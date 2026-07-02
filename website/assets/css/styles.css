@@ -1,0 +1,12 @@
+html {
+  scroll-behavior: smooth;
+}
+
+.product-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -8px rgba(27, 16, 53, 0.15);
+}
