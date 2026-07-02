@@ -57,6 +57,7 @@ export async function searchProducts({
     : [];
 
   const results = products.filter((product) => {
+    if (product.inStock === false) return false;
     if (category && product.category !== category) return false;
     if (subcategory && product.subcategory !== subcategory) return false;
     if (source && product.source !== source) return false;
@@ -84,6 +85,7 @@ export async function searchProducts({
 export async function getDealOfTheDay({ scope = "all", limit = 3 } = {}) {
   const products = await loadProducts();
   const filtered = products.filter((product) => {
+    if (product.inStock === false) return false;
     if (scope === "all") return true;
     return product.scope === scope;
   });

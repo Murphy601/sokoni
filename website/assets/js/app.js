@@ -75,7 +75,7 @@ async function loadProducts() {
 
 async function renderProducts() {
   try {
-    const products = await loadProducts();
+    const products = (await loadProducts()).filter((p) => p.inStock !== false);
     const local = products.filter((p) => p.scope === "local").slice(0, 4);
     const intl = products.filter((p) => p.scope === "international").slice(0, 4);
     const localGrid = document.getElementById("local-deals-grid");

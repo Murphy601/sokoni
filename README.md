@@ -16,6 +16,8 @@ Read the full concept first: [`docs/CONCEPT.md`](docs/CONCEPT.md)
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Name shortlist (Sokoni, PataMall, DukaLink, ...) + logo concepts. |
 | [`docs/WHATSAPP_FLOWS.md`](docs/WHATSAPP_FLOWS.md) | The full menu tree and user-journey diagrams for the WhatsApp bot. |
 | [`docs/AI_AGENT_PROMPT.md`](docs/AI_AGENT_PROMPT.md) | The system prompt + example transcripts that power the AI shopping agent. |
+| [`docs/CATALOG_SYNC.md`](docs/CATALOG_SYNC.md) | The automated daily price/availability sync (Amazon + AliExpress APIs, opt-in structured-data for the rest) and what's automatable vs manual. |
+| `scripts/sync/` | The catalog sync script + provider modules, run daily by a GitHub Action. |
 | `website/` | A working, dependency-free storefront (HTML/Tailwind/JS) that showcases categories & deals and drives visitors to WhatsApp. |
 | `whatsapp-bot/` | A working Node.js/Express WhatsApp Cloud API bot: structured menus + an AI free-text agent (with tool-calling) + affiliate-link building with per-customer tracking sub-IDs. |
 

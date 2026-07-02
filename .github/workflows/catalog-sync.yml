@@ -1,0 +1,59 @@
+name: Catalog Sync
+
+# Refreshes product prices/availability daily and commits any changes back to the repo.
+# See docs/CATALOG_SYNC.md for what's automatable per source and how to add secrets.
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # every day at 03:00 UTC
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run catalog sync
+        env:
+          # Amazon PA-API 5.0
+          AMAZON_ACCESS_KEY: ${{ secrets.AMAZON_ACCESS_KEY }}
+          AMAZON_SECRET_KEY: ${{ secrets.AMAZON_SECRET_KEY }}
+          AMAZON_PARTNER_TAG: ${{ secrets.AMAZON_PARTNER_TAG }}
+          AMAZON_HOST: ${{ vars.AMAZON_HOST }}
+          AMAZON_REGION: ${{ vars.AMAZON_REGION }}
+          AMAZON_MARKETPLACE: ${{ vars.AMAZON_MARKETPLACE }}
+          # AliExpress Affiliate API
+          ALIEXPRESS_APP_KEY: ${{ secrets.ALIEXPRESS_APP_KEY }}
+          ALIEXPRESS_APP_SECRET: ${{ secrets.ALIEXPRESS_APP_SECRET }}
+          ALIEXPRESS_TRACKING_ID: ${{ secrets.ALIEXPRESS_TRACKING_ID }}
+          ALIEXPRESS_TARGET_CURRENCY: ${{ vars.ALIEXPRESS_TARGET_CURRENCY }}
+          ALIEXPRESS_TARGET_LANGUAGE: ${{ vars.ALIEXPRESS_TARGET_LANGUAGE }}
+          # Opt-in structured-data reader for Kilimall/Jumia/Temu
+          SOKONI_ENABLE_SCRAPE: ${{ vars.SOKONI_ENABLE_SCRAPE }}
+        run: node scripts/sync/sync.mjs
+
+      - name: Commit updated catalog
+        run: |
+          git config user.name "sokoni-catalog-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add website/data/products.json whatsapp-bot/src/data/products.json
+          if git diff --cached --quiet; then
+            echo "No catalog changes to commit."
+          else
+            git commit -m "chore(catalog): automated price/availability sync [skip ci]"
+            git push
+          fi
