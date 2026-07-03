@@ -30,7 +30,7 @@ export function sendMainMenu(to) {
         rows: [
           { id: "deals_today", title: "🔥 Today's Hot Deals", description: "Best discounts right now" },
           { id: "intl_shop", title: "🌍 Shop International", description: "AliExpress, Temu, Amazon" },
-          { id: "track_order", title: "📦 Track My Order", description: "Find your order status" },
+          { id: "track_order", title: "🧾 Track My Order", description: "Find your order status" },
           { id: "human_handoff", title: "🙋 Talk to a Human", description: "Chat with our team" },
           { id: "how_it_works", title: "❓ How Sokoni Works", description: "About us & affiliate links" },
         ],
@@ -129,11 +129,17 @@ export async function sendDealsOfTheDay(to, scope = "all") {
   }
 }
 
-export function sendInternationalMenu(to) {
+export async function sendInternationalMenu(to) {
+  await sendText(
+    to,
+    "🌍 *Before we go international* — a quick heads-up:\n" +
+      "• AliExpress/Temu/Amazon ship *from overseas* (not Kenya), typically 1-4 weeks depending on the item.\n" +
+      "• Kenya charges import duty + VAT + other fees on arrival, paid by *you*, on top of the item price — this is standard for any international order, not a Sokoni charge.\n" +
+      "• Not every item ships to Kenya — I'll always double-check before sending you a link.\n\n" +
+      "Still keen? 👇"
+  );
   return sendButtons(to, {
-    body:
-      "🌍 I can help you shop from AliExpress, Temu and Amazon too — delivery usually " +
-      "takes 1-4 weeks internationally.\nWant trending picks, or know exactly what you want?",
+    body: "Want trending picks, or do you know exactly what you want?",
     buttons: [
       { id: "intl_trending", title: "🔥 Trending Picks" },
       { id: "intl_custom", title: "🔍 I know what I want" },

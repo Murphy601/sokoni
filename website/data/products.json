@@ -101,7 +101,7 @@
     "sourceUrl": "https://www.aliexpress.com/item/apple-watch-se-alt?aff_id=demo-aliexpress",
     "emoji": "⌚",
     "scope": "international",
-    "estDelivery": "14-21 days"
+    "estDelivery": "15-30 days"
   },
   {
     "id": "intl-002",
@@ -114,7 +114,7 @@
     "sourceUrl": "https://www.amazon.com/dp/apple-watch-series-9?tag=demo-amazon",
     "emoji": "⌚",
     "scope": "international",
-    "estDelivery": "10-18 days"
+    "estDelivery": "9-15 days (if eligible for Kenya delivery)"
   },
   {
     "id": "intl-003",
@@ -127,7 +127,7 @@
     "sourceUrl": "https://www.temu.com/item/mini-portable-blender?aff_id=demo-temu",
     "emoji": "🥤",
     "scope": "international",
-    "estDelivery": "12-20 days"
+    "estDelivery": "5-10 days (availability to Kenya varies)"
   },
   {
     "id": "intl-004",
@@ -140,6 +140,6 @@
     "sourceUrl": "https://www.aliexpress.com/item/wireless-earbuds-pro-anc?aff_id=demo-aliexpress",
     "emoji": "🎧",
     "scope": "international",
-    "estDelivery": "14-21 days"
+    "estDelivery": "15-30 days"
   }
 ]

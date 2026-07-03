@@ -132,7 +132,7 @@
     "tags": ["wearable", "fitness", "international"],
     "scope": "international",
     "priceUsd": 89,
-    "estDeliveryDays": "14-21"
+    "estDeliveryDays": "15-30"
   },
   {
     "id": "intl-002",
@@ -147,7 +147,7 @@
     "tags": ["wearable", "premium", "international"],
     "scope": "international",
     "priceUsd": 329,
-    "estDeliveryDays": "10-18"
+    "estDeliveryDays": "9-15 (only if this item ships to Kenya — verify at checkout)"
   },
   {
     "id": "intl-003",
@@ -162,7 +162,7 @@
     "tags": ["kitchen", "gadget", "viral"],
     "scope": "international",
     "priceUsd": 14,
-    "estDeliveryDays": "12-20"
+    "estDeliveryDays": "5-10 (availability to Kenya varies — verify at checkout)"
   },
   {
     "id": "intl-004",
@@ -177,6 +177,6 @@
     "tags": ["audio", "gadget", "budget"],
     "scope": "international",
     "priceUsd": 19,
-    "estDeliveryDays": "14-21"
+    "estDeliveryDays": "15-30"
   }
 ]

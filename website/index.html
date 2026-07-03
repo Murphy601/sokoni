@@ -1,111 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sokoni — Your Market, On WhatsApp</title>
-  <meta name="description" content="Sokoni is your AI shopping concierge on WhatsApp. Find the best deals across Kilimall, Jumia, AliExpress, Temu and Amazon — guided straight to checkout, all inside a chat." />
-
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              green: "#25D366",
-              purple: "#1B1035",
-              navy: "#0B1A3A",
-            },
-          },
-          fontFamily: {
-            sans: ["Poppins", "system-ui", "sans-serif"],
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sokoni — Your Market, On WhatsApp</title>
+<meta name="description" content="Sokoni is an AI shopping concierge on WhatsApp. Discover deals from Kilimall, Jumia, AliExpress, Temu and Amazon, and chat your way to checkout." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            green: '#25D366',
+            purple: '#1B1035',
+            purpleLight: '#2E1B57',
+            cream: '#FFF8F0',
           },
         },
+        fontFamily: {
+          sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        },
       },
-    };
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/css/styles.css" />
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css" />
 </head>
-<body class="font-sans text-brand-purple bg-[#faf9fc] antialiased">
-
-  <!-- Nav -->
-  <header class="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-black/5">
-    <nav class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-      <a href="#" class="flex items-center gap-2 font-extrabold text-lg">
-        <span class="text-2xl">🛍️</span> Sokoni
+<body class="bg-brand-cream text-brand-purple font-sans antialiased">
+  <!-- NAV -->
+  <header class="sticky top-0 z-50 bg-brand-cream/90 backdrop-blur border-b border-black/5">
+    <div class="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-2 font-extrabold text-xl">
+        <span class="w-9 h-9 rounded-xl bg-brand-purple text-brand-green flex items-center justify-center text-lg">🛒</span>
+        Sokoni
       </a>
-      <div class="hidden md:flex items-center gap-7 text-sm font-medium text-brand-purple/70">
-        <a href="#categories" class="hover:text-brand-purple">Categories</a>
-        <a href="#deals" class="hover:text-brand-purple">Hot Deals</a>
-        <a href="#international" class="hover:text-brand-purple">Shop International</a>
-        <a href="#how" class="hover:text-brand-purple">How It Works</a>
-      </div>
-      <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop"
+      <nav class="hidden md:flex items-center gap-8 text-sm font-medium">
+        <a href="#categories" class="hover:text-brand-green transition">Categories</a>
+        <a href="#deals" class="hover:text-brand-green transition">Hot Deals</a>
+        <a href="#international" class="hover:text-brand-green transition">Shop International</a>
+        <a href="#how-it-works" class="hover:text-brand-green transition">How It Works</a>
+      </nav>
+      <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop%20%F0%9F%9B%92"
          target="_blank" rel="noopener"
-         class="bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
+         class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-4 py-2.5 rounded-full shadow-lg shadow-green-500/20 hover:scale-105 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.29-1.39a9.9 9.9 0 0 0 4.75 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.51 2 12.04 2Zm0 18.06h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.14.82.84-3.06-.2-.32a8.17 8.17 0 0 1-1.26-4.35c0-4.52 3.68-8.2 8.21-8.2a8.14 8.14 0 0 1 8.19 8.2c0 4.53-3.68 8.24-8.14 8.24Zm4.49-6.16c-.25-.12-1.46-.72-1.68-.8-.23-.08-.39-.12-.56.12-.16.25-.64.8-.78.96-.14.16-.29.18-.53.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.24-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.42-.14-.01-.31-.01-.47-.01a.9.9 0 0 0-.65.3c-.23.25-.86.84-.86 2.04 0 1.2.88 2.36 1 2.52.12.16 1.73 2.64 4.2 3.7.59.25 1.05.4 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.66-1.17.21-.58.21-1.08.15-1.18-.06-.1-.22-.16-.47-.28Z"/></svg>
         Chat on WhatsApp
       </a>
-    </nav>
+    </div>
   </header>
 
-  <!-- Hero -->
+  <!-- HERO -->
   <section class="relative overflow-hidden">
-    <div class="max-w-6xl mx-auto px-5 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div class="absolute -top-24 -right-24 w-96 h-96 bg-brand-green/20 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-brand-purple/10 rounded-full blur-3xl"></div>
+    <div class="max-w-7xl mx-auto px-5 pt-16 pb-20 md:pt-24 md:pb-28 relative grid md:grid-cols-2 gap-12 items-center">
       <div>
-        <span class="inline-block bg-brand-green/15 text-brand-purple text-xs font-bold px-3 py-1 rounded-full mb-5">
+        <span class="inline-block bg-brand-purple text-brand-green text-xs font-bold tracking-wide px-3 py-1.5 rounded-full mb-5">
           🇰🇪 KENYA-FIRST · GOING GLOBAL
         </span>
         <h1 class="text-4xl md:text-6xl font-extrabold leading-tight mb-5">
-          Your Market,<br /><span class="text-brand-green">On WhatsApp.</span>
+          Your <span class="text-brand-green">Market</span>,<br />On WhatsApp.
         </h1>
-        <p class="text-brand-purple/70 text-base md:text-lg mb-8 max-w-lg">
-          Sokoni is your AI shopping concierge. Tell us what you need, and we'll find the best deal
-          across Kilimall, Jumia, AliExpress, Temu and Amazon — then guide you straight to checkout,
-          all inside a WhatsApp chat.
+        <p class="text-lg text-brand-purple/70 mb-8 max-w-md">
+          Sokoni is your AI shopping concierge. Tell us what you need, and we'll find the best
+          deal across Kilimall, Jumia, AliExpress, Temu and Amazon — then guide you straight
+          to checkout, all inside a WhatsApp chat.
         </p>
-        <div class="flex flex-wrap gap-3">
-          <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop"
+        <div class="flex flex-wrap gap-4">
+          <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop%20%F0%9F%9B%92"
              target="_blank" rel="noopener"
-             class="bg-brand-green text-brand-purple font-bold px-6 py-3 rounded-full hover:scale-105 transition">
+             class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-6 py-3.5 rounded-full shadow-lg shadow-green-500/30 hover:scale-105 transition text-base">
             💬 Start Shopping on WhatsApp
           </a>
           <a href="#deals"
-             class="bg-white border border-black/10 font-bold px-6 py-3 rounded-full hover:shadow-md transition">
+             class="inline-flex items-center gap-2 border-2 border-brand-purple/15 font-bold px-6 py-3.5 rounded-full hover:bg-brand-purple hover:text-white transition text-base">
             🔥 See Today's Deals
           </a>
         </div>
-        <p class="text-xs text-brand-purple/50 mt-6 max-w-md">
-          Sokoni is an independent affiliate concierge. We may earn a commission when you buy through
-          our links — it never costs you extra.
+        <p class="mt-6 text-xs text-brand-purple/50 max-w-md">
+          Sokoni is an independent affiliate concierge. We may earn a commission when you buy
+          through our links — it never costs you extra.
         </p>
       </div>
-
-      <!-- Chat mockup -->
-      <div class="relative">
-        <div class="mx-auto max-w-xs bg-white rounded-3xl shadow-2xl border border-black/5 overflow-hidden">
-          <div class="bg-brand-green px-4 py-3 flex items-center gap-3">
-            <div class="w-9 h-9 rounded-full bg-white/90 flex items-center justify-center text-lg">🛍️</div>
-            <div class="text-brand-purple">
-              <p class="font-bold text-sm leading-tight">Sokoni AI</p>
-              <p class="text-[11px] opacity-70 leading-tight">online</p>
+      <div class="relative mx-auto max-w-xs">
+        <div class="rounded-[2.5rem] border-8 border-brand-purple bg-white shadow-2xl overflow-hidden">
+          <div class="bg-[#075E54] text-white px-4 py-3 flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-brand-green flex items-center justify-center">🛒</span>
+            <div>
+              <p class="font-semibold text-sm leading-none">Sokoni AI</p>
+              <p class="text-[11px] text-white/70">online</p>
             </div>
           </div>
-          <div class="p-4 space-y-3 bg-[#efeae2] min-h-[320px] text-sm">
-            <div class="bg-white rounded-xl rounded-tl-none px-3 py-2 shadow-sm max-w-[85%]">
+          <div class="bg-[#ECE5DD] p-4 space-y-3 min-h-[420px]">
+            <div class="bg-white rounded-2xl rounded-tl-none px-3 py-2 text-sm shadow max-w-[85%]">
               👋 Karibu! I'm Sokoni AI. What are you shopping for today?
             </div>
-            <div class="bg-brand-green/90 text-brand-purple rounded-xl rounded-tr-none px-3 py-2 shadow-sm max-w-[85%] ml-auto">
+            <div class="bg-[#DCF8C6] rounded-2xl rounded-tr-none px-3 py-2 text-sm shadow max-w-[85%] ml-auto">
               nataka simu poa chini ya 15k, camera nzuri
             </div>
-            <div class="bg-white rounded-xl rounded-tl-none px-3 py-2 shadow-sm max-w-[90%]">
-              Sawa! Top pick chini ya KES 15,000:<br />
-              📱 <strong>Tecno Spark 20</strong> — KES 14,200<br />
-              ⭐ 4.6 · Jumia<br />
-              <span class="text-brand-green font-semibold">🛒 Buy on Jumia →</span>
+            <div class="bg-white rounded-2xl rounded-tl-none px-3 py-2 text-sm shadow max-w-[85%] space-y-1">
+              <p>Sawa! Top pick chini ya KES 15,000:</p>
+              <p class="font-semibold">📱 Tecno Spark 20 — KES 14,200</p>
+              <p class="text-brand-purple/60">⭐ 4.6 · Jumia</p>
+              <p class="text-brand-green font-semibold">🛒 Buy on Jumia →</p>
             </div>
           </div>
         </div>
@@ -113,115 +114,144 @@
     </div>
   </section>
 
-  <!-- Categories -->
-  <section id="categories" class="max-w-6xl mx-auto px-5 py-14">
-    <div class="text-center mb-10">
-      <h2 class="text-3xl font-extrabold mb-2">Shop by Category</h2>
-      <p class="text-brand-purple/60">Everything you need, curated from trusted partners.</p>
-    </div>
-    <div id="category-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
-  </section>
-
-  <!-- Hot Deals -->
-  <section id="deals" class="max-w-6xl mx-auto px-5 py-14">
-    <div class="mb-8">
-      <h2 class="text-3xl font-extrabold mb-2">🔥 Today's Hot Deals</h2>
-      <p class="text-brand-purple/60">Local picks from Kilimall &amp; Jumia — chat to grab one.</p>
-    </div>
-    <div id="local-deals-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
-  </section>
-
-  <!-- International -->
-  <section id="international" class="bg-brand-purple text-white py-14">
-    <div class="max-w-6xl mx-auto px-5">
-      <div class="mb-8">
-        <h2 class="text-3xl font-extrabold mb-2">🌍 Shop International</h2>
-        <p class="text-white/60">AliExpress, Temu &amp; Amazon — delivered to your door, 1-4 weeks.</p>
-      </div>
-      <div id="intl-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-brand-purple"></div>
-    </div>
-  </section>
-
-  <!-- How it works -->
-  <section id="how" class="max-w-6xl mx-auto px-5 py-16">
-    <div class="text-center mb-12">
-      <h2 class="text-3xl font-extrabold mb-2">How Sokoni Works</h2>
-      <p class="text-brand-purple/60">No app to download. No account to create. Just chat.</p>
-    </div>
-    <div class="grid md:grid-cols-3 gap-6">
-      <div class="bg-white rounded-2xl border border-black/5 shadow-sm p-7">
-        <div class="w-10 h-10 rounded-full bg-brand-green/15 flex items-center justify-center font-bold mb-4">1</div>
-        <h3 class="font-bold mb-2">💬 Tell us what you need</h3>
-        <p class="text-sm text-brand-purple/60">Message Sokoni on WhatsApp, or tap a category on this site — in English, Kiswahili, or Sheng.</p>
-      </div>
-      <div class="bg-white rounded-2xl border border-black/5 shadow-sm p-7">
-        <div class="w-10 h-10 rounded-full bg-brand-green/15 flex items-center justify-center font-bold mb-4">2</div>
-        <h3 class="font-bold mb-2">🤖 Our AI finds your best match</h3>
-        <p class="text-sm text-brand-purple/60">We search across Kilimall, Jumia, AliExpress, Temu and Amazon for the best price and reviews.</p>
-      </div>
-      <div class="bg-white rounded-2xl border border-black/5 shadow-sm p-7">
-        <div class="w-10 h-10 rounded-full bg-brand-green/15 flex items-center justify-center font-bold mb-4">3</div>
-        <h3 class="font-bold mb-2">🛒 Checkout with the store, safely</h3>
-        <p class="text-sm text-brand-purple/60">We send you straight to the retailer's own secure checkout. We never touch your payment details.</p>
-      </div>
-    </div>
-    <p class="text-xs text-brand-purple/50 mt-8 text-center max-w-2xl mx-auto">
-      Sokoni is an independent affiliate shopping concierge, not a retailer. We may earn a small
-      commission from our partner stores when you complete a purchase through our links — this never
-      increases the price you pay.
-    </p>
-  </section>
-
-  <!-- CTA -->
-  <section class="bg-brand-green">
-    <div class="max-w-6xl mx-auto px-5 py-14 text-center text-brand-purple">
-      <h2 class="text-3xl font-extrabold mb-3">Ready to shop the easy way?</h2>
-      <p class="mb-7 opacity-80">Save this number, say hi, and let Sokoni AI do the searching for you.</p>
-      <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop"
-         target="_blank" rel="noopener"
-         class="inline-block bg-brand-purple text-white font-bold px-8 py-4 rounded-full hover:scale-105 transition">
-        💬 Chat with Sokoni AI Now
-      </a>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="bg-brand-purple text-white/80 py-12">
-    <div class="max-w-6xl mx-auto px-5 grid md:grid-cols-4 gap-8 text-sm">
+  <!-- CATEGORIES -->
+  <section id="categories" class="max-w-7xl mx-auto px-5 py-16">
+    <div class="flex items-end justify-between mb-8">
       <div>
-        <p class="flex items-center gap-2 font-extrabold text-white text-lg mb-3">🛍️ Sokoni</p>
-        <p class="text-white/50">Your Market, On WhatsApp. Kenya-born, going global.</p>
+        <h2 class="text-2xl md:text-3xl font-extrabold">Shop by Category</h2>
+        <p class="text-brand-purple/60 mt-1">Everything you need, curated from trusted partners.</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="category-grid">
+      <!-- filled by JS -->
+    </div>
+  </section>
+
+  <!-- DEALS -->
+  <section id="deals" class="bg-white py-16">
+    <div class="max-w-7xl mx-auto px-5">
+      <div class="flex items-end justify-between mb-8">
+        <div>
+          <h2 class="text-2xl md:text-3xl font-extrabold">🔥 Today's Hot Deals</h2>
+          <p class="text-brand-purple/60 mt-1">Local picks from Kilimall &amp; Jumia — chat to grab one.</p>
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" id="local-deals-grid">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERNATIONAL -->
+  <section id="international" class="py-16">
+    <div class="max-w-7xl mx-auto px-5">
+      <div class="flex items-end justify-between mb-8">
+        <div>
+          <h2 class="text-2xl md:text-3xl font-extrabold">🌍 Shop International</h2>
+          <p class="text-brand-purple/60 mt-1">AliExpress, Temu &amp; Amazon — delivered to your door, 1-4 weeks.</p>
+        </div>
+      </div>
+      <p class="text-xs text-brand-purple/50 bg-white border border-black/5 rounded-xl px-4 py-3 mb-6 max-w-2xl">
+        ℹ️ These ship from overseas, not Kenya. Kenya import duty + VAT may apply on arrival and is
+        paid by you, on top of the item price — this is standard for any international order, not
+        a Sokoni fee. Not every item ships to Kenya; always confirm at checkout.
+      </p>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" id="intl-grid">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how-it-works" class="bg-brand-purple text-white py-20">
+    <div class="max-w-7xl mx-auto px-5">
+      <h2 class="text-2xl md:text-3xl font-extrabold text-center mb-3">How Sokoni Works</h2>
+      <p class="text-white/60 text-center max-w-xl mx-auto mb-12">
+        No app to download. No account to create. Just chat.
+      </p>
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
+          <div class="w-12 h-12 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-xl font-bold mb-4">1</div>
+          <h3 class="font-bold text-lg mb-2">💬 Tell us what you need</h3>
+          <p class="text-white/60 text-sm">Message Sokoni on WhatsApp, or tap a category on this site — in English, Kiswahili, or Sheng.</p>
+        </div>
+        <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
+          <div class="w-12 h-12 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-xl font-bold mb-4">2</div>
+          <h3 class="font-bold text-lg mb-2">🤖 Our AI finds your best match</h3>
+          <p class="text-white/60 text-sm">We search across Kilimall, Jumia, AliExpress, Temu and Amazon for the best price and reviews.</p>
+        </div>
+        <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
+          <div class="w-12 h-12 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-xl font-bold mb-4">3</div>
+          <h3 class="font-bold text-lg mb-2">🛒 Checkout with the store, safely</h3>
+          <p class="text-white/60 text-sm">We send you straight to the retailer's own secure checkout. We never touch your payment details.</p>
+        </div>
+      </div>
+      <p class="text-center text-white/40 text-xs mt-10 max-w-xl mx-auto">
+        Sokoni is an independent affiliate shopping concierge, not a retailer. We may earn a
+        small commission from our partner stores when you complete a purchase through our
+        links — this never increases the price you pay.
+      </p>
+    </div>
+  </section>
+
+  <!-- CTA STRIP -->
+  <section class="max-w-7xl mx-auto px-5 py-16 text-center">
+    <h2 class="text-2xl md:text-4xl font-extrabold mb-4">Ready to shop the easy way?</h2>
+    <p class="text-brand-purple/60 mb-8 max-w-lg mx-auto">Save this number, say hi, and let Sokoni AI do the searching for you.</p>
+    <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop%20%F0%9F%9B%92"
+       target="_blank" rel="noopener"
+       class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-8 py-4 rounded-full shadow-lg shadow-green-500/30 hover:scale-105 transition text-lg">
+      💬 Chat with Sokoni AI Now
+    </a>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="bg-brand-purple text-white/70 pt-14 pb-8">
+    <div class="max-w-7xl mx-auto px-5 grid md:grid-cols-4 gap-10 mb-10">
+      <div>
+        <div class="flex items-center gap-2 font-extrabold text-xl text-white mb-3">
+          <span class="w-9 h-9 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-lg">🛒</span>
+          Sokoni
+        </div>
+        <p class="text-sm">Your Market, On WhatsApp. Kenya-born, going global.</p>
       </div>
       <div>
-        <p class="font-semibold text-white mb-3">Shop</p>
-        <ul class="space-y-2 text-white/50">
-          <li><a href="#categories" class="hover:text-white">Categories</a></li>
-          <li><a href="#deals" class="hover:text-white">Hot Deals</a></li>
-          <li><a href="#international" class="hover:text-white">International</a></li>
+        <h4 class="text-white font-semibold mb-3">Shop</h4>
+        <ul class="space-y-2 text-sm">
+          <li><a href="#categories" class="hover:text-brand-green">Categories</a></li>
+          <li><a href="#deals" class="hover:text-brand-green">Hot Deals</a></li>
+          <li><a href="#international" class="hover:text-brand-green">International</a></li>
         </ul>
       </div>
       <div>
-        <p class="font-semibold text-white mb-3">Company</p>
-        <ul class="space-y-2 text-white/50">
-          <li><a href="#how" class="hover:text-white">How It Works</a></li>
-          <li><a href="#" class="hover:text-white">Affiliate Disclosure</a></li>
-          <li><a href="#" class="hover:text-white">Privacy Policy</a></li>
+        <h4 class="text-white font-semibold mb-3">Company</h4>
+        <ul class="space-y-2 text-sm">
+          <li><a href="#how-it-works" class="hover:text-brand-green">How It Works</a></li>
+          <li><a href="#" class="hover:text-brand-green">Affiliate Disclosure</a></li>
+          <li><a href="#" class="hover:text-brand-green">Privacy Policy</a></li>
         </ul>
       </div>
       <div>
-        <p class="font-semibold text-white mb-3">Get in Touch</p>
-        <ul class="space-y-2 text-white/50">
-          <li><a href="https://wa.me/254700000000" class="hover:text-white">WhatsApp</a></li>
-          <li><a href="#" class="hover:text-white">Instagram</a></li>
-          <li><a href="#" class="hover:text-white">TikTok</a></li>
+        <h4 class="text-white font-semibold mb-3">Get in Touch</h4>
+        <ul class="space-y-2 text-sm">
+          <li><a href="https://wa.me/254700000000" class="hover:text-brand-green">WhatsApp</a></li>
+          <li><a href="#" class="hover:text-brand-green">Instagram</a></li>
+          <li><a href="#" class="hover:text-brand-green">TikTok</a></li>
         </ul>
       </div>
     </div>
-    <div class="max-w-6xl mx-auto px-5 mt-10 pt-6 border-t border-white/10 text-xs text-white/40">
-      © 2026 Sokoni. As an affiliate, Sokoni may earn a commission on qualifying purchases.
+    <div class="max-w-7xl mx-auto px-5 border-t border-white/10 pt-6 text-xs text-white/40 text-center">
+      &copy; <span id="year"></span> Sokoni. As an affiliate, Sokoni may earn a commission on qualifying purchases.
     </div>
   </footer>
 
+  <a href="https://wa.me/254700000000?text=Hi%20Sokoni%2C%20I%20want%20to%20shop%20%F0%9F%9B%92"
+     target="_blank" rel="noopener"
+     class="fixed bottom-6 right-6 z-50 md:hidden bg-brand-green text-brand-purple w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-2xl">
+    💬
+  </a>
+
   <script src="assets/js/app.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

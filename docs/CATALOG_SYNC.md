@@ -99,5 +99,12 @@ The commit message includes `[skip ci]` so it won't trigger other workflows.
   re-check the current Open Platform signing docs and adjust `providers/aliexpress.mjs`.
 - **Scraping** (`SOKONI_ENABLE_SCRAPE=true`) is best-effort and can break any time a site changes its
   markup, and may conflict with a site's Terms of Service / `robots.txt` — verify before enabling.
+- **Tested reality for Kilimall/Jumia (be honest with yourself here):** their product pages render the
+  actual price via client-side JavaScript *after* load. A plain server-side `fetch` (which is all the
+  JSON-LD reader does) sees the initial HTML shell and often will **not** find the real price for the
+  main product. Getting it reliably would require a full headless browser (Playwright/Puppeteer) —
+  heavier, more fragile, and closer to the kind of automated access most sites' ToS restrict. This
+  starter deliberately does **not** do that automatically; treat Kilimall/Jumia/Temu as manual
+  updates unless you make that a deliberate, separate decision.
 - The sync only *updates existing* products; it never adds or removes items. Curating which products
   are in the catalog stays a human decision.

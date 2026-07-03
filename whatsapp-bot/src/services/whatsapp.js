@@ -77,15 +77,21 @@ export function sendButtons(to, { body, footer, buttons }) {
  * follow-up quick-reply for "Ask AI about this" to keep the conversation open.
  */
 export async function sendProductCard(to, product, affiliateUrl, sourceLabel) {
+  const isInternational = product.scope === "international";
   const priceLine = product.priceKes
     ? `KES ${product.priceKes.toLocaleString()}` +
       (product.originalPriceKes ? ` (was KES ${product.originalPriceKes.toLocaleString()})` : "")
-    : `$${product.priceUsd} (${sourceLabel} · est. delivery ${product.estDeliveryDays || "1-4 weeks"})`;
+    : `$${product.priceUsd} (est. delivery ${product.estDeliveryDays || "10-20 days"})`;
+
+  const dutiesNote = isInternational
+    ? "\n_Heads up: Kenya import duty/VAT may apply on arrival, paid by you — not included in this price._\n"
+    : "";
 
   const body =
     `*${product.name}*\n` +
     `${priceLine}\n` +
-    `⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews) · ${sourceLabel}\n\n` +
+    `⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews) · ${sourceLabel}\n` +
+    `${dutiesNote}\n` +
     `🛒 Buy here: ${affiliateUrl}\n\n` +
     `_Sokoni may earn a small commission on this purchase — it never costs you extra 🙏_`;
 

@@ -31,7 +31,7 @@ Tell me what you're looking for, or pick an option below 👇
 ── More ──
 🔥 Today's Hot Deals
 🌍 Shop International (AliExpress/Temu/Amazon)
-📦 Track My Order
+🧾 Track My Order
 🙋 Talk to a Human
 ❓ How Sokoni Works
 ```
@@ -122,23 +122,35 @@ Optional: "Want me to alert you when there's a deal like this again?
 User taps "🌍 Shop International"
         │
         ▼
-Bot explains briefly: "I can help you shop from AliExpress, Temu and Amazon too —
-delivery usually takes 1-4 weeks internationally. Want me to show trending picks,
-or are you looking for something specific?"
+Bot sends an upfront disclosure BEFORE showing any products:
+  "🌍 Before we go international — a quick heads-up:
+   • Ships from overseas (not Kenya), typically 1-4 weeks.
+   • Kenya import duty + VAT may apply on arrival, paid by you —
+     standard for any international order, not a Sokoni fee.
+   • Not every item ships to Kenya — I'll always double-check before sending a link.
+   Still keen?"
         │
         ▼
 [ 🔥 Trending Global Picks ] [ 🔍 I know what I want ]
 ```
 
+- **Why the disclosure comes first, not buried in fine print:** none of AliExpress/Temu/Amazon are
+  Kenya-based — every order is a cross-border purchase with real customs exposure. Surprise duty
+  bills on arrival are one of the fastest ways to lose customer trust, so this is shown proactively,
+  every time, not just mentioned once and forgotten.
 - Trending picks → curated list similar to local categories, but tagged with the source platform and
-  estimated delivery time (important expectation-setting for cross-border orders).
+  a realistic estimated delivery time per platform (AliExpress ~15-30 days standard, Temu ~5-10 days
+  where available, Amazon ~9-15 days but only for items actually eligible for Kenya delivery — verify
+  per product, don't assume).
 - "I know what I want" → free text → AI searches the international catalog / can also just paraphrase
-  to a searchable Temu/AliExpress affiliate deep-link if no curated match exists.
+  to a searchable Temu/AliExpress affiliate deep-link if no curated match exists. The AI repeats the
+  shipping/duty disclosure the first time it sends an international product link in a conversation
+  (see [`AI_AGENT_PROMPT.md`](AI_AGENT_PROMPT.md)).
 
 ## 7. Track My Order
 
 ```
-User taps "📦 Track My Order"
+User taps "🧾 Track My Order"
         │
         ▼
 Bot: "Which store did you order from?"

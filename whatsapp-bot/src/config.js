@@ -8,6 +8,7 @@ import "dotenv/config";
 export const config = {
   brand: {
     name: "Sokoni",
+    tagline: "Your Market, On WhatsApp.",
   },
   port: Number(process.env.PORT) || 3000,
   whatsapp: {
@@ -22,11 +23,11 @@ export const config = {
     model: process.env.OPENAI_MODEL || "gpt-4o-mini",
   },
   affiliates: {
-    kilimall: process.env.KILIMALL_AFFILIATE_ID || "",
-    jumia: process.env.JUMIA_AFFILIATE_ID || "",
-    aliexpress: process.env.ALIEXPRESS_AFFILIATE_ID || "",
-    temu: process.env.TEMU_AFFILIATE_ID || "",
-    amazon: process.env.AMAZON_AFFILIATE_TAG || "",
+    kilimall: process.env.KILIMALL_AFFILIATE_ID || "demo-kilimall",
+    jumia: process.env.JUMIA_AFFILIATE_ID || "demo-jumia",
+    aliexpress: process.env.ALIEXPRESS_AFFILIATE_ID || "demo-aliexpress",
+    temu: process.env.TEMU_AFFILIATE_ID || "demo-temu",
+    amazon: process.env.AMAZON_AFFILIATE_TAG || "demo-amazon",
   },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
 };
