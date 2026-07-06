@@ -48,20 +48,20 @@ export async function searchProducts({
   minPriceKes,
   source,
   scope,
+  fulfillment,
   limit = 3,
 } = {}) {
   const products = await loadProducts();
 
-  const keywordTokens = keywords
-    ? keywords.toLowerCase().split(/\s+/).filter(Boolean)
-    : [];
+  const keywordTokens = expandKeywordTokens(keywords);
 
-  const results = products.filter((product) => {
+  let results = products.filter((product) => {
     if (product.inStock === false) return false;
     if (category && product.category !== category) return false;
     if (subcategory && product.subcategory !== subcategory) return false;
     if (source && product.source !== source) return false;
     if (scope && product.scope !== scope) return false;
+    if (fulfillment && product.fulfillment !== fulfillment) return false;
     if (maxPriceKes != null && product.priceKes != null && product.priceKes > maxPriceKes) {
       return false;
     }
@@ -69,16 +69,17 @@ export async function searchProducts({
       return false;
     }
     if (keywordTokens.length > 0) {
-      const haystack = [product.name, product.category, product.subcategory, ...(product.tags || [])]
-        .join(" ")
-        .toLowerCase();
-      const matchesAny = keywordTokens.some((token) => haystack.includes(token));
-      if (!matchesAny) return false;
+      const score = scoreProduct(product, keywordTokens);
+      if (score === 0) return false;
     }
     return true;
   });
 
-  results.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  if (keywordTokens.length > 0) {
+    results.sort((a, b) => scoreProduct(b, keywordTokens) - scoreProduct(a, keywordTokens));
+  } else {
+    results.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  }
   return results.slice(0, limit);
 }
 
@@ -106,4 +107,123 @@ export async function getDealOfTheDay({ scope = "all", limit = 3 } = {}) {
 export async function getProductById(id) {
   const products = await loadProducts();
   return products.find((product) => product.id === id) || null;
+}
+
+const STOP_WORDS = new Set([
+  "a", "an", "the", "i", "me", "my", "we", "you", "can", "could", "would", "please",
+  "get", "give", "show", "find", "want", "need", "looking", "for", "about", "what",
+  "how", "is", "are", "do", "does", "this", "that", "these", "those", "more", "info",
+  "on", "in", "at", "to", "of", "and", "or", "best", "recommend", "recommendations",
+  "please", "tell", "some", "any", "good", "nice",
+]);
+
+/** Maps common shopper words to catalog tokens / subcategories. */
+const QUERY_EXPANSIONS = {
+  tv: ["tv", "television", "tvs", "smart"],
+  laundry: ["laundry", "washing", "washer", "washing-machines"],
+  phone: ["phone", "smartphone", "mobile", "phones-tablets", "smartphones"],
+  laptop: ["laptop", "laptops", "computing"],
+  fridge: ["fridge", "refrigerator", "kitchen-appliances"],
+  game: ["game", "gaming", "console", "consoles"],
+};
+
+function expandKeywordTokens(raw) {
+  if (!raw) return [];
+  const base = raw
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t && !STOP_WORDS.has(t));
+
+  const expanded = new Set(base);
+  for (const token of base) {
+    for (const [key, aliases] of Object.entries(QUERY_EXPANSIONS)) {
+      if (token.includes(key) || aliases.some((a) => token.includes(a.replace(/-/g, "")))) {
+        aliases.forEach((a) => expanded.add(a));
+      }
+    }
+    if (token === "tvs" || token === "tv") {
+      expanded.add("tv");
+      expanded.add("television");
+      expanded.add("televisions");
+    }
+    if (token.includes("laundry") || token.includes("wash")) {
+      expanded.add("laundry");
+      expanded.add("washing");
+      expanded.add("washing-machines");
+    }
+  }
+  return [...expanded];
+}
+
+/** Try to pull a product from quoted text, product cards, or numbered list lines. */
+export async function findProductFromMessage(text) {
+  if (!text) return null;
+  const products = await loadProducts();
+
+  const numberedLine = text.match(/^\d+\.\s*\*?([^*\n]+?)\*?(?:\n|$)/m);
+  if (numberedLine) {
+    const guess = numberedLine[1].trim();
+    const hit = products.find(
+      (p) =>
+        p.fulfillment === "store" &&
+        (guess.toLowerCase().includes(p.name.toLowerCase().slice(0, 14)) ||
+          p.name.toLowerCase().includes(guess.toLowerCase().slice(0, 20)))
+    );
+    if (hit) return hit;
+  }
+
+  const priceLine = text.match(/(.{8,}?)\s+KES\s+[\d,]+/i);
+  if (priceLine) {
+    const guess = priceLine[1].split("\n").pop().replace(/\*/g, "").trim();
+    const hit = products.find(
+      (p) =>
+        p.fulfillment === "store" &&
+        (guess.toLowerCase().includes(p.name.toLowerCase().slice(0, 12)) ||
+          p.name.toLowerCase().includes(guess.toLowerCase().slice(0, 20)))
+    );
+    if (hit) return hit;
+  }
+
+  const lower = text.toLowerCase();
+  let best = null;
+  let bestLen = 0;
+  for (const p of products) {
+    if (p.fulfillment !== "store") continue;
+    const name = p.name.toLowerCase();
+    if (lower.includes(name) && name.length > bestLen) {
+      best = p;
+      bestLen = name.length;
+    }
+  }
+  if (best) return best;
+
+  const searched = await searchProducts({
+    keywords: text,
+    fulfillment: "store",
+    scope: "local",
+    limit: 3,
+  });
+  if (searched.length === 1) return searched[0];
+  if (searched.length > 1) {
+    const tokens = expandKeywordTokens(text);
+    searched.sort((a, b) => scoreProduct(b, tokens) - scoreProduct(a, tokens));
+    if (scoreProduct(searched[0], tokens) > 0) return searched[0];
+  }
+  return null;
+}
+
+function productHaystack(product) {
+  return [product.name, product.category, product.subcategory, ...(product.tags || [])]
+    .join(" ")
+    .toLowerCase();
+}
+
+function scoreProduct(product, tokens) {
+  const hay = productHaystack(product);
+  let score = 0;
+  for (const token of tokens) {
+    if (hay.includes(token)) score += token.length >= 4 ? 2 : 1;
+  }
+  return score;
 }

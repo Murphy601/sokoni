@@ -10,17 +10,17 @@ export const config = {
     name: "Sokoni",
     tagline: "Your Market, On WhatsApp.",
   },
-  port: Number(process.env.PORT) || 3000,
-  whatsapp: {
-    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
-    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
-    businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
-    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "",
-    apiVersion: process.env.WHATSAPP_API_VERSION || "v21.0",
+  port: Number(process.env.PORT) || 3001,
+  /** WAHA — WhatsApp HTTP API (self-hosted, not Meta Cloud API). */
+  waha: {
+    apiUrl: (process.env.WAHA_API_URL || process.env.WAHA_URL || "").replace(/\/$/, ""),
+    apiKey: process.env.WAHA_API_KEY || "",
+    session: process.env.WAHA_SESSION || "default",
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
+    model: process.env.OPENAI_MODEL || "nvidia/nemotron-nano-9b-v2:free",
   },
   affiliates: {
     kilimall: process.env.KILIMALL_AFFILIATE_ID || "demo-kilimall",
@@ -29,5 +29,53 @@ export const config = {
     temu: process.env.TEMU_AFFILIATE_ID || "demo-temu",
     amazon: process.env.AMAZON_AFFILIATE_TAG || "demo-amazon",
   },
+  /**
+   * Main store settings. Sokoni sells at its own price (supplier cost + markup)
+   * and the customer pays on delivery (cash/M-Pesa to the rider).
+   */
+  store: {
+    markupKes: Number(process.env.STORE_MARKUP_KES) || 100,
+    businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
+    codAreas: process.env.STORE_COD_AREAS || "Nairobi & environs",
+    deliveryNote:
+      process.env.STORE_DELIVERY_NOTE ||
+      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay cash/M-Pesa on delivery.",
+  },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
+  /**
+   * Admin console phone(s). Set ADMIN_PHONES to a number DIFFERENT from the bot
+   * so the owner can manage the shop from their own WhatsApp. Messages from
+   * these numbers are treated as admin commands, and order/handoff alerts are
+   * sent here. Defaults to the business number (self-chat) if unset.
+   */
+  admin: (() => {
+    const phones = (process.env.ADMIN_PHONES || process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428")
+      .split(",")
+      .map((p) => p.replace(/\D/g, ""))
+      .filter(Boolean);
+    return { phones, primary: phones[0] || "254117422428" };
+  })(),
+  /** Public URL where product images are hosted (needed for WhatsApp image messages). */
+  publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
+  /** TikTok Content Posting API (backend cron only — not exposed on website). */
+  tiktok: {
+    clientKey: process.env.TIKTOK_CLIENT_KEY || "",
+    clientSecret: process.env.TIKTOK_CLIENT_SECRET || "",
+    /** Optional one-time bootstrap; persisted tokens live in data/tiktok-oauth.json */
+    accessToken: process.env.TIKTOK_ACCESS_TOKEN || "",
+    refreshToken: process.env.TIKTOK_REFRESH_TOKEN || "",
+    redirectUri:
+      process.env.TIKTOK_REDIRECT_URI ||
+      `http://localhost:${Number(process.env.PORT) || 3001}/admin/tiktok/callback`,
+    scopes: process.env.TIKTOK_SCOPES || "user.info.basic,video.publish",
+    /** Secret for /admin/tiktok/connect and /status (backend setup only). */
+    setupToken: process.env.TIKTOK_SETUP_TOKEN || "",
+    cronEnabled: process.env.TIKTOK_CRON_ENABLED === "true",
+    /** Post times in EAT — 8:00 AM, 1:00 PM, 7:30 PM by default */
+    postTimes: (process.env.TIKTOK_POST_TIMES || "08:00,13:00,19:30")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean),
+    timezone: process.env.TIKTOK_TIMEZONE || "Africa/Nairobi",
+  },
 };

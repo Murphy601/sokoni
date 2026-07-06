@@ -1,5 +1,36 @@
-html {
-  scroll-behavior: smooth;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#ai-nudge {
+  animation: nudge-in 0.35s ease-out;
+}
+
+@keyframes nudge-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html.dark #ai-nudge {
+  border-color: rgba(37, 211, 102, 0.35);
+}
+
+html.dark #search-wa-cta {
+  background: rgba(37, 211, 102, 0.12);
 }
 
 .product-card {
@@ -10,3 +41,80 @@ html {
   transform: translateY(-4px);
   box-shadow: 0 12px 24px -8px rgba(27, 16, 53, 0.15);
 }
+
+.product-image-wrap {
+  min-height: 10rem;
+}
+
+.product-image {
+  transition: transform 0.25s ease;
+}
+
+.product-card:hover .product-image {
+  transform: scale(1.03);
+}
+
+/* ============================================================
+   DARK MODE
+   Centralised overrides so we theme the whole site without
+   editing every element. Deep charcoal base + elevated
+   card surfaces with a soft green glow. Green CTAs stay green
+   with dark text for contrast.
+   ============================================================ */
+
+body,
+header,
+section,
+footer,
+.product-card,
+.cat-chip {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Base surfaces */
+html.dark .bg-brand-cream { background-color: #0f1116 !important; }
+html.dark .bg-brand-cream\/90 { background-color: rgba(15, 17, 22, 0.9) !important; }
+html.dark .bg-white { background-color: #1a1d24 !important; }
+
+/* Deals band sits on the base so its cards read as elevated */
+html.dark #deals { background-color: #0f1116 !important; }
+
+/* Text */
+html.dark .text-brand-purple { color: #ece9f5 !important; }
+html.dark .text-brand-purple\/70 { color: rgba(236, 233, 245, 0.72) !important; }
+html.dark .text-brand-purple\/60 { color: rgba(236, 233, 245, 0.62) !important; }
+html.dark .text-brand-purple\/50 { color: rgba(236, 233, 245, 0.52) !important; }
+html.dark .text-brand-purple\/40 { color: rgba(236, 233, 245, 0.42) !important; }
+
+/* Borders */
+html.dark .border-black\/5 { border-color: rgba(255, 255, 255, 0.08) !important; }
+
+/* Green CTAs & badges keep dark text on green for contrast */
+html.dark .bg-brand-green.text-brand-purple { color: #0b131a !important; }
+
+/* Cards: elevated surface + soft border, green glow on hover */
+html.dark .product-card {
+  background-color: #1a1d24 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+html.dark .product-card:hover {
+  box-shadow: 0 14px 34px -12px rgba(37, 211, 102, 0.35);
+}
+
+/* Category tiles */
+html.dark .cat-chip {
+  background-color: #1a1d24 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Keep product image tiles light so photos stay vibrant/legible */
+html.dark .product-image-wrap { background-color: #f3f4f6 !important; }
+
+/* Keep the hero WhatsApp mock authentically light in both modes */
+html.dark #hero-mock { background-color: #ffffff !important; }
+html.dark #hero-mock .bg-white { background-color: #ffffff !important; }
+html.dark #hero-mock,
+html.dark #hero-mock p { color: #1b1035 !important; }
+html.dark #hero-mock .text-brand-purple\/60 { color: rgba(27, 16, 53, 0.6) !important; }
+html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }

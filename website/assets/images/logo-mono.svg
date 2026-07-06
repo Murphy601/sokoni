@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sokoni">
+  <title>Sokoni</title>
+  <defs>
+    <filter id="drop"><feDropShadow dx="0" dy="16" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/></filter>
+  </defs>
+  <ellipse cx="268" cy="458" rx="150" ry="28" fill="currentColor" opacity="0.2"/>
+  <g filter="url(#drop)" fill="currentColor">
+    <path d="M118 188 C118 88, 394 88, 394 188 L374 188 C374 108, 138 108, 138 188 Z"/>
+    <path d="M108 196 L148 196 L168 420 C168 448 188 468 228 472 L228 196 Z" opacity="0.75"/>
+    <path d="M148 196 L228 196 L228 472 C188 468 158 448 148 420 Z" opacity="0.88"/>
+    <path d="M228 196 L404 196 C420 196 428 210 424 228 L392 430 C382 462 352 478 300 482 C248 486 210 468 198 430 L168 228 C162 208 178 196 228 196 Z"/>
+    <path opacity="0.85" d="M138 196 C138 168 196 152 300 152 C404 152 462 168 462 196 L442 196 C442 178 392 168 300 168 C208 168 158 178 158 196 Z"/>
+    <path d="M158 196 L442 196 L438 214 L162 214 Z" opacity="0.7"/>
+    <g opacity="0.35">
+      <path d="M182 248 L418 248 L412 268 L188 268 Z"/>
+      <path d="M192 296 L408 296 L402 316 L198 316 Z"/>
+      <path d="M200 344 L400 344 L394 364 L206 364 Z"/>
+    </g>
+  </g>
+</svg>

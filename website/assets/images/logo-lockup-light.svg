@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 96" role="img" aria-label="Sokoni">
+  <title>Sokoni</title>
+  <defs>
+    <linearGradient id="front" x1="28%" y1="0%" x2="72%" y2="100%">
+      <stop offset="0%" stop-color="#38F080"/>
+      <stop offset="40%" stop-color="#18C858"/>
+      <stop offset="100%" stop-color="#0A8040"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#065A2E"/>
+      <stop offset="100%" stop-color="#0A7040"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#C88B12"/>
+      <stop offset="50%" stop-color="#FFD84A"/>
+      <stop offset="100%" stop-color="#A87208"/>
+    </linearGradient>
+    <linearGradient id="handle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0C8848"/>
+      <stop offset="50%" stop-color="#28E068"/>
+      <stop offset="100%" stop-color="#066830"/>
+    </linearGradient>
+    <filter id="drop"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.25"/></filter>
+  </defs>
+  <!-- Large bold icon (~88px) -->
+  <g transform="translate(0 -4) scale(0.172)" filter="url(#drop)">
+    <path fill="url(#handle)" stroke="#065A2E" stroke-width="6"
+          d="M118 188 C118 88, 394 88, 394 188 L374 188 C374 108, 138 108, 138 188 Z"/>
+    <path fill="#065A2E" d="M108 196 L148 196 L168 420 C168 448 188 468 228 472 L228 196 Z"/>
+    <path fill="url(#side)" d="M148 196 L228 196 L228 472 C188 468 158 448 148 420 Z"/>
+    <path fill="url(#front)" d="M228 196 L404 196 C420 196 428 210 424 228 L392 430 C382 462 352 478 300 482 C248 486 210 468 198 430 L168 228 C162 208 178 196 228 196 Z"/>
+    <path fill="url(#gold)" d="M138 196 C138 168 196 152 300 152 C404 152 462 168 462 196 L442 196 C442 178 392 168 300 168 C208 168 158 178 158 196 Z"/>
+    <path fill="url(#gold)" d="M158 196 L442 196 L438 214 L162 214 Z"/>
+    <g fill="#065A2E" opacity="0.45">
+      <path d="M182 248 L418 248 L412 268 L188 268 Z"/>
+      <path d="M192 296 L408 296 L402 316 L198 316 Z"/>
+      <path d="M200 344 L400 344 L394 364 L206 364 Z"/>
+    </g>
+  </g>
+  <text x="100" y="64" font-family="Georgia, 'Times New Roman', serif"
+        font-size="52" font-weight="700" letter-spacing="-1" fill="#1B1035">Sokoni</text>
+</svg>

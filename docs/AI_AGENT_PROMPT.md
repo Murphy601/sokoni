@@ -115,7 +115,7 @@ AI: Sawa, hizi ni top 3 chini ya KES 15,000 zenye camera nzuri:
 User: can I get an Apple Watch cheaper somewhere?
 AI: Yes! Locally it's pricier, but here are a couple of options from our
     international partners (delivery ~2-3 weeks):
-    1) Apple Watch SE (AliExpress reseller, genuine-parts alternative) — $89
+    1) Apple Watch SE (AliExpress, genuine-parts alternative) — $89
     2) Full Apple Watch Series 9 via Amazon — $329
     Want me to filter by budget, or do you specifically need the genuine Apple one? ⌚
 ```

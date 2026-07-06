@@ -1,82 +1,179 @@
 import axios from "axios";
 import { config } from "../config.js";
 
-const BASE_URL = `https://graph.facebook.com/${config.whatsapp.apiVersion}/${config.whatsapp.phoneNumberId}/messages`;
+/** Normalize phone digits or chatId to WAHA chatId format. */
+export function toChatId(phoneOrChatId) {
+  if (phoneOrChatId.includes("@")) {
+    return phoneOrChatId.replace(/@s\.whatsapp\.net$/, "@c.us");
+  }
+  const digits = String(phoneOrChatId).replace(/\D/g, "");
+  return `${digits}@c.us`;
+}
 
-async function callWhatsApp(payload) {
-  if (!config.whatsapp.accessToken || !config.whatsapp.phoneNumberId) {
-    // Local dev / demo mode without real WhatsApp credentials configured yet.
-    console.log("[whatsapp:dry-run]", JSON.stringify(payload, null, 2));
+/** Session key + display id from WAHA `from` field (supports @c.us and @lid). */
+export function customerKeyFromChatId(chatId) {
+  if (!chatId) return "";
+  return chatId.replace(/@s\.whatsapp\.net$/, "@c.us");
+}
+
+/** Extract phone digits from WAHA chatId when possible. */
+export function phoneDigitsFromChatId(chatId) {
+  if (!chatId || chatId.includes("@lid")) return null;
+  const digits = chatId.replace(/@c\.us$/, "").replace(/@s\.whatsapp\.net$/, "").replace(/\D/g, "");
+  return digits.length >= 9 ? digits : null;
+}
+
+/** Extract phone digits from WAHA chatId. */
+export function fromChatId(chatId) {
+  return customerKeyFromChatId(chatId);
+}
+
+export function formatCustomerLabel(meta, fallbackKey) {
+  const parts = [];
+  if (meta?.displayName) parts.push(meta.displayName);
+  const phone = meta?.phone || phoneDigitsFromChatId(meta?.chatId || fallbackKey);
+  if (phone) parts.push(`+${phone}`);
+  const chatRef = meta?.chatId || fallbackKey;
+  if (chatRef && !phone) parts.push(`chat ${chatRef}`);
+  return parts.join(" · ") || fallbackKey || "Unknown customer";
+}
+
+async function callWaha(endpoint, body) {
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", endpoint, JSON.stringify(body, null, 2));
     return { dryRun: true };
   }
-  const { data } = await axios.post(BASE_URL, payload, {
-    headers: {
-      Authorization: `Bearer ${config.whatsapp.accessToken}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const headers = { "Content-Type": "application/json" };
+  if (config.waha.apiKey) headers["X-Api-Key"] = config.waha.apiKey;
+  const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, { headers });
   return data;
 }
 
-export function sendText(to, body) {
-  return callWhatsApp({
-    messaging_product: "whatsapp",
-    to,
-    type: "text",
-    text: { body },
+/**
+ * Because the admin/store owner shares the SAME WhatsApp account as the bot,
+ * WAHA delivers the bot's OWN outgoing messages back to the webhook (via
+ * message.any). We track what the bot sent so we can ignore those echoes and
+ * only react to messages the human actually typed.
+ */
+const botSentIds = new Set();
+const BOT_IDS_MAX = 1000;
+const recentSends = new Map(); // normalized chatId -> timestamp
+const RECENT_SEND_WINDOW_MS = 6000;
+
+function idStrings(idLike) {
+  const out = [];
+  if (!idLike) return out;
+  if (typeof idLike === "string") out.push(idLike);
+  else if (typeof idLike === "object") {
+    if (idLike._serialized) out.push(idLike._serialized);
+    if (typeof idLike.id === "string") out.push(idLike.id);
+  }
+  return out;
+}
+
+function extractMessageIds(resp) {
+  const raw = [
+    ...idStrings(resp?.id),
+    ...idStrings(resp?.key?.id),
+    ...idStrings(resp?._data?.id),
+    ...idStrings(resp?.message?.id),
+  ];
+  if (typeof resp?._serialized === "string") raw.push(resp._serialized);
+  const shorts = raw.map((s) => String(s).split("_").pop()).filter(Boolean);
+  return [...new Set([...raw, ...shorts])];
+}
+
+function rememberSend(resp, to) {
+  for (const id of extractMessageIds(resp)) botSentIds.add(id);
+  if (botSentIds.size > BOT_IDS_MAX) {
+    const arr = [...botSentIds];
+    arr.slice(0, arr.length - Math.floor(BOT_IDS_MAX / 2)).forEach((id) => botSentIds.delete(id));
+  }
+  try {
+    recentSends.set(toChatId(to), Date.now());
+  } catch {}
+}
+
+/** True if a webhook message is the bot's own outgoing echo (not human-typed). */
+export function isBotEcho(messageId, destinationChatId) {
+  if (messageId) {
+    const parts = [messageId, String(messageId).split("_").pop()].filter(Boolean);
+    if (parts.some((p) => botSentIds.has(p))) return true;
+  }
+  try {
+    const ts = recentSends.get(toChatId(destinationChatId));
+    if (ts && Date.now() - ts < RECENT_SEND_WINDOW_MS) return true;
+  } catch {}
+  return false;
+}
+
+export async function sendText(to, text) {
+  const resp = await callWaha("/api/sendText", {
+    session: config.waha.session,
+    chatId: toChatId(to),
+    text,
   });
+  rememberSend(resp, to);
+  return resp;
+}
+
+/** Public HTTPS URL for a catalog image (WhatsApp requires a reachable link). */
+export function resolvePublicImageUrl(product) {
+  if (!product?.imageUrl) return null;
+  if (/^https?:\/\//i.test(product.imageUrl)) return product.imageUrl;
+  return `${config.publicSiteUrl}/${product.imageUrl.replace(/^\//, "")}`;
+}
+
+export async function sendImage(to, { link, caption }) {
+  const resp = await callWaha("/api/sendImage", {
+    session: config.waha.session,
+    chatId: toChatId(to),
+    file: { url: link, mimetype: "image/jpeg", filename: "product.jpg" },
+    caption: caption || "",
+  });
+  rememberSend(resp, to);
+  return resp;
 }
 
 /**
- * Sends an interactive list message (max 10 rows total across all sections).
- * `sections`: [{ title, rows: [{ id, title, description }] }]
+ * Renders a single product as image + text. WAHA does not support reliable
+ * quick-reply buttons, so follow-up actions use numbered text menus instead.
  */
-export function sendList(to, { header, body, footer, buttonText, sections }) {
-  return callWhatsApp({
-    messaging_product: "whatsapp",
-    to,
-    type: "interactive",
-    interactive: {
-      type: "list",
-      ...(header ? { header: { type: "text", text: header } } : {}),
-      body: { text: body },
-      ...(footer ? { footer: { text: footer } } : {}),
-      action: { button: buttonText, sections },
-    },
-  });
-}
+export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { setActions = true } = {}) {
+  const { setMenuState } = await import("./session.js");
 
-/**
- * Sends up to 3 quick-reply buttons.
- * `buttons`: [{ id, title }]
- */
-export function sendButtons(to, { body, footer, buttons }) {
-  return callWhatsApp({
-    messaging_product: "whatsapp",
-    to,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: { text: body },
-      ...(footer ? { footer: { text: footer } } : {}),
-      action: {
-        buttons: buttons.map((button) => ({
-          type: "reply",
-          reply: { id: button.id, title: button.title },
-        })),
-      },
-    },
-  });
-}
+  if (product.fulfillment === "store") {
+    const caption =
+      `*${product.name}*\n` +
+      `KES ${product.priceKes.toLocaleString()}  ·  💵 Pay on delivery\n` +
+      `⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews)`;
 
-/**
- * Renders a single product as a text card + a button to open the affiliate
- * link. WhatsApp interactive buttons can't open arbitrary URLs directly in
- * every client the same way link previews do, so we combine a rich text
- * message (with the link inline, giving a native link preview) with a
- * follow-up quick-reply for "Ask AI about this" to keep the conversation open.
- */
-export async function sendProductCard(to, product, affiliateUrl, sourceLabel) {
+    const imageUrl = resolvePublicImageUrl(product);
+    if (imageUrl) {
+      try {
+        await sendImage(to, { link: imageUrl, caption });
+      } catch (err) {
+        console.warn("[whatsapp] image send failed, using text:", err.message);
+        await sendText(to, caption + `\n🛵 ${config.store.deliveryNote}`);
+      }
+    } else {
+      await sendText(to, caption + `\n🛵 ${config.store.deliveryNote}`);
+    }
+
+    if (!setActions) return;
+
+    const options = [
+      { id: `order_${product.id}`, label: "🛒 Order (pay on delivery)" },
+      { id: `ask_ai_${product.id}`, label: "🤖 Ask about it" },
+      { id: "menu_main", label: "⬅ Main menu" },
+    ];
+    setMenuState(to, { type: "product", productId: product.id, options });
+    return sendText(
+      to,
+      `What next?\n\n1. 🛒 Order (pay on delivery)\n2. 🤖 Ask about it\n3. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
+    );
+  }
+
   const isInternational = product.scope === "international";
   const priceLine = product.priceKes
     ? `KES ${product.priceKes.toLocaleString()}` +
@@ -95,13 +192,33 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel) {
     `🛒 Buy here: ${affiliateUrl}\n\n` +
     `_Sokoni may earn a small commission on this purchase — it never costs you extra 🙏_`;
 
-  await sendText(to, body);
+  const imageUrl = resolvePublicImageUrl(product);
+  if (imageUrl) {
+    try {
+      await sendImage(to, {
+        link: imageUrl,
+        caption: `*${product.name}*\n${priceLine}\n⭐ ${product.rating} · ${sourceLabel}`,
+      });
+    } catch (err) {
+      console.warn("[whatsapp] image send failed, using text:", err.message);
+    }
+    await sendText(
+      to,
+      `${dutiesNote}🛒 Buy here: ${affiliateUrl}\n\n_Sokoni may earn a small commission — it never costs you extra 🙏_`
+    );
+  } else {
+    await sendText(to, body);
+  }
 
-  return sendButtons(to, {
-    body: `Want to know more about the ${product.name}?`,
-    buttons: [
-      { id: `ask_ai_${product.id}`, title: "🤖 Ask AI about it" },
-      { id: "menu_main", title: "⬅ Main Menu" },
-    ],
-  });
+  if (!setActions) return;
+
+  const options = [
+    { id: `ask_ai_${product.id}`, label: "🤖 Ask AI about it" },
+    { id: "menu_main", label: "⬅ Main menu" },
+  ];
+  setMenuState(to, { type: "product", productId: product.id, options });
+  return sendText(
+    to,
+    `What next?\n\n1. 🤖 Ask AI about it\n2. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
+  );
 }

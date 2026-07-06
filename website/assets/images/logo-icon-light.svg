@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sokoni">
+  <title>Sokoni on light</title>
+  <rect width="512" height="512" fill="#FFFFFF"/>
+  <defs>
+    <linearGradient id="front" x1="28%" y1="0%" x2="72%" y2="100%">
+      <stop offset="0%" stop-color="#38F080"/>
+      <stop offset="40%" stop-color="#18C858"/>
+      <stop offset="100%" stop-color="#0A8040"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#065A2E"/>
+      <stop offset="100%" stop-color="#0A7040"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#C88B12"/>
+      <stop offset="50%" stop-color="#FFD84A"/>
+      <stop offset="100%" stop-color="#A87208"/>
+    </linearGradient>
+    <linearGradient id="handle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0C8848"/>
+      <stop offset="50%" stop-color="#28E068"/>
+      <stop offset="100%" stop-color="#066830"/>
+    </linearGradient>
+    <filter id="drop"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-opacity="0.28"/></filter>
+  </defs>
+  <ellipse cx="268" cy="458" rx="168" ry="34" fill="#000" opacity="0.18"/>
+  <g filter="url(#drop)">
+    <path fill="url(#handle)" stroke="#065A2E" stroke-width="6"
+          d="M118 188 C118 88, 394 88, 394 188 L374 188 C374 108, 138 108, 138 188 Z"/>
+    <path fill="#065A2E" d="M108 196 L148 196 L168 420 C168 448 188 468 228 472 L228 196 Z"/>
+    <path fill="url(#side)" d="M148 196 L228 196 L228 472 C188 468 158 448 148 420 Z"/>
+    <path fill="url(#front)" d="M228 196 L404 196 C420 196 428 210 424 228 L392 430 C382 462 352 478 300 482 C248 486 210 468 198 430 L168 228 C162 208 178 196 228 196 Z"/>
+    <path fill="url(#gold)" d="M138 196 C138 168 196 152 300 152 C404 152 462 168 462 196 L442 196 C442 178 392 168 300 168 C208 168 158 178 158 196 Z"/>
+    <path fill="url(#gold)" d="M158 196 L442 196 L438 214 L162 214 Z"/>
+    <g fill="#065A2E" opacity="0.45">
+      <path d="M182 248 L418 248 L412 268 L188 268 Z"/>
+      <path d="M192 296 L408 296 L402 316 L198 316 Z"/>
+      <path d="M200 344 L400 344 L394 364 L206 364 Z"/>
+      <path d="M208 392 L392 392 L386 412 L214 412 Z"/>
+    </g>
+    <path fill="#FFFFFF" opacity="0.25" d="M360 210 L400 210 L382 440 C370 455 350 462 330 460 L350 220 Z"/>
+    <ellipse cx="300" cy="210" rx="118" ry="22" fill="#043D1F" opacity="0.55"/>
+  </g>
+</svg>

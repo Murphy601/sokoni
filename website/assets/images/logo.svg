@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sokoni">
+  <title>Sokoni</title>
+  <defs>
+    <linearGradient id="wood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F0D4A8"/>
+      <stop offset="50%" stop-color="#D4A574"/>
+      <stop offset="100%" stop-color="#B8894E"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5CE892"/>
+      <stop offset="50%" stop-color="#25D366"/>
+      <stop offset="100%" stop-color="#1A9E4A"/>
+    </linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="16" stdDeviation="14" flood-opacity="0.35"/></filter>
+  </defs>
+  <ellipse cx="256" cy="460" rx="150" ry="28" fill="#000" opacity="0.22"/>
+  <g filter="url(#sh)">
+    <!-- Green handle -->
+    <path fill="url(#green)" d="M128 168 C128 88, 384 88, 384 168 L360 168 C360 108, 152 108, 152 168 Z"/>
+    <!-- Wood basket body -->
+    <path fill="url(#wood)" d="M112 176 L400 176 C418 176 426 192 420 208 L388 432 C378 468 340 488 256 488 C172 488 134 468 124 432 L92 208 C86 192 94 176 112 176 Z"/>
+    <!-- Green bands -->
+    <path fill="url(#green)" d="M104 188 L408 188 L404 212 L108 212 Z"/>
+    <path fill="url(#green)" opacity="0.9" d="M118 280 L394 280 L388 304 L124 304 Z"/>
+    <!-- Wood slats -->
+    <g fill="#B8894E" opacity="0.35">
+      <rect x="140" y="220" width="14" height="200" rx="4"/>
+      <rect x="200" y="220" width="14" height="215" rx="4"/>
+      <rect x="260" y="220" width="14" height="220" rx="4"/>
+      <rect x="320" y="220" width="14" height="215" rx="4"/>
+    </g>
+    <path fill="#FFF" opacity="0.22" d="M140 200 C200 185 310 185 370 200 L350 230 C290 218 220 218 160 230 Z"/>
+  </g>
+</svg>

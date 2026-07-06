@@ -1,90 +1,319 @@
 import {
   sendWelcome,
-  sendMainMenu,
-  isCategoryMenuId,
-  sendCategorySubmenu,
-  isSubcategoryRowId,
-  sendProductsForSubcategory,
-  sendDealsOfTheDay,
-  sendInternationalMenu,
-  sendInternationalTrending,
-  sendTrackOrderMenu,
-  sendTrackingInfo,
+  handleMenuAction,
+  tryHandlePendingOrder,
+  sendNumberedProductList,
+  cancelOrder,
+  changeOrder,
+  handleCart,
+  startCodOrder,
   sendHumanHandoff,
-  sendHowItWorks,
-  sendProductFollowUpContext,
 } from "../services/menu.js";
-import { sendText } from "../services/whatsapp.js";
+import { sendText, customerKeyFromChatId, isBotEcho } from "../services/whatsapp.js";
 import { runAiAgent } from "../services/ai.js";
-import { pushMessage, setProductContext } from "../services/session.js";
+import {
+  getMenuState,
+  getSession,
+  isHumanHandoff,
+  clearHumanHandoff,
+  setCustomerMeta,
+} from "../services/session.js";
+import { searchProducts, findProductFromMessage } from "../services/catalog.js";
+import { handleCustomerWhileHandoff } from "../services/handoff.js";
+import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, extractCustomerMeta } from "../services/admin.js";
+import { registerContact } from "../services/orders.js";
+import { sendOrderStatus } from "../services/menu.js";
 
-const RESET_KEYWORDS = new Set(["menu", "hi", "hello", "start", "hey", "habari"]);
+const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
+const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
 
-/**
- * Extracts a normalized { from, kind, text, interactiveId } shape from a raw
- * WhatsApp Cloud API webhook payload for a single message.
- */
-function parseMessage(message) {
-  const from = message.from;
-  if (message.type === "text") {
-    return { from, kind: "text", text: message.text.body };
-  }
-  if (message.type === "interactive") {
-    const interactive = message.interactive;
-    if (interactive.type === "list_reply") {
-      return { from, kind: "interactive", interactiveId: interactive.list_reply.id };
-    }
-    if (interactive.type === "button_reply") {
-      return { from, kind: "interactive", interactiveId: interactive.button_reply.id };
-    }
-  }
-  return { from, kind: "unsupported" };
+function parseNumericChoice(text) {
+  const match = text.trim().match(/^(\d{1,2})$/);
+  return match ? Number(match[1]) : null;
 }
 
-async function handleInteractive(from, id) {
-  if (id === "menu_main") return sendMainMenu(from);
-  if (isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
-  if (isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
-  if (id === "deals_today") return sendDealsOfTheDay(from);
-  if (id === "intl_shop") return sendInternationalMenu(from);
-  if (id === "intl_trending") return sendInternationalTrending(from);
-  if (id === "intl_custom") {
-    return sendText(from, "Tell me what you're looking for and I'll search AliExpress, Temu and Amazon for you! 🌍");
+function extractQuotedText(payload) {
+  const candidates = [
+    payload.replyTo?.body,
+    payload.replyTo?.text,
+    payload.quotedMsg?.body,
+    payload.quotedMessage?.body,
+    payload._data?.quotedMessage?.body,
+    payload._data?.quotedMsg?.body,
+    payload._data?.quotedMsgObj?.caption,
+    payload._data?.quotedStanza?.body,
+    payload.quoted?.body,
+    payload.replyTo?._data?.body,
+    payload.replyTo?._data?.quotedMessage?.body,
+  ];
+  for (const c of candidates) {
+    if (c && String(c).trim()) return String(c).trim();
   }
-  if (id === "track_order") return sendTrackOrderMenu(from);
-  if (id.startsWith("track_")) return sendTrackingInfo(from, id);
-  if (id === "human_handoff") return sendHumanHandoff(from);
-  if (id === "how_it_works") return sendHowItWorks(from);
-  if (id.startsWith("ask_ai_")) {
-    const product = await sendProductFollowUpContext(id);
-    if (product) {
-      setProductContext(from, product);
-      pushMessage(
-        from,
-        "system",
-        `The customer wants to ask about this specific product: ${JSON.stringify(product)}`
-      );
-    }
-    return sendText(from, "Sure — what would you like to know about it? 🤔");
-  }
-  return sendMainMenu(from);
+  return "";
 }
 
-export async function handleIncomingMessage(message) {
-  const parsed = parseMessage(message);
-  if (parsed.kind === "unsupported") return;
-  const { from } = parsed;
+function isCasualGreeting(text) {
+  const t = text.toLowerCase().trim();
+  return /^(sasa|mambo|habari yako|habari|uko aje|uze aje|poa|sema|hujambo|shikamoo|good morning|good evening|good afternoon|hello|hi|hey)[\s!?.]*$/i.test(
+    t
+  );
+}
 
-  if (parsed.kind === "interactive") {
-    return handleInteractive(from, parsed.interactiveId);
+function isPurchaseIntent(text) {
+  const t = text.toLowerCase().trim();
+  return /^(nipee|nataka|give me|order it|buy it|take it|yes please|confirm|ndio|sawa)[\s!?.]*$/i.test(t);
+}
+
+function isIgnorableChat(id) {
+  if (!id) return false;
+  return /@g\.us$|@newsletter$|status@broadcast/i.test(id);
+}
+
+function messageIdFrom(payload) {
+  const id = payload?.id;
+  if (typeof id === "string") return id;
+  if (id && typeof id === "object") return id._serialized || id.id || null;
+  return payload?._data?.id?._serialized || payload?._data?.id?.id || null;
+}
+
+export function parseWahaMessage(body) {
+  // WAHA delivers incoming via "message" and the bot's OWN outgoing via
+  // "message.any". We subscribe to message.any so admin actions are seen too.
+  if (body?.event !== "message" && body?.event !== "message.any") return null;
+  const payload = body.payload;
+  if (!payload || !payload.body?.trim()) return null;
+  if (payload.hasMedia && !payload.body) return null;
+  if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
+
+  const text = payload.body.trim();
+  const quotedText = extractQuotedText(payload);
+  const messageId = messageIdFrom(payload);
+
+  if (payload.fromMe) {
+    return {
+      direction: "outgoing",
+      messageId,
+      fromChatId: customerKeyFromChatId(payload.from),
+      toChatId: customerKeyFromChatId(payload.to),
+      text,
+      quotedText,
+    };
   }
 
-  const text = parsed.text.trim();
-  const normalized = text.toLowerCase();
+  const meta = extractCustomerMeta(payload);
+  const combinedText = quotedText ? `${quotedText}\n${text}` : text;
+
+  return {
+    direction: "incoming",
+    messageId,
+    customerKey: meta.chatId,
+    text,
+    quotedText,
+    combinedText,
+    ...meta,
+  };
+}
+
+async function tryProductSearch(customerKey, text) {
+  if (isCasualGreeting(text)) return false;
+
+  const products = await searchProducts({
+    keywords: text,
+    fulfillment: "store",
+    scope: "local",
+    limit: 4,
+  });
+  if (products.length === 0) return false;
+
+  const isProductIntent =
+    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(text) ||
+    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix/i.test(text);
+
+  if (!isProductIntent && products.length > 1) return false;
+
+  await sendNumberedProductList(customerKey, products, { title: "Here's what I found:" });
+  return true;
+}
+
+export async function handleIncomingMessage(
+  customerKey,
+  text,
+  { quotedText = "", combinedText = text, displayName = "", phone = "", chatId = customerKey } = {}
+) {
+  setCustomerMeta(customerKey, { chatId, displayName, phone });
+  registerContact(customerKey, { chatId, displayName, phone });
+
+  const normalized = text.toLowerCase().trim();
+
+  // Human handoff FIRST — bot must stay silent (only "menu" exits)
+  if (isHumanHandoff(customerKey)) {
+    if (normalized === "menu") {
+      clearHumanHandoff(customerKey);
+      return sendWelcome(customerKey);
+    }
+    return handleCustomerWhileHandoff(customerKey);
+  }
+
+  // Order-number lookup — never treat admin #commands as customer track requests
+  const orderIdMatch =
+    !containsAdminCommand(text) &&
+    !isAdminSender(customerKey, phone) &&
+    text.trim().match(/\bSK-?(\d{3,})\b/i);
+  if (orderIdMatch) {
+    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`);
+  }
+  if (normalized === "track" || normalized === "track order" || normalized === "my order" || normalized === "my orders") {
+    const { sendTrackOrderMenu } = await import("../services/menu.js");
+    return sendTrackOrderMenu(customerKey);
+  }
+
+  if (
+    /^(tiktok\s*deals?|viral\s*bargains?|viral\s*deals?|as\s*seen\s*on\s*tiktok)$/i.test(normalized) ||
+    /^tiktokdeals$/i.test(normalized.replace(/\s/g, ""))
+  ) {
+    const { sendViralDealsMenu } = await import("../services/menu.js");
+    return sendViralDealsMenu(customerKey);
+  }
+
+  if (/tik\s*tok|tiktok|viral bargain|nimeona.*tik\s*tok|saw (?:your|the).*(?:tik\s*tok|viral)/i.test(combinedText)) {
+    const { sendViralDealsMenu } = await import("../services/menu.js");
+    return sendViralDealsMenu(customerKey);
+  }
+
   if (RESET_KEYWORDS.has(normalized)) {
-    return sendWelcome(from);
+    return sendWelcome(customerKey);
   }
 
-  const reply = await runAiAgent(from, text);
-  return sendText(from, reply);
+  if (CATALOG_ALIASES.has(normalized)) {
+    return sendWelcome(customerKey);
+  }
+
+  if (normalized === "cart" || normalized === "my cart" || normalized === "my cart?") {
+    return handleCart(customerKey);
+  }
+
+  if (/^cancel(\s+order)?$/i.test(normalized) || normalized === "cancel order") {
+    return cancelOrder(customerKey);
+  }
+
+  if (/^change(\s+order)?$/i.test(normalized) || normalized === "change order") {
+    return changeOrder(customerKey);
+  }
+
+  if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
+    const product = await findProductFromMessage(combinedText);
+    if (product) {
+      const { showProductActions } = await import("../services/menu.js");
+      return showProductActions(customerKey, product.id);
+    }
+  }
+
+  if (quotedText) {
+    const quotedProduct = await findProductFromMessage(quotedText);
+    if (quotedProduct) {
+      if (text === "1" || /^order$/i.test(text)) {
+        return startCodOrder(customerKey, quotedProduct.id);
+      }
+      if (/^(info|details?|more)$/i.test(text)) {
+        const { showProductActions } = await import("../services/menu.js");
+        return showProductActions(customerKey, quotedProduct.id);
+      }
+    }
+  }
+
+  const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
+  if (pendingHandled) return;
+
+  if (isCasualGreeting(text)) {
+    return sendText(
+      customerKey,
+      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *Hisense TV*, *washing machine*)."
+    );
+  }
+
+  if (isPurchaseIntent(text)) {
+    const session = getSession(customerKey);
+    if (session.lastProductContext) {
+      return startCodOrder(customerKey, session.lastProductContext.id);
+    }
+    return sendText(customerKey, "Which item do you want? Type *menu* → browse → reply with the item number.");
+  }
+
+  const choice = parseNumericChoice(text);
+  const menuState = getMenuState(customerKey);
+
+  if (choice && menuState?.type === "product_list" && menuState.productIds?.[choice - 1]) {
+    const { showProductActions } = await import("../services/menu.js");
+    return showProductActions(customerKey, menuState.productIds[choice - 1]);
+  }
+
+  if (choice && menuState?.options?.length >= choice) {
+    const option = menuState.options[choice - 1];
+    if (option.id === "human_handoff") {
+      return sendHumanHandoff(customerKey, {
+        chatId,
+        displayName,
+        phone,
+        lastMessage: combinedText,
+      });
+    }
+    try {
+      return await handleMenuAction(customerKey, option.id);
+    } catch (err) {
+      console.error("Menu action failed:", err.message);
+      return sendText(customerKey, "Sorry, something went wrong. Type *menu* to try again.");
+    }
+  }
+
+  if (/human|agent|person|call me|speak to someone|talk to a human|i need human/i.test(normalized)) {
+    return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
+  }
+
+  if (await tryProductSearch(customerKey, combinedText)) return;
+
+  try {
+    const reply = await runAiAgent(customerKey, combinedText);
+    if (!reply) return;
+    return sendText(customerKey, reply);
+  } catch (err) {
+    console.error("Unexpected reply error:", err.message);
+    return sendText(customerKey, "Something went wrong. Type *menu* to browse products.");
+  }
+}
+
+function looksLikeAdminAction(text, quotedText) {
+  if (containsAdminCommand(text)) return true;
+  if (quotedText && /human help requested|new cod order|\[chat:/i.test(quotedText)) return true;
+  return false;
+}
+
+export async function handleWahaWebhook(body) {
+  const parsed = parseWahaMessage(body);
+  if (!parsed) return;
+
+  if (parsed.direction === "outgoing") {
+    // Ignore the bot's OWN outgoing messages (echoes). Only act on messages
+    // the human store owner actually typed (admin commands, quote-replies,
+    // or a manual reply inside a customer's chat).
+    if (!looksLikeAdminAction(parsed.text, parsed.quotedText) && isBotEcho(parsed.messageId, parsed.toChatId)) {
+      return;
+    }
+    return handleAdminOutgoing(parsed);
+  }
+
+  // Incoming from admin phone — route BEFORE customer flow
+  if (shouldRouteIncomingAsAdmin(body, parsed)) {
+    return handleAdminIncoming({
+      ...parsed,
+      phone: parsed.phone || undefined,
+    });
+  }
+
+  return handleIncomingMessage(parsed.customerKey, parsed.text, {
+    quotedText: parsed.quotedText,
+    combinedText: parsed.combinedText,
+    displayName: parsed.displayName,
+    phone: parsed.phone,
+    chatId: parsed.chatId,
+  });
 }
