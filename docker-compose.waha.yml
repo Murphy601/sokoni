@@ -1,0 +1,27 @@
+# WAHA — WhatsApp HTTP API (self-hosted)
+# Docs: https://waha.devlike.pro/
+#
+# Start:  docker compose -f docker-compose.waha.yml up -d
+# Dashboard: http://localhost:3000/dashboard  (admin / sokoni)
+# QR (with key): http://localhost:3000/api/default/auth/qr?x-api-key=sokoni-local-dev-key
+
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      WAHA_RUN_XVFB: "False"
+      WAHA_API_KEY: sokoni-local-dev-key
+      WAHA_API_KEY_PLAIN: sokoni-local-dev-key
+      WAHA_DASHBOARD_USERNAME: admin
+      WAHA_DASHBOARD_PASSWORD: sokoni
+      # NOWEB = no Chromium browser (more reliable on Windows Docker)
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
+      WAHA_PRINT_QR: "true"
+    volumes:
+      - waha_sessions:/app/.sessions
+
+volumes:
+  waha_sessions:

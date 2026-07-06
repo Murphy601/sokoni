@@ -17,9 +17,11 @@ Read the full concept first: [`docs/CONCEPT.md`](docs/CONCEPT.md)
 | [`docs/WHATSAPP_FLOWS.md`](docs/WHATSAPP_FLOWS.md) | The full menu tree and user-journey diagrams for the WhatsApp bot. |
 | [`docs/AI_AGENT_PROMPT.md`](docs/AI_AGENT_PROMPT.md) | The system prompt + example transcripts that power the AI shopping agent. |
 | [`docs/CATALOG_SYNC.md`](docs/CATALOG_SYNC.md) | The automated daily price/availability sync (Amazon + AliExpress APIs, opt-in structured-data for the rest) and what's automatable vs manual. |
+| [`docs/STORE.md`](docs/STORE.md) | The Sokoni Store / pay-on-delivery model, Jumia-style category tree, how to add products from one file, and **automatic product images**. |
+| [`docs/GO_LIVE_WAHA.md`](docs/GO_LIVE_WAHA.md) | **Step-by-step go-live** with WAHA + free hosting (Oracle VM + Cloudflare Pages). |
 | `scripts/sync/` | The catalog sync script + provider modules, run daily by a GitHub Action. |
 | `website/` | A working, dependency-free storefront (HTML/Tailwind/JS) that showcases categories & deals and drives visitors to WhatsApp. |
-| `whatsapp-bot/` | A working Node.js/Express WhatsApp Cloud API bot: structured menus + an AI free-text agent (with tool-calling) + affiliate-link building with per-customer tracking sub-IDs. |
+| `whatsapp-bot/` | Node.js/Express bot via **WAHA**: numbered text menus + OpenRouter AI + pay-on-delivery orders. |
 
 ## How the pieces connect
 
@@ -27,8 +29,8 @@ Read the full concept first: [`docs/CONCEPT.md`](docs/CONCEPT.md)
 Website (storefront, SEO, trust) ──► "Chat on WhatsApp" (wa.me link)
         │
         ▼
-WhatsApp Cloud API + Sokoni AI bot
-   (menus + free-text AI agent)
+WhatsApp (WAHA) + Sokoni AI bot
+   (numbered menus + free-text AI)
         │
         ▼
 Tracked affiliate link (Kilimall / Jumia / AliExpress / Temu / Amazon)
@@ -59,9 +61,7 @@ cp .env.example .env
 npm run dev
 ```
 
-See [`whatsapp-bot/README.md`](whatsapp-bot/README.md) for how to wire it up to a real WhatsApp
-Business number via Meta's Cloud API, and [`website/README.md`](website/README.md) for deployment
-notes.
+See [`docs/GO_LIVE_WAHA.md`](docs/GO_LIVE_WAHA.md) for WAHA setup and free hosting.
 
 ## Suggested next steps
 
@@ -69,9 +69,8 @@ notes.
    the domain + socials, and confirm the WhatsApp Business display name is available.
 2. Register as an affiliate on Kilimall, Jumia KOL, AliExpress, and Temu (links + notes in
    [`docs/CONCEPT.md`](docs/CONCEPT.md)) — approval can take a few days for some programs.
-3. Get a WhatsApp Business number and Meta Cloud API access (developers.facebook.com).
+3. Go live with WAHA — scan QR with your WhatsApp number (see [`docs/GO_LIVE_WAHA.md`](docs/GO_LIVE_WAHA.md)).
 4. Replace the demo catalog (`whatsapp-bot/src/data/products.json` and
    `website/data/products.json`) with your first ~20 real curated products and real affiliate links.
-5. Deploy the bot (Render/Railway/Fly.io/a small VPS) and the website
-   (Netlify/Vercel/Cloudflare Pages), point your WhatsApp webhook at the deployed bot URL, and
-   start driving traffic — a Reels/TikTok style works well for this.
+5. Deploy WAHA + bot (Oracle free VM) and website (Cloudflare Pages), configure the WAHA webhook,
+   and start driving traffic.

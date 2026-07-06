@@ -1,0 +1,18 @@
+{
+  "name": "sokoni",
+  "version": "1.0.0",
+  "description": "**Your Market, On WhatsApp.** Sokoni is a concept + working starter kit for an AI-powered,\r affiliate-driven \"online mall\" reachable entirely through WhatsApp: an AI agent helps shoppers\r find and buy products from trusted local suppliers (Kilimall, Jumia) and global marketplaces\r (AliExpress, Temu, Amazon) — with no inventory to manage, earning affiliate commission on every\r completed sale.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "sharp": "^0.35.3"
+  }
+}
