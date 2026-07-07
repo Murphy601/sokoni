@@ -49,11 +49,20 @@ export const config = {
    * sent here. Defaults to the business number (self-chat) if unset.
    */
   admin: (() => {
-    const phones = (process.env.ADMIN_PHONES || process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428")
+    const phones = (process.env.ADMIN_PHONES || "")
       .split(",")
       .map((p) => p.replace(/\D/g, ""))
       .filter(Boolean);
-    return { phones, primary: phones[0] || "254117422428" };
+    const alertPhone =
+      phones[0] ||
+      (process.env.BUSINESS_WHATSAPP_NUMBER || "").replace(/\D/g, "") ||
+      "";
+    if (phones.length === 0) {
+      console.warn(
+        "[config] ADMIN_PHONES not set — admin commands disabled; alerts go to business number only"
+      );
+    }
+    return { phones, primary: alertPhone };
   })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
@@ -77,5 +86,7 @@ export const config = {
       .map((t) => t.trim())
       .filter(Boolean),
     timezone: process.env.TIKTOK_TIMEZONE || "Africa/Nairobi",
+    /** Sandbox/unaudited apps must use SELF_ONLY until TikTok app audit passes. */
+    privacyLevel: process.env.TIKTOK_PRIVACY_LEVEL || "SELF_ONLY",
   },
 };

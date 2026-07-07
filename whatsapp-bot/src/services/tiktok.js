@@ -121,7 +121,7 @@ async function postToTikTok({ caption, product }) {
     post_info: {
       title: caption.slice(0, 150),
       description: caption,
-      privacy_level: "PUBLIC_TO_EVERYONE",
+      privacy_level: config.tiktok.privacyLevel,
       disable_comment: false,
     },
     source_info: {

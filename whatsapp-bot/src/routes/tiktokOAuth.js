@@ -29,6 +29,15 @@ router.get("/connect", (req, res) => {
   }
 });
 
+/** TikTok URL-prefix verification file (Content Posting / URL properties). */
+router.get("/callback/:verifyFile", (req, res, next) => {
+  const { verifyFile } = req.params;
+  if (!/^tiktok[a-zA-Z0-9]+\.txt$/.test(verifyFile)) return next();
+  const signature = process.env.TIKTOK_VERIFY_SIGNATURE?.trim();
+  if (!signature) return res.status(404).type("text/plain").send("Not found");
+  return res.type("text/plain").send(signature);
+});
+
 /** TikTok OAuth redirect target — must match TIKTOK_REDIRECT_URI in developer portal. */
 router.get("/callback", async (req, res) => {
   const { code, state, error, error_description: desc } = req.query;

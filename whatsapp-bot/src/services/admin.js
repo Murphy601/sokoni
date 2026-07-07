@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
 import { sendText, customerKeyFromChatId, phoneDigitsFromChatId } from "./whatsapp.js";
-import { relayAdminMessage } from "./handoff.js";
 import { setHumanHandoff } from "./session.js";
 import {
   getOrder,
@@ -22,7 +21,15 @@ function phonesMatch(a, b) {
   const da = digitsOnly(a);
   const db = digitsOnly(b);
   if (!da || !db) return false;
-  return da === db || da.endsWith(db.slice(-9)) || db.endsWith(da.slice(-9));
+  if (da === db) return true;
+  // Kenya: 2547XXXXXXXX vs 07XXXXXXXX — same national number only
+  const norm = (d) => {
+    if (d.startsWith("254")) return d;
+    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
+    if (d.length === 9) return `254${d}`;
+    return d;
+  };
+  return norm(da) === norm(db);
 }
 
 function isAdminPhone(phone) {
@@ -84,19 +91,30 @@ function persistAdminChatIds() {
 export function isAdminSender(chatId, phone = "") {
   loadAdminChatIds();
 
-  if (isAdminPhone(phone)) return true;
-
   if (chatId && adminChatIds.has(chatId)) {
-    const mapped = adminChatIds.get(chatId);
-    return isAdminPhone(mapped);
+    return isAdminPhone(adminChatIds.get(chatId));
   }
 
-  const digits = digitsOnly(chatId);
-  if (!digits || chatId?.includes("@lid")) return false;
+  const chatDigits = phoneDigitsFromChatId(chatId);
+  if (chatDigits && config.admin.phones.some((p) => phonesMatch(chatDigits, p))) {
+    return true;
+  }
 
-  return config.admin.phones.some(
-    (p) => digits === p || digits.endsWith(p.slice(-9)) || p.endsWith(digits.slice(-9))
-  );
+  // WhatsApp @lid ids — only admin after explicit phone match + registration.
+  if (chatId?.includes("@lid")) {
+    if (isAdminPhone(phone)) {
+      registerAdminChatId(chatId, phone);
+      return true;
+    }
+    return false;
+  }
+
+  // Metadata phone must match the sender chat id, not a random field in the payload.
+  if (isAdminPhone(phone) && chatDigits && phonesMatch(phone, chatDigits)) {
+    return true;
+  }
+
+  return false;
 }
 
 export function registerAdminChatId(chatId, phone = "") {
@@ -109,12 +127,11 @@ export function registerAdminChatId(chatId, phone = "") {
   console.log("[admin] registered chat id", chatId, "for", p);
 }
 
-/** Detect #commands anywhere in the message (not only at the start). */
+/** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
-  const t = text || "";
-  if (/#(?:help|orders|status|broadcast)\b/i.test(t)) return true;
-  if (/#SK-\d+\s+/i.test(t)) return true;
-  if (/^#\s+.+/s.test(t.trim())) return true;
+  const t = (text || "").trim();
+  if (/^#(?:help|orders|status|broadcast)\b/i.test(t)) return true;
+  if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
 
@@ -123,50 +140,38 @@ export function isAdminCommandText(text) {
   return containsAdminCommand(text);
 }
 
-/** Scan WAHA payload for any string matching a configured admin phone. */
-export function findAdminPhoneInPayload(payload, depth = 0) {
-  if (!payload || depth > 10) return null;
-  if (typeof payload === "string") {
-    const d = digitsOnly(payload);
-    if (d.length >= 9 && d.length <= 15 && isAdminPhone(d)) return d;
-    return null;
-  }
-  if (typeof payload !== "object") return null;
-  for (const v of Object.values(payload)) {
-    const found = findAdminPhoneInPayload(v, depth + 1);
-    if (found) return found;
-  }
-  return null;
-}
-
 /**
- * Resolve admin identity from chat id + WAHA payload. Admin ONLY if phone
- * matches ADMIN_PHONES or chat id was previously verified for an admin phone.
+ * Resolve admin identity from the message sender only (never scan whole payload).
  */
-export function resolveAdminIdentity(body, parsed) {
-  const payloadPhone = findAdminPhoneInPayload(body?.payload);
-  const phone = parsed.phone || payloadPhone || "";
+export function resolveAdminIdentity(_body, parsed) {
+  const phone = parsed.phone || phoneDigitsFromChatId(parsed.customerKey) || "";
   const verified = isAdminSender(parsed.customerKey, phone);
-  if (verified && parsed.customerKey?.includes("@lid") && isAdminPhone(phone)) {
-    registerAdminChatId(parsed.customerKey, phone);
-  }
   return { verified, phone };
 }
 
+/** Hard gate — admin features only for configured ADMIN_PHONES. */
+export function requireAdminSender(chatId, phone = "") {
+  if (!isAdminSender(chatId, phone)) {
+    return false;
+  }
+  if (config.admin.phones.length === 0) {
+    console.warn("[admin] ADMIN_PHONES not configured — admin console disabled");
+    return false;
+  }
+  return true;
+}
+
 /**
- * Should this incoming message be handled as admin (not customer)?
- * Strict: only configured admin phone(s) — never trust #commands from customers.
+ * Route to admin handler only for explicit admin commands — not every admin message.
+ * Admin can still type "menu" / shop like a normal customer otherwise.
  */
 export function shouldRouteIncomingAsAdmin(body, parsed) {
-  const { verified } = resolveAdminIdentity(body, parsed);
-  if (!verified) return false;
+  if (!requireAdminSender(parsed.customerKey, parsed.phone)) return false;
 
   const text = (parsed.text || "").trim();
   if (/^admin\b/i.test(text)) return true;
+  if (/^orders?\b/i.test(text)) return true;
   if (containsAdminCommand(parsed.text)) return true;
-  if (parsed.quotedText && /new cod order|human help requested|\[chat:/i.test(parsed.quotedText)) {
-    return true;
-  }
   return false;
 }
 
@@ -176,11 +181,8 @@ function isBusinessChat(chatId) {
   return digits === business || digits.endsWith(business.slice(-9));
 }
 
-function isAdminRelayAttempt(text, quotedText) {
-  const t = normalizeAdminCommand(text || "");
-  if (containsAdminCommand(t)) return true;
-  if (quotedText && /human help requested|new cod order|\[chat:/i.test(quotedText)) return true;
-  return false;
+function isAdminRelayAttempt(text) {
+  return containsAdminCommand((text || "").trim());
 }
 
 const CUSTOMER_STATUS_MESSAGES = {
@@ -209,13 +211,13 @@ async function notifyCustomerOfStatus(order) {
 function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
-    `📋 *#orders* — recent orders\n` +
+    `📋 *#orders* (or type *orders*) — recent orders\n` +
     `🔄 *#status SK-1042 out* — update status\n` +
     `   (received/confirmed/packed/out/delivered/cancelled)\n` +
     `📣 *#broadcast <message>* — message all customers\n` +
-    `💬 *# <message>* — reply to the last customer who asked for help\n` +
     `🆔 *#SK-1042 <message>* — message that order's customer\n` +
-    `❓ *#help* — this list`
+    `❓ *#help* — this list\n\n` +
+    `_Reply to customers by opening their chat in WhatsApp, or use #SK-xxxx._`
   );
 }
 
@@ -312,7 +314,7 @@ function normalizeAdminCommand(text) {
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
   if (sk) return sk[0].trim();
-  if (/^#\s+.+/s.test(t)) return t;
+  if (/^orders?\b/i.test(t)) return "#orders";
   return t;
 }
 
@@ -332,13 +334,16 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
 
 /** Parse and run an admin command. Returns true if handled. */
 async function runAdminCommand(adminChatId, text, quotedText) {
+  if (!requireAdminSender(adminChatId)) {
+    return false;
+  }
   const t = text.trim();
 
   if (/^#help\b/i.test(t)) {
     await sendText(adminChatId, adminHelpText());
     return true;
   }
-  if (/^#orders\b/i.test(t)) {
+  if (/^#orders?\b/i.test(t) || /^orders?\b/i.test(t)) {
     await handleOrdersCommand(adminChatId);
     return true;
   }
@@ -357,8 +362,7 @@ async function runAdminCommand(adminChatId, text, quotedText) {
     return true;
   }
 
-  // Fallback: relay a plain "# message" (or quoted reply) to the last customer.
-  await relayAdminMessage({ quotedText, replyText: text, adminChatId });
+  await sendText(adminChatId, adminHelpText());
   return true;
 }
 
@@ -368,20 +372,26 @@ async function runAdminCommand(adminChatId, text, quotedText) {
  * as normal incoming messages (not fromMe). Route them to admin commands.
  */
 export async function handleAdminIncoming({ customerKey, text, quotedText, phone = "" }) {
+  if (!requireAdminSender(customerKey, phone)) {
+    console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
+    return false;
+  }
+
   const cmd = normalizeAdminCommand(text);
   console.log("[admin:incoming]", { from: customerKey, phone, cmd: cmd?.slice(0, 80) });
 
-  if (/^admin\b/i.test((text || "").trim())) {
-    return sendText(customerKey, adminHelpText());
-  }
-
-  if (isAdminRelayAttempt(cmd, quotedText)) {
+  if (/^admin\b/i.test((text || "").trim()) || /^orders?\b/i.test((text || "").trim())) {
     return runAdminCommand(customerKey, cmd, quotedText);
   }
-  return relayAdminMessage({ quotedText, replyText: cmd, adminChatId: customerKey });
+
+  if (isAdminRelayAttempt(cmd)) {
+    return runAdminCommand(customerKey, cmd, quotedText);
+  }
+
+  return false;
 }
 
-/** Handle messages sent by the store owner (fromMe). */
+/** Handle messages sent by the store owner (fromMe). Admin #commands only from ADMIN_PHONES. */
 export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedText }) {
   console.log("[admin:outgoing]", {
     to: toChatId,
@@ -389,7 +399,11 @@ export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedTe
     quoted: quotedText?.slice(0, 80),
   });
 
-  if (isAdminRelayAttempt(text, quotedText)) {
+  const fromPhone = phoneDigitsFromChatId(fromChatId);
+  const adminCommand =
+    requireAdminSender(fromChatId, fromPhone) && isAdminRelayAttempt(text);
+
+  if (adminCommand) {
     return runAdminCommand(fromChatId || config.admin.primary, text, quotedText);
   }
 

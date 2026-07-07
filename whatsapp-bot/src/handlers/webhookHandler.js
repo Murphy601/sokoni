@@ -9,7 +9,7 @@ import {
   startCodOrder,
   sendHumanHandoff,
 } from "../services/menu.js";
-import { sendText, customerKeyFromChatId, isBotEcho } from "../services/whatsapp.js";
+import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId } from "../services/whatsapp.js";
 import { runAiAgent } from "../services/ai.js";
 import {
   getMenuState,
@@ -20,7 +20,7 @@ import {
 } from "../services/session.js";
 import { searchProducts, findProductFromMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, extractCustomerMeta } from "../services/admin.js";
+import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, extractCustomerMeta } from "../services/admin.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 
@@ -144,6 +144,16 @@ export async function handleIncomingMessage(
   registerContact(customerKey, { chatId, displayName, phone });
 
   const normalized = text.toLowerCase().trim();
+
+  // Customers must never see admin console — even if they type "admin" or #help.
+  if (!requireAdminSender(customerKey, phone)) {
+    if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
+      return sendText(
+        customerKey,
+        "Karibu Sokoni! 🛒\n\nType *menu* to browse and order (pay on delivery).\nNeed a person? *menu* → *Talk to a Human*."
+      );
+    }
+  }
 
   // Human handoff FIRST — bot must stay silent (only "menu" exits)
   if (isHumanHandoff(customerKey)) {
@@ -281,10 +291,11 @@ export async function handleIncomingMessage(
   }
 }
 
-function looksLikeAdminAction(text, quotedText) {
-  if (containsAdminCommand(text)) return true;
-  if (quotedText && /human help requested|new cod order|\[chat:/i.test(quotedText)) return true;
-  return false;
+function looksLikeAdminAction(text, fromChatId) {
+  if (!containsAdminCommand(text) && !/^orders?\b/i.test((text || "").trim())) {
+    return false;
+  }
+  return requireAdminSender(fromChatId, phoneDigitsFromChatId(fromChatId));
 }
 
 export async function handleWahaWebhook(body) {
@@ -295,18 +306,18 @@ export async function handleWahaWebhook(body) {
     // Ignore the bot's OWN outgoing messages (echoes). Only act on messages
     // the human store owner actually typed (admin commands, quote-replies,
     // or a manual reply inside a customer's chat).
-    if (!looksLikeAdminAction(parsed.text, parsed.quotedText) && isBotEcho(parsed.messageId, parsed.toChatId)) {
+    if (!looksLikeAdminAction(parsed.text, parsed.fromChatId) && isBotEcho(parsed.messageId, parsed.toChatId)) {
       return;
     }
     return handleAdminOutgoing(parsed);
   }
 
-  // Incoming from admin phone — route BEFORE customer flow
   if (shouldRouteIncomingAsAdmin(body, parsed)) {
-    return handleAdminIncoming({
+    const handled = await handleAdminIncoming({
       ...parsed,
       phone: parsed.phone || undefined,
     });
+    if (handled !== false) return handled;
   }
 
   return handleIncomingMessage(parsed.customerKey, parsed.text, {
