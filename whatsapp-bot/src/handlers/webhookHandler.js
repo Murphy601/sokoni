@@ -20,7 +20,7 @@ import {
 } from "../services/session.js";
 import { searchProducts, findProductFromMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, extractCustomerMeta } from "../services/admin.js";
+import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta } from "../services/admin.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
@@ -296,10 +296,12 @@ export async function handleIncomingMessage(
 }
 
 function looksLikeAdminAction(text, fromChatId) {
-  if (!containsAdminCommand(text) && !/^orders?\b/i.test((text || "").trim())) {
+  const trimmed = (text || "").trim();
+  if (!containsAdminCommand(text) && !/^orders?\b/i.test(trimmed) && !/^admin\b/i.test(trimmed)) {
     return false;
   }
-  return requireAdminSender(fromChatId, phoneDigitsFromChatId(fromChatId));
+  const phone = phoneDigitsFromChatId(fromChatId);
+  return canRunAdminCommands(fromChatId, phone, { allowBusinessOwner: true });
 }
 
 export async function handleWahaWebhook(body) {

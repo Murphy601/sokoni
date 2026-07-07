@@ -98,10 +98,13 @@ export function isAdminSender(chatId, phone = "") {
 
   const chatDigits = phoneDigitsFromChatId(chatId);
   if (chatDigits && config.admin.phones.some((p) => phonesMatch(chatDigits, p))) {
+    if (chatId && chatId.includes("@lid")) {
+      registerAdminChatId(chatId, chatDigits);
+    }
     return true;
   }
 
-  // WhatsApp @lid ids — only admin after explicit phone match + registration.
+  // WhatsApp @lid ids — register when phone metadata matches ADMIN_PHONES.
   if (chatId?.includes("@lid")) {
     if (isAdminPhone(phone)) {
       registerAdminChatId(chatId, phone);
@@ -115,6 +118,43 @@ export function isAdminSender(chatId, phone = "") {
     return true;
   }
 
+  return false;
+}
+
+/** Register admin @lid on first verified contact (call early in webhook). */
+export function tryRegisterAdminFromMessage(chatId, phone = "", text = "") {
+  if (chatId && phone && isAdminPhone(phone)) {
+    registerAdminChatId(chatId, phone);
+    return isAdminSender(chatId, phone);
+  }
+  // Bootstrap @lid when the configured admin sends a command (single-admin setup).
+  if (
+    chatId?.includes("@lid") &&
+    config.admin.phones.length === 1 &&
+    (containsAdminCommand(text) ||
+      /^admin\b/i.test((text || "").trim()) ||
+      /^orders?\b/i.test((text || "").trim()))
+  ) {
+    registerAdminChatId(chatId, config.admin.phones[0]);
+    console.log("[admin] bootstrapped @lid for", config.admin.phones[0]);
+    return true;
+  }
+  return isAdminSender(chatId, phone);
+}
+
+/** Business WhatsApp owner typing #commands from the store phone (fromMe). */
+export function isBusinessOwnerSender(chatId) {
+  const digits = digitsOnly(chatId);
+  const business = digitsOnly(config.store.businessNumber);
+  if (!digits || !business) return false;
+  return phonesMatch(digits, business);
+}
+
+export function canRunAdminCommands(chatId, phone = "", { allowBusinessOwner = false } = {}) {
+  if (requireAdminSender(chatId, phone)) return true;
+  if (allowBusinessOwner && isBusinessOwnerSender(chatId) && config.admin.phones.length > 0) {
+    return true;
+  }
   return false;
 }
 
@@ -167,7 +207,9 @@ export function requireAdminSender(chatId, phone = "") {
  * Admin can still type "menu" / shop like a normal customer otherwise.
  */
 export function shouldRouteIncomingAsAdmin(body, parsed) {
-  if (!requireAdminSender(parsed.customerKey, parsed.phone)) return false;
+  tryRegisterAdminFromMessage(parsed.customerKey, parsed.phone, parsed.text);
+
+  if (!canRunAdminCommands(parsed.customerKey, parsed.phone)) return false;
 
   const text = (parsed.text || "").trim();
   if (/^admin\b/i.test(text)) return true;
@@ -183,7 +225,10 @@ function isBusinessChat(chatId) {
 }
 
 function isAdminRelayAttempt(text) {
-  return containsAdminCommand((text || "").trim());
+  const t = normalizeAdminCommand((text || "").trim());
+  if (containsAdminCommand(t)) return true;
+  if (/^admin\b/i.test(t) || /^orders?\b/i.test(t)) return true;
+  return false;
 }
 
 const CUSTOMER_STATUS_MESSAGES = {
@@ -340,11 +385,12 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
 }
 
 /** Parse and run an admin command. Returns true if handled. */
-async function runAdminCommand(adminChatId, text, quotedText) {
-  if (!requireAdminSender(adminChatId)) {
+async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwner = false } = {}) {
+  const phone = phoneDigitsFromChatId(adminChatId) || "";
+  if (!canRunAdminCommands(adminChatId, phone, { allowBusinessOwner })) {
     return false;
   }
-  const t = text.trim();
+  const t = normalizeAdminCommand(text.trim());
 
   if (/^#help\b/i.test(t)) {
     await sendText(adminChatId, adminHelpText());
@@ -379,7 +425,8 @@ async function runAdminCommand(adminChatId, text, quotedText) {
  * as normal incoming messages (not fromMe). Route them to admin commands.
  */
 export async function handleAdminIncoming({ customerKey, text, quotedText, phone = "" }) {
-  if (!requireAdminSender(customerKey, phone)) {
+  tryRegisterAdminFromMessage(customerKey, phone, text);
+  if (!canRunAdminCommands(customerKey, phone)) {
     console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
     return false;
   }
@@ -407,11 +454,14 @@ export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedTe
   });
 
   const fromPhone = phoneDigitsFromChatId(fromChatId);
+  const allowBusinessOwner = isBusinessOwnerSender(fromChatId);
   const adminCommand =
-    requireAdminSender(fromChatId, fromPhone) && isAdminRelayAttempt(text);
+    canRunAdminCommands(fromChatId, fromPhone, { allowBusinessOwner }) &&
+    isAdminRelayAttempt(normalizeAdminCommand(text));
 
   if (adminCommand) {
-    return runAdminCommand(fromChatId || config.admin.primary, text, quotedText);
+    const replyTo = allowBusinessOwner ? fromChatId || config.admin.primary : fromChatId || config.admin.primary;
+    return runAdminCommand(replyTo, text, quotedText, { allowBusinessOwner });
   }
 
   if (toChatId && !isBusinessChat(toChatId)) {
@@ -432,13 +482,17 @@ export function extractCustomerMeta(payload) {
     payload.notifyName ||
     "";
   let phone = phoneDigitsFromChatId(chatId);
+  const candidates = [
+    payload._data?.from?.user,
+    payload._data?.from?.server === "c.us" ? payload._data?.from?.user : null,
+    payload._data?.author,
+    payload._data?.participant,
+    payload.participant,
+    payload._data?.participant,
+    payload._data?.sender?.id?.user,
+    payload._data?.id?.participant,
+  ];
   if (!phone) {
-    const candidates = [
-      payload._data?.from?.user,
-      payload._data?.author,
-      payload.participant,
-      payload._data?.participant,
-    ];
     for (const c of candidates) {
       const d = digitsOnly(c);
       if (d.length >= 9) {
