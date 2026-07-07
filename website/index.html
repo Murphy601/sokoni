@@ -62,6 +62,7 @@
         <a href="#categories" class="hover:text-brand-green transition">Categories</a>
         <a href="#deals" class="hover:text-brand-green transition">Hot Deals</a>
         <a href="#international" class="hover:text-brand-green transition">Shop International</a>
+        <a href="#reviews" class="hover:text-brand-green transition">Reviews</a>
         <a href="#how-it-works" class="hover:text-brand-green transition">How It Works</a>
       </nav>
       <div class="flex items-center gap-3">
@@ -347,6 +348,63 @@
     </div>
   </section>
 
+  <!-- REVIEWS -->
+  <section id="reviews" class="py-20 bg-white dark:bg-brand-purple/95 border-y border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-5">
+      <div class="text-center mb-12">
+        <h2 class="text-2xl md:text-3xl font-extrabold">⭐ Customer Reviews</h2>
+        <p class="text-brand-purple/60 dark:text-white/60 mt-2 max-w-xl mx-auto">
+          Real feedback from Sokoni shoppers — on WhatsApp and right here on the site.
+        </p>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-10 items-start">
+        <div>
+          <div id="reviews-list" class="space-y-4 min-h-[8rem]">
+            <p class="text-brand-purple/50 dark:text-white/50 text-sm">Loading reviews…</p>
+          </div>
+        </div>
+        <div class="bg-brand-cream dark:bg-brand-purpleLight rounded-2xl border border-black/5 dark:border-white/10 p-6 shadow-lg">
+          <h3 class="font-bold text-lg mb-1">Leave a review</h3>
+          <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-5">Shopped with us? Tell others how it went.</p>
+          <form id="review-form" class="space-y-4">
+            <div>
+              <label for="review-name" class="block text-xs font-semibold mb-1">Your name</label>
+              <input id="review-name" name="name" type="text" required maxlength="80" placeholder="Jane W."
+                     class="w-full rounded-xl border border-black/10 dark:border-white/20 bg-white dark:bg-brand-purple px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green" />
+            </div>
+            <div>
+              <label for="review-product" class="block text-xs font-semibold mb-1">Product (optional)</label>
+              <input id="review-product" name="product" type="text" maxlength="120" placeholder="What did you order?"
+                     class="w-full rounded-xl border border-black/10 dark:border-white/20 bg-white dark:bg-brand-purple px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green" />
+            </div>
+            <div>
+              <label for="review-stars" class="block text-xs font-semibold mb-1">Rating</label>
+              <select id="review-stars" name="stars" required
+                      class="w-full rounded-xl border border-black/10 dark:border-white/20 bg-white dark:bg-brand-purple px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green">
+                <option value="">Choose…</option>
+                <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
+                <option value="4">⭐⭐⭐⭐ Great</option>
+                <option value="3">⭐⭐⭐ Good</option>
+                <option value="2">⭐⭐ Fair</option>
+                <option value="1">⭐ Poor</option>
+              </select>
+            </div>
+            <div>
+              <label for="review-comment" class="block text-xs font-semibold mb-1">Comment</label>
+              <textarea id="review-comment" name="comment" rows="3" maxlength="500" placeholder="Fast delivery, great price…"
+                        class="w-full rounded-xl border border-black/10 dark:border-white/20 bg-white dark:bg-brand-purple px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green resize-none"></textarea>
+            </div>
+            <p id="review-form-msg" class="text-sm hidden"></p>
+            <button type="submit"
+                    class="w-full bg-brand-green text-brand-purple font-bold py-3 rounded-full hover:scale-[1.02] transition shadow-lg shadow-green-500/20">
+              Submit review
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- CTA STRIP -->
   <section class="max-w-7xl mx-auto px-5 py-16 text-center">
     <img src="assets/images/sokoni-mall-sign.png" alt="Sokoni Mall — wood and green marketplace sign"
@@ -382,6 +440,7 @@
         <h4 class="text-white font-semibold mb-3">Company</h4>
         <ul class="space-y-2 text-sm">
           <li><a href="#how-it-works" class="hover:text-brand-green">How It Works</a></li>
+          <li><a href="#reviews" class="hover:text-brand-green">Reviews</a></li>
           <li><a href="#" class="hover:text-brand-green">Affiliate Disclosure</a></li>
           <li><a href="#" class="hover:text-brand-green">Privacy Policy</a></li>
         </ul>

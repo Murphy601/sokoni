@@ -20,6 +20,7 @@ import {
   getOrder,
 } from "./orders.js";
 import { getFeaturedProductIds } from "./tiktok.js";
+import { siteUrlLine } from "./reviews.js";
 
 function formatNumberedMenu(title, options) {
   const lines = options.map((o, i) => `${i + 1}. ${o.label}`);
@@ -35,7 +36,8 @@ export async function sendWelcome(to) {
   await sendText(
     to,
     `👋 Karibu! I'm *${config.brand.name} AI* — your shopping buddy on WhatsApp.\n` +
-      `Tell me what you're looking for, or reply with a number from the menu 👇`
+      `Tell me what you're looking for, or reply with a number from the menu 👇\n\n` +
+      `${siteUrlLine()}`
   );
   return sendMainMenu(to);
 }
@@ -45,6 +47,7 @@ export function sendMainMenu(to) {
     { id: "shop_all", label: "🛍️ Browse Categories" },
     { id: "deals_today", label: "🔥 Today's Picks" },
     { id: "track_order", label: "🧾 Track My Order" },
+    { id: "visit_site", label: "🌐 Visit Website" },
     { id: "human_handoff", label: "🙋 Talk to a Human" },
     { id: "how_it_works", label: "❓ How Sokoni Works" },
   ];
@@ -389,7 +392,17 @@ export function sendHowItWorks(to) {
       `2️⃣ Reply *1* to order and share your name, location & phone in one message.\n` +
       `3️⃣ We deliver to you — and you *pay on delivery* (cash or M-Pesa to the rider).\n\n` +
       `No paying upfront, no risk. ${config.store.deliveryNote}\n\n` +
+      `${siteUrlLine()}\n\n` +
       `Type "menu" anytime to start again.`
+  );
+}
+
+export function sendWebsiteLink(to) {
+  return sendText(
+    to,
+    `${siteUrlLine("Shop Sokoni online")}\n\n` +
+      `Browse all categories, hot deals & viral bargains — then order here on WhatsApp (pay on delivery 💵).\n\n` +
+      `_Type *menu* to continue shopping in chat._`
   );
 }
 
@@ -654,6 +667,7 @@ export async function confirmCodOrder(to, parsed) {
       `${order ? `Status: ${statusLabel(order.status)}\n` : ""}` +
       `Our team will confirm shortly. ${config.store.deliveryNote}\n\n` +
       `${orderRef ? `_Track anytime: type *track* or *${orderRef}*._\n` : ""}` +
+      `${siteUrlLine()}\n\n` +
       `Asante for shopping with Sokoni! 🙏`
   );
 
@@ -703,6 +717,7 @@ export async function handleMenuAction(from, id) {
     return sendText(from, "Tell me what you're looking for and I'll search AliExpress, Temu and Amazon for you! 🌍");
   }
   if (id === "track_order") return sendTrackOrderMenu(from);
+  if (id === "visit_site") return sendWebsiteLink(from);
   if (id === "human_handoff") {
     const meta = getCustomerMeta(from) || {};
     return sendHumanHandoff(from, { ...meta, lastMessage: "Menu → Talk to a Human" });

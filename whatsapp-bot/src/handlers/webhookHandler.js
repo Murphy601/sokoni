@@ -23,6 +23,7 @@ import { handleCustomerWhileHandoff } from "../services/handoff.js";
 import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, extractCustomerMeta } from "../services/admin.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
+import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -145,6 +146,8 @@ export async function handleIncomingMessage(
 
   const normalized = text.toLowerCase().trim();
 
+  if (await handleReviewReply(customerKey, text)) return;
+
   // Customers must never see admin console — even if they type "admin" or #help.
   if (!requireAdminSender(customerKey, phone)) {
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
@@ -237,7 +240,8 @@ export async function handleIncomingMessage(
   if (isCasualGreeting(text)) {
     return sendText(
       customerKey,
-      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *Hisense TV*, *washing machine*)."
+      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *Hisense TV*, *washing machine*).\n\n" +
+        siteUrlLine()
     );
   }
 

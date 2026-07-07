@@ -2,6 +2,10 @@
 
 const WHATSAPP_NUMBER = "254117422428";
 const USD_TO_KES = 130; // Approximate display rate for international items
+const REVIEWS_API =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001/api/reviews"
+    : "https://bot.sokonimall.com/api/reviews";
 
 const CATEGORY_META = {
   "phones-tablets": { label: "Phones & Tablets", emoji: "📱" },
@@ -419,6 +423,124 @@ async function loadProducts() {
   return response.json();
 }
 
+function starsHtml(n) {
+  const count = Math.min(5, Math.max(1, Number(n) || 5));
+  return "⭐".repeat(count);
+}
+
+function formatReviewDate(ts) {
+  if (!ts) return "";
+  try {
+    return new Intl.DateTimeFormat("en-KE", { dateStyle: "medium" }).format(new Date(ts));
+  } catch {
+    return "";
+  }
+}
+
+function renderReviewCard(review) {
+  const name = escapeHtml(review.customerName || "Sokoni customer");
+  const product = review.productName ? `<span class="text-brand-purple/50 dark:text-white/50"> · ${escapeHtml(review.productName)}</span>` : "";
+  const comment = review.comment
+    ? `<p class="text-sm text-brand-purple/70 dark:text-white/70 mt-2">${escapeHtml(review.comment)}</p>`
+    : "";
+  const date = formatReviewDate(review.createdAt);
+  const source = review.source === "whatsapp" ? "WhatsApp" : "Website";
+  return `
+    <article class="rounded-2xl border border-black/5 dark:border-white/10 bg-brand-cream/50 dark:bg-white/5 p-5">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <span class="font-semibold text-sm">${name}${product}</span>
+        <span class="text-xs text-brand-purple/40 dark:text-white/40">${date}</span>
+      </div>
+      <div class="text-sm">${starsHtml(review.stars)} <span class="text-xs text-brand-purple/40 dark:text-white/40 ml-1">via ${source}</span></div>
+      ${comment}
+    </article>`;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function loadReviewsFromApi() {
+  try {
+    const res = await fetch(REVIEWS_API);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.reviews)) return data.reviews;
+    }
+  } catch {
+    /* fall back to static file */
+  }
+  try {
+    const res = await fetch("data/reviews.json");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.reviews || [];
+  } catch {
+    return [];
+  }
+}
+
+async function renderReviews() {
+  const list = document.getElementById("reviews-list");
+  if (!list) return;
+  const reviews = await loadReviewsFromApi();
+  if (!reviews.length) {
+    list.innerHTML =
+      '<p class="text-brand-purple/50 dark:text-white/50 text-sm">No reviews yet — be the first after your delivery! Order on WhatsApp and we\'ll ask you to rate us.</p>';
+    return;
+  }
+  list.innerHTML = reviews.slice(0, 12).map(renderReviewCard).join("");
+}
+
+function bindReviewForm() {
+  const form = document.getElementById("review-form");
+  const msg = document.getElementById("review-form-msg");
+  if (!form) return;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (msg) {
+      msg.classList.add("hidden");
+      msg.classList.remove("text-brand-green", "text-red-600");
+    }
+
+    const payload = {
+      customerName: document.getElementById("review-name")?.value?.trim(),
+      productName: document.getElementById("review-product")?.value?.trim(),
+      stars: Number(document.getElementById("review-stars")?.value),
+      comment: document.getElementById("review-comment")?.value?.trim(),
+    };
+
+    try {
+      const res = await fetch(REVIEWS_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not submit review");
+
+      form.reset();
+      if (msg) {
+        msg.textContent = "Thank you! Your review is live.";
+        msg.classList.remove("hidden");
+        msg.classList.add("text-brand-green");
+      }
+      await renderReviews();
+    } catch (err) {
+      if (msg) {
+        msg.textContent = "Could not submit right now. Try again or rate us on WhatsApp after delivery.";
+        msg.classList.remove("hidden");
+        msg.classList.add("text-red-600");
+      }
+    }
+  });
+}
+
 async function renderProducts() {
   try {
     await loadTiktokFeaturedIds();
@@ -442,3 +564,5 @@ async function renderProducts() {
 }
 
 renderProducts();
+renderReviews();
+bindReviewForm();

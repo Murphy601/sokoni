@@ -114,10 +114,21 @@ export function createOrder({ customerKey, chatId, product, details }) {
     phone: details.phone,
     status: "received",
     history: [{ status: "received", at: now }],
+    reviewPromptSent: false,
     createdAt: now,
     updatedAt: now,
   };
   store.orders[id] = order;
+  persist();
+  return order;
+}
+
+export function markReviewPromptSent(id) {
+  load();
+  const order = getOrder(id);
+  if (!order || order.reviewPromptSent) return order;
+  order.reviewPromptSent = true;
+  order.updatedAt = Date.now();
   persist();
   return order;
 }

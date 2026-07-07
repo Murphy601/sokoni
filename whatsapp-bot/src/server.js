@@ -4,8 +4,28 @@ import { handleWahaWebhook } from "./handlers/webhookHandler.js";
 import { runTiktokPostJob } from "./services/tiktok.js";
 import { startTokenRefreshScheduler, getConnectionStatus } from "./services/tiktok-auth.js";
 import tiktokOAuthRouter from "./routes/tiktokOAuth.js";
+import { listReviews, addReview } from "./services/reviews.js";
 
 const app = express();
+
+const SITE_ORIGINS = new Set([
+  config.publicSiteUrl,
+  "https://sokonimall.com",
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+]);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && SITE_ORIGINS.has(origin.replace(/\/$/, ""))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json());
 
 app.get("/", (_req, res) => {
@@ -18,6 +38,27 @@ app.get("/", (_req, res) => {
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+/** Public reviews for website + WhatsApp-collected feedback. */
+app.get("/api/reviews", (_req, res) => {
+  res.json({ reviews: listReviews(30) });
+});
+
+app.post("/api/reviews", (req, res) => {
+  const { customerName, productName, stars, comment, orderId } = req.body || {};
+  const result = addReview({
+    customerName,
+    productName,
+    stars,
+    comment,
+    orderId,
+    source: "website",
+  });
+  if (result.error) {
+    return res.status(400).json({ error: result.error });
+  }
+  res.status(201).json({ review: result.review });
 });
 
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */

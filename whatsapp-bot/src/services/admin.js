@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
 import { sendText, customerKeyFromChatId, phoneDigitsFromChatId } from "./whatsapp.js";
+import { sendReviewPrompt } from "./reviews.js";
 import { setHumanHandoff } from "./session.js";
 import {
   getOrder,
@@ -203,6 +204,9 @@ async function notifyCustomerOfStatus(order) {
   if (!builder) return;
   try {
     await sendText(order.customerKey, builder(order));
+    if (order.status === "delivered") {
+      await sendReviewPrompt(order.customerKey, order);
+    }
   } catch (err) {
     console.error("[admin] failed to notify customer of status:", err.message);
   }
@@ -326,6 +330,9 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
   try {
     await sendText(order.customerKey, message.trim());
     setHumanHandoff(order.customerKey, { adminDirect: true, startedAt: Date.now(), ackSent: true });
+    if (order.status === "delivered" && !order.reviewPromptSent) {
+      await sendReviewPrompt(order.customerKey, order);
+    }
     return sendText(adminChatId, `✅ Sent to *${order.customerName}* (${order.id}).`);
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed to send: ${err.message}`);
