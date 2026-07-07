@@ -8,15 +8,15 @@ In **Workers & Pages → sokoni → Settings → Builds**:
 
 | Setting | Value |
 |---------|--------|
-| **Root directory** | `website` |
+| **Path (root directory)** | `website` |
 | **Build command** | *(leave empty)* |
-| **Deploy command** | *(leave empty — remove `npx wrangler deploy`)* |
+| **Deploy command** | `npx wrangler deploy` |
+
+The repo includes `website/wrangler.toml`, which tells Wrangler to publish the static
+HTML/JS/CSS in that folder (not a Worker script). Without that file, `wrangler deploy`
+fails because it has nothing to deploy.
 
 Then **Deployments → Retry deployment** (or push to `main`).
-
-### Why `npx wrangler deploy` fails
-
-That command deploys a **Cloudflare Worker**, not a static site. This project has no Worker entrypoint in `website/`, so the build fails at “Deploying”.
 
 ## After deploy
 
