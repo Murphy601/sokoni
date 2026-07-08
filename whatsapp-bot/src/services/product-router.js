@@ -383,6 +383,10 @@ export async function sendScentDisambiguation(to, matches, sizeMl = null) {
   );
 }
 
+function isProductMenuChoice(text) {
+  return /^[123]$/.test(String(text || "").trim());
+}
+
 /** Handle multi-step catalog flows + free-text product routing (all categories). */
 export async function handleProductRouter(customerKey, text) {
   const { getMenuState } = await import("./session.js");
@@ -393,6 +397,17 @@ export async function handleProductRouter(customerKey, text) {
   const normalized = text.toLowerCase().trim();
   const choice = parseNumericChoice(text);
   const menuState = getMenuState(customerKey);
+
+  if (menuState?.type === "product" && isProductMenuChoice(text)) {
+    const { handleMenuAction, startCodOrder } = await import("./menu.js");
+    const choice = parseNumericChoice(text);
+    const option = menuState.options?.[choice - 1];
+    if (!option) return false;
+    if (option.id.startsWith("order_")) {
+      return startCodOrder(customerKey, menuState.productId);
+    }
+    return handleMenuAction(customerKey, option.id);
+  }
 
   if (menuState?.type === "product_confirm") {
     if (isYes(normalized) || choice === 1) {

@@ -216,18 +216,22 @@ function expandKeywordTokens(raw) {
 /** Try to pull a product from quoted text, product cards, or numbered list lines. */
 export async function findProductFromMessage(text) {
   if (!text) return null;
+  if (isMenuBoilerplate(text)) return null;
+
   const products = await loadProducts();
 
   const numberedLine = text.match(/^\d+\.\s*\*?([^*\n]+?)\*?(?:\n|$)/m);
   if (numberedLine) {
     const guess = numberedLine[1].trim();
-    const hit = products.find(
-      (p) =>
-        p.fulfillment === "store" &&
-        (guess.toLowerCase().includes(p.name.toLowerCase().slice(0, 14)) ||
-          p.name.toLowerCase().includes(guess.toLowerCase().slice(0, 20)))
-    );
-    if (hit) return hit;
+    if (!isMenuBoilerplate(guess)) {
+      const hit = products.find(
+        (p) =>
+          p.fulfillment === "store" &&
+          (guess.toLowerCase().includes(p.name.toLowerCase().slice(0, 14)) ||
+            p.name.toLowerCase().includes(guess.toLowerCase().slice(0, 20)))
+      );
+      if (hit) return hit;
+    }
   }
 
   const priceLine = text.match(/(.{8,}?)\s+KES\s+[\d,]+/i);
@@ -268,6 +272,17 @@ export async function findProductFromMessage(text) {
     if (scoreProduct(searched[0], tokens) > 0) return searched[0];
   }
   return null;
+}
+
+function isMenuBoilerplate(text) {
+  const t = String(text || "").toLowerCase();
+  return (
+    /what next|reply with the number|pick your size|pick an item|do you mean|type \*menu\*|pay on delivery\)\s*$/i.test(
+      t
+    ) ||
+    /^🛒 order|^🤖 ask|^⬅️? main menu/i.test(t.trim()) ||
+    (/^\d+\.\s*🛒/i.test(t) && !/kes|perfume|ml|tv|phone|kg/i.test(t))
+  );
 }
 
 function productHaystack(product) {

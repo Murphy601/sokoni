@@ -73,9 +73,13 @@ async function gatherProducts(userMessage, phoneNumber) {
   }
 
   const session = getSession(phoneNumber);
-  const routed = await resolveProductQuery(userMessage);
-  if (routed.action !== "none") {
-    return { products: [], focus: null, viral: false };
+  const existingFocus = session.lastProductContext;
+
+  if (!existingFocus) {
+    const routed = await resolveProductQuery(userMessage);
+    if (routed.action !== "none") {
+      return { products: [], focus: null, viral: false };
+    }
   }
 
   const quoted = await findProductFromMessage(userMessage);
@@ -217,6 +221,14 @@ export async function runAiAgent(phoneNumber, userMessage) {
   const { products, focus, viral } = await gatherProducts(userMessage, phoneNumber);
 
   if (products.length === 0) {
+    const session = getSession(phoneNumber);
+    if (session.lastProductContext) {
+      const reply = formatCatalogReply([session.lastProductContext], {
+        intro: `About *${session.lastProductContext.name}*:`,
+      });
+      pushMessage(phoneNumber, "assistant", reply);
+      return reply;
+    }
     const reply = viral
       ? "Ah, umetoka TikTok! 🔥 Bado hatujapost deal mpya leo — type *menu* kuchagua, au niambie ukitafuta nini."
       : "I couldn't find that in our catalog right now. Type *menu* → *1* to browse categories (phones, TVs, appliances, fashion & more), or tell me a specific item name.";

@@ -140,6 +140,24 @@ async function tryProductSearch(customerKey, text) {
   return true;
 }
 
+function isProductMenuChoice(text) {
+  return /^[123]$/.test(String(text || "").trim());
+}
+
+async function handleActiveProductMenu(customerKey, text) {
+  const menuState = getMenuState(customerKey);
+  if (menuState?.type !== "product" || !menuState.productId) return false;
+
+  const choice = parseNumericChoice(text);
+  if (!choice || !menuState.options?.[choice - 1]) return false;
+
+  const option = menuState.options[choice - 1];
+  if (option.id === "human_handoff") {
+    return sendHumanHandoff(customerKey, { lastMessage: text });
+  }
+  return handleMenuAction(customerKey, option.id);
+}
+
 export async function handleIncomingMessage(
   customerKey,
   text,
@@ -217,6 +235,8 @@ export async function handleIncomingMessage(
     return changeOrder(customerKey);
   }
 
+  if (await handleActiveProductMenu(customerKey, text)) return;
+
   if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
     const product = await findProductFromMessage(combinedText);
     if (product) {
@@ -226,6 +246,11 @@ export async function handleIncomingMessage(
   }
 
   if (quotedText) {
+    const menuState = getMenuState(customerKey);
+    if (menuState?.type === "product" && menuState.productId && (text === "1" || /^order$/i.test(text))) {
+      return startCodOrder(customerKey, menuState.productId);
+    }
+
     const quotedProduct = await findProductFromMessage(quotedText);
     if (quotedProduct) {
       if (text === "1" || /^order$/i.test(text)) {
@@ -259,8 +284,11 @@ export async function handleIncomingMessage(
     return sendText(customerKey, "Which item do you want? Type *menu* → browse → reply with the item number.");
   }
 
-  const choice = parseNumericChoice(text);
   const menuState = getMenuState(customerKey);
+
+  if (menuState?.type === "product" && isProductMenuChoice(text)) {
+    return handleActiveProductMenu(customerKey, text);
+  }
 
   if (menuState?.type === "product_list_paged" && menuState.rowId) {
     if (/^(next|more|n)$/i.test(normalized)) {
@@ -278,6 +306,8 @@ export async function handleIncomingMessage(
     }
   }
 
+  const choice = parseNumericChoice(text);
+
   if (
     choice &&
     (menuState?.type === "product_list_paged" || menuState?.type === "product_list") &&
@@ -287,7 +317,7 @@ export async function handleIncomingMessage(
     return showProductActions(customerKey, menuState.productIds[choice - 1]);
   }
 
-  if (choice && menuState?.options?.length >= choice) {
+  if (choice && menuState?.options?.length >= choice && menuState?.type !== "product_list") {
     const option = menuState.options[choice - 1];
     if (option.id === "human_handoff") {
       return sendHumanHandoff(customerKey, {
