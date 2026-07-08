@@ -95,6 +95,7 @@ const CATEGORY_SUBMENUS = {
       { id: "sub_beauty_makeup", title: "Makeup", subcategory: "makeup" },
       { id: "sub_beauty_personal-care", title: "Personal Care", subcategory: "personal-care" },
       { id: "sub_beauty_fragrances", title: "Fragrances", subcategory: "fragrances" },
+      { id: "sub_beauty_perfume-oils", title: "Perfume Oils", subcategory: "perfume-oils" },
     ],
   },
   cat_home: {
