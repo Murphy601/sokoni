@@ -18,7 +18,7 @@ import {
   clearHumanHandoff,
   setCustomerMeta,
 } from "../services/session.js";
-import { searchProducts, findProductFromMessage } from "../services/catalog.js";
+import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
 import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta } from "../services/admin.js";
 import { registerContact } from "../services/orders.js";
@@ -270,6 +270,12 @@ export async function handleIncomingMessage(
 
   const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
   if (pendingHandled) return;
+
+  const websiteProduct = await findProductFromWebsiteMessage(combinedText);
+  if (websiteProduct) {
+    const { showProductActions } = await import("../services/menu.js");
+    return showProductActions(customerKey, websiteProduct.id);
+  }
 
   if (await handleProductRouter(customerKey, text)) return;
 

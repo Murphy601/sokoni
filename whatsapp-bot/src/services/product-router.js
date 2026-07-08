@@ -128,6 +128,22 @@ function isPerfumeBrowseIntent(text) {
   return /\b(perfume|perfumes|fragrance|fragrances|cologne|attar|scent)\b/i.test(text);
 }
 
+const NON_PERFUME_PRODUCT_HINTS =
+  /\b(watch|watches|phone|phones|tablet|tablets|laptop|laptops|tv|television|fridge|refrigerator|console|consoles|gps|smartphone|headphone|headphones|speaker|speakers|camera|cameras|hisense|samsung|iphone|ipad|macbook|playstation|xbox|blender|kettle|washing|washer|dryer|monitor|keyboard|mouse|router|modem|charger|powerbank|power\s*bank|series\s*\d|android|windows|intel|amd|nvidia|mm\b|inch|gb\b|ram\b|smart\s*tv)\b/i;
+
+function isNonPerfumeProductQuery(text) {
+  return NON_PERFUME_PRODUCT_HINTS.test(String(text || ""));
+}
+
+function shouldTryPerfumeRouting(text) {
+  if (isNonPerfumeProductQuery(text)) return false;
+  if (isPerfumeBrowseIntent(text)) return true;
+  const q = stripPerfumeNoise(text);
+  const words = q.split(/\s+/).filter((w) => w.length > 1);
+  if (words.length <= 2) return true;
+  return /\b(oil|oils|ml|litre|liter|attar|eau)\b/i.test(text);
+}
+
 function isYes(text) {
   return /^(yes|y|yeah|yep|ndio|sawa|ok|okay|1)$/i.test(text.trim());
 }
@@ -233,12 +249,14 @@ async function resolveGeneralProductQuery(text) {
   const query = stripSearchNoise(text);
   if (isWeakCatalogQuery(text)) return { action: "none" };
 
-  const products = await searchProducts({
-    keywords: query,
-    fulfillment: "store",
-    scope: "local",
-    limit: 8,
-  });
+  const searchAll = isNonPerfumeProductQuery(text) || /["'][^"']{4,}["']/.test(text);
+  const searchOpts = { keywords: query, limit: 8 };
+  if (!searchAll) {
+    searchOpts.fulfillment = "store";
+    searchOpts.scope = "local";
+  }
+
+  const products = await searchProducts(searchOpts);
   if (products.length === 0) return { action: "none" };
 
   const ranked = products.map((product, index) => {
@@ -302,7 +320,7 @@ export async function resolveProductQuery(text) {
   }
 
   const perfumeResult =
-    scentQuery && scentQuery.length >= 2
+    shouldTryPerfumeRouting(raw) && scentQuery && scentQuery.length >= 2
       ? await resolvePerfumeScentQuery(scentQuery, sizeMl)
       : { action: "none" };
   const generalResult = await resolveGeneralProductQuery(raw);

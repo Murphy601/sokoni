@@ -213,61 +213,106 @@ function expandKeywordTokens(raw) {
   return [...expanded];
 }
 
-/** Try to pull a product from quoted text, product cards, or numbered list lines. */
-export async function findProductFromMessage(text) {
-  if (!text) return null;
-  if (isMenuBoilerplate(text)) return null;
-
-  const products = await loadProducts();
-
-  const numberedLine = text.match(/^\d+\.\s*\*?([^*\n]+?)\*?(?:\n|$)/m);
-  if (numberedLine) {
-    const guess = numberedLine[1].trim();
-    if (!isMenuBoilerplate(guess)) {
-      const hit = products.find(
-        (p) =>
-          p.fulfillment === "store" &&
-          (guess.toLowerCase().includes(p.name.toLowerCase().slice(0, 14)) ||
-            p.name.toLowerCase().includes(guess.toLowerCase().slice(0, 20)))
-      );
-      if (hit) return hit;
+/** Product name inside quotes — e.g. website "Ask on WhatsApp" deep links. */
+export function extractQuotedProductName(text) {
+  const s = String(text || "");
+  const dbl = s.match(/"([^"]{4,120})"/);
+  if (dbl) return dbl[1].trim();
+  const singles = s.match(/'([^']{6,120})'/g);
+  if (singles) {
+    for (const m of singles) {
+      const inner = m.slice(1, -1).trim();
+      if (inner.includes(" ") || /\d/.test(inner)) return inner;
     }
   }
+  return null;
+}
 
-  const priceLine = text.match(/(.{8,}?)\s+KES\s+[\d,]+/i);
-  if (priceLine) {
-    const guess = priceLine[1].split("\n").pop().replace(/\*/g, "").trim();
-    const hit = products.find(
-      (p) =>
-        p.fulfillment === "store" &&
-        (guess.toLowerCase().includes(p.name.toLowerCase().slice(0, 12)) ||
-          p.name.toLowerCase().includes(guess.toLowerCase().slice(0, 20)))
-    );
-    if (hit) return hit;
-  }
+export function isWebsiteReferralMessage(text) {
+  return /\btell me more about\b|\bi(?:'d| would) like to order\b|\bfrom your site\b|\bwas browsing\b|\bsokonimall\b/i.test(
+    String(text || "")
+  );
+}
 
-  const lower = text.toLowerCase();
+function matchProductByNameInText(text, products, { storeOnly = false } = {}) {
+  const lower = String(text || "").toLowerCase();
   let best = null;
   let bestLen = 0;
   for (const p of products) {
-    if (p.fulfillment !== "store") continue;
+    if (p.inStock === false) continue;
+    if (storeOnly && p.fulfillment !== "store") continue;
     const name = p.name.toLowerCase();
     if (lower.includes(name) && name.length > bestLen) {
       best = p;
       bestLen = name.length;
     }
   }
-  if (best) return best;
+  return best;
+}
 
-  const searched = await searchProducts({
-    keywords: text,
-    fulfillment: "store",
-    scope: "local",
-    limit: 3,
-  });
+function fuzzyProductHit(guess, products, { storeOnly = false } = {}) {
+  const g = guess.toLowerCase();
+  return (
+    products.find(
+      (p) =>
+        (!storeOnly || p.fulfillment === "store") &&
+        p.inStock !== false &&
+        (g.includes(p.name.toLowerCase().slice(0, 14)) ||
+          p.name.toLowerCase().includes(g.slice(0, 20)))
+    ) || null
+  );
+}
+
+export async function findProductFromWebsiteMessage(text) {
+  if (!text) return null;
+  const quoted = extractQuotedProductName(text);
+  if (quoted) return findProductFromMessage(quoted, { allProducts: true });
+  if (isWebsiteReferralMessage(text)) return findProductFromMessage(text, { allProducts: true });
+  return null;
+}
+
+/** Try to pull a product from quoted text, product cards, or numbered list lines. */
+export async function findProductFromMessage(text, { allProducts = false } = {}) {
+  if (!text) return null;
+  if (isMenuBoilerplate(text)) return null;
+
+  const products = await loadProducts();
+  const storeOnly = !allProducts;
+
+  const quoted = extractQuotedProductName(text);
+  if (quoted) {
+    const byQuote = matchProductByNameInText(quoted, products, { storeOnly: false });
+    if (byQuote) return byQuote;
+  }
+
+  const numberedLine = text.match(/^\d+\.\s*\*?([^*\n]+?)\*?(?:\n|$)/m);
+  if (numberedLine) {
+    const guess = numberedLine[1].trim();
+    if (!isMenuBoilerplate(guess)) {
+      const hit = fuzzyProductHit(guess, products, { storeOnly });
+      if (hit) return hit;
+    }
+  }
+
+  const priceLine = text.match(/(.{8,}?)\s+(?:KES|≈\s*KES|\$)\s*[\d,]+/i);
+  if (priceLine) {
+    const guess = priceLine[1].split("\n").pop().replace(/\*/g, "").trim();
+    const hit = fuzzyProductHit(guess, products, { storeOnly: false });
+    if (hit) return hit;
+  }
+
+  const byName = matchProductByNameInText(text, products, { storeOnly });
+  if (byName) return byName;
+
+  const searchOpts = { keywords: quoted || text, limit: 5 };
+  if (storeOnly) {
+    searchOpts.fulfillment = "store";
+    searchOpts.scope = "local";
+  }
+  const searched = await searchProducts(searchOpts);
   if (searched.length === 1) return searched[0];
   if (searched.length > 1) {
-    const tokens = expandKeywordTokens(text);
+    const tokens = expandKeywordTokens(quoted || text);
     searched.sort((a, b) => scoreProduct(b, tokens) - scoreProduct(a, tokens));
     if (scoreProduct(searched[0], tokens) > 0) return searched[0];
   }

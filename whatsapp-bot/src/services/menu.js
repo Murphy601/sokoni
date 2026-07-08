@@ -425,7 +425,9 @@ export async function showProductActions(to, productId) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
   setProductContext(to, product);
-  return sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: true });
+  const affiliateUrl =
+    product.fulfillment === "store" ? null : buildAffiliateLink(product, to);
+  return sendProductCard(to, product, affiliateUrl, SOURCE_LABELS[product.source], { setActions: true });
 }
 
 export async function sendInternationalMenu(to) {
