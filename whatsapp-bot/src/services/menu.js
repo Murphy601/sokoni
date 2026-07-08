@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { sendText, sendProductCard } from "./whatsapp.js";
-import { searchProducts, getProductById, findProductFromMessage } from "./catalog.js";
+import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts } from "./catalog.js";
 import { buildAffiliateLink, SOURCE_LABELS } from "./affiliate.js";
 import {
   setPendingOrder,
@@ -53,6 +53,54 @@ export function sendMainMenu(to) {
   ];
   return sendNumberedMenu(to, "Karibu Sokoni! Everything is *pay on delivery* 💵", options);
 }
+
+const CATALOG_PAGE_SIZE = 12;
+
+const SUBCATEGORY_LABELS = {
+  smartphones: "Smartphones",
+  tablets: "Tablets",
+  "power-banks": "Power Banks",
+  "phone-accessories": "Phone Accessories",
+  televisions: "Televisions",
+  headphones: "Headphones & Earbuds",
+  speakers: "Speakers",
+  "home-theatre": "Home Theatre",
+  "kitchen-appliances": "Kitchen Appliances",
+  kettles: "Kettles",
+  blenders: "Blenders",
+  irons: "Irons",
+  "washing-machines": "Washing Machines",
+  skincare: "Skincare",
+  haircare: "Hair Care",
+  makeup: "Makeup",
+  "personal-care": "Personal Care",
+  fragrances: "Fragrances",
+  "perfume-oils": "Perfume Oils",
+  "kitchen-dining": "Kitchen & Dining",
+  bedding: "Bedding",
+  cleaning: "Cleaning",
+  "home-decor": "Home Decor",
+  stationery: "Stationery",
+  "mens-fashion": "Men's Fashion",
+  "womens-fashion": "Women's Fashion",
+  shoes: "Shoes",
+  bags: "Bags",
+  watches: "Watches",
+  laptops: "Laptops",
+  printers: "Printers",
+  storage: "Storage",
+  "computer-accessories": "Accessories",
+  consoles: "Consoles",
+  controllers: "Controllers",
+  "gaming-accessories": "Gaming Accessories",
+  "food-cupboard": "Food Cupboard",
+  drinks: "Drinks",
+  "household-supplies": "Household Supplies",
+  diapering: "Diapering",
+  feeding: "Feeding",
+  toys: "Toys",
+  "baby-gear": "Baby Gear",
+};
 
 const CATEGORY_SUBMENUS = {
   cat_phones: {
@@ -194,21 +242,77 @@ export function isSubcategoryRowId(id) {
   return Boolean(findSubcategoryRow(id));
 }
 
-export async function sendProductsForSubcategory(to, rowId) {
+export async function sendProductsForSubcategory(to, rowId, page = 0) {
   const target = findSubcategoryRow(rowId);
   if (!target) return sendMainMenu(to);
-  const products = await searchProducts({
+  const products = await listCategoryProducts({
     category: target.category,
     subcategory: target.subcategory,
     scope: "local",
     fulfillment: "store",
-    limit: 4,
   });
   if (products.length === 0) {
     await sendText(to, "I don't have picks here yet — reply *1* on the main menu to browse categories.");
     return sendMainMenu(to);
   }
-  return sendNumberedProductList(to, products, { title: "Here are my top picks 👇" });
+  const label = SUBCATEGORY_LABELS[target.subcategory] || target.subcategory;
+  const sizeNote =
+    target.subcategory === "perfume-oils"
+      ? `\n\n_Each scent also comes in 30ml · 50ml · 100ml · 250ml · 500ml · 1L. Say e.g. *Sauvage 50ml* for another size._`
+      : "";
+  return sendPaginatedProductList(to, products, {
+    title: `*${label}* — full catalog (${products.length} items)`,
+    page,
+    rowId,
+    footer: sizeNote,
+  });
+}
+
+/** Paginated product list — reply *next* / *prev* to browse large categories. */
+export async function sendPaginatedProductList(
+  to,
+  allProducts,
+  { title = "Pick an item", page = 0, footer = "", rowId = null } = {}
+) {
+  const total = allProducts.length;
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const start = safePage * CATALOG_PAGE_SIZE;
+  const pageProducts = allProducts.slice(start, start + CATALOG_PAGE_SIZE);
+
+  const lines = pageProducts.map(
+    (p, i) =>
+      `${i + 1}. *${p.name}*\n   KES ${p.priceKes.toLocaleString()} · ⭐ ${p.rating} · pay on delivery`
+  );
+
+  let navFooter = "";
+  if (totalPages > 1) {
+    navFooter = `\n\n📄 Page ${safePage + 1} of ${totalPages}`;
+    if (safePage + 1 < totalPages) navFooter += `\nReply *next* for more items.`;
+    if (safePage > 0) navFooter += `\nReply *prev* for previous page.`;
+  }
+
+  setMenuState(to, {
+    type: "product_list_paged",
+    allProductIds: allProducts.map((p) => p.id),
+    page: safePage,
+    pageSize: CATALOG_PAGE_SIZE,
+    productIds: pageProducts.map((p) => p.id),
+    rowId,
+  });
+
+  await sendText(
+    to,
+    `${title}\n\n${lines.join("\n\n")}\n\n` +
+      `*Reply with the number* (e.g. 1) to order that item.${navFooter}${footer}\n` +
+      `_Type *menu* anytime._`
+  );
+
+  if (total <= 6) {
+    for (const product of pageProducts) {
+      await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+    }
+  }
 }
 
 export async function sendDealsOfTheDay(to) {
@@ -221,7 +325,7 @@ export async function sendDealsOfTheDay(to) {
 }
 
 /** Show a numbered list — customer replies 1, 2, 3 to pick an item. */
-export async function sendNumberedProductList(to, products, { title = "Pick an item" } = {}) {
+export async function sendNumberedProductList(to, products, { title = "Pick an item", footer = "" } = {}) {
   const lines = products.map(
     (p, i) =>
       `${i + 1}. *${p.name}*\n   KES ${p.priceKes.toLocaleString()} · ⭐ ${p.rating} · pay on delivery`
@@ -244,7 +348,7 @@ export async function sendNumberedProductList(to, products, { title = "Pick an i
     `${title}\n\n${lines.join("\n\n")}\n\n` +
       `*Reply with the number* (e.g. 1) to order that item.\n` +
       `Or swipe-reply on a product line and type *1* to order it.\n` +
-      `_Type *menu* anytime._`
+      `_Type *menu* anytime._${footer}`
   );
 
   for (const product of products) {

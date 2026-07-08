@@ -71,6 +71,8 @@ export async function searchProducts({
     if (keywordTokens.length > 0) {
       const score = scoreProduct(product, keywordTokens);
       if (score === 0) return false;
+      const scentTokens = scentKeywordTokens(keywordTokens);
+      if (scentTokens.length > 0 && scoreProduct(product, scentTokens) === 0) return false;
     }
     return true;
   });
@@ -80,7 +82,26 @@ export async function searchProducts({
   } else {
     results.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }
+
+  if (results.some(isPerfumeOil)) {
+    results = dedupePerfumeOilVariants(results, keywordTokens);
+  }
+
+  if (limit == null || limit <= 0 || limit >= 5000) {
+    return results;
+  }
   return results.slice(0, limit);
+}
+
+/** All in-stock items in a category/subcategory (deduped perfume scents). */
+export async function listCategoryProducts({ category, subcategory, scope, fulfillment } = {}) {
+  return searchProducts({
+    category,
+    subcategory,
+    scope,
+    fulfillment,
+    limit: 5000,
+  });
 }
 
 export async function getDealOfTheDay({ scope = "all", limit = 3 } = {}) {
@@ -114,7 +135,7 @@ const STOP_WORDS = new Set([
   "get", "give", "show", "find", "want", "need", "looking", "for", "about", "what",
   "how", "is", "are", "do", "does", "this", "that", "these", "those", "more", "info",
   "on", "in", "at", "to", "of", "and", "or", "best", "recommend", "recommendations",
-  "please", "tell", "some", "any", "good", "nice",
+  "please", "tell", "some", "any", "good", "nice", "de", "la", "le", "el", "di", "du",
 ]);
 
 /** Maps common shopper words to catalog tokens / subcategories. */
@@ -125,6 +146,7 @@ const QUERY_EXPANSIONS = {
   laptop: ["laptop", "laptops", "computing"],
   fridge: ["fridge", "refrigerator", "kitchen-appliances"],
   game: ["game", "gaming", "console", "consoles"],
+  perfume: ["perfume", "perfume-oil", "perfume-oils", "fragrance", "fragrances", "cologne", "scent", "attar"],
 };
 
 function expandKeywordTokens(raw) {
@@ -133,7 +155,7 @@ function expandKeywordTokens(raw) {
     .toLowerCase()
     .replace(/[^\w\s-]/g, " ")
     .split(/\s+/)
-    .filter((t) => t && !STOP_WORDS.has(t));
+    .filter((t) => t && !STOP_WORDS.has(t) && (t.length >= 3 || t === "tv" || /^\d+ml$/.test(t)));
 
   const expanded = new Set(base);
   for (const token of base) {
@@ -223,7 +245,91 @@ function scoreProduct(product, tokens) {
   const hay = productHaystack(product);
   let score = 0;
   for (const token of tokens) {
+    if (isSizeToken(token)) continue;
     if (hay.includes(token)) score += token.length >= 4 ? 2 : 1;
   }
   return score;
+}
+
+function isSizeToken(token) {
+  return /^\d+ml$/.test(token) || /^1l$|^1litre$|^litre$|^liter$/.test(token);
+}
+
+function scentKeywordTokens(tokens) {
+  return tokens.filter((t) => !isSizeToken(t));
+}
+
+function isPerfumeOil(product) {
+  return product.subcategory === "perfume-oils" || String(product.id || "").startsWith("po-");
+}
+
+/** "SAUVAGE DIOR — 100ml Perfume Oil" → "SAUVAGE DIOR" */
+export function scentFamilyName(product) {
+  if (!isPerfumeOil(product)) return product.name;
+  const parts = String(product.name).split(" — ");
+  return parts[0]?.trim() || product.name;
+}
+
+function parseSizeMlFromTokens(tokens) {
+  for (const t of tokens) {
+    if (/^1l$|^1litre$|^litre$|^liter$/.test(t)) return 1000;
+    const m = t.match(/^(\d+)ml$/);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+function pickVariantForFamily(variants, keywordTokens = []) {
+  if (!variants?.length) return null;
+  if (variants.length === 1) return variants[0];
+
+  const wantMl = parseSizeMlFromTokens(keywordTokens);
+  if (wantMl != null) {
+    const exact = variants.find((v) => v.volumeMl === wantMl);
+    if (exact) return exact;
+    const byName = variants.find((v) => v.name.toLowerCase().includes(`${wantMl}ml`));
+    if (byName) return byName;
+  }
+
+  return (
+    variants.find((v) => v.volumeMl === 100) ||
+    variants.find((v) => /100ml/i.test(v.name)) ||
+    variants.find((v) => v.volumeMl === 50) ||
+    [...variants].sort((a, b) => (a.volumeMl || 0) - (b.volumeMl || 0))[0]
+  );
+}
+
+/** One row per scent — avoids 4× sizes of "1 MILLION" in browse/search lists. */
+function dedupePerfumeOilVariants(products, keywordTokens = []) {
+  const families = new Map();
+  const other = [];
+
+  for (const p of products) {
+    if (!isPerfumeOil(p)) {
+      other.push(p);
+      continue;
+    }
+    const family = scentFamilyName(p);
+    if (!families.has(family)) families.set(family, []);
+    families.get(family).push(p);
+  }
+
+  if (families.size === 0) return products;
+
+  const familyOrder = [];
+  const seen = new Set();
+  for (const p of products) {
+    if (!isPerfumeOil(p)) continue;
+    const family = scentFamilyName(p);
+    if (!seen.has(family)) {
+      seen.add(family);
+      familyOrder.push(family);
+    }
+  }
+
+  const deduped = familyOrder
+    .map((family) => pickVariantForFamily(families.get(family), keywordTokens))
+    .filter(Boolean);
+
+  return [...other, ...deduped];
 }

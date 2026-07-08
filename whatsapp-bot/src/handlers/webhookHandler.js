@@ -256,7 +256,27 @@ export async function handleIncomingMessage(
   const choice = parseNumericChoice(text);
   const menuState = getMenuState(customerKey);
 
-  if (choice && menuState?.type === "product_list" && menuState.productIds?.[choice - 1]) {
+  if (menuState?.type === "product_list_paged" && menuState.rowId) {
+    if (/^(next|more|n)$/i.test(normalized)) {
+      const totalPages = Math.ceil((menuState.allProductIds?.length || 0) / (menuState.pageSize || 12));
+      const nextPage = (menuState.page || 0) + 1;
+      if (nextPage < totalPages) {
+        const { sendProductsForSubcategory } = await import("../services/menu.js");
+        return sendProductsForSubcategory(customerKey, menuState.rowId, nextPage);
+      }
+      return sendText(customerKey, "You're on the last page. Reply with a number to order, or *menu*.");
+    }
+    if (/^(prev|previous|back|p)$/i.test(normalized) && (menuState.page || 0) > 0) {
+      const { sendProductsForSubcategory } = await import("../services/menu.js");
+      return sendProductsForSubcategory(customerKey, menuState.rowId, menuState.page - 1);
+    }
+  }
+
+  if (
+    choice &&
+    (menuState?.type === "product_list_paged" || menuState?.type === "product_list") &&
+    menuState.productIds?.[choice - 1]
+  ) {
     const { showProductActions } = await import("../services/menu.js");
     return showProductActions(customerKey, menuState.productIds[choice - 1]);
   }
