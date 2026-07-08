@@ -328,6 +328,7 @@ export async function sendPerfumeSizePicker(to, scentFamily) {
   for (const product of variants) {
     await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
   }
+  return true;
 }
 
 /** Paginated product list — reply *next* / *prev* to browse large categories. */
@@ -423,7 +424,7 @@ export async function showProductActions(to, productId) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
   setProductContext(to, product);
-  await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: true });
+  return sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: true });
 }
 
 export async function sendInternationalMenu(to) {

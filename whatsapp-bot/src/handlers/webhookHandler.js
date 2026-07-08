@@ -268,6 +268,11 @@ export async function handleIncomingMessage(
 
   if (await handleProductRouter(customerKey, text)) return;
 
+  const catalogRoute = await resolveProductQuery(text);
+  if (catalogRoute.action === "exact" || catalogRoute.action === "confirm") {
+    return;
+  }
+
   if (isCasualGreeting(text)) {
     return sendText(
       customerKey,
@@ -340,6 +345,9 @@ export async function handleIncomingMessage(
   }
 
   if (await tryProductSearch(customerKey, combinedText)) return;
+
+  const session = getSession(customerKey);
+  if (session.lastProductContext && catalogRoute.action !== "none") return;
 
   try {
     const reply = await runAiAgent(customerKey, combinedText);
