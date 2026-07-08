@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { sendText, sendProductCard } from "./whatsapp.js";
-import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts } from "./catalog.js";
+import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
+import { formatListNumber, formatKes } from "./list-format.js";
 import { buildAffiliateLink, SOURCE_LABELS } from "./affiliate.js";
 import {
   setPendingOrder,
@@ -245,6 +246,9 @@ export function isSubcategoryRowId(id) {
 export async function sendProductsForSubcategory(to, rowId, page = 0) {
   const target = findSubcategoryRow(rowId);
   if (!target) return sendMainMenu(to);
+  if (target.subcategory === "perfume-oils") {
+    return sendPerfumeScentList(to, { page, rowId });
+  }
   const products = await listCategoryProducts({
     category: target.category,
     subcategory: target.subcategory,
@@ -256,16 +260,74 @@ export async function sendProductsForSubcategory(to, rowId, page = 0) {
     return sendMainMenu(to);
   }
   const label = SUBCATEGORY_LABELS[target.subcategory] || target.subcategory;
-  const sizeNote =
-    target.subcategory === "perfume-oils"
-      ? `\n\n_Each scent also comes in 30ml · 50ml · 100ml · 250ml · 500ml · 1L. Say e.g. *Sauvage 50ml* for another size._`
-      : "";
   return sendPaginatedProductList(to, products, {
     title: `*${label}* — full catalog (${products.length} items)`,
     page,
     rowId,
-    footer: sizeNote,
   });
+}
+
+/** Step 1: scent names only (no size) — paginated. */
+export async function sendPerfumeScentList(to, { page = 0, rowId = "sub_beauty_perfume-oils" } = {}) {
+  const allFamilies = await listPerfumeScentFamilies();
+  const total = allFamilies.length;
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const start = safePage * CATALOG_PAGE_SIZE;
+  const pageFamilies = allFamilies.slice(start, start + CATALOG_PAGE_SIZE);
+
+  const lines = pageFamilies.map((name, i) => `${formatListNumber(i + 1)} *${name}*`);
+
+  let navFooter = "";
+  if (totalPages > 1) {
+    navFooter = `\n\n📄 Page ${safePage + 1} of ${totalPages} · ${total} scents`;
+    if (safePage + 1 < totalPages) navFooter += `\nReply *next* for more.`;
+    if (safePage > 0) navFooter += `\nReply *prev* for previous page.`;
+  }
+
+  setMenuState(to, {
+    type: "scent_list_paged",
+    scentFamilies: allFamilies,
+    page: safePage,
+    pageSize: CATALOG_PAGE_SIZE,
+    rowId,
+  });
+
+  return sendText(
+    to,
+    `*Perfume Oils* — pick a scent (${total} available)\n\n${lines.join("\n")}\n\n` +
+      `*Reply with the number* (e.g. 1) or type the scent name (e.g. *BRUT*).${navFooter}\n` +
+      `_Type *menu* anytime._`
+  );
+}
+
+/** Step 2: sizes + images for one scent. */
+export async function sendPerfumeSizePicker(to, scentFamily) {
+  const variants = await getPerfumeVariantsForFamily(scentFamily);
+  if (variants.length === 0) {
+    return sendText(to, `Sorry, *${scentFamily}* isn't available right now. Type *menu* to browse.`);
+  }
+
+  const lines = variants.map((p, i) => {
+    const label = p.volumeMl === 1000 ? "1 Litre" : `${p.volumeMl}ml`;
+    return `${formatListNumber(i + 1)} *${label}* — ${formatKes(p.priceKes)} · pay on delivery`;
+  });
+
+  setMenuState(to, {
+    type: "size_pick",
+    scentFamily,
+    productIds: variants.map((p) => p.id),
+  });
+
+  await sendText(
+    to,
+    `You chose: *${scentFamily}*\n\n*Pick your size:*\n\n${lines.join("\n\n")}\n\n` +
+      `*Reply with the number* to order that size.\n_Type *menu* anytime._`
+  );
+
+  for (const product of variants) {
+    await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+  }
 }
 
 /** Paginated product list — reply *next* / *prev* to browse large categories. */
@@ -282,7 +344,7 @@ export async function sendPaginatedProductList(
 
   const lines = pageProducts.map(
     (p, i) =>
-      `${i + 1}. *${p.name}*\n   KES ${p.priceKes.toLocaleString()} · ⭐ ${p.rating} · pay on delivery`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · pay on delivery`
   );
 
   let navFooter = "";
@@ -328,7 +390,7 @@ export async function sendDealsOfTheDay(to) {
 export async function sendNumberedProductList(to, products, { title = "Pick an item", footer = "" } = {}) {
   const lines = products.map(
     (p, i) =>
-      `${i + 1}. *${p.name}*\n   KES ${p.priceKes.toLocaleString()} · ⭐ ${p.rating} · pay on delivery`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · pay on delivery`
   );
 
   const options = products.map((p) => ({

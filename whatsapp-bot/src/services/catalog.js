@@ -104,6 +104,41 @@ export async function listCategoryProducts({ category, subcategory, scope, fulfi
   });
 }
 
+export async function listPerfumeScentFamilies() {
+  const products = await loadProducts();
+  const families = [];
+  const seen = new Set();
+  for (const p of products) {
+    if (!isPerfumeOil(p)) continue;
+    const family = scentFamilyName(p);
+    if (seen.has(family)) continue;
+    seen.add(family);
+    families.push(family);
+  }
+  return families;
+}
+
+export async function getPerfumeVariantsForFamily(familyName) {
+  const products = await loadProducts();
+  const target = normalizeFamilyKey(familyName);
+  return products
+    .filter((p) => isPerfumeOil(p) && normalizeFamilyKey(scentFamilyName(p)) === target)
+    .sort((a, b) => (a.volumeMl || 0) - (b.volumeMl || 0));
+}
+
+export async function getPerfumeProductByFamilyAndSize(familyName, volumeMl) {
+  const variants = await getPerfumeVariantsForFamily(familyName);
+  return variants.find((v) => v.volumeMl === volumeMl) || null;
+}
+
+function normalizeFamilyKey(name) {
+  return String(name || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export async function getDealOfTheDay({ scope = "all", limit = 3 } = {}) {
   const products = await loadProducts();
   const filtered = products.filter((product) => {

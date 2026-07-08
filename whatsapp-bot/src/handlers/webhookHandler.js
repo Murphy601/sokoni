@@ -24,6 +24,7 @@ import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminC
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
+import { handleProductRouter, resolveProductQuery } from "../services/product-router.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -117,6 +118,9 @@ export function parseWahaMessage(body) {
 
 async function tryProductSearch(customerKey, text) {
   if (isCasualGreeting(text)) return false;
+
+  const routed = await resolveProductQuery(text);
+  if (routed.action !== "none") return false;
 
   const products = await searchProducts({
     keywords: text,
@@ -236,6 +240,8 @@ export async function handleIncomingMessage(
 
   const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
   if (pendingHandled) return;
+
+  if (await handleProductRouter(customerKey, text)) return;
 
   if (isCasualGreeting(text)) {
     return sendText(

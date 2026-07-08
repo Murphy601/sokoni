@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
 import { searchProducts, findProductFromMessage } from "./catalog.js";
+import { resolveProductQuery } from "./product-router.js";
 import { getFeaturedProductIds } from "./tiktok.js";
 import { getSession, pushMessage, setProductContext, isHumanHandoff } from "./session.js";
 
@@ -72,6 +73,11 @@ async function gatherProducts(userMessage, phoneNumber) {
   }
 
   const session = getSession(phoneNumber);
+  const routed = await resolveProductQuery(userMessage);
+  if (routed.action !== "none") {
+    return { products: [], focus: null, viral: false };
+  }
+
   const quoted = await findProductFromMessage(userMessage);
   if (quoted) setProductContext(phoneNumber, quoted);
 
