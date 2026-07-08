@@ -39,16 +39,16 @@ async function loadTiktokFeaturedIds() {
 
 const NUDGE_COPY = {
   "phones-tablets": {
-    text: "Looking for a smartphone under KES 15,000? Sokoni AI can compare deals instantly.",
-    wa: "Hi Sokoni, I'm browsing phones on your site — nataka simu poa chini ya 15k. What do you recommend?",
+    text: "Need a phone under KES 15,000? Order on WhatsApp — pay when it arrives 💵",
+    wa: "Hi Sokoni, nataka simu poa chini ya 15k — pay on delivery. What do you recommend?",
   },
   deals: {
-    text: "Spotted something you like? Order on WhatsApp — pay only when it arrives.",
-    wa: "Hi Sokoni, I was browsing your store deals and need help picking the best one.",
+    text: "Browse 1,200+ store deals. Reply on WhatsApp — no upfront payment.",
+    wa: "Hi Sokoni, I was browsing your store and need help picking the best deal (pay on delivery).",
   },
   default: {
-    text: "Tell Sokoni AI what you need — in English, Kiswahili or Sheng — and we'll find it.",
-    wa: "Hi Sokoni, I was browsing your site and need help finding the right product.",
+    text: "Tell Sokoni AI what you need — English, Kiswahili or Sheng — order pay on delivery.",
+    wa: "Hi Sokoni, I was browsing sokonimall.com and need help finding the right product.",
   },
 };
 
@@ -79,9 +79,14 @@ function searchWaLink(query) {
   const q = (query || "").trim();
   return waLink(
     q
-      ? `Hi Sokoni, I searched your site for "${q}" — can you find more options or a better deal?`
-      : "Hi Sokoni, I want to shop 🛒"
+      ? `Hi Sokoni, I'm looking for "${q}" in your store — pay on delivery. What do you have?`
+      : "Hi Sokoni, I want to shop from your store 🛒 (pay on delivery)"
   );
+}
+
+function categoryWaLink(categoryId) {
+  const label = CATEGORY_META[categoryId]?.label || categoryId;
+  return waLink(`Hi Sokoni, I want to browse ${label} — pay on delivery.`);
 }
 
 // ---------- Currency ----------
@@ -197,8 +202,8 @@ function runSearch(query) {
       waCta.classList.remove("hidden");
       waLabel.textContent =
         count > 0
-          ? `Want more options or a better price for “${searchQuery}”?`
-          : `We couldn't find “${searchQuery}” in the catalog — Sokoni AI can search Kilimall, Jumia & more.`;
+          ? `Want more options for “${searchQuery}”? Chat Sokoni on WhatsApp.`
+          : `No on-site match for “${searchQuery}” — Sokoni AI can search our full store catalog.`;
       waLinkEl.href = searchWaLink(searchQuery);
     }
     document.getElementById("deals")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -552,6 +557,7 @@ async function renderProducts() {
     syncCurrencyUi();
     bindSearch();
     setupBrowseNudge();
+    applyDeepLinkFromUrl();
 
     document.getElementById("currency-toggle")?.addEventListener("click", toggleCurrency);
 
@@ -561,6 +567,14 @@ async function renderProducts() {
   } catch (err) {
     console.error("Failed to load product catalog:", err);
   }
+}
+
+/** ?text= or ?q= in URL pre-fills search and scrolls to store (e.g. ?text=phone under 15k). */
+function applyDeepLinkFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const text = params.get("text") || params.get("q");
+  if (!text?.trim()) return;
+  runSearch(text.trim());
 }
 
 renderProducts();

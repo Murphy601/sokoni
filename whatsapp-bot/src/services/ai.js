@@ -10,36 +10,75 @@ const FALLBACK_MODELS = [
   "openai/gpt-oss-20b:free",
 ];
 
-const SYSTEM_PROMPT = `You are "Sokoni AI" — a witty, sharp, and deeply helpful shopping concierge on WhatsApp in Kenya.
+const SYSTEM_PROMPT = `You are "Sokoni AI" — the shopping brain of Sokoni Mall (sokonimall.com) on WhatsApp in Kenya.
 
-Sokoni runs a pay-on-delivery store (phones, TVs, appliances, fashion, home, beauty, gaming, supermarket, baby products) and helps shoppers find deals from partner platforms (Jumia, Kilimall, AliExpress, Temu, Amazon) via tracked affiliate links when asked.
+## What Sokoni is
+Sokoni is a pay-on-delivery store PLUS a shopping concierge for international partner stores.
+- **Store (default):** Customer orders on WhatsApp, pays cash/M-Pesa on delivery. No upfront payment.
+- **International (when asked):** AliExpress, Temu, Amazon via official partner checkout links (affiliate; disclosed once per chat).
+You are NOT the seller for international items. For store items, you represent Sokoni's COD fulfillment.
 
-## TikTok & viral traffic awareness
-- Many users arrive from automated TikTok posts (@SokoniMall). They may say "Nimeona form flani TikTok", "TikTokDeals", "ile item ya video", or "viral bargain".
-- Match their energy immediately (e.g. "Ah, hio form ya TikTok! Kuom nikufe kizie chap chap...").
-- Prioritize the product they describe using the CATALOG below — match by name, category, or price. If unclear, ask which item they saw in one short line.
-- Recent TikTok featured items appear in CATALOG when relevant — help them confirm and order fast.
-- Store items: guide them to reply *1* to order (pay on delivery). Or type *menu* to browse all categories.
+## Your job each turn
+1. Understand intent in the user's language (English, Kiswahili, Sheng).
+2. Use ONLY the CATALOG block provided — it is pre-searched by the system. You do NOT search yourself.
+3. Recommend clearly, compare honestly, and move the user to the next action in one message.
+4. Never invent products, prices, stock, links, delivery dates, or specs.
 
-## Tone & communication
-- Trusted local friend who "knows a guy" and gets the best prices.
-- Match English, Kiswahili, or casual Sheng depending on how they text. Never stiff, academic, or robotic.
-- Short and punchy for mobile: 2–5 lines max. Emojis naturally for scannability.
+## Conversation loop (internal)
+DETECT → (greeting / shop / compare / order intent / track / human / TikTok / international)
+ANSWER → lead with the useful conclusion in line 1
+PROVE → cite catalog facts only
+ACT → one clear CTA (reply *1*, type *menu*, or one clarifying question)
+CLOSE → invite them to continue in chat
 
-## Strict operational rules
-- Use ONLY products and prices from the CATALOG section. NEVER guess or invent prices, stock, delivery times, or links.
-- If the item is not in CATALOG, say so honestly and offer a similar alternative from CATALOG only.
-- First time you mention buying via a partner/affiliate link in a chat, disclose transparently: Sokoni may earn a small commission at no extra cost to them.
-- NEVER ask for or store card numbers, M-Pesa PINs, or direct payments — store orders are pay-on-delivery; partner buys go to official checkout links.
-- "Sasa", "mambo", "uko aje", "habari" are greetings — respond warmly, not as product searches.
-- "Nipee" / "nataka" = they want the last discussed item → tell them to reply *1* or type *menu*.
-- For cart, cancel, track order, or human agent → type *menu* (handled outside this reply).
-- If they asked for a human, stop selling — say the team will reply shortly.
+## Tone
+Warm, sharp, trusted local friend — not corporate, not robotic.
+2–5 short lines max. Emojis sparingly for scanability.
+Mirror the user's language register (formal/casual/Sheng).
 
-## System capabilities (you do not call APIs — routing is automatic)
-- **Product search:** You receive matches in the CATALOG block — cite only those.
-- **TikTok / viral deals:** Keywords like TikTokDeals or "viral" trigger featured recent posts; help user pick the right item.
-- **Human escalation:** Direct them to *menu* → Talk to a Human for a real person.`;
+## Store orders (primary path)
+When CATALOG items are pay-on-delivery:
+- Present up to 3 best matches: name, KES price, rating, one honest reason it fits.
+- CTA: "Reply *1* to order" or "Type *menu* → Browse Categories".
+- If they say nipee/nataka/yes/sawa about the last item → confirm product + reply *1* to start order.
+- Never collect payment details in chat.
+
+## TikTok / viral traffic
+If user mentions TikTok, reels, viral, "nimeona post", TikTokDeals:
+- Match energy immediately ("Ah, hio form ya TikTok! 🔥").
+- Prioritize featured/recent items in CATALOG.
+- Fast path: name the item + reply *1*.
+
+## International (only when user asks)
+If user wants import/abroad/AliExpress/Temu/Amazon/cheaper from outside:
+- Say delivery is typically 1–4 weeks.
+- Mention Kenya import duty/VAT may apply on arrival (customer pays customs, not a Sokoni fee).
+- Direct them: *menu* → Shop International.
+- On first partner link in a chat, disclose affiliate commission transparently.
+
+## Product Q&A mode
+When user asks specs, battery, size, "is it worth it", comparisons:
+- Answer using catalog fields + reasonable general knowledge about the product TYPE.
+- If spec not in catalog, say you don't have that detail; offer human help or similar catalog item.
+- Compare max 2–3 items on: price/value, rating, fit for stated use.
+
+## Hard rules
+- NEVER contradict the CATALOG block.
+- NEVER ask for card numbers or M-Pesa PIN.
+- NEVER promise exact delivery date unless provided in catalog.
+- NEVER pretend to be human; say you're Sokoni AI — human available via menu.
+- For track order, cart, cancel, change order, human agent → tell user *menu* (handled outside you).
+- If user asks for human/agent/manager → stop selling; say team will reply in this chat.
+- "Sasa", "mambo", "habari" are greetings — respond warmly, not as product searches.
+
+## Output format (WhatsApp)
+Line 1: direct answer or top pick
+Lines 2–4: options or key facts
+Final line: single CTA
+Examples:
+- "Reply *1* kuanza order (pay on delivery)."
+- "Type *menu* kuchagua category."
+- "Niambie budget yako nikupe options 2 zingine."`;
 
 function modelChain() {
   const primary = config.openai.model?.trim();
@@ -53,7 +92,7 @@ function formatProductLine(p) {
 function formatCatalogReply(products, { intro } = {}) {
   const head = intro || "Here's what I found in our store:";
   const lines = products.slice(0, 3).map(formatProductLine);
-  return `${head}\n\n${lines.join("\n")}\n\nType *menu* → *1* to browse all categories, or tell me the exact item name (e.g. "Hisense 43 TV").`;
+  return `${head}\n\n${lines.join("\n")}\n\nReply *1* to order, or type *menu* to browse all categories.`;
 }
 
 function isCasualGreeting(text) {
@@ -67,9 +106,38 @@ function isViralIntent(text) {
   );
 }
 
+function isInternationalIntent(text) {
+  return /international|abroad|overseas|aliexpress|temu|amazon|import from|from china|from usa|shop international|cheaper outside/i.test(
+    text
+  );
+}
+
+function isRecommendationQuery(text) {
+  return /recommend|best|looking for|what about|do you have|show me|suggest|options/i.test(text);
+}
+
+function isProductDetailQuery(text) {
+  return /info|detail|spec|battery|size|good for|worth|compare|how long|quality|tell me about|is it/i.test(text);
+}
+
+function extractBudgetHint(text) {
+  const under = text.match(/(?:under|chini ya|below|less than)\s*(?:kes\s*)?(\d[\d,]*)\s*k?/i);
+  if (under) return `under KES ${under[1].replace(/,/g, "")}`;
+  const around = text.match(/(?:around|about|kama)\s*(?:kes\s*)?(\d[\d,]*)\s*k?/i);
+  if (around) return `around KES ${around[1].replace(/,/g, "")}`;
+  return null;
+}
+
+function detectLanguageHint(text) {
+  if (/[àâäèéêëïîôùûü]/i.test(text)) return "en";
+  if (/\b(nataka|nipee|habari|chini|simu|bei|poa|sawa|nimeona|nipe|nataka|kiasi)\b/i.test(text)) return "sw";
+  if (/\b(form|mambo|sasa|niko|fit|chap|chapu)\b/i.test(text)) return "sheng";
+  return "en";
+}
+
 async function gatherProducts(userMessage, phoneNumber) {
   if (isCasualGreeting(userMessage)) {
-    return { products: [], focus: null, viral: false };
+    return { products: [], focus: null, viral: false, international: false };
   }
 
   const session = getSession(phoneNumber);
@@ -78,7 +146,7 @@ async function gatherProducts(userMessage, phoneNumber) {
   if (!existingFocus) {
     const routed = await resolveProductQuery(userMessage);
     if (routed.action !== "none") {
-      return { products: [], focus: null, viral: false };
+      return { products: [], focus: null, viral: false, international: false };
     }
   }
 
@@ -86,6 +154,7 @@ async function gatherProducts(userMessage, phoneNumber) {
   if (quoted) setProductContext(phoneNumber, quoted);
 
   const viral = isViralIntent(userMessage);
+  const international = isInternationalIntent(userMessage);
   let matches = await searchProducts({
     keywords: userMessage,
     fulfillment: "store",
@@ -108,31 +177,69 @@ async function gatherProducts(userMessage, phoneNumber) {
   for (const p of matches) {
     if (!products.some((x) => x.id === p.id)) products.push(p);
   }
-  return { products, focus, viral };
+  return { products, focus, viral, international };
 }
 
-function buildCatalogBlock(products, focus) {
-  const lines = products.slice(0, 5).map(
-    (p) =>
-      `- ${p.name} | KES ${p.priceKes?.toLocaleString()} | pay on delivery | ⭐ ${p.rating} | id:${p.id}`
-  );
+function formatCatalogLine(p, index) {
+  const tags = (p.tags || []).slice(0, 3).join(",");
+  const cat = [p.category, p.subcategory].filter(Boolean).join("/");
+  const fulfillment = p.fulfillment === "store" ? "STORE|pay on delivery" : "INTL|partner checkout";
+  return `${index}) id:${p.id} | ${p.name} | KES ${p.priceKes?.toLocaleString()} | ⭐${p.rating} (${p.reviews || 0}) | ${fulfillment} | cat:${cat}${tags ? ` | tags:${tags}` : ""}`;
+}
+
+function buildCatalogBlock(products, focus, { userMessage = "", viral = false } = {}) {
+  const storeItems = products.filter((p) => p.fulfillment === "store");
+  const lines = (storeItems.length ? storeItems : products).slice(0, 5).map((p, i) => formatCatalogLine(p, i + 1));
+
+  const budget = extractBudgetHint(userMessage);
+  const lang = detectLanguageHint(userMessage);
+  const context = [
+    `intent: ${isProductDetailQuery(userMessage) ? "product_qa" : isRecommendationQuery(userMessage) ? "recommend" : "general"}`,
+    budget ? `budget_hint: ${budget}` : null,
+    `viral_source: ${viral ? "yes" : "no"}`,
+    `language: ${lang}`,
+    "REQUIRED CTA: reply *1* to order OR *menu* to browse",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   if (focus && lines.length > 0) {
     return (
-      `CUSTOMER IS ASKING ABOUT THIS PRODUCT:\n${lines[0]}\n\n` +
-      (lines.length > 1 ? `Related items:\n${lines.slice(1).join("\n")}` : "")
+      `CATALOG (authoritative — only use these):\n[STORE | pay on delivery]\n${lines.join("\n")}\n\n` +
+      `CUSTOMER CONTEXT:\n${context}\n\n` +
+      `FOCUS PRODUCT (answer about this first):\n${lines[0]}`
     );
   }
   if (lines.length === 0) return null;
-  return lines.join("\n");
+  return `CATALOG (authoritative — only use these):\n[STORE | pay on delivery]\n${lines.join("\n")}\n\nCUSTOMER CONTEXT:\n${context}`;
 }
 
-function isRecommendationQuery(text) {
-  return /recommend|best|looking for|what about|do you have|show me|suggest|options/i.test(text);
-}
+function buildModeInjection({ viral, focus, userMessage, international }) {
+  const modes = [];
 
-function isProductDetailQuery(text) {
-  return /info|detail|spec|battery|size|good for|worth|compare|how long|quality/i.test(text);
+  if (viral) {
+    modes.push(
+      `MODE: TIKTOK_VIRAL\nUser likely came from @SokoniMall TikTok. Be fast and hype-but-honest.\nShow featured catalog items first. Short Sheng welcome OK.\nPrimary CTA: reply *1* to order pay on delivery.`
+    );
+  }
+
+  if (focus && isProductDetailQuery(userMessage)) {
+    modes.push(
+      `MODE: PRODUCT_FOCUS\nUser is asking about: "${focus.name}" (id:${focus.id}, KES ${focus.priceKes}).\nAnswer their specific question about THIS item first, then mention 1 related catalog item max.`
+    );
+  } else if (isRecommendationQuery(userMessage) && !isProductDetailQuery(userMessage)) {
+    modes.push(
+      `MODE: RECOMMEND\nGive top 3 catalog matches ranked by: fit to request > rating > value within budget.\nDo not overload specs. End with reply *1* or *menu*.`
+    );
+  }
+
+  if (international) {
+    modes.push(
+      `MODE: INTERNATIONAL\nUser wants overseas shopping. Clarify budget + item in one question if vague.\nSet expectations: 1–4 weeks shipping, possible customs charges at arrival.\nRoute to *menu* → Shop International; do not promise Sokoni COD for intl items unless catalog says store.`
+    );
+  }
+
+  return modes.join("\n\n");
 }
 
 function extractReply(message) {
@@ -213,15 +320,14 @@ export async function runAiAgent(phoneNumber, userMessage) {
 
   if (isCasualGreeting(userMessage)) {
     const reply =
-      "Poa! 😊 Niko fit. Unatafuta nini leo? Type *menu* to browse, or tell me what you need.";
+      "Poa! 😊 Niko fit. Unatafuta nini leo? Type *menu* to browse our store (pay on delivery), or tell me what you need.";
     pushMessage(phoneNumber, "assistant", reply);
     return reply;
   }
 
-  const { products, focus, viral } = await gatherProducts(userMessage, phoneNumber);
+  const { products, focus, viral, international } = await gatherProducts(userMessage, phoneNumber);
 
   if (products.length === 0) {
-    const session = getSession(phoneNumber);
     if (session.lastProductContext) {
       const reply = formatCatalogReply([session.lastProductContext], {
         intro: `About *${session.lastProductContext.name}*:`,
@@ -231,7 +337,9 @@ export async function runAiAgent(phoneNumber, userMessage) {
     }
     const reply = viral
       ? "Ah, umetoka TikTok! 🔥 Bado hatujapost deal mpya leo — type *menu* kuchagua, au niambie ukitafuta nini."
-      : "I couldn't find that in our catalog right now. Type *menu* → *1* to browse categories (phones, TVs, appliances, fashion & more), or tell me a specific item name.";
+      : international
+        ? "For international shopping (AliExpress, Temu, Amazon), type *menu* → *Shop International*. For local pay-on-delivery items, tell me what you need."
+        : "I couldn't find that in our store catalog right now. Type *menu* → *Browse Categories*, or tell me a specific item name (e.g. *Hisense TV*, *Brut perfume*).";
     pushMessage(phoneNumber, "assistant", reply);
     return reply;
   }
@@ -242,7 +350,7 @@ export async function runAiAgent(phoneNumber, userMessage) {
         ? "Ah hio form ya TikTok! 🔥 Hizi ndio deals zetu za hivi karibuni:"
         : focus
           ? `About *${focus.name}* and similar items:`
-          : "Here are my top picks:",
+          : "Here are my top picks from our store:",
     });
     pushMessage(phoneNumber, "assistant", reply);
     return reply;
@@ -255,14 +363,14 @@ export async function runAiAgent(phoneNumber, userMessage) {
   }
 
   try {
-    const catalog = buildCatalogBlock(products, focus);
-    const focusedQuestion = focus
-      ? `About "${focus.name}": ${userMessage}`
-      : userMessage;
+    const catalog = buildCatalogBlock(products, focus, { userMessage, viral });
+    const mode = buildModeInjection({ viral, focus, userMessage, international });
+    const focusedQuestion = focus ? `About "${focus.name}": ${userMessage}` : userMessage;
 
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "system", content: `CATALOG (only use these — never contradict this list):\n${catalog}` },
+      ...(catalog ? [{ role: "system", content: catalog }] : []),
+      ...(mode ? [{ role: "system", content: mode }] : []),
       ...session.history.slice(-14, -1),
       { role: "user", content: focusedQuestion },
     ];

@@ -223,6 +223,11 @@ export async function handleIncomingMessage(
     return sendWelcome(customerKey);
   }
 
+  if (/^(shop international|international shopping|🌍)$/i.test(normalized) || normalized === "international") {
+    const { sendInternationalMenu } = await import("../services/menu.js");
+    return sendInternationalMenu(customerKey);
+  }
+
   if (normalized === "cart" || normalized === "my cart" || normalized === "my cart?") {
     return handleCart(customerKey);
   }

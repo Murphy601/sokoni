@@ -47,6 +47,7 @@ export function sendMainMenu(to) {
   const options = [
     { id: "shop_all", label: "🛍️ Browse Categories" },
     { id: "deals_today", label: "🔥 Today's Picks" },
+    { id: "intl_shop", label: "🌍 Shop International" },
     { id: "track_order", label: "🧾 Track My Order" },
     { id: "visit_site", label: "🌐 Visit Website" },
     { id: "human_handoff", label: "🙋 Talk to a Human" },
@@ -556,12 +557,15 @@ export function sendHowItWorks(to) {
   return sendText(
     to,
     `*How ${config.brand.name} works* 🛍️\n\n` +
-      `1️⃣ Browse our store and pick what you like (reply with numbers from the menu).\n` +
-      `2️⃣ Reply *1* to order and share your name, location & phone in one message.\n` +
-      `3️⃣ We deliver to you — and you *pay on delivery* (cash or M-Pesa to the rider).\n\n` +
-      `No paying upfront, no risk. ${config.store.deliveryNote}\n\n` +
+      `1️⃣ Chat Sokoni on WhatsApp (or browse sokonimall.com).\n` +
+      `2️⃣ Our AI finds the right product from our *pay-on-delivery* store catalog.\n` +
+      `3️⃣ Reply *1* to order — share name, location & phone in one message.\n` +
+      `4️⃣ We deliver — you pay cash or M-Pesa to the rider on arrival.\n` +
+      `5️⃣ Track anytime with your *SK-####* order number.\n\n` +
+      `*International?* Type *menu* → *Shop International* for AliExpress, Temu & Amazon links (1–4 weeks; customs may apply).\n\n` +
+      `${config.store.deliveryNote}\n\n` +
       `${siteUrlLine()}\n\n` +
-      `Type "menu" anytime to start again.`
+      `Type *menu* anytime to start again.`
   );
 }
 
