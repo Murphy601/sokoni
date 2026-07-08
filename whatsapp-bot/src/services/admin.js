@@ -8,11 +8,14 @@ import { setHumanHandoff } from "./session.js";
 import {
   getOrder,
   updateOrderStatus,
+  updateOrderMeta,
   listRecentOrders,
   getAllContacts,
   statusLabel,
   ORDER_STATUSES,
 } from "./orders.js";
+import { getSupplier } from "./suppliers.js";
+import { recordDeliveryPayout, getSettlementSummary, markPayoutPaid } from "./settlements.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -171,7 +174,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -260,13 +263,15 @@ async function notifyCustomerOfStatus(order) {
 function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
-    `📋 *#orders* (or type *orders*) — recent orders\n` +
-    `🔄 *#status SK-1042 out* — update status\n` +
-    `   (received/confirmed/packed/out/delivered/cancelled)\n` +
+    `📋 *#orders* — recent orders\n` +
+    `🔄 *#status SK-1042 delivered* — update + payout on delivery\n` +
+    `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
+    `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
+    `💰 *#payouts* — supplier amounts owed\n` +
+    `✅ *#paid SK-1042* — mark supplier paid\n` +
     `📣 *#broadcast <message>* — message all customers\n` +
-    `🆔 *#SK-1042 <message>* — message that order's customer\n` +
-    `❓ *#help* — this list\n\n` +
-    `_Reply to customers by opening their chat in WhatsApp, or use #SK-xxxx._`
+    `🆔 *#SK-1042 <message>* — message customer\n` +
+    `❓ *#help* — this list`
   );
 }
 
@@ -275,11 +280,19 @@ async function handleOrdersCommand(adminChatId) {
   if (orders.length === 0) {
     return sendText(adminChatId, "No orders yet.");
   }
-  const lines = orders.map(
-    (o) =>
-      `*${o.id}* · ${statusLabel(o.status)}\n${o.productName} — KES ${o.priceKes.toLocaleString()}\n${o.customerName} · ${o.phone}`
+  const lines = orders.map((o) => {
+    const margin = o.marginKes != null ? ` · margin KES ${o.marginKes.toLocaleString()}` : "";
+    const sup = o.supplierId ? ` · supplier` : "";
+    return (
+      `*${o.id}* · ${statusLabel(o.status)}${sup}\n` +
+      `${o.productName} — KES ${o.priceKes.toLocaleString()}${margin}\n` +
+      `${o.customerName} · ${o.phone}`
+    );
+  });
+  return sendText(
+    adminChatId,
+    `📋 *Recent orders*\n\n${lines.join("\n\n")}\n\n#fulfill <id> · #status <id> delivered`
   );
-  return sendText(adminChatId, `📋 *Recent orders*\n\n${lines.join("\n\n")}\n\nUpdate: #status <id> <status>`);
 }
 
 async function handleStatusCommand(adminChatId, args) {
@@ -299,9 +312,105 @@ async function handleStatusCommand(adminChatId, args) {
     return sendText(adminChatId, `⚠️ Unknown status. Use: ${ORDER_STATUSES.join(", ")}`);
   }
   await notifyCustomerOfStatus(result.order);
+  if (result.status === "delivered" && result.order.supplierId) {
+    const payout = recordDeliveryPayout(result.order);
+    updateOrderMeta(result.order.id, { payoutStatus: payout ? "owed" : result.order.payoutStatus });
+  }
+  const payoutNote =
+    result.status === "delivered" && result.order.sourcePriceKes
+      ? `\nSupplier owed: KES ${result.order.sourcePriceKes.toLocaleString()} (#payouts)`
+      : "";
   return sendText(
     adminChatId,
-    `✅ *${result.order.id}* → ${statusLabel(result.status)}\nCustomer notified on WhatsApp.`
+    `✅ *${result.order.id}* → ${statusLabel(result.status)}\nCustomer notified.${payoutNote}`
+  );
+}
+
+async function handleFulfillCommand(adminChatId, args) {
+  const parts = args.trim().split(/\s+/);
+  const orderId = parts[0];
+  const share = parts[1]?.toLowerCase() === "share";
+  if (!orderId) {
+    return sendText(adminChatId, "Usage: #fulfill SK-1042\nOr: #fulfill SK-1042 share (includes customer address)");
+  }
+  const order = getOrder(orderId);
+  if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+  if (!supplier?.phone) {
+    return sendText(
+      adminChatId,
+      `⚠️ No supplier phone for this order. Fulfill manually or add supplier on approval.`
+    );
+  }
+
+  const supplierChat = `${supplier.phone.replace(/\D/g, "")}@c.us`;
+  let msg =
+    `📦 *Sokoni supply order ${order.id}*\n\n` +
+    `Product: *${order.productName}*\n` +
+    `Qty: 1\n` +
+    `Your payout: KES ${(order.sourcePriceKes || 0).toLocaleString()} (after customer delivery)\n\n`;
+
+  if (share) {
+    msg +=
+      `*Deliver to customer:*\n` +
+      `${order.customerName}\n` +
+      `${order.location}\n` +
+      `Phone: ${order.phone}\n\n` +
+      `_Reply READY when dispatched, or call Sokoni admin if you need a hub pickup instead._`;
+    updateOrderMeta(order.id, {
+      deliveryMode: "supplier_to_customer",
+      shareCustomerContact: true,
+      supplierNotified: true,
+    });
+  } else {
+    msg +=
+      `*Sokoni hub / rider pickup — customer details not included.*\n` +
+      `Reply READY when the item is packed, or tell us if *you can deliver* to the buyer's area.\n\n` +
+      `_Sokoni admin will coordinate delivery based on location._`;
+    updateOrderMeta(order.id, {
+      deliveryMode: "pending_coordination",
+      shareCustomerContact: false,
+      supplierNotified: true,
+    });
+  }
+
+  try {
+    await sendText(supplierChat, msg);
+    return sendText(
+      adminChatId,
+      `✅ Supplier *${supplier.businessName}* notified for *${order.id}*${share ? " (with customer address)" : ""}.`
+    );
+  } catch (err) {
+    return sendText(adminChatId, `⚠️ Failed to WhatsApp supplier: ${err.message}`);
+  }
+}
+
+async function handlePayoutsCommand(adminChatId) {
+  const summary = getSettlementSummary();
+  if (summary.count === 0) {
+    return sendText(adminChatId, "💰 No supplier payouts owed right now.");
+  }
+  const lines = summary.entries.slice(0, 10).map(
+    (e) =>
+      `*${e.orderId}* · ${e.supplierName}\n` +
+      `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
+      `#paid ${e.orderId} when sent`
+  );
+  return sendText(
+    adminChatId,
+    `💰 *Owed to suppliers:* KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+  );
+}
+
+async function handlePaidCommand(adminChatId, orderId) {
+  if (!orderId) return sendText(adminChatId, "Usage: #paid SK-1042");
+  const entry = markPayoutPaid(orderId);
+  if (!entry) return sendText(adminChatId, `⚠️ No owed payout for *${orderId}*.`);
+  updateOrderMeta(orderId, { payoutStatus: "paid" });
+  return sendText(
+    adminChatId,
+    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.`
   );
 }
 
@@ -359,7 +468,7 @@ function getBroadcastRecipients() {
 /** Pull a #command out of longer pasted text (e.g. "Update: #status SK-1002 confirmed"). */
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
-  const embedded = t.match(/#(?:help|orders|status|broadcast)\b[\s\S]*/i);
+  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid)\b[\s\S]*/i);
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
   if (sk) return sk[0].trim();
@@ -406,6 +515,19 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#broadcast\b/i.test(t)) {
     await handleBroadcastCommand(adminChatId, t.replace(/^#broadcast\b/i, ""));
+    return true;
+  }
+  if (/^#fulfill\b/i.test(t)) {
+    await handleFulfillCommand(adminChatId, t.replace(/^#fulfill\b/i, ""));
+    return true;
+  }
+  if (/^#payouts\b/i.test(t)) {
+    await handlePayoutsCommand(adminChatId);
+    return true;
+  }
+  if (/^#paid\b/i.test(t)) {
+    const oid = t.replace(/^#paid\b/i, "").trim().split(/\s+/)[0];
+    await handlePaidCommand(adminChatId, oid);
     return true;
   }
 

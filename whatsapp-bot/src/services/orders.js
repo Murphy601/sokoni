@@ -102,17 +102,30 @@ export function createOrder({ customerKey, chatId, product, details }) {
   store.seq += 1;
   const id = `SK-${store.seq}`;
   const now = Date.now();
+  const sourcePriceKes = product.sourcePriceKes != null ? Number(product.sourcePriceKes) : null;
+  const priceKes = product.priceKes != null ? Number(product.priceKes) : null;
+  const marginKes =
+    sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
+
   const order = {
     id,
     customerKey,
     chatId: chatId || customerKey,
     productId: product.productId || product.id,
     productName: product.name,
-    priceKes: product.priceKes,
+    priceKes,
+    sourcePriceKes,
+    marginKes,
+    supplierId: product.supplierId || null,
+    supplierSku: product.supplierSku || null,
     customerName: details.name,
     location: details.location,
     phone: details.phone,
     status: "received",
+    deliveryMode: "pending",
+    shareCustomerContact: false,
+    supplierNotified: false,
+    payoutStatus: sourcePriceKes != null ? "pending" : "n/a",
     history: [{ status: "received", at: now }],
     reviewPromptSent: false,
     createdAt: now,
@@ -164,4 +177,12 @@ export function updateOrderStatus(id, statusInput) {
   order.updatedAt = Date.now();
   persist();
   return { order, status };
+}
+
+export function updateOrderMeta(id, patch) {
+  const order = getOrder(id);
+  if (!order) return null;
+  Object.assign(order, patch, { updatedAt: Date.now() });
+  persist();
+  return order;
 }

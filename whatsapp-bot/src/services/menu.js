@@ -615,12 +615,17 @@ export async function confirmCodOrder(to, parsed) {
   setCustomerMeta(to, { phone: details.phone.replace(/\D/g, "") });
 
   const meta = getCustomerMeta(to) || {};
+  const catalogProduct = pending.productId ? await getProductById(pending.productId) : null;
+  const productForOrder = catalogProduct
+    ? { ...catalogProduct, productId: catalogProduct.id }
+    : pending;
+
   let order = null;
   try {
     order = createOrder({
       customerKey: to,
       chatId: meta.chatId || to,
-      product: pending,
+      product: productForOrder,
       details,
     });
   } catch (err) {

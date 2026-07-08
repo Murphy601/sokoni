@@ -4,6 +4,8 @@ import { handleWahaWebhook } from "./handlers/webhookHandler.js";
 import { runTiktokPostJob } from "./services/tiktok.js";
 import { startTokenRefreshScheduler, getConnectionStatus } from "./services/tiktok-auth.js";
 import tiktokOAuthRouter from "./routes/tiktokOAuth.js";
+import suppliersApiRouter from "./routes/suppliersApi.js";
+import adminSuppliersRouter from "./routes/adminSuppliers.js";
 import { listReviews, addReview } from "./services/reviews.js";
 
 const app = express();
@@ -60,6 +62,9 @@ app.post("/api/reviews", (req, res) => {
   }
   res.status(201).json({ review: result.review });
 });
+
+app.use("/api/suppliers", suppliersApiRouter);
+app.use("/admin/suppliers", adminSuppliersRouter);
 
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */
 app.use("/admin/tiktok", tiktokOAuthRouter);

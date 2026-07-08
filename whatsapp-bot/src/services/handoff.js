@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { getSupplier } from "./suppliers.js";
 import { sendText, formatCustomerLabel } from "./whatsapp.js";
 import {
   setHumanHandoff,
@@ -81,15 +82,33 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
   const meta = getCustomerMeta(customerKey);
   const label = formatCustomerLabel(meta, customerKey);
   const orderId = order?.id ? `  ·  *${order.id}*` : "";
+
+  let supplierBlock = "";
+  if (order?.supplierId) {
+    const sup = getSupplier(order.supplierId);
+    supplierBlock =
+      `\n*Supplier:* ${sup?.businessName || order.supplierId}\n` +
+      `Supply: KES ${(order.sourcePriceKes || 0).toLocaleString()} · ` +
+      `Margin: KES ${(order.marginKes || 0).toLocaleString()}\n` +
+      (sup?.delivers
+        ? `Delivers: yes (${sup.deliveryAreas || "countrywide"})\n`
+        : `Delivers: no — arrange pickup/hub\n`) +
+      (sup?.phone ? `Supplier WA: +${sup.phone}\n` : "");
+  }
+
   return (
     `🧾 *NEW COD ORDER*${orderId}\n` +
     `Product: ${pending.name}\n` +
-    `Price: KES ${pending.priceKes} (pay on delivery)\n` +
+    `Retail: KES ${pending.priceKes.toLocaleString()} (customer pays on delivery)\n` +
+    supplierBlock +
     `Customer: ${label}\n` +
     `Name: ${details.name}\n` +
     `Location: ${details.location}\n` +
     `Phone: ${details.phone}\n\n` +
-    `Update: ${order?.id ? `#status ${order.id} confirmed` : "#status <id> confirmed"}\n` +
-    `Message them: #${order?.id || "SK-xxxx"} Your message here`
+    `*Next steps:*\n` +
+    `${order?.id ? `#fulfill ${order.id}` : "#fulfill SK-xxxx"} — ping supplier (no customer contact)\n` +
+    `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SK-xxxx share"} — supplier delivers (includes address)\n` +
+    `#status ${order?.id || "<id>"} confirmed\n` +
+    `#${order?.id || "SK-xxxx"} Message to customer`
   );
 }

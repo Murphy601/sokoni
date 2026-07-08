@@ -19,9 +19,12 @@ const ROOT = path.join(__dirname, "..");
 const MASTER = path.join(ROOT, "whatsapp-bot", "src", "data", "products.json");
 const OUTPUT = path.join(ROOT, "website", "data", "products.json");
 
-// Flat margin added to supplier cost (buy at 300 -> sell at 400). Keep this in
-// sync with RESELLER_MARKUP_KES / config.store.markupKes in the bot.
-const MARKUP_KES = 100;
+// Retail = supplier cost + KES 100 + 8% (rounded to nearest KES 50).
+function computeRetail(sourcePriceKes) {
+  const cost = Math.max(0, Number(sourcePriceKes) || 0);
+  const raw = cost + 100 + Math.round(cost * 0.08);
+  return Math.ceil(raw / 50) * 50;
+}
 
 const SOURCE_LABELS = {
   aliexpress: "AliExpress",
@@ -52,7 +55,7 @@ function toPublic(product) {
     const priceKes =
       product.priceKes != null
         ? product.priceKes
-        : (product.sourcePriceKes || 0) + MARKUP_KES;
+        : computeRetail(product.sourcePriceKes || 0);
     return {
       id: product.id,
       name: product.name,

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Become a Sokoni Supplier — Sell Countrywide</title>
+<meta name="description" content="List your products on Sokoni. We handle WhatsApp sales, customer pricing, and payouts on delivery. Countrywide Kenya." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
+        },
+        fontFamily: { sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Sokoni</a>
+      <a href="suppliers/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-4 py-2 rounded-full text-sm hover:scale-105 transition">
+        Apply now
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-12 md:py-16">
+    <p class="text-sm font-semibold text-brand-green mb-3">Supplier programme · Kenya countrywide</p>
+    <h1 class="text-3xl md:text-5xl font-extrabold leading-tight mb-5">Sell through Sokoni — we bring the buyers on WhatsApp</h1>
+    <p class="text-lg text-brand-purple/70 dark:text-white/70 max-w-2xl mb-10">
+      You list supply prices. Sokoni sets customer retail, takes orders on WhatsApp, and pays you <strong>after delivery</strong> when cash or M-Pesa is collected.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-12">
+      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/50 p-6">
+        <h2 class="font-bold text-xl mb-3">How it works</h2>
+        <ol class="space-y-3 text-sm text-brand-purple/80 dark:text-white/80 list-decimal list-inside">
+          <li>Submit your business + products with <em>your</em> supply price.</li>
+          <li>Sokoni reviews and publishes retail prices (customers never see your cost).</li>
+          <li>When someone orders, we WhatsApp you to fulfill — delivery is coordinated in chat.</li>
+          <li>After the order is delivered, we owe you your supply amount. Payout when marked paid.</li>
+        </ol>
+      </div>
+      <div class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6">
+        <h2 class="font-bold text-xl mb-3">Pricing model</h2>
+        <p class="text-sm text-brand-purple/80 dark:text-white/80 mb-3">
+          Customer retail ≈ your supply price + <strong>KES 100 + 8%</strong>, rounded to the nearest KES 50. You only submit supply price; Sokoni confirms final shelf price on approval.
+        </p>
+        <p class="text-xs text-brand-purple/60 dark:text-white/50">Example: supply KES 3,000 → retail about KES 3,350.</p>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-4 mb-12">
+      <div class="rounded-2xl bg-brand-purple text-white p-5">
+        <p class="text-2xl mb-2">🚚</p>
+        <h3 class="font-bold mb-1">Flexible delivery</h3>
+        <p class="text-sm text-white/70">Some suppliers deliver to buyers; others drop at our hub or hand to a rider. We decide per order and location — all coordinated on WhatsApp.</p>
+      </div>
+      <div class="rounded-2xl bg-brand-purple text-white p-5">
+        <p class="text-2xl mb-2">🔒</p>
+        <h3 class="font-bold mb-1">Customer privacy</h3>
+        <p class="text-sm text-white/70">Buyer phone and address are <em>not</em> shared by default. Sokoni admin only shares contact when you are delivering directly to the customer.</p>
+      </div>
+      <div class="rounded-2xl bg-brand-purple text-white p-5">
+        <p class="text-2xl mb-2">🇰🇪</p>
+        <h3 class="font-bold mb-1">Countrywide</h3>
+        <p class="text-sm text-white/70">We accept suppliers anywhere in Kenya. Tell us your city and delivery areas on the application.</p>
+      </div>
+    </div>
+
+    <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-8 text-center">
+      <h2 class="text-2xl font-extrabold mb-3">Ready to list?</h2>
+      <p class="text-brand-purple/60 dark:text-white/60 mb-6 max-w-lg mx-auto">Takes about 5 minutes. We respond on WhatsApp within 48 hours.</p>
+      <a href="suppliers/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-8 py-4 rounded-full shadow-lg hover:scale-105 transition">
+        Start supplier application
+      </a>
+    </div>
+  </main>
+
+  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-xs text-brand-purple/50 dark:text-white/40">
+    <a href="terms.html" class="hover:text-brand-green">Terms</a> · <a href="privacy.html" class="hover:text-brand-green">Privacy</a>
+  </footer>
+</body>
+</html>

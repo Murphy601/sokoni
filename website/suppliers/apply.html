@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Supplier Application — Sokoni</title>
+<meta name="description" content="Apply to sell on Sokoni. Submit your supply prices — we handle WhatsApp sales and payout on delivery." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
+        },
+        fontFamily: { sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+<body data-page="apply" class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="../suppliers.html" class="text-sm font-medium hover:text-brand-green transition">← Supplier info</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-5 py-10">
+    <div id="success-box" class="hidden rounded-3xl border border-brand-green/40 bg-brand-green/10 p-8 text-center">
+      <p class="text-3xl mb-3">✅</p>
+      <h1 class="text-2xl font-extrabold mb-2">Application received</h1>
+      <p class="text-sm text-brand-purple/70 dark:text-white/70 mb-2">Reference: <strong id="application-id"></strong></p>
+      <p class="text-sm">Sokoni will WhatsApp you within 48 hours. Keep your phone on.</p>
+      <a href="../index.html" class="inline-block mt-6 text-sm font-semibold text-brand-green hover:underline">Back to sokonimall.com</a>
+    </div>
+
+    <form id="apply-form" class="space-y-8">
+      <div>
+        <h1 class="text-3xl font-extrabold mb-2">Supplier application</h1>
+        <p id="pricing-note" class="text-sm text-brand-purple/60 dark:text-white/60">Submit your supply price only. Sokoni sets customer retail after review.</p>
+      </div>
+
+      <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6">
+        <h2 class="font-bold text-lg">Business</h2>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium sm:col-span-2">Business name *
+            <input id="businessName" required class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">Contact person
+            <input id="contactName" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">WhatsApp phone *
+            <input id="phone" required type="tel" placeholder="07xx or 2547xx" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">Email
+            <input id="email" type="email" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">City / town *
+            <input id="city" required class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" placeholder="e.g. Nairobi" />
+          </label>
+        </div>
+      </section>
+
+      <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6">
+        <h2 class="font-bold text-lg">Delivery</h2>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">Most suppliers deliver in some areas; others prefer hub pickup. Sokoni coordinates per order on WhatsApp.</p>
+        <fieldset class="space-y-2">
+          <legend class="text-sm font-medium mb-2">Can you deliver to buyers?</legend>
+          <label class="flex items-center gap-2 text-sm"><input type="radio" name="delivers" value="yes" /> Yes, in some areas</label>
+          <label class="flex items-center gap-2 text-sm"><input type="radio" name="delivers" value="no" checked /> No — pickup / hub only</label>
+        </fieldset>
+        <div id="delivery-fields" class="hidden space-y-3">
+          <label class="block text-sm font-medium">Areas you deliver
+            <input id="deliveryAreas" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" placeholder="e.g. Nairobi, Kiambu, Mombasa road" />
+          </label>
+          <label class="block text-sm font-medium">Delivery notes
+            <textarea id="deliveryNote" rows="2" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" placeholder="Minimum order, same-day, etc."></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="space-y-4">
+        <div class="flex items-center justify-between gap-4">
+          <h2 class="font-bold text-lg">Products</h2>
+          <button type="button" id="add-product" class="text-sm font-semibold text-brand-green hover:underline">+ Add product</button>
+        </div>
+        <div id="products-wrap" class="space-y-4"></div>
+      </section>
+
+      <p id="form-status" class="text-sm text-red-600 dark:text-red-400"></p>
+      <button id="submit-btn" type="submit" class="w-full sm:w-auto bg-brand-green text-brand-purple font-bold px-8 py-3.5 rounded-full shadow-lg hover:scale-105 transition">
+        Submit application
+      </button>
+    </form>
+  </main>
+
+  <script src="../assets/js/suppliers.js"></script>
+</body>
+</html>
