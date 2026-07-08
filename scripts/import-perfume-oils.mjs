@@ -16,12 +16,12 @@ const MASTER = path.join(ROOT, "whatsapp-bot", "src", "data", "products.json");
 const SCENTS_FILE = path.join(ROOT, "whatsapp-bot", "src", "data", "perfume-oils-scents.txt");
 
 const SIZE_TIERS = [
-  { key: "30ml", label: "30ml", volumeMl: 30, sourcePriceKes: 270, priceKes: 700 },
-  { key: "50ml", label: "50ml", volumeMl: 50, sourcePriceKes: 450, priceKes: 950 },
-  { key: "100ml", label: "100ml", volumeMl: 100, sourcePriceKes: 800, priceKes: 1250 },
-  { key: "250ml", label: "250ml", volumeMl: 250, sourcePriceKes: 1750, priceKes: 2150 },
-  { key: "500ml", label: "500ml", volumeMl: 500, sourcePriceKes: 3350, priceKes: 3700 },
-  { key: "1l", label: "1 Litre", volumeMl: 1000, sourcePriceKes: 5450, priceKes: 5700 },
+  { key: "30ml", label: "30ml", volumeMl: 30, sourcePriceKes: 270, priceKes: 700, imageUrl: "assets/images/products/po-bottle-30ml.jpg" },
+  { key: "50ml", label: "50ml", volumeMl: 50, sourcePriceKes: 450, priceKes: 950, imageUrl: "assets/images/products/po-bottle-50ml.jpg" },
+  { key: "100ml", label: "100ml", volumeMl: 100, sourcePriceKes: 800, priceKes: 1250, imageUrl: "assets/images/products/po-bottle-100ml.jpg" },
+  { key: "250ml", label: "250ml", volumeMl: 250, sourcePriceKes: 1750, priceKes: 2150, imageUrl: "assets/images/products/po-bottle-250ml.jpg" },
+  { key: "500ml", label: "500ml", volumeMl: 500, sourcePriceKes: 3350, priceKes: 3700, imageUrl: "assets/images/products/po-bottle-500ml.jpg" },
+  { key: "1l", label: "1 Litre", volumeMl: 1000, sourcePriceKes: 5450, priceKes: 5700, imageUrl: "assets/images/products/po-bottle-1l.jpg" },
 ];
 
 function slugify(text) {
@@ -66,6 +66,7 @@ function buildPerfumeProducts(scents) {
         source: "Sokoni",
         emoji: "🌸",
         tags: ["perfume-oil", "fragrance", "beauty"],
+        imageUrl: tier.imageUrl,
         scope: "local",
         fulfillment: "store",
         payment: "cod",
