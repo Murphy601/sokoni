@@ -6,6 +6,8 @@ import { startTokenRefreshScheduler, getConnectionStatus } from "./services/tikt
 import tiktokOAuthRouter from "./routes/tiktokOAuth.js";
 import suppliersApiRouter from "./routes/suppliersApi.js";
 import adminSuppliersRouter from "./routes/adminSuppliers.js";
+import pickupPointsApiRouter from "./routes/pickupPointsApi.js";
+import adminPickupPointsRouter from "./routes/adminPickupPoints.js";
 import { listReviews, addReview } from "./services/reviews.js";
 
 const app = express();
@@ -65,6 +67,8 @@ app.post("/api/reviews", (req, res) => {
 
 app.use("/api/suppliers", suppliersApiRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
+app.use("/api/pickup-points", pickupPointsApiRouter);
+app.use("/admin/pickup-points", adminPickupPointsRouter);
 
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */
 app.use("/admin/tiktok", tiktokOAuthRouter);

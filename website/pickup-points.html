@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Become a Sokoni Pickup Point — Earn Per Parcel</title>
+<meta name="description" content="Turn your shop into a Sokoni pickup station. Receive COD parcels, customers collect from you, earn KES 50+ per package. Apply free — Kenya countrywide." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
+        },
+        fontFamily: { sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Sokoni</a>
+      <a href="pickup-points/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-4 py-2 rounded-full text-sm hover:scale-105 transition">
+        Apply now
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-12 md:py-16">
+    <p class="text-sm font-semibold text-brand-green mb-3">Pickup point programme · Like Jumia PUS & Kilimall KiliShop</p>
+    <h1 class="text-3xl md:text-5xl font-extrabold leading-tight mb-5">Turn your shop into a Sokoni pickup station</h1>
+    <p class="text-lg text-brand-purple/70 dark:text-white/70 max-w-2xl mb-10">
+      Customers order on WhatsApp. We deliver parcels to <strong>your shop</strong>. They collect and pay cash or M-Pesa — you earn a commission for every package you handle.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-12">
+      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/50 p-6">
+        <h2 class="font-bold text-xl mb-3">How it works</h2>
+        <ol class="space-y-3 text-sm text-brand-purple/80 dark:text-white/80 list-decimal list-inside">
+          <li>Apply with your shop details — phone shop, duka, cyber, etc.</li>
+          <li>Sokoni reviews your location and storage (within 48 hours).</li>
+          <li>Riders drop Sokoni orders at your shop instead of every doorstep.</li>
+          <li>Customer collects within 5 days — you earn per parcel handled.</li>
+        </ol>
+      </div>
+      <div class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6">
+        <h2 class="font-bold text-xl mb-3">What you earn</h2>
+        <p class="text-sm text-brand-purple/80 dark:text-white/80 mb-3">
+          <strong id="commission-line">KES 50+</strong> commission per parcel received and released to a customer. Extra foot traffic to your shop — customers may buy from you while picking up.
+        </p>
+        <p class="text-xs text-brand-purple/60 dark:text-white/50">Exact rate confirmed on approval. Payouts via M-Pesa weekly for verified points.</p>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-4 mb-12">
+      <div class="rounded-2xl bg-brand-purple text-white p-5">
+        <p class="text-2xl mb-2">📦</p>
+        <h3 class="font-bold mb-1">Receive & store</h3>
+        <p class="text-sm text-white/70">Secure space for parcels. Sokoni tracks every SK-#### order dropped at your shop.</p>
+      </div>
+      <div class="rounded-2xl bg-brand-purple text-white p-5">
+        <p class="text-2xl mb-2">💵</p>
+        <h3 class="font-bold mb-1">Pay on delivery</h3>
+        <p class="text-sm text-white/70">Customer pays cash or M-Pesa when collecting. You confirm handover in WhatsApp.</p>
+      </div>
+      <div class="rounded-2xl bg-brand-purple text-white p-5">
+        <p class="text-2xl mb-2">🇰🇪</p>
+        <h3 class="font-bold mb-1">Countrywide</h3>
+        <p class="text-sm text-white/70">We're building pickup networks in Nairobi, upcountry towns, and neighborhoods — starting where demand is highest.</p>
+      </div>
+    </div>
+
+    <section class="mb-12">
+      <h2 class="text-2xl font-extrabold mb-4">Requirements</h2>
+      <ul class="grid sm:grid-cols-2 gap-3 text-sm text-brand-purple/80 dark:text-white/80">
+        <li class="flex gap-2"><span class="text-brand-green">✓</span> Registered shop or business with valid permit</li>
+        <li class="flex gap-2"><span class="text-brand-green">✓</span> National ID of owner or manager</li>
+        <li class="flex gap-2"><span class="text-brand-green">✓</span> Secure storage (locked room or staffed counter)</li>
+        <li class="flex gap-2"><span class="text-brand-green">✓</span> WhatsApp phone always reachable</li>
+        <li class="flex gap-2"><span class="text-brand-green">✓</span> M-Pesa number for commission payouts</li>
+        <li class="flex gap-2"><span class="text-brand-green">✓</span> Open at least 6 days a week</li>
+      </ul>
+    </section>
+
+    <section id="active-points" class="mb-12 hidden">
+      <h2 class="text-2xl font-extrabold mb-4">Active pickup points</h2>
+      <div id="points-list" class="grid sm:grid-cols-2 gap-4"></div>
+    </section>
+
+    <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-8 text-center">
+      <h2 class="text-2xl font-extrabold mb-3">Ready to partner?</h2>
+      <p class="text-brand-purple/60 dark:text-white/60 mb-6 max-w-lg mx-auto">Takes about 3 minutes. We WhatsApp you within 48 hours after review.</p>
+      <a href="pickup-points/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-8 py-4 rounded-full shadow-lg hover:scale-105 transition">
+        Apply to become a pickup point
+      </a>
+    </div>
+  </main>
+
+  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-xs text-brand-purple/50 dark:text-white/40">
+    <a href="terms.html" class="hover:text-brand-green">Terms</a> · <a href="privacy.html" class="hover:text-brand-green">Privacy</a>
+  </footer>
+  <script src="assets/js/pickup-points.js"></script>
+</body>
+</html>
