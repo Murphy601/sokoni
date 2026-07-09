@@ -15,7 +15,10 @@
         colors: {
           brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
         },
-        fontFamily: { sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+        fontFamily: {
+          sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['Fraunces', 'Georgia', 'serif'],
+        },
       },
     },
   };
@@ -30,26 +33,26 @@
     } catch (e) {}
   })();
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css" />
-</head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" /></head>
 <body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
   <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
     <div class="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
       <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Sokoni</a>
-      <a href="pickup-points/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-4 py-2 rounded-full text-sm hover:scale-105 transition">
-        Apply now
-      </a>
+      <a href="pickup-points/apply.html" class="inline-flex items-center gap-2 btn-whatsapp font-bold px-4 py-2 rounded-full text-sm hover:scale-105 transition">
+        Apply now      </a>
     </div>
   </header>
 
   <main class="max-w-5xl mx-auto px-5 py-12 md:py-16">
     <p class="text-sm font-semibold text-brand-green mb-3">Pickup point programme</p>
-    <h1 class="text-3xl md:text-5xl font-extrabold leading-tight mb-5">Turn your shop into a Sokoni pickup station</h1>
+    <h1 class="font-display text-3xl md:text-5xl font-bold leading-tight mb-5">Turn your shop into a Sokoni pickup station</h1>
     <p class="text-lg text-brand-purple/70 dark:text-white/70 max-w-2xl mb-10">
-      Customers order on WhatsApp. We deliver parcels to <strong>your shop</strong>. They collect and pay cash or M-Pesa — you earn a commission for every package you handle.
+      Shoppers order on WhatsApp. We drop parcels at <strong>your shop</strong> across Kenya. They collect and pay cash or M-Pesa — you earn commission on every package.
     </p>
-
     <div class="grid md:grid-cols-2 gap-6 mb-12">
       <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/50 p-6">
         <h2 class="font-bold text-xl mb-3">How it works</h2>
@@ -83,7 +86,7 @@
       <div class="rounded-2xl bg-brand-purple text-white p-5">
         <p class="text-2xl mb-2">🇰🇪</p>
         <h3 class="font-bold mb-1">Countrywide</h3>
-        <p class="text-sm text-white/70">We're building pickup networks in Nairobi, upcountry towns, and neighborhoods — starting where demand is highest.</p>
+        <p class="text-sm text-white/70">We're building pickup networks in towns and neighborhoods across Kenya — starting where shopper demand is strongest.</p>
       </div>
     </div>
 
@@ -105,11 +108,10 @@
     </section>
 
     <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-8 text-center">
-      <h2 class="text-2xl font-extrabold mb-3">Ready to partner?</h2>
-      <p class="text-brand-purple/60 dark:text-white/60 mb-6 max-w-lg mx-auto">Takes about 3 minutes. We WhatsApp you within 48 hours after review.</p>
-      <a href="pickup-points/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-8 py-4 rounded-full shadow-lg hover:scale-105 transition">
-        Apply to become a pickup point
-      </a>
+      <h2 class="font-display text-2xl font-bold mb-3">Ready to partner?</h2>
+      <p class="text-brand-purple/60 dark:text-white/60 mb-6 max-w-lg mx-auto">About 3 minutes. We WhatsApp you within 48 hours after review.</p>
+      <a href="pickup-points/apply.html" class="inline-flex items-center gap-2 btn-whatsapp font-bold px-8 py-4 rounded-full shadow-lg hover:scale-105 transition">
+        Apply to become a pickup point      </a>
     </div>
   </main>
 

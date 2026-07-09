@@ -1,0 +1,137 @@
+/**
+ * Sokoni design tokens — from website/DESIGN.md
+ * @theme block: `npm run design:export` (Tailwind v4). :root + utilities: static CDN site.
+ */
+@theme {
+  --color-primary: #25d366;
+  --color-on-primary: #1b1035;
+  --color-secondary: #1b1035;
+  --color-on-secondary: #fff8f0;
+  --color-surface: #fff8f0;
+  --color-on-surface: #1b1035;
+  --color-surface-elevated: #ffffff;
+  --color-muted: #5c5470;
+  --color-accent-soft: #2e1b57;
+  --color-whatsapp-header: #075e54;
+  --color-whatsapp-bubble-in: #ffffff;
+  --color-whatsapp-bubble-out: #dcf8c6;
+  --color-whatsapp-chat-bg: #ece5dd;
+}
+
+:root {
+  --color-primary: #25d366;
+  --color-on-primary: #1b1035;
+  --color-secondary: #1b1035;
+  --color-on-secondary: #fff8f0;
+  --color-surface: #fff8f0;
+  --color-on-surface: #1b1035;
+  --color-surface-elevated: #ffffff;
+  --color-muted: #5c5470;
+  --color-accent-soft: #2e1b57;
+  --color-whatsapp-header: #075e54;
+  --color-whatsapp-bubble-in: #ffffff;
+  --color-whatsapp-bubble-out: #dcf8c6;
+  --color-whatsapp-chat-bg: #ece5dd;
+
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --text-display: clamp(2.25rem, 5vw, 3.5rem);
+  --text-headline: clamp(1.5rem, 3vw, 2rem);
+  --text-body-lg: 1.125rem;
+  --text-body-md: 1rem;
+  --text-label: 0.875rem;
+  --text-caption: 0.75rem;
+
+  --leading-body: 1.65;
+  --leading-tight: 1.15;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-pill: 9999px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-section: 64px;
+
+  --shadow-card: 0 1px 3px rgba(27, 16, 53, 0.06);
+  --shadow-card-hover: 0 12px 24px -8px rgba(27, 16, 53, 0.15);
+  --shadow-cta: 0 10px 25px -8px rgba(37, 211, 102, 0.35);
+
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html.dark {
+  --color-surface: #0f1116;
+  --color-on-surface: #ece9f5;
+  --color-surface-elevated: #1a1d24;
+  --color-muted: rgba(236, 233, 245, 0.62);
+  --shadow-card-hover: 0 14px 34px -12px rgba(37, 211, 102, 0.35);
+}
+
+/* Typography utilities */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.text-muted {
+  color: var(--color-muted);
+}
+
+/* Component tokens */
+.btn-whatsapp {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.btn-whatsapp:hover {
+  transform: scale(1.03);
+  box-shadow: var(--shadow-cta);
+}
+
+.btn-whatsapp:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.card-elevated {
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out);
+}
+
+.input-sokoni {
+  font-family: var(--font-body);
+  border-radius: var(--radius-xl);
+  transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.input-sokoni:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-whatsapp,
+  .card-elevated,
+  .product-card {
+    transition: none !important;
+  }
+}

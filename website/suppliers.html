@@ -15,7 +15,10 @@
         colors: {
           brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
         },
-        fontFamily: { sans: ['Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+        fontFamily: {
+          sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['Fraunces', 'Georgia', 'serif'],
+        },
       },
     },
   };
@@ -30,14 +33,17 @@
     } catch (e) {}
   })();
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
 </head>
 <body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
   <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
     <div class="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
       <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Sokoni</a>
-      <a href="suppliers/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-4 py-2 rounded-full text-sm hover:scale-105 transition">
+      <a href="suppliers/apply.html" class="inline-flex items-center gap-2 btn-whatsapp font-bold px-4 py-2 rounded-full text-sm hover:scale-105 transition">
         Apply now
       </a>
     </div>
@@ -45,9 +51,9 @@
 
   <main class="max-w-5xl mx-auto px-5 py-12 md:py-16">
     <p class="text-sm font-semibold text-brand-green mb-3">Supplier programme · Kenya countrywide</p>
-    <h1 class="text-3xl md:text-5xl font-extrabold leading-tight mb-5">Sell through Sokoni — we bring the buyers on WhatsApp</h1>
+    <h1 class="font-display text-3xl md:text-5xl font-bold leading-tight mb-5">Sell through Sokoni — we bring buyers on WhatsApp</h1>
     <p class="text-lg text-brand-purple/70 dark:text-white/70 max-w-2xl mb-10">
-      You list supply prices. Sokoni sets customer retail, takes orders on WhatsApp, and pays you <strong>after delivery</strong> when cash or M-Pesa is collected.
+      You list supply prices. Sokoni sets retail, takes orders in chat, and pays you <strong>after delivery</strong> when cash or M-Pesa is collected — countrywide across Kenya.
     </p>
 
     <div class="grid md:grid-cols-2 gap-6 mb-12">
@@ -88,9 +94,9 @@
     </div>
 
     <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-8 text-center">
-      <h2 class="text-2xl font-extrabold mb-3">Ready to list?</h2>
-      <p class="text-brand-purple/60 dark:text-white/60 mb-6 max-w-lg mx-auto">Takes about 5 minutes. We respond on WhatsApp within 48 hours.</p>
-      <a href="suppliers/apply.html" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-8 py-4 rounded-full shadow-lg hover:scale-105 transition">
+      <h2 class="font-display text-2xl font-bold mb-3">Ready to list?</h2>
+      <p class="text-brand-purple/60 dark:text-white/60 mb-6 max-w-lg mx-auto">About 5 minutes. We reply on WhatsApp within 48 hours — same chat you already use.</p>
+      <a href="suppliers/apply.html" class="inline-flex items-center gap-2 btn-whatsapp font-bold px-8 py-4 rounded-full shadow-lg hover:scale-105 transition">
         Start supplier application
       </a>
     </div>

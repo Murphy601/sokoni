@@ -274,6 +274,7 @@ function renderCategoryChips() {
     chip("all", "All Products", "🛍️") +
     chip("viral", "Viral Bargains", "🔥") +
     cats.map((c) => chip(c, CATEGORY_META[c]?.label || c, CATEGORY_META[c]?.emoji || "🛍️")).join("");
+  if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeCategory = btn.dataset.cat;
@@ -292,6 +293,7 @@ function renderStoreGrid() {
 
   const items = filteredStoreProducts();
   grid.innerHTML = items.map(renderStoreCard).join("");
+  if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
   grid.classList.toggle("hidden", items.length === 0 && tokenize(searchQuery).length > 0);
 
   const isViralTab = activeCategory === "viral" && !tokenize(searchQuery).length;
@@ -348,6 +350,7 @@ function renderIntlGrid() {
   const intlGrid = document.getElementById("intl-grid");
   if (!intlGrid) return;
   intlGrid.innerHTML = intlProducts.map(renderAffiliateCard).join("");
+  if (window.SokoniComponents) SokoniComponents.upgradeIn(intlGrid);
 }
 
 // ---------- AI browse nudge ----------

@@ -7,12 +7,17 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "design:lint": "designmd lint website/DESIGN.md",
+    "design:export": "designmd export website/DESIGN.md --format css-tailwind --out website/assets/css/design-tokens.css"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@google/design.md": "^0.3.0"
   }
 }
