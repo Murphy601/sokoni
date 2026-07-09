@@ -14,6 +14,13 @@ function getPagedSlice(items, page = 0, pageSize = 12) {
   return items.slice(start, start + (pageSize || 12));
 }
 
+/** Current page of scent names — pageFamilies is pre-sliced; do not paginate again. */
+function getScentPageFamilies(menuState) {
+  if (!menuState) return [];
+  if (menuState.pageFamilies?.length) return menuState.pageFamilies;
+  return getPagedSlice(menuState.scentFamilies, menuState.page, menuState.pageSize);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCENTS_FILE = path.join(__dirname, "..", "data", "perfume-oils-scents.txt");
 
@@ -165,6 +172,8 @@ function parseNumericChoice(text) {
 }
 
 function findScentByNameInput(text, names) {
+  const raw = String(text || "").trim();
+  if (/^\d{1,2}$/.test(raw)) return null;
   const q = normalizeForMatch(text);
   if (!q) return null;
   let best = null;
@@ -508,15 +517,17 @@ export async function handleProductRouter(customerKey, text) {
     if (/^(prev|previous|back|p)$/i.test(normalized) && menuState.rowId && (menuState.page || 0) > 0) {
       return sendPerfumeScentList(customerKey, { page: menuState.page - 1, rowId: menuState.rowId });
     }
-    const pageFamilies = getPagedSlice(
-      menuState.pageFamilies || menuState.scentFamilies,
-      menuState.page,
-      menuState.pageSize
-    );
-    if (choice && pageFamilies?.[choice - 1]) {
-      return sendPerfumeSizePicker(customerKey, pageFamilies[choice - 1]);
+    const pageFamilies = getScentPageFamilies(menuState);
+    if (choice) {
+      if (pageFamilies[choice - 1]) {
+        return sendPerfumeSizePicker(customerKey, pageFamilies[choice - 1]);
+      }
+      return sendText(
+        customerKey,
+        `Reply *1–${pageFamilies.length}* from the list above (page ${(menuState.page || 0) + 1}), or type the scent name.`
+      );
     }
-    if (pageFamilies?.length) {
+    if (pageFamilies.length) {
       const byName = findScentByNameInput(text, pageFamilies);
       if (byName) return sendPerfumeSizePicker(customerKey, byName);
     }

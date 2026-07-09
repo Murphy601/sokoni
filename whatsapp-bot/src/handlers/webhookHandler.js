@@ -342,6 +342,22 @@ export async function handleIncomingMessage(
     }
   }
 
+  if (menuState?.type === "scent_list_paged" && menuState.rowId) {
+    if (/^(next|more|n)$/i.test(normalized)) {
+      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || 12));
+      const nextPage = (menuState.page || 0) + 1;
+      if (nextPage < totalPages) {
+        const { sendPerfumeScentList } = await import("../services/menu.js");
+        return sendPerfumeScentList(customerKey, { page: nextPage, rowId: menuState.rowId });
+      }
+      return sendText(customerKey, "Last page. Reply with a scent number or type a name (e.g. *BRUT*).");
+    }
+    if (/^(prev|previous|back|p)$/i.test(normalized) && (menuState.page || 0) > 0) {
+      const { sendPerfumeScentList } = await import("../services/menu.js");
+      return sendPerfumeScentList(customerKey, { page: menuState.page - 1, rowId: menuState.rowId });
+    }
+  }
+
   const choice = parseNumericChoice(text);
 
   if (
