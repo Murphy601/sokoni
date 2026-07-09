@@ -467,22 +467,36 @@ function renderStatusTimeline(currentStatus) {
 }
 
 function renderOrderCard(order) {
+  const paid =
+    order.customerPaymentStatus === "confirmed"
+      ? "✅ Payment confirmed"
+      : order.customerPaymentStatus === "claimed"
+        ? "⏳ Payment pending confirmation"
+        : `M-Pesa Till ${config.store.mpesaTill} on delivery`;
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
-    `💰 KES ${order.priceKes.toLocaleString()} — pay on delivery\n` +
+    `💰 KES ${order.priceKes.toLocaleString()} — ${paid}\n` +
     `📍 ${order.location}\n\n` +
     `${renderStatusTimeline(order.status)}`
   );
 }
 
+async function sendPaymentReminderIfNeeded(to, order) {
+  const reminder = formatShortPaymentReminder(order);
+  if (reminder) {
+    await sendText(to, reminder);
+  }
+}
+
 /** Show a specific order by ID (customer typed e.g. SK-1042). */
-export function sendOrderStatus(to, orderId) {
+export async function sendOrderStatus(to, orderId) {
   const order = getOrder(orderId);
   if (!order || order.customerKey !== to) {
     return sendText(to, `I couldn't find order *${orderId}* on this number. Type *track* to see your orders.`);
   }
-  return sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
+  await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
+  await sendPaymentReminderIfNeeded(to, order);
 }
 
 export async function sendTrackOrderMenu(to) {
@@ -510,12 +524,17 @@ export async function sendTrackOrderMenu(to) {
     blocks.push(renderOrderCard(order));
   }
 
-  return sendText(
+  await sendText(
     to,
     `📦 *Your Sokoni orders*\n\n` +
       blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
       `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
   );
+
+  const latestUnpaid = orders.find((o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled");
+  if (latestUnpaid) {
+    await sendPaymentReminderIfNeeded(to, latestUnpaid);
+  }
 }
 
 /** Recent TikTok/viral featured deals (synced from backend cron). */
@@ -562,8 +581,8 @@ export function sendHowItWorks(to) {
       `1️⃣ Chat Sokoni on WhatsApp (or browse sokonimall.com).\n` +
       `2️⃣ Our AI finds the right product from our *pay-on-delivery* store catalog.\n` +
       `3️⃣ Reply *1* to order — share name, location & phone in one message.\n` +
-      `4️⃣ We deliver — you pay cash or M-Pesa to the rider on arrival.\n` +
-      `5️⃣ Track anytime with your *SK-####* order number.\n\n` +
+      `4️⃣ We deliver — pay via *M-Pesa Till ${config.store.mpesaTill}* (${config.store.mpesaTillName}) on arrival. Do not pay riders.\n` +
+      `5️⃣ Track anytime with your *SK-####* order number. Reply *paid* after you pay.\n\n` +
       `*International?* Type *menu* → *Shop International* for AliExpress, Temu & Amazon links (1–4 weeks; customs may apply).\n\n` +
       `${config.store.deliveryNote}\n\n` +
       `${siteUrlLine()}\n\n` +
@@ -596,7 +615,7 @@ export async function startCodOrder(to, productId) {
   return sendText(
     to,
     `Great choice! 🛍️\n` +
-      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (pay on delivery)\n\n` +
+      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (pay on delivery via M-Pesa Till)\n\n` +
       `To place your order, reply in *one message* with:\n` +
       `1️⃣ Your full name\n` +
       `2️⃣ Delivery location (estate/town + a landmark)\n` +
@@ -849,6 +868,10 @@ export async function confirmCodOrder(to, parsed) {
       `${siteUrlLine()}\n\n` +
       `Asante for shopping with Sokoni! 🙏`
   );
+
+  if (order) {
+    await sendText(to, formatMpesaTillBlock(order.priceKes));
+  }
 
   await sendUpsell(to, pending);
   return true;

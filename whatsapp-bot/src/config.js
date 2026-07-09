@@ -39,7 +39,9 @@ export const config = {
     codAreas: process.env.STORE_COD_AREAS || "Nairobi & environs",
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
-      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay cash/M-Pesa on delivery.",
+      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay via M-Pesa Till on delivery.",
+    mpesaTill: process.env.MPESA_TILL_NUMBER || "4475847",
+    mpesaTillName: process.env.MPESA_TILL_NAME || "DAVID MUIRURI",
   },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**

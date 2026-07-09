@@ -15,6 +15,13 @@ import {
   ORDER_STATUSES,
 } from "./orders.js";
 import { getSupplier } from "./suppliers.js";
+import { getPickupPoint } from "./pickupPoints.js";
+import {
+  buildAdminPaidClaimMessage,
+  filterPendingPaymentClaims,
+  notifyStorePaymentConfirmed,
+  formatShortPaymentReminder,
+} from "./payment.js";
 import { recordDeliveryPayout, getSettlementSummary, markPayoutPaid } from "./settlements.js";
 
 function digitsOnly(value) {
@@ -174,7 +181,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -236,11 +243,11 @@ function isAdminRelayAttempt(text) {
 
 const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
-    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. You'll pay KES ${o.priceKes.toLocaleString()} on delivery (cash or M-Pesa). Asante! 🙏`,
+    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. You'll pay KES ${o.priceKes.toLocaleString()} on delivery to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}). Asante! 🙏`,
   packed: (o) =>
     `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready and waiting for a rider. We'll let you know when it's on the way. 🛵`,
   out_for_delivery: (o) =>
-    `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with your *${o.productName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (cash or M-Pesa). Keep your phone on 📞`,
+    `🛵 *Order ${o.id} is out for delivery!*\n\nYour order is on the way. Please have *KES ${o.priceKes.toLocaleString()}* ready to pay to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}) — *not to the rider*. Keep your phone on 📞`,
   delivered: (o) =>
     `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`,
   cancelled: (o) =>
@@ -252,6 +259,10 @@ async function notifyCustomerOfStatus(order) {
   if (!builder) return;
   try {
     await sendText(order.customerKey, builder(order));
+    const reminder = formatShortPaymentReminder(order);
+    if (reminder && ["out_for_delivery", "delivered"].includes(order.status)) {
+      await sendText(order.customerKey, reminder);
+    }
     if (order.status === "delivered") {
       await sendReviewPrompt(order.customerKey, order);
     }
@@ -264,6 +275,10 @@ function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
     `📋 *#orders* — recent orders\n` +
+    `💰 *#payments* — customer *paid* claims awaiting confirmation\n` +
+    `✅ *#payconfirm SK-1042* — confirm customer M-Pesa payment\n` +
+    `📦 *#notify-store SK-1042* — tell store/pickup point to release parcel\n` +
+    `📍 *#pickup SK-1042 pp-xxxx* — assign pickup point to order\n` +
     `🔄 *#status SK-1042 delivered* — update + payout on delivery\n` +
     `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
     `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
@@ -377,6 +392,12 @@ async function handleFulfillCommand(adminChatId, args) {
 
   try {
     await sendText(supplierChat, msg);
+    updateOrderMeta(order.id, {
+      fulfillmentStoreId: supplier.id,
+      fulfillmentStoreName: supplier.businessName,
+      fulfillmentStorePhone: supplier.phone,
+      fulfillmentStoreCity: supplier.city,
+    });
     return sendText(
       adminChatId,
       `✅ Supplier *${supplier.businessName}* notified for *${order.id}*${share ? " (with customer address)" : ""}.`
@@ -400,6 +421,106 @@ async function handlePayoutsCommand(adminChatId) {
   return sendText(
     adminChatId,
     `💰 *Owed to suppliers:* KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+  );
+}
+
+async function handlePaymentsCommand(adminChatId) {
+  const pending = filterPendingPaymentClaims(listRecentOrders(50));
+  if (pending.length === 0) {
+    return sendText(adminChatId, "💰 No pending customer payment claims. Customers reply *paid* after paying the till.");
+  }
+  const lines = pending.slice(0, 10).map((o) => {
+    const store = o.pickupPointName || o.fulfillmentStoreName || (o.supplierId ? "supplier" : "not assigned");
+    return (
+      `*${o.id}* · KES ${o.priceKes.toLocaleString()}\n` +
+      `${o.customerName} · ${o.phone}\n` +
+      `Store: ${store}\n` +
+      `#payconfirm ${o.id} · #notify-store ${o.id}`
+    );
+  });
+  return sendText(
+    adminChatId,
+    `💰 *Payment claims (${pending.length})*\n\n${lines.join("\n\n")}\n\nConfirm M-Pesa on till ${config.store.mpesaTill} first, then #payconfirm.`
+  );
+}
+
+async function handlePayconfirmCommand(adminChatId, orderId) {
+  if (!orderId) return sendText(adminChatId, "Usage: #payconfirm SK-1042");
+  const order = getOrder(orderId);
+  if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  updateOrderMeta(order.id, {
+    customerPaymentStatus: "confirmed",
+    customerPaidConfirmedAt: Date.now(),
+  });
+
+  try {
+    await sendText(
+      order.customerKey,
+      `✅ *Payment confirmed* for *${order.id}*!\n\nWe verified your M-Pesa payment of KES ${order.priceKes.toLocaleString()} to Till *${config.store.mpesaTill}*. Your order will be released shortly. Asante! 🙏`
+    );
+  } catch (err) {
+    console.warn("[admin] customer pay confirm notify failed:", err.message);
+  }
+
+  return sendText(
+    adminChatId,
+    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()}\nCustomer notified.\n\nNext: #notify-store ${order.id}`
+  );
+}
+
+async function handleNotifyStoreCommand(adminChatId, orderId) {
+  if (!orderId) return sendText(adminChatId, "Usage: #notify-store SK-1042");
+  const order = getOrder(orderId);
+  if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  if (order.customerPaymentStatus !== "confirmed") {
+    return sendText(
+      adminChatId,
+      `⚠️ Customer payment not confirmed yet for *${order.id}*. Run #payconfirm ${order.id} first.`
+    );
+  }
+
+  const result = await notifyStorePaymentConfirmed(order);
+  if (result.error === "no_store") {
+    return sendText(
+      adminChatId,
+      `⚠️ No store assigned. Use:\n#pickup ${order.id} <pp-id>\nOr fulfill via supplier first.`
+    );
+  }
+
+  return sendText(
+    adminChatId,
+    `✅ Store *${result.store.name}* (+${result.store.phone}) notified to release *${order.id}*.`
+  );
+}
+
+async function handleAssignPickupCommand(adminChatId, args) {
+  const parts = args.trim().split(/\s+/);
+  const orderId = parts[0];
+  const pointId = parts[1];
+  if (!orderId || !pointId) {
+    return sendText(adminChatId, "Usage: #pickup SK-1042 pp-xxxx");
+  }
+  const order = getOrder(orderId);
+  if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  const point = getPickupPoint(pointId);
+  if (!point) return sendText(adminChatId, `⚠️ Pickup point *${pointId}* not found.`);
+
+  updateOrderMeta(order.id, {
+    pickupPointId: point.id,
+    pickupPointName: point.shopName,
+    pickupPointPhone: point.phone,
+    fulfillmentStoreId: point.id,
+    fulfillmentStoreName: point.shopName,
+    fulfillmentStorePhone: point.phone,
+    fulfillmentStoreCity: point.city,
+  });
+
+  return sendText(
+    adminChatId,
+    `✅ *${order.id}* assigned to pickup point *${point.shopName}* (${point.id})\n+${point.phone} · ${point.city}`
   );
 }
 
@@ -468,7 +589,7 @@ function getBroadcastRecipients() {
 /** Pull a #command out of longer pasted text (e.g. "Update: #status SK-1002 confirmed"). */
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
-  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid)\b[\s\S]*/i);
+  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup)\b[\s\S]*/i);
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
   if (sk) return sk[0].trim();
@@ -523,6 +644,24 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#payouts\b/i.test(t)) {
     await handlePayoutsCommand(adminChatId);
+    return true;
+  }
+  if (/^#payments\b/i.test(t)) {
+    await handlePaymentsCommand(adminChatId);
+    return true;
+  }
+  if (/^#payconfirm\b/i.test(t)) {
+    const oid = t.replace(/^#payconfirm\b/i, "").trim().split(/\s+/)[0];
+    await handlePayconfirmCommand(adminChatId, oid);
+    return true;
+  }
+  if (/^#notify-store\b/i.test(t)) {
+    const oid = t.replace(/^#notify-store\b/i, "").trim().split(/\s+/)[0];
+    await handleNotifyStoreCommand(adminChatId, oid);
+    return true;
+  }
+  if (/^#pickup\b/i.test(t)) {
+    await handleAssignPickupCommand(adminChatId, t.replace(/^#pickup\b/i, ""));
     return true;
   }
   if (/^#paid\b/i.test(t)) {

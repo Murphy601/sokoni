@@ -170,7 +170,12 @@ export async function handleIncomingMessage(
 
   if (await handleReviewReply(customerKey, text)) return;
 
-  // Customers must never see admin console — even if they type "admin" or #help.
+  if (/^(paid|nimelipa|nimepay|payment done|done paying)\b/i.test(normalized)) {
+    const { handleCustomerPaidClaim } = await import("../services/payment.js");
+    return handleCustomerPaidClaim(customerKey, text);
+  }
+
+  // Customers must never see admin console
   if (!requireAdminSender(customerKey, phone)) {
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
       return sendText(

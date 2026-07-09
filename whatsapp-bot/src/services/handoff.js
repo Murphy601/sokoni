@@ -109,6 +109,8 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
     `${order?.id ? `#fulfill ${order.id}` : "#fulfill SK-xxxx"} — ping supplier (no customer contact)\n` +
     `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SK-xxxx share"} — supplier delivers (includes address)\n` +
     `#status ${order?.id || "<id>"} confirmed\n` +
+    `#pickup ${order?.id || "SK-xxxx"} <pp-id> — assign pickup point\n` +
+    `Till: *${config.store.mpesaTill}* (${config.store.mpesaTillName})\n` +
     `#${order?.id || "SK-xxxx"} Message to customer`
   );
 }
