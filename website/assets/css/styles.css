@@ -117,9 +117,12 @@ html.dark #deals { background-color: #0f1116 !important; }
 
 /* Text */
 html.dark .text-brand-purple { color: #ece9f5 !important; }
+html.dark .text-brand-purple\/90 { color: rgba(236, 233, 245, 0.92) !important; }
 html.dark .text-brand-purple\/70 { color: rgba(236, 233, 245, 0.72) !important; }
+html.dark .text-brand-purple\/65 { color: rgba(236, 233, 245, 0.68) !important; }
 html.dark .text-brand-purple\/60 { color: rgba(236, 233, 245, 0.62) !important; }
 html.dark .text-brand-purple\/50 { color: rgba(236, 233, 245, 0.52) !important; }
+html.dark .text-brand-purple\/45 { color: rgba(236, 233, 245, 0.48) !important; }
 html.dark .text-brand-purple\/40 { color: rgba(236, 233, 245, 0.42) !important; }
 
 /* Borders */
