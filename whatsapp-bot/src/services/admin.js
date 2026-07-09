@@ -242,11 +242,11 @@ function isAdminRelayAttempt(text) {
 
 const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
-    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. You'll pay KES ${o.priceKes.toLocaleString()} on delivery to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}). Asante! 🙏`,
+    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. You'll pay KES ${o.priceKes.toLocaleString()} on delivery (cash or M-Pesa). Asante! 🙏`,
   packed: (o) =>
     `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready and waiting for a rider. We'll let you know when it's on the way. 🛵`,
   out_for_delivery: (o) =>
-    `🛵 *Order ${o.id} is out for delivery!*\n\nYour order is on the way. Please have *KES ${o.priceKes.toLocaleString()}* ready to pay to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}) — *not to the rider*. Keep your phone on 📞`,
+    `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with your *${o.productName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (cash or M-Pesa). Keep your phone on 📞`,
   delivered: (o) =>
     `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`,
   cancelled: (o) =>

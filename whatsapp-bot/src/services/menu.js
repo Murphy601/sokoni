@@ -489,30 +489,13 @@ function renderStatusTimeline(currentStatus) {
 }
 
 function renderOrderCard(order) {
-  const till = config.store.mpesaTill;
-  const paid =
-    order.customerPaymentStatus === "confirmed"
-      ? "✅ Payment confirmed"
-      : order.customerPaymentStatus === "claimed"
-        ? "⏳ Payment pending confirmation"
-        : `M-Pesa Till ${till} on delivery`;
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
-    `💰 KES ${formatOrderKes(order.priceKes)} — ${paid}\n` +
+    `💰 KES ${formatOrderKes(order.priceKes)} — pay on delivery\n` +
     `📍 ${order.location}\n\n` +
     `${renderStatusTimeline(order.status)}`
   );
-}
-
-async function sendPaymentReminderIfNeeded(to, order) {
-  if (!order || order.customerPaymentStatus === "confirmed") return;
-  try {
-    const reminder = formatShortPaymentReminder(order);
-    if (reminder) await sendText(to, reminder);
-  } catch (err) {
-    console.error("[track] payment reminder failed:", err.message);
-  }
 }
 
 /** Show a specific order by ID (customer typed e.g. SK-1042). */
@@ -522,8 +505,7 @@ export async function sendOrderStatus(to, orderId, phone = "") {
     return sendText(to, `I couldn't find order *${orderId}* on this number. Type *track* to see your orders.`);
   }
   try {
-    await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
-    await sendPaymentReminderIfNeeded(to, order);
+    return await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
   } catch (err) {
     console.error("[track] sendOrderStatus failed:", err.message);
     return sendText(to, "Sorry, could not load that order. Type *track* to try again.");
@@ -540,7 +522,7 @@ export async function sendTrackOrderMenu(to, phone = "") {
         to,
         `📦 *Track your Sokoni order*\n\n` +
           `You don't have any orders yet.\n\n` +
-          `Type *menu* → browse → reply *1* on an item to order.`
+          `Type *menu* → browse → reply *1* on an item to order. All orders are *pay on delivery* 💵`
       );
     }
 
@@ -556,17 +538,12 @@ export async function sendTrackOrderMenu(to, phone = "") {
       blocks.push(renderOrderCard(order));
     }
 
-    await sendText(
+    return await sendText(
       to,
       `📦 *Your Sokoni orders*\n\n` +
         blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
         `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
     );
-
-    const latestUnpaid = orders.find((o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled");
-    if (latestUnpaid) {
-      await sendPaymentReminderIfNeeded(to, latestUnpaid);
-    }
   } catch (err) {
     console.error("[track] sendTrackOrderMenu failed:", err.message);
     return sendText(to, "Sorry, could not load your orders. Type *track* again or *menu* for help.");
@@ -617,8 +594,8 @@ export function sendHowItWorks(to) {
       `1️⃣ Chat Sokoni on WhatsApp (or browse sokonimall.com).\n` +
       `2️⃣ Our AI finds the right product from our *pay-on-delivery* store catalog.\n` +
       `3️⃣ Reply *1* to order — share name, location & phone in one message.\n` +
-      `4️⃣ We deliver — pay via *M-Pesa Till ${config.store.mpesaTill}* (${config.store.mpesaTillName}) on arrival. Do not pay riders.\n` +
-      `5️⃣ Track anytime with your *SK-####* order number. Reply *paid* after you pay.\n\n` +
+      `4️⃣ We deliver — you pay cash or M-Pesa to the rider on arrival.\n` +
+      `5️⃣ Track anytime with your *SK-####* order number.\n\n` +
       `*International?* Type *menu* → *Shop International* for AliExpress, Temu & Amazon links (1–4 weeks; customs may apply).\n\n` +
       `${config.store.deliveryNote}\n\n` +
       `${siteUrlLine()}\n\n` +
@@ -651,7 +628,7 @@ export async function startCodOrder(to, productId) {
   return sendText(
     to,
     `Great choice! 🛍️\n` +
-      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (pay on delivery via M-Pesa Till)\n\n` +
+      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (pay on delivery)\n\n` +
       `To place your order, reply in *one message* with:\n` +
       `1️⃣ Your full name\n` +
       `2️⃣ Delivery location (estate/town + a landmark)\n` +
@@ -888,15 +865,13 @@ export async function confirmCodOrder(to, parsed) {
   }
 
   const orderRef = order?.id;
-  const till = config.store.mpesaTill;
-  const tillName = config.store.mpesaTillName;
   await sendText(
     to,
     `✅ *Order received!*${orderRef ? `  ·  *${orderRef}*` : ""}\n\n` +
       `🧾 *Order summary*\n` +
       `━━━━━━━━━━━━━━━\n` +
       `🛍️ ${pending.name}\n` +
-      `💰 KES ${formatOrderKes(pending.priceKes)} — *M-Pesa Till ${till} on delivery*\n` +
+      `💰 KES ${formatOrderKes(pending.priceKes)} — *pay on delivery*\n` +
       `━━━━━━━━━━━━━━━\n` +
       `📍 ${details.name} — ${details.location}\n` +
       `📞 ${details.phone}\n\n` +
@@ -906,14 +881,6 @@ export async function confirmCodOrder(to, parsed) {
       `${siteUrlLine()}\n\n` +
       `Asante for shopping with Sokoni! 🙏`
   );
-
-  if (order) {
-    try {
-      await sendText(to, formatMpesaTillBlock(order.priceKes));
-    } catch (err) {
-      console.error("[order] till message failed:", err.message);
-    }
-  }
 
   await sendUpsell(to, pending);
   return true;
