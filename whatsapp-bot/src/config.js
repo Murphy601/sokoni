@@ -40,8 +40,8 @@ export const config = {
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
       "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay cash/M-Pesa on delivery.",
-    mpesaTill: process.env.MPESA_TILL_NUMBER || "4475847",
-    mpesaTillName: process.env.MPESA_TILL_NAME || "DAVID MUIRURI",
+    mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
+    mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**
