@@ -23,6 +23,7 @@ import {
 import { getFeaturedProductIds } from "./tiktok.js";
 import { siteUrlLine } from "./reviews.js";
 import { formatShortPaymentReminder, formatMpesaTillBlock } from "./payment.js";
+import { planFulfillment, applyFulfillmentPlan, formatFulfillmentConfirmBlock, formatFulfillmentLine } from "./fulfillment.js";
 
 function formatNumberedMenu(title, options) {
   const lines = options.map((o, i) => `${i + 1}. ${o.label}`);
@@ -530,7 +531,8 @@ function renderOrderCard(order) {
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
     `💰 KES ${formatOrderKes(order.priceKes)} — ${paymentLineForOrder(order)}\n` +
-    `📍 ${order.location}\n\n` +
+    `📍 ${order.location}\n` +
+    `🚚 ${formatFulfillmentLine(order)}\n\n` +
     `${renderStatusTimeline(order.status)}`
   );
 }
@@ -875,6 +877,10 @@ export async function confirmCodOrder(to, parsed) {
       product: productForOrder,
       details,
     });
+    if (order?.id) {
+      const plan = planFulfillment(details.location);
+      order = applyFulfillmentPlan(order.id, plan) || order;
+    }
   } catch (err) {
     console.error("[order] createOrder failed (continuing):", err.message);
   }
@@ -917,7 +923,8 @@ export async function confirmCodOrder(to, parsed) {
       `📍 ${details.name} — ${details.location}\n` +
       `📞 ${details.phone}\n\n` +
       `${order ? `Status: ${statusLabel(order.status)}\n` : ""}` +
-      `Our team will confirm shortly. ${config.store.deliveryNote}\n\n` +
+      `Our team will confirm shortly. ${config.store.deliveryNote}` +
+      `${order ? formatFulfillmentConfirmBlock(order) : ""}\n\n` +
       `${orderRef ? `_Track anytime: type *track* or *${orderRef}*._\n` : ""}` +
       `${siteUrlLine()}\n\n` +
       `Asante for shopping with Sokoni! 🙏`

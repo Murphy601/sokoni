@@ -24,6 +24,12 @@ import {
   notifyStorePaymentConfirmed,
   formatShortPaymentReminder,
 } from "./payment.js";
+import {
+  pickupMetaFromPoint,
+  formatPickupAssignedMessage,
+  formatPickupReadyMessage,
+  rankPickupPointsForLocation,
+} from "./fulfillment.js";
 import { recordDeliveryPayout, getSettlementSummary, markPayoutPaid } from "./settlements.js";
 
 function digitsOnly(value) {
@@ -183,7 +189,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -247,14 +253,38 @@ const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
     `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. You'll pay KES ${o.priceKes.toLocaleString()} on delivery (cash or M-Pesa). Asante! 🙏`,
   packed: (o) =>
-    `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready and waiting for a rider. We'll let you know when it's on the way. 🛵`,
+    o.deliveryMode === "pickup_point" && o.pickupPointName
+      ? `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready at pickup partner *${o.pickupPointName}*. We'll send the shop address in the next message 📍`
+      : `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready and waiting for a rider. We'll let you know when it's on the way. 🛵`,
   out_for_delivery: (o) =>
-    `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with your *${o.productName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (cash or M-Pesa). Keep your phone on 📞`,
+    o.deliveryMode === "pickup_point" && o.pickupPointName
+      ? `📍 *Order ${o.id} is ready for collection!*\n\nCollect your *${o.productName}* from *${o.pickupPointName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (M-Pesa Till or at the shop).`
+      : `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with your *${o.productName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (cash or M-Pesa). Keep your phone on 📞`,
   delivered: (o) =>
-    `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`,
+    o.deliveryMode === "pickup_point"
+      ? `🎉 *Order ${o.id} collected!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`
+      : `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`,
   cancelled: (o) =>
     `❌ *Order ${o.id} was cancelled.*\n\nIf this was a mistake or you'd like to reorder, type *menu* and we'll help you out.`,
 };
+
+async function notifyCustomerPickupDetails(order, { force = false } = {}) {
+  if (order.deliveryMode !== "pickup_point" || !order.pickupPointName) return;
+  if (!force && order.customerPickupNotifiedAt) return;
+
+  const packedReady = ["packed", "out_for_delivery", "delivered"].includes(order.status);
+  const msg = packedReady ? formatPickupReadyMessage(order) : formatPickupAssignedMessage(order);
+  if (!msg) return;
+
+  try {
+    await sendText(order.customerKey, msg);
+    if (packedReady) {
+      updateOrderMeta(order.id, { customerPickupNotifiedAt: Date.now() });
+    }
+  } catch (err) {
+    console.error("[fulfillment] pickup notify failed:", err.message);
+  }
+}
 
 async function notifyCustomerOfStatus(order) {
   const builder = CUSTOMER_STATUS_MESSAGES[order.status];
@@ -267,6 +297,9 @@ async function notifyCustomerOfStatus(order) {
     ) {
       const reminder = formatShortPaymentReminder(order);
       if (reminder) await sendText(order.customerKey, reminder);
+    }
+    if (["packed", "out_for_delivery"].includes(order.status)) {
+      await notifyCustomerPickupDetails(order);
     }
     if (order.status === "delivered") {
       await sendReviewPrompt(order.customerKey, order);
@@ -315,7 +348,8 @@ function adminHelpText() {
     `💰 *#payments* — customer *paid* claims awaiting confirmation\n` +
     `✅ *#payconfirm SK-1042* — confirm customer M-Pesa payment\n` +
     `📦 *#notify-store SK-1042* — tell store/pickup point to release parcel\n` +
-    `📍 *#pickup SK-1042 pp-xxxx* — assign pickup point to order\n` +
+    `📍 *#pickup SK-1042 pp-xxxx* — assign / override pickup point\n` +
+    `🔎 *#nearby SK-1042* — suggest pickup partners near customer\n` +
     `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
     `   (or *#SK-1042 confirmed* — same as #status for confirmed/packed/out/delivered)\n` +
     `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
@@ -336,10 +370,16 @@ async function handleOrdersCommand(adminChatId) {
   const lines = orders.map((o) => {
     const margin = o.marginKes != null ? ` · margin KES ${o.marginKes.toLocaleString()}` : "";
     const sup = o.supplierId ? ` · supplier` : "";
+    const fulfill =
+      o.deliveryMode === "pickup_point" && o.pickupPointName
+        ? ` · 📍 ${o.pickupPointName}`
+        : o.deliveryMode === "home_delivery"
+          ? " · 🛵 delivery"
+          : " · ⏳ assign";
     return (
-      `*${o.id}* · ${statusLabel(o.status)}${sup}\n` +
+      `*${o.id}* · ${statusLabel(o.status)}${sup}${fulfill}\n` +
       `${o.productName} — KES ${o.priceKes.toLocaleString()}${margin}\n` +
-      `${o.customerName} · ${o.phone}`
+      `${o.customerName} · ${o.phone} · ${o.location}`
     );
   });
   return sendText(
@@ -539,6 +579,29 @@ async function handleNotifyStoreCommand(adminChatId, orderId) {
   );
 }
 
+async function handleNearbyCommand(adminChatId, orderId) {
+  if (!orderId) return sendText(adminChatId, "Usage: #nearby SK-1042");
+  const order = getOrder(orderId);
+  if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  const suggestions = rankPickupPointsForLocation(order.location, 5);
+  if (!suggestions.length) {
+    return sendText(
+      adminChatId,
+      `🔎 No pickup partners match *${order.location}* yet.\n\nApprove more partners or use home delivery / #fulfill.`
+    );
+  }
+
+  const lines = suggestions.map(
+    (s, i) =>
+      `${i + 1}. *${s.point.shopName}* (${s.point.id})\n   ${s.point.city}, ${s.point.county} · score ${s.score}\n   #pickup ${order.id} ${s.point.id}`
+  );
+  return sendText(
+    adminChatId,
+    `🔎 *Pickup partners near ${order.location}*\n\n${lines.join("\n\n")}`
+  );
+}
+
 async function handleAssignPickupCommand(adminChatId, args) {
   const parts = args.trim().split(/\s+/);
   const orderId = parts[0];
@@ -552,19 +615,18 @@ async function handleAssignPickupCommand(adminChatId, args) {
   const point = getPickupPoint(pointId);
   if (!point) return sendText(adminChatId, `⚠️ Pickup point *${pointId}* not found.`);
 
-  updateOrderMeta(order.id, {
-    pickupPointId: point.id,
-    pickupPointName: point.shopName,
-    pickupPointPhone: point.phone,
-    fulfillmentStoreId: point.id,
-    fulfillmentStoreName: point.shopName,
-    fulfillmentStorePhone: point.phone,
-    fulfillmentStoreCity: point.city,
-  });
+  updateOrderMeta(order.id, pickupMetaFromPoint(point));
+  const fresh = getOrder(order.id);
+
+  try {
+    await notifyCustomerPickupDetails(fresh, { force: true });
+  } catch (err) {
+    console.warn("[admin] pickup assign customer notify failed:", err.message);
+  }
 
   return sendText(
     adminChatId,
-    `✅ *${order.id}* assigned to pickup point *${point.shopName}* (${point.id})\n+${point.phone} · ${point.city}`
+    `✅ *${order.id}* assigned to pickup point *${point.shopName}* (${point.id})\n+${point.phone} · ${point.city}\nCustomer notified.`
   );
 }
 
@@ -633,7 +695,7 @@ function getBroadcastRecipients() {
 /** Pull a #command out of longer pasted text (e.g. "Update: #status SK-1002 confirmed"). */
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
-  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup)\b[\s\S]*/i);
+  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby)\b[\s\S]*/i);
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
   if (sk) return sk[0].trim();
@@ -706,6 +768,11 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#pickup\b/i.test(t)) {
     await handleAssignPickupCommand(adminChatId, t.replace(/^#pickup\b/i, ""));
+    return true;
+  }
+  if (/^#nearby\b/i.test(t)) {
+    const oid = t.replace(/^#nearby\b/i, "").trim().split(/\s+/)[0];
+    await handleNearbyCommand(adminChatId, oid);
     return true;
   }
   if (/^#paid\b/i.test(t)) {

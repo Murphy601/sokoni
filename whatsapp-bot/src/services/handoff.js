@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { getSupplier } from "./suppliers.js";
 import { sendText, formatCustomerLabel } from "./whatsapp.js";
+import { formatAdminFulfillmentBlock } from "./fulfillment.js";
 import {
   setHumanHandoff,
   getHumanHandoff,
@@ -105,6 +106,7 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
     `Name: ${details.name}\n` +
     `Location: ${details.location}\n` +
     `Phone: ${details.phone}\n\n` +
+    `${formatAdminFulfillmentBlock(order, details.location)}\n\n` +
     `*Next steps:*\n` +
     `${order?.id ? `#fulfill ${order.id}` : "#fulfill SK-xxxx"} — ping supplier (no customer contact)\n` +
     `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SK-xxxx share"} — supplier delivers (includes address)\n` +
