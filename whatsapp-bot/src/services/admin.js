@@ -7,12 +7,14 @@ import { sendReviewPrompt } from "./reviews.js";
 import { setHumanHandoff } from "./session.js";
 import {
   getOrder,
+  getOrdersForCustomer,
   updateOrderStatus,
   updateOrderMeta,
   listRecentOrders,
   getAllContacts,
   statusLabel,
   ORDER_STATUSES,
+  normalizeStatus,
 } from "./orders.js";
 import { getSupplier } from "./suppliers.js";
 import { getPickupPoint } from "./pickupPoints.js";
@@ -266,6 +268,38 @@ async function notifyCustomerOfStatus(order) {
   }
 }
 
+const QUICK_STATUS_WORDS = new Set(["confirmed", "packed", "out_for_delivery", "delivered", "cancelled"]);
+
+/** Status keywords admins sometimes type in a customer chat (e.g. "confirmed"). */
+export function isAdminQuickStatusText(text) {
+  const status = normalizeStatus(String(text || "").trim());
+  return Boolean(status && QUICK_STATUS_WORDS.has(status));
+}
+
+async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quotedText, fromPhone, allowBusinessOwner }) {
+  if (!toChatId || isBusinessChat(toChatId)) return false;
+  if (!isAdminQuickStatusText(text)) return false;
+  if (!canRunAdminCommands(fromChatId, fromPhone, { allowBusinessOwner })) return false;
+
+  const statusInput = String(text || "").trim();
+  let orderId = quotedText?.match(/\bSK-\d+\b/i)?.[0];
+  if (!orderId) {
+    const customerKey = customerKeyFromChatId(toChatId);
+    const orders = getOrdersForCustomer(customerKey);
+    const active = orders.find((o) => !["delivered", "cancelled"].includes(o.status));
+    orderId = active?.id;
+  }
+  if (!orderId) {
+    console.warn("[admin:quick-status] no order for", toChatId, statusInput);
+    return false;
+  }
+
+  const replyTo = fromChatId || config.admin.primary;
+  await handleStatusCommand(replyTo, `${orderId} ${statusInput}`);
+  console.log("[admin:quick-status]", orderId, statusInput, "→", toChatId);
+  return true;
+}
+
 function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
@@ -320,6 +354,12 @@ async function handleStatusCommand(adminChatId, args) {
   }
   if (result.error === "invalid_status") {
     return sendText(adminChatId, `⚠️ Unknown status. Use: ${ORDER_STATUSES.join(", ")}`);
+  }
+  if (result.unchanged) {
+    return sendText(
+      adminChatId,
+      `ℹ️ *${result.order.id}* is already ${statusLabel(result.status)}. Customer was not re-notified.`
+    );
   }
   await notifyCustomerOfStatus(result.order);
   if (result.status === "delivered" && result.order.supplierId) {
@@ -718,6 +758,19 @@ export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedTe
   if (adminCommand) {
     const replyTo = allowBusinessOwner ? fromChatId || config.admin.primary : fromChatId || config.admin.primary;
     return runAdminCommand(replyTo, text, quotedText, { allowBusinessOwner });
+  }
+
+  if (
+    await tryQuickStatusOnCustomerReply({
+      fromChatId,
+      toChatId,
+      text,
+      quotedText,
+      fromPhone,
+      allowBusinessOwner,
+    })
+  ) {
+    return true;
   }
 
   if (toChatId && !isBusinessChat(toChatId)) {

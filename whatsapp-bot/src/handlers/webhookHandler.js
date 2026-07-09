@@ -20,7 +20,7 @@ import {
 } from "../services/session.js";
 import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta } from "../services/admin.js";
+import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText } from "../services/admin.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
@@ -185,16 +185,7 @@ export async function handleIncomingMessage(
     }
   }
 
-  // Human handoff FIRST — bot must stay silent (only "menu" exits)
-  if (isHumanHandoff(customerKey)) {
-    if (normalized === "menu") {
-      clearHumanHandoff(customerKey);
-      return sendWelcome(customerKey);
-    }
-    return handleCustomerWhileHandoff(customerKey);
-  }
-
-  // Order-number lookup — never treat admin #commands as customer track requests
+  // Track always works — even during human handoff (admin may have replied manually)
   const orderIdMatch =
     !containsAdminCommand(text) &&
     !isAdminSender(customerKey, phone) &&
@@ -202,9 +193,23 @@ export async function handleIncomingMessage(
   if (orderIdMatch) {
     return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`, phone);
   }
-  if (/^track\b/i.test(normalized) || normalized === "my order" || normalized === "my orders") {
+  if (
+    /^track\b/i.test(normalized) ||
+    normalized === "track order" ||
+    normalized === "my order" ||
+    normalized === "my orders"
+  ) {
     const { sendTrackOrderMenu } = await import("../services/menu.js");
     return sendTrackOrderMenu(customerKey, phone);
+  }
+
+  // Human handoff — bot stays silent except menu / track (handled above)
+  if (isHumanHandoff(customerKey)) {
+    if (normalized === "menu") {
+      clearHumanHandoff(customerKey);
+      return sendWelcome(customerKey);
+    }
+    return handleCustomerWhileHandoff(customerKey);
   }
 
   if (
@@ -392,7 +397,11 @@ export async function handleWahaWebhook(body) {
     // Ignore the bot's OWN outgoing messages (echoes). Only act on messages
     // the human store owner actually typed (admin commands, quote-replies,
     // or a manual reply inside a customer's chat).
-    if (!looksLikeAdminAction(parsed.text, parsed.fromChatId) && isBotEcho(parsed.messageId, parsed.toChatId)) {
+    if (
+      !looksLikeAdminAction(parsed.text, parsed.fromChatId) &&
+      !isAdminQuickStatusText(parsed.text) &&
+      isBotEcho(parsed.messageId, parsed.toChatId)
+    ) {
       return;
     }
     return handleAdminOutgoing(parsed);

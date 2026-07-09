@@ -199,6 +199,7 @@ export function updateOrderStatus(id, statusInput) {
   if (!order) return null;
   const status = normalizeStatus(statusInput);
   if (!status) return { error: "invalid_status", order };
+  if (order.status === status) return { order, status, unchanged: true };
   order.status = status;
   order.history.push({ status, at: Date.now() });
   order.updatedAt = Date.now();
