@@ -308,7 +308,8 @@ function adminHelpText() {
     `✅ *#payconfirm SK-1042* — confirm customer M-Pesa payment\n` +
     `📦 *#notify-store SK-1042* — tell store/pickup point to release parcel\n` +
     `📍 *#pickup SK-1042 pp-xxxx* — assign pickup point to order\n` +
-    `🔄 *#status SK-1042 delivered* — update + payout on delivery\n` +
+    `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
+    `   (or *#SK-1042 confirmed* — same as #status for confirmed/packed/out/delivered)\n` +
     `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
     `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
     `💰 *#payouts* — supplier amounts owed\n` +
@@ -707,7 +708,13 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
 
   const targeted = t.match(/^#(SK-\d+)\s+([\s\S]+)/i);
   if (targeted) {
-    await handleTargetedOrderMessage(adminChatId, targeted[1].toUpperCase(), targeted[2]);
+    const orderId = targeted[1].toUpperCase();
+    const msg = targeted[2].trim();
+    if (isAdminQuickStatusText(msg)) {
+      await handleStatusCommand(adminChatId, `${orderId} ${msg}`);
+      return true;
+    }
+    await handleTargetedOrderMessage(adminChatId, orderId, msg);
     return true;
   }
 
