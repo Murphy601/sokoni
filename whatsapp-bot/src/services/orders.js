@@ -164,10 +164,26 @@ export function getOrder(id) {
   return store.orders[key] || null;
 }
 
-export function getOrdersForCustomer(customerKey) {
+export function getOrdersForCustomer(customerKey, phone = "") {
   load();
+  const digits = String(phone || "").replace(/\D/g, "");
+  const norm = (d) => {
+    if (!d) return "";
+    if (d.startsWith("254")) return d;
+    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
+    if (d.length === 9) return `254${d}`;
+    return d;
+  };
+  const want = norm(digits);
+
   return Object.values(store.orders)
-    .filter((o) => o.customerKey === customerKey)
+    .filter((o) => {
+      if (o.customerKey === customerKey) return true;
+      if (!want) return false;
+      const orderPhone = norm(String(o.phone || "").replace(/\D/g, ""));
+      const orderKeyPhone = norm(String(o.customerKey || "").replace(/\D/g, ""));
+      return orderPhone === want || orderKeyPhone === want;
+    })
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 

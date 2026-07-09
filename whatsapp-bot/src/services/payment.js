@@ -26,9 +26,11 @@ export function formatMpesaTillBlock(amountKes = null) {
 
 export function formatShortPaymentReminder(order) {
   if (!order || order.customerPaymentStatus === "confirmed") return null;
+  const price = Number(order.priceKes);
+  const priceLine = Number.isFinite(price) ? price.toLocaleString() : "—";
   return (
     `💳 *Payment reminder — ${order.id}*\n\n` +
-    `On delivery, pay *KES ${order.priceKes.toLocaleString()}* to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}).\n\n` +
+    `On delivery, pay *KES ${priceLine}* to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}).\n\n` +
     `Do not pay riders or anyone else. Reply *paid* after you send payment.`
   );
 }

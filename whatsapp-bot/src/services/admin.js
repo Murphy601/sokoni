@@ -20,7 +20,6 @@ import {
   buildAdminPaidClaimMessage,
   filterPendingPaymentClaims,
   notifyStorePaymentConfirmed,
-  formatShortPaymentReminder,
 } from "./payment.js";
 import { recordDeliveryPayout, getSettlementSummary, markPayoutPaid } from "./settlements.js";
 
@@ -259,10 +258,6 @@ async function notifyCustomerOfStatus(order) {
   if (!builder) return;
   try {
     await sendText(order.customerKey, builder(order));
-    const reminder = formatShortPaymentReminder(order);
-    if (reminder && ["out_for_delivery", "delivered"].includes(order.status)) {
-      await sendText(order.customerKey, reminder);
-    }
     if (order.status === "delivered") {
       await sendReviewPrompt(order.customerKey, order);
     }

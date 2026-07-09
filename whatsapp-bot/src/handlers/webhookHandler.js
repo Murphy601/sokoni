@@ -200,11 +200,11 @@ export async function handleIncomingMessage(
     !isAdminSender(customerKey, phone) &&
     text.trim().match(/\bSK-?(\d{3,})\b/i);
   if (orderIdMatch) {
-    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`);
+    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`, phone);
   }
-  if (normalized === "track" || normalized === "track order" || normalized === "my order" || normalized === "my orders") {
+  if (/^track\b/i.test(normalized) || normalized === "my order" || normalized === "my orders") {
     const { sendTrackOrderMenu } = await import("../services/menu.js");
-    return sendTrackOrderMenu(customerKey);
+    return sendTrackOrderMenu(customerKey, phone);
   }
 
   if (
