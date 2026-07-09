@@ -199,6 +199,7 @@ export async function handleIncomingMessage(
     normalized === "my order" ||
     normalized === "my orders"
   ) {
+    console.log("[track] request from", customerKey, phone || "(no phone)");
     const { sendTrackOrderMenu } = await import("../services/menu.js");
     return sendTrackOrderMenu(customerKey, phone);
   }

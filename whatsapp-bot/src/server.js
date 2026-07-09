@@ -1,4 +1,7 @@
 import express from "express";
+import { execSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { handleWahaWebhook } from "./handlers/webhookHandler.js";
 import { runTiktokPostJob } from "./services/tiktok.js";
@@ -11,6 +14,19 @@ import adminPickupPointsRouter from "./routes/adminPickupPoints.js";
 import { listReviews, addReview } from "./services/reviews.js";
 
 const app = express();
+
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+function resolveBuildId() {
+  if (process.env.BUILD_COMMIT) return process.env.BUILD_COMMIT;
+  try {
+    return execSync("git rev-parse --short HEAD", { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+const BUILD_ID = resolveBuildId();
 
 const SITE_ORIGINS = new Set([
   config.publicSiteUrl,
@@ -41,7 +57,7 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", build: BUILD_ID });
 });
 
 /** Public reviews for website + WhatsApp-collected feedback. */
@@ -87,7 +103,7 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port}`);
+  console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port} (build ${BUILD_ID})`);
   if (!config.waha.apiUrl) {
     console.log("⚠️ WAHA_API_URL not set — running in dry-run mode (messages will be logged, not sent).");
   } else {
