@@ -172,7 +172,7 @@ export async function handleIncomingMessage(
 
   if (/^(paid|nimelipa|nimepay|payment done|done paying)\b/i.test(normalized)) {
     const { handleCustomerPaidClaim } = await import("../services/payment.js");
-    return handleCustomerPaidClaim(customerKey, text);
+    return handleCustomerPaidClaim(customerKey, text, phone);
   }
 
   // Customers must never see admin console

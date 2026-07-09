@@ -76,14 +76,30 @@ export function resolveOrderStore(order) {
   return null;
 }
 
-function pickOrderForPaidClaim(customerKey, text = "") {
+function orderMatchesCustomer(order, customerKey, phone = "") {
+  if (!order) return false;
+  if (order.customerKey === customerKey) return true;
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return false;
+  const norm = (d) => {
+    if (d.startsWith("254")) return d;
+    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
+    if (d.length === 9) return `254${d}`;
+    return d;
+  };
+  const want = norm(digits);
+  const orderPhone = norm(String(order.phone || "").replace(/\D/g, ""));
+  return orderPhone === want;
+}
+
+function pickOrderForPaidClaim(customerKey, text = "", phone = "") {
   const idMatch = text.match(/\bSK-?(\d{3,})\b/i);
   if (idMatch) {
     const order = getOrder(`SK-${idMatch[1]}`);
-    if (order && order.customerKey === customerKey) return order;
+    if (orderMatchesCustomer(order, customerKey, phone)) return order;
   }
 
-  const active = getOrdersForCustomer(customerKey).filter(
+  const active = getOrdersForCustomer(customerKey, phone).filter(
     (o) =>
       o.customerPaymentStatus !== "confirmed" &&
       !["cancelled"].includes(o.status) &&
@@ -91,7 +107,7 @@ function pickOrderForPaidClaim(customerKey, text = "") {
   );
   if (active.length === 0) {
     return (
-      getOrdersForCustomer(customerKey).find((o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled") ||
+      getOrdersForCustomer(customerKey, phone).find((o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled") ||
       null
     );
   }
@@ -126,8 +142,8 @@ export function buildAdminPaidClaimMessage(order) {
 }
 
 /** Customer replied "paid" — flag for admin review. */
-export async function handleCustomerPaidClaim(customerKey, text) {
-  const order = pickOrderForPaidClaim(customerKey, text);
+export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
+  const order = pickOrderForPaidClaim(customerKey, text, phone);
   if (!order) {
     await sendText(
       customerKey,

@@ -22,6 +22,7 @@ import {
 } from "./orders.js";
 import { getFeaturedProductIds } from "./tiktok.js";
 import { siteUrlLine } from "./reviews.js";
+import { formatShortPaymentReminder, formatMpesaTillBlock } from "./payment.js";
 
 function formatNumberedMenu(title, options) {
   const lines = options.map((o, i) => `${i + 1}. ${o.label}`);
@@ -463,6 +464,42 @@ function formatOrderKes(amount) {
   return n.toLocaleString();
 }
 
+function paymentLineForOrder(order) {
+  if (order.customerPaymentStatus === "confirmed") return "✅ Payment confirmed";
+  if (order.customerPaymentStatus === "claimed") return "⏳ Payment pending verification";
+  return "pay on delivery";
+}
+
+async function sendPaymentReminderSafe(to, order) {
+  if (!order) return;
+  try {
+    const reminder = formatShortPaymentReminder(order);
+    if (reminder) await sendText(to, reminder);
+  } catch (err) {
+    console.error("[payment] reminder failed:", err.message);
+  }
+}
+
+async function sendTillIntroSafe(to, amountKes) {
+  try {
+    await sendText(to, formatMpesaTillBlock(amountKes));
+  } catch (err) {
+    console.error("[payment] till intro failed:", err.message);
+  }
+}
+
+function pickPaymentReminderOrder(orders) {
+  const eligible = orders.filter(
+    (o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled"
+  );
+  const priority = ["out_for_delivery", "packed", "confirmed", "received"];
+  for (const st of priority) {
+    const hit = eligible.find((o) => o.status === st);
+    if (hit) return hit;
+  }
+  return eligible[0] || null;
+}
+
 function orderBelongsToCustomer(order, customerKey, phone = "") {
   if (!order) return false;
   if (order.customerKey === customerKey) return true;
@@ -492,7 +529,7 @@ function renderOrderCard(order) {
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
-    `💰 KES ${formatOrderKes(order.priceKes)} — pay on delivery\n` +
+    `💰 KES ${formatOrderKes(order.priceKes)} — ${paymentLineForOrder(order)}\n` +
     `📍 ${order.location}\n\n` +
     `${renderStatusTimeline(order.status)}`
   );
@@ -505,7 +542,9 @@ export async function sendOrderStatus(to, orderId, phone = "") {
     return sendText(to, `I couldn't find order *${orderId}* on this number. Type *track* to see your orders.`);
   }
   try {
-    return await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
+    await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
+    await sendPaymentReminderSafe(to, order);
+    return true;
   } catch (err) {
     console.error("[track] sendOrderStatus failed:", err.message);
     return sendText(to, "Sorry, could not load that order. Type *track* to try again.");
@@ -538,12 +577,14 @@ export async function sendTrackOrderMenu(to, phone = "") {
       blocks.push(renderOrderCard(order));
     }
 
-    return await sendText(
+    await sendText(
       to,
       `📦 *Your Sokoni orders*\n\n` +
         blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
         `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
     );
+    await sendPaymentReminderSafe(to, pickPaymentReminderOrder(orders));
+    return true;
   } catch (err) {
     console.error("[track] sendTrackOrderMenu failed:", err.message);
     return sendText(to, "Sorry, could not load your orders. Type *track* again or *menu* for help.");
@@ -882,6 +923,7 @@ export async function confirmCodOrder(to, parsed) {
       `Asante for shopping with Sokoni! 🙏`
   );
 
+  await sendTillIntroSafe(to, pending.priceKes);
   await sendUpsell(to, pending);
   return true;
 }
