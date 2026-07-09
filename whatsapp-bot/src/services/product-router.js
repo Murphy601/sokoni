@@ -6,6 +6,13 @@ import {
   getPerfumeProductByFamilyAndSize,
   searchProducts,
 } from "./catalog.js";
+import { looksLikeDeliveryDetails } from "./delivery-details.js";
+
+function getPagedSlice(items, page = 0, pageSize = 12) {
+  if (!items?.length) return [];
+  const start = (page || 0) * (pageSize || 12);
+  return items.slice(start, start + (pageSize || 12));
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCENTS_FILE = path.join(__dirname, "..", "data", "perfume-oils-scents.txt");
@@ -311,6 +318,7 @@ async function resolveGeneralProductQuery(text) {
 export async function resolveProductQuery(text) {
   const raw = String(text || "").trim();
   if (!raw || raw.length < 2) return { action: "none" };
+  if (looksLikeDeliveryDetails(raw)) return { action: "none" };
 
   const sizeMl = parseSizeFromText(raw);
   const scentQuery = stripPerfumeNoise(raw);
@@ -413,6 +421,7 @@ export async function handleProductRouter(customerKey, text) {
   const { sendPerfumeSizePicker, sendPerfumeScentList, showProductActions } = await import("./menu.js");
 
   const normalized = text.toLowerCase().trim();
+  if (looksLikeDeliveryDetails(text)) return false;
   const choice = parseNumericChoice(text);
   const menuState = getMenuState(customerKey);
 
@@ -499,13 +508,14 @@ export async function handleProductRouter(customerKey, text) {
     if (/^(prev|previous|back|p)$/i.test(normalized) && menuState.rowId && (menuState.page || 0) > 0) {
       return sendPerfumeScentList(customerKey, { page: menuState.page - 1, rowId: menuState.rowId });
     }
-    if (choice && menuState.scentFamilies?.[choice - 1]) {
-      return sendPerfumeSizePicker(customerKey, menuState.scentFamilies[choice - 1]);
-    }
-    const pageFamilies = menuState.scentFamilies?.slice(
-      (menuState.page || 0) * (menuState.pageSize || 12),
-      ((menuState.page || 0) + 1) * (menuState.pageSize || 12)
+    const pageFamilies = getPagedSlice(
+      menuState.pageFamilies || menuState.scentFamilies,
+      menuState.page,
+      menuState.pageSize
     );
+    if (choice && pageFamilies?.[choice - 1]) {
+      return sendPerfumeSizePicker(customerKey, pageFamilies[choice - 1]);
+    }
     if (pageFamilies?.length) {
       const byName = findScentByNameInput(text, pageFamilies);
       if (byName) return sendPerfumeSizePicker(customerKey, byName);

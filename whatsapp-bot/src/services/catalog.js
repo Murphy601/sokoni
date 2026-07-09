@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { looksLikeDeliveryDetails } from "./delivery-details.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -274,6 +275,7 @@ export async function findProductFromWebsiteMessage(text) {
 /** Try to pull a product from quoted text, product cards, or numbered list lines. */
 export async function findProductFromMessage(text, { allProducts = false } = {}) {
   if (!text) return null;
+  if (looksLikeDeliveryDetails(text)) return null;
   if (isMenuBoilerplate(text)) return null;
 
   const products = await loadProducts();
@@ -341,6 +343,7 @@ function scoreProduct(product, tokens) {
   let score = 0;
   for (const token of tokens) {
     if (isSizeToken(token)) continue;
+    if (token.length < 4) continue;
     if (hay.includes(token)) score += token.length >= 4 ? 2 : 1;
   }
   return score;

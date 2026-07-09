@@ -25,6 +25,8 @@ import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
 import { handleProductRouter, resolveProductQuery } from "../services/product-router.js";
+import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
+import { getPendingOrder } from "../services/session.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -281,6 +283,13 @@ export async function handleIncomingMessage(
 
   const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
   if (pendingHandled) return;
+
+  if (looksLikeDeliveryDetails(combinedText) && !getPendingOrder(customerKey)) {
+    return sendText(
+      customerKey,
+      "I have your name and location 👍 To place the order, first pick an item (*menu* → category → reply with the number → *1* to order), then send those details again."
+    );
+  }
 
   const websiteProduct = await findProductFromWebsiteMessage(combinedText);
   if (websiteProduct) {
