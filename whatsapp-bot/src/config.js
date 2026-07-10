@@ -44,8 +44,8 @@ export const config = {
    * and the customer pays on delivery (cash/M-Pesa to the rider).
    */
   contact: {
-    phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254757764009",
-    phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "0757 764 009",
+    phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
+    phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "+254 117 422 428",
     email: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
     founderName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
     location: process.env.BUSINESS_LOCATION || "Sokoni Mall Startup Hub, Nairobi, Kenya",
@@ -61,7 +61,7 @@ export const config = {
   },
   store: {
     markupKes: Number(process.env.STORE_MARKUP_KES) || 100,
-    businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254757764009",
+    businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
     codAreas: process.env.STORE_COD_AREAS || "Nairobi & environs",
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||

@@ -27,6 +27,6 @@ All customer promotions are capped at **3% off** (code **SOKONI3**). No free-del
 
 ## Contact (public)
 
-- WhatsApp / calls: **0757 764 009** (`254757764009`)
+- WhatsApp / calls: **+254 117 422 428** (`254117422428`)
 - Email: **support@sokonimall.com**
 - Till: **4775847** (David Thuku Muiruri)

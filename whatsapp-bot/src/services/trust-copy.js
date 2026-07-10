@@ -5,7 +5,7 @@ export const OFFER_PERCENT = config.offers?.maxDiscountPercent ?? 3;
 export const PROMO_CODE = config.offers?.promoCode ?? "SOKONI3";
 
 export function formatPhoneDisplay() {
-  return config.contact?.phoneDisplay || "0757 764 009";
+  return config.contact?.phoneDisplay || "+254 117 422 428";
 }
 
 export function formatWhatsAppLink() {

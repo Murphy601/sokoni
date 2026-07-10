@@ -32,7 +32,20 @@ if ! git pull --rebase origin main; then
   echo "WARN: git pull --rebase failed — continuing deploy at $(git rev-parse --short HEAD)"
 fi
 if [ "$STASHED" = "1" ]; then
-  git stash pop || echo "WARN: stash pop had conflicts — fix later; bot restart continues"
+  if ! git stash pop; then
+    echo "WARN: stash pop had conflicts — auto-resolving known VM-only files..."
+    if git diff --name-only --diff-filter=U 2>/dev/null | grep -q '^website/data/tiktok-featured\.json$'; then
+      git checkout --ours website/data/tiktok-featured.json
+      git add website/data/tiktok-featured.json
+      echo "==> Resolved tiktok-featured.json (kept origin/main version)"
+    fi
+    # Drop stash if working tree is clean enough to continue
+    if [ -z "$(git diff --name-only --diff-filter=U 2>/dev/null)" ]; then
+      git stash drop || true
+    else
+      echo "WARN: unresolved conflicts remain — fix manually; bot restart continues"
+    fi
+  fi
 fi
 echo "==> Git at: $(git log -1 --oneline)"
 
