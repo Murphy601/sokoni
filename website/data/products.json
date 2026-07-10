@@ -20577,7 +20577,7 @@
   },
   {
     "id": "fa-016",
-    "name": "Women's Black Heeled Loafers with Tassels",
+    "name": "Women's Black Block Heel Loafers",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20712,7 +20712,7 @@
   },
   {
     "id": "fa-025",
-    "name": "Women's Patent Leather Block Heel Shoes - Green",
+    "name": "Women's Gold Block Heel Shoes",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20742,7 +20742,7 @@
   },
   {
     "id": "fa-027",
-    "name": "Women's Black Pointed Toe Heels with Snake Print Detail",
+    "name": "Women's Black Pointed-Toe Heels with Snake Print Accent",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20772,7 +20772,7 @@
   },
   {
     "id": "fa-029",
-    "name": "Women's Silver Block Heel Shoes with Gold Chain Detail",
+    "name": "Women's Block Heel Shoes - Teal with Snake Print Detail",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20802,7 +20802,7 @@
   },
   {
     "id": "fa-031",
-    "name": "Women's Black Block Heel Loafers",
+    "name": "Women's Patent Leather Block Heel Shoes - Green",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20817,7 +20817,7 @@
   },
   {
     "id": "fa-032",
-    "name": "Women's Burgundy Suede and Patent Leather Block Heel Shoes with Tassels",
+    "name": "Women's Suede and Patent Leather Heeled Loafers - Burgundy",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20847,7 +20847,7 @@
   },
   {
     "id": "fa-034",
-    "name": "Women's Strappy Stiletto Heels - Red Patent",
+    "name": "Women's Patent Slingback Block Heels - Orange",
     "category": "fashion",
     "priceKes": 5000,
     "rating": 4.5,
@@ -20858,6 +20858,21 @@
     "fulfillment": "store",
     "payment": "cod",
     "imageUrl": "assets/images/products/fa-034.jpg",
+    "subcategory": "shoes"
+  },
+  {
+    "id": "fa-035",
+    "name": "Women's Silver Heeled Loafers with Gold Chain Detail",
+    "category": "fashion",
+    "priceKes": 5000,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-035.jpg",
     "subcategory": "shoes"
   }
 ]

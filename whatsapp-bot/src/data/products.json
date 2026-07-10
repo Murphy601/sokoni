@@ -33496,7 +33496,7 @@
   },
   {
     "id": "fa-016",
-    "name": "Women's Black Heeled Loafers with Tassels",
+    "name": "Women's Black Block Heel Loafers",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33511,7 +33511,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-016.jpg",
-    "imageKey": "06c7ccba89b6"
+    "imageKey": "87ef5b0d0f09"
   },
   {
     "id": "fa-017",
@@ -33667,7 +33667,7 @@
   },
   {
     "id": "fa-025",
-    "name": "Women's Patent Leather Block Heel Shoes - Green",
+    "name": "Women's Gold Block Heel Shoes",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33682,7 +33682,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-025.jpg",
-    "imageKey": "e3ddb4c5ae32"
+    "imageKey": "b713925422e8"
   },
   {
     "id": "fa-026",
@@ -33705,7 +33705,7 @@
   },
   {
     "id": "fa-027",
-    "name": "Women's Black Pointed Toe Heels with Snake Print Detail",
+    "name": "Women's Black Pointed-Toe Heels with Snake Print Accent",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33720,7 +33720,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-027.jpg",
-    "imageKey": "a2302d1118ee"
+    "imageKey": "f5033ac1c2e4"
   },
   {
     "id": "fa-028",
@@ -33743,7 +33743,7 @@
   },
   {
     "id": "fa-029",
-    "name": "Women's Silver Block Heel Shoes with Gold Chain Detail",
+    "name": "Women's Block Heel Shoes - Teal with Snake Print Detail",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33758,7 +33758,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-029.jpg",
-    "imageKey": "73c4dc1793d4"
+    "imageKey": "a8fbc8e67106"
   },
   {
     "id": "fa-030",
@@ -33781,7 +33781,7 @@
   },
   {
     "id": "fa-031",
-    "name": "Women's Black Block Heel Loafers",
+    "name": "Women's Patent Leather Block Heel Shoes - Green",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33796,11 +33796,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-031.jpg",
-    "imageKey": "87ef5b0d0f09"
+    "imageKey": "e3ddb4c5ae32"
   },
   {
     "id": "fa-032",
-    "name": "Women's Burgundy Suede and Patent Leather Block Heel Shoes with Tassels",
+    "name": "Women's Suede and Patent Leather Heeled Loafers - Burgundy",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33815,7 +33815,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-032.jpg",
-    "imageKey": "4890945cd908"
+    "imageKey": "6c5896896dc6"
   },
   {
     "id": "fa-033",
@@ -33838,7 +33838,7 @@
   },
   {
     "id": "fa-034",
-    "name": "Women's Strappy Stiletto Heels - Red Patent",
+    "name": "Women's Patent Slingback Block Heels - Orange",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33853,6 +33853,25 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-034.jpg",
-    "imageKey": "2e40d013434b"
+    "imageKey": "921037fef513"
+  },
+  {
+    "id": "fa-035",
+    "name": "Women's Silver Heeled Loafers with Gold Chain Detail",
+    "category": "fashion",
+    "subcategory": "shoes",
+    "sourcePriceKes": 4500,
+    "priceKes": 5000,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-035.jpg",
+    "imageKey": "9708130286d7"
   }
 ]
