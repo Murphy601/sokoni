@@ -533,7 +533,7 @@ async function renderReviews() {
   const reviews = await loadReviewsFromApi();
   if (!reviews.length) {
     list.innerHTML =
-      '<p class="text-brand-purple/50 dark:text-white/50 text-sm">No reviews yet — be the first after your delivery! Order on WhatsApp and we\'ll ask you to rate us.</p>';
+      '<p class="text-brand-purple/50 dark:text-white/50 text-sm">We\'re onboarding our first customers — real reviews from real orders will appear here as we grow. Order on WhatsApp and we\'ll ask you to rate us after delivery.</p>';
     return;
   }
   list.innerHTML = reviews.slice(0, 12).map(renderReviewCard).join("");

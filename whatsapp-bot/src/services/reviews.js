@@ -106,7 +106,7 @@ export async function sendReviewPrompt(customerKey, order) {
       `We hope you're happy with your *${order.productName}*!\n\n` +
       `*Rate us* — reply with a number:\n` +
       `1 ⭐  ·  2 ⭐⭐  ·  3 ⭐⭐⭐  ·  4 ⭐⭐⭐⭐  ·  5 ⭐⭐⭐⭐⭐\n\n` +
-      `_Your feedback helps other shoppers trust Sokoni during our public beta._\n\n` +
+      `_Your feedback helps other shoppers trust Sokoni as we grow._\n\n` +
       `${reviewsUrlLine()}`
   );
 }

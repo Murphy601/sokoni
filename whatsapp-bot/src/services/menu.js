@@ -65,7 +65,7 @@ export function sendMainMenu(to) {
     { id: "human_handoff", label: "🙋 Talk to a Human" },
     { id: "how_it_works", label: "❓ How Sokoni Works" },
   ];
-  return sendNumberedMenu(to, "Karibu Sokoni Mall! *Public Beta* · pay on delivery only 💵", options);
+  return sendNumberedMenu(to, "Karibu Sokoni Mall! Pay on delivery only 💵", options);
 }
 
 const SUBCATEGORY_LABELS = {

@@ -23,19 +23,32 @@ function tillName() {
 
 export function tillExplainLine() {
   return (
-    `🏢 *Official Till:* ${till()} (resolves to our founder, *${tillName()}*, during our launch phase)\n` +
+    `🏢 *M-Pesa Till:* ${till()} — registered to Sokoni Mall founder *${tillName()}* (named, accountable checkout)\n` +
     `📞 *WhatsApp / calls:* ${formatPhoneDisplay()}`
   );
 }
 
-export function betaSafetyBlock() {
+export function paymentTrustDisclosure() {
   return (
-    `🛠️ *Public Beta Testing* — your safety is our priority:\n` +
-    `• *Pay on Delivery only* for local orders — zero deposits upfront\n` +
-    `• Inspect your item first, then pay via M-Pesa Till *${till()}* (*${tillName()}*)\n` +
-    `• Never pay riders, personal numbers, or any other till\n\n` +
-    tillExplainLine()
+    `Countrywide pay-on-delivery, zero upfront deposits. Inspect your order first, then pay via M-Pesa Till *${till()}*.\n\n` +
+    `During our founder-led launch phase, this till is registered directly to Sokoni Mall's founder, *${tillName()}* — ` +
+    `so you're paying a named, accountable individual, not an anonymous account. Business till transition in progress.\n\n` +
+    `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
+    `✅ *Verify:* call or WhatsApp us before paying to confirm your order number.`
   );
+}
+
+export function founderLedSafetyBlock() {
+  return (
+    `🛡️ *Sokoni Mall* — founded by *${tillName()}*\n` +
+    `We're a young, growing Kenyan business onboarding our first customers.\n\n` +
+    paymentTrustDisclosure()
+  );
+}
+
+/** @deprecated use founderLedSafetyBlock */
+export function betaSafetyBlock() {
+  return founderLedSafetyBlock();
 }
 
 export function offerLine(extra = "") {
@@ -47,7 +60,7 @@ export function welcomeMessage() {
   return (
     `Habari! Welcome to *Sokoni Mall AI* 🤖🇰🇪\n` +
     `Your smart shopping assistant for local deals across Kenya.\n\n` +
-    `${betaSafetyBlock()}\n\n` +
+    `${founderLedSafetyBlock()}\n\n` +
     `What are you shopping for today? (English, Kiswahili, or Sheng 👇)\n` +
     `Reply with a number from the menu below, or type what you need.`
   );
@@ -68,11 +81,10 @@ export function welcomeBackMessage(customerName = "") {
 
 export function broadcastReEngageMessage() {
   return (
-    `Habari! It's the *Sokoni Mall* team 👋🚀\n` +
+    `Habari! It's the *Sokoni Mall* team 👋\n` +
     `We've upgraded our WhatsApp shopping assistant!\n\n` +
-    `🛠️ Still in Beta, still 100% safe:\n` +
     `• Pay on Delivery — inspect first, pay after\n` +
-    `• Official Till *${till()}* (*${tillName()}*)\n` +
+    `• Till *${till()}* — founder *${tillName()}* (named, accountable checkout)\n` +
     `• ${offerLine()}\n\n` +
     `Text us what you need in English, Kiswahili, or Sheng! 👇`
   );
@@ -90,9 +102,10 @@ export function orderConfirmedMessage({ orderId, productName, amountKes, custome
     `📞 ${phone}\n\n` +
     `⚠️ *Payment security reminder:*\n` +
     `We will *NEVER* ask for a commitment fee, delivery deposit, or upfront payment.\n` +
-    `When your package arrives, inspect it first, then pay to Buy Goods Till *${till()}* (*${tillName()}*).\n` +
+    `When your package arrives, inspect it first, then pay to Buy Goods Till *${till()}* (founder *${tillName()}* — named, accountable checkout).\n` +
+    `✅ Verify on ${formatPhoneDisplay()} before paying if you want to confirm this order.\n` +
     `Do not pay cash to the rider. Reply *paid* here once done.\n\n` +
-    `Track anytime: type *track* or *${orderId}*. Thank you for testing Sokoni! 🙏`
+    `Track anytime: type *track* or *${orderId}*. Thank you for shopping with Sokoni! 🙏`
   );
 }
 
@@ -102,7 +115,7 @@ export function howItWorksMessage() {
     `1️⃣ Chat us on WhatsApp (${formatPhoneDisplay()}) or browse sokonimall.com.\n` +
     `2️⃣ Our AI finds products from our *pay-on-delivery* local catalog.\n` +
     `3️⃣ Reply *1* to order — send name, location & phone in one message.\n` +
-    `4️⃣ *Safe Pay on Delivery:* inspect first, then pay via Till *${till()}* (*${tillName()}*).\n` +
+    `4️⃣ *Safe Pay on Delivery:* inspect first, then pay Till *${till()}* (founder *${tillName()}*). Verify on ${formatPhoneDisplay()} before paying.\n` +
     `5️⃣ Track with your *SK-####* order number anytime.\n\n` +
     `*International?* *menu* → *Shop International* — partner stores (AliExpress, Temu, Amazon). Customs may apply; no pay-on-delivery.\n\n` +
     `${config.store.deliveryNote}\n\n` +
@@ -112,15 +125,15 @@ export function howItWorksMessage() {
 
 export function paymentVerificationPrompt(amountKes = null) {
   const amt = amountKes != null && Number.isFinite(Number(amountKes)) ? Number(amountKes) : null;
-  const amountLine = amt != null ? `Pay *KES ${amt.toLocaleString()}* to:\n\n` : "";
+  const amountLine = amt != null ? `Amount: *KES ${amt.toLocaleString()}*\n\n` : "";
   return (
     `Payment Verification 🔑\n\n` +
-    `Once the rider delivers and you are satisfied:\n\n` +
+    `Once you're satisfied with your delivery:\n\n` +
     amountLine +
     `🏢 *Buy Goods Till:* ${till()}\n` +
-    `👤 *Name to confirm:* ${tillName()}\n\n` +
-    `After paying, paste your M-Pesa confirmation text here, or reply with the transaction code (e.g. UK12345678).\n` +
-    `Our team will verify on Till *${till()}* and confirm shortly. 🧾`
+    `👤 *Registered to:* ${tillName()} (Sokoni Mall founder — named, accountable checkout)\n\n` +
+    `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your order number before paying.\n` +
+    `After paying, paste your M-Pesa confirmation or reply with the transaction code. 🧾`
   );
 }
 
@@ -149,11 +162,12 @@ export function outOfOfficeMessage() {
 export function humanHandoffAck(isAfterHours = false) {
   const hours = isAfterHours
     ? "Our human team is offline until 7:30 AM EAT — we'll reply first thing in the morning."
-    : "A team member will reply here shortly (usually within a few hours, 7:30 AM–9 PM EAT).";
+    : "A real person from our team will reply here shortly (usually within a few hours, 7:30 AM–9 PM EAT).";
   return (
     `You're connected with our team 👋\n` +
     `${hours}\n\n` +
-    `🛡️ Reminder: pay only on delivery to Till *${till()}* (*${tillName()}*).\n` +
+    `Not just a bot — we're here to verify orders, answer payment questions, or help you shop with confidence.\n` +
+    `🛡️ Till *${till()}* (${tillName()}). Verify on ${formatPhoneDisplay()} before paying.\n` +
     `Type *menu* anytime to return to the shopping bot.`
   );
 }
@@ -425,7 +439,7 @@ export function scamWarningMessage() {
 export function reviewRequestMessage() {
   return (
     `Delivery Confirmed! Thank you for shopping with Sokoni Mall 🎉🛍️\n\n` +
-    `Because we're in public beta, your feedback means everything.\n` +
+    `Because we're a young, growing business, your feedback means everything.\n` +
     `How was the AI? Delivery speed? Rider professionalism?\n\n` +
     `Leave a public review: ${config.publicSiteUrl || "https://sokonimall.com"}#reviews 🌟\n` +
     `${offerLine("on your next order")}. Asante! 🙏`
