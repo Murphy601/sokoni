@@ -8,6 +8,11 @@ const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
 
 let cachedProducts = null;
 
+/** Clear in-memory cache after admin/catalog writes. */
+export function invalidateProductCache() {
+  cachedProducts = null;
+}
+
 /**
  * Loads the curated product catalog. In v1 this is a static JSON file you
  * (or a VA) maintain by hand with the best products per category. Phase 2

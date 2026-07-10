@@ -30,7 +30,7 @@ import {
   formatPickupReadyMessage,
   rankPickupPointsForLocation,
 } from "./fulfillment.js";
-import { recordDeliveryPayout, getSettlementSummary, markPayoutPaid } from "./settlements.js";
+import { handleCatalogCommand, isCatalogCommand } from "./catalog-admin.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -150,6 +150,7 @@ export function tryRegisterAdminFromMessage(chatId, phone = "", text = "") {
     chatId?.includes("@lid") &&
     config.admin.phones.length === 1 &&
     (containsAdminCommand(text) ||
+      isCatalogCommand(text) ||
       /^admin\b/i.test((text || "").trim()) ||
       /^orders?\b/i.test((text || "").trim()))
   ) {
@@ -189,7 +190,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -233,6 +234,7 @@ export function shouldRouteIncomingAsAdmin(body, parsed) {
   if (/^admin\b/i.test(text)) return true;
   if (/^orders?\b/i.test(text)) return true;
   if (containsAdminCommand(parsed.text)) return true;
+  if (isCatalogCommand(parsed.text)) return true;
   return false;
 }
 
@@ -245,6 +247,7 @@ function isBusinessChat(chatId) {
 function isAdminRelayAttempt(text) {
   const t = normalizeAdminCommand((text || "").trim());
   if (containsAdminCommand(t)) return true;
+  if (isCatalogCommand(t)) return true;
   if (/^admin\b/i.test(t) || /^orders?\b/i.test(t)) return true;
   return false;
 }
@@ -358,6 +361,7 @@ function adminHelpText() {
     `✅ *#paid SK-1042* — mark supplier paid\n` +
     `📣 *#broadcast <message>* — message all customers\n` +
     `🆔 *#SK-1042 <message>* — message customer\n` +
+    `📦 *#catalog* — add/update products (photos + text)\n` +
     `❓ *#help* — this list`
   );
 }
@@ -695,7 +699,7 @@ function getBroadcastRecipients() {
 /** Pull a #command out of longer pasted text (e.g. "Update: #status SK-1002 confirmed"). */
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
-  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby)\b[\s\S]*/i);
+  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find)\b[\s\S]*/i);
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
   if (sk) return sk[0].trim();
@@ -731,6 +735,9 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   if (/^#help\b/i.test(t)) {
     await sendText(adminChatId, adminHelpText());
     return true;
+  }
+  if (isCatalogCommand(t)) {
+    return handleCatalogCommand(adminChatId, t);
   }
   if (/^#orders?\b/i.test(t) || /^orders?\b/i.test(t)) {
     await handleOrdersCommand(adminChatId);

@@ -1,0 +1,568 @@
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import OpenAI from "openai";
+import { config } from "../config.js";
+import { computeRetailPrice, pricingBreakdown } from "./pricing.js";
+import { invalidateProductCache } from "./catalog.js";
+import { downloadWahaMedia, sendText } from "./whatsapp.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.join(__dirname, "..", "..", "..");
+const MASTER_CATALOG = path.join(__dirname, "..", "data", "products.json");
+const IMAGES_DIR = path.join(REPO_ROOT, "website", "assets", "images", "products");
+const BUILD_SCRIPT = path.join(REPO_ROOT, "scripts", "build-site-catalog.mjs");
+const COMMIT_SCRIPT = path.join(REPO_ROOT, "scripts", "commit-catalog.mjs");
+
+const CATEGORY_PREFIX = {
+  "phones-tablets": "pt",
+  "tvs-audio": "ta",
+  appliances: "ap",
+  "health-beauty": "hb",
+  "home-office": "ho",
+  fashion: "fa",
+  computing: "co",
+  gaming: "ga",
+  supermarket: "sm",
+  "baby-products": "bp",
+};
+
+const CATEGORY_EMOJI = {
+  "phones-tablets": "📱",
+  "tvs-audio": "📺",
+  appliances: "🔌",
+  "health-beauty": "💄",
+  "home-office": "🏠",
+  fashion: "👗",
+  computing: "💻",
+  gaming: "🎮",
+  supermarket: "🛒",
+  "baby-products": "🍼",
+};
+
+const VALID_CATEGORIES = Object.keys(CATEGORY_PREFIX);
+
+const CATEGORY_KEYWORDS = [
+  { category: "phones-tablets", words: ["phone", "tecno", "samsung", "iphone", "redmi", "infinix", "tablet", "ipad"] },
+  { category: "tvs-audio", words: ["tv", "television", "speaker", "soundbar", "earbud", "headphone", "hisense"] },
+  { category: "appliances", words: ["fridge", "freezer", "washing", "microwave", "blender", "cooker", "iron"] },
+  { category: "health-beauty", words: ["perfume", "lotion", "cream", "makeup", "soap", "shampoo", "beauty"] },
+  { category: "fashion", words: ["dress", "shirt", "shoe", "sneaker", "bag", "jeans", "suit"] },
+  { category: "computing", words: ["laptop", "computer", "monitor", "keyboard", "mouse", "printer"] },
+  { category: "gaming", words: ["playstation", "xbox", "game", "controller", "ps5", "ps4"] },
+  { category: "supermarket", words: ["rice", "flour", "sugar", "oil", "tea", "coffee", "cereal"] },
+  { category: "baby-products", words: ["diaper", "pampers", "baby", "stroller", "formula"] },
+  { category: "home-office", words: ["chair", "desk", "bed", "mattress", "curtain", "lamp", "furniture"] },
+];
+
+/** @type {Array<{ adminChatId: string, task: () => Promise<void> }>} */
+const queue = [];
+let queueRunning = false;
+let publishTimer = null;
+let pendingPublishCount = 0;
+
+export function isCatalogCommand(text) {
+  const t = (text || "").trim();
+  return /^#(?:catalog|add|price|stock|find)\b/i.test(t);
+}
+
+export function isCatalogMedia(mimetype = "") {
+  const mt = String(mimetype || "").toLowerCase();
+  return mt.startsWith("image/") || mt === "application/pdf";
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function tokenSet(value) {
+  return new Set(normalizeName(value).split(/\s+/).filter((t) => t.length > 1));
+}
+
+function nameSimilarity(a, b) {
+  const ta = tokenSet(a);
+  const tb = tokenSet(b);
+  if (!ta.size || !tb.size) return 0;
+  let overlap = 0;
+  for (const t of ta) if (tb.has(t)) overlap += 1;
+  return overlap / Math.max(ta.size, tb.size);
+}
+
+function inferCategory(name) {
+  const hay = normalizeName(name);
+  let best = { category: "home-office", score: 0 };
+  for (const row of CATEGORY_KEYWORDS) {
+    let score = 0;
+    for (const w of row.words) if (hay.includes(w)) score += 1;
+    if (score > best.score) best = { category: row.category, score };
+  }
+  return best.category;
+}
+
+function slugifySubcategory(name, category) {
+  const words = normalizeName(name).split(/\s+/).slice(0, 2).join("-");
+  return words || category;
+}
+
+function imageKeyForName(name) {
+  return createHash("sha256").update(String(name).trim().toLowerCase()).digest("hex").slice(0, 12);
+}
+
+async function loadMaster() {
+  const raw = await readFile(MASTER_CATALOG, "utf-8");
+  return JSON.parse(raw);
+}
+
+async function saveMaster(products) {
+  await writeFile(MASTER_CATALOG, JSON.stringify(products, null, 2) + "\n", "utf-8");
+  invalidateProductCache();
+}
+
+function nextProductId(products, category) {
+  const prefix = CATEGORY_PREFIX[category] || "ho";
+  let max = 0;
+  for (const p of products) {
+    const m = String(p.id || "").match(new RegExp(`^${prefix}-(\\d+)$`));
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+}
+
+function findStoreProduct(products, query) {
+  const q = String(query || "").trim();
+  if (!q) return null;
+
+  const byId = products.find((p) => p.id === q.toLowerCase() || p.id === q);
+  if (byId) return byId;
+
+  const idMatch = q.match(/\b([a-z]{2}-\d{3})\b/i);
+  if (idMatch) {
+    const hit = products.find((p) => p.id === idMatch[1].toLowerCase());
+    if (hit) return hit;
+  }
+
+  let best = null;
+  let bestScore = 0;
+  for (const p of products) {
+    if (p.fulfillment !== "store" && p.scope !== "local") continue;
+    const score = nameSimilarity(q, p.name);
+    if (score > bestScore) {
+      bestScore = score;
+      best = p;
+    }
+  }
+  return bestScore >= 0.45 ? best : null;
+}
+
+function parseCost(text) {
+  const t = String(text || "");
+  const labeled = t.match(/(?:cost|wholesale|supply|price|kes|ksh)\s*[:=]?\s*([\d,]+(?:\.\d+)?)/i);
+  if (labeled) return Math.round(Number(labeled[1].replace(/,/g, "")));
+
+  const plain = t.match(/\b([\d]{3,7})\b/);
+  if (plain) return Math.round(Number(plain[1].replace(/,/g, "")));
+  return null;
+}
+
+/** Parse: #add Name | category | cost 12000 */
+export function parseAddCommand(text) {
+  const raw = text.replace(/^#add\b/i, "").trim();
+  if (!raw) return { error: "missing_fields" };
+
+  const parts = raw.split("|").map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return { error: "missing_fields" };
+
+  const name = parts[0];
+  let category = null;
+  let cost = null;
+
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i];
+    if (VALID_CATEGORIES.includes(part)) {
+      category = part;
+      continue;
+    }
+    const c = parseCost(part);
+    if (c != null) cost = c;
+  }
+
+  if (cost == null) cost = parseCost(raw);
+  if (!category) category = inferCategory(name);
+  if (!name || cost == null) return { error: "missing_fields", name, category, cost };
+
+  return { name, category, sourcePriceKes: cost, subcategory: slugifySubcategory(name, category) };
+}
+
+/** Parse: #price pt-001 cost 12000  OR  #price Tecno Spark 12000 */
+export function parsePriceCommand(text) {
+  const raw = text.replace(/^#price\b/i, "").trim();
+  if (!raw) return { error: "missing_fields" };
+
+  const pipeParts = raw.split("|").map((s) => s.trim());
+  const query = pipeParts[0];
+  const cost = parseCost(pipeParts[1] || raw);
+  if (!query || cost == null) return { error: "missing_fields", query, cost };
+  return { query, sourcePriceKes: cost };
+}
+
+function formatProductAck(product, { updated = false } = {}) {
+  const bd = pricingBreakdown(product.sourcePriceKes);
+  const verb = updated ? "Updated" : "Added";
+  return (
+    `✅ *${verb}* \`${product.id}\` · ${product.name}\n` +
+    `Cost KES ${bd.supplierPriceKes.toLocaleString()} → Retail *KES ${bd.retailPriceKes.toLocaleString()}*`
+  );
+}
+
+async function saveProductImage(productId, buffer) {
+  if (!existsSync(IMAGES_DIR)) await mkdir(IMAGES_DIR, { recursive: true });
+  const filePath = path.join(IMAGES_DIR, `${productId}.jpg`);
+  await writeFile(filePath, buffer);
+  return `assets/images/products/${productId}.jpg`;
+}
+
+async function upsertStoreProduct(draft, imageBuffer = null) {
+  const products = await loadMaster();
+  const existing = findStoreProduct(products, draft.matchQuery || draft.name);
+  const sourcePriceKes = Math.max(0, Number(draft.sourcePriceKes) || 0);
+  const retail = computeRetailPrice(sourcePriceKes);
+  const category = VALID_CATEGORIES.includes(draft.category) ? draft.category : inferCategory(draft.name);
+
+  let product;
+  let updated = false;
+
+  if (existing && (draft.matchQuery || nameSimilarity(existing.name, draft.name) >= 0.45)) {
+    product = { ...existing };
+    product.name = draft.name || product.name;
+    product.sourcePriceKes = sourcePriceKes;
+    product.priceKes = retail;
+    if (draft.category) product.category = category;
+    if (draft.subcategory) product.subcategory = draft.subcategory;
+    product.inStock = draft.inStock !== false;
+    updated = true;
+    const idx = products.findIndex((p) => p.id === product.id);
+    products[idx] = product;
+  } else {
+    const id = nextProductId(products, category);
+    product = {
+      id,
+      name: draft.name,
+      category,
+      subcategory: draft.subcategory || slugifySubcategory(draft.name, category),
+      sourcePriceKes,
+      priceKes: retail,
+      rating: 4.5,
+      reviews: 0,
+      source: "Sokoni",
+      emoji: CATEGORY_EMOJI[category] || "🛍️",
+      tags: [],
+      scope: "local",
+      fulfillment: "store",
+      payment: "cod",
+      inStock: true,
+    };
+    products.push(product);
+  }
+
+  if (imageBuffer?.length) {
+    product.imageUrl = await saveProductImage(product.id, imageBuffer);
+    product.imageKey = imageKeyForName(product.name);
+  }
+
+  await saveMaster(products);
+  schedulePublish();
+  return { product, updated };
+}
+
+function runNodeScript(scriptPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [scriptPath], {
+      cwd: REPO_ROOT,
+      stdio: "pipe",
+      env: process.env,
+    });
+    let err = "";
+    child.stderr.on("data", (d) => {
+      err += d.toString();
+    });
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(err || `exit ${code}`))));
+  });
+}
+
+function schedulePublish() {
+  pendingPublishCount += 1;
+  if (publishTimer) clearTimeout(publishTimer);
+  publishTimer = setTimeout(() => {
+    publishTimer = null;
+    const count = pendingPublishCount;
+    pendingPublishCount = 0;
+    publishCatalog({ count }).catch((err) => console.error("[catalog-admin] publish failed:", err.message));
+  }, config.catalog.publishDebounceMs);
+}
+
+async function publishCatalog({ count = 1, adminChatId = null } = {}) {
+  console.log("[catalog-admin] publishing catalog…");
+  await runNodeScript(BUILD_SCRIPT);
+  if (config.catalog.autoPush) {
+    try {
+      await runNodeScript(COMMIT_SCRIPT);
+      if (adminChatId) {
+        await sendText(
+          adminChatId,
+          `📦 *Catalog live* — ${count} change${count === 1 ? "" : "s"} synced to site.\n` +
+            `_Pushed to GitHub; Cloudflare deploys in ~1–2 min._`
+        );
+      }
+    } catch (err) {
+      console.warn("[catalog-admin] git push failed:", err.message);
+      if (adminChatId) {
+        await sendText(
+          adminChatId,
+          `⚠️ Catalog saved locally but git push failed.\nRun on server:\n\`node scripts/commit-catalog.mjs\``
+        );
+      }
+    }
+  } else if (adminChatId) {
+    await sendText(
+      adminChatId,
+      `📦 Catalog rebuilt (${count} item${count === 1 ? "" : "s"}).\n` +
+        `_Set CATALOG_AUTO_PUSH=true on server to auto-publish to site._`
+    );
+  }
+}
+
+let visionClient = null;
+function getVisionClient() {
+  if (!config.openai.apiKey) return null;
+  if (!visionClient) {
+    visionClient = new OpenAI({
+      apiKey: config.openai.apiKey,
+      baseURL: config.openai.baseUrl,
+      defaultHeaders: {
+        "HTTP-Referer": config.publicSiteUrl || "http://localhost:3001",
+        "X-Title": config.brand.name,
+      },
+    });
+  }
+  return visionClient;
+}
+
+async function extractFromImage(buffer, mimetype, caption = "") {
+  const client = getVisionClient();
+  if (!client) throw new Error("OPENAI_API_KEY not set — vision OCR unavailable");
+
+  const base64 = buffer.toString("base64");
+  const dataUrl = `data:${mimetype || "image/jpeg"};base64,${base64}`;
+
+  const prompt =
+    `Read this Kenyan retail store product photo (packaging and/or handwritten/printed price label).\n` +
+    `Extract product name and the STORE COST price in Kenyan Shillings (KES) — the wholesale/tag price, not retail markup.\n` +
+    `Pick category from: ${VALID_CATEGORIES.join(", ")}.\n` +
+    (caption ? `WhatsApp caption (may override name/price): "${caption}"\n` : "") +
+    `Reply with ONLY JSON, no markdown:\n` +
+    `{"name":"Product Name","sourcePriceKes":1234,"category":"phones-tablets","subcategory":"smartphones"}\n` +
+    `If unreadable: {"error":"brief reason"}`;
+
+  const response = await client.chat.completions.create({
+    model: config.catalog.visionModel,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: dataUrl } },
+        ],
+      },
+    ],
+    max_tokens: 300,
+    temperature: 0.1,
+  });
+
+  const raw = response.choices[0]?.message?.content?.trim() || "";
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Vision model returned no JSON");
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (parsed.error) throw new Error(parsed.error);
+
+  if (caption) {
+    const capCost = parseCost(caption);
+    const capName = caption.replace(/(?:cost|wholesale|supply|price|kes|ksh)\s*[:=]?\s*[\d,]+/gi, "").trim();
+    if (capCost != null) parsed.sourcePriceKes = capCost;
+    if (capName && capName.length > 2) parsed.name = capName;
+  }
+
+  if (!parsed.name || !parsed.sourcePriceKes) throw new Error("Could not read name and price from image");
+  if (!VALID_CATEGORIES.includes(parsed.category)) parsed.category = inferCategory(parsed.name);
+  parsed.sourcePriceKes = Math.round(Number(parsed.sourcePriceKes));
+  return parsed;
+}
+
+function enqueue(adminChatId, task) {
+  queue.push({ adminChatId, task });
+  drainQueue();
+}
+
+async function drainQueue() {
+  if (queueRunning) return;
+  queueRunning = true;
+  while (queue.length > 0) {
+    const { adminChatId, task } = queue.shift();
+    try {
+      await task();
+    } catch (err) {
+      console.error("[catalog-admin] task failed:", err.message);
+      try {
+        await sendText(adminChatId, `⚠️ Catalog error: ${err.message}`);
+      } catch {}
+    }
+  }
+  queueRunning = false;
+}
+
+export function catalogHelpText() {
+  return (
+    `📦 *Catalog commands* (admin)\n\n` +
+    `*Add by text:*\n` +
+    `#add Product name | category | cost 12000\n` +
+    `_category optional — bot guesses from name_\n\n` +
+    `*Update price:*\n` +
+    `#price pt-001 cost 11500\n` +
+    `#price Tecno Spark 20 | cost 13499\n\n` +
+    `*Stock:*\n` +
+    `#stock pt-001 off` + ` — hide from shop\n` +
+    `#stock pt-001 on` + ` — show again\n\n` +
+    `*Search:* #find tecno\n\n` +
+    `*Photos (auto — no confirm):*\n` +
+    `Forward or send store product photos (with price labels) to this chat.\n` +
+    `Optional caption: \`Tecno Spark cost 12000\`\n` +
+    `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
+    `Categories: ${VALID_CATEGORIES.join(", ")}`
+  );
+}
+
+export async function handleCatalogCommand(adminChatId, text) {
+  const t = (text || "").trim();
+
+  if (/^#catalog\b/i.test(t) || /^#catalog\s+help\b/i.test(t)) {
+    await sendText(adminChatId, catalogHelpText());
+    return true;
+  }
+
+  if (/^#find\b/i.test(t)) {
+    const q = t.replace(/^#find\b/i, "").trim();
+    const products = await loadMaster();
+    const hits = products
+      .filter((p) => p.fulfillment === "store")
+      .map((p) => ({ p, score: nameSimilarity(q, p.name) }))
+      .filter((x) => x.score > 0.2)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+    if (!hits.length) {
+      await sendText(adminChatId, `No store items matching *${q}*.`);
+      return true;
+    }
+    const lines = hits.map(
+      ({ p }) =>
+        `\`${p.id}\` ${p.name} — cost ${p.sourcePriceKes?.toLocaleString() || "?"} → retail ${p.priceKes?.toLocaleString() || "?"}`
+    );
+    await sendText(adminChatId, `🔎 *Matches for "${q}"*\n\n${lines.join("\n")}`);
+    return true;
+  }
+
+  if (/^#add\b/i.test(t)) {
+    const draft = parseAddCommand(t);
+    if (draft.error) {
+      await sendText(
+        adminChatId,
+        `⚠️ Usage: #add Product name | phones-tablets | cost 12000\n\n${catalogHelpText()}`
+      );
+      return true;
+    }
+    const { product, updated } = await upsertStoreProduct(draft);
+    await sendText(adminChatId, formatProductAck(product, { updated }));
+    return true;
+  }
+
+  if (/^#price\b/i.test(t)) {
+    const parsed = parsePriceCommand(t);
+    if (parsed.error) {
+      await sendText(adminChatId, `⚠️ Usage: #price pt-001 cost 12000`);
+      return true;
+    }
+    const products = await loadMaster();
+    const existing = findStoreProduct(products, parsed.query);
+    if (!existing) {
+      await sendText(adminChatId, `⚠️ No product found for *${parsed.query}*. Try #find ${parsed.query}`);
+      return true;
+    }
+    const { product, updated } = await upsertStoreProduct({
+      name: existing.name,
+      category: existing.category,
+      subcategory: existing.subcategory,
+      sourcePriceKes: parsed.sourcePriceKes,
+      matchQuery: existing.id,
+    });
+    await sendText(adminChatId, formatProductAck(product, { updated: true }));
+    return true;
+  }
+
+  if (/^#stock\b/i.test(t)) {
+    const m = t.match(/^#stock\s+(\S+)\s+(on|off)\b/i);
+    if (!m) {
+      await sendText(adminChatId, `⚠️ Usage: #stock pt-001 off`);
+      return true;
+    }
+    const products = await loadMaster();
+    const existing = findStoreProduct(products, m[1]);
+    if (!existing) {
+      await sendText(adminChatId, `⚠️ Product *${m[1]}* not found.`);
+      return true;
+    }
+    existing.inStock = m[2].toLowerCase() === "on";
+    const idx = products.findIndex((p) => p.id === existing.id);
+    products[idx] = existing;
+    await saveMaster(products);
+    schedulePublish();
+    await sendText(
+      adminChatId,
+      `${existing.inStock ? "✅" : "🚫"} *${existing.id}* ${existing.name} — ${existing.inStock ? "back in shop" : "hidden from shop"}`
+    );
+    return true;
+  }
+
+  return false;
+}
+
+export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype, caption = "", messageId, chatId, session }) {
+  if (!isCatalogMedia(mediaMimetype)) {
+    await sendText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG) or PDF with a visible price label.");
+    return true;
+  }
+
+  enqueue(adminChatId, async () => {
+    await sendText(adminChatId, "⏳ Reading product photo…");
+
+    let buffer;
+    try {
+      buffer = await downloadWahaMedia(mediaUrl, { messageId, chatId, session });
+    } catch (err) {
+      throw new Error(`Could not download image: ${err.message}`);
+    }
+
+    if (String(mediaMimetype).includes("pdf")) {
+      throw new Error("PDF not supported yet — photograph the price label and send as image.");
+    }
+
+    const draft = await extractFromImage(buffer, mediaMimetype, caption);
+    const { product, updated } = await upsertStoreProduct(draft, buffer);
+    await sendText(adminChatId, formatProductAck(product, { updated }));
+  });
+
+  return true;
+}

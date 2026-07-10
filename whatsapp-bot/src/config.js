@@ -22,6 +22,12 @@ export const config = {
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
     model: process.env.OPENAI_MODEL || "nvidia/nemotron-nano-9b-v2:free",
   },
+  /** WhatsApp admin catalog intake (photos + #add / #price). */
+  catalog: {
+    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.0-flash-001",
+    autoPush: process.env.CATALOG_AUTO_PUSH === "true",
+    publishDebounceMs: Number(process.env.CATALOG_PUBLISH_DEBOUNCE_MS) || 30_000,
+  },
   affiliates: {
     kilimall: process.env.KILIMALL_AFFILIATE_ID || "demo-kilimall",
     jumia: process.env.JUMIA_AFFILIATE_ID || "demo-jumia",

@@ -38,15 +38,52 @@ export function formatCustomerLabel(meta, fallbackKey) {
   return parts.join(" · ") || fallbackKey || "Unknown customer";
 }
 
+function wahaHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (config.waha.apiKey) headers["X-Api-Key"] = config.waha.apiKey;
+  return headers;
+}
+
 async function callWaha(endpoint, body) {
   if (!config.waha.apiUrl) {
     console.log("[waha:dry-run]", endpoint, JSON.stringify(body, null, 2));
     return { dryRun: true };
   }
-  const headers = { "Content-Type": "application/json" };
-  if (config.waha.apiKey) headers["X-Api-Key"] = config.waha.apiKey;
-  const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, { headers });
+  const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, {
+    headers: wahaHeaders({ "Content-Type": "application/json" }),
+  });
   return data;
+}
+
+/** Download media from WAHA (image/PDF from WhatsApp message). */
+export async function downloadWahaMedia(mediaUrl, { messageId, chatId, session } = {}) {
+  if (!config.waha.apiUrl) {
+    throw new Error("WAHA_API_URL not set");
+  }
+
+  const headers = wahaHeaders();
+  let url = mediaUrl;
+
+  if (!url && messageId && chatId) {
+    const sid = session || config.waha.session;
+    const mid = encodeURIComponent(messageId);
+    const cid = encodeURIComponent(chatId);
+    url = `${config.waha.apiUrl}/api/${sid}/chats/${cid}/messages/${mid}?downloadMedia=true`;
+  }
+
+  if (!url) throw new Error("No media URL on message");
+
+  try {
+    const { data } = await axios.get(url, { headers, responseType: "arraybuffer", timeout: 90_000 });
+    return Buffer.from(data);
+  } catch (err) {
+    if (url.includes("localhost") && config.waha.apiUrl && !config.waha.apiUrl.includes("localhost")) {
+      const fixed = url.replace(/https?:\/\/[^/]+/, config.waha.apiUrl);
+      const { data } = await axios.get(fixed, { headers, responseType: "arraybuffer", timeout: 90_000 });
+      return Buffer.from(data);
+    }
+    throw err;
+  }
 }
 
 /**

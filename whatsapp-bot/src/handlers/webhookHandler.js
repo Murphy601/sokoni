@@ -20,7 +20,9 @@ import {
 } from "../services/session.js";
 import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText } from "../services/admin.js";
+import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
+import { handleCatalogCommand, handleCatalogMedia, isCatalogCommand, isCatalogMedia } from "../services/catalog-admin.js";
+import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
@@ -80,16 +82,36 @@ function messageIdFrom(payload) {
   return payload?._data?.id?._serialized || payload?._data?.id?.id || null;
 }
 
+function extractMedia(payload) {
+  const media = payload?.media || payload?._data?.media || null;
+  return {
+    hasMedia: Boolean(payload?.hasMedia && (media?.url || payload?.id)),
+    mediaUrl: media?.url || null,
+    mediaMimetype: media?.mimetype || media?.mimeType || "image/jpeg",
+    mediaFilename: media?.filename || null,
+  };
+}
+
+function isSelfOrBusinessChat(chatId) {
+  if (!chatId) return false;
+  const digits = phoneDigitsFromChatId(chatId);
+  const business = String(config.store.businessNumber || "").replace(/\D/g, "");
+  if (!digits || !business) return false;
+  return digits === business || digits.endsWith(business.slice(-9));
+}
+
 export function parseWahaMessage(body) {
   // WAHA delivers incoming via "message" and the bot's OWN outgoing via
   // "message.any". We subscribe to message.any so admin actions are seen too.
   if (body?.event !== "message" && body?.event !== "message.any") return null;
   const payload = body.payload;
-  if (!payload || !payload.body?.trim()) return null;
-  if (payload.hasMedia && !payload.body) return null;
+  if (!payload) return null;
+
+  const text = String(payload.body || "").trim();
+  const mediaInfo = extractMedia(payload);
+  if (!text && !mediaInfo.hasMedia) return null;
   if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
 
-  const text = payload.body.trim();
   const quotedText = extractQuotedText(payload);
   const messageId = messageIdFrom(payload);
 
@@ -101,6 +123,8 @@ export function parseWahaMessage(body) {
       toChatId: customerKeyFromChatId(payload.to),
       text,
       quotedText,
+      session: body.session || config.waha.session,
+      ...mediaInfo,
     };
   }
 
@@ -114,8 +138,53 @@ export function parseWahaMessage(body) {
     text,
     quotedText,
     combinedText,
+    session: body.session || config.waha.session,
+    ...mediaInfo,
     ...meta,
   };
+}
+
+function shouldRouteAdminCatalog(parsed) {
+  if (!parsed.hasMedia || !isCatalogMedia(parsed.mediaMimetype)) return false;
+
+  if (parsed.direction === "incoming") {
+    return canRunAdminCommands(parsed.customerKey, parsed.phone);
+  }
+
+  if (parsed.direction === "outgoing") {
+    const fromPhone = phoneDigitsFromChatId(parsed.fromChatId);
+    const allowBusinessOwner = isBusinessOwnerSender(parsed.fromChatId);
+    if (!canRunAdminCommands(parsed.fromChatId, fromPhone, { allowBusinessOwner })) return false;
+    if (isSelfOrBusinessChat(parsed.toChatId)) return true;
+    if (isCatalogCommand(parsed.text) || /\b(cost|price|kes|ksh)\s*[:=]?\s*\d/i.test(parsed.text)) return true;
+    return false;
+  }
+
+  return false;
+}
+
+async function routeAdminCatalog(parsed) {
+  const adminChatId =
+    parsed.direction === "incoming"
+      ? parsed.customerKey
+      : parsed.fromChatId || config.admin.primary;
+
+  if (parsed.hasMedia && shouldRouteAdminCatalog(parsed)) {
+    return handleCatalogMedia(adminChatId, {
+      mediaUrl: parsed.mediaUrl,
+      mediaMimetype: parsed.mediaMimetype,
+      caption: parsed.text,
+      messageId: parsed.messageId,
+      chatId: parsed.direction === "incoming" ? parsed.customerKey : parsed.toChatId,
+      session: parsed.session,
+    });
+  }
+
+  if (parsed.text && isCatalogCommand(parsed.text)) {
+    return handleCatalogCommand(adminChatId, parsed.text);
+  }
+
+  return false;
 }
 
 async function tryProductSearch(customerKey, text) {
@@ -408,7 +477,12 @@ export async function handleIncomingMessage(
 
 function looksLikeAdminAction(text, fromChatId) {
   const trimmed = (text || "").trim();
-  if (!containsAdminCommand(text) && !/^orders?\b/i.test(trimmed) && !/^admin\b/i.test(trimmed)) {
+  if (
+    !containsAdminCommand(text) &&
+    !isCatalogCommand(text) &&
+    !/^orders?\b/i.test(trimmed) &&
+    !/^admin\b/i.test(trimmed)
+  ) {
     return false;
   }
   const phone = phoneDigitsFromChatId(fromChatId);
@@ -426,12 +500,20 @@ export async function handleWahaWebhook(body) {
     if (
       !looksLikeAdminAction(parsed.text, parsed.fromChatId) &&
       !isAdminQuickStatusText(parsed.text) &&
+      !shouldRouteAdminCatalog(parsed) &&
       isBotEcho(parsed.messageId, parsed.toChatId)
     ) {
       return;
     }
+
+    const catalogHandled = await routeAdminCatalog(parsed);
+    if (catalogHandled) return catalogHandled;
+
     return handleAdminOutgoing(parsed);
   }
+
+  const catalogHandled = await routeAdminCatalog(parsed);
+  if (catalogHandled) return catalogHandled;
 
   if (shouldRouteIncomingAsAdmin(body, parsed)) {
     const handled = await handleAdminIncoming({
@@ -440,6 +522,8 @@ export async function handleWahaWebhook(body) {
     });
     if (handled !== false) return handled;
   }
+
+  if (!parsed.text) return;
 
   return handleIncomingMessage(parsed.customerKey, parsed.text, {
     quotedText: parsed.quotedText,
