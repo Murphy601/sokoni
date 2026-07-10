@@ -8,7 +8,8 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import { computeRetailPrice, pricingBreakdown } from "./pricing.js";
 import { invalidateProductCache } from "./catalog.js";
-import { downloadWahaMedia, sendText } from "./whatsapp.js";
+import { downloadWahaMedia, sendText, phoneDigitsFromChatId } from "./whatsapp.js";
+import { isAdminSender, canRunAdminCommands } from "./admin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -16,6 +17,29 @@ const MASTER_CATALOG = path.join(__dirname, "..", "data", "products.json");
 const IMAGES_DIR = path.join(REPO_ROOT, "website", "assets", "images", "products");
 const BUILD_SCRIPT = path.join(REPO_ROOT, "scripts", "build-site-catalog.mjs");
 const COMMIT_SCRIPT = path.join(REPO_ROOT, "scripts", "commit-catalog.mjs");
+
+/** Admin-only inbox — never customer order chats. */
+function resolveAdminNotifyChat(contextChatId = null) {
+  if (contextChatId && isAdminSender(contextChatId)) return contextChatId;
+  for (const p of config.admin.phones) {
+    const id = `${String(p).replace(/\D/g, "")}@c.us`;
+    if (isAdminSender(id, p)) return id;
+  }
+  if (config.admin.primary) {
+    return `${String(config.admin.primary).replace(/\D/g, "")}@c.us`;
+  }
+  return null;
+}
+
+/** Catalog ops (cost, sync, OCR) — admin eyes only, never shoppers. */
+async function sendAdminOnlyText(contextChatId, text) {
+  const to = resolveAdminNotifyChat(contextChatId);
+  if (!to || !isAdminSender(to)) {
+    console.log("[catalog-admin] admin notify skipped");
+    return;
+  }
+  await sendText(to, text);
+}
 
 const CATEGORY_PREFIX = {
   "phones-tablets": "pt",
@@ -385,7 +409,7 @@ function schedulePublish(adminChatId = null) {
     publishCatalog({ count, adminChatId: lastCatalogAdminChatId }).catch((err) => {
       console.error("[catalog-admin] publish failed:", err.message);
       if (lastCatalogAdminChatId) {
-        sendText(
+        sendAdminOnlyText(
           lastCatalogAdminChatId,
           `⚠️ *Catalog sync failed*\n${err.message}\n\nRun on server:\n\`node scripts/publish-catalog-now.mjs\`\nOr WhatsApp: *#sync*`
         ).catch(() => {});
@@ -403,7 +427,7 @@ export async function forcePublishCatalog(adminChatId) {
   }
   const count = Math.max(pendingPublishCount, 1);
   pendingPublishCount = 0;
-  await sendText(adminChatId, "⏳ Syncing catalog to website…");
+  await sendAdminOnlyText(adminChatId, "⏳ Syncing catalog to website…");
   await publishCatalog({ count, adminChatId });
 }
 
@@ -414,7 +438,7 @@ async function publishCatalog({ count = 1, adminChatId = null } = {}) {
     try {
       await runNodeScript(COMMIT_SCRIPT);
       if (adminChatId) {
-        await sendText(
+        await sendAdminOnlyText(
           adminChatId,
           `📦 *Catalog live* — ${count} change${count === 1 ? "" : "s"} synced to site.\n` +
             `_Pushed to GitHub; Cloudflare deploys in ~1–2 min._`
@@ -423,14 +447,14 @@ async function publishCatalog({ count = 1, adminChatId = null } = {}) {
     } catch (err) {
       console.warn("[catalog-admin] git push failed:", err.message);
       if (adminChatId) {
-        await sendText(
+        await sendAdminOnlyText(
           adminChatId,
           `⚠️ Catalog saved locally but git push failed.\nRun on server:\n\`node scripts/commit-catalog.mjs\``
         );
       }
     }
   } else if (adminChatId) {
-    await sendText(
+    await sendAdminOnlyText(
       adminChatId,
       `📦 Catalog rebuilt (${count} item${count === 1 ? "" : "s"}).\n` +
         `_Set CATALOG_AUTO_PUSH=true on server to auto-publish to site._`
@@ -526,7 +550,7 @@ async function drainQueue() {
     } catch (err) {
       console.error("[catalog-admin] task failed:", err.message);
       try {
-        await sendText(adminChatId, `⚠️ Catalog error: ${err.message}`);
+        await sendAdminOnlyText(adminChatId, `⚠️ Catalog error: ${err.message}`);
       } catch {}
     }
   }
@@ -557,6 +581,8 @@ export function catalogHelpText() {
 
 export async function handleCatalogCommand(adminChatId, text) {
   const t = (text || "").trim();
+  const phone = phoneDigitsFromChatId(adminChatId) || "";
+  if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
 
   if (/^#sync\b/i.test(t)) {
@@ -565,7 +591,7 @@ export async function handleCatalogCommand(adminChatId, text) {
   }
 
   if (/^#catalog\b/i.test(t) || /^#catalog\s+help\b/i.test(t)) {
-    await sendText(adminChatId, catalogHelpText());
+    await sendAdminOnlyText(adminChatId, catalogHelpText());
     return true;
   }
 
@@ -579,41 +605,41 @@ export async function handleCatalogCommand(adminChatId, text) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
     if (!hits.length) {
-      await sendText(adminChatId, `No store items matching *${q}*.`);
+      await sendAdminOnlyText(adminChatId, `No store items matching *${q}*.`);
       return true;
     }
     const lines = hits.map(
       ({ p }) =>
         `\`${p.id}\` ${p.name} — cost ${p.sourcePriceKes?.toLocaleString() || "?"} → retail ${p.priceKes?.toLocaleString() || "?"}`
     );
-    await sendText(adminChatId, `🔎 *Matches for "${q}"*\n\n${lines.join("\n")}`);
+    await sendAdminOnlyText(adminChatId, `🔎 *Matches for "${q}"*\n\n${lines.join("\n")}`);
     return true;
   }
 
   if (/^#add\b/i.test(t)) {
     const draft = parseAddCommand(t);
     if (draft.error) {
-      await sendText(
+      await sendAdminOnlyText(
         adminChatId,
         `⚠️ Usage: #add Product name | phones-tablets | cost 12000\n\n${catalogHelpText()}`
       );
       return true;
     }
     const { product, updated } = await upsertStoreProduct(draft);
-    await sendText(adminChatId, formatProductAck(product, { updated }));
+    await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
     return true;
   }
 
   if (/^#price\b/i.test(t)) {
     const parsed = parsePriceCommand(t);
     if (parsed.error) {
-      await sendText(adminChatId, `⚠️ Usage: #price pt-001 cost 12000`);
+      await sendAdminOnlyText(adminChatId, `⚠️ Usage: #price pt-001 cost 12000`);
       return true;
     }
     const products = await loadMaster();
     const existing = findStoreProduct(products, parsed.query);
     if (!existing) {
-      await sendText(adminChatId, `⚠️ No product found for *${parsed.query}*. Try #find ${parsed.query}`);
+      await sendAdminOnlyText(adminChatId, `⚠️ No product found for *${parsed.query}*. Try #find ${parsed.query}`);
       return true;
     }
     const { product, updated } = await upsertStoreProduct({
@@ -623,20 +649,20 @@ export async function handleCatalogCommand(adminChatId, text) {
       sourcePriceKes: parsed.sourcePriceKes,
       matchQuery: existing.id,
     });
-    await sendText(adminChatId, formatProductAck(product, { updated: true }));
+    await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated: true }));
     return true;
   }
 
   if (/^#stock\b/i.test(t)) {
     const m = t.match(/^#stock\s+(\S+)\s+(on|off)\b/i);
     if (!m) {
-      await sendText(adminChatId, `⚠️ Usage: #stock pt-001 off`);
+      await sendAdminOnlyText(adminChatId, `⚠️ Usage: #stock pt-001 off`);
       return true;
     }
     const products = await loadMaster();
     const existing = findStoreProduct(products, m[1]);
     if (!existing) {
-      await sendText(adminChatId, `⚠️ Product *${m[1]}* not found.`);
+      await sendAdminOnlyText(adminChatId, `⚠️ Product *${m[1]}* not found.`);
       return true;
     }
     existing.inStock = m[2].toLowerCase() === "on";
@@ -644,7 +670,7 @@ export async function handleCatalogCommand(adminChatId, text) {
     products[idx] = existing;
     await saveMaster(products);
     schedulePublish(adminChatId);
-    await sendText(
+    await sendAdminOnlyText(
       adminChatId,
       `${existing.inStock ? "✅" : "🚫"} *${existing.id}* ${existing.name} — ${existing.inStock ? "back in shop" : "hidden from shop"}`
     );
@@ -655,14 +681,16 @@ export async function handleCatalogCommand(adminChatId, text) {
 }
 
 export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype, caption = "", messageId, chatId, session }) {
+  const phone = phoneDigitsFromChatId(adminChatId) || "";
+  if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
   if (!isCatalogMedia(mediaMimetype)) {
-    await sendText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG) or PDF with a visible price label.");
+    await sendAdminOnlyText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG) or PDF with a visible price label.");
     return true;
   }
 
   enqueue(adminChatId, async () => {
-    await sendText(adminChatId, "⏳ Reading product photo…");
+    await sendAdminOnlyText(adminChatId, "⏳ Reading product photo…");
 
     let buffer;
     try {
@@ -677,7 +705,7 @@ export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype,
 
     const draft = await extractFromImage(buffer, mediaMimetype, caption);
     const { product, updated } = await upsertStoreProduct(draft, buffer);
-    await sendText(adminChatId, formatProductAck(product, { updated }));
+    await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
   });
 
   return true;

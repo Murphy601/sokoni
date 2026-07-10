@@ -155,22 +155,25 @@ function shouldRouteAdminCatalog(parsed) {
     const fromPhone = phoneDigitsFromChatId(parsed.fromChatId);
     const allowBusinessOwner = isBusinessOwnerSender(parsed.fromChatId);
     if (!canRunAdminCommands(parsed.fromChatId, fromPhone, { allowBusinessOwner })) return false;
-    if (isSelfOrBusinessChat(parsed.toChatId)) return true;
-    if (isCatalogCommand(parsed.text) || /\b(cost|price|kes|ksh)\s*[:=]?\s*\d/i.test(parsed.text)) return true;
-    return false;
+    // Only ingest catalog photos in self-chat — never while replying to a customer thread.
+    return isSelfOrBusinessChat(parsed.toChatId);
   }
 
   return false;
 }
 
 async function routeAdminCatalog(parsed) {
-  const adminChatId =
-    parsed.direction === "incoming"
-      ? parsed.customerKey
-      : parsed.fromChatId || config.admin.primary;
+  const phone =
+    parsed.phone ||
+    phoneDigitsFromChatId(parsed.customerKey || parsed.fromChatId) ||
+    "";
+  const chatId =
+    parsed.direction === "incoming" ? parsed.customerKey : parsed.fromChatId || config.admin.primary;
+  const allowBusinessOwner =
+    parsed.direction === "outgoing" && isBusinessOwnerSender(parsed.fromChatId);
 
   if (parsed.hasMedia && shouldRouteAdminCatalog(parsed)) {
-    return handleCatalogMedia(adminChatId, {
+    return handleCatalogMedia(chatId, {
       mediaUrl: parsed.mediaUrl,
       mediaMimetype: parsed.mediaMimetype,
       caption: parsed.text,
@@ -181,7 +184,8 @@ async function routeAdminCatalog(parsed) {
   }
 
   if (parsed.text && isCatalogCommand(parsed.text)) {
-    return handleCatalogCommand(adminChatId, parsed.text);
+    if (!canRunAdminCommands(chatId, phone, { allowBusinessOwner })) return false;
+    return handleCatalogCommand(chatId, parsed.text);
   }
 
   return false;
