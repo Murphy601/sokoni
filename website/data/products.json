@@ -20472,7 +20472,7 @@
   },
   {
     "id": "fa-009",
-    "name": "DLGM Women's Flat Sandals with Studs - Beige",
+    "name": "Assorted NICE STYLE Women's Flat Sandals (3 styles)",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20562,7 +20562,7 @@
   },
   {
     "id": "fa-015",
-    "name": "Women's Bow Flat Sandals - White/Brown",
+    "name": "Assorted Women's Embellished Slide Sandals",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20577,7 +20577,7 @@
   },
   {
     "id": "fa-016",
-    "name": "DLGM Women's Slide Sandals - Green Croc Print with Gold Medallion",
+    "name": "Women's Flat Slide Sandals - Black with Gold Buckle",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20592,7 +20592,7 @@
   },
   {
     "id": "fa-017",
-    "name": "Fashion World Women's Flat Sandals - White with Gold Buckle",
+    "name": "Women's Flat Sandals with Gold-tone Logo - Pink and Black",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20607,7 +20607,7 @@
   },
   {
     "id": "fa-018",
-    "name": "Assorted Women's Flat Sandals (3 colours)",
+    "name": "DLGM Women's Rhinestone Flat Sandals - Pink",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20622,7 +20622,7 @@
   },
   {
     "id": "fa-019",
-    "name": "Assorted Women's Patent Leather Slide Sandals with Rhinestone Detail",
+    "name": "Women's Slide Sandals with Rhinestone Detail - Brown",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20637,7 +20637,7 @@
   },
   {
     "id": "fa-020",
-    "name": "Women's DIOR Slide Sandals - Yellow Croc Print",
+    "name": "ZARA Women's Denim Slide Sandals - Blue",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20652,7 +20652,7 @@
   },
   {
     "id": "fa-021",
-    "name": "Wisteria Women's Buckle Slide Sandals - Black",
+    "name": "Bibas Women's Flat Sandals with Patterned Straps - Assorted Colors",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20667,7 +20667,7 @@
   },
   {
     "id": "fa-022",
-    "name": "AIMEIGAO Women's Rhinestone Flat Sandals - Gold and White",
+    "name": "NICE STYLE Women's Rhinestone Flat Sandals (3 colours)",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20682,7 +20682,7 @@
   },
   {
     "id": "fa-023",
-    "name": "NICE STYLE Women's Rhinestone Flat Sandals - Assorted Colors",
+    "name": "BiBas Women's Chain Detail Flat Sandals - Assorted (Black, Silver, Gold)",
     "category": "fashion",
     "priceKes": 250,
     "rating": 4.5,
@@ -20693,6 +20693,21 @@
     "fulfillment": "store",
     "payment": "cod",
     "imageUrl": "assets/images/products/fa-023.jpg",
+    "subcategory": "shoes"
+  },
+  {
+    "id": "fa-024",
+    "name": "Assorted Women's H-Strap Slide Sandals by BiBas",
+    "category": "fashion",
+    "priceKes": 250,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-024.jpg",
     "subcategory": "shoes"
   }
 ]
