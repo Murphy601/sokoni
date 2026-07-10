@@ -120,10 +120,18 @@ const queue = [];
 let queueRunning = false;
 let publishTimer = null;
 let pendingPublishCount = 0;
+let lastCatalogAdminChatId = null;
+
+const GIT_SCRIPT_ENV = {
+  GIT_AUTHOR_NAME: "sokoni-bot",
+  GIT_AUTHOR_EMAIL: "bot@sokonimall.com",
+  GIT_COMMITTER_NAME: "sokoni-bot",
+  GIT_COMMITTER_EMAIL: "bot@sokonimall.com",
+};
 
 export function isCatalogCommand(text) {
   const t = (text || "").trim();
-  return /^#(?:catalog|add|price|stock|find)\b/i.test(t);
+  return /^#(?:catalog|add|price|stock|find|sync)\b/i.test(t);
 }
 
 export function isCatalogMedia(mimetype = "") {
@@ -335,7 +343,7 @@ async function upsertStoreProduct(draft, imageBuffer = null) {
   }
 
   await saveMaster(products);
-  schedulePublish();
+  schedulePublish(lastCatalogAdminChatId);
   return { product, updated };
 }
 
@@ -344,25 +352,59 @@ function runNodeScript(scriptPath) {
     const child = spawn(process.execPath, [scriptPath], {
       cwd: REPO_ROOT,
       stdio: "pipe",
-      env: process.env,
+      env: { ...process.env, ...GIT_SCRIPT_ENV },
     });
+    let out = "";
     let err = "";
-    child.stderr.on("data", (d) => {
-      err += d.toString();
+    child.stdout.on("data", (d) => {
+      const s = d.toString();
+      out += s;
+      console.log("[catalog-script]", s.trim());
     });
-    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(err || `exit ${code}`))));
+    child.stderr.on("data", (d) => {
+      const s = d.toString();
+      err += s;
+      console.error("[catalog-script]", s.trim());
+    });
+    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(err || out || `exit ${code}`))));
   });
 }
 
-function schedulePublish() {
+function trackCatalogAdmin(adminChatId) {
+  if (adminChatId) lastCatalogAdminChatId = adminChatId;
+}
+
+function schedulePublish(adminChatId = null) {
+  trackCatalogAdmin(adminChatId);
   pendingPublishCount += 1;
   if (publishTimer) clearTimeout(publishTimer);
   publishTimer = setTimeout(() => {
     publishTimer = null;
     const count = pendingPublishCount;
     pendingPublishCount = 0;
-    publishCatalog({ count }).catch((err) => console.error("[catalog-admin] publish failed:", err.message));
+    publishCatalog({ count, adminChatId: lastCatalogAdminChatId }).catch((err) => {
+      console.error("[catalog-admin] publish failed:", err.message);
+      if (lastCatalogAdminChatId) {
+        sendText(
+          lastCatalogAdminChatId,
+          `⚠️ *Catalog sync failed*\n${err.message}\n\nRun on server:\n\`node scripts/publish-catalog-now.mjs\`\nOr WhatsApp: *#sync*`
+        ).catch(() => {});
+      }
+    });
   }, config.catalog.publishDebounceMs);
+}
+
+/** Force immediate rebuild + git push (admin #sync). */
+export async function forcePublishCatalog(adminChatId) {
+  trackCatalogAdmin(adminChatId);
+  if (publishTimer) {
+    clearTimeout(publishTimer);
+    publishTimer = null;
+  }
+  const count = Math.max(pendingPublishCount, 1);
+  pendingPublishCount = 0;
+  await sendText(adminChatId, "⏳ Syncing catalog to website…");
+  await publishCatalog({ count, adminChatId });
 }
 
 async function publishCatalog({ count = 1, adminChatId = null } = {}) {
@@ -504,6 +546,7 @@ export function catalogHelpText() {
     `#stock pt-001 off` + ` — hide from shop\n` +
     `#stock pt-001 on` + ` — show again\n\n` +
     `*Search:* #find tecno\n\n` +
+    `*Push to website:* #sync\n\n` +
     `*Photos (auto — no confirm):*\n` +
     `Forward or send store product photos (with price labels) to this chat.\n` +
     `Optional caption: \`Tecno Spark cost 12000\`\n` +
@@ -514,6 +557,12 @@ export function catalogHelpText() {
 
 export async function handleCatalogCommand(adminChatId, text) {
   const t = (text || "").trim();
+  trackCatalogAdmin(adminChatId);
+
+  if (/^#sync\b/i.test(t)) {
+    await forcePublishCatalog(adminChatId);
+    return true;
+  }
 
   if (/^#catalog\b/i.test(t) || /^#catalog\s+help\b/i.test(t)) {
     await sendText(adminChatId, catalogHelpText());
@@ -594,7 +643,7 @@ export async function handleCatalogCommand(adminChatId, text) {
     const idx = products.findIndex((p) => p.id === existing.id);
     products[idx] = existing;
     await saveMaster(products);
-    schedulePublish();
+    schedulePublish(adminChatId);
     await sendText(
       adminChatId,
       `${existing.inStock ? "✅" : "🚫"} *${existing.id}* ${existing.name} — ${existing.inStock ? "back in shop" : "hidden from shop"}`
@@ -606,6 +655,7 @@ export async function handleCatalogCommand(adminChatId, text) {
 }
 
 export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype, caption = "", messageId, chatId, session }) {
+  trackCatalogAdmin(adminChatId);
   if (!isCatalogMedia(mediaMimetype)) {
     await sendText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG) or PDF with a visible price label.");
     return true;

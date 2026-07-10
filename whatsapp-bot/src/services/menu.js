@@ -384,6 +384,7 @@ export async function sendPaginatedProductList(
   if (total <= 6) {
     for (const product of pageProducts) {
       await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 }
@@ -426,6 +427,7 @@ export async function sendNumberedProductList(to, products, { title = "Pick an i
 
   for (const product of products) {
     await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 

@@ -69,6 +69,7 @@ function toPublic(product) {
       fulfillment: "store",
       payment: "cod",
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
+      ...(product.subcategory ? { subcategory: product.subcategory } : {}),
     };
   }
 

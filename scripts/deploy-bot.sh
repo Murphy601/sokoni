@@ -9,8 +9,19 @@ NAME="${PM2_NAME:-sokoni-bot}"
 echo "==> Deploying Sokoni bot from $REPO"
 
 cd "$REPO"
+
+# Push local WhatsApp catalog changes BEFORE pulling code (never wipe unpushed products).
+if git status --porcelain whatsapp-bot/src/data/products.json website/data/products.json website/assets/images/products/ 2>/dev/null | grep -q .; then
+  echo "==> Local catalog changes found — publishing to GitHub first..."
+  node scripts/build-site-catalog.mjs
+  if ! node scripts/commit-catalog.mjs; then
+    echo "ERROR: Catalog publish failed. Fix git auth, then run: node scripts/publish-catalog-now.mjs"
+    exit 1
+  fi
+fi
+
 git fetch origin main
-git reset --hard origin/main
+git pull --rebase origin main
 echo "==> Git at: $(git log -1 --oneline)"
 
 cd "$BOT_DIR"

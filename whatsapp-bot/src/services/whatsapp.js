@@ -178,18 +178,8 @@ export async function sendImage(to, { link, data, caption, filename = "product.j
   return resp;
 }
 
-/** Try HTTPS URL(s) on bot/site, then base64 from local disk. */
+/** Try local base64 first (always on VM disk), then HTTPS URL(s). */
 export async function sendProductImage(to, product, caption) {
-  for (const link of catalogImageUrlCandidates(product)) {
-    try {
-      await sendImage(to, { link, caption, filename: `${product.id || "product"}.jpg` });
-      console.log("[whatsapp] product image sent via URL:", link);
-      return true;
-    } catch (err) {
-      console.warn("[whatsapp] product image URL failed:", link, err.message);
-    }
-  }
-
   try {
     const data = await readCatalogImageBase64(product);
     if (data) {
@@ -199,6 +189,16 @@ export async function sendProductImage(to, product, caption) {
     }
   } catch (err) {
     console.warn("[whatsapp] product image base64 failed:", product.id, err.message);
+  }
+
+  for (const link of catalogImageUrlCandidates(product)) {
+    try {
+      await sendImage(to, { link, caption, filename: `${product.id || "product"}.jpg` });
+      console.log("[whatsapp] product image sent via URL:", link);
+      return true;
+    } catch (err) {
+      console.warn("[whatsapp] product image URL failed:", link, err.message);
+    }
   }
 
   return false;

@@ -20,6 +20,29 @@ const CATEGORY_META = {
   "baby-products": { label: "Baby Products", emoji: "🍼" },
 };
 
+const SUBCATEGORY_LABELS = {
+  smartphones: "Smartphones",
+  tablets: "Tablets",
+  "power-banks": "Power Banks",
+  "phone-accessories": "Phone Accessories",
+  televisions: "TVs",
+  headphones: "Headphones",
+  speakers: "Speakers",
+  "home-theatre": "Home Theatre",
+  wearables: "Wearables",
+  "kitchen-appliances": "Kitchen",
+  kettles: "Kettles",
+  irons: "Irons",
+  blenders: "Blenders",
+  "washing-machines": "Washing Machines",
+  "personal-care": "Personal Care",
+  skincare: "Skincare",
+  makeup: "Makeup",
+  haircare: "Haircare",
+  fragrances: "Fragrances",
+  "perfume-oils": "Perfume Oils",
+};
+
 /** Viral / TikTok deals posted by backend automation (see data/tiktok-posts.json). */
 const VIRAL_IDS = new Set();
 let tiktokFeaturedLoaded = false;
@@ -152,7 +175,8 @@ function tokenize(q) {
 
 function productSearchText(product) {
   const cat = CATEGORY_META[product.category]?.label || product.category || "";
-  return [product.name, product.category, cat, product.source, product.emoji]
+  const sub = SUBCATEGORY_LABELS[product.subcategory] || product.subcategory || "";
+  return [product.name, product.category, cat, sub, product.source, product.emoji]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -235,7 +259,12 @@ function renderStoreCard(product) {
       <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">💵 Pay on Delivery</span>
       ${productImageBlock(product)}
       <h3 class="font-bold text-sm mb-1 line-clamp-2">${product.name}</h3>
-      <p class="text-xs text-brand-purple/50 mb-2">${CATEGORY_META[product.category]?.label || product.category}</p>
+      <p class="text-xs text-brand-purple/50 mb-2">${[
+        CATEGORY_META[product.category]?.label || product.category,
+        SUBCATEGORY_LABELS[product.subcategory] || product.subcategory,
+      ]
+        .filter(Boolean)
+        .join(" · ")}</p>
       <div class="flex items-baseline gap-2 mb-1">
         <span class="font-extrabold text-lg">${formatPrice(product)}</span>
         ${
