@@ -31,7 +31,7 @@ import {
   rankPickupPointsForLocation,
 } from "./fulfillment.js";
 import { handleCatalogCommand, isCatalogCommand } from "./catalog-admin.js";
-import { broadcastFooter } from "./trust-copy.js";
+import { broadcastFooter, OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
 import { isBroadcastOptedOut } from "./customer-automations.js";
 
 function digitsOnly(value) {
@@ -349,6 +349,7 @@ async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quote
 function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
+    `Type *admin* or *#help* anytime for this menu.\n\n` +
     `📋 *#orders* — recent orders\n` +
     `💰 *#payments* — customer *paid* claims awaiting confirmation\n` +
     `✅ *#payconfirm SK-1042* — confirm customer M-Pesa payment\n` +
@@ -356,14 +357,18 @@ function adminHelpText() {
     `📍 *#pickup SK-1042 pp-xxxx* — assign / override pickup point\n` +
     `🔎 *#nearby SK-1042* — suggest pickup partners near customer\n` +
     `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
-    `   (or *#SK-1042 confirmed* — same as #status for confirmed/packed/out/delivered)\n` +
+    `   _(or *#SK-1042 confirmed* — same as #status)_\n\n` +
     `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
     `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
     `💰 *#payouts* — supplier amounts owed\n` +
-    `✅ *#paid SK-1042* — mark supplier paid\n` +
-    `📣 *#broadcast <message>* — message all customers\n` +
-    `🆔 *#SK-1042 <message>* — message customer\n` +
-    `📦 *#catalog* — add/update products (photos + text)\n` +
+    `✅ *#paid SK-1042* — mark supplier paid\n\n` +
+    `📣 *Customer comms & offers*\n` +
+    `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
+    `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
+    `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
+    `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
+    `🆔 *#SK-1042 <message>* — message one customer\n` +
+    `📦 *#catalog* — add/update products (photos + text commands)\n` +
     `❓ *#help* — this list`
   );
 }
@@ -702,7 +707,9 @@ function getBroadcastRecipients() {
 /** Pull a #command out of longer pasted text (e.g. "Update: #status SK-1002 confirmed"). */
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
-  const embedded = t.match(/#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find|sync|import-catalog)\b[\s\S]*/i);
+  const embedded = t.match(
+    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find|sync|import-catalog)\b[\s\S]*/i
+  );
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
   if (sk) return sk[0].trim();
@@ -735,7 +742,7 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   const t = normalizeAdminCommand(text.trim());
 
-  if (/^#help\b/i.test(t)) {
+  if (/^admin\b/i.test(t) || /^#help\b/i.test(t)) {
     await sendText(adminChatId, adminHelpText());
     return true;
   }

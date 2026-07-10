@@ -445,16 +445,27 @@ const GIT_SCRIPT_ENV = {
   GIT_COMMITTER_EMAIL: "bot@sokonimall.com",
 };
 
+/** True only when the message itself is a catalog command (not help text mentioning #add). */
 export function isCatalogCommand(text) {
-  return /#(?:catalog|add|price|stock|find|sync|import-catalog|done)\b/i.test(String(text || ""));
+  const line = primaryCatalogCommandLine(text);
+  return /^#(?:catalog|add|price|stock|find|sync|import-catalog|done)\b/i.test(line);
+}
+
+/** First line that starts with a catalog #command, or the trimmed message if it starts with #. */
+export function primaryCatalogCommandLine(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  if (/^#(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(raw)) return raw;
+  for (const line of raw.split("\n")) {
+    const t = line.trim();
+    if (/^#(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(t)) return t;
+  }
+  return raw;
 }
 
 /** Pull the #command line out of a message that may include links or captions. */
 export function extractCatalogCommandLine(text) {
-  const m = String(text || "").match(
-    /#(?:import-catalog|sync|catalog(?:\s+help)?|add|price|stock|find)\b[^\n]*/i
-  );
-  return m ? m[0].trim() : String(text || "").trim();
+  return primaryCatalogCommandLine(text);
 }
 
 /** Parse: #import-catalog 254723813039  OR  #import-catalog https://wa.me/c/254723813039 */
@@ -986,26 +997,27 @@ async function drainQueue() {
 export function catalogHelpText() {
   return (
     `📦 *Catalog commands* (admin)\n\n` +
+    `All commands start with *#* on their own line.\n\n` +
     `*Add by text:*\n` +
-    `#add Product name | category | cost 12000\n` +
+    `add → Product name | category | cost 12000\n` +
     `_category optional — bot guesses from name_\n\n` +
     `*Update price:*\n` +
-    `#price pt-001 cost 11500\n` +
-    `#price Tecno Spark 20 | cost 13499\n\n` +
+    `price → pt-001 cost 11500\n` +
+    `price → Tecno Spark 20 | cost 13499\n\n` +
     `*Stock:*\n` +
-    `#stock pt-001 off` + ` — hide from shop\n` +
-    `#stock pt-001 on` + ` — show again\n\n` +
-    `*Search:* #find tecno\n\n` +
-    `*Push to website:* #sync\n\n` +
+    `stock → pt-001 off — hide from shop\n` +
+    `stock → pt-001 on — show again\n\n` +
+    `*Search:* find → tecno\n\n` +
+    `*Push to website:* sync\n\n` +
     `*Photos (auto — no confirm):*\n` +
-    `Send or forward product photos to this chat.\n` +
+    `Send or forward product photos to this chat.\n\n` +
     `• *With price tag* — bot reads name + cost from the photo.\n` +
     `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
-    `• *Many photos at once* — put the caption on the first image (or any one); same price applies to the whole album.\n` +
+    `• *Many photos at once* — put the caption on the first image; same price applies to the whole album.\n` +
     `• *Import supplier catalog (many products):*\n` +
-    `  \`#import-catalog 254723813039\` → then send photo *albums* to yourself (30/batch, caption on first)\n` +
-    `  _(True one-click import needs WAHA catalog API — not in free WAHA yet.)_\n` +
-    `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
+    `  import-catalog → 254723813039, then send photo *albums* to yourself (30/batch, caption on first)\n` +
+    `  _(True one-click import needs WAHA catalog API — not in free WAHA yet.)_\n\n` +
+    `AI names items from the photo even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
   );
@@ -1046,6 +1058,11 @@ export async function handleCatalogCommand(adminChatId, text) {
   if (/^#catalog\b/i.test(t) || /^#catalog\s+help\b/i.test(t)) {
     await sendAdminOnlyText(adminChatId, catalogHelpText());
     return true;
+  }
+
+  // Ignore stray text that is not a catalog command (prevents accidental product adds).
+  if (!/^#(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(t)) {
+    return false;
   }
 
   if (/^#find\b/i.test(t)) {

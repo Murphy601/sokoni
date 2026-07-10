@@ -516,36 +516,14 @@ export async function handleIncomingMessage(
   }
 }
 
-function looksLikeAdminAction(text, fromChatId) {
-  const trimmed = (text || "").trim();
-  if (
-    !containsAdminCommand(text) &&
-    !isCatalogCommand(text) &&
-    !/^orders?\b/i.test(trimmed) &&
-    !/^admin\b/i.test(trimmed)
-  ) {
-    return false;
-  }
-  const phone = phoneDigitsFromChatId(fromChatId);
-  return canRunAdminCommands(fromChatId, phone, { allowBusinessOwner: true });
-}
-
 export async function handleWahaWebhook(body) {
   const parsed = parseWahaMessage(body);
   if (!parsed) return;
 
   if (parsed.direction === "outgoing") {
-    // Ignore the bot's OWN outgoing messages (echoes). Only act on messages
-    // the human store owner actually typed (admin commands, quote-replies,
-    // or a manual reply inside a customer's chat).
-    if (
-      !looksLikeAdminAction(parsed.text, parsed.fromChatId) &&
-      !isAdminQuickStatusText(parsed.text) &&
-      !shouldRouteAdminCatalog(parsed) &&
-      isBotEcho(parsed.messageId, parsed.toChatId)
-    ) {
-      return;
-    }
+    // Always ignore the bot's own replies first — help text embeds #catalog / #add
+    // examples that would otherwise re-trigger catalog intake.
+    if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
 
     const catalogHandled = await routeAdminCatalog(parsed);
     if (catalogHandled) return catalogHandled;

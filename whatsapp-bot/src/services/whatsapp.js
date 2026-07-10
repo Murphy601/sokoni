@@ -470,11 +470,26 @@ export function isBotEcho(messageId, destinationChatId) {
   return false;
 }
 
+/** Light spacing pass — extra breathing room between sections without bloating short replies. */
+export function normalizeBotMessageSpacing(text) {
+  let s = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+  if (!s) return s;
+
+  // Blank line before emoji-led section headers (common in admin/help menus).
+  s = s.replace(/\n(?=[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/gu, "\n\n");
+  // Blank line before bold section labels like *Catalog commands*
+  s = s.replace(/\n(\*[^\n*]{3,}\*)/g, "\n\n$1");
+  return s.replace(/\n{3,}/g, "\n\n");
+}
+
 export async function sendText(to, text) {
+  const body = normalizeBotMessageSpacing(text);
   const resp = await callWaha("/api/sendText", {
     session: config.waha.session,
     chatId: toChatId(to),
-    text,
+    text: body,
   });
   rememberSend(resp, to);
   return resp;
