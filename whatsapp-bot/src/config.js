@@ -78,6 +78,8 @@ export const config = {
   })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
+  /** Bot HTTPS base — serves /catalog-images for WhatsApp (immediate after admin upload). */
+  botPublicUrl: (process.env.BOT_PUBLIC_URL || "https://bot.sokonimall.com").replace(/\/$/, ""),
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

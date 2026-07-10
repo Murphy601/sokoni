@@ -3,6 +3,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
+import { CATALOG_IMAGES_DIR } from "./lib/catalog-images.js";
 import { handleWahaWebhook } from "./handlers/webhookHandler.js";
 import { runTiktokPostJob } from "./services/tiktok.js";
 import { startTokenRefreshScheduler, getConnectionStatus } from "./services/tiktok-auth.js";
@@ -59,6 +60,17 @@ app.get("/", (_req, res) => {
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", build: BUILD_ID });
 });
+
+/** Product photos for WhatsApp — served from VM disk (no Cloudflare wait). */
+app.use(
+  "/catalog-images",
+  express.static(CATALOG_IMAGES_DIR, {
+    maxAge: "1d",
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=86400");
+    },
+  })
+);
 
 /** Public reviews for website + WhatsApp-collected feedback. */
 app.get("/api/reviews", (_req, res) => {

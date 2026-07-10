@@ -1,5 +1,9 @@
 import axios from "axios";
 import { config } from "../config.js";
+import {
+  catalogImageUrlCandidates,
+  readCatalogImageBase64,
+} from "../lib/catalog-images.js";
 
 /** Normalize phone digits or chatId to WAHA chatId format. */
 export function toChatId(phoneOrChatId) {
@@ -154,22 +158,50 @@ export async function sendText(to, text) {
   return resp;
 }
 
-/** Public HTTPS URL for a catalog image (WhatsApp requires a reachable link). */
+/** Public HTTPS URL for a catalog image (prefers bot server for WhatsApp). */
 export function resolvePublicImageUrl(product) {
-  if (!product?.imageUrl) return null;
-  if (/^https?:\/\//i.test(product.imageUrl)) return product.imageUrl;
-  return `${config.publicSiteUrl}/${product.imageUrl.replace(/^\//, "")}`;
+  const candidates = catalogImageUrlCandidates(product);
+  return candidates[0] || null;
 }
 
-export async function sendImage(to, { link, caption }) {
+export async function sendImage(to, { link, data, caption, filename = "product.jpg" }) {
+  const file = data
+    ? { data, mimetype: "image/jpeg", filename }
+    : { url: link, mimetype: "image/jpeg", filename };
   const resp = await callWaha("/api/sendImage", {
     session: config.waha.session,
     chatId: toChatId(to),
-    file: { url: link, mimetype: "image/jpeg", filename: "product.jpg" },
+    file,
     caption: caption || "",
   });
   rememberSend(resp, to);
   return resp;
+}
+
+/** Try HTTPS URL(s) on bot/site, then base64 from local disk. */
+export async function sendProductImage(to, product, caption) {
+  for (const link of catalogImageUrlCandidates(product)) {
+    try {
+      await sendImage(to, { link, caption, filename: `${product.id || "product"}.jpg` });
+      console.log("[whatsapp] product image sent via URL:", link);
+      return true;
+    } catch (err) {
+      console.warn("[whatsapp] product image URL failed:", link, err.message);
+    }
+  }
+
+  try {
+    const data = await readCatalogImageBase64(product);
+    if (data) {
+      await sendImage(to, { data, caption, filename: `${product.id || "product"}.jpg` });
+      console.log("[whatsapp] product image sent via base64:", product.id);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[whatsapp] product image base64 failed:", product.id, err.message);
+  }
+
+  return false;
 }
 
 /**
@@ -185,15 +217,8 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
       `KES ${product.priceKes.toLocaleString()}  ·  💵 Pay on delivery\n` +
       `⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews)`;
 
-    const imageUrl = resolvePublicImageUrl(product);
-    if (imageUrl) {
-      try {
-        await sendImage(to, { link: imageUrl, caption });
-      } catch (err) {
-        console.warn("[whatsapp] image send failed, using text:", err.message);
-        await sendText(to, caption + `\n🛵 ${config.store.deliveryNote}`);
-      }
-    } else {
+    const sent = await sendProductImage(to, product, caption);
+    if (!sent) {
       await sendText(to, caption + `\n🛵 ${config.store.deliveryNote}`);
     }
 
@@ -229,16 +254,9 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
     `🛒 Buy here: ${affiliateUrl}\n\n` +
     `_Sokoni may earn a small commission on this purchase — it never costs you extra 🙏_`;
 
-  const imageUrl = resolvePublicImageUrl(product);
-  if (imageUrl) {
-    try {
-      await sendImage(to, {
-        link: imageUrl,
-        caption: `*${product.name}*\n${priceLine}\n⭐ ${product.rating} · ${sourceLabel}`,
-      });
-    } catch (err) {
-      console.warn("[whatsapp] image send failed, using text:", err.message);
-    }
+  const intlCaption = `*${product.name}*\n${priceLine}\n⭐ ${product.rating} · ${sourceLabel}`;
+  const sent = await sendProductImage(to, product, intlCaption);
+  if (sent) {
     await sendText(
       to,
       `${dutiesNote}🛒 Buy here: ${affiliateUrl}\n\n_Sokoni may earn a small commission — it never costs you extra 🙏_`
