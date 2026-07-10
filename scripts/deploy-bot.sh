@@ -20,8 +20,20 @@ if git status --porcelain whatsapp-bot/src/data/products.json website/data/produ
   fi
 fi
 
+echo "==> Syncing with origin/main..."
 git fetch origin main
-git pull --rebase origin main
+STASHED=0
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  echo "==> Stashing dirty files so git pull can proceed..."
+  git stash push -u -m "deploy-bot-$(date +%s)" || true
+  STASHED=1
+fi
+if ! git pull --rebase origin main; then
+  echo "WARN: git pull --rebase failed — continuing deploy at $(git rev-parse --short HEAD)"
+fi
+if [ "$STASHED" = "1" ]; then
+  git stash pop || echo "WARN: stash pop had conflicts — fix later; bot restart continues"
+fi
 echo "==> Git at: $(git log -1 --oneline)"
 
 if [ -f "$REPO/docker-compose.waha.yml" ]; then

@@ -49,8 +49,14 @@ function main() {
   run("git", ["add", ...CATALOG_PATHS]);
   run("git", ["commit", "-m", `catalog: update products via WhatsApp admin (${new Date().toISOString().slice(0, 10)})`]);
 
-  // Rebase on latest main so push succeeds after code deploys.
+  const dirty = run("git", ["status", "--porcelain"], { optional: true });
+  if (dirty) {
+    run("git", ["stash", "push", "-u", "-m", `commit-catalog-${Date.now()}`], { optional: true });
+  }
   run("git", ["pull", "--rebase", "origin", "main"], { optional: true });
+  if (dirty) {
+    run("git", ["stash", "pop"], { optional: true });
+  }
   run("git", ["push", "origin", "HEAD"]);
   console.log("Catalog committed and pushed to GitHub.");
 }
