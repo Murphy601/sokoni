@@ -20424,5 +20424,20 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/ta-033.jpg",
     "subcategory": "headphones"
+  },
+  {
+    "id": "fa-006",
+    "name": "DLGM Slides",
+    "category": "fashion",
+    "priceKes": 900,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-006.jpg",
+    "subcategory": "womens-fashion"
   }
 ]

@@ -33303,5 +33303,24 @@
     "inStock": true,
     "imageUrl": "assets/images/products/ta-033.jpg",
     "imageKey": "261890130f64"
+  },
+  {
+    "id": "fa-006",
+    "name": "DLGM Slides",
+    "category": "fashion",
+    "subcategory": "womens-fashion",
+    "sourcePriceKes": 700,
+    "priceKes": 900,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-006.jpg",
+    "imageKey": "b4b83f3a626a"
   }
 ]
