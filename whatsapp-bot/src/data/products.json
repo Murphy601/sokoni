@@ -34124,5 +34124,22 @@
     "fulfillment": "store",
     "payment": "cod",
     "inStock": true
+  },
+  {
+    "id": "ho-019",
+    "name": "Product name (2)",
+    "category": "home-office",
+    "subcategory": "product-name",
+    "sourcePriceKes": 12000,
+    "priceKes": 13100,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🏠",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true
   }
 ]
