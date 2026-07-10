@@ -24,7 +24,11 @@ export const config = {
   },
   /** WhatsApp admin catalog intake (photos + #add / #price). */
   catalog: {
-    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.0-flash-001",
+    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.5-flash",
+    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemini-2.0-flash-exp:free,google/gemini-2.5-flash-lite")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     autoPush: process.env.CATALOG_AUTO_PUSH === "true",
     publishDebounceMs: Number(process.env.CATALOG_PUBLISH_DEBOUNCE_MS) || 30_000,
   },

@@ -43,10 +43,67 @@ const CATEGORY_EMOJI = {
   "baby-products": "🍼",
 };
 
+const SUBCATEGORY_GUIDE = {
+  "phones-tablets": "smartphones, tablets, power-banks, phone-accessories",
+  "tvs-audio": "televisions, headphones, speakers, home-theatre, wearables",
+  appliances: "kitchen-appliances, kettles, irons, blenders, washing-machines",
+  "health-beauty": "personal-care, skincare, makeup, haircare, fragrances",
+  "home-office": "kitchen-dining, bedding, cleaning, home-decor, stationery",
+  fashion: "mens-fashion, womens-fashion, shoes, bags, watches",
+  computing: "laptops, computer-accessories, printers, storage",
+  gaming: "consoles, gaming-accessories",
+  supermarket: "groceries, beverages, snacks, household",
+  "baby-products": "diapers, feeding, baby-care, toys",
+};
+
 const VALID_CATEGORIES = Object.keys(CATEGORY_PREFIX);
 
+function visionModelChain() {
+  const primary = config.catalog.visionModel?.trim();
+  const fallbacks = config.catalog.visionFallbacks || [];
+  return [...new Set([primary, ...fallbacks].filter(Boolean))];
+}
+
+function normalizeSubcategory(category, subcategory, name) {
+  const sub = String(subcategory || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (sub && sub.length > 1) return sub;
+  return slugifySubcategory(name, category);
+}
+
+function buildVisionPrompt(caption = "") {
+  const categoryLines = VALID_CATEGORIES.map(
+    (c) => `- ${c}: subcategories → ${SUBCATEGORY_GUIDE[c] || c}`
+  ).join("\n");
+
+  return (
+    `You catalog products for a Kenyan WhatsApp shop (Sokoni).\n` +
+    `Look at the product photo: packaging, labels, stickers, handwritten prices.\n\n` +
+    `TASK:\n` +
+    `1. Product name — read from box/label (brand + model + key spec e.g. "20000mAh").\n` +
+    `2. sourcePriceKes — the STORE COST on the price tag/sticker (number only). ` +
+    `White stickers like "850" or "50" are usually KES prices.\n` +
+    `3. category + subcategory — pick the BEST fit from the guide below.\n` +
+    `   Examples:\n` +
+    `   - Power bank / charger → phones-tablets / power-banks\n` +
+    `   - Phone case / cover / screen guard → phones-tablets / phone-accessories\n` +
+    `   - TV, speaker, earbud → tvs-audio\n` +
+    `   - Fridge, kettle, blender → appliances\n` +
+    `   - Perfume, lotion, makeup → health-beauty\n` +
+    `   - Dress, shoes, bag → fashion\n` +
+    `   - Laptop, mouse, printer → computing\n\n` +
+    `CATEGORIES:\n${categoryLines}\n\n` +
+    (caption ? `WhatsApp caption (override if clearer): "${caption}"\n\n` : "") +
+    `Reply ONLY JSON, no markdown:\n` +
+    `{"name":"CALUS P207 MAX Power Bank 20000mAh","sourcePriceKes":850,"category":"phones-tablets","subcategory":"power-banks"}\n` +
+    `If unreadable: {"error":"brief reason"}`
+  );
+}
+
 const CATEGORY_KEYWORDS = [
-  { category: "phones-tablets", words: ["phone", "tecno", "samsung", "iphone", "redmi", "infinix", "tablet", "ipad"] },
+  { category: "phones-tablets", words: ["phone", "tecno", "samsung", "iphone", "redmi", "infinix", "tablet", "ipad", "power bank", "powerbank", "charger", "case", "cover", "screen guard"] },
   { category: "tvs-audio", words: ["tv", "television", "speaker", "soundbar", "earbud", "headphone", "hisense"] },
   { category: "appliances", words: ["fridge", "freezer", "washing", "microwave", "blender", "cooker", "iron"] },
   { category: "health-beauty", words: ["perfume", "lotion", "cream", "makeup", "soap", "shampoo", "beauty"] },
@@ -214,8 +271,10 @@ export function parsePriceCommand(text) {
 function formatProductAck(product, { updated = false } = {}) {
   const bd = pricingBreakdown(product.sourcePriceKes);
   const verb = updated ? "Updated" : "Added";
+  const cat = product.subcategory ? `${product.category} / ${product.subcategory}` : product.category;
   return (
     `✅ *${verb}* \`${product.id}\` · ${product.name}\n` +
+    `📂 ${cat}\n` +
     `Cost KES ${bd.supplierPriceKes.toLocaleString()} → Retail *KES ${bd.retailPriceKes.toLocaleString()}*`
   );
 }
@@ -359,48 +418,55 @@ async function extractFromImage(buffer, mimetype, caption = "") {
 
   const base64 = buffer.toString("base64");
   const dataUrl = `data:${mimetype || "image/jpeg"};base64,${base64}`;
+  const prompt = buildVisionPrompt(caption);
+  const messages = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: dataUrl } },
+      ],
+    },
+  ];
 
-  const prompt =
-    `Read this Kenyan retail store product photo (packaging and/or handwritten/printed price label).\n` +
-    `Extract product name and the STORE COST price in Kenyan Shillings (KES) — the wholesale/tag price, not retail markup.\n` +
-    `Pick category from: ${VALID_CATEGORIES.join(", ")}.\n` +
-    (caption ? `WhatsApp caption (may override name/price): "${caption}"\n` : "") +
-    `Reply with ONLY JSON, no markdown:\n` +
-    `{"name":"Product Name","sourcePriceKes":1234,"category":"phones-tablets","subcategory":"smartphones"}\n` +
-    `If unreadable: {"error":"brief reason"}`;
+  let lastError = null;
+  for (const model of visionModelChain()) {
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        messages,
+        max_tokens: 400,
+        temperature: 0.1,
+      });
 
-  const response = await client.chat.completions.create({
-    model: config.catalog.visionModel,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: dataUrl } },
-        ],
-      },
-    ],
-    max_tokens: 300,
-    temperature: 0.1,
-  });
+      const raw = response.choices[0]?.message?.content?.trim() || "";
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Vision model returned no JSON");
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.error) throw new Error(parsed.error);
 
-  const raw = response.choices[0]?.message?.content?.trim() || "";
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Vision model returned no JSON");
-  const parsed = JSON.parse(jsonMatch[0]);
-  if (parsed.error) throw new Error(parsed.error);
+      if (caption) {
+        const capCost = parseCost(caption);
+        const capName = caption.replace(/(?:cost|wholesale|supply|price|kes|ksh)\s*[:=]?\s*[\d,]+/gi, "").trim();
+        if (capCost != null) parsed.sourcePriceKes = capCost;
+        if (capName && capName.length > 2) parsed.name = capName;
+      }
 
-  if (caption) {
-    const capCost = parseCost(caption);
-    const capName = caption.replace(/(?:cost|wholesale|supply|price|kes|ksh)\s*[:=]?\s*[\d,]+/gi, "").trim();
-    if (capCost != null) parsed.sourcePriceKes = capCost;
-    if (capName && capName.length > 2) parsed.name = capName;
+      if (!parsed.name || !parsed.sourcePriceKes) {
+        throw new Error("Could not read name and price from image");
+      }
+      if (!VALID_CATEGORIES.includes(parsed.category)) parsed.category = inferCategory(parsed.name);
+      parsed.subcategory = normalizeSubcategory(parsed.category, parsed.subcategory, parsed.name);
+      parsed.sourcePriceKes = Math.round(Number(parsed.sourcePriceKes));
+      console.log(`[catalog-admin] vision ok via ${model}:`, parsed.name, parsed.sourcePriceKes);
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[catalog-admin] vision failed (${model}):`, err.message);
+    }
   }
 
-  if (!parsed.name || !parsed.sourcePriceKes) throw new Error("Could not read name and price from image");
-  if (!VALID_CATEGORIES.includes(parsed.category)) parsed.category = inferCategory(parsed.name);
-  parsed.sourcePriceKes = Math.round(Number(parsed.sourcePriceKes));
-  return parsed;
+  throw lastError || new Error("All vision models failed");
 }
 
 function enqueue(adminChatId, task) {
