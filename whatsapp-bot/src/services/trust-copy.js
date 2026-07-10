@@ -143,7 +143,7 @@ export function paymentConfirmedMessage({ orderId, amountKes }) {
   return (
     `✅ *Payment Confirmed!*\n` +
     `We received your payment of *${priceLine}* for order *${orderId}*.\n` +
-    `Thank you for shopping with Sokoni Mall during our live beta phase. Enjoy your purchase! 🎉`
+    `Thank you for shopping with Sokoni Mall! Enjoy your purchase! 🎉`
   );
 }
 
