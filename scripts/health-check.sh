@@ -68,8 +68,7 @@ if [ -n "${WAHA_CID:-}" ]; then
   WAHA_VER="$(docker exec "$WAHA_CID" node -e "try{console.log(require('/app/package.json').version)}catch{console.log('unknown')}" 2>/dev/null || echo "unknown")"
   echo "WAHA version: $WAHA_VER"
   if [ "$HTTP_CODE" = "404" ]; then
-    echo "ERROR: catalog API missing (HTTP 404) — run: bash scripts/deploy-waha.sh"
-    echo "       (pulls latest WAHA image; does not delete sessions)"
+    echo "INFO: bulk catalog API not in WAHA Core — use #import-catalog share mode instead"
   elif [ "$HTTP_CODE" = "000" ]; then
     echo "WARN: could not reach catalog API"
   else

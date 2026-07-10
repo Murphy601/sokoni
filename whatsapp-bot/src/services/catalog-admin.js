@@ -9,7 +9,7 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import { computeRetailPrice, pricingBreakdown } from "./pricing.js";
 import { invalidateProductCache } from "./catalog.js";
-import { downloadWahaMedia, sendText, phoneDigitsFromChatId, fetchWahaBusinessCatalog } from "./whatsapp.js";
+import { downloadWahaMedia, sendText, phoneDigitsFromChatId, fetchWahaBusinessCatalog, extractWahaProductMessage, isWahaCatalogApiMissing } from "./whatsapp.js";
 import { isAdminSender, canRunAdminCommands } from "./admin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -258,6 +258,127 @@ let pendingPublishCount = 0;
 let lastCatalogAdminChatId = null;
 let lastMediaDownloadAt = 0;
 const MEDIA_DOWNLOAD_GAP_MS = 5000;
+const SHARE_IMPORT_TTL_MS = 15 * 60 * 1000;
+/** @type {Map<string, { supplierDigits: string, added: number, updated: number, expiresAt: number }>} */
+const shareImportSessions = new Map();
+
+function getShareImportSession(adminChatId) {
+  const s = shareImportSessions.get(adminChatId);
+  if (!s) return null;
+  if (Date.now() > s.expiresAt) {
+    shareImportSessions.delete(adminChatId);
+    return null;
+  }
+  return s;
+}
+
+async function startShareImportMode(adminChatId, supplierDigits) {
+  const digits = String(supplierDigits || "").replace(/\D/g, "");
+  shareImportSessions.set(adminChatId, {
+    supplierDigits: digits,
+    added: 0,
+    updated: 0,
+    expiresAt: Date.now() + SHARE_IMPORT_TTL_MS,
+  });
+  trackCatalogAdmin(adminChatId);
+  const link = digits ? `https://wa.me/c/${digits}` : "the supplier catalog";
+  await sendAdminOnlyText(
+    adminChatId,
+    `📋 *Share import mode* (15 min)\n\n` +
+      `WAHA can't pull supplier catalogs automatically — share products from your phone instead.\n\n` +
+      `1. Open ${link} on your phone\n` +
+      `2. Open a product → ⋮ → *Share* → *Message yourself*\n` +
+      `3. Repeat for each product (name + price + photo import automatically)\n\n` +
+      `*Or* send product photos here with caption \`cost 130\`.\n\n` +
+      `Reply *#done* when finished.`
+  );
+}
+
+async function finishShareImport(adminChatId) {
+  const session = getShareImportSession(adminChatId);
+  if (!session) {
+    await sendAdminOnlyText(adminChatId, "No share import in progress. Start with `#import-catalog 254723813039`.");
+    return true;
+  }
+  shareImportSessions.delete(adminChatId);
+  await sendAdminOnlyText(
+    adminChatId,
+    `📦 *Share import done*\n✅ Added: ${session.added}\n🔄 Updated: ${session.updated}\n_Syncing to website…_`
+  );
+  await forcePublishCatalog(adminChatId);
+  return true;
+}
+
+/** Ingest a product card the admin shared from a supplier WhatsApp catalog. */
+export async function handleShareImportMessage(parsed, adminChatId) {
+  const session = getShareImportSession(adminChatId);
+  if (!session) return false;
+
+  const phone = phoneDigitsFromChatId(adminChatId) || "";
+  if (!canRunAdminCommands(adminChatId, phone)) return false;
+
+  if (parsed.direction === "outgoing" && parsed.toChatId !== adminChatId) return false;
+
+  const product = extractWahaProductMessage(parsed.rawPayload);
+  if (!product || !product.name) return false;
+
+  if (
+    session.supplierDigits &&
+    product.businessOwnerDigits &&
+    !product.businessOwnerDigits.endsWith(session.supplierDigits.slice(-9)) &&
+    !session.supplierDigits.endsWith(product.businessOwnerDigits.slice(-9))
+  ) {
+    console.warn("[catalog-admin] share import owner mismatch:", product.businessOwnerDigits, session.supplierDigits);
+  }
+
+  if (!product.sourcePriceKes) {
+    await sendAdminOnlyText(adminChatId, `⚠️ *${product.name}* — no price on card. Share again or add via photo + \`cost 130\`.`);
+    return true;
+  }
+
+  trackCatalogAdmin(adminChatId);
+  const category = inferCategory(`${product.name} ${product.description || ""}`);
+  const draft = {
+    name: product.name,
+    category,
+    subcategory: slugifySubcategory(product.name, category),
+    sourcePriceKes: product.sourcePriceKes,
+    matchQuery: product.retailerId || product.name,
+  };
+
+  let imageBuffer = null;
+  if (parsed.hasMedia && parsed.mediaUrl) {
+    try {
+      imageBuffer = await downloadWahaMedia({
+        mediaUrl: parsed.mediaUrl,
+        messageId: parsed.messageId,
+        chatId: parsed.toChatId || parsed.fromChatId || adminChatId,
+        fromChatId: parsed.fromChatId,
+        toChatId: parsed.toChatId,
+        session: parsed.session,
+        mimetype: parsed.mediaMimetype,
+      });
+    } catch (err) {
+      console.warn("[catalog-admin] share import image:", err.message);
+    }
+  }
+  if (!imageBuffer?.length && product.imageUrl) {
+    imageBuffer = await downloadImageUrl(product.imageUrl);
+  }
+
+  const { product: saved, updated } = await upsertStoreProduct(draft, imageBuffer);
+  if (updated) session.updated += 1;
+  else session.added += 1;
+
+  const total = session.added + session.updated;
+  if (total <= 3 || total % 5 === 0) {
+    await sendAdminOnlyText(
+      adminChatId,
+      `${updated ? "🔄" : "✅"} *${saved.name}* — cost ${saved.sourcePriceKes?.toLocaleString()} → retail ${saved.priceKes?.toLocaleString()} (${total} so far)`
+    );
+  }
+  return true;
+}
 
 /** Remember one caption for multi-photo WhatsApp albums (only first image has caption). */
 const BATCH_CAPTION_TTL_MS = 25 * 60 * 1000;
@@ -319,7 +440,7 @@ const GIT_SCRIPT_ENV = {
 };
 
 export function isCatalogCommand(text) {
-  return /#(?:catalog|add|price|stock|find|sync|import-catalog)\b/i.test(String(text || ""));
+  return /#(?:catalog|add|price|stock|find|sync|import-catalog|done)\b/i.test(String(text || ""));
 }
 
 /** Pull the #command line out of a message that may include links or captions. */
@@ -353,46 +474,64 @@ async function downloadImageUrl(url) {
 }
 
 async function importBusinessCatalog(adminChatId, businessRef, session) {
-  const { chatId, products } = await fetchWahaBusinessCatalog(businessRef, session);
-  let added = 0;
-  let updated = 0;
-  let skipped = 0;
-
-  await sendAdminOnlyText(
-    adminChatId,
-    `⏳ Importing *${products.length}* items from business catalog \`${chatId}\`…\n_Applying Sokoni retail: cost + KES 100 + 8%_`
+  const parsed = parseImportCatalogCommand(
+    businessRef.includes("#import-catalog") ? businessRef : `#import-catalog ${businessRef}`
   );
+  const supplierDigits = parsed.phone || String(businessRef).replace(/\D/g, "");
 
-  for (const item of products) {
-    const category = inferCategory(`${item.name} ${item.description || ""}`);
-    const draft = {
-      name: item.name,
-      category,
-      subcategory: slugifySubcategory(item.name, category),
-      sourcePriceKes: item.sourcePriceKes,
-      matchQuery: item.retailerId || item.name,
-    };
-    const imageBuffer = await downloadImageUrl(item.imageUrl);
-    try {
-      const { updated: wasUpdate } = await upsertStoreProduct(draft, imageBuffer);
-      if (wasUpdate) updated += 1;
-      else added += 1;
-    } catch (err) {
-      skipped += 1;
-      console.warn("[catalog-admin] import skip:", item.name, err.message);
+  try {
+    const { chatId, products } = await fetchWahaBusinessCatalog(businessRef, session);
+    if (!products.length) {
+      await startShareImportMode(adminChatId, supplierDigits);
+      return;
     }
-    await new Promise((r) => setTimeout(r, 400));
-  }
 
-  await sendAdminOnlyText(
-    adminChatId,
-    `📦 *Catalog import done*\n` +
-      `✅ Added: ${added}\n` +
-      `🔄 Updated: ${updated}\n` +
-      (skipped ? `⚠️ Skipped: ${skipped}\n` : "") +
-      `_Syncing to website…_`
-  );
-  await forcePublishCatalog(adminChatId);
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    await sendAdminOnlyText(
+      adminChatId,
+      `⏳ Importing *${products.length}* items from business catalog \`${chatId}\`…\n_Applying Sokoni retail: cost + KES 100 + 8%_`
+    );
+
+    for (const item of products) {
+      const category = inferCategory(`${item.name} ${item.description || ""}`);
+      const draft = {
+        name: item.name,
+        category,
+        subcategory: slugifySubcategory(item.name, category),
+        sourcePriceKes: item.sourcePriceKes,
+        matchQuery: item.retailerId || item.name,
+      };
+      const imageBuffer = await downloadImageUrl(item.imageUrl);
+      try {
+        const { updated: wasUpdate } = await upsertStoreProduct(draft, imageBuffer);
+        if (wasUpdate) updated += 1;
+        else added += 1;
+      } catch (err) {
+        skipped += 1;
+        console.warn("[catalog-admin] import skip:", item.name, err.message);
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    await sendAdminOnlyText(
+      adminChatId,
+      `📦 *Catalog import done*\n` +
+        `✅ Added: ${added}\n` +
+        `🔄 Updated: ${updated}\n` +
+        (skipped ? `⚠️ Skipped: ${skipped}\n` : "") +
+        `_Syncing to website…_`
+    );
+    await forcePublishCatalog(adminChatId);
+  } catch (err) {
+    if (isWahaCatalogApiMissing(err) || err.code === "WAHA_CATALOG_API_MISSING") {
+      await startShareImportMode(adminChatId, supplierDigits);
+      return;
+    }
+    throw err;
+  }
 }
 
 export function isCatalogMedia(mimetype = "") {
@@ -794,7 +933,7 @@ export function catalogHelpText() {
     `• *Import supplier WhatsApp catalog:*\n` +
     `  Send from *Message yourself* (not to the supplier):\n` +
     `  \`#import-catalog 254723813039\`\n` +
-    `  _(Catalog prices = your cost → retail formula. Needs WAHA Plus API.)_\n` +
+    `  _(Share mode: share each product from supplier catalog → Message yourself, then \`#done\`)_\n` +
     `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
@@ -819,15 +958,13 @@ export async function handleCatalogCommand(adminChatId, text) {
     try {
       await importBusinessCatalog(adminChatId, parsed.label, config.waha.session);
     } catch (err) {
-      await sendAdminOnlyText(
-        adminChatId,
-        `⚠️ *Catalog import failed*\n${err.message}\n\n` +
-          `*Safe fix on server (keeps WhatsApp linked):*\n` +
-          `\`cd ~/sokoni && git pull && bash scripts/deploy-waha.sh && bash scripts/deploy-bot.sh\`\n\n` +
-          `*Photo workaround (works today):* Open supplier catalog on your phone → forward photos to this chat with caption \`cost 130\`.`
-      );
+      await sendAdminOnlyText(adminChatId, `⚠️ *Catalog import failed*\n${err.message}`);
     }
     return true;
+  }
+
+  if (/^#done\b/i.test(t)) {
+    return finishShareImport(adminChatId);
   }
 
   if (/^#sync\b/i.test(t)) {

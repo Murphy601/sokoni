@@ -265,7 +265,7 @@ export async function downloadWahaMedia(
   );
 }
 
-function parseWahaCatalogPrice(price, currency = "KES") {
+export function parseWahaCatalogPrice(price, currency = "KES") {
   let n = Number(String(price ?? "").replace(/,/g, ""));
   if (!Number.isFinite(n) || n <= 0) return 0;
   const cur = String(currency || "KES").toUpperCase();
@@ -299,7 +299,39 @@ function normalizeWahaCatalogProducts(data) {
     .filter((p) => p.name.length > 1 && p.sourcePriceKes > 0);
 }
 
-/** Fetch another WhatsApp Business catalog via WAHA (requires WAHA Plus catalog API). */
+/** Product card shared from a WhatsApp Business catalog (webhook _data). */
+export function extractWahaProductMessage(payload) {
+  const roots = [payload?._data?.message, payload?._data, payload].filter(Boolean);
+  for (const root of roots) {
+    const pm = root.productMessage || root.product_message;
+    if (!pm) continue;
+    const p = pm.product || pm;
+    const name = String(p.title || p.name || pm.title || "").trim();
+    if (!name) continue;
+    const sourcePriceKes = parseWahaCatalogPrice(
+      p.priceAmount1000 ?? p.priceAmount ?? p.price,
+      p.currencyCode || p.currency || "KES"
+    );
+    const owner = String(pm.businessOwnerJid || pm.businessOwner || "").replace(/\D/g, "");
+    return {
+      name,
+      description: String(p.description || "").trim(),
+      sourcePriceKes,
+      retailerId: String(p.productId || p.retailerId || "").trim() || null,
+      businessOwnerDigits: owner,
+      imageUrl: p.productImage?.url || p.image?.url || null,
+    };
+  }
+  return null;
+}
+
+export function isWahaCatalogApiMissing(err) {
+  const status = err?.response?.status;
+  const msg = String(err?.message || "");
+  return status === 404 || /catalog API not found/i.test(msg);
+}
+
+/** Fetch another WhatsApp Business catalog via WAHA (not available on all WAHA builds). */
 export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
   if (!config.waha.apiUrl) throw new Error("WAHA_API_URL not set");
 
@@ -372,14 +404,10 @@ export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
     }
   }
 
-  const status = lastError?.response?.status;
-  if (status === 404) {
-    throw new Error(
-      "WAHA catalog API not found (HTTP 404). Update WAHA on the server:\n" +
-        "`bash scripts/deploy-waha.sh`\n" +
-        "That pulls the latest image and restarts WAHA without deleting your WhatsApp session.\n" +
-        "If it still fails, use photo upload: forward supplier photos here with caption `cost 130`."
-    );
+  if (isWahaCatalogApiMissing(lastError)) {
+    const e = new Error("WAHA catalog API not available on this WAHA build (HTTP 404)");
+    e.code = "WAHA_CATALOG_API_MISSING";
+    throw e;
   }
   throw new Error(lastError?.message || "Could not fetch business catalog from WAHA");
 }

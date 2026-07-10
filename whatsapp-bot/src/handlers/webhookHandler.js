@@ -21,7 +21,8 @@ import {
 import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
 import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
-import { handleCatalogCommand, handleCatalogMedia, isCatalogCommand, isCatalogMedia, extractCatalogCommandLine } from "../services/catalog-admin.js";
+import { handleCatalogCommand, handleCatalogMedia, isCatalogCommand, isCatalogMedia, extractCatalogCommandLine, handleShareImportMessage } from "../services/catalog-admin.js";
+import { extractWahaProductMessage } from "../services/whatsapp.js";
 import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
@@ -133,7 +134,8 @@ export function parseWahaMessage(body) {
 
   const text = String(payload.body || "").trim();
   const mediaInfo = extractMedia(payload);
-  if (!text && !mediaInfo.hasMedia) return null;
+  const hasProductCard = Boolean(extractWahaProductMessage(payload));
+  if (!text && !mediaInfo.hasMedia && !hasProductCard) return null;
   if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
 
   const quotedText = extractQuotedText(payload);
@@ -152,6 +154,7 @@ export function parseWahaMessage(body) {
       text,
       quotedText,
       session: body.session || config.waha.session,
+      rawPayload: payload,
       ...mediaInfo,
     };
   }
@@ -171,6 +174,7 @@ export function parseWahaMessage(body) {
     quotedText,
     combinedText,
     session: body.session || config.waha.session,
+    rawPayload: payload,
     ...mediaInfo,
     ...meta,
   };
@@ -209,6 +213,8 @@ async function routeAdminCatalog(parsed) {
   const adminChat = adminActionChat(parsed);
   const allowBusinessOwner =
     parsed.direction === "outgoing" && isBusinessOwnerSender(parsed.fromChatId);
+
+  if (await handleShareImportMessage(parsed, adminChat)) return true;
 
   if (parsed.hasMedia && shouldRouteAdminCatalog(parsed)) {
     return handleCatalogMedia(adminChat, {
