@@ -33686,11 +33686,11 @@
   },
   {
     "id": "fa-026",
-    "name": "Women's Crocodile Print Knee-High Boots - Red",
+    "name": "Women's Leather Boots - Red Crocodile Print",
     "category": "fashion",
     "subcategory": "shoes",
-    "sourcePriceKes": 4500,
-    "priceKes": 5000,
+    "sourcePriceKes": 6500,
+    "priceKes": 7150,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -33701,7 +33701,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-026.jpg",
-    "imageKey": "94fb201f72cd"
+    "imageKey": "be155a6b0ab6"
   },
   {
     "id": "fa-027",
@@ -33724,11 +33724,11 @@
   },
   {
     "id": "fa-028",
-    "name": "Women's Over-the-Knee Boots - Brown",
+    "name": "Women's Red Croc-Embossed Leather Boots",
     "category": "fashion",
     "subcategory": "shoes",
-    "sourcePriceKes": 4500,
-    "priceKes": 5000,
+    "sourcePriceKes": 6500,
+    "priceKes": 7150,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -33739,7 +33739,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-028.jpg",
-    "imageKey": "2adfba46d93a"
+    "imageKey": "e49e5979487c"
   },
   {
     "id": "fa-029",
@@ -33873,5 +33873,43 @@
     "inStock": true,
     "imageUrl": "assets/images/products/fa-035.jpg",
     "imageKey": "9708130286d7"
+  },
+  {
+    "id": "fa-036",
+    "name": "Women's Leather Over-the-Knee Boots - Brown",
+    "category": "fashion",
+    "subcategory": "shoes",
+    "sourcePriceKes": 6500,
+    "priceKes": 7150,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-036.jpg",
+    "imageKey": "f082d3579400"
+  },
+  {
+    "id": "fa-037",
+    "name": "Women's Knee-High Cowboy Boots - Beige Croc Print",
+    "category": "fashion",
+    "subcategory": "shoes",
+    "sourcePriceKes": 6500,
+    "priceKes": 7150,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-037.jpg",
+    "imageKey": "b5d651d99d64"
   }
 ]

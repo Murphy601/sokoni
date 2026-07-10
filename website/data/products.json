@@ -20727,9 +20727,9 @@
   },
   {
     "id": "fa-026",
-    "name": "Women's Crocodile Print Knee-High Boots - Red",
+    "name": "Women's Leather Boots - Red Crocodile Print",
     "category": "fashion",
-    "priceKes": 5000,
+    "priceKes": 7150,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -20757,9 +20757,9 @@
   },
   {
     "id": "fa-028",
-    "name": "Women's Over-the-Knee Boots - Brown",
+    "name": "Women's Red Croc-Embossed Leather Boots",
     "category": "fashion",
-    "priceKes": 5000,
+    "priceKes": 7150,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -20873,6 +20873,36 @@
     "fulfillment": "store",
     "payment": "cod",
     "imageUrl": "assets/images/products/fa-035.jpg",
+    "subcategory": "shoes"
+  },
+  {
+    "id": "fa-036",
+    "name": "Women's Leather Over-the-Knee Boots - Brown",
+    "category": "fashion",
+    "priceKes": 7150,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-036.jpg",
+    "subcategory": "shoes"
+  },
+  {
+    "id": "fa-037",
+    "name": "Women's Knee-High Cowboy Boots - Beige Croc Print",
+    "category": "fashion",
+    "priceKes": 7150,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-037.jpg",
     "subcategory": "shoes"
   }
 ]
