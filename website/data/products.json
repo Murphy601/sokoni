@@ -21023,5 +21023,19 @@
     "fulfillment": "store",
     "payment": "cod",
     "subcategory": "product-name"
+  },
+  {
+    "id": "ho-016",
+    "name": "Product name (2)",
+    "category": "home-office",
+    "priceKes": 13100,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🏠",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "subcategory": "product-name"
   }
 ]
