@@ -822,9 +822,9 @@ export async function handleCatalogCommand(adminChatId, text) {
       await sendAdminOnlyText(
         adminChatId,
         `⚠️ *Catalog import failed*\n${err.message}\n\n` +
-          `*Workaround:* Open the supplier catalog on your phone → forward product photos to this admin chat with caption \`cost 130\`.\n` +
-          `Or test WAHA on server:\n` +
-          `\`curl -H "X-Api-Key: $WAHA_API_KEY" "http://localhost:3000/api/default/get-business-profiles-products?phone=254723813039@c.us"\``
+          `*Safe fix on server (keeps WhatsApp linked):*\n` +
+          `\`cd ~/sokoni && git pull && bash scripts/deploy-waha.sh && bash scripts/deploy-bot.sh\`\n\n` +
+          `*Photo workaround (works today):* Open supplier catalog on your phone → forward photos to this chat with caption \`cost 130\`.`
       );
     }
     return true;

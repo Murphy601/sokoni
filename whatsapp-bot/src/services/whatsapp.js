@@ -338,11 +338,20 @@ export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
         axios.post(`${apiBase}/api/${sid}/get-business-profiles-products`, { phone: chatId }, { headers, timeout: 120_000 }),
     },
     {
-      label: "get-products",
+      label: "get-products (digits)",
       run: () =>
         axios.get(`${apiBase}/api/${sid}/get-products`, {
           headers,
           params: { phone: digits, qnt: 200 },
+          timeout: 120_000,
+        }),
+    },
+    {
+      label: "get-products (chatId)",
+      run: () =>
+        axios.get(`${apiBase}/api/${sid}/get-products`, {
+          headers,
+          params: { phone: chatId, qnt: 200 },
           timeout: 120_000,
         }),
     },
@@ -363,11 +372,16 @@ export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
     }
   }
 
-  throw new Error(
-    lastError?.response?.status === 404
-      ? "WAHA catalog API not found — your WAHA tier may not support business catalog import. Use photo upload or ask supplier for CSV."
-      : lastError?.message || "Could not fetch business catalog from WAHA"
-  );
+  const status = lastError?.response?.status;
+  if (status === 404) {
+    throw new Error(
+      "WAHA catalog API not found (HTTP 404). Update WAHA on the server:\n" +
+        "`bash scripts/deploy-waha.sh`\n" +
+        "That pulls the latest image and restarts WAHA without deleting your WhatsApp session.\n" +
+        "If it still fails, use photo upload: forward supplier photos here with caption `cost 130`."
+    );
+  }
+  throw new Error(lastError?.message || "Could not fetch business catalog from WAHA");
 }
 
 /**

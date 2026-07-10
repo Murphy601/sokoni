@@ -61,7 +61,26 @@ except Exception as e:
 fi
 
 echo ""
-echo "5) Public bot URL"
+echo "5) WAHA catalog API (for #import-catalog)"
+if [ -n "${WAHA_CID:-}" ]; then
+  HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -H "X-Api-Key: $WAHA_KEY" \
+    "http://127.0.0.1:3000/api/default/get-business-profiles-products?phone=254723813039@c.us" 2>/dev/null || echo "000")"
+  WAHA_VER="$(docker exec "$WAHA_CID" node -e "try{console.log(require('/app/package.json').version)}catch{console.log('unknown')}" 2>/dev/null || echo "unknown")"
+  echo "WAHA version: $WAHA_VER"
+  if [ "$HTTP_CODE" = "404" ]; then
+    echo "ERROR: catalog API missing (HTTP 404) — run: bash scripts/deploy-waha.sh"
+    echo "       (pulls latest WAHA image; does not delete sessions)"
+  elif [ "$HTTP_CODE" = "000" ]; then
+    echo "WARN: could not reach catalog API"
+  else
+    echo "OK: catalog API responded HTTP $HTTP_CODE"
+  fi
+else
+  echo "SKIP: WAHA not running"
+fi
+
+echo ""
+echo "6) Public bot URL"
 curl -sf "https://bot.sokonimall.com/health" && echo "" || echo "WARN: public health check failed"
 
 echo ""

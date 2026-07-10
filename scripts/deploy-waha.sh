@@ -29,6 +29,12 @@ fi
 echo "==> Starting WAHA from $COMPOSE_FILE"
 cd "$REPO"
 
+# Pull latest image so catalog API endpoints are available (sessions/volumes are preserved).
+if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
+  echo "==> Pulling latest devlikeapro/waha:latest (set SKIP_WAHA_PULL=1 to skip)"
+  docker pull devlikeapro/waha:latest || echo "WARN: docker pull failed — continuing with cached image"
+fi
+
 # docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
 docker_compose -f docker-compose.waha.yml down --remove-orphans 2>/dev/null || true
 
