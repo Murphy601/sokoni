@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { sendText, sendProductCard } from "./whatsapp.js";
 import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
-import { formatListNumber, formatKes } from "./list-format.js";
+import { formatListNumber, formatKes, CATALOG_PAGE_SIZE } from "./list-format.js";
 import { buildAffiliateLink, SOURCE_LABELS } from "./affiliate.js";
 import {
   setPendingOrder,
@@ -63,8 +63,6 @@ export function sendMainMenu(to) {
   ];
   return sendNumberedMenu(to, "Karibu Sokoni! Everything is *pay on delivery* 💵", options);
 }
-
-const CATALOG_PAGE_SIZE = 12;
 
 const SUBCATEGORY_LABELS = {
   smartphones: "Smartphones",

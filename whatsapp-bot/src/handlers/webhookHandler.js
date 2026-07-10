@@ -450,6 +450,21 @@ export async function handleIncomingMessage(
 
   const choice = parseNumericChoice(text);
 
+  if (choice && menuState?.type === "product_list_paged") {
+    const pageCount = menuState.productIds?.length || 0;
+    if (choice > pageCount) {
+      const pageNum = (menuState.page || 0) + 1;
+      const pageSize = menuState.pageSize || 10;
+      const totalPages = Math.max(1, Math.ceil((menuState.allProductIds?.length || 0) / pageSize));
+      const hasMore = pageNum < totalPages;
+      return sendText(
+        customerKey,
+        `On page ${pageNum}, reply *1–${pageCount}* to pick an item.` +
+          (hasMore ? ` Or reply *next* for more.` : "")
+      );
+    }
+  }
+
   if (
     choice &&
     (menuState?.type === "product_list_paged" || menuState?.type === "product_list") &&

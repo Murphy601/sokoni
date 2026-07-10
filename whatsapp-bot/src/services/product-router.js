@@ -8,10 +8,12 @@ import {
 } from "./catalog.js";
 import { looksLikeDeliveryDetails } from "./delivery-details.js";
 
-function getPagedSlice(items, page = 0, pageSize = 12) {
+import { CATALOG_PAGE_SIZE } from "./list-format.js";
+
+function getPagedSlice(items, page = 0, pageSize = CATALOG_PAGE_SIZE) {
   if (!items?.length) return [];
-  const start = (page || 0) * (pageSize || 12);
-  return items.slice(start, start + (pageSize || 12));
+  const start = (page || 0) * (pageSize || CATALOG_PAGE_SIZE);
+  return items.slice(start, start + (pageSize || CATALOG_PAGE_SIZE));
 }
 
 /** Current page of scent names — pageFamilies is pre-sliced; do not paginate again. */
@@ -154,7 +156,7 @@ export async function handleCatalogPagination(customerKey, text) {
 
   if (menuState?.type === "product_list_paged" && menuState.rowId) {
     if (/^(next|more)$/i.test(normalized)) {
-      const totalPages = Math.ceil((menuState.allProductIds?.length || 0) / (menuState.pageSize || 12));
+      const totalPages = Math.ceil((menuState.allProductIds?.length || 0) / (menuState.pageSize || CATALOG_PAGE_SIZE));
       const nextPage = (menuState.page || 0) + 1;
       if (nextPage < totalPages) {
         await sendProductsForSubcategory(customerKey, menuState.rowId, nextPage);
@@ -171,7 +173,7 @@ export async function handleCatalogPagination(customerKey, text) {
 
   if (menuState?.type === "scent_list_paged" && menuState.rowId) {
     if (/^(next|more)$/i.test(normalized)) {
-      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || 12));
+      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || CATALOG_PAGE_SIZE));
       const nextPage = (menuState.page || 0) + 1;
       if (nextPage < totalPages) {
         await sendPerfumeScentList(customerKey, { page: nextPage, rowId: menuState.rowId });
@@ -423,18 +425,23 @@ export async function sendProductConfirm(to, product) {
 export async function sendProductDisambiguation(to, products) {
   const { setMenuState } = await import("./session.js");
   const { sendText } = await import("./whatsapp.js");
-  const { formatListNumber, formatKes } = await import("./list-format.js");
-  const lines = products.map(
+  const { formatListNumber, formatKes, CATALOG_PAGE_SIZE } = await import("./list-format.js");
+  const picks = products.slice(0, CATALOG_PAGE_SIZE);
+  const lines = picks.map(
     (p, i) => `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · pay on delivery`
   );
   setMenuState(to, {
     type: "product_pick",
-    productIds: products.map((p) => p.id),
-    productNames: products.map((p) => p.name),
+    productIds: picks.map((p) => p.id),
+    productNames: picks.map((p) => p.name),
   });
+  const more =
+    products.length > CATALOG_PAGE_SIZE
+      ? `\n_Showing top ${CATALOG_PAGE_SIZE}. Type more of the name to narrow down._\n`
+      : "";
   return sendText(
     to,
-    `*Do you mean one of these?*\n\n${lines.join("\n\n")}\n\n` +
+    `*Do you mean one of these?*\n\n${lines.join("\n\n")}${more}\n` +
       `Reply with the *number* or type more of the product name.`
   );
 }
@@ -561,7 +568,7 @@ export async function handleProductRouter(customerKey, text) {
 
   if (menuState?.type === "scent_list_paged") {
     if (/^(next|more)$/i.test(normalized) && menuState.rowId) {
-      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || 12));
+      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || CATALOG_PAGE_SIZE));
       const nextPage = (menuState.page || 0) + 1;
       if (nextPage < totalPages) {
         return sendPerfumeScentList(customerKey, { page: nextPage, rowId: menuState.rowId });
