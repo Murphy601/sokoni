@@ -20559,5 +20559,20 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/fa-014.jpg",
     "subcategory": "shoes"
+  },
+  {
+    "id": "fa-015",
+    "name": "ZARA Women's Rhinestone Flat Sandals - Burgundy",
+    "category": "fashion",
+    "priceKes": 250,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-015.jpg",
+    "subcategory": "shoes"
   }
 ]
