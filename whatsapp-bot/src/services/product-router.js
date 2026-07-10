@@ -204,6 +204,7 @@ function isNonPerfumeProductQuery(text) {
 
 function shouldTryPerfumeRouting(text) {
   if (isCatalogNavCommand(text)) return false;
+  if (/^\d{1,2}$/.test(String(text || "").trim())) return false;
   if (isNonPerfumeProductQuery(text)) return false;
   if (isPerfumeBrowseIntent(text)) return true;
   const q = stripPerfumeNoise(text);
@@ -564,6 +565,24 @@ export async function handleProductRouter(customerKey, text) {
 
   if (menuState?.type === "size_pick" && choice && menuState.productIds?.[choice - 1]) {
     return showProductActions(customerKey, menuState.productIds[choice - 1]);
+  }
+
+  if (menuState?.type === "product_list_paged" || menuState?.type === "product_list") {
+    const pageCount = menuState.productIds?.length || 0;
+    if (choice) {
+      if (menuState.productIds?.[choice - 1]) {
+        return showProductActions(customerKey, menuState.productIds[choice - 1]);
+      }
+      const pageNum = (menuState.page || 0) + 1;
+      const pageSize = menuState.pageSize || CATALOG_PAGE_SIZE;
+      const totalPages = Math.max(1, Math.ceil((menuState.allProductIds?.length || 0) / pageSize));
+      const hasMore = pageNum < totalPages;
+      return sendText(
+        customerKey,
+        `On page ${pageNum}, reply *1–${pageCount}* to pick an item.` +
+          (hasMore ? ` Or reply *next* for more.` : "")
+      );
+    }
   }
 
   if (menuState?.type === "scent_list_paged") {
