@@ -60,13 +60,29 @@ async function callWaha(endpoint, body) {
 }
 
 /** WAHA expects @ encoded in chatId path only — not the full message id. */
-function wahaChatPath(chatId) {
-  return String(chatId || "").replace(/@/g, "%40");
+export function normalizeWahaChatId(chatId) {
+  return String(chatId || "").replace(/@s\.whatsapp\.net$/, "@c.us");
 }
 
-function wahaFileUrl(apiBase, messageId, ext = "jpg") {
-  if (!messageId || !apiBase) return null;
-  return `${apiBase}/api/files/${messageId}.${ext}`;
+function wahaChatPath(chatId) {
+  return normalizeWahaChatId(chatId).replace(/@/g, "%40");
+}
+
+function messageFileKeys(messageId) {
+  if (!messageId) return [];
+  const id = String(messageId);
+  const keys = [id];
+  const tail = id.split("_").pop();
+  if (tail && tail !== id) keys.push(tail);
+  return [...new Set(keys)];
+}
+
+function wahaFileUrl(apiBase, sessionId, key, ext = "jpg") {
+  if (!key || !apiBase) return null;
+  return [
+    `${apiBase}/api/files/${key}.${ext}`,
+    sessionId ? `${apiBase}/api/files/${sessionId}/${key}.${ext}` : null,
+  ].filter(Boolean);
 }
 
 function fixMediaUrl(url, apiBase) {
@@ -74,18 +90,10 @@ function fixMediaUrl(url, apiBase) {
   try {
     const u = new URL(url);
     const base = new URL(apiBase);
-    // Rewrite localhost/docker hostnames to the configured WAHA API base.
-    if (
-      u.hostname === "localhost" ||
-      u.hostname === "127.0.0.1" ||
-      u.hostname === "host.docker.internal" ||
-      u.pathname.startsWith("/api/files/")
-    ) {
+    // Only rewrite docker/localhost hosts — keep path exactly as WAHA sent it.
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "host.docker.internal") {
       u.protocol = base.protocol;
       u.host = base.host;
-    }
-    if (config.waha.apiKey && !u.searchParams.has("x-api-key")) {
-      u.searchParams.set("x-api-key", config.waha.apiKey);
     }
     return u.toString();
   } catch {
@@ -93,8 +101,20 @@ function fixMediaUrl(url, apiBase) {
   }
 }
 
+function uniqueChatIds(...ids) {
+  const out = [];
+  for (const id of ids) {
+    const n = normalizeWahaChatId(id);
+    if (n && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 /** Download media from WAHA (image/PDF from WhatsApp message). Retries when WAHA is still saving. */
-export async function downloadWahaMedia(mediaUrl, { messageId, chatId, session, mimetype } = {}) {
+export async function downloadWahaMedia(
+  mediaUrl,
+  { messageId, chatId, fromChatId, toChatId, session, mimetype } = {}
+) {
   if (!config.waha.apiUrl) {
     throw new Error("WAHA_API_URL not set");
   }
@@ -102,6 +122,7 @@ export async function downloadWahaMedia(mediaUrl, { messageId, chatId, session, 
   const headers = wahaHeaders();
   const sid = session || config.waha.session;
   const apiBase = config.waha.apiUrl.replace(/\/$/, "");
+  const chatCandidates = uniqueChatIds(chatId, fromChatId, toChatId);
 
   async function fetchBuffer(url) {
     const { data, status, headers: respHeaders } = await axios.get(url, {
@@ -120,55 +141,85 @@ export async function downloadWahaMedia(mediaUrl, { messageId, chatId, session, 
     return Buffer.from(data);
   }
 
-  async function tryMessageDownload() {
-    if (!messageId || !chatId) return null;
-    const cid = wahaChatPath(chatId);
-    const url = `${apiBase}/api/${sid}/chats/${cid}/messages/${messageId}?downloadMedia=true`;
-    try {
-      const resp = await axios.get(url, {
-        headers,
-        timeout: 120_000,
-        responseType: "arraybuffer",
-        validateStatus: (s) => s >= 200 && s < 300,
-      });
-      const ct = String(resp.headers["content-type"] || "");
-      if (resp.data?.byteLength && (ct.includes("image") || ct.includes("octet-stream") || ct.includes("pdf"))) {
-        return Buffer.from(resp.data);
-      }
-      if (resp.data?.byteLength) {
+  async function fetchMessageJson(cid) {
+    const url = `${apiBase}/api/${sid}/chats/${wahaChatPath(cid)}/messages/${messageId}?downloadMedia=false`;
+    const { data } = await axios.get(url, { headers, timeout: 60_000 });
+    return data;
+  }
+
+  async function pollForMediaUrl(maxMs = 60_000) {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      for (const cid of chatCandidates) {
         try {
-          const json = JSON.parse(Buffer.from(resp.data).toString("utf8"));
-          if (json?.media?.url) return fetchBuffer(fixMediaUrl(json.media.url, apiBase));
-        } catch {
-          /* binary */
+          const msg = await fetchMessageJson(cid);
+          if (msg?.media?.url) return fixMediaUrl(msg.media.url, apiBase);
+        } catch (err) {
+          const status = err.response?.status;
+          if (status && status !== 404) {
+            console.warn("[waha] message lookup:", cid, status, err.message);
+          }
         }
       }
-    } catch (err) {
-      console.warn("[waha] message download failed:", err.message);
+      await new Promise((r) => setTimeout(r, 3000));
     }
     return null;
   }
 
-  const exts = ["jpg", "jpeg", "png", "webp"];
+  async function tryMessageDownload(cid) {
+    const url = `${apiBase}/api/${sid}/chats/${wahaChatPath(cid)}/messages/${messageId}?downloadMedia=true`;
+    const resp = await axios.get(url, {
+      headers,
+      timeout: 120_000,
+      responseType: "arraybuffer",
+      validateStatus: (s) => s >= 200 && s < 300,
+    });
+    const ct = String(resp.headers["content-type"] || "");
+    if (resp.data?.byteLength && (ct.includes("image") || ct.includes("octet-stream") || ct.includes("pdf"))) {
+      return Buffer.from(resp.data);
+    }
+    if (resp.data?.byteLength) {
+      try {
+        const json = JSON.parse(Buffer.from(resp.data).toString("utf8"));
+        if (json?.media?.url) return fetchBuffer(fixMediaUrl(json.media.url, apiBase));
+      } catch {
+        /* binary */
+      }
+    }
+    return null;
+  }
+
+  const exts = ["jpeg", "jpg", "png", "webp"];
   if (String(mimetype || "").includes("png")) exts.unshift("png");
-  if (String(mimetype || "").includes("webp")) exts.unshift("webp");
 
   const urls = [];
-  if (messageId) {
-    for (const ext of exts) urls.push(wahaFileUrl(apiBase, messageId, ext));
-  }
   if (mediaUrl) urls.push(fixMediaUrl(mediaUrl, apiBase));
+
+  if (messageId) {
+    for (const key of messageFileKeys(messageId)) {
+      for (const ext of exts) urls.push(...wahaFileUrl(apiBase, sid, key, ext));
+    }
+  }
 
   if (!messageId && urls.length === 0) throw new Error("No media URL on message");
 
   let lastError = null;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    if (messageId && chatId) {
+
+  // Album child messages often arrive before WAHA finishes saving the file.
+  if (!mediaUrl && messageId && chatCandidates.length) {
+    const polled = await pollForMediaUrl(45_000);
+    if (polled) urls.unshift(polled);
+  }
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    for (const cid of chatCandidates) {
       try {
-        const viaMessage = await tryMessageDownload();
+        const viaMessage = await tryMessageDownload(cid);
         if (viaMessage?.byteLength) return viaMessage;
       } catch (err) {
         lastError = err;
+        const status = err.response?.status;
+        if (status !== 404) console.warn("[waha] message download:", cid, status || err.message);
       }
     }
 
@@ -178,14 +229,22 @@ export async function downloadWahaMedia(mediaUrl, { messageId, chatId, session, 
       } catch (err) {
         lastError = err;
         const status = err.response?.status;
-        console.warn("[waha] media download failed:", url, status || err.message);
+        console.warn("[waha] file download failed:", url, status || err.message);
       }
     }
 
-    if (attempt < 5) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    if (attempt < 7) {
+      const fresh = await pollForMediaUrl(12_000);
+      if (fresh && !urls.includes(fresh)) urls.unshift(fresh);
+      await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
+    }
   }
 
-  throw new Error(lastError?.response?.status ? `Request failed with status code ${lastError.response.status}` : lastError?.message || "download failed");
+  throw new Error(
+    lastError?.response?.status
+      ? `Request failed with status code ${lastError.response.status}`
+      : lastError?.message || "download failed"
+  );
 }
 
 /**

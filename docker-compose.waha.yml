@@ -22,8 +22,13 @@ services:
       WAHA_PRINT_QR: "true"
       # Save incoming images/files so the bot can download them (required for catalog photos)
       WHATSAPP_DOWNLOAD_MEDIA: "true"
+      # Keep files until manually cleared — default 180s deletes files during large album uploads
+      WHATSAPP_FILES_LIFETIME: "0"
+      WHATSAPP_FILES_FOLDER: /app/.media
     volumes:
       - waha_sessions:/app/.sessions
+      - waha_media:/app/.media
 
 volumes:
   waha_sessions:
+  waha_media:

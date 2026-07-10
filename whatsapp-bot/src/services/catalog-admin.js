@@ -256,7 +256,7 @@ let publishTimer = null;
 let pendingPublishCount = 0;
 let lastCatalogAdminChatId = null;
 let lastMediaDownloadAt = 0;
-const MEDIA_DOWNLOAD_GAP_MS = 3500;
+const MEDIA_DOWNLOAD_GAP_MS = 5000;
 
 /** Remember one caption for multi-photo WhatsApp albums (only first image has caption). */
 const BATCH_CAPTION_TTL_MS = 25 * 60 * 1000;
@@ -825,7 +825,10 @@ export async function handleCatalogCommand(adminChatId, text) {
   return false;
 }
 
-export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype, caption = "", messageId, chatId, session, albumId = null }) {
+export async function handleCatalogMedia(
+  adminChatId,
+  { mediaUrl, mediaMimetype, caption = "", messageId, chatId, fromChatId, toChatId, session, albumId = null }
+) {
   const phone = phoneDigitsFromChatId(adminChatId) || "";
   if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
@@ -841,12 +844,20 @@ export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype,
     if (gap) await new Promise((r) => setTimeout(r, gap));
 
     await sendAdminOnlyText(adminChatId, "⏳ Reading product photo…");
-    // WAHA may still be saving media when the webhook fires (common in albums).
-    await new Promise((r) => setTimeout(r, 3000));
+    // Album photos often have no media.url on the webhook — give WAHA time to save the file.
+    const initialWait = mediaUrl ? 3000 : 8000;
+    await new Promise((r) => setTimeout(r, initialWait));
 
     let buffer;
     try {
-      buffer = await downloadWahaMedia(mediaUrl, { messageId, chatId, session, mimetype: mediaMimetype });
+      buffer = await downloadWahaMedia(mediaUrl, {
+        messageId,
+        chatId,
+        fromChatId,
+        toChatId,
+        session,
+        mimetype: mediaMimetype,
+      });
       lastMediaDownloadAt = Date.now();
     } catch (err) {
       throw new Error(err.message?.startsWith("Could not download") ? err.message : `Could not download image: ${err.message}`);
