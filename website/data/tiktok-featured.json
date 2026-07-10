@@ -1,30 +1,72 @@
 {
-  "updatedAt": "2026-07-10T16:30:49.006Z",
+  "updatedAt": "2026-07-10T16:30:16.989Z",
   "productIds": [
-    "intl-001",
-    "po-115-500ml",
-    "po-154-500ml",
+    "ga-003",
+    "ho-005",
+    "fa-005",
+    "sm-006",
+    "hb-002",
+    "po-103-250ml",
+    "po-025-1l",
+    "po-202-1l",
+    "po-104-1l",
+    "po-077-500ml",
     "po-144-50ml"
   ],
   "posts": [
     {
-      "productId": "intl-001",
-      "postedAt": "2026-07-06T15:02:38.596Z",
-      "caption": "Unaona hii form? Apple Watch SE (2nd Gen) — $89 tu! 🔥 Quality iko top, reviews ziko poa. Text Sokoni on WhatsApp (link kwa bio) ukichukua chap chap — pay on delivery 💵 #SokoniMall #TikTokDealsKenya #WhatsAppShopping #tvsaudio"
-    },
-    {
-      "productId": "po-115-500ml",
-      "postedAt": "2026-07-10T05:00:52.038Z",
+      "productId": "ga-003",
+      "postedAt": "2026-07-07T05:00:34.687Z",
       "caption": ""
     },
     {
-      "productId": "po-154-500ml",
-      "postedAt": "2026-07-10T10:00:48.204Z",
+      "productId": "ho-005",
+      "postedAt": "2026-07-07T06:08:22.989Z",
+      "caption": ""
+    },
+    {
+      "productId": "fa-005",
+      "postedAt": "2026-07-08T05:00:25.426Z",
+      "caption": ""
+    },
+    {
+      "productId": "sm-006",
+      "postedAt": "2026-07-08T10:00:26.213Z",
+      "caption": ""
+    },
+    {
+      "productId": "hb-002",
+      "postedAt": "2026-07-08T16:30:21.578Z",
+      "caption": ""
+    },
+    {
+      "productId": "po-103-250ml",
+      "postedAt": "2026-07-09T05:00:23.291Z",
+      "caption": ""
+    },
+    {
+      "productId": "po-025-1l",
+      "postedAt": "2026-07-09T10:00:30.484Z",
+      "caption": ""
+    },
+    {
+      "productId": "po-202-1l",
+      "postedAt": "2026-07-09T16:30:15.024Z",
+      "caption": ""
+    },
+    {
+      "productId": "po-104-1l",
+      "postedAt": "2026-07-10T05:00:23.839Z",
+      "caption": ""
+    },
+    {
+      "productId": "po-077-500ml",
+      "postedAt": "2026-07-10T10:00:16.532Z",
       "caption": ""
     },
     {
       "productId": "po-144-50ml",
-      "postedAt": "2026-07-10T16:30:49.006Z",
+      "postedAt": "2026-07-10T16:30:16.989Z",
       "caption": ""
     }
   ]

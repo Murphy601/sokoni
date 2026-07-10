@@ -34056,5 +34056,22 @@
     "imageUrl": "assets/images/products/fa-044.jpg",
     "imageKey": "fdbe5f0540ec0820",
     "imageHash": "fdbe5f0540ec0820"
+  },
+  {
+    "id": "ho-015",
+    "name": "Product name",
+    "category": "home-office",
+    "subcategory": "product-name",
+    "sourcePriceKes": 12000,
+    "priceKes": 13100,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🏠",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true
   }
 ]

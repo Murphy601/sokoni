@@ -21009,5 +21009,19 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/fa-044.jpg",
     "subcategory": "shoes"
+  },
+  {
+    "id": "ho-015",
+    "name": "Product name",
+    "category": "home-office",
+    "priceKes": 13100,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🏠",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "subcategory": "product-name"
   }
 ]
