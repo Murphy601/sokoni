@@ -255,6 +255,8 @@ let queueRunning = false;
 let publishTimer = null;
 let pendingPublishCount = 0;
 let lastCatalogAdminChatId = null;
+let lastMediaDownloadAt = 0;
+const MEDIA_DOWNLOAD_GAP_MS = 3500;
 
 /** Remember one caption for multi-photo WhatsApp albums (only first image has caption). */
 const BATCH_CAPTION_TTL_MS = 25 * 60 * 1000;
@@ -835,15 +837,19 @@ export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype,
   const effectiveCaption = resolveCatalogCaption(adminChatId, caption, albumId);
 
   enqueue(adminChatId, async () => {
+    const gap = Math.max(0, MEDIA_DOWNLOAD_GAP_MS - (Date.now() - lastMediaDownloadAt));
+    if (gap) await new Promise((r) => setTimeout(r, gap));
+
     await sendAdminOnlyText(adminChatId, "⏳ Reading product photo…");
-    // WAHA may still be saving media when the webhook fires.
-    await new Promise((r) => setTimeout(r, 2000));
+    // WAHA may still be saving media when the webhook fires (common in albums).
+    await new Promise((r) => setTimeout(r, 3000));
 
     let buffer;
     try {
-      buffer = await downloadWahaMedia(mediaUrl, { messageId, chatId, session });
+      buffer = await downloadWahaMedia(mediaUrl, { messageId, chatId, session, mimetype: mediaMimetype });
+      lastMediaDownloadAt = Date.now();
     } catch (err) {
-      throw new Error(`Could not download image: ${err.message}`);
+      throw new Error(err.message?.startsWith("Could not download") ? err.message : `Could not download image: ${err.message}`);
     }
 
     if (String(mediaMimetype).includes("pdf")) {

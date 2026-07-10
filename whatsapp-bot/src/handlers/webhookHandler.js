@@ -97,12 +97,23 @@ function extractAlbumId(payload) {
 
 function extractMedia(payload) {
   const media = payload?.media || payload?._data?.media || null;
+  const mediaError = media?.error || payload?._data?.media?.error || null;
   return {
     hasMedia: Boolean(payload?.hasMedia && (media?.url || payload?.id)),
     mediaUrl: media?.url || null,
     mediaMimetype: media?.mimetype || media?.mimeType || "image/jpeg",
     mediaFilename: media?.filename || null,
+    mediaError,
   };
+}
+
+/** Album container messages have no real file — skip them; individual photos follow separately. */
+function isAlbumPlaceholder(payload) {
+  const d = payload?._data || {};
+  const type = String(d.type || payload?.type || "").toLowerCase();
+  if (!/album|multi_vcard|product_catalog/.test(type)) return false;
+  const media = payload?.media || d.media;
+  return !media?.url;
 }
 
 function isSelfOrBusinessChat(chatId) {
@@ -128,12 +139,14 @@ export function parseWahaMessage(body) {
   const quotedText = extractQuotedText(payload);
   const messageId = messageIdFrom(payload);
   const albumId = extractAlbumId(payload);
+  const isAlbumPlaceholderMsg = isAlbumPlaceholder(payload);
 
   if (payload.fromMe) {
     return {
       direction: "outgoing",
       messageId,
       albumId,
+      isAlbumPlaceholder: isAlbumPlaceholderMsg,
       fromChatId: customerKeyFromChatId(payload.from),
       toChatId: customerKeyFromChatId(payload.to),
       text,
@@ -150,6 +163,7 @@ export function parseWahaMessage(body) {
     direction: "incoming",
     messageId,
     albumId,
+    isAlbumPlaceholder: isAlbumPlaceholderMsg,
     customerKey: meta.chatId,
     text,
     quotedText,
@@ -162,6 +176,7 @@ export function parseWahaMessage(body) {
 
 function shouldRouteAdminCatalog(parsed) {
   if (!parsed.hasMedia || !isCatalogMedia(parsed.mediaMimetype)) return false;
+  if (parsed.isAlbumPlaceholder) return false;
 
   if (parsed.direction === "incoming") {
     return canRunAdminCommands(parsed.customerKey, parsed.phone);
