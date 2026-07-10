@@ -31518,11 +31518,11 @@
   },
   {
     "id": "pt-010",
-    "name": "*Fashion Case for HOT 50 PRO*\n  ·  💵 Pay on delivery\n⭐ 4.5 (0 reviews)",
+    "name": "**Fashion Case for HOT 50 PRO*\n  ·  💵 Pay on delivery\n⭐ 4.5 (0 reviews)*\n  ·  💵 Pay on delivery\n⭐ 4.5 (0 reviews)",
     "category": "phones-tablets",
     "subcategory": "phone-accessories",
-    "sourcePriceKes": 200,
-    "priceKes": 350,
+    "sourcePriceKes": 350,
+    "priceKes": 500,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -31533,7 +31533,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/pt-010.jpg",
-    "imageKey": "dba13feb5655"
+    "imageKey": "61fb2a865592"
   },
   {
     "id": "ho-006",
