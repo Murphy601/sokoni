@@ -24,6 +24,10 @@ git fetch origin main
 git pull --rebase origin main
 echo "==> Git at: $(git log -1 --oneline)"
 
+if [ -f "$REPO/docker-compose.waha.yml" ]; then
+  bash "$REPO/scripts/deploy-waha.sh"
+fi
+
 cd "$BOT_DIR"
 npm install --omit=dev 2>/dev/null || npm install
 

@@ -147,6 +147,18 @@ export async function downloadWahaMedia(
     return data;
   }
 
+  async function tryGlobalMessagesLookup(cid) {
+    const url = `${apiBase}/api/messages?session=${encodeURIComponent(sid)}&chatId=${wahaChatPath(cid)}&limit=80`;
+    const { data } = await axios.get(url, { headers, timeout: 60_000 });
+    const list = Array.isArray(data) ? data : data?.messages || data?.data || [];
+    const hit = list.find((m) => {
+      const id = typeof m.id === "string" ? m.id : m.id?._serialized || m.id?.id || "";
+      return id === messageId;
+    });
+    if (hit?.media?.url) return fixMediaUrl(hit.media.url, apiBase);
+    return null;
+  }
+
   async function pollForMediaUrl(maxMs = 60_000) {
     const start = Date.now();
     while (Date.now() - start < maxMs) {
@@ -159,6 +171,12 @@ export async function downloadWahaMedia(
           if (status && status !== 404) {
             console.warn("[waha] message lookup:", cid, status, err.message);
           }
+        }
+        try {
+          const fromList = await tryGlobalMessagesLookup(cid);
+          if (fromList) return fromList;
+        } catch (err) {
+          console.warn("[waha] messages list lookup:", cid, err.message);
         }
       }
       await new Promise((r) => setTimeout(r, 3000));
