@@ -33496,7 +33496,7 @@
   },
   {
     "id": "fa-016",
-    "name": "Women's Block Heel Loafers - Green",
+    "name": "Women's Black Block Heel Loafers",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33511,7 +33511,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-016.jpg",
-    "imageKey": "4e3872c7801d"
+    "imageKey": "87ef5b0d0f09"
   },
   {
     "id": "fa-017",
@@ -33667,7 +33667,7 @@
   },
   {
     "id": "fa-025",
-    "name": "Women's Loafer Style Block Heel Shoes - Tan",
+    "name": "Women's Gold Block Heel Shoes",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33682,7 +33682,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-025.jpg",
-    "imageKey": "9f42130f34dd"
+    "imageKey": "b713925422e8"
   },
   {
     "id": "fa-026",
@@ -33705,7 +33705,7 @@
   },
   {
     "id": "fa-027",
-    "name": "Women's Pointed Toe Block Heel Shoes - Red with Snake Print Accent",
+    "name": "Women's Black Pointed-Toe Heels with Snake Print Accent",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33720,7 +33720,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-027.jpg",
-    "imageKey": "9cf9e61bc85a"
+    "imageKey": "f5033ac1c2e4"
   },
   {
     "id": "fa-028",
@@ -33743,7 +33743,7 @@
   },
   {
     "id": "fa-029",
-    "name": "Women's Block Heel Shoes - Teal with Snake Print Detail",
+    "name": "Women's Brown Block Heel Shoes with Snake Print Detail",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33758,11 +33758,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-029.jpg",
-    "imageKey": "a8fbc8e67106"
+    "imageKey": "c04fad05c6be"
   },
   {
     "id": "fa-030",
-    "name": "Women's Black Heeled Loafers",
+    "name": "Women's Patent Leather Heeled Sandals - Black",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33777,11 +33777,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-030.jpg",
-    "imageKey": "484f30ae3255"
+    "imageKey": "4798e0f63779"
   },
   {
     "id": "fa-031",
-    "name": "Women's Navy Blue Suede and Patent Leather Block Heel Shoes",
+    "name": "Women's Suede and Patent Leather Block Heel Shoes - Burgundy",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33796,7 +33796,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-031.jpg",
-    "imageKey": "b13f8293a4b1"
+    "imageKey": "0f3a2bb53063"
   },
   {
     "id": "fa-032",
@@ -33819,7 +33819,7 @@
   },
   {
     "id": "fa-033",
-    "name": "Women's Red Patent Leather Strappy High Heel Sandals",
+    "name": "Women's White Strappy High Heel Sandals",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33834,7 +33834,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-033.jpg",
-    "imageKey": "137c9e6bd2ec"
+    "imageKey": "1e8d4c506d54"
   },
   {
     "id": "fa-034",
