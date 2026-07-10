@@ -113,9 +113,11 @@ function buildVisionPrompt(caption = "") {
     `   - Examples: "Women's Rhinestone Flat Sandals - Burgundy", "Men's Leather Slide Sandals - Black", "Assorted Women's Flat Sandals (4 styles)".\n` +
     `   - Multiple items in one photo → one title for the main product type shown.\n` +
     `2. *sourcePriceKes* — store cost in KES (integer):\n` +
-    `   - From price sticker/tag if visible.\n` +
-    `   - If NO price on image, use the WhatsApp caption price if given.\n` +
-    `   - If still unknown, use 0 (caption will be applied after).\n` +
+    (capHints?.cost != null
+      ? `   - The WhatsApp caption sets the price for this batch: use *${capHints.cost}* and IGNORE price stickers on the photo.\n`
+      : `   - From price sticker/tag if visible.\n` +
+        `   - If NO price on image, use the WhatsApp caption price if given.\n` +
+        `   - If still unknown, use 0 (caption will be applied after).\n`) +
     `3. *category* + *subcategory* — from what the item IS (not only caption):\n` +
     `   - Sandals, slides, shoes, flats → fashion / shoes\n` +
     `   - Women's clothing → fashion / womens-fashion\n` +
@@ -196,7 +198,11 @@ function parseCaptionHints(caption = "") {
 
 function applyCaptionToDraft(parsed, caption = "") {
   const hints = parseCaptionHints(caption);
-  if (hints.cost != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes === 0)) {
+  const capCost = parseCost(caption);
+  // Batch caption price always wins over sticker/OCR (one price for all photos in album).
+  if (capCost != null) {
+    parsed.sourcePriceKes = capCost;
+  } else if (hints.cost != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes === 0)) {
     parsed.sourcePriceKes = hints.cost;
   }
   if (hints.category && !VALID_CATEGORIES.includes(parsed.category)) {
@@ -249,6 +255,58 @@ let queueRunning = false;
 let publishTimer = null;
 let pendingPublishCount = 0;
 let lastCatalogAdminChatId = null;
+
+/** Remember one caption for multi-photo WhatsApp albums (only first image has caption). */
+const BATCH_CAPTION_TTL_MS = 25 * 60 * 1000;
+const batchCaptionByChat = new Map();
+const batchCaptionByAlbum = new Map();
+
+function pruneBatchCaptions() {
+  const now = Date.now();
+  for (const [k, v] of batchCaptionByChat) {
+    if (now - v.at > BATCH_CAPTION_TTL_MS) batchCaptionByChat.delete(k);
+  }
+  for (const [k, v] of batchCaptionByAlbum) {
+    if (now - v.at > BATCH_CAPTION_TTL_MS) batchCaptionByAlbum.delete(k);
+  }
+}
+
+function storeBatchCaption(adminChatId, caption, albumId = null) {
+  const entry = { caption, at: Date.now(), albumId };
+  batchCaptionByChat.set(adminChatId, entry);
+  if (albumId) batchCaptionByAlbum.set(String(albumId), entry);
+}
+
+function lookupBatchCaption(adminChatId, albumId = null) {
+  pruneBatchCaptions();
+  const now = Date.now();
+  if (albumId) {
+    const byAlbum = batchCaptionByAlbum.get(String(albumId));
+    if (byAlbum && now - byAlbum.at < BATCH_CAPTION_TTL_MS) {
+      byAlbum.at = now;
+      batchCaptionByChat.set(adminChatId, byAlbum);
+      return byAlbum.caption;
+    }
+  }
+  const byChat = batchCaptionByChat.get(adminChatId);
+  if (byChat && now - byChat.at < BATCH_CAPTION_TTL_MS) {
+    byChat.at = now;
+    return byChat.caption;
+  }
+  return "";
+}
+
+/** Resolve caption for one photo — reuses album/batch caption when later images have no text. */
+export function resolveCatalogCaption(adminChatId, rawCaption = "", albumId = null) {
+  const cap = String(rawCaption || "").trim();
+  if (cap && parseCost(cap)) {
+    storeBatchCaption(adminChatId, cap, albumId);
+    return cap;
+  }
+  if (cap) storeBatchCaption(adminChatId, cap, albumId);
+  const stored = lookupBatchCaption(adminChatId, albumId);
+  return stored || cap;
+}
 
 const GIT_SCRIPT_ENV = {
   GIT_AUTHOR_NAME: "sokoni-bot",
@@ -657,6 +715,7 @@ export function catalogHelpText() {
     `Send or forward product photos to this chat.\n` +
     `• *With price tag* — bot reads name + cost from the photo.\n` +
     `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
+    `• *Many photos at once* — put the caption on the first image (or any one); same price applies to the whole album.\n` +
     `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
@@ -764,7 +823,7 @@ export async function handleCatalogCommand(adminChatId, text) {
   return false;
 }
 
-export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype, caption = "", messageId, chatId, session }) {
+export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype, caption = "", messageId, chatId, session, albumId = null }) {
   const phone = phoneDigitsFromChatId(adminChatId) || "";
   if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
@@ -772,6 +831,8 @@ export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype,
     await sendAdminOnlyText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG).");
     return true;
   }
+
+  const effectiveCaption = resolveCatalogCaption(adminChatId, caption, albumId);
 
   enqueue(adminChatId, async () => {
     await sendAdminOnlyText(adminChatId, "⏳ Reading product photo…");
@@ -789,7 +850,7 @@ export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype,
       throw new Error("PDF not supported yet — photograph the price label and send as image.");
     }
 
-    const draft = await extractFromImage(buffer, mediaMimetype, caption);
+    const draft = await extractFromImage(buffer, mediaMimetype, effectiveCaption);
     const { product, updated } = await upsertStoreProduct(draft, buffer);
     await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
   });

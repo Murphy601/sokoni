@@ -26,7 +26,7 @@ import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
-import { handleProductRouter, resolveProductQuery } from "../services/product-router.js";
+import { handleProductRouter, resolveProductQuery, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder } from "../services/session.js";
 
@@ -82,6 +82,19 @@ function messageIdFrom(payload) {
   return payload?._data?.id?._serialized || payload?._data?.id?.id || null;
 }
 
+function extractAlbumId(payload) {
+  const d = payload?._data || {};
+  return (
+    payload?.albumId ||
+    d.albumId ||
+    d.album?.id ||
+    d.groupedId ||
+    d.mediaData?.albumId ||
+    d.message?.albumId ||
+    null
+  );
+}
+
 function extractMedia(payload) {
   const media = payload?.media || payload?._data?.media || null;
   return {
@@ -114,11 +127,13 @@ export function parseWahaMessage(body) {
 
   const quotedText = extractQuotedText(payload);
   const messageId = messageIdFrom(payload);
+  const albumId = extractAlbumId(payload);
 
   if (payload.fromMe) {
     return {
       direction: "outgoing",
       messageId,
+      albumId,
       fromChatId: customerKeyFromChatId(payload.from),
       toChatId: customerKeyFromChatId(payload.to),
       text,
@@ -134,6 +149,7 @@ export function parseWahaMessage(body) {
   return {
     direction: "incoming",
     messageId,
+    albumId,
     customerKey: meta.chatId,
     text,
     quotedText,
@@ -180,6 +196,7 @@ async function routeAdminCatalog(parsed) {
       messageId: parsed.messageId,
       chatId: parsed.direction === "incoming" ? parsed.customerKey : parsed.toChatId,
       session: parsed.session,
+      albumId: parsed.albumId,
     });
   }
 
@@ -370,6 +387,8 @@ export async function handleIncomingMessage(
     return showProductActions(customerKey, websiteProduct.id);
   }
 
+  if (await handleCatalogPagination(customerKey, text)) return;
+
   if (await handleProductRouter(customerKey, text)) return;
 
   const catalogRoute = await resolveProductQuery(text);
@@ -397,38 +416,6 @@ export async function handleIncomingMessage(
 
   if (menuState?.type === "product" && isProductMenuChoice(text)) {
     return handleActiveProductMenu(customerKey, text);
-  }
-
-  if (menuState?.type === "product_list_paged" && menuState.rowId) {
-    if (/^(next|more|n)$/i.test(normalized)) {
-      const totalPages = Math.ceil((menuState.allProductIds?.length || 0) / (menuState.pageSize || 12));
-      const nextPage = (menuState.page || 0) + 1;
-      if (nextPage < totalPages) {
-        const { sendProductsForSubcategory } = await import("../services/menu.js");
-        return sendProductsForSubcategory(customerKey, menuState.rowId, nextPage);
-      }
-      return sendText(customerKey, "You're on the last page. Reply with a number to order, or *menu*.");
-    }
-    if (/^(prev|previous|back|p)$/i.test(normalized) && (menuState.page || 0) > 0) {
-      const { sendProductsForSubcategory } = await import("../services/menu.js");
-      return sendProductsForSubcategory(customerKey, menuState.rowId, menuState.page - 1);
-    }
-  }
-
-  if (menuState?.type === "scent_list_paged" && menuState.rowId) {
-    if (/^(next|more|n)$/i.test(normalized)) {
-      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || 12));
-      const nextPage = (menuState.page || 0) + 1;
-      if (nextPage < totalPages) {
-        const { sendPerfumeScentList } = await import("../services/menu.js");
-        return sendPerfumeScentList(customerKey, { page: nextPage, rowId: menuState.rowId });
-      }
-      return sendText(customerKey, "Last page. Reply with a scent number or type a name (e.g. *BRUT*).");
-    }
-    if (/^(prev|previous|back|p)$/i.test(normalized) && (menuState.page || 0) > 0) {
-      const { sendPerfumeScentList } = await import("../services/menu.js");
-      return sendPerfumeScentList(customerKey, { page: menuState.page - 1, rowId: menuState.rowId });
-    }
   }
 
   const choice = parseNumericChoice(text);

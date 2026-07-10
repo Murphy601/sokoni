@@ -135,7 +135,58 @@ function stripSearchNoise(text) {
 
 function isWeakCatalogQuery(text) {
   const q = stripSearchNoise(text);
-  return !q || q.length < 2 || /^(hi|hey|hello|thanks|ok|okay|yes|no)$/i.test(q);
+  return !q || q.length < 2 || /^(hi|hey|hello|thanks|ok|okay|yes|no|next|more|prev|previous|back)$/i.test(q);
+}
+
+export function isCatalogNavCommand(text) {
+  return /^(next|more|prev|previous|back)$/i.test(String(text || "").trim());
+}
+
+/** Paginate product/scent lists — must run before free-text product search. */
+export async function handleCatalogPagination(customerKey, text) {
+  if (!isCatalogNavCommand(text)) return false;
+
+  const { getMenuState } = await import("./session.js");
+  const { sendText } = await import("./whatsapp.js");
+  const { sendProductsForSubcategory, sendPerfumeScentList } = await import("./menu.js");
+  const normalized = String(text || "").trim().toLowerCase();
+  const menuState = getMenuState(customerKey);
+
+  if (menuState?.type === "product_list_paged" && menuState.rowId) {
+    if (/^(next|more)$/i.test(normalized)) {
+      const totalPages = Math.ceil((menuState.allProductIds?.length || 0) / (menuState.pageSize || 12));
+      const nextPage = (menuState.page || 0) + 1;
+      if (nextPage < totalPages) {
+        await sendProductsForSubcategory(customerKey, menuState.rowId, nextPage);
+        return true;
+      }
+      await sendText(customerKey, "You're on the last page. Reply with a number to order, or *menu*.");
+      return true;
+    }
+    if (/^(prev|previous|back)$/i.test(normalized) && (menuState.page || 0) > 0) {
+      await sendProductsForSubcategory(customerKey, menuState.rowId, menuState.page - 1);
+      return true;
+    }
+  }
+
+  if (menuState?.type === "scent_list_paged" && menuState.rowId) {
+    if (/^(next|more)$/i.test(normalized)) {
+      const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || 12));
+      const nextPage = (menuState.page || 0) + 1;
+      if (nextPage < totalPages) {
+        await sendPerfumeScentList(customerKey, { page: nextPage, rowId: menuState.rowId });
+        return true;
+      }
+      await sendText(customerKey, "Last page. Reply with a scent number or type a name (e.g. *BRUT*).");
+      return true;
+    }
+    if (/^(prev|previous|back)$/i.test(normalized) && (menuState.page || 0) > 0) {
+      await sendPerfumeScentList(customerKey, { page: menuState.page - 1, rowId: menuState.rowId });
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isPerfumeBrowseIntent(text) {
@@ -150,6 +201,7 @@ function isNonPerfumeProductQuery(text) {
 }
 
 function shouldTryPerfumeRouting(text) {
+  if (isCatalogNavCommand(text)) return false;
   if (isNonPerfumeProductQuery(text)) return false;
   if (isPerfumeBrowseIntent(text)) return true;
   const q = stripPerfumeNoise(text);
@@ -327,6 +379,7 @@ async function resolveGeneralProductQuery(text) {
 export async function resolveProductQuery(text) {
   const raw = String(text || "").trim();
   if (!raw || raw.length < 2) return { action: "none" };
+  if (isCatalogNavCommand(raw)) return { action: "none" };
   if (looksLikeDeliveryDetails(raw)) return { action: "none" };
 
   const sizeMl = parseSizeFromText(raw);
@@ -431,6 +484,7 @@ export async function handleProductRouter(customerKey, text) {
 
   const normalized = text.toLowerCase().trim();
   if (looksLikeDeliveryDetails(text)) return false;
+  if (await handleCatalogPagination(customerKey, text)) return true;
   const choice = parseNumericChoice(text);
   const menuState = getMenuState(customerKey);
 
@@ -506,7 +560,7 @@ export async function handleProductRouter(customerKey, text) {
   }
 
   if (menuState?.type === "scent_list_paged") {
-    if (/^(next|more|n)$/i.test(normalized) && menuState.rowId) {
+    if (/^(next|more)$/i.test(normalized) && menuState.rowId) {
       const totalPages = Math.ceil((menuState.scentFamilies?.length || 0) / (menuState.pageSize || 12));
       const nextPage = (menuState.page || 0) + 1;
       if (nextPage < totalPages) {
@@ -514,7 +568,7 @@ export async function handleProductRouter(customerKey, text) {
       }
       return sendText(customerKey, "Last page. Reply with a scent number or type a name (e.g. *BRUT*).");
     }
-    if (/^(prev|previous|back|p)$/i.test(normalized) && menuState.rowId && (menuState.page || 0) > 0) {
+    if (/^(prev|previous|back)$/i.test(normalized) && menuState.rowId && (menuState.page || 0) > 0) {
       return sendPerfumeScentList(customerKey, { page: menuState.page - 1, rowId: menuState.rowId });
     }
     const pageFamilies = getScentPageFamilies(menuState);
