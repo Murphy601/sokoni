@@ -20,6 +20,8 @@ services:
       # NOWEB = no Chromium browser (more reliable on Windows Docker)
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_PRINT_QR: "true"
+      # Save incoming images/files so the bot can download them (required for catalog photos)
+      WHATSAPP_DOWNLOAD_MEDIA: "true"
     volumes:
       - waha_sessions:/app/.sessions
 
