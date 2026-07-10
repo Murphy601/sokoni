@@ -25,7 +25,10 @@ git pull --rebase origin main
 echo "==> Git at: $(git log -1 --oneline)"
 
 if [ -f "$REPO/docker-compose.waha.yml" ]; then
-  bash "$REPO/scripts/deploy-waha.sh"
+  if ! bash "$REPO/scripts/deploy-waha.sh"; then
+    echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
+    echo "      Run: bash scripts/deploy-waha.sh"
+  fi
 fi
 
 cd "$BOT_DIR"

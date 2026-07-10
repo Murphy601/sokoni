@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Recreate WAHA with media settings required for WhatsApp catalog photo uploads.
+# Start/recreate WAHA with media settings required for WhatsApp catalog photo uploads.
+# Safe on docker-compose v1 (no --force-recreate — that triggers ContainerConfig KeyError).
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
@@ -25,15 +26,23 @@ if [ ! -f "$COMPOSE_FILE" ]; then
   exit 1
 fi
 
-echo "==> Recreating WAHA from $COMPOSE_FILE"
+echo "==> Starting WAHA from $COMPOSE_FILE"
 cd "$REPO"
-docker_compose -f docker-compose.waha.yml up -d --force-recreate --remove-orphans
+
+# docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
+docker_compose -f docker-compose.waha.yml down --remove-orphans 2>/dev/null || true
+
+# Remove ghost containers left by failed --force-recreate runs.
+docker ps -aq --filter "name=waha" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+
+docker_compose -f docker-compose.waha.yml up -d
 
 sleep 4
 WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA container is not running."
-  docker_compose -f docker-compose.waha.yml ps
+  docker_compose -f docker-compose.waha.yml ps || true
+  docker ps -a | grep -i waha || true
   exit 1
 fi
 
@@ -44,13 +53,13 @@ docker exec "$WAHA_CID" env | grep -E '^WHATSAPP_' | sort || true
 missing=0
 for key in WHATSAPP_DOWNLOAD_MEDIA WHATSAPP_FILES_LIFETIME WHATSAPP_FILES_FOLDER; do
   if ! docker exec "$WAHA_CID" env | grep -q "^${key}="; then
-    echo "ERROR: Missing $key in WAHA container — recreate failed."
+    echo "ERROR: Missing $key in WAHA container."
     missing=1
   fi
 done
 
 if [ "$missing" -ne 0 ]; then
-  echo "Fix: docker_compose -f docker-compose.waha.yml down && docker_compose -f docker-compose.waha.yml up -d --force-recreate"
+  echo "Fix: bash scripts/deploy-waha.sh"
   exit 1
 fi
 
@@ -67,3 +76,7 @@ fi
 
 echo "==> WAHA media config OK"
 docker_compose -f docker-compose.waha.yml ps
+
+if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
+  bash "$REPO/scripts/configure-waha-session.sh"
+fi

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
+WAHA_KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
 echo "=== Sokoni health check ==="
 
 echo ""
@@ -14,7 +15,7 @@ else
 fi
 
 echo ""
-echo "2) Bot HTTP"
+echo "2) Bot HTTP (local)"
 curl -sf "http://127.0.0.1:3001/health" && echo "" || echo "ERROR: bot not responding on :3001"
 
 echo ""
@@ -30,9 +31,33 @@ fi
 echo ""
 echo "4) WAHA session"
 if [ -n "${WAHA_CID:-}" ]; then
-  KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
-  curl -sf -H "X-Api-Key: $KEY" "http://127.0.0.1:3000/api/sessions/default" | head -c 400 || echo "WARN: cannot read WAHA session"
-  echo ""
+  SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "http://127.0.0.1:3000/api/sessions/default" 2>/dev/null || echo "")"
+  if [ -z "$SESSION_JSON" ]; then
+    echo "ERROR: cannot read WAHA session — run: bash scripts/configure-waha-session.sh"
+  else
+    printf '%s' "$SESSION_JSON" | python3 -c "
+import sys, json
+try:
+  d = json.load(sys.stdin)
+  cfg = d.get('config') or {}
+  hooks = cfg.get('webhooks') or []
+  store = (cfg.get('noweb') or {}).get('store') or {}
+  print('status:', d.get('status'))
+  print('engine:', (d.get('engine') or {}).get('engine'))
+  print('noweb.store.enabled:', store.get('enabled'))
+  if hooks:
+    print('webhook:', hooks[0].get('url'))
+  else:
+    print('webhook: MISSING')
+except Exception as e:
+  print('WARN: parse error', e)
+" 2>/dev/null || echo "$SESSION_JSON" | head -c 400
+    echo ""
+    STATUS="$(printf '%s' "$SESSION_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")"
+    if [ "$STATUS" != "WORKING" ]; then
+      echo "ERROR: session not WORKING (status=$STATUS) — scan QR or run configure-waha-session.sh"
+    fi
+  fi
 fi
 
 echo ""
@@ -41,3 +66,4 @@ curl -sf "https://bot.sokonimall.com/health" && echo "" || echo "WARN: public he
 
 echo ""
 echo "Done. If any ERROR above, fix before testing WhatsApp."
+echo "Quick fix: cd ~/sokoni && git pull && bash scripts/deploy-waha.sh && bash scripts/deploy-bot.sh"

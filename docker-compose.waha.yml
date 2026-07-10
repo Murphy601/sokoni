@@ -25,6 +25,9 @@ services:
       # Keep files until manually cleared — default 180s deletes files during large album uploads
       WHATSAPP_FILES_LIFETIME: "0"
       WHATSAPP_FILES_FOLDER: /app/.media
+    extra_hosts:
+      # Lets WAHA reach the bot on the host (pm2 :3001) from inside the container.
+      - "host.docker.internal:host-gateway"
     volumes:
       - waha_sessions:/app/.sessions
       - waha_media:/app/.media
