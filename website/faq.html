@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FAQ — Sokoni Mall</title>
+<meta name="description" content="Frequently asked questions about shopping on Sokoni Mall via WhatsApp — pay on delivery, M-Pesa Till, beta testing, and international orders." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' } }, fontFamily: { sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], display: ['Fraunces', 'Georgia', 'serif'] } } } };
+</script>
+<script>
+  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+</script>
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Back to Sokoni</a>
+      <a href="about.html" class="text-sm text-brand-purple/60 dark:text-white/60 hover:text-brand-green">About Us</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-5 py-12 legal-prose">
+    <h1 class="font-display text-3xl font-bold mb-2">Frequently Asked Questions</h1>
+    <p class="text-sm text-brand-purple/50 dark:text-white/50 mb-10">Sokoni Mall · Public Beta · sokonimall.com</p>
+
+    <h2>How does shopping on WhatsApp work?</h2>
+    <p>No app download or account needed. Message our AI assistant on <a href="https://wa.me/254757764009">0757 764 009</a> in English, Kiswahili, or Sheng. It searches our local catalog, places your order, and sends tracking updates in the same chat.</p>
+
+    <h2>Why does the M-Pesa Till show a personal name?</h2>
+    <p>Sokoni Mall is in live <strong>Public Beta Testing</strong>. While corporate registrations are finalized, authorized local payments go through Buy Goods Till <strong>4775847</strong>, legally registered to our founder <strong>David Thuku Muiruri</strong> as a sole-proprietor bridge account during launch.</p>
+
+    <h2>Do I need to pay a commitment or delivery fee upfront?</h2>
+    <p><strong>Absolutely not.</strong> For all local catalog items we enforce strict <strong>Pay on Delivery</strong>. Never send money before the item is in your hands and fully inspected.</p>
+
+    <h2>What are international orders?</h2>
+    <p>Products from overseas marketplaces (AliExpress, Temu, Amazon, etc.) link you to <strong>partner stores</strong>. Sokoni may earn a small affiliate commission at no extra cost to you. International items do <strong>not</strong> support pay-on-delivery and are subject to partner checkout, shipping, and Kenya customs rules.</p>
+
+    <h2>How do I track my package?</h2>
+    <p>Every order gets an ID like <strong>SK-1042</strong>. Type your order number or <em>track</em> in WhatsApp for a live status timeline.</p>
+
+    <h2>What offers or discounts are available?</h2>
+    <p>During beta, promotional offers are capped at <strong>3% off</strong> eligible local orders using code <strong>SOKONI3</strong> in chat. We do not run larger percentage discounts or upfront payment deals on local COD orders.</p>
+
+    <h2>How do I contact support?</h2>
+    <ul>
+      <li>WhatsApp / calls: <a href="https://wa.me/254757764009">0757 764 009</a></li>
+      <li>Email: <a href="mailto:support@sokonimall.com">support@sokonimall.com</a></li>
+      <li>Human help: WhatsApp → <em>Talk to a Human</em> (7:30 AM–9 PM EAT)</li>
+    </ul>
+  </main>
+
+  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-sm text-brand-purple/50 dark:text-white/50">
+    <p><a href="index.html" class="hover:text-brand-green">Home</a> · <a href="about.html" class="hover:text-brand-green">About</a> · <a href="terms.html" class="hover:text-brand-green">Terms</a> · <a href="privacy.html" class="hover:text-brand-green">Privacy</a></p>
+    <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise</p>
+  </footer>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

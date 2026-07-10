@@ -2,6 +2,8 @@ import { config } from "../config.js";
 import { getSupplier } from "./suppliers.js";
 import { sendText, formatCustomerLabel } from "./whatsapp.js";
 import { formatAdminFulfillmentBlock } from "./fulfillment.js";
+import { humanHandoffAck } from "./trust-copy.js";
+import { isAfterHumanHours } from "./customer-automations.js";
 import {
   setHumanHandoff,
   getHumanHandoff,
@@ -71,10 +73,7 @@ export async function handleCustomerWhileHandoff(customerKey) {
 
   if (!handoff.ackSent) {
     setHumanHandoff(customerKey, { ...handoff, ackSent: true });
-    await sendText(
-      customerKey,
-      "You're connected with our team 👋 We'll reply here shortly.\n\nType *menu* anytime to return to the shopping bot."
-    );
+    await sendText(customerKey, humanHandoffAck(isAfterHumanHours()));
   }
   return true;
 }

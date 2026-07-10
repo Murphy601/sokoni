@@ -30,6 +30,7 @@ import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
 import { handleProductRouter, resolveProductQuery, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder } from "../services/session.js";
+import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -349,12 +350,16 @@ export async function handleIncomingMessage(
   }
 
   if (RESET_KEYWORDS.has(normalized)) {
+    await maybeSendOutOfOffice(customerKey);
     return sendWelcome(customerKey);
   }
 
   if (CATALOG_ALIASES.has(normalized)) {
+    await maybeSendOutOfOffice(customerKey);
     return sendWelcome(customerKey);
   }
+
+  if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
 
   if (/^(shop international|international shopping|🌍)$/i.test(normalized) || normalized === "international") {
     const { sendInternationalMenu } = await import("../services/menu.js");

@@ -3,25 +3,13 @@ import { sendText } from "./whatsapp.js";
 import { getOrder, getOrdersForCustomer, updateOrderMeta, listRecentOrders } from "./orders.js";
 import { getPickupPoint } from "./pickupPoints.js";
 import { getSupplier } from "./suppliers.js";
+import { paymentVerificationPrompt, paymentConfirmedMessage } from "./trust-copy.js";
 
 export const CUSTOMER_PAYMENT_STATUSES = ["unpaid", "claimed", "confirmed"];
 
 /** M-Pesa Lipa na M-Pesa till payment block for customers. */
 export function formatMpesaTillBlock(amountKes = null) {
-  const till = config.store.mpesaTill;
-  const name = config.store.mpesaTillName;
-  const amountLine =
-    amountKes != null && Number.isFinite(Number(amountKes))
-      ? `Pay *KES ${Number(amountKes).toLocaleString()}* to:\n\n`
-      : "";
-  return (
-    `💳 *M-Pesa Till (pay on delivery only)*\n\n` +
-    amountLine +
-    `📱 *Till number:* ${till}\n` +
-    `👤 *Name:* ${name}\n\n` +
-    `⚠️ *Pay ONLY to this till* when your order arrives — not to riders or other numbers. This ensures your payment reaches Sokoni.\n\n` +
-    `After paying, reply *paid* here so we can confirm your payment.`
-  );
+  return paymentVerificationPrompt(amountKes);
 }
 
 export function formatShortPaymentReminder(order) {
@@ -153,10 +141,7 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
   }
 
   if (order.customerPaymentStatus === "confirmed") {
-    await sendText(
-      customerKey,
-      `Payment for *${order.id}* is already confirmed ✅ Thank you for shopping with Sokoni!`
-    );
+    await sendText(customerKey, paymentConfirmedMessage({ orderId: order.id, amountKes: order.priceKes }));
     return true;
   }
 

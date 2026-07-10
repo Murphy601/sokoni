@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>About Us — Sokoni Mall</title>
+<meta name="description" content="About Sokoni Mall — a Kenyan conversational AI shopping platform on WhatsApp with strict pay-on-delivery consumer protection." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' } }, fontFamily: { sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], display: ['Fraunces', 'Georgia', 'serif'] } } } };
+</script>
+<script>
+  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+</script>
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Back to Sokoni</a>
+      <a href="faq.html" class="text-sm text-brand-purple/60 dark:text-white/60 hover:text-brand-green">FAQ</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-5 py-12 legal-prose">
+    <h1 class="font-display text-3xl font-bold mb-2">About Sokoni Mall</h1>
+    <p class="text-sm text-brand-purple/50 dark:text-white/50 mb-10">Kenyan-born · Public Beta · Founded by David Thuku Muiruri</p>
+
+    <p><strong>Sokoni Mall Enterprise</strong> (sokonimall.com) is a homegrown conversational commerce platform. We built a smart AI shopping assistant that lives inside <strong>WhatsApp</strong> — so you can discover products, place orders, and track deliveries without downloading another heavy shopping app.</p>
+
+    <h2>Our mission</h2>
+    <p>Bridge cutting-edge automated retail with absolute consumer trust in Kenya. We process requests in English, Kiswahili, and Sheng, matching shoppers to local distributor inventory and curated international affiliate deals.</p>
+
+    <h2>Public beta &amp; transparency</h2>
+    <p>We are openly in <strong>Public Beta Testing</strong>. The platform is fully functional but continuously improving. During this phase:</p>
+    <ul>
+      <li>Local orders use strict <strong>Pay on Delivery</strong> — zero deposits upfront.</li>
+      <li>Authorized M-Pesa checkout is Till <strong>4775847</strong> (David Thuku Muiruri) while corporate entity documentation is finalized.</li>
+      <li>You inspect every item before payment. Never pay riders or personal numbers.</li>
+    </ul>
+
+    <h2>Local vs international</h2>
+    <p><strong>Local Sokoni Store</strong> items are fulfilled by us and partners across Kenya with pay-on-delivery. <strong>International</strong> items link to external partner marketplaces — separate checkout, shipping, and customs policies apply.</p>
+
+    <h2>Contact</h2>
+    <ul>
+      <li>WhatsApp / calls: <a href="https://wa.me/254757764009">0757 764 009</a></li>
+      <li>Email: <a href="mailto:support@sokonimall.com">support@sokonimall.com</a></li>
+      <li>Location: Sokoni Mall Startup Hub, Nairobi, Kenya</li>
+    </ul>
+  </main>
+
+  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-sm text-brand-purple/50 dark:text-white/50">
+    <p><a href="index.html" class="hover:text-brand-green">Home</a> · <a href="faq.html" class="hover:text-brand-green">FAQ</a> · <a href="terms.html" class="hover:text-brand-green">Terms</a> · <a href="privacy.html" class="hover:text-brand-green">Privacy</a></p>
+    <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise</p>
+  </footer>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

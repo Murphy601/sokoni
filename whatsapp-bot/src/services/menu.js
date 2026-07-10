@@ -25,6 +25,12 @@ import { siteUrlLine } from "./reviews.js";
 import { formatShortPaymentReminder, formatMpesaTillBlock } from "./payment.js";
 import { planFulfillment, applyFulfillmentPlan, formatFulfillmentConfirmBlock, formatFulfillmentLine } from "./fulfillment.js";
 import {
+  welcomeMessage,
+  howItWorksMessage,
+  orderConfirmedMessage,
+} from "./trust-copy.js";
+import { welcomeMessageForCustomer } from "./customer-automations.js";
+import {
   parseDeliveryDetails,
   isOrderCorrectionMessage,
   deliveryDetailsHint,
@@ -42,12 +48,10 @@ function sendNumberedMenu(to, title, options) {
 }
 
 export async function sendWelcome(to) {
-  await sendText(
-    to,
-    `👋 Karibu! I'm *${config.brand.name} AI* — your shopping buddy on WhatsApp.\n` +
-      `Tell me what you're looking for, or reply with a number from the menu 👇\n\n` +
-      `${siteUrlLine()}`
-  );
+  const meta = getCustomerMeta(to) || {};
+  const phone = meta.phone || "";
+  const back = welcomeMessageForCustomer(to, phone, meta.displayName);
+  await sendText(to, back || welcomeMessage());
   return sendMainMenu(to);
 }
 
@@ -61,7 +65,7 @@ export function sendMainMenu(to) {
     { id: "human_handoff", label: "🙋 Talk to a Human" },
     { id: "how_it_works", label: "❓ How Sokoni Works" },
   ];
-  return sendNumberedMenu(to, "Karibu Sokoni! Everything is *pay on delivery* 💵", options);
+  return sendNumberedMenu(to, "Karibu Sokoni Mall! *Public Beta* · pay on delivery only 💵", options);
 }
 
 const SUBCATEGORY_LABELS = {
@@ -638,19 +642,7 @@ export async function sendHumanHandoff(customerKey, { chatId, displayName, phone
 }
 
 export function sendHowItWorks(to) {
-  return sendText(
-    to,
-    `*How ${config.brand.name} works* 🛍️\n\n` +
-      `1️⃣ Chat Sokoni on WhatsApp (or browse sokonimall.com).\n` +
-      `2️⃣ Our AI finds the right product from our *pay-on-delivery* store catalog.\n` +
-      `3️⃣ Reply *1* to order — share name, location & phone in one message.\n` +
-      `4️⃣ We deliver — you pay cash or M-Pesa to the rider on arrival.\n` +
-      `5️⃣ Track anytime with your *SK-####* order number.\n\n` +
-      `*International?* Type *menu* → *Shop International* for AliExpress, Temu & Amazon links (1–4 weeks; customs may apply).\n\n` +
-      `${config.store.deliveryNote}\n\n` +
-      `${siteUrlLine()}\n\n` +
-      `Type *menu* anytime to start again.`
-  );
+  return sendText(to, `${howItWorksMessage()}\n\n${siteUrlLine()}`);
 }
 
 export function sendWebsiteLink(to) {
@@ -836,20 +828,17 @@ export async function confirmCodOrder(to, parsed) {
   const orderRef = order?.id;
   await sendText(
     to,
-    `✅ *Order received!*${orderRef ? `  ·  *${orderRef}*` : ""}\n\n` +
-      `🧾 *Order summary*\n` +
-      `━━━━━━━━━━━━━━━\n` +
-      `🛍️ ${pending.name}\n` +
-      `💰 KES ${formatOrderKes(pending.priceKes)} — *pay on delivery*\n` +
-      `━━━━━━━━━━━━━━━\n` +
-      `📍 ${details.name} — ${details.location}\n` +
-      `📞 ${details.phone}\n\n` +
-      `${order ? `Status: ${statusLabel(order.status)}\n` : ""}` +
-      `Our team will confirm shortly. ${config.store.deliveryNote}` +
-      `${order ? formatFulfillmentConfirmBlock(order) : ""}\n\n` +
-      `${orderRef ? `_Track anytime: type *track* or *${orderRef}*._\n` : ""}` +
-      `${siteUrlLine()}\n\n` +
-      `Asante for shopping with Sokoni! 🙏`
+    orderConfirmedMessage({
+      orderId: orderRef || "pending",
+      productName: pending.name,
+      amountKes: pending.priceKes,
+      customerName: details.name,
+      location: details.location,
+      phone: details.phone,
+    }) +
+      (order ? `\nStatus: ${statusLabel(order.status)}` : "") +
+      (order ? formatFulfillmentConfirmBlock(order) : "") +
+      `\n\n${siteUrlLine()}`
   );
 
   await sendTillIntroSafe(to, pending.priceKes);

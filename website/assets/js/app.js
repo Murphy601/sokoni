@@ -1,6 +1,12 @@
 // Storefront — discovery layer; WhatsApp is the conversion layer.
 
-const WHATSAPP_NUMBER = "254117422428";
+const WHATSAPP_NUMBER = "254757764009";
+const WHATSAPP_DISPLAY = "0757 764 009";
+const SUPPORT_EMAIL = "support@sokonimall.com";
+const MPESA_TILL = "4775847";
+const MPESA_TILL_NAME = "David Thuku Muiruri";
+const OFFER_PERCENT = 3;
+const PROMO_CODE = "SOKONI3";
 const USD_TO_KES = 130; // Approximate display rate for international items
 const REVIEWS_API =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

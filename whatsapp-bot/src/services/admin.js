@@ -31,6 +31,8 @@ import {
   rankPickupPointsForLocation,
 } from "./fulfillment.js";
 import { handleCatalogCommand, isCatalogCommand } from "./catalog-admin.js";
+import { broadcastFooter } from "./trust-copy.js";
+import { isBroadcastOptedOut } from "./customer-automations.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -254,21 +256,21 @@ function isAdminRelayAttempt(text) {
 
 const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
-    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. You'll pay KES ${o.priceKes.toLocaleString()} on delivery (cash or M-Pesa). Asante! 🙏`,
+    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Pay KES ${o.priceKes.toLocaleString()} on delivery to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}) only — not to riders. Asante! 🙏`,
   packed: (o) =>
     o.deliveryMode === "pickup_point" && o.pickupPointName
       ? `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready at pickup partner *${o.pickupPointName}*. We'll send the shop address in the next message 📍`
       : `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready and waiting for a rider. We'll let you know when it's on the way. 🛵`,
   out_for_delivery: (o) =>
     o.deliveryMode === "pickup_point" && o.pickupPointName
-      ? `📍 *Order ${o.id} is ready for collection!*\n\nCollect your *${o.productName}* from *${o.pickupPointName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (M-Pesa Till or at the shop).`
-      : `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with your *${o.productName}*. Please have *KES ${o.priceKes.toLocaleString()}* ready (cash or M-Pesa). Keep your phone on 📞`,
+      ? `📍 *Order ${o.id} is ready for collection!*\n\nCollect your *${o.productName}* from *${o.pickupPointName}*. Inspect first, then pay *KES ${o.priceKes.toLocaleString()}* to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}).`
+      : `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with *${o.productName}*. Inspect on arrival, then pay *KES ${o.priceKes.toLocaleString()}* to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}). Keep your phone on 📞`,
   delivered: (o) =>
     o.deliveryMode === "pickup_point"
-      ? `🎉 *Order ${o.id} collected!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`
-      : `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni! Type *menu* anytime to shop again.`,
+      ? `🎉 *Order ${o.id} collected!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni Mall! Type *menu* anytime.`
+      : `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for testing Sokoni Mall during our beta! Type *menu* anytime.`,
   cancelled: (o) =>
-    `❌ *Order ${o.id} was cancelled.*\n\nIf this was a mistake or you'd like to reorder, type *menu* and we'll help you out.`,
+    `❌ *Order ${o.id} was cancelled.*\n\nYou owe nothing — zero upfront deposit policy. Type *menu* to reorder or find alternatives.`,
 };
 
 async function notifyCustomerPickupDetails(order, { force = false } = {}) {
@@ -657,8 +659,9 @@ async function handleBroadcastCommand(adminChatId, message) {
   let sent = 0;
   let failed = 0;
   for (const contact of contacts) {
+    if (isBroadcastOptedOut(contact.customerKey)) continue;
     try {
-      await sendText(contact.customerKey, `📣 *Sokoni*\n\n${text}\n\n_Type *menu* to shop — pay on delivery 💵_`);
+      await sendText(contact.customerKey, `📣 *Sokoni Mall*\n\n${text}${broadcastFooter()}`);
       sent += 1;
     } catch (err) {
       failed += 1;

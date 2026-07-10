@@ -43,13 +43,29 @@ export const config = {
    * Main store settings. Sokoni sells at its own price (supplier cost + markup)
    * and the customer pays on delivery (cash/M-Pesa to the rider).
    */
+  contact: {
+    phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254757764009",
+    phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "0757 764 009",
+    email: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
+    founderName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+    location: process.env.BUSINESS_LOCATION || "Sokoni Mall Startup Hub, Nairobi, Kenya",
+  },
+  offers: {
+    maxDiscountPercent: Number(process.env.MAX_OFFER_PERCENT) || 3,
+    promoCode: process.env.PROMO_CODE || "SOKONI3",
+  },
+  businessHours: {
+    timezone: process.env.BUSINESS_TIMEZONE || "Africa/Nairobi",
+    humanSupportStart: process.env.HUMAN_SUPPORT_START || "07:30",
+    humanSupportEnd: process.env.HUMAN_SUPPORT_END || "21:00",
+  },
   store: {
     markupKes: Number(process.env.STORE_MARKUP_KES) || 100,
-    businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
+    businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254757764009",
     codAreas: process.env.STORE_COD_AREAS || "Nairobi & environs",
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
-      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay cash/M-Pesa on delivery.",
+      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay via M-Pesa Till on delivery only.",
     mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
     mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },

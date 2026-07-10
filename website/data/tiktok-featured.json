@@ -1,37 +1,31 @@
 {
-  "updatedAt": "2026-07-08T23:15:00.000Z",
+  "updatedAt": "2026-07-10T16:30:49.006Z",
   "productIds": [
-    "pt-001",
-    "ta-002",
-    "ap-005",
-    "ga-003",
-    "pt-002"
+    "intl-001",
+    "po-115-500ml",
+    "po-154-500ml",
+    "po-144-50ml"
   ],
   "posts": [
     {
-      "productId": "pt-001",
-      "postedAt": "2026-07-08T23:15:00.000Z",
-      "caption": "Tecno Spark 20C — camera na battery kali, KES 13,599! 🔥 Text Sokoni WhatsApp (link bio) — pay on delivery 💵 #SokoniMall #TikTokDealsKenya"
+      "productId": "intl-001",
+      "postedAt": "2026-07-06T15:02:38.596Z",
+      "caption": "Unaona hii form? Apple Watch SE (2nd Gen) — $89 tu! 🔥 Quality iko top, reviews ziko poa. Text Sokoni on WhatsApp (link kwa bio) ukichukua chap chap — pay on delivery 💵 #SokoniMall #TikTokDealsKenya #WhatsAppShopping #tvsaudio"
     },
     {
-      "productId": "ta-002",
-      "postedAt": "2026-07-08T22:00:00.000Z",
-      "caption": "Hisense 43\" Smart TV — movie night sorted! KES 28,099 pay on delivery 📺 WhatsApp Sokoni (link bio) #SokoniMall"
+      "productId": "po-115-500ml",
+      "postedAt": "2026-07-10T05:00:52.038Z",
+      "caption": ""
     },
     {
-      "productId": "ap-005",
-      "postedAt": "2026-07-08T21:00:00.000Z",
-      "caption": "6.5kg Twin Tub Washing Machine — laundry sorted! KES 19,099 COD 🌀 Sokoni WhatsApp link in bio #SokoniMall"
+      "productId": "po-154-500ml",
+      "postedAt": "2026-07-10T10:00:48.204Z",
+      "caption": ""
     },
     {
-      "productId": "ga-003",
-      "postedAt": "2026-07-08T20:00:00.000Z",
-      "caption": "Gaming Headset with Mic — KES 2,099 pay on delivery 🎧 WhatsApp Sokoni (bio link) #TikTokDealsKenya"
-    },
-    {
-      "productId": "pt-002",
-      "postedAt": "2026-07-08T19:00:00.000Z",
-      "caption": "Redmi A3 — budget smartphone done right! Pay on delivery on WhatsApp Sokoni 📱 #SokoniMall"
+      "productId": "po-144-50ml",
+      "postedAt": "2026-07-10T16:30:49.006Z",
+      "caption": ""
     }
   ]
 }
