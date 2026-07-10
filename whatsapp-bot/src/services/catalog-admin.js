@@ -723,17 +723,31 @@ async function saveProductImage(productId, buffer) {
   return `assets/images/products/${productId}.jpg`;
 }
 
-async function upsertStoreProduct(draft, imageBuffer = null, { matchMode = UPSERT_MATCH.REF } = {}) {
+async function upsertStoreProduct(
+  draft,
+  imageBuffer = null,
+  { matchMode = UPSERT_MATCH.REF, uploadMessageId = null } = {}
+) {
   const products = await loadMaster();
   const imgHash = imageContentHash(imageBuffer);
-  let existing = imgHash ? products.find((p) => p.imageHash === imgHash) : null;
+  let existing = null;
 
-  if (!existing && matchMode === UPSERT_MATCH.ID) {
-    existing = findStoreProductById(products, draft.matchQuery);
-  } else if (!existing && matchMode === UPSERT_MATCH.REF) {
-    existing = findStoreProductByRef(products, draft.matchQuery);
+  if (matchMode === UPSERT_MATCH.ALWAYS_ADD) {
+    // One WhatsApp message = one catalog row (retries update; new photos always add).
+    if (uploadMessageId) {
+      existing = products.find((p) => p.uploadMessageId === uploadMessageId) || null;
+    }
+    if (!existing && imgHash) {
+      existing = products.find((p) => p.imageHash === imgHash) || null;
+    }
+  } else {
+    if (imgHash) existing = products.find((p) => p.imageHash === imgHash) || null;
+    if (!existing && matchMode === UPSERT_MATCH.ID) {
+      existing = findStoreProductById(products, draft.matchQuery);
+    } else if (!existing && matchMode === UPSERT_MATCH.REF) {
+      existing = findStoreProductByRef(products, draft.matchQuery);
+    }
   }
-  // ALWAYS_ADD: never fuzzy-match by name — each photo is a new SKU unless same image hash.
 
   const sourcePriceKes = Math.max(0, Number(draft.sourcePriceKes) || 0);
   const retail = computeRetailPrice(sourcePriceKes);
@@ -780,12 +794,13 @@ async function upsertStoreProduct(draft, imageBuffer = null, { matchMode = UPSER
       inStock: true,
     };
     if (draft.retailerId) product.retailerId = draft.retailerId;
+    if (uploadMessageId) product.uploadMessageId = uploadMessageId;
     products.push(product);
   }
 
   if (imageBuffer?.length) {
     product.imageUrl = await saveProductImage(product.id, imageBuffer);
-    product.imageKey = imageKeyForName(product.name);
+    product.imageKey = imgHash || imageKeyForName(product.id);
     if (imgHash) product.imageHash = imgHash;
   }
 
@@ -1165,7 +1180,10 @@ export async function handleCatalogMedia(
     }
 
     const draft = await extractFromImage(buffer, mediaMimetype, effectiveCaption);
-    const { product, updated } = await upsertStoreProduct(draft, buffer, { matchMode: UPSERT_MATCH.ALWAYS_ADD });
+    const { product, updated } = await upsertStoreProduct(draft, buffer, {
+      matchMode: UPSERT_MATCH.ALWAYS_ADD,
+      uploadMessageId: messageId || null,
+    });
     await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
   });
 
