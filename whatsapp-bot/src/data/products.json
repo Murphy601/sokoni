@@ -33493,5 +33493,24 @@
     "inStock": true,
     "imageUrl": "assets/images/products/fa-015.jpg",
     "imageKey": "18fd11fdafdf"
+  },
+  {
+    "id": "fa-016",
+    "name": "Women's Flat Sandals - Black with Gold Dots",
+    "category": "fashion",
+    "subcategory": "shoes",
+    "sourcePriceKes": 90,
+    "priceKes": 200,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-016.jpg",
+    "imageKey": "12bf07fb3e9f"
   }
 ]
