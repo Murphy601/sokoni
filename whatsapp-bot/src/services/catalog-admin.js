@@ -284,13 +284,16 @@ async function startShareImportMode(adminChatId, supplierDigits) {
   const link = digits ? `https://wa.me/c/${digits}` : "the supplier catalog";
   await sendAdminOnlyText(
     adminChatId,
-    `📋 *Share import mode* (15 min)\n\n` +
-      `WAHA can't pull supplier catalogs automatically — share products from your phone instead.\n\n` +
+    `📋 *Bulk import mode* (30 min)\n\n` +
+      `*Why not automatic?* WhatsApp supplier catalogs are only readable through a paid WAHA catalog API — it's not in the free WAHA build (that's the HTTP 404). There's no safe server-side pull for 100+ items today.\n\n` +
+      `*Fastest for many products — photo albums (automatic OCR):*\n` +
       `1. Open ${link} on your phone\n` +
-      `2. Open a product → ⋮ → *Share* → *Message yourself*\n` +
-      `3. Repeat for each product (name + price + photo import automatically)\n\n` +
-      `*Or* send product photos here with caption \`cost 130\`.\n\n` +
-      `Reply *#done* when finished.`
+      `2. Save or screenshot product photos, or forward from supplier chat\n` +
+      `3. Send to *Message yourself* in batches (~30 photos per album)\n` +
+      `4. Caption on the *first* photo only: \`130ksh women sandals\` (cost for that batch)\n` +
+      `5. Bot reads every photo automatically — repeat batches until done\n` +
+      `6. Reply *#done*\n\n` +
+      `_Slower option: share individual catalog cards one by one._`
   );
 }
 
@@ -344,6 +347,7 @@ export async function handleShareImportMessage(parsed, adminChatId) {
     subcategory: slugifySubcategory(product.name, category),
     sourcePriceKes: product.sourcePriceKes,
     matchQuery: product.retailerId || product.name,
+    retailerId: product.retailerId || undefined,
   };
 
   let imageBuffer = null;
@@ -366,7 +370,9 @@ export async function handleShareImportMessage(parsed, adminChatId) {
     imageBuffer = await downloadImageUrl(product.imageUrl);
   }
 
-  const { product: saved, updated } = await upsertStoreProduct(draft, imageBuffer);
+  const { product: saved, updated } = await upsertStoreProduct(draft, imageBuffer, {
+    matchMode: product.retailerId ? UPSERT_MATCH.REF : UPSERT_MATCH.ALWAYS_ADD,
+  });
   if (updated) session.updated += 1;
   else session.added += 1;
 
@@ -502,11 +508,14 @@ async function importBusinessCatalog(adminChatId, businessRef, session) {
         category,
         subcategory: slugifySubcategory(item.name, category),
         sourcePriceKes: item.sourcePriceKes,
-        matchQuery: item.retailerId || item.name,
-      };
-      const imageBuffer = await downloadImageUrl(item.imageUrl);
-      try {
-        const { updated: wasUpdate } = await upsertStoreProduct(draft, imageBuffer);
+      matchQuery: item.retailerId || item.name,
+      retailerId: item.retailerId || undefined,
+    };
+    const imageBuffer = await downloadImageUrl(item.imageUrl);
+    try {
+      const { updated: wasUpdate } = await upsertStoreProduct(draft, imageBuffer, {
+        matchMode: item.retailerId ? UPSERT_MATCH.REF : UPSERT_MATCH.ALWAYS_ADD,
+      });
         if (wasUpdate) updated += 1;
         else added += 1;
       } catch (err) {
@@ -603,14 +612,8 @@ function findStoreProduct(products, query) {
   const q = String(query || "").trim();
   if (!q) return null;
 
-  const byId = products.find((p) => p.id === q.toLowerCase() || p.id === q);
+  const byId = findStoreProductById(products, q);
   if (byId) return byId;
-
-  const idMatch = q.match(/\b([a-z]{2}-\d{3})\b/i);
-  if (idMatch) {
-    const hit = products.find((p) => p.id === idMatch[1].toLowerCase());
-    if (hit) return hit;
-  }
 
   let best = null;
   let bestScore = 0;
@@ -624,6 +627,42 @@ function findStoreProduct(products, query) {
   }
   return bestScore >= 0.45 ? best : null;
 }
+
+function findStoreProductById(products, query) {
+  const q = String(query || "").trim();
+  if (!q) return null;
+  const lower = q.toLowerCase();
+  const byId = products.find((p) => p.id === lower || p.id === q);
+  if (byId) return byId;
+  const idMatch = q.match(/\b([a-z]{2}-\d{3})\b/i);
+  if (idMatch) {
+    return products.find((p) => p.id === idMatch[1].toLowerCase()) || null;
+  }
+  return null;
+}
+
+/** Match by Sokoni id or supplier retailerId (catalog import re-sync). */
+function findStoreProductByRef(products, query) {
+  const q = String(query || "").trim();
+  if (!q) return null;
+  const byId = findStoreProductById(products, q);
+  if (byId) return byId;
+  return products.find((p) => p.retailerId && String(p.retailerId) === q) || null;
+}
+
+function imageContentHash(buffer) {
+  if (!buffer?.length) return null;
+  return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+}
+
+const UPSERT_MATCH = {
+  /** Photo / #add — always new row unless exact same image bytes re-sent. */
+  ALWAYS_ADD: "always-add",
+  /** Catalog import — match id or retailerId only. */
+  REF: "ref",
+  /** #price after lookup — id only. */
+  ID: "id",
+};
 
 /** Parse: #add Name | category | cost 12000 */
 export function parseAddCommand(text) {
@@ -684,9 +723,18 @@ async function saveProductImage(productId, buffer) {
   return `assets/images/products/${productId}.jpg`;
 }
 
-async function upsertStoreProduct(draft, imageBuffer = null) {
+async function upsertStoreProduct(draft, imageBuffer = null, { matchMode = UPSERT_MATCH.REF } = {}) {
   const products = await loadMaster();
-  const existing = findStoreProduct(products, draft.matchQuery || draft.name);
+  const imgHash = imageContentHash(imageBuffer);
+  let existing = imgHash ? products.find((p) => p.imageHash === imgHash) : null;
+
+  if (!existing && matchMode === UPSERT_MATCH.ID) {
+    existing = findStoreProductById(products, draft.matchQuery);
+  } else if (!existing && matchMode === UPSERT_MATCH.REF) {
+    existing = findStoreProductByRef(products, draft.matchQuery);
+  }
+  // ALWAYS_ADD: never fuzzy-match by name — each photo is a new SKU unless same image hash.
+
   const sourcePriceKes = Math.max(0, Number(draft.sourcePriceKes) || 0);
   const retail = computeRetailPrice(sourcePriceKes);
   const category = VALID_CATEGORIES.includes(draft.category) ? draft.category : inferCategory(draft.name);
@@ -694,22 +742,29 @@ async function upsertStoreProduct(draft, imageBuffer = null) {
   let product;
   let updated = false;
 
-  if (existing && (draft.matchQuery || nameSimilarity(existing.name, draft.name) >= 0.45)) {
+  if (existing) {
     product = { ...existing };
     product.name = draft.name || product.name;
     product.sourcePriceKes = sourcePriceKes;
     product.priceKes = retail;
     if (draft.category) product.category = category;
     if (draft.subcategory) product.subcategory = draft.subcategory;
+    if (draft.retailerId) product.retailerId = draft.retailerId;
     product.inStock = draft.inStock !== false;
     updated = true;
     const idx = products.findIndex((p) => p.id === product.id);
     products[idx] = product;
   } else {
     const id = nextProductId(products, category);
+    let displayName = draft.name;
+    if (matchMode === UPSERT_MATCH.ALWAYS_ADD) {
+      const base = normalizeName(draft.name);
+      const siblings = products.filter((p) => normalizeName(p.name) === base);
+      if (siblings.length) displayName = `${draft.name} (${siblings.length + 1})`;
+    }
     product = {
       id,
-      name: draft.name,
+      name: displayName,
       category,
       subcategory: draft.subcategory || slugifySubcategory(draft.name, category),
       sourcePriceKes,
@@ -724,12 +779,14 @@ async function upsertStoreProduct(draft, imageBuffer = null) {
       payment: "cod",
       inStock: true,
     };
+    if (draft.retailerId) product.retailerId = draft.retailerId;
     products.push(product);
   }
 
   if (imageBuffer?.length) {
     product.imageUrl = await saveProductImage(product.id, imageBuffer);
     product.imageKey = imageKeyForName(product.name);
+    if (imgHash) product.imageHash = imgHash;
   }
 
   await saveMaster(products);
@@ -930,10 +987,9 @@ export function catalogHelpText() {
     `• *With price tag* — bot reads name + cost from the photo.\n` +
     `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
     `• *Many photos at once* — put the caption on the first image (or any one); same price applies to the whole album.\n` +
-    `• *Import supplier WhatsApp catalog:*\n` +
-    `  Send from *Message yourself* (not to the supplier):\n` +
-    `  \`#import-catalog 254723813039\`\n` +
-    `  _(Share mode: share each product from supplier catalog → Message yourself, then \`#done\`)_\n` +
+    `• *Import supplier catalog (many products):*\n` +
+    `  \`#import-catalog 254723813039\` → then send photo *albums* to yourself (30/batch, caption on first)\n` +
+    `  _(True one-click import needs WAHA catalog API — not in free WAHA yet.)_\n` +
     `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
@@ -1007,7 +1063,7 @@ export async function handleCatalogCommand(adminChatId, text) {
       );
       return true;
     }
-    const { product, updated } = await upsertStoreProduct(draft);
+    const { product, updated } = await upsertStoreProduct(draft, null, { matchMode: UPSERT_MATCH.ALWAYS_ADD });
     await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
     return true;
   }
@@ -1024,13 +1080,17 @@ export async function handleCatalogCommand(adminChatId, text) {
       await sendAdminOnlyText(adminChatId, `⚠️ No product found for *${parsed.query}*. Try #find ${parsed.query}`);
       return true;
     }
-    const { product, updated } = await upsertStoreProduct({
-      name: existing.name,
-      category: existing.category,
-      subcategory: existing.subcategory,
-      sourcePriceKes: parsed.sourcePriceKes,
-      matchQuery: existing.id,
-    });
+    const { product, updated } = await upsertStoreProduct(
+      {
+        name: existing.name,
+        category: existing.category,
+        subcategory: existing.subcategory,
+        sourcePriceKes: parsed.sourcePriceKes,
+        matchQuery: existing.id,
+      },
+      null,
+      { matchMode: UPSERT_MATCH.ID }
+    );
     await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated: true }));
     return true;
   }
@@ -1105,7 +1165,7 @@ export async function handleCatalogMedia(
     }
 
     const draft = await extractFromImage(buffer, mediaMimetype, effectiveCaption);
-    const { product, updated } = await upsertStoreProduct(draft, buffer);
+    const { product, updated } = await upsertStoreProduct(draft, buffer, { matchMode: UPSERT_MATCH.ALWAYS_ADD });
     await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
   });
 
