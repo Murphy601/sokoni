@@ -59,35 +59,71 @@ async function callWaha(endpoint, body) {
   return data;
 }
 
-/** Download media from WAHA (image/PDF from WhatsApp message). */
+/** Download media from WAHA (image/PDF from WhatsApp message). Retries when WAHA is still saving. */
 export async function downloadWahaMedia(mediaUrl, { messageId, chatId, session } = {}) {
   if (!config.waha.apiUrl) {
     throw new Error("WAHA_API_URL not set");
   }
 
   const headers = wahaHeaders();
-  let url = mediaUrl;
+  const sid = session || config.waha.session;
+  const apiBase = config.waha.apiUrl.replace(/\/$/, "");
 
-  if (!url && messageId && chatId) {
-    const sid = session || config.waha.session;
+  function fixHost(url) {
+    if (!url || !apiBase) return url;
+    try {
+      const u = new URL(url);
+      const base = new URL(apiBase);
+      if (u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.port !== base.port) {
+        u.protocol = base.protocol;
+        u.host = base.host;
+      }
+      return u.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  async function fetchBuffer(url) {
+    const { data } = await axios.get(fixHost(url), {
+      headers,
+      responseType: "arraybuffer",
+      timeout: 90_000,
+      validateStatus: (s) => s === 200,
+    });
+    if (!data?.byteLength) throw new Error("Empty media file");
+    return Buffer.from(data);
+  }
+
+  const urls = [];
+  if (mediaUrl) urls.push(fixHost(mediaUrl));
+
+  if (messageId && chatId) {
     const mid = encodeURIComponent(messageId);
     const cid = encodeURIComponent(chatId);
-    url = `${config.waha.apiUrl}/api/${sid}/chats/${cid}/messages/${mid}?downloadMedia=true`;
-  }
-
-  if (!url) throw new Error("No media URL on message");
-
-  try {
-    const { data } = await axios.get(url, { headers, responseType: "arraybuffer", timeout: 90_000 });
-    return Buffer.from(data);
-  } catch (err) {
-    if (url.includes("localhost") && config.waha.apiUrl && !config.waha.apiUrl.includes("localhost")) {
-      const fixed = url.replace(/https?:\/\/[^/]+/, config.waha.apiUrl);
-      const { data } = await axios.get(fixed, { headers, responseType: "arraybuffer", timeout: 90_000 });
-      return Buffer.from(data);
+    urls.push(`${apiBase}/api/${sid}/chats/${cid}/messages/${mid}?downloadMedia=true`);
+    // Some WAHA builds accept the raw id without encoding the full serialized form.
+    if (messageId.includes("@")) {
+      urls.push(`${apiBase}/api/${sid}/chats/${cid}/messages/${encodeURIComponent(messageId.split("_").pop())}?downloadMedia=true`);
     }
-    throw err;
   }
+
+  if (urls.length === 0) throw new Error("No media URL on message");
+
+  let lastError = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    for (const url of [...new Set(urls)]) {
+      try {
+        return await fetchBuffer(url);
+      } catch (err) {
+        lastError = err;
+        console.warn("[waha] media download failed:", url, err.message);
+      }
+    }
+    if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+  }
+
+  throw new Error(`Could not download image: ${lastError?.message || "404"}`);
 }
 
 /**

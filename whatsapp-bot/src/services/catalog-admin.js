@@ -101,29 +101,133 @@ function buildVisionPrompt(caption = "") {
   const categoryLines = VALID_CATEGORIES.map(
     (c) => `- ${c}: subcategories → ${SUBCATEGORY_GUIDE[c] || c}`
   ).join("\n");
+  const capHints = caption ? parseCaptionHints(caption) : null;
 
   return (
     `You catalog products for a Kenyan WhatsApp shop (Sokoni).\n` +
-    `Look at the product photo: packaging, labels, stickers, handwritten prices.\n\n` +
+    `Study the product photo carefully — many store photos have NO price sticker and NO printed product name.\n\n` +
     `TASK:\n` +
-    `1. Product name — read from box/label (brand + model + key spec e.g. "20000mAh").\n` +
-    `2. sourcePriceKes — the STORE COST on the price tag/sticker (number only). ` +
-    `White stickers like "850" or "50" are usually KES prices.\n` +
-    `3. category + subcategory — pick the BEST fit from the guide below.\n` +
-    `   Examples:\n` +
-    `   - Power bank / charger → phones-tablets / power-banks\n` +
-    `   - Phone case / cover / screen guard → phones-tablets / phone-accessories\n` +
-    `   - TV, speaker, earbud → tvs-audio\n` +
-    `   - Fridge, kettle, blender → appliances\n` +
-    `   - Perfume, lotion, makeup → health-beauty\n` +
-    `   - Dress, shoes, bag → fashion\n` +
-    `   - Laptop, mouse, printer → computing\n\n` +
+    `1. *name* — ALWAYS provide a clear English product title:\n` +
+    `   - If a brand/label is visible (e.g. NICE STYLE, DLGM), include it.\n` +
+    `   - If NO label, DESCRIBE what you see: item type + colour + style/material.\n` +
+    `   - Examples: "Women's Rhinestone Flat Sandals - Burgundy", "Men's Leather Slide Sandals - Black", "Assorted Women's Flat Sandals (4 styles)".\n` +
+    `   - Multiple items in one photo → one title for the main product type shown.\n` +
+    `2. *sourcePriceKes* — store cost in KES (integer):\n` +
+    `   - From price sticker/tag if visible.\n` +
+    `   - If NO price on image, use the WhatsApp caption price if given.\n` +
+    `   - If still unknown, use 0 (caption will be applied after).\n` +
+    `3. *category* + *subcategory* — from what the item IS (not only caption):\n` +
+    `   - Sandals, slides, shoes, flats → fashion / shoes\n` +
+    `   - Women's clothing → fashion / womens-fashion\n` +
+    `   - Men's clothing → fashion / mens-fashion\n` +
+    `   - Bags, watches → fashion\n` +
+    `   - Phones, power banks → phones-tablets\n\n` +
     `CATEGORIES:\n${categoryLines}\n\n` +
-    (caption ? `WhatsApp caption (override if clearer): "${caption}"\n\n` : "") +
-    `Reply ONLY JSON, no markdown:\n` +
-    `{"name":"CALUS P207 MAX Power Bank 20000mAh","sourcePriceKes":850,"category":"phones-tablets","subcategory":"power-banks"}\n` +
-    `If unreadable: {"error":"brief reason"}`
+    (caption
+      ? `WhatsApp caption from seller: "${caption}"\n` +
+        (capHints?.cost != null ? `Caption price hint: KES ${capHints.cost}\n` : "") +
+        (capHints?.category ? `Caption category hint: ${capHints.category}\n` : "") +
+        `\n`
+      : "") +
+    `Reply ONLY JSON, no markdown. NEVER return error just because there is no price tag — always name the product from the image.\n` +
+    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes"}`
   );
+}
+
+function parseCost(text) {
+  const t = String(text || "");
+  const patterns = [
+    /(?:cost|wholesale|supply|price|@)\s*[:=]?\s*ksh?\s*([\d,]+)/i,
+    /(?:cost|wholesale|supply|price|@)\s*[:=]?\s*([\d,]+)\s*(?:ksh|kes)\b/i,
+    /\b(\d{2,6})\s*ksh\b/i,
+    /\b(\d{2,6})\s*(?:ksh|kes)\b/i,
+    /\b(?:ksh|kes)\s*(\d{2,6})\b/i,
+    /\b(\d{2,6})\s*(?:\/|per)\s*(?:shoe|pair|pc|piece|item|unit)\b/i,
+    /\b(\d{2,6})\s*k\b/i,
+    /\b([\d]{2,7})\b/,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (m) {
+      const n = Math.round(Number(String(m[1]).replace(/,/g, "")));
+      if (n >= 10 && n <= 5_000_000) return n;
+    }
+  }
+  return null;
+}
+
+/** Hints from WhatsApp caption when the photo has no price tag or name. */
+function parseCaptionHints(caption = "") {
+  const t = String(caption || "").trim();
+  const lower = t.toLowerCase();
+  const hints = {
+    cost: parseCost(t),
+    category: null,
+    subcategory: null,
+    nameHint: "",
+  };
+
+  if (/women|ladies|female|girl|woman/.test(lower)) {
+    hints.category = "fashion";
+    hints.subcategory = "womens-fashion";
+  } else if (/men|gents|male|man\b/.test(lower)) {
+    hints.category = "fashion";
+    hints.subcategory = "mens-fashion";
+  }
+
+  if (/shoe|sandal|slide|footwear|flat|heel|sneaker|boot/.test(lower)) {
+    hints.category = "fashion";
+    hints.subcategory = hints.subcategory === "mens-fashion" ? "shoes" : hints.subcategory === "womens-fashion" ? "shoes" : "shoes";
+  }
+
+  if (/phone|tecno|samsung|charger|power\s*bank/.test(lower)) hints.category = "phones-tablets";
+  if (/perfume|lotion|makeup|beauty/.test(lower)) hints.category = "health-beauty";
+
+  const namePart = t
+    .replace(/(?:cost|wholesale|supply|price|@)\s*[:=]?\s*ksh?\s*[\d,]+/gi, "")
+    .replace(/\b\d{2,6}\s*(?:ksh|kes|k)\b/gi, "")
+    .replace(/\b\d{2,6}\s*(?:\/|per)\s*(?:shoe|pair|pc|piece|item|unit)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (namePart.length > 2) hints.nameHint = namePart;
+
+  return hints;
+}
+
+function applyCaptionToDraft(parsed, caption = "") {
+  const hints = parseCaptionHints(caption);
+  if (hints.cost != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes === 0)) {
+    parsed.sourcePriceKes = hints.cost;
+  }
+  if (hints.category && !VALID_CATEGORIES.includes(parsed.category)) {
+    parsed.category = hints.category;
+  }
+  if (hints.subcategory) {
+    parsed.subcategory = hints.subcategory;
+  }
+  if (hints.nameHint && (!parsed.name || parsed.name.length < 4)) {
+    parsed.name = hints.nameHint;
+  }
+  return parsed;
+}
+
+function finalizeVisionDraft(parsed, caption = "") {
+  applyCaptionToDraft(parsed, caption);
+
+  if (!parsed.name || String(parsed.name).trim().length < 3) {
+    throw new Error("Could not identify product — add a short caption e.g. `130 ksh women sandals`");
+  }
+
+  if (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0) {
+    const capCost = parseCost(caption);
+    if (capCost != null) parsed.sourcePriceKes = capCost;
+    else throw new Error("No price found — add caption e.g. `130 ksh per shoe` or `cost 130`");
+  }
+
+  if (!VALID_CATEGORIES.includes(parsed.category)) parsed.category = inferCategory(parsed.name);
+  parsed.subcategory = normalizeSubcategory(parsed.category, parsed.subcategory, parsed.name);
+  parsed.sourcePriceKes = Math.round(Number(parsed.sourcePriceKes));
+  return parsed;
 }
 
 const CATEGORY_KEYWORDS = [
@@ -131,7 +235,7 @@ const CATEGORY_KEYWORDS = [
   { category: "tvs-audio", words: ["tv", "television", "speaker", "soundbar", "earbud", "headphone", "hisense"] },
   { category: "appliances", words: ["fridge", "freezer", "washing", "microwave", "blender", "cooker", "iron"] },
   { category: "health-beauty", words: ["perfume", "lotion", "cream", "makeup", "soap", "shampoo", "beauty"] },
-  { category: "fashion", words: ["dress", "shirt", "shoe", "sneaker", "bag", "jeans", "suit"] },
+  { category: "fashion", words: ["dress", "shirt", "shoe", "shoes", "sandal", "slide", "flat", "sneaker", "bag", "jeans", "suit", "women", "ladies", "wear"] },
   { category: "computing", words: ["laptop", "computer", "monitor", "keyboard", "mouse", "printer"] },
   { category: "gaming", words: ["playstation", "xbox", "game", "controller", "ps5", "ps4"] },
   { category: "supermarket", words: ["rice", "flour", "sugar", "oil", "tea", "coffee", "cereal"] },
@@ -247,16 +351,6 @@ function findStoreProduct(products, query) {
     }
   }
   return bestScore >= 0.45 ? best : null;
-}
-
-function parseCost(text) {
-  const t = String(text || "");
-  const labeled = t.match(/(?:cost|wholesale|supply|price|kes|ksh)\s*[:=]?\s*([\d,]+(?:\.\d+)?)/i);
-  if (labeled) return Math.round(Number(labeled[1].replace(/,/g, "")));
-
-  const plain = t.match(/\b([\d]{3,7})\b/);
-  if (plain) return Math.round(Number(plain[1].replace(/,/g, "")));
-  return null;
 }
 
 /** Parse: #add Name | category | cost 12000 */
@@ -509,22 +603,10 @@ async function extractFromImage(buffer, mimetype, caption = "") {
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Vision model returned no JSON");
       const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.error) throw new Error(parsed.error);
+      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(parsed.error);
 
-      if (caption) {
-        const capCost = parseCost(caption);
-        const capName = caption.replace(/(?:cost|wholesale|supply|price|kes|ksh)\s*[:=]?\s*[\d,]+/gi, "").trim();
-        if (capCost != null) parsed.sourcePriceKes = capCost;
-        if (capName && capName.length > 2) parsed.name = capName;
-      }
-
-      if (!parsed.name || !parsed.sourcePriceKes) {
-        throw new Error("Could not read name and price from image");
-      }
-      if (!VALID_CATEGORIES.includes(parsed.category)) parsed.category = inferCategory(parsed.name);
-      parsed.subcategory = normalizeSubcategory(parsed.category, parsed.subcategory, parsed.name);
-      parsed.sourcePriceKes = Math.round(Number(parsed.sourcePriceKes));
-      console.log(`[catalog-admin] vision ok via ${model}:`, parsed.name, parsed.sourcePriceKes);
+      finalizeVisionDraft(parsed, caption);
+      console.log(`[catalog-admin] vision ok via ${model}:`, parsed.name, parsed.sourcePriceKes, parsed.category);
       return parsed;
     } catch (err) {
       lastError = err;
@@ -572,8 +654,10 @@ export function catalogHelpText() {
     `*Search:* #find tecno\n\n` +
     `*Push to website:* #sync\n\n` +
     `*Photos (auto — no confirm):*\n` +
-    `Forward or send store product photos (with price labels) to this chat.\n` +
-    `Optional caption: \`Tecno Spark cost 12000\`\n` +
+    `Send or forward product photos to this chat.\n` +
+    `• *With price tag* — bot reads name + cost from the photo.\n` +
+    `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
+    `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
   );
@@ -685,12 +769,14 @@ export async function handleCatalogMedia(adminChatId, { mediaUrl, mediaMimetype,
   if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
   if (!isCatalogMedia(mediaMimetype)) {
-    await sendAdminOnlyText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG) or PDF with a visible price label.");
+    await sendAdminOnlyText(adminChatId, "⚠️ Send a product *photo* (JPEG/PNG).");
     return true;
   }
 
   enqueue(adminChatId, async () => {
     await sendAdminOnlyText(adminChatId, "⏳ Reading product photo…");
+    // WAHA may still be saving media when the webhook fires.
+    await new Promise((r) => setTimeout(r, 2000));
 
     let buffer;
     try {
