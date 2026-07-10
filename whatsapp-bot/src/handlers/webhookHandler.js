@@ -21,7 +21,7 @@ import {
 import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
 import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
-import { handleCatalogCommand, handleCatalogMedia, isCatalogCommand, isCatalogMedia } from "../services/catalog-admin.js";
+import { handleCatalogCommand, handleCatalogMedia, isCatalogCommand, isCatalogMedia, extractCatalogCommandLine } from "../services/catalog-admin.js";
 import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
@@ -195,18 +195,23 @@ function shouldRouteAdminCatalog(parsed) {
   return false;
 }
 
+/** Chat where the admin typed — replies must go here (not only self-chat). */
+function adminActionChat(parsed) {
+  if (parsed.direction === "incoming") return parsed.customerKey;
+  return parsed.toChatId || parsed.fromChatId;
+}
+
 async function routeAdminCatalog(parsed) {
   const phone =
     parsed.phone ||
     phoneDigitsFromChatId(parsed.customerKey || parsed.fromChatId) ||
     "";
-  const chatId =
-    parsed.direction === "incoming" ? parsed.customerKey : parsed.fromChatId || config.admin.primary;
+  const adminChat = adminActionChat(parsed);
   const allowBusinessOwner =
     parsed.direction === "outgoing" && isBusinessOwnerSender(parsed.fromChatId);
 
   if (parsed.hasMedia && shouldRouteAdminCatalog(parsed)) {
-    return handleCatalogMedia(chatId, {
+    return handleCatalogMedia(adminChat, {
       mediaUrl: parsed.mediaUrl,
       mediaMimetype: parsed.mediaMimetype,
       caption: parsed.text,
@@ -220,8 +225,8 @@ async function routeAdminCatalog(parsed) {
   }
 
   if (parsed.text && isCatalogCommand(parsed.text)) {
-    if (!canRunAdminCommands(chatId, phone, { allowBusinessOwner })) return false;
-    return handleCatalogCommand(chatId, parsed.text);
+    if (!canRunAdminCommands(adminChat, phone, { allowBusinessOwner })) return false;
+    return handleCatalogCommand(adminChat, extractCatalogCommandLine(parsed.text));
   }
 
   return false;

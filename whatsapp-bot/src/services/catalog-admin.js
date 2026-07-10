@@ -32,11 +32,11 @@ function resolveAdminNotifyChat(contextChatId = null) {
   return null;
 }
 
-/** Catalog ops (cost, sync, OCR) — admin eyes only, never shoppers. */
+/** Catalog ops (cost, sync, OCR) — admin eyes only. Replies in the chat you used (usually self-chat). */
 async function sendAdminOnlyText(contextChatId, text) {
   const to = resolveAdminNotifyChat(contextChatId);
-  if (!to || !isAdminSender(to)) {
-    console.log("[catalog-admin] admin notify skipped");
+  if (!to) {
+    console.log("[catalog-admin] admin notify skipped — no admin chat");
     return;
   }
   await sendText(to, text);
@@ -319,17 +319,26 @@ const GIT_SCRIPT_ENV = {
 };
 
 export function isCatalogCommand(text) {
-  const t = (text || "").trim();
-  return /^#(?:catalog|add|price|stock|find|sync|import-catalog)\b/i.test(t);
+  return /#(?:catalog|add|price|stock|find|sync|import-catalog)\b/i.test(String(text || ""));
+}
+
+/** Pull the #command line out of a message that may include links or captions. */
+export function extractCatalogCommandLine(text) {
+  const m = String(text || "").match(
+    /#(?:import-catalog|sync|catalog(?:\s+help)?|add|price|stock|find)\b[^\n]*/i
+  );
+  return m ? m[0].trim() : String(text || "").trim();
 }
 
 /** Parse: #import-catalog 254723813039  OR  #import-catalog https://wa.me/c/254723813039 */
 export function parseImportCatalogCommand(text) {
-  const raw = text.replace(/^#import-catalog\b/i, "").trim();
-  const urlMatch = raw.match(/wa\.me\/c\/(\d+)/i);
-  const digits = urlMatch ? urlMatch[1] : raw.replace(/\D/g, "");
+  const full = String(text || "");
+  const urlMatch = full.match(/wa\.me\/c\/(\d+)/i);
+  const cmdMatch = full.match(/#import-catalog\b([^\n]*)/i);
+  const tail = (cmdMatch?.[1] || full).trim();
+  const digits = urlMatch ? urlMatch[1] : tail.replace(/\D/g, "");
   if (!digits || digits.length < 9) return { error: "bad_phone" };
-  return { phone: digits, label: raw || digits };
+  return { phone: digits, label: urlMatch ? full : tail || digits };
 }
 
 async function downloadImageUrl(url) {
@@ -783,9 +792,9 @@ export function catalogHelpText() {
     `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
     `• *Many photos at once* — put the caption on the first image (or any one); same price applies to the whole album.\n` +
     `• *Import supplier WhatsApp catalog:*\n` +
+    `  Send from *Message yourself* (not to the supplier):\n` +
     `  \`#import-catalog 254723813039\`\n` +
-    `  or \`#import-catalog https://wa.me/c/254723813039\`\n` +
-    `  _(Uses catalog prices as your cost → Sokoni retail formula. Needs WAHA Plus catalog API.)_\n` +
+    `  _(Catalog prices = your cost → retail formula. Needs WAHA Plus API.)_\n` +
     `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
