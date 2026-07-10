@@ -1,3 +1,4 @@
+import axios from "axios";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -8,7 +9,7 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import { computeRetailPrice, pricingBreakdown } from "./pricing.js";
 import { invalidateProductCache } from "./catalog.js";
-import { downloadWahaMedia, sendText, phoneDigitsFromChatId } from "./whatsapp.js";
+import { downloadWahaMedia, sendText, phoneDigitsFromChatId, fetchWahaBusinessCatalog } from "./whatsapp.js";
 import { isAdminSender, canRunAdminCommands } from "./admin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -319,7 +320,70 @@ const GIT_SCRIPT_ENV = {
 
 export function isCatalogCommand(text) {
   const t = (text || "").trim();
-  return /^#(?:catalog|add|price|stock|find|sync)\b/i.test(t);
+  return /^#(?:catalog|add|price|stock|find|sync|import-catalog)\b/i.test(t);
+}
+
+/** Parse: #import-catalog 254723813039  OR  #import-catalog https://wa.me/c/254723813039 */
+export function parseImportCatalogCommand(text) {
+  const raw = text.replace(/^#import-catalog\b/i, "").trim();
+  const urlMatch = raw.match(/wa\.me\/c\/(\d+)/i);
+  const digits = urlMatch ? urlMatch[1] : raw.replace(/\D/g, "");
+  if (!digits || digits.length < 9) return { error: "bad_phone" };
+  return { phone: digits, label: raw || digits };
+}
+
+async function downloadImageUrl(url) {
+  if (!url) return null;
+  try {
+    const { data } = await axios.get(url, { responseType: "arraybuffer", timeout: 90_000 });
+    return data?.byteLength ? Buffer.from(data) : null;
+  } catch (err) {
+    console.warn("[catalog-admin] image download failed:", url, err.message);
+    return null;
+  }
+}
+
+async function importBusinessCatalog(adminChatId, businessRef, session) {
+  const { chatId, products } = await fetchWahaBusinessCatalog(businessRef, session);
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  await sendAdminOnlyText(
+    adminChatId,
+    `⏳ Importing *${products.length}* items from business catalog \`${chatId}\`…\n_Applying Sokoni retail: cost + KES 100 + 8%_`
+  );
+
+  for (const item of products) {
+    const category = inferCategory(`${item.name} ${item.description || ""}`);
+    const draft = {
+      name: item.name,
+      category,
+      subcategory: slugifySubcategory(item.name, category),
+      sourcePriceKes: item.sourcePriceKes,
+      matchQuery: item.retailerId || item.name,
+    };
+    const imageBuffer = await downloadImageUrl(item.imageUrl);
+    try {
+      const { updated: wasUpdate } = await upsertStoreProduct(draft, imageBuffer);
+      if (wasUpdate) updated += 1;
+      else added += 1;
+    } catch (err) {
+      skipped += 1;
+      console.warn("[catalog-admin] import skip:", item.name, err.message);
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+
+  await sendAdminOnlyText(
+    adminChatId,
+    `📦 *Catalog import done*\n` +
+      `✅ Added: ${added}\n` +
+      `🔄 Updated: ${updated}\n` +
+      (skipped ? `⚠️ Skipped: ${skipped}\n` : "") +
+      `_Syncing to website…_`
+  );
+  await forcePublishCatalog(adminChatId);
 }
 
 export function isCatalogMedia(mimetype = "") {
@@ -718,6 +782,10 @@ export function catalogHelpText() {
     `• *With price tag* — bot reads name + cost from the photo.\n` +
     `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
     `• *Many photos at once* — put the caption on the first image (or any one); same price applies to the whole album.\n` +
+    `• *Import supplier WhatsApp catalog:*\n` +
+    `  \`#import-catalog 254723813039\`\n` +
+    `  or \`#import-catalog https://wa.me/c/254723813039\`\n` +
+    `  _(Uses catalog prices as your cost → Sokoni retail formula. Needs WAHA Plus catalog API.)_\n` +
     `AI names items from the photo (e.g. women's flat sandals) even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
     `Categories: ${VALID_CATEGORIES.join(", ")}`
@@ -729,6 +797,29 @@ export async function handleCatalogCommand(adminChatId, text) {
   const phone = phoneDigitsFromChatId(adminChatId) || "";
   if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
+
+  if (/^#import-catalog\b/i.test(t)) {
+    const parsed = parseImportCatalogCommand(t);
+    if (parsed.error) {
+      await sendAdminOnlyText(
+        adminChatId,
+        "⚠️ Usage:\n`#import-catalog 254723813039`\nor\n`#import-catalog https://wa.me/c/254723813039`"
+      );
+      return true;
+    }
+    try {
+      await importBusinessCatalog(adminChatId, parsed.label, config.waha.session);
+    } catch (err) {
+      await sendAdminOnlyText(
+        adminChatId,
+        `⚠️ *Catalog import failed*\n${err.message}\n\n` +
+          `*Workaround:* Open the supplier catalog on your phone → forward product photos to this admin chat with caption \`cost 130\`.\n` +
+          `Or test WAHA on server:\n` +
+          `\`curl -H "X-Api-Key: $WAHA_API_KEY" "http://localhost:3000/api/default/get-business-profiles-products?phone=254723813039@c.us"\``
+      );
+    }
+    return true;
+  }
 
   if (/^#sync\b/i.test(t)) {
     await forcePublishCatalog(adminChatId);

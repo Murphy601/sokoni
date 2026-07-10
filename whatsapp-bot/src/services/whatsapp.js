@@ -265,6 +265,111 @@ export async function downloadWahaMedia(
   );
 }
 
+function parseWahaCatalogPrice(price, currency = "KES") {
+  let n = Number(String(price ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const cur = String(currency || "KES").toUpperCase();
+  // WhatsApp catalog stores price in minor units (often ×1000 for KES).
+  if (cur === "KES" && n >= 5000) n = Math.round(n / 1000);
+  else if (n >= 100000) n = Math.round(n / 1000);
+  else if (n >= 10000 && n % 100 === 0) n = Math.round(n / 100);
+  return Math.round(n);
+}
+
+function normalizeWahaCatalogProducts(data) {
+  const list =
+    data?.products ||
+    data?.data?.products ||
+    data?.catalog?.products ||
+    (Array.isArray(data) ? data : []);
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .map((p) => {
+      const name = String(p.name || p.title || "").trim();
+      const description = String(p.description || "").trim();
+      const sourcePriceKes = parseWahaCatalogPrice(p.price ?? p.salePrice, p.currency);
+      const imageUrl =
+        p.image ||
+        p.imageUrl ||
+        (Array.isArray(p.images) ? p.images[0] : null) ||
+        (Array.isArray(p.media) ? p.media[0]?.url : null);
+      return { name, description, sourcePriceKes, imageUrl, retailerId: p.retailerId || p.id || null };
+    })
+    .filter((p) => p.name.length > 1 && p.sourcePriceKes > 0);
+}
+
+/** Fetch another WhatsApp Business catalog via WAHA (requires WAHA Plus catalog API). */
+export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
+  if (!config.waha.apiUrl) throw new Error("WAHA_API_URL not set");
+
+  const raw = String(businessPhoneOrUrl || "").trim();
+  const urlMatch = raw.match(/wa\.me\/c\/(\d+)/i);
+  const digits = urlMatch ? urlMatch[1] : raw.replace(/\D/g, "");
+  if (!digits || digits.length < 9) throw new Error("Invalid business phone or wa.me/c/ link");
+
+  const chatId = normalizeWahaChatId(`${digits}@c.us`);
+  const headers = wahaHeaders();
+  const sid = session || config.waha.session;
+  const apiBase = config.waha.apiUrl.replace(/\/$/, "");
+
+  const attempts = [
+    {
+      label: "get-business-profiles-products (query)",
+      run: () =>
+        axios.get(`${apiBase}/api/${sid}/get-business-profiles-products`, {
+          headers,
+          params: { phone: chatId },
+          timeout: 120_000,
+        }),
+    },
+    {
+      label: "get-business-profiles-products (digits)",
+      run: () =>
+        axios.get(`${apiBase}/api/${sid}/get-business-profiles-products`, {
+          headers,
+          params: { phone: digits },
+          timeout: 120_000,
+        }),
+    },
+    {
+      label: "get-business-profiles-products (POST)",
+      run: () =>
+        axios.post(`${apiBase}/api/${sid}/get-business-profiles-products`, { phone: chatId }, { headers, timeout: 120_000 }),
+    },
+    {
+      label: "get-products",
+      run: () =>
+        axios.get(`${apiBase}/api/${sid}/get-products`, {
+          headers,
+          params: { phone: digits, qnt: 200 },
+          timeout: 120_000,
+        }),
+    },
+  ];
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      const { data } = await attempt.run();
+      const products = normalizeWahaCatalogProducts(data);
+      if (products.length) {
+        console.log(`[waha] catalog import via ${attempt.label}: ${products.length} products`);
+        return { chatId, products };
+      }
+    } catch (err) {
+      lastError = err;
+      console.warn(`[waha] catalog ${attempt.label} failed:`, err.response?.status || err.message);
+    }
+  }
+
+  throw new Error(
+    lastError?.response?.status === 404
+      ? "WAHA catalog API not found — your WAHA tier may not support business catalog import. Use photo upload or ask supplier for CSV."
+      : lastError?.message || "Could not fetch business catalog from WAHA"
+  );
+}
+
 /**
  * Because the admin/store owner shares the SAME WhatsApp account as the bot,
  * WAHA delivers the bot's OWN outgoing messages back to the webhook (via
