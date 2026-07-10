@@ -20472,9 +20472,9 @@
   },
   {
     "id": "fa-009",
-    "name": "Fashion World Sandals Tan",
+    "name": "Women's Studded Flat Sandals - White",
     "category": "fashion",
-    "priceKes": 200,
+    "priceKes": 250,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -20588,6 +20588,21 @@
     "fulfillment": "store",
     "payment": "cod",
     "imageUrl": "assets/images/products/fa-016.jpg",
+    "subcategory": "shoes"
+  },
+  {
+    "id": "fa-017",
+    "name": "Women's Bow Slide Sandals - Cream",
+    "category": "fashion",
+    "priceKes": 200,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/fa-017.jpg",
     "subcategory": "shoes"
   }
 ]
