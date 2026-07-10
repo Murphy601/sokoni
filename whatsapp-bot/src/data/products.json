@@ -33496,7 +33496,7 @@
   },
   {
     "id": "fa-016",
-    "name": "Women's Black Block Heel Loafers",
+    "name": "Women's Block Heel Loafers - Green",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33511,7 +33511,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-016.jpg",
-    "imageKey": "87ef5b0d0f09"
+    "imageKey": "4e3872c7801d"
   },
   {
     "id": "fa-017",
@@ -33667,7 +33667,7 @@
   },
   {
     "id": "fa-025",
-    "name": "Women's Gold Block Heel Shoes",
+    "name": "Women's Loafer Style Block Heel Shoes - Tan",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33682,7 +33682,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-025.jpg",
-    "imageKey": "b713925422e8"
+    "imageKey": "9f42130f34dd"
   },
   {
     "id": "fa-026",
@@ -33705,7 +33705,7 @@
   },
   {
     "id": "fa-027",
-    "name": "Women's Black Pointed-Toe Heels with Snake Print Accent",
+    "name": "Women's Pointed Toe Block Heel Shoes - Red with Snake Print Accent",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33720,7 +33720,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-027.jpg",
-    "imageKey": "f5033ac1c2e4"
+    "imageKey": "9cf9e61bc85a"
   },
   {
     "id": "fa-028",
@@ -33762,7 +33762,7 @@
   },
   {
     "id": "fa-030",
-    "name": "Women's Patent Leather Slingback Heels - Black",
+    "name": "Women's Black Heeled Loafers",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33777,11 +33777,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-030.jpg",
-    "imageKey": "d5eceafcf28c"
+    "imageKey": "484f30ae3255"
   },
   {
     "id": "fa-031",
-    "name": "Women's Patent Leather Block Heel Shoes - Green",
+    "name": "Women's Navy Blue Suede and Patent Leather Block Heel Shoes",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33796,11 +33796,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-031.jpg",
-    "imageKey": "e3ddb4c5ae32"
+    "imageKey": "b13f8293a4b1"
   },
   {
     "id": "fa-032",
-    "name": "Women's Suede and Patent Leather Heeled Loafers - Burgundy",
+    "name": "Women's Burgundy Suede and Patent Leather Heeled Loafers",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33815,11 +33815,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-032.jpg",
-    "imageKey": "6c5896896dc6"
+    "imageKey": "e47eb6ffa492"
   },
   {
     "id": "fa-033",
-    "name": "Women's White Strappy High Heel Sandals",
+    "name": "Women's Red Patent Leather Strappy High Heel Sandals",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33834,11 +33834,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-033.jpg",
-    "imageKey": "1e8d4c506d54"
+    "imageKey": "137c9e6bd2ec"
   },
   {
     "id": "fa-034",
-    "name": "Women's Patent Slingback Block Heels - Orange",
+    "name": "Women's Patent Leather Ankle Strap Heels - Peach",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 4500,
@@ -33853,7 +33853,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-034.jpg",
-    "imageKey": "921037fef513"
+    "imageKey": "45ff07547270"
   },
   {
     "id": "fa-035",
@@ -33911,5 +33911,24 @@
     "inStock": true,
     "imageUrl": "assets/images/products/fa-037.jpg",
     "imageKey": "b5d651d99d64"
+  },
+  {
+    "id": "fa-038",
+    "name": "Women's Patent Leather Slingback Heels - White",
+    "category": "fashion",
+    "subcategory": "shoes",
+    "sourcePriceKes": 4500,
+    "priceKes": 5000,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-038.jpg",
+    "imageKey": "134a7edd8f2d"
   }
 ]
