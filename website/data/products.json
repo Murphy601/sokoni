@@ -18969,5 +18969,20 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/pt-007.jpg",
     "subcategory": "phone-accessories"
+  },
+  {
+    "id": "pt-008",
+    "name": "Aldeepo Power Bank AD-P800 10000mAh",
+    "category": "phones-tablets",
+    "priceKes": 650,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "📱",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/pt-008.jpg",
+    "subcategory": "power-banks"
   }
 ]
