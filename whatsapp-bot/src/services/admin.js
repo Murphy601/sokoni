@@ -349,7 +349,8 @@ async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quote
 function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
-    `Type *admin* or *#help* anytime for this menu.\n\n` +
+    `Type *admin* or *#help* anytime for this menu.\n` +
+    `Customers: *menu* · Suppliers: *vendor menu*\n\n` +
     `📋 *#orders* — recent orders\n` +
     `💰 *#payments* — customer *paid* claims awaiting confirmation\n` +
     `✅ *#payconfirm SK-1042* — confirm customer M-Pesa payment\n` +

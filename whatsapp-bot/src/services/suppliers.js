@@ -152,6 +152,28 @@ export function listSuppliers() {
   return Object.values(supplierStore.suppliers);
 }
 
+function normalizePhoneDigits(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9) d = `254${d}`;
+  return d;
+}
+
+/** Approved supplier record for a WhatsApp phone, if any. */
+export function findSupplierByPhone(phone) {
+  loadSuppliers();
+  const target = normalizePhoneDigits(phone);
+  if (!target) return null;
+  return (
+    Object.values(supplierStore.suppliers).find((s) => {
+      const sp = normalizePhoneDigits(s.phone);
+      if (!sp) return false;
+      if (sp === target) return true;
+      return sp.slice(-9) === target.slice(-9);
+    }) || null
+  );
+}
+
 export async function approveApplication(applicationId, { retailOverrides = {} } = {}) {
   loadApps();
   loadSuppliers();

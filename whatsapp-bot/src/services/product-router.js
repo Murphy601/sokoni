@@ -202,8 +202,19 @@ function isNonPerfumeProductQuery(text) {
   return NON_PERFUME_PRODUCT_HINTS.test(String(text || ""));
 }
 
+function isMenuOrRoleIntent(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return (
+    /^(menu|customer menu|main menu|shop menu|#menu)$/i.test(t) ||
+    /^customer\s+menu$/i.test(t) ||
+    /^(vendor|supplier|admin)(\s+menu)?$/i.test(t) ||
+    /^#(?:vendor|vendors|supplier|suppliers|giftwrap|gift-wrap|menu)\b/i.test(String(text || "").trim())
+  );
+}
+
 function shouldTryPerfumeRouting(text) {
   if (isCatalogNavCommand(text)) return false;
+  if (isMenuOrRoleIntent(text)) return false;
   if (/^\d{1,2}$/.test(String(text || "").trim())) return false;
   if (isNonPerfumeProductQuery(text)) return false;
   if (isPerfumeBrowseIntent(text)) return true;
@@ -383,6 +394,7 @@ export async function resolveProductQuery(text) {
   const raw = String(text || "").trim();
   if (!raw || raw.length < 2) return { action: "none" };
   if (isCatalogNavCommand(raw)) return { action: "none" };
+  if (isMenuOrRoleIntent(raw)) return { action: "none" };
   if (looksLikeDeliveryDetails(raw)) return { action: "none" };
 
   const sizeMl = parseSizeFromText(raw);

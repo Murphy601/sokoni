@@ -37,7 +37,7 @@ import {
   looksLikeDeliveryDetails,
 } from "./delivery-details.js";
 
-function formatNumberedMenu(title, options) {
+export function formatNumberedMenu(title, options) {
   const lines = options.map((o, i) => `${i + 1}. ${o.label}`);
   return `${title}\n\n${lines.join("\n")}\n\n_Reply with the number (e.g. 1)_`;
 }
@@ -894,6 +894,11 @@ export async function handleMenuAction(from, id) {
     return sendHumanHandoff(from, { ...meta, lastMessage: "Menu → Talk to a Human" });
   }
   if (id === "how_it_works") return sendHowItWorks(from);
+  if (id.startsWith("vendor_")) {
+    const { handleVendorMenuAction } = await import("./role-menus.js");
+    const phone = getCustomerMeta(from)?.phone || "";
+    return handleVendorMenuAction(from, id, { phone });
+  }
   if (id.startsWith("ask_ai_")) {
     const product = await sendProductFollowUpContext(id);
     if (product) {

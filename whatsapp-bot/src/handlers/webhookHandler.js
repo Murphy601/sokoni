@@ -31,6 +31,8 @@ import { handleProductRouter, resolveProductQuery, handleCatalogPagination } fro
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
+import { tryRoleMenu, handleVendorMenuAction } from "../services/role-menus.js";
+import { handleSupplierOnboarding, isInSupplierOnboarding } from "../services/supplier-onboarding.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -284,12 +286,38 @@ async function handleActiveProductMenu(customerKey, text) {
 export async function handleIncomingMessage(
   customerKey,
   text,
-  { quotedText = "", combinedText = text, displayName = "", phone = "", chatId = customerKey } = {}
+  {
+    quotedText = "",
+    combinedText = text,
+    displayName = "",
+    phone = "",
+    chatId = customerKey,
+    hasMedia = false,
+    mediaUrl = null,
+    mediaMimetype = null,
+    messageId = null,
+    wahaSession = null,
+  } = {}
 ) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
 
   const normalized = text.toLowerCase().trim();
+
+  if (isInSupplierOnboarding(customerKey)) {
+    const handled = await handleSupplierOnboarding(customerKey, text, {
+      phone,
+      hasMedia,
+      mediaUrl,
+      mediaMimetype,
+      messageId,
+      chatId,
+      session: wahaSession,
+    });
+    if (handled) return;
+  }
+
+  if (await tryRoleMenu(customerKey, text, { phone })) return;
 
   if (await handleReviewReply(customerKey, text)) return;
 
@@ -303,7 +331,7 @@ export async function handleIncomingMessage(
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
       return sendText(
         customerKey,
-        "Karibu Sokoni! 🛒\n\nType *menu* to browse and order (pay on delivery).\nNeed a person? *menu* → *Talk to a Human*."
+        "Karibu Sokoni! 🛒\n\nType *menu* for customer shopping.\nSuppliers: *vendor menu* · Admins only: configured admin phone."
       );
     }
   }
@@ -481,6 +509,9 @@ export async function handleIncomingMessage(
 
   if (choice && menuState?.options?.length >= choice && menuState?.type !== "product_list") {
     const option = menuState.options[choice - 1];
+    if (menuState.type === "vendor_apply_gate" || menuState.type === "role_menu") {
+      return handleVendorMenuAction(customerKey, option.id, { phone });
+    }
     if (option.id === "human_handoff") {
       return sendHumanHandoff(customerKey, {
         chatId,
@@ -542,13 +573,18 @@ export async function handleWahaWebhook(body) {
     if (handled !== false) return handled;
   }
 
-  if (!parsed.text) return;
+  if (!parsed.text && !parsed.hasMedia) return;
 
-  return handleIncomingMessage(parsed.customerKey, parsed.text, {
+  return handleIncomingMessage(parsed.customerKey, parsed.text || "", {
     quotedText: parsed.quotedText,
-    combinedText: parsed.combinedText,
+    combinedText: parsed.combinedText || parsed.text || "",
     displayName: parsed.displayName,
     phone: parsed.phone,
     chatId: parsed.chatId,
+    hasMedia: parsed.hasMedia,
+    mediaUrl: parsed.mediaUrl,
+    mediaMimetype: parsed.mediaMimetype,
+    messageId: parsed.messageId,
+    session: parsed.session,
   });
 }

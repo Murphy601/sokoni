@@ -7,7 +7,6 @@ import {
   outOfOfficeMessage,
   broadcastOptOutAck,
   broadcastOptInAck,
-  vendorOnboardingMessage,
   proformaInvoiceMessage,
   priceNegotiationMessage,
   referralProgramMessage,
@@ -124,8 +123,39 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
       t
     )
   ) {
-    await sendText(customerKey, vendorOnboardingMessage());
+    const { startSupplierOnboarding } = await import("./supplier-onboarding.js");
+    return startSupplierOnboarding(customerKey, { phone });
+  }
+
+  if (/^#(?:giftwrap|gift-wrap)\b/i.test(String(text || "").trim()) || /\b(gift\s*wrap|zawadi)\b/i.test(t)) {
+    setCustomerMeta(customerKey, { awaitingGiftWrap: true });
+    await sendText(customerKey, giftWrapMessage());
     return true;
+  }
+
+  if (getCustomerMeta(customerKey)?.awaitingGiftWrap) {
+    const msg = String(text || "").trim();
+    if (msg && !/^#(?:giftwrap|gift-wrap)\b/i.test(msg)) {
+      setCustomerMeta(customerKey, { awaitingGiftWrap: false, giftWrapRequest: msg });
+      await sendText(
+        customerKey,
+        `✅ *Gift wrap request saved*\n\n` +
+          `Card message: _"${msg}"_\n` +
+          `Add-on: KES 250 (confirmed before dispatch).\n\n` +
+          `Our team will WhatsApp you to confirm payment if you're sending the surprise.`
+      );
+      if (config.admin.primary) {
+        try {
+          await sendText(
+            config.admin.primary,
+            `🎁 *Gift wrap request*\nFrom: ${displayName || "—"} · ${phone || customerKey}\nMessage: ${msg}`
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      return true;
+    }
   }
 
   if (/\b(proforma|pro-forma|quotation|quote|invoice)\b/i.test(t)) {
@@ -153,10 +183,7 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
     return true;
   }
 
-  if (/\b(wrap|zawadi|gift\s*wrap)\b/i.test(t) || t === "wrap") {
-    await sendText(customerKey, giftWrapMessage());
-    return true;
-  }
+  // "wrap" alone is handled via awaitingGiftWrap after #giftwrap — avoid re-trigger loop.
 
   if (/change\s+(location|address)|badilisha\s+address|huku\s+niko\s+tena/i.test(t)) {
     await sendText(customerKey, addressChangeMessage());
