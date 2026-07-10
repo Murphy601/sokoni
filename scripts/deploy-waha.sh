@@ -5,6 +5,21 @@ set -euo pipefail
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
 COMPOSE_FILE="$REPO/docker-compose.waha.yml"
 
+# GCP VM may have docker-compose (v1) instead of "docker compose" (v2 plugin).
+docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    echo "ERROR: Docker Compose not found."
+    echo "Install one of:"
+    echo "  sudo apt install docker-compose-plugin   # docker compose"
+    echo "  sudo apt install docker-compose            # docker-compose"
+    exit 1
+  fi
+}
+
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "ERROR: Missing $COMPOSE_FILE — run: cd ~/sokoni && git pull origin main"
   exit 1
@@ -12,13 +27,13 @@ fi
 
 echo "==> Recreating WAHA from $COMPOSE_FILE"
 cd "$REPO"
-docker compose -f docker-compose.waha.yml up -d --force-recreate --remove-orphans
+docker_compose -f docker-compose.waha.yml up -d --force-recreate --remove-orphans
 
 sleep 4
 WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA container is not running."
-  docker compose -f docker-compose.waha.yml ps
+  docker_compose -f docker-compose.waha.yml ps
   exit 1
 fi
 
@@ -35,7 +50,7 @@ for key in WHATSAPP_DOWNLOAD_MEDIA WHATSAPP_FILES_LIFETIME WHATSAPP_FILES_FOLDER
 done
 
 if [ "$missing" -ne 0 ]; then
-  echo "Fix: docker compose -f docker-compose.waha.yml down && docker compose -f docker-compose.waha.yml up -d --force-recreate"
+  echo "Fix: docker_compose -f docker-compose.waha.yml down && docker_compose -f docker-compose.waha.yml up -d --force-recreate"
   exit 1
 fi
 
@@ -51,4 +66,4 @@ if [ "$life" != "0" ]; then
 fi
 
 echo "==> WAHA media config OK"
-docker compose -f docker-compose.waha.yml ps
+docker_compose -f docker-compose.waha.yml ps
