@@ -31438,5 +31438,24 @@
     "payment": "cod",
     "inStock": true,
     "description": "Premium inspired perfume oil. 1 Litre bottle. Pay on delivery."
+  },
+  {
+    "id": "pt-007",
+    "name": "*USB-C Fast Charger 33W*\n  ·  💵 Pay on delivery\n⭐ 4.4 (900 reviews)",
+    "category": "phones-tablets",
+    "subcategory": "phone-accessories",
+    "sourcePriceKes": 999,
+    "priceKes": 1200,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "📱",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "imageUrl": "assets/images/products/pt-007.jpg",
+    "imageKey": "c0c65a9fab3c"
   }
 ]
