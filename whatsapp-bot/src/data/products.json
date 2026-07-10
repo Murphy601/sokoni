@@ -33363,7 +33363,7 @@
   },
   {
     "id": "fa-009",
-    "name": "Women's Rhinestone Slide Sandals - White",
+    "name": "DLGM Women's Flat Sandals with Studs - Beige",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33378,7 +33378,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-009.jpg",
-    "imageKey": "db20a68eb42f"
+    "imageKey": "8a6c8d120365"
   },
   {
     "id": "fa-010",
@@ -33477,7 +33477,7 @@
   },
   {
     "id": "fa-015",
-    "name": "STARKELA Women's Ruffled Rhinestone Flat Sandals - Assorted Colors",
+    "name": "Women's Bow Flat Sandals - White/Brown",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33492,11 +33492,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-015.jpg",
-    "imageKey": "bc9b19c4a491"
+    "imageKey": "4e313a95e3dc"
   },
   {
     "id": "fa-016",
-    "name": "Women's DLGM Slide Sandals - Blue Croc Print with Gold Buckle",
+    "name": "DLGM Women's Slide Sandals - Green Croc Print with Gold Medallion",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33511,11 +33511,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-016.jpg",
-    "imageKey": "c8f498590ad4"
+    "imageKey": "6fd6f455c5a9"
   },
   {
     "id": "fa-017",
-    "name": "Assorted Women's Flat Sandals with Buckle Detail",
+    "name": "Fashion World Women's Flat Sandals - White with Gold Buckle",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33530,11 +33530,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-017.jpg",
-    "imageKey": "08b0d3438ca2"
+    "imageKey": "46cea09901bb"
   },
   {
     "id": "fa-018",
-    "name": "Assorted Women's Patent Leather Flat Sandals (5 colours)",
+    "name": "Assorted Women's Flat Sandals (3 colours)",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33549,11 +33549,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-018.jpg",
-    "imageKey": "d2e43bdc097c"
+    "imageKey": "f1e1067ac646"
   },
   {
     "id": "fa-019",
-    "name": "Assorted Women's Patent Leather Slide Sandals with Rhinestone Strap",
+    "name": "Assorted Women's Patent Leather Slide Sandals with Rhinestone Detail",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33568,7 +33568,7 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-019.jpg",
-    "imageKey": "83a207636a15"
+    "imageKey": "4a2db01cd243"
   },
   {
     "id": "fa-020",
@@ -33591,7 +33591,7 @@
   },
   {
     "id": "fa-021",
-    "name": "DLGM Women's Flat Slide Sandals - Black",
+    "name": "Wisteria Women's Buckle Slide Sandals - Black",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33606,11 +33606,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-021.jpg",
-    "imageKey": "53f786afdd5e"
+    "imageKey": "e56e16da2f73"
   },
   {
     "id": "fa-022",
-    "name": "Women's Flat Slide Sandals - Black and White with Gold Embellishment",
+    "name": "AIMEIGAO Women's Rhinestone Flat Sandals - Gold and White",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33625,11 +33625,11 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-022.jpg",
-    "imageKey": "cc395275f6d4"
+    "imageKey": "835cd1e5998f"
   },
   {
     "id": "fa-023",
-    "name": "NICE STYLE Women's Rhinestone Flat Sandals - Assorted (Gold, Black)",
+    "name": "NICE STYLE Women's Rhinestone Flat Sandals - Assorted Colors",
     "category": "fashion",
     "subcategory": "shoes",
     "sourcePriceKes": 130,
@@ -33644,6 +33644,6 @@
     "payment": "cod",
     "inStock": true,
     "imageUrl": "assets/images/products/fa-023.jpg",
-    "imageKey": "8882c9186a6d"
+    "imageKey": "2ccd1786e0e2"
   }
 ]
