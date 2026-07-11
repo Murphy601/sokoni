@@ -5,9 +5,12 @@ import { resolveProductQuery } from "./product-router.js";
 import { getFeaturedProductIds } from "./tiktok.js";
 import { getSession, pushMessage, setProductContext, isHumanHandoff } from "./session.js";
 
+import { normalizeShopperQuery } from "./shopper-language.js";
+
 const FALLBACK_MODELS = [
+  "openai/gpt-4o-mini",
+  "google/gemini-2.5-flash-lite",
   "nvidia/nemotron-nano-9b-v2:free",
-  "openai/gpt-oss-20b:free",
 ];
 
 const SYSTEM_PROMPT = `You are "Sokoni AI" — the shopping brain of Sokoni Mall (sokonimall.com) on WhatsApp in Kenya.
@@ -31,10 +34,18 @@ PROVE → cite catalog facts only
 ACT → one clear CTA (reply *1*, type *menu*, or one clarifying question)
 CLOSE → invite them to continue in chat
 
-## Tone
-Warm, sharp, trusted local friend — not corporate, not robotic.
-2–5 short lines max. Emojis sparingly for scanability.
-Mirror the user's language register (formal/casual/Sheng).
+## Language (English, Kiswahili, Sheng) — CRITICAL
+Understand Kenyan shopper language before answering. Common mappings:
+- *simu* / *mobi* → phone/smartphone
+- *mafuta* / *marashi* → perfume/fragrance oil
+- *nataka* / *nipee* / *niletee* → want to buy
+- *chini ya X* / *under X* → budget max X KES
+- *bei ngapi* / *kiasi gani* → asking price (answer from catalog)
+- *form* / *poa* / *fit* → good quality (not a product name)
+- *sauti* / *spika* → speaker/soundbar/audio
+- *nguo* / *viatu* → fashion/shoes
+Do NOT guess product names from slang. Match intent → CATALOG items only.
+If unclear, ask ONE short clarifying question in the user's language.
 
 ## Store orders (primary path)
 When CATALOG items are pay-on-delivery:
@@ -82,7 +93,8 @@ Examples:
 
 function modelChain() {
   const primary = config.openai.model?.trim();
-  return [...new Set([primary, ...FALLBACK_MODELS].filter(Boolean))];
+  const configured = config.openai.modelFallbacks || [];
+  return [...new Set([primary, ...configured, ...FALLBACK_MODELS].filter(Boolean))];
 }
 
 function formatProductLine(p) {
@@ -155,8 +167,9 @@ async function gatherProducts(userMessage, phoneNumber) {
 
   const viral = isViralIntent(userMessage);
   const international = isInternationalIntent(userMessage);
+  const searchText = normalizeShopperQuery(userMessage);
   let matches = await searchProducts({
-    keywords: userMessage,
+    keywords: searchText,
     fulfillment: "store",
     scope: "local",
     limit: 5,
@@ -288,8 +301,8 @@ async function callOpenRouter(messages) {
       const response = await openai.chat.completions.create({
         model,
         messages,
-        max_tokens: 350,
-        temperature: 0.3,
+        max_tokens: 450,
+        temperature: 0.25,
       });
       const reply = sanitizeReply(extractReply(response.choices[0]?.message));
       if (reply) {

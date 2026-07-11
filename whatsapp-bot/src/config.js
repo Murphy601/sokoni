@@ -20,7 +20,12 @@ export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    model: process.env.OPENAI_MODEL || "nvidia/nemotron-nano-9b-v2:free",
+    model: process.env.OPENAI_MODEL || "google/gemini-2.5-flash",
+    modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
+      "openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   },
   /** WhatsApp admin catalog intake (photos + #add / #price). */
   catalog: {

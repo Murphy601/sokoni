@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { looksLikeDeliveryDetails } from "./delivery-details.js";
+import { normalizeShopperQuery } from "./shopper-language.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -177,22 +178,31 @@ const STOP_WORDS = new Set([
   "how", "is", "are", "do", "does", "this", "that", "these", "those", "more", "info",
   "on", "in", "at", "to", "of", "and", "or", "best", "recommend", "recommendations",
   "please", "tell", "some", "any", "good", "nice", "de", "la", "le", "el", "di", "du",
+  "poa", "sawa", "sasa", "mambo", "habari", "niko", "fit", "buda", "leo", "kama", "tu",
+  "na", "kwa", "ya", "au", "ndio", "ndiyo", "gani", "gania", "nataka", "nipee", "nipe",
 ]);
 
 /** Maps common shopper words to catalog tokens / subcategories. */
 const QUERY_EXPANSIONS = {
   tv: ["tv", "television", "tvs", "smart"],
   laundry: ["laundry", "washing", "washer", "washing-machines"],
-  phone: ["phone", "smartphone", "mobile", "phones-tablets", "smartphones"],
+  phone: ["phone", "smartphone", "mobile", "phones-tablets", "smartphones", "simu"],
   laptop: ["laptop", "laptops", "computing"],
   fridge: ["fridge", "refrigerator", "kitchen-appliances"],
   game: ["game", "gaming", "console", "consoles"],
-  perfume: ["perfume", "perfume-oil", "perfume-oils", "fragrance", "fragrances", "cologne", "scent", "attar"],
+  perfume: ["perfume", "perfume-oil", "perfume-oils", "fragrance", "fragrances", "cologne", "scent", "attar", "mafuta", "marashi"],
+  simu: ["phone", "smartphone", "smartphones", "phones-tablets"],
+  sauti: ["speaker", "speakers", "headphones", "soundbar", "audio", "tvs-audio"],
+  spika: ["speaker", "speakers", "soundbar"],
+  nguo: ["fashion", "clothing"],
+  viatu: ["shoes", "fashion"],
+  lotion: ["lotion", "skincare", "body", "health-beauty"],
 };
 
 function expandKeywordTokens(raw) {
   if (!raw) return [];
-  const base = raw
+  const normalized = normalizeShopperQuery(raw);
+  const base = normalized
     .toLowerCase()
     .replace(/[^\w\s-]/g, " ")
     .split(/\s+/)

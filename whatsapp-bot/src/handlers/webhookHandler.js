@@ -31,6 +31,7 @@ import { handleProductRouter, resolveProductQuery, handleCatalogPagination } fro
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
+import { normalizeShopperQuery } from "../services/shopper-language.js";
 import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
 import { handleSupplierOnboarding, isInSupplierOnboarding, trySupplierContinueFromRef } from "../services/supplier-onboarding.js";
 import {
@@ -252,8 +253,9 @@ async function tryProductSearch(customerKey, text) {
   const routed = await resolveProductQuery(text);
   if (routed.action !== "none") return false;
 
+  const searchText = normalizeShopperQuery(text);
   const products = await searchProducts({
-    keywords: text,
+    keywords: searchText,
     fulfillment: "store",
     scope: "local",
     limit: 4,
@@ -261,8 +263,11 @@ async function tryProductSearch(customerKey, text) {
   if (products.length === 0) return false;
 
   const isProductIntent =
-    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(text) ||
-    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix/i.test(text);
+    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(searchText) ||
+    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix|simu|perfume|mafuta|sauti|spika/i.test(
+      searchText
+    ) ||
+    /nataka|nipee|nipe|chini ya|bei/i.test(String(text || "").toLowerCase());
 
   if (!isProductIntent && products.length > 1) return false;
 
