@@ -31459,5 +31459,26 @@
     "imageUrl": "assets/images/products/hb-006.jpg",
     "imageKey": "6ca391501f81dedf",
     "imageHash": "6ca391501f81dedf"
+  },
+  {
+    "id": "hb-007",
+    "name": "Wins Town Women's Probiotic Gummies - Cranberry Flavor",
+    "category": "health-beauty",
+    "subcategory": "personal-care",
+    "sourcePriceKes": 2000,
+    "priceKes": 2300,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "uploadMessageId": "false_202400887484571@lid_ACAB3C4246FD2F2CBE99E1CC6296AD3E",
+    "imageUrl": "assets/images/products/hb-007.jpg",
+    "imageKey": "c49bad1077b15cf0",
+    "imageHash": "c49bad1077b15cf0"
   }
 ]
