@@ -4,20 +4,19 @@
   position: relative;
   width: 100%;
   aspect-ratio: 1;
-  min-height: 12rem;
-  max-height: 15rem;
+  min-height: 16rem;
   margin-bottom: 1rem;
   border-radius: 1rem;
   overflow: hidden;
-  background: rgba(27, 16, 53, 0.04);
-  border: 1px solid rgba(27, 16, 53, 0.08);
-  box-shadow: 0 8px 24px rgba(27, 16, 53, 0.08);
+  background: #2e1b57;
+  border: 1px solid rgba(37, 211, 102, 0.22);
+  box-shadow: 0 10px 32px rgba(27, 16, 53, 0.2);
 }
 
 html.dark .hero-preview-square {
-  background: rgba(46, 27, 87, 0.5);
-  border-color: rgba(37, 211, 102, 0.2);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+  background: #2e1b57;
+  border-color: rgba(37, 211, 102, 0.28);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.35);
 }
 
 .hero-filmstrip {
@@ -39,11 +38,8 @@ html.dark .hero-preview-square {
   inset: 0;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  padding: 0.65rem;
   opacity: 0;
-  transform: scale(0.96);
+  transform: scale(0.98);
   transition: opacity 0.45s ease, transform 0.45s ease;
 }
 
@@ -52,46 +48,78 @@ html.dark .hero-preview-square {
   transform: scale(1);
 }
 
-.hero-filmstrip-single img {
-  flex: 1;
+.hero-filmstrip-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   width: 100%;
+  background: #2e1b57;
+}
+
+.hero-filmstrip-img-wrap {
+  flex: 1;
   min-height: 0;
-  max-height: calc(100% - 2.75rem);
-  object-fit: contain;
-  border-radius: 0.65rem;
-  background: #fff;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  background: #ece5dd;
   padding: 0.35rem;
 }
 
-html.dark .hero-filmstrip-single img {
+.hero-filmstrip-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+html.dark .hero-filmstrip-img-wrap {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .hero-filmstrip-img-wrap img {
   background: rgba(255, 255, 255, 0.95);
 }
 
 .hero-filmstrip-caption {
   flex-shrink: 0;
-  margin-top: 0.45rem;
+  padding: 0.55rem 0.65rem 0.65rem;
   text-align: center;
   font-size: 0.72rem;
   line-height: 1.35;
-  color: #1b1035;
+  color: #fff;
+  background: #2e1b57;
+}
+
+.hero-filmstrip-caption strong {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.hero-filmstrip-trail {
+  display: block;
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 0.15rem;
+}
+
+.hero-filmstrip-price {
+  display: block;
+  color: #25d366;
+  font-weight: 700;
+  font-size: 0.72rem;
 }
 
 html.dark .hero-filmstrip-caption {
   color: #fff;
 }
 
-.hero-filmstrip-caption strong {
-  display: block;
-  font-weight: 700;
-  margin-bottom: 0.1rem;
-}
-
-.hero-filmstrip-caption span {
-  color: #25d366;
-  font-weight: 600;
-}
-
-html.dark .hero-filmstrip-caption span {
+html.dark .hero-filmstrip-price {
   color: #7dffb0;
 }
 

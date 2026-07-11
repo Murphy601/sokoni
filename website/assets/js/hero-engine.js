@@ -95,14 +95,48 @@
     products = list;
   }
 
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  /** Round-robin across category/subcategory buckets — full catalog, diverse order. */
+  function buildDiverseFilmstrip(list) {
+    const store = list.filter((p) => p.imageUrl && p.fulfillment === "store" && p.inStock !== false);
+    const buckets = new Map();
+    for (const p of store) {
+      const key = `${p.category || "other"}::${p.subcategory || "general"}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(p);
+    }
+    for (const arr of buckets.values()) shuffle(arr);
+    const keys = shuffle([...buckets.keys()]);
+    const out = [];
+    let more = true;
+    while (more) {
+      more = false;
+      for (const key of keys) {
+        const arr = buckets.get(key);
+        if (arr?.length) {
+          out.push(arr.shift());
+          more = true;
+        }
+      }
+    }
+    return out;
+  }
+
   function buildFilmstrip() {
     const wrap = $("hero-filmstrip");
     if (!wrap) return;
-    filmstripProducts = products
-      .filter((p) => p.imageUrl && p.fulfillment === "store")
-      .slice(0, 12);
+    filmstripProducts = buildDiverseFilmstrip(products);
     if (!filmstripProducts.length) return;
     wrap.innerHTML = `<div class="hero-filmstrip-single" id="hero-filmstrip-slide"></div>`;
+    filmstripIdx = 0;
     showFilmstripSlide(0);
     if (filmstripTimer) clearInterval(filmstripTimer);
     if (!reducedMotion) {
@@ -117,12 +151,18 @@
     const slide = $("hero-filmstrip-slide");
     const p = filmstripProducts[idx];
     if (!slide || !p) return;
-    const name = esc(p.name?.slice(0, 36) || "Product");
+    const name = esc(p.name?.slice(0, 48) || "Product");
     const price = formatKes(p.priceKes);
+    const cat = CATEGORY_META[p.category]?.label || p.category || "";
+    const sub = SUBCATEGORY_LABELS[p.subcategory] || p.subcategory || "";
+    const trail = [cat, sub].filter(Boolean).join(" · ");
     slide.classList.remove("is-active");
     slide.innerHTML =
-      `<img src="${esc(p.imageUrl)}" alt="${name}" loading="lazy" decoding="async" />` +
-      `<div class="hero-filmstrip-caption"><strong>${name}</strong><span>${price} · Pay on delivery</span></div>`;
+      `<div class="hero-filmstrip-card">` +
+      `<div class="hero-filmstrip-img-wrap"><img src="${esc(p.imageUrl)}" alt="${name}" loading="lazy" decoding="async" /></div>` +
+      `<div class="hero-filmstrip-caption"><strong>${name}</strong>` +
+      (trail ? `<span class="hero-filmstrip-trail">${esc(trail)}</span>` : "") +
+      `<span class="hero-filmstrip-price">${price} · Pay on delivery</span></div></div>`;
     requestAnimationFrame(() => slide.classList.add("is-active"));
   }
 
