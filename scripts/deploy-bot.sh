@@ -57,6 +57,21 @@ if [ -f "$REPO/docker-compose.waha.yml" ]; then
 fi
 
 cd "$BOT_DIR"
+
+# Upgrade legacy free tiny models to Gemini Flash (better EN/Swahili/Sheng).
+ENV_FILE="$BOT_DIR/.env"
+if [ -f "$ENV_FILE" ]; then
+  if grep -qE '^OPENAI_MODEL=(nvidia/nemotron-nano-9b-v2:free|google/gemma-2-9b-it:free|openai/gpt-oss-20b:free)' "$ENV_FILE"; then
+    echo "==> Upgrading OPENAI_MODEL → google/gemini-2.5-flash"
+    sed -i 's/^OPENAI_MODEL=.*/OPENAI_MODEL=google\/gemini-2.5-flash/' "$ENV_FILE"
+  fi
+  if ! grep -q '^OPENAI_MODEL_FALLBACKS=' "$ENV_FILE"; then
+    echo 'OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free' >> "$ENV_FILE"
+    echo "==> Added OPENAI_MODEL_FALLBACKS"
+  fi
+  echo "==> AI model: $(grep '^OPENAI_MODEL=' "$ENV_FILE" | cut -d= -f2-)"
+fi
+
 npm install --omit=dev 2>/dev/null || npm install
 
 if pm2 describe "$NAME" >/dev/null 2>&1; then

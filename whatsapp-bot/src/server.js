@@ -58,7 +58,11 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", build: BUILD_ID });
+  res.json({
+    status: "ok",
+    build: BUILD_ID,
+    aiModel: config.openai.model || null,
+  });
 });
 
 /** Product photos for WhatsApp — served from VM disk (no Cloudflare wait). */

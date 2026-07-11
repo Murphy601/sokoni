@@ -88,7 +88,8 @@ WAHA_SESSION=default
 
 OPENAI_API_KEY=sk-or-v1-...your key...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=nvidia/nemotron-nano-9b-v2:free
+OPENAI_MODEL=google/gemini-2.5-flash
+OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free
 
 PORT=3001
 PUBLIC_SITE_URL=https://sokonimall.com
