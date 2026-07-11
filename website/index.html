@@ -51,6 +51,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/motion.css" />
 </head>
 <body class="bg-brand-cream text-brand-purple font-sans antialiased">
   <!-- TRUST / PAYMENT DISCLOSURE -->
@@ -100,10 +101,11 @@
   </header>
 
   <!-- HERO -->
-  <section class="relative overflow-hidden">
+  <section class="relative overflow-hidden" id="hero">
+    <div id="hero-filmstrip" class="hero-filmstrip" aria-hidden="true"></div>
     <div class="absolute -top-24 -right-24 w-96 h-96 bg-brand-green/20 rounded-full blur-3xl"></div>
     <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-brand-purple/10 rounded-full blur-3xl"></div>
-    <div class="max-w-7xl mx-auto px-5 pt-16 pb-20 md:pt-24 md:pb-28 relative grid md:grid-cols-2 gap-12 items-center">
+    <div class="max-w-7xl mx-auto px-5 pt-16 pb-20 md:pt-24 md:pb-28 relative z-10 grid md:grid-cols-2 gap-12 items-center">
       <div>
         <span class="inline-block bg-brand-purple text-brand-green text-xs font-bold tracking-wide px-3 py-1.5 rounded-full mb-5">
           💵 PAY ON DELIVERY · NO APP NEEDED
@@ -111,13 +113,17 @@
         <h1 class="font-display text-4xl md:text-6xl font-bold leading-tight mb-5">
           Shop while texting a <span class="text-brand-green">trusted</span> local AI agent assistant.
         </h1>
-        <p class="font-display text-xl md:text-2xl font-bold mb-4 max-w-xl leading-tight">
-          1,200+ deals across Kenya. <span class="text-brand-green">Pay when it arrives.</span>
+        <p id="hero-kinetic-line" class="font-display text-lg md:text-xl font-semibold mb-4 max-w-xl leading-snug text-brand-purple/80 dark:text-white/80">
+          Your Market, On WhatsApp — live catalog, same chat as the bot.
         </p>
-        <p class="text-base md:text-lg text-brand-purple/70 mb-8 max-w-xl leading-relaxed">
+        <p class="font-display text-xl md:text-2xl font-bold mb-4 max-w-xl leading-tight">
+          <span id="hero-store-count">1,200</span>+ deals across Kenya. <span class="text-brand-green">Pay when it arrives.</span>
+        </p>
+        <p class="text-base md:text-lg text-brand-purple/70 mb-6 max-w-xl leading-relaxed">
           No app to install, no deposit upfront. Tell us what you need in English, Kiswahili or Sheng —
           we find it, deliver to your door or a nearby pickup point, and you pay on delivery or M-Pesa Till when it's in your hands.
         </p>
+        <div id="hero-trust-chips" class="hero-trust-chips mb-6"></div>
         <form id="hero-search-form" class="relative max-w-xl mb-8" role="search" aria-label="Search products">
           <label for="hero-search" class="sr-only">Search products</label>
           <input type="search" id="hero-search" autocomplete="off"
@@ -151,7 +157,12 @@
           <strong>International:</strong> separate partner-store links (AliExpress, Temu, Amazon) — we may earn a small affiliate commission at no extra cost to you; no pay-on-delivery.
         </p>
       </div>
-      <div class="relative mx-auto max-w-xs w-full">
+      <div id="hero-phone-3d" class="relative mx-auto max-w-xs w-full">
+        <div class="hero-story-meta">
+          <p id="hero-story-label" class="hero-story-label">Loading platform story…</p>
+          <div id="hero-story-progress" class="hero-story-progress"></div>
+          <div class="hero-story-timer"><div id="hero-story-timer-fill" class="hero-story-timer-fill"></div></div>
+        </div>
         <p class="font-display text-2xl md:text-3xl font-bold text-center mb-5 leading-tight">
           Your <span class="text-brand-green">Market</span>,<br class="hidden sm:block" /> On WhatsApp.
         </p>
@@ -160,30 +171,22 @@
             <span class="w-8 h-8 rounded-full bg-brand-green flex items-center justify-center">🛒</span>
             <div>
               <p class="font-semibold text-sm leading-none">Sokoni AI</p>
-              <p class="text-[11px] text-white/70">online</p>
+              <p class="text-[11px] text-white/70">online · +254 117 422 428</p>
             </div>
           </div>
-          <div class="bg-[#ECE5DD] p-4 space-y-3 min-h-[420px]">
-            <div class="bg-white rounded-2xl rounded-tl-none px-3 py-2 text-sm shadow max-w-[85%]">
-              👋 Karibu! I'm Sokoni AI. What are you shopping for today?
-            </div>
-            <div class="bg-[#DCF8C6] rounded-2xl rounded-tr-none px-3 py-2 text-sm shadow max-w-[85%] ml-auto">
-              nataka simu poa chini ya 15k, camera nzuri
-            </div>
-            <div class="bg-white rounded-2xl rounded-tl-none px-3 py-2 text-sm shadow max-w-[85%] space-y-1">
-              <p>Sawa! Top pick chini ya KES 15,000:</p>
-              <p class="font-semibold">📱 Tecno Spark 20C — KES 13,599</p>
-              <p class="text-brand-purple/60">⭐ 4.5 · Pay on delivery 💵</p>
-              <p class="text-brand-green font-semibold">🛒 Order — Pay on Delivery →</p>
-            </div>
+          <div class="bg-[#ECE5DD] p-4">
+            <div id="hero-chat-stage" class="space-y-2" aria-live="polite" aria-label="WhatsApp order story preview"></div>
           </div>
         </div>
+        <p class="text-center text-[11px] text-brand-purple/45 mt-3 max-w-xs mx-auto">
+          4 live stories · ~60s each · built from real catalog &amp; bot flows
+        </p>
       </div>
     </div>
   </section>
 
   <!-- FEATURES / WHAT SOKONI DOES -->
-  <section id="features" class="relative overflow-hidden bg-brand-purple text-white py-20">
+  <section id="features" class="reveal-on-scroll relative overflow-hidden bg-brand-purple text-white py-20">
     <div class="absolute -top-32 right-0 w-96 h-96 bg-brand-green/20 rounded-full blur-3xl"></div>
     <div class="absolute -bottom-32 -left-20 w-96 h-96 bg-brand-green/10 rounded-full blur-3xl"></div>
     <div class="max-w-7xl mx-auto px-5 relative">
@@ -268,7 +271,7 @@
   </section>
 
   <!-- CATEGORIES -->
-  <section id="categories" class="max-w-7xl mx-auto px-5 py-16">
+  <section id="categories" class="reveal-on-scroll max-w-7xl mx-auto px-5 py-16">
     <div class="flex items-end justify-between mb-8">
       <div>
         <h2 class="text-2xl md:text-3xl font-extrabold">Shop by Category</h2>
@@ -281,7 +284,7 @@
   </section>
 
   <!-- DEALS -->
-  <section id="deals" class="bg-white py-16">
+  <section id="deals" class="reveal-on-scroll bg-white py-16">
     <div class="max-w-7xl mx-auto px-5">
       <div class="flex items-end justify-between mb-8">
         <div>
@@ -315,7 +318,7 @@
   </section>
 
   <!-- INTERNATIONAL -->
-  <section id="international" class="py-16">
+  <section id="international" class="reveal-on-scroll py-16">
     <div class="max-w-7xl mx-auto px-5">
       <div class="flex items-end justify-between mb-8">
         <div>
@@ -336,7 +339,7 @@
   </section>
 
   <!-- HOW IT WORKS -->
-  <section id="how-it-works" class="bg-brand-purple text-white py-20">
+  <section id="how-it-works" class="reveal-on-scroll bg-brand-purple text-white py-20">
     <div class="max-w-7xl mx-auto px-5">
       <h2 class="text-2xl md:text-3xl font-extrabold text-center mb-3">How Sokoni Works</h2>
       <p class="text-white/60 text-center max-w-xl mx-auto mb-12">
@@ -367,7 +370,7 @@
   </section>
 
   <!-- REVIEWS -->
-  <section id="reviews" class="py-20 bg-white dark:bg-brand-purple/95 border-y border-black/5 dark:border-white/10">
+  <section id="reviews" class="reveal-on-scroll py-20 bg-white dark:bg-brand-purple/95 border-y border-black/5 dark:border-white/10">
     <div class="max-w-7xl mx-auto px-5">
       <div class="text-center mb-12">
         <h2 class="text-2xl md:text-3xl font-extrabold">⭐ Customer Reviews</h2>
@@ -509,6 +512,8 @@
 
   <script src="assets/js/component-handler.js"></script>
   <script src="assets/js/app.js"></script>
+  <script src="assets/js/hero-engine.js" defer></script>
+  <script src="assets/js/main.js" defer></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 

@@ -1,0 +1,111 @@
+{
+  "storyDurationMs": 60000,
+  "stories": [
+    {
+      "id": "order-journey",
+      "title": "Order journey",
+      "subtitle": "Hello → menu → order → track → pay → review",
+      "frames": [
+        { "at": 0, "action": "clear" },
+        { "at": 500, "side": "out", "text": "habari" },
+        { "at": 2500, "side": "in", "text": "Habari! Welcome to *Sokoni Mall AI* 🤖🇰🇪\nType *menu* to browse — pay on delivery only." },
+        { "at": 5500, "side": "out", "text": "menu" },
+        { "at": 7500, "side": "in", "kind": "menu", "lines": ["🛍️ Browse Categories", "🔥 Today's Picks", "🧾 Track My Order", "🙋 Talk to a Human"] },
+        { "at": 10500, "side": "out", "text": "1" },
+        { "at": 12500, "side": "in", "text": "📱 *Phones & Tablets*\n\n1. Smartphones\n2. Tablets\n3. Power Banks\n\n_Reply with a number_" },
+        { "at": 15500, "side": "out", "text": "1" },
+        { "at": 17500, "side": "in", "text": "📱 *Smartphones* (page 1)\n\n1. {{productName}} — {{price}}\n2. …more deals\n\n_Reply 1 to order_" },
+        { "at": 20500, "side": "out", "text": "1" },
+        { "at": 22500, "side": "in", "kind": "product", "productSlot": "featured" },
+        { "at": 25500, "side": "out", "text": "1" },
+        { "at": 27500, "side": "in", "text": "🛒 *Order {{productName}}*\n\nSend *name, location & phone* in one message (pay on delivery)." },
+        { "at": 30500, "side": "out", "text": "Jane · Westlands Nairobi · 0712345678" },
+        { "at": 33000, "side": "in", "text": "Order Confirmed! 🎉\n*{{orderId}}*\n\n🛍️ {{productName}}\n💰 {{price}} — pay on delivery\n📍 Jane — Westlands\n\nPay Till *{{till}}* only when it arrives." },
+        { "at": 37000, "side": "out", "text": "track" },
+        { "at": 39000, "side": "in", "text": "📋 *{{orderId}}* — Out for delivery 🛵\n\nYour order is on the way. Keep your phone on." },
+        { "at": 43000, "side": "in", "text": "🛵 *{{orderId}} is out for delivery!*\n\nInspect on arrival, then pay *{{price}}* to Till *{{till}}*." },
+        { "at": 47000, "side": "in", "text": "🎉 *{{orderId}} delivered!*\n\nEnjoy your *{{productName}}* 💚" },
+        { "at": 50000, "side": "out", "text": "paid" },
+        { "at": 52000, "side": "in", "text": "✅ Payment noted — thank you!\nOur team confirms M-Pesa to Till *{{till}}* shortly." },
+        { "at": 55000, "side": "in", "text": "⭐ *Rate your order {{orderId}}*\n\nReply 1–5 stars, or a short comment.\n_Your feedback helps Sokoni grow._" },
+        { "at": 58000, "side": "out", "text": "5 — fast delivery, as advertised!" }
+      ]
+    },
+    {
+      "id": "browse-handoff",
+      "title": "Site → WhatsApp handoff",
+      "subtitle": "Same product, same price, same message",
+      "frames": [
+        { "at": 0, "action": "clear" },
+        { "at": 800, "side": "in", "text": "👀 Visitor tapped *Ask on WhatsApp* on sokonimall.com…" },
+        { "at": 3500, "side": "out", "text": "Hi Sokoni, tell me more about \"{{productName}}\" ({{price}})." },
+        { "at": 6000, "side": "in", "kind": "product", "productSlot": "featured" },
+        { "at": 10000, "side": "in", "text": "What next?\n\n1. 🛒 Order (pay on delivery)\n2. 🤖 Ask about it\n3. ⬅ Main menu" },
+        { "at": 14000, "side": "out", "text": "discount" },
+        { "at": 16000, "side": "in", "text": "🎫 Use code *{{promoCode}}* for *{{offerPercent}}% off* eligible local orders.\nReply *yes* to apply on your next order." },
+        { "at": 20000, "side": "out", "text": "yes" },
+        { "at": 22000, "side": "in", "text": "✅ Code *{{promoCode}}* noted — {{offerPercent}}% off on next eligible order." },
+        { "at": 26000, "side": "out", "text": "referral" },
+        { "at": 28000, "side": "in", "text": "Share Sokoni with friends — pay-on-delivery, zero deposits.\nYou both benefit when they order via Till *{{till}}*." },
+        { "at": 32000, "side": "in", "text": "🛡️ *Trust checklist*\n• Pay on delivery only\n• Till *{{till}}* — {{tillName}}\n• Verify {{whatsappDisplay}} before paying" },
+        { "at": 38000, "side": "out", "text": "1" },
+        { "at": 40000, "side": "in", "text": "🛒 Send *name, location & phone* to place your order (COD)." },
+        { "at": 44000, "side": "out", "text": "Peter · Kisumu · 0722111222" },
+        { "at": 46500, "side": "in", "text": "✅ *{{orderId}}* confirmed!\nWe'll WhatsApp you at every step." },
+        { "at": 52000, "side": "in", "text": "📦 *{{orderId}} packed* — waiting for rider." },
+        { "at": 57000, "side": "in", "text": "Same catalog on web & WhatsApp — always in sync." }
+      ]
+    },
+    {
+      "id": "international",
+      "title": "International lane",
+      "subtitle": "Partner checkout · duty on arrival",
+      "frames": [
+        { "at": 0, "action": "clear" },
+        { "at": 600, "side": "out", "text": "menu" },
+        { "at": 2800, "side": "in", "kind": "menu", "lines": ["🛍️ Browse Categories", "🌍 Shop International", "🧾 Track My Order"] },
+        { "at": 5500, "side": "out", "text": "2" },
+        { "at": 7500, "side": "in", "text": "🌍 *Shop International*\n\n1. Trending picks\n2. Tell me what you need\n\n_No pay-on-delivery for overseas items._" },
+        { "at": 11000, "side": "out", "text": "wireless earbuds under $20" },
+        { "at": 13500, "side": "in", "kind": "product", "productSlot": "intl" },
+        { "at": 17500, "side": "in", "text": "🛒 Buy via partner link (AliExpress / Temu / Amazon).\n_Sokoni may earn affiliate commission — never costs you extra._" },
+        { "at": 22000, "side": "in", "text": "⚠️ *Import note:* Kenya duty/VAT may apply on arrival — paid by you, not included in price." },
+        { "at": 27000, "side": "out", "text": "scam" },
+        { "at": 29000, "side": "in", "text": "🛡️ Sokoni is a real Kenyan business.\nTill *{{till}}* registered to *{{tillName}}*.\nVerify {{whatsappDisplay}} before any payment." },
+        { "at": 34000, "side": "in", "text": "Local store items = pay on delivery.\nInternational = partner checkout only." },
+        { "at": 40000, "side": "out", "text": "menu" },
+        { "at": 42000, "side": "out", "text": "1" },
+        { "at": 44000, "side": "in", "text": "Back to *local* pay-on-delivery catalog 🇰🇪" },
+        { "at": 48000, "side": "in", "kind": "product", "productSlot": "featured" },
+        { "at": 53000, "side": "in", "text": "💵 *COD badge* = inspect first, pay Till *{{till}}* on delivery." },
+        { "at": 58000, "side": "in", "text": "Full terms: sokonimall.com/terms" }
+      ]
+    },
+    {
+      "id": "human-admin",
+      "title": "Human & admin support",
+      "subtitle": "Handoff → admin updates → you get notified",
+      "frames": [
+        { "at": 0, "action": "clear" },
+        { "at": 500, "side": "out", "text": "menu" },
+        { "at": 2500, "side": "in", "kind": "menu", "lines": ["🛍️ Browse Categories", "🧾 Track My Order", "🙋 Talk to a Human"] },
+        { "at": 5500, "side": "out", "text": "3" },
+        { "at": 7500, "side": "in", "text": "🙋 *Connecting you to Sokoni support…*\n\nA team member will reply on this chat.\n_Meanwhile type *track* or your order number._" },
+        { "at": 11000, "side": "out", "text": "SK-1042" },
+        { "at": 13000, "side": "in", "text": "📋 *SK-1042*\nStatus: *Confirmed* ✅\n{{productName}} — {{price}}\n\nWe'll notify you when it's packed & out for delivery." },
+        { "at": 17000, "side": "in", "text": "👤 *Sokoni team*\nHabari Jane — your order is confirmed. Rider assigned shortly. 🙏" },
+        { "at": 22000, "side": "in", "text": "📦 *SK-1042 packed!*\nYour item is ready and waiting for a rider." },
+        { "at": 27000, "side": "in", "text": "🔄 *Admin update* (behind the scenes)\n`#status SK-1042 out_for_delivery`" },
+        { "at": 31000, "side": "in", "text": "🛵 *SK-1042 is out for delivery!*\n\nInspect on arrival. Pay *{{price}}* to Till *{{till}}* only." },
+        { "at": 36000, "side": "out", "text": "Can I change delivery to Kilimani?" },
+        { "at": 38000, "side": "in", "text": "👤 *Sokoni team*\nNoted — we'll try before dispatch. Reply with landmark if rider is already close." },
+        { "at": 42000, "side": "in", "text": "🎉 *SK-1042 delivered!*\nEnjoy your purchase 💚" },
+        { "at": 46000, "side": "out", "text": "paid" },
+        { "at": 48000, "side": "in", "text": "✅ *Payment received* — thank you!\nAdmin confirmed your M-Pesa to Till *{{till}}*." },
+        { "at": 52000, "side": "in", "text": "⭐ How was your experience?\nReply 1–5 for order *SK-1042*." },
+        { "at": 56000, "side": "out", "text": "4" },
+        { "at": 58000, "side": "in", "text": "Asante! Real humans + AI — same WhatsApp chat. 🤝" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "tagline": "Your Market, On WhatsApp",
+  "whatsappNumber": "254117422428",
+  "whatsappDisplay": "+254 117 422 428",
+  "mpesaTill": "4775847",
+  "mpesaTillName": "David Thuku Muiruri",
+  "promoCode": "SOKONI3",
+  "offerPercent": 3,
+  "supportEmail": "support@sokonimall.com",
+  "kineticLines": [
+    "Browse real deals → chat on WhatsApp → pay on delivery",
+    "{{storeCount}}+ pay-on-delivery items across Kenya",
+    "Order in English, Kiswahili, or Sheng — same bot",
+    "Track with your SK-#### order number anytime",
+    "International? Partner links — duty may apply on arrival",
+    "Verify on {{whatsappDisplay}} before paying Till {{mpesaTill}}",
+    "Privacy: your WhatsApp number is for your order only"
+  ],
+  "trustChips": [
+    {
+      "icon": "🛵",
+      "label": "Pay on delivery",
+      "detail": "Inspect first. Pay Till {{mpesaTill}} ({{mpesaTillName}}) — not to riders.",
+      "href": "faq.html"
+    },
+    {
+      "icon": "🌍",
+      "label": "International",
+      "detail": "Partner checkout. Import duty/VAT paid by you on arrival.",
+      "href": "terms.html"
+    },
+    {
+      "icon": "🤝",
+      "label": "Affiliate",
+      "detail": "We may earn a small commission — never costs you extra.",
+      "href": "terms.html"
+    },
+    {
+      "icon": "🔒",
+      "label": "Privacy",
+      "detail": "We don't sell your chat data. Orders use your WhatsApp number.",
+      "href": "privacy.html"
+    }
+  ],
+  "storyTitles": [
+    "Full order journey — menu to delivery & review",
+    "Browse on site → same product in WhatsApp",
+    "International lane — partner links & duty",
+    "Talk to a human — admin updates your order"
+  ]
+}
