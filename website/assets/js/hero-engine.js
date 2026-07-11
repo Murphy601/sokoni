@@ -108,9 +108,9 @@
 
   function updateStoryMeta() {
     const label = $("hero-story-label");
-    const titles = siteStory.storyTitles || stories.map((s) => s.title);
+    const titles = siteStory.storyTitles || stories.map((s) => s.subtitle || s.title);
     if (label) {
-      label.textContent = `Story ${storyIndex + 1}/${stories.length}: ${titles[storyIndex] || stories[storyIndex]?.title || ""}`;
+      label.textContent = titles[storyIndex] || stories[storyIndex]?.subtitle || stories[storyIndex]?.title || "";
     }
     renderKineticDots();
   }

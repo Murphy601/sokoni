@@ -5,8 +5,13 @@
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  opacity: 0.14;
+  opacity: 0.22;
   pointer-events: none;
+  border-radius: 1rem;
+}
+
+html.dark .hero-filmstrip {
+  opacity: 0.18;
 }
 
 .hero-filmstrip-track {
@@ -90,16 +95,26 @@ html.dark .hero-trust-chip {
 .hero-story-meta {
   text-align: center;
   margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+html.dark .hero-story-meta {
+  background: rgba(46, 27, 87, 0.9);
+  border-color: rgba(37, 211, 102, 0.25);
 }
 
 .hero-story-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(27, 16, 53, 0.65);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #1b1035;
 }
 
 html.dark .hero-story-label {
-  color: rgba(255, 255, 255, 0.65);
+  color: #25d366;
 }
 
 .hero-story-progress {
@@ -113,8 +128,12 @@ html.dark .hero-story-label {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 9999px;
-  background: rgba(27, 16, 53, 0.2);
+  background: rgba(27, 16, 53, 0.25);
   transition: background 0.3s ease, transform 0.3s ease;
+}
+
+html.dark .hero-story-dot {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .hero-story-dot.is-active {
@@ -123,11 +142,15 @@ html.dark .hero-story-label {
 }
 
 .hero-story-timer {
-  height: 3px;
-  background: rgba(27, 16, 53, 0.08);
+  height: 4px;
+  background: rgba(27, 16, 53, 0.12);
   border-radius: 9999px;
   overflow: hidden;
   margin-top: 0.5rem;
+}
+
+html.dark .hero-story-timer {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .hero-story-timer-fill {

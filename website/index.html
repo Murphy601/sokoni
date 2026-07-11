@@ -101,12 +101,12 @@
   </header>
 
   <!-- HERO -->
-  <section class="relative overflow-hidden" id="hero">
-    <div id="hero-filmstrip" class="hero-filmstrip" aria-hidden="true"></div>
+  <section class="relative overflow-hidden dark:bg-brand-purple" id="hero">
     <div class="absolute -top-24 -right-24 w-96 h-96 bg-brand-green/20 rounded-full blur-3xl"></div>
     <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-brand-purple/10 rounded-full blur-3xl"></div>
     <div class="max-w-7xl mx-auto px-5 pt-16 pb-20 md:pt-24 md:pb-28 relative z-10 grid md:grid-cols-2 gap-12 items-center">
-      <div>
+      <div class="relative z-[1]">
+        <div id="hero-filmstrip" class="hero-filmstrip" aria-hidden="true"></div>
         <span class="inline-block bg-brand-purple text-brand-green text-xs font-bold tracking-wide px-3 py-1.5 rounded-full mb-5">
           💵 PAY ON DELIVERY · NO APP NEEDED
         </span>
@@ -159,7 +159,7 @@
       </div>
       <div id="hero-phone-3d" class="relative mx-auto max-w-xs w-full">
         <div class="hero-story-meta">
-          <p id="hero-story-label" class="hero-story-label">Loading platform story…</p>
+          <p id="hero-story-label" class="hero-story-label text-brand-purple dark:text-brand-green">Loading platform story…</p>
           <div id="hero-story-progress" class="hero-story-progress"></div>
           <div class="hero-story-timer"><div id="hero-story-timer-fill" class="hero-story-timer-fill"></div></div>
         </div>
@@ -178,9 +178,6 @@
             <div id="hero-chat-stage" class="space-y-2" aria-live="polite" aria-label="WhatsApp order story preview"></div>
           </div>
         </div>
-        <p class="text-center text-[11px] text-brand-purple/45 mt-3 max-w-xs mx-auto">
-          4 live stories · ~60s each · built from real catalog &amp; bot flows
-        </p>
       </div>
     </div>
   </section>
