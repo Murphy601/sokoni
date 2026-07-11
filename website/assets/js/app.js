@@ -86,6 +86,9 @@ let intlProducts = [];
 let activeCategory = "all";
 let searchQuery = "";
 let showKes = true;
+const STORE_INITIAL_LIMIT = 48;
+const STORE_SEARCH_LIMIT = 120;
+let storeDisplayLimit = STORE_INITIAL_LIMIT;
 
 // ---------- WhatsApp deep links ----------
 
@@ -199,7 +202,13 @@ function expandKeywordTokens(raw) {
     .replace(/[^\w\s-]/g, " ")
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t && !SEARCH_STOP_WORDS.has(t) && (t.length >= 2 || t === "tv" || /^\d+ml$/.test(t)));
+    .filter(
+      (t) =>
+        t &&
+        !SEARCH_STOP_WORDS.has(t) &&
+        !isPriceToken(t) &&
+        (t.length >= 2 || t === "tv" || /^\d+ml$/.test(t))
+    );
 
   const expanded = new Set(base);
   for (const token of base) {
@@ -230,6 +239,21 @@ function parseMaxPriceKes(query) {
   return null;
 }
 
+const PRICE_TOKEN_RE = /^\d+(?:\.\d+)?k?$/i;
+
+function isPriceToken(token) {
+  return PRICE_TOKEN_RE.test(String(token || ""));
+}
+
+function meaningfulSearchTokens(tokens) {
+  return (tokens || []).filter((t) => !isPriceToken(t));
+}
+
+function hasActiveSearch(query = searchQuery) {
+  const tokens = tokenize(query);
+  return meaningfulSearchTokens(tokens).length > 0 || parseMaxPriceKes(query) != null;
+}
+
 function tokenize(q) {
   return expandKeywordTokens(q);
 }
@@ -256,8 +280,9 @@ function scoreProduct(product, tokens) {
 
 function matchesSearch(product, tokens, maxPriceKes) {
   if (maxPriceKes != null && product.priceKes != null && product.priceKes > maxPriceKes) return false;
-  if (!tokens.length) return maxPriceKes == null;
-  return scoreProduct(product, tokens) > 0;
+  const meaningful = meaningfulSearchTokens(tokens);
+  if (!meaningful.length) return true;
+  return scoreProduct(product, meaningful) > 0;
 }
 
 function filteredStoreProducts() {
@@ -269,9 +294,9 @@ function filteredStoreProducts() {
   } else if (activeCategory !== "all") {
     items = items.filter((p) => p.category === activeCategory);
   }
-  if (tokens.length || maxPriceKes != null) {
+  if (meaningfulSearchTokens(tokens).length || maxPriceKes != null) {
     items = items.filter((p) => matchesSearch(p, tokens, maxPriceKes));
-    if (tokens.length) {
+    if (meaningfulSearchTokens(tokens).length) {
       items.sort((a, b) => scoreProduct(b, tokens) - scoreProduct(a, tokens));
     } else if (maxPriceKes != null) {
       items.sort((a, b) => (a.priceKes || 0) - (b.priceKes || 0));
@@ -280,8 +305,15 @@ function filteredStoreProducts() {
   return items;
 }
 
+function visibleStoreProducts() {
+  const all = filteredStoreProducts();
+  const limit = hasActiveSearch() || activeCategory !== "all" ? STORE_SEARCH_LIMIT : storeDisplayLimit;
+  return { all, visible: all.slice(0, limit) };
+}
+
 function runSearch(query) {
   searchQuery = query.trim();
+  storeDisplayLimit = STORE_INITIAL_LIMIT;
   const input = document.getElementById("hero-search");
   if (input && input.value !== searchQuery) input.value = searchQuery;
 
@@ -289,10 +321,9 @@ function runSearch(query) {
   const waCta = document.getElementById("search-wa-cta");
   const waLabel = document.getElementById("search-wa-label");
   const waLinkEl = document.getElementById("search-wa-link");
-  const tokens = tokenize(searchQuery);
-  const hasSearch = tokens.length > 0 || parseMaxPriceKes(searchQuery) != null;
+  const searching = hasActiveSearch();
 
-  if (hasSearch) {
+  if (searching) {
     activeCategory = "all";
     const count = filteredStoreProducts().length;
     if (status) {
@@ -334,11 +365,14 @@ function productImageBlock(product) {
 }
 
 function renderStoreCard(product) {
+  const name = escapeHtml(product.name || "Product");
+  const rating = Number(product.rating) || 0;
+  const reviews = Number(product.reviews) || 0;
   return `
     <div class="product-card relative bg-white rounded-2xl border border-black/5 shadow-sm p-5 flex flex-col">
       <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">💵 Pay on Delivery</span>
       ${productImageBlock(product)}
-      <h3 class="font-bold text-sm mb-1 line-clamp-2">${product.name}</h3>
+      <h3 class="font-bold text-sm mb-1 line-clamp-2">${name}</h3>
       <p class="text-xs text-brand-purple/50 mb-2">${[
         CATEGORY_META[product.category]?.label || product.category,
         SUBCATEGORY_LABELS[product.subcategory] || product.subcategory,
@@ -353,7 +387,7 @@ function renderStoreCard(product) {
             : ""
         }
       </div>
-      <p class="text-xs text-brand-purple/50 mb-4">⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews)</p>
+      <p class="text-xs text-brand-purple/50 mb-4">⭐ ${rating} (${reviews.toLocaleString()} reviews)</p>
       <div class="mt-auto flex flex-col gap-2">
         <a href="${orderLinkFor(product)}" target="_blank" rel="noopener"
            class="text-center bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
@@ -387,10 +421,43 @@ function renderCategoryChips() {
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeCategory = btn.dataset.cat;
+      storeDisplayLimit = STORE_INITIAL_LIMIT;
       renderCategoryChips();
       renderStoreGrid();
     });
   });
+}
+
+function renderStoreMoreButton(allCount, visibleCount) {
+  let wrap = document.getElementById("local-deals-more");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "local-deals-more";
+    wrap.className = "text-center mt-8";
+    document.getElementById("local-deals-grid")?.insertAdjacentElement("afterend", wrap);
+  }
+  const canLoadMore = !hasActiveSearch() && activeCategory === "all" && visibleCount < allCount;
+  if (!canLoadMore) {
+    wrap.classList.add("hidden");
+    wrap.innerHTML = "";
+    return;
+  }
+  wrap.classList.remove("hidden");
+  wrap.innerHTML = `
+    <button type="button" id="local-deals-more-btn"
+      class="inline-flex items-center gap-2 border-2 border-brand-purple/15 font-bold px-6 py-3 rounded-full hover:bg-brand-purple hover:text-white transition">
+      Show more deals (${visibleCount} of ${allCount})
+    </button>`;
+  document.getElementById("local-deals-more-btn")?.addEventListener("click", () => {
+    storeDisplayLimit += STORE_INITIAL_LIMIT;
+    renderStoreGrid();
+  });
+}
+
+function revealCatalogSections() {
+  for (const id of ["categories", "deals", "international"]) {
+    document.getElementById(id)?.classList.add("is-visible");
+  }
 }
 
 function renderStoreGrid() {
@@ -400,26 +467,25 @@ function renderStoreGrid() {
   const viralEmpty = document.getElementById("viral-empty");
   if (!grid) return;
 
-  const items = filteredStoreProducts();
+  const { all: allItems, visible: items } = visibleStoreProducts();
   grid.innerHTML = items.map(renderStoreCard).join("");
   if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
-  grid.classList.toggle("hidden", items.length === 0 && (tokenize(searchQuery).length > 0 || parseMaxPriceKes(searchQuery) != null));
 
-  const isViralTab = activeCategory === "viral" && !(tokenize(searchQuery).length || parseMaxPriceKes(searchQuery) != null);
-  if (viralEmpty) {
-    viralEmpty.classList.toggle("hidden", !isViralTab || items.length > 0);
-  }
-  if (grid && isViralTab && items.length === 0) {
-    grid.classList.add("hidden");
-  } else if (grid && !(items.length === 0 && (tokenize(searchQuery).length > 0 || parseMaxPriceKes(searchQuery) != null))) {
-    grid.classList.remove("hidden");
-  }
+  const searching = hasActiveSearch();
+  const showEmpty = allItems.length === 0 && searching;
+  const isViralTab = activeCategory === "viral" && !searching;
 
+  grid.classList.toggle("hidden", showEmpty || (isViralTab && allItems.length === 0));
   if (empty) {
-    const showEmpty = items.length === 0 && (tokenize(searchQuery).length > 0 || parseMaxPriceKes(searchQuery) != null);
     empty.classList.toggle("hidden", !showEmpty);
     if (emptyWa && showEmpty) emptyWa.href = searchWaLink(searchQuery);
   }
+  if (viralEmpty) {
+    viralEmpty.classList.toggle("hidden", !isViralTab || allItems.length > 0);
+  }
+
+  renderStoreMoreButton(allItems.length, items.length);
+  revealCatalogSections();
 }
 
 function discountBadge(product) {
@@ -662,7 +728,7 @@ async function renderProducts() {
   try {
     await loadTiktokFeaturedIds();
     const products = (await loadProducts()).filter((p) => p.inStock !== false);
-    storeProducts = products.filter((p) => p.fulfillment === "store");
+    storeProducts = products.filter((p) => p.fulfillment === "store" || (p.scope === "local" && p.fulfillment !== "supplier"));
     intlProducts = products.filter((p) => p.scope === "international").slice(0, 8);
 
     loadCurrencyPref();
@@ -676,8 +742,16 @@ async function renderProducts() {
     renderCategoryChips();
     renderStoreGrid();
     renderIntlGrid();
+    revealCatalogSections();
   } catch (err) {
     console.error("Failed to load product catalog:", err);
+    const grid = document.getElementById("local-deals-grid");
+    if (grid) {
+      grid.innerHTML =
+        '<p class="text-sm text-brand-purple/60 col-span-full">Could not load products right now. Please refresh, or browse on <a class="text-brand-green font-semibold underline" href="https://wa.me/254117422428">WhatsApp</a>.</p>';
+      grid.classList.remove("hidden");
+    }
+    revealCatalogSections();
   }
 }
 
