@@ -13,11 +13,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { CATEGORY_TAXONOMY } from "./catalog-taxonomy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const MASTER = path.join(ROOT, "whatsapp-bot", "src", "data", "products.json");
 const OUTPUT = path.join(ROOT, "website", "data", "products.json");
+const MENU_OUTPUT = path.join(ROOT, "website", "data", "catalog-menu.json");
 
 // Retail = supplier cost + KES 100 + 8% (rounded to nearest KES 50).
 function computeRetail(sourcePriceKes) {
@@ -101,7 +103,20 @@ async function main() {
   const publicItems = master.map(toPublic).filter(Boolean);
   await writeFile(OUTPUT, JSON.stringify(publicItems, null, 2) + "\n", "utf-8");
 
-  const store = publicItems.filter((p) => p.fulfillment === "store").length;
+  const storeItems = publicItems.filter((p) => p.fulfillment === "store");
+  const storeCats = new Set(storeItems.map((p) => p.category));
+  const menu = {
+    version: 1,
+    categories: CATEGORY_TAXONOMY.filter((c) => storeCats.has(c.id)).map((cat) => ({
+      ...cat,
+      subcategories: cat.subcategories.filter((sub) =>
+        storeItems.some((p) => p.category === cat.id && p.subcategory === sub.id)
+      ),
+    })),
+  };
+  await writeFile(MENU_OUTPUT, JSON.stringify(menu, null, 2) + "\n", "utf-8");
+
+  const store = storeItems.length;
   const intl = publicItems.filter((p) => p.scope === "international").length;
   console.log(
     `Built ${OUTPUT}\n  store (pay-on-delivery): ${store}\n  international: ${intl}\n  total: ${publicItems.length}`

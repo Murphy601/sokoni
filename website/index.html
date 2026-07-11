@@ -268,7 +268,7 @@
   </section>
 
   <!-- CATEGORIES -->
-  <section id="categories" class="reveal-on-scroll max-w-7xl mx-auto px-5 py-16">
+  <section id="categories" class="catalog-main reveal-on-scroll max-w-7xl mx-auto px-5 py-16">
     <div class="flex items-end justify-between mb-8">
       <div>
         <h2 class="text-2xl md:text-3xl font-extrabold">Shop by Category</h2>
@@ -282,16 +282,17 @@
 
   <!-- DEALS -->
   <section id="deals" class="reveal-on-scroll bg-white py-16">
-    <div class="max-w-7xl mx-auto px-5">
+    <div class="max-w-7xl mx-auto px-5 catalog-main">
       <div class="flex items-end justify-between mb-8">
         <div>
           <h2 class="text-2xl md:text-3xl font-extrabold">🛍️ Sokoni Store</h2>
           <p class="text-brand-purple/60 mt-1">Order on WhatsApp, pay cash or M-Pesa when it arrives. No paying upfront.</p>
         </div>
       </div>
-      <p class="text-xs text-brand-purple/50 bg-brand-cream border border-black/5 rounded-xl px-4 py-3 mb-6 max-w-2xl">
-        💵 <b>Pay on delivery</b> in major towns (1–3 days); countrywide via courier or <a href="pickup-points.html" class="text-brand-green font-semibold underline">pickup partners</a>. Tap a category to filter — or use <a href="#" id="search-hint-link" class="text-brand-green font-semibold underline">search</a> above.
+      <p class="text-xs text-brand-purple/50 bg-brand-cream border border-black/5 rounded-xl px-4 py-3 mb-4 max-w-2xl">
+        💵 <b>Pay on delivery</b> in major towns (1–3 days); countrywide via courier or <a href="pickup-points.html" class="text-brand-green font-semibold underline">pickup partners</a>. Use the <strong>Catalog</strong> menu on the left (categories → subcategories → items) — or <a href="#" id="search-hint-link" class="text-brand-green font-semibold underline">search</a> above.
       </p>
+      <p id="catalog-filter-label" class="hidden text-sm font-semibold text-brand-green mb-4"></p>
       <p id="search-status" class="hidden text-sm text-brand-purple/70 mb-4"></p>
       <div id="local-deals-empty" class="hidden text-center py-12 text-brand-purple/50">
         <p class="mb-4">No products match your search on the site.</p>
@@ -507,7 +508,16 @@
     </a>
   </div>
 
+  <!-- Catalog navigator (Shopify-style left panel) -->
+  <div id="catalog-nav-backdrop" class="catalog-nav-backdrop" hidden></div>
+  <aside id="catalog-nav-panel" class="catalog-nav-panel" hidden aria-label="Store catalog"></aside>
+  <button type="button" id="catalog-nav-toggle" class="catalog-nav-toggle lg:hidden" aria-expanded="false" aria-controls="catalog-nav-panel">
+    <span class="catalog-nav-toggle-icon" aria-hidden="true">☰</span>
+    <span class="catalog-nav-toggle-label">Catalog</span>
+  </button>
+
   <script src="assets/js/component-handler.js"></script>
+  <script src="assets/js/catalog-nav.js"></script>
   <script src="assets/js/app.js"></script>
   <script src="assets/js/hero-engine.js" defer></script>
   <script src="assets/js/main.js" defer></script>

@@ -47,6 +47,30 @@ const SUBCATEGORY_LABELS = {
   haircare: "Haircare",
   fragrances: "Fragrances",
   "perfume-oils": "Perfume Oils",
+  "kitchen-dining": "Kitchen & Dining",
+  bedding: "Bedding",
+  cleaning: "Cleaning",
+  "home-decor": "Home Decor",
+  stationery: "Stationery",
+  "mens-fashion": "Men's Fashion",
+  "womens-fashion": "Women's Fashion",
+  shoes: "Shoes",
+  bags: "Bags",
+  watches: "Watches",
+  laptops: "Laptops",
+  printers: "Printers",
+  storage: "Storage",
+  "computer-accessories": "Accessories",
+  consoles: "Consoles",
+  controllers: "Controllers",
+  "gaming-accessories": "Gaming Accessories",
+  "food-cupboard": "Food Cupboard",
+  drinks: "Drinks",
+  "household-supplies": "Household Supplies",
+  diapering: "Diapering",
+  feeding: "Feeding",
+  toys: "Toys",
+  "baby-gear": "Baby Gear",
 };
 
 /** Viral / TikTok deals posted by backend automation (see data/tiktok-posts.json). */
@@ -84,6 +108,8 @@ const NUDGE_COPY = {
 let storeProducts = [];
 let intlProducts = [];
 let activeCategory = "all";
+let activeSubcategory = null;
+let activeProductId = null;
 let searchQuery = "";
 let showKes = true;
 const STORE_INITIAL_LIMIT = 48;
@@ -294,6 +320,12 @@ function filteredStoreProducts() {
   } else if (activeCategory !== "all") {
     items = items.filter((p) => p.category === activeCategory);
   }
+  if (activeSubcategory) {
+    items = items.filter((p) => p.subcategory === activeSubcategory);
+  }
+  if (activeProductId) {
+    items = items.filter((p) => p.id === activeProductId);
+  }
   if (meaningfulSearchTokens(tokens).length || maxPriceKes != null) {
     items = items.filter((p) => matchesSearch(p, tokens, maxPriceKes));
     if (meaningfulSearchTokens(tokens).length) {
@@ -307,13 +339,80 @@ function filteredStoreProducts() {
 
 function visibleStoreProducts() {
   const all = filteredStoreProducts();
-  const limit = hasActiveSearch() || activeCategory !== "all" ? STORE_SEARCH_LIMIT : storeDisplayLimit;
+  const filtered =
+    hasActiveSearch() ||
+    activeCategory !== "all" ||
+    activeSubcategory ||
+    activeProductId;
+  const limit = filtered ? STORE_SEARCH_LIMIT : storeDisplayLimit;
   return { all, visible: all.slice(0, limit) };
+}
+
+function setCatalogFilter({ category = "all", subcategory = null, productId = null, scroll = false } = {}) {
+  searchQuery = "";
+  activeCategory = category || "all";
+  activeSubcategory = subcategory || null;
+  activeProductId = productId || null;
+  storeDisplayLimit = STORE_SEARCH_LIMIT;
+
+  const input = document.getElementById("hero-search");
+  if (input) input.value = "";
+  document.getElementById("search-status")?.classList.add("hidden");
+  document.getElementById("search-wa-cta")?.classList.add("hidden");
+
+  renderCategoryChips();
+  renderStoreGrid();
+  syncCatalogNavUi();
+
+  if (scroll) {
+    document.getElementById("deals")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function syncCatalogNavUi() {
+  if (window.SokoniCatalogNav) {
+    window.SokoniCatalogNav.sync({
+      category: activeCategory,
+      subcategory: activeSubcategory,
+      productId: activeProductId,
+    });
+  }
+}
+
+function updateDealsFilterLabel() {
+  const el = document.getElementById("catalog-filter-label");
+  if (!el) return;
+  if (activeProductId) {
+    const p = storeProducts.find((x) => x.id === activeProductId);
+    el.textContent = p ? `Showing: ${p.name}` : "Showing selected item";
+    el.classList.remove("hidden");
+    return;
+  }
+  if (activeSubcategory && activeCategory !== "all" && activeCategory !== "viral") {
+    const cat = CATEGORY_META[activeCategory]?.label || activeCategory;
+    const sub = SUBCATEGORY_LABELS[activeSubcategory] || activeSubcategory;
+    el.textContent = `Showing: ${cat} → ${sub}`;
+    el.classList.remove("hidden");
+    return;
+  }
+  if (activeCategory === "viral") {
+    el.textContent = "Showing: Viral Bargains";
+    el.classList.remove("hidden");
+    return;
+  }
+  if (activeCategory !== "all") {
+    el.textContent = `Showing: ${CATEGORY_META[activeCategory]?.label || activeCategory}`;
+    el.classList.remove("hidden");
+    return;
+  }
+  el.classList.add("hidden");
 }
 
 function runSearch(query) {
   searchQuery = query.trim();
   storeDisplayLimit = STORE_INITIAL_LIMIT;
+  activeSubcategory = null;
+  activeProductId = null;
   const input = document.getElementById("hero-search");
   if (input && input.value !== searchQuery) input.value = searchQuery;
 
@@ -325,6 +424,8 @@ function runSearch(query) {
 
   if (searching) {
     activeCategory = "all";
+    activeSubcategory = null;
+    activeProductId = null;
     const count = filteredStoreProducts().length;
     if (status) {
       status.classList.remove("hidden");
@@ -349,6 +450,7 @@ function runSearch(query) {
 
   renderCategoryChips();
   renderStoreGrid();
+  syncCatalogNavUi();
 }
 
 // ---------- Render helpers ----------
@@ -408,7 +510,7 @@ function renderCategoryChips() {
   const cats = [...new Set(storeProducts.map((p) => p.category))];
   const chip = (id, label, emoji) => `
     <button type="button" data-cat="${id}"
-      class="cat-chip group bg-white rounded-2xl border ${activeCategory === id ? "border-brand-green ring-2 ring-brand-green/30" : "border-black/5"} shadow-sm p-6 text-center hover:shadow-lg hover:-translate-y-1 transition">
+      class="cat-chip group bg-white rounded-2xl border ${activeCategory === id && !activeProductId ? "border-brand-green ring-2 ring-brand-green/30" : "border-black/5"} shadow-sm p-6 text-center hover:shadow-lg hover:-translate-y-1 transition">
       <div class="text-4xl mb-3">${emoji}</div>
       <p class="font-semibold text-sm group-hover:text-brand-green">${label}</p>
     </button>
@@ -420,10 +522,7 @@ function renderCategoryChips() {
   if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
-      activeCategory = btn.dataset.cat;
-      storeDisplayLimit = STORE_INITIAL_LIMIT;
-      renderCategoryChips();
-      renderStoreGrid();
+      setCatalogFilter({ category: btn.dataset.cat, subcategory: null, productId: null });
     });
   });
 }
@@ -436,7 +535,12 @@ function renderStoreMoreButton(allCount, visibleCount) {
     wrap.className = "text-center mt-8";
     document.getElementById("local-deals-grid")?.insertAdjacentElement("afterend", wrap);
   }
-  const canLoadMore = !hasActiveSearch() && activeCategory === "all" && visibleCount < allCount;
+  const canLoadMore =
+    !hasActiveSearch() &&
+    activeCategory === "all" &&
+    !activeSubcategory &&
+    !activeProductId &&
+    visibleCount < allCount;
   if (!canLoadMore) {
     wrap.classList.add("hidden");
     wrap.innerHTML = "";
@@ -485,6 +589,7 @@ function renderStoreGrid() {
   }
 
   renderStoreMoreButton(allItems.length, items.length);
+  updateDealsFilterLabel();
   revealCatalogSections();
 }
 
@@ -743,6 +848,13 @@ async function renderProducts() {
     renderStoreGrid();
     renderIntlGrid();
     revealCatalogSections();
+
+    if (window.SokoniCatalogNav) {
+      await window.SokoniCatalogNav.init({
+        products: storeProducts,
+        navigate: (sel) => setCatalogFilter({ ...sel, scroll: sel.scroll }),
+      });
+    }
   } catch (err) {
     console.error("Failed to load product catalog:", err);
     const grid = document.getElementById("local-deals-grid");
