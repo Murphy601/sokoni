@@ -193,7 +193,7 @@
           if (onNavigate) {
             onNavigate({ category, subcategory: null, productId: null, scroll: true });
           }
-          if (window.innerWidth < 1024) closePanel();
+          closePanel();
           return;
         }
 
@@ -203,41 +203,49 @@
           if (onNavigate) {
             onNavigate({ category, subcategory, productId, scroll: true });
           }
-          if (window.innerWidth < 1024) closePanel();
+          closePanel();
         }
       });
     });
   }
 
+  function syncToggleUi() {
+    const toggle = document.getElementById("catalog-nav-toggle");
+    const icon = toggle?.querySelector(".catalog-nav-toggle-icon");
+    const label = toggle?.querySelector(".catalog-nav-toggle-label");
+    if (!toggle) return;
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    toggle.setAttribute("aria-label", isOpen ? "Close catalog menu" : "Open catalog menu");
+    if (icon) icon.textContent = isOpen ? "✕" : "☰";
+    if (label) label.textContent = isOpen ? "Close" : "Catalog";
+    toggle.classList.toggle("is-open", isOpen);
+  }
+
   function openPanel() {
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
-    const toggle = document.getElementById("catalog-nav-toggle");
     if (!panel) return;
     isOpen = true;
     panel.classList.add("is-open");
     panel.removeAttribute("hidden");
     backdrop?.classList.add("is-open");
     backdrop?.removeAttribute("hidden");
-    toggle?.setAttribute("aria-expanded", "true");
     document.body.classList.add("catalog-nav-open");
+    syncToggleUi();
     renderPanel();
   }
 
   function closePanel() {
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
-    const toggle = document.getElementById("catalog-nav-toggle");
     if (!panel) return;
     isOpen = false;
     panel.classList.remove("is-open");
+    panel.setAttribute("hidden", "");
     backdrop?.classList.remove("is-open");
-    toggle?.setAttribute("aria-expanded", "false");
+    backdrop?.setAttribute("hidden", "");
     document.body.classList.remove("catalog-nav-open");
-    if (window.innerWidth < 1024) {
-      panel.setAttribute("hidden", "");
-      backdrop?.setAttribute("hidden", "");
-    }
+    syncToggleUi();
   }
 
   function togglePanel() {
@@ -276,16 +284,7 @@
       if (e.key === "Escape" && isOpen) closePanel();
     });
 
-    if (window.innerWidth >= 1024) {
-      openPanel();
-    } else {
-      closePanel();
-    }
-
-    window.addEventListener("resize", () => {
-      if (window.innerWidth >= 1024 && !isOpen) openPanel();
-    });
-
+    closePanel();
     renderPanel();
   }
 

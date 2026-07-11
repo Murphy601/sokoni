@@ -170,9 +170,8 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
 .catalog-nav-toggle {
   position: fixed;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 45;
+  top: 5.5rem;
+  z-index: 65;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -187,7 +186,11 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
   font-weight: 700;
   letter-spacing: 0.02em;
   box-shadow: 4px 0 18px -6px rgba(27, 16, 53, 0.18);
-  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, left 0.28s ease;
+}
+
+.catalog-nav-toggle.is-open {
+  left: min(19.5rem, 88vw);
 }
 
 .catalog-nav-toggle:hover {
@@ -217,7 +220,7 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
 .catalog-nav-panel {
   position: fixed;
   left: 0;
-  top: 0;
+  top: 4.75rem;
   bottom: 0;
   z-index: 60;
   width: min(19.5rem, 88vw);
@@ -228,10 +231,12 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
   flex-direction: column;
   transform: translateX(-105%);
   transition: transform 0.28s ease;
+  visibility: hidden;
 }
 
 .catalog-nav-panel.is-open {
   transform: translateX(0);
+  visibility: visible;
 }
 
 .catalog-nav-header {
@@ -382,31 +387,6 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
 .catalog-nav-group.is-expanded > .catalog-nav-cat .catalog-nav-chevron,
 .catalog-nav-subgroup.is-expanded > .catalog-nav-sub .catalog-nav-chevron {
   transform: rotate(45deg);
-}
-
-@media (min-width: 1024px) {
-  .catalog-nav-toggle {
-    display: none;
-  }
-
-  .catalog-nav-panel {
-    top: 4.75rem;
-    bottom: 0;
-    transform: translateX(0);
-  }
-
-  .catalog-nav-panel[hidden] {
-    display: flex;
-  }
-
-  .catalog-nav-close {
-    display: none;
-  }
-
-  body.catalog-nav-open .catalog-main {
-    margin-left: min(19.5rem, 88vw);
-    transition: margin-left 0.28s ease;
-  }
 }
 
 html.dark .catalog-nav-panel {
