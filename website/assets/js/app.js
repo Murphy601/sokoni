@@ -171,39 +171,111 @@ function toggleCurrency() {
 
 // ---------- Search ----------
 
-function tokenize(q) {
-  return q
+const SEARCH_STOP_WORDS = new Set([
+  "a", "an", "the", "i", "me", "my", "we", "you", "can", "could", "would", "please",
+  "get", "give", "show", "find", "want", "need", "looking", "for", "about", "what",
+  "how", "is", "are", "do", "does", "this", "that", "these", "those", "more", "info",
+  "on", "in", "at", "to", "of", "and", "or", "best", "recommend", "tell", "some", "any",
+  "good", "nice", "under", "below", "less", "than", "around", "about", "chini", "ya",
+  "kwa", "na", "au", "bei", "kiasi", "kama", "poa", "nataka", "nipe", "simu",
+]);
+
+const QUERY_EXPANSIONS = {
+  tv: ["tv", "television", "tvs", "smart"],
+  laundry: ["laundry", "washing", "washer", "washing-machines"],
+  phone: ["phone", "smartphone", "mobile", "phones-tablets", "smartphones"],
+  laptop: ["laptop", "laptops", "computing"],
+  fridge: ["fridge", "refrigerator", "kitchen-appliances"],
+  game: ["game", "gaming", "console", "consoles"],
+  perfume: ["perfume", "perfume-oil", "perfume-oils", "fragrance", "fragrances", "cologne", "scent"],
+  lotion: ["lotion", "skincare", "body", "health-beauty"],
+  soundbar: ["soundbar", "speaker", "speakers", "audio", "tvs-audio"],
+};
+
+function expandKeywordTokens(raw) {
+  if (!raw) return [];
+  const base = String(raw)
     .toLowerCase()
-    .split(/[\s,]+/)
+    .replace(/[^\w\s-]/g, " ")
+    .split(/\s+/)
     .map((t) => t.trim())
-    .filter(Boolean);
+    .filter((t) => t && !SEARCH_STOP_WORDS.has(t) && (t.length >= 2 || t === "tv" || /^\d+ml$/.test(t)));
+
+  const expanded = new Set(base);
+  for (const token of base) {
+    for (const [key, aliases] of Object.entries(QUERY_EXPANSIONS)) {
+      if (token.includes(key) || aliases.some((a) => token.includes(a.replace(/-/g, "")))) {
+        aliases.forEach((a) => expanded.add(a));
+      }
+    }
+    if (token === "tvs" || token === "tv") {
+      expanded.add("tv");
+      expanded.add("television");
+      expanded.add("televisions");
+    }
+  }
+  return [...expanded];
 }
 
-function productSearchText(product) {
+function parseMaxPriceKes(query) {
+  const q = String(query || "").toLowerCase();
+  const budget = q.match(/(?:chini\s+ya|under|below|less\s+than|max)\s*(?:kes\s*)?(\d[\d,]*)(k)?/i);
+  if (budget) {
+    let n = Number(budget[1].replace(/,/g, ""));
+    if (budget[2] || (n > 0 && n < 1000)) n *= 1000;
+    return n;
+  }
+  const inline = q.match(/\b(\d{1,3})k\b/);
+  if (inline) return Number(inline[1]) * 1000;
+  return null;
+}
+
+function tokenize(q) {
+  return expandKeywordTokens(q);
+}
+
+function productHaystack(product) {
   const cat = CATEGORY_META[product.category]?.label || product.category || "";
   const sub = SUBCATEGORY_LABELS[product.subcategory] || product.subcategory || "";
-  return [product.name, product.category, cat, sub, product.source, product.emoji]
+  return [product.name, product.category, cat, sub, product.source, product.emoji, ...(product.tags || [])]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 }
 
-function matchesSearch(product, tokens) {
-  if (!tokens.length) return true;
-  const hay = productSearchText(product);
-  return tokens.every((t) => hay.includes(t));
+function scoreProduct(product, tokens) {
+  const hay = productHaystack(product);
+  let score = 0;
+  for (const token of tokens) {
+    if (/^\d+ml$/.test(token)) continue;
+    if (token.length < 2) continue;
+    if (hay.includes(token)) score += token.length >= 4 ? 2 : 1;
+  }
+  return score;
+}
+
+function matchesSearch(product, tokens, maxPriceKes) {
+  if (maxPriceKes != null && product.priceKes != null && product.priceKes > maxPriceKes) return false;
+  if (!tokens.length) return maxPriceKes == null;
+  return scoreProduct(product, tokens) > 0;
 }
 
 function filteredStoreProducts() {
   const tokens = tokenize(searchQuery);
+  const maxPriceKes = parseMaxPriceKes(searchQuery);
   let items = storeProducts;
   if (activeCategory === "viral") {
     items = items.filter((p) => p.viral || VIRAL_IDS.has(p.id));
   } else if (activeCategory !== "all") {
     items = items.filter((p) => p.category === activeCategory);
   }
-  if (tokens.length) {
-    items = items.filter((p) => matchesSearch(p, tokens));
+  if (tokens.length || maxPriceKes != null) {
+    items = items.filter((p) => matchesSearch(p, tokens, maxPriceKes));
+    if (tokens.length) {
+      items.sort((a, b) => scoreProduct(b, tokens) - scoreProduct(a, tokens));
+    } else if (maxPriceKes != null) {
+      items.sort((a, b) => (a.priceKes || 0) - (b.priceKes || 0));
+    }
   }
   return items;
 }
@@ -218,8 +290,10 @@ function runSearch(query) {
   const waLabel = document.getElementById("search-wa-label");
   const waLinkEl = document.getElementById("search-wa-link");
   const tokens = tokenize(searchQuery);
+  const hasSearch = tokens.length > 0 || parseMaxPriceKes(searchQuery) != null;
 
-  if (tokens.length) {
+  if (hasSearch) {
+    activeCategory = "all";
     const count = filteredStoreProducts().length;
     if (status) {
       status.classList.remove("hidden");
@@ -329,20 +403,20 @@ function renderStoreGrid() {
   const items = filteredStoreProducts();
   grid.innerHTML = items.map(renderStoreCard).join("");
   if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
-  grid.classList.toggle("hidden", items.length === 0 && tokenize(searchQuery).length > 0);
+  grid.classList.toggle("hidden", items.length === 0 && (tokenize(searchQuery).length > 0 || parseMaxPriceKes(searchQuery) != null));
 
-  const isViralTab = activeCategory === "viral" && !tokenize(searchQuery).length;
+  const isViralTab = activeCategory === "viral" && !(tokenize(searchQuery).length || parseMaxPriceKes(searchQuery) != null);
   if (viralEmpty) {
     viralEmpty.classList.toggle("hidden", !isViralTab || items.length > 0);
   }
   if (grid && isViralTab && items.length === 0) {
     grid.classList.add("hidden");
-  } else if (grid && !(items.length === 0 && tokenize(searchQuery).length > 0)) {
+  } else if (grid && !(items.length === 0 && (tokenize(searchQuery).length > 0 || parseMaxPriceKes(searchQuery) != null))) {
     grid.classList.remove("hidden");
   }
 
   if (empty) {
-    const showEmpty = items.length === 0 && tokenize(searchQuery).length > 0;
+    const showEmpty = items.length === 0 && (tokenize(searchQuery).length > 0 || parseMaxPriceKes(searchQuery) != null);
     empty.classList.toggle("hidden", !showEmpty);
     if (emptyWa && showEmpty) emptyWa.href = searchWaLink(searchQuery);
   }
