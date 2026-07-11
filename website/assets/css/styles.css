@@ -170,7 +170,7 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
 .catalog-nav-toggle {
   position: fixed;
   left: 0;
-  top: 5.5rem;
+  top: 4.25rem;
   z-index: 65;
   display: inline-flex;
   flex-direction: column;

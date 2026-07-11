@@ -5,7 +5,7 @@
   width: 100%;
   aspect-ratio: 1;
   min-height: 16rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   border-radius: 1rem;
   overflow: hidden;
   background: #2e1b57;
@@ -63,15 +63,15 @@ html.dark .hero-preview-square {
   align-items: stretch;
   justify-content: stretch;
   background: #ece5dd;
-  padding: 0.35rem;
+  padding: 0;
 }
 
 .hero-filmstrip-img-wrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
-  border-radius: 0.5rem;
+  object-position: center 42%;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -85,10 +85,10 @@ html.dark .hero-filmstrip-img-wrap img {
 
 .hero-filmstrip-caption {
   flex-shrink: 0;
-  padding: 0.55rem 0.65rem 0.65rem;
+  padding: 0.35rem 0.5rem 0.4rem;
   text-align: center;
-  font-size: 0.72rem;
-  line-height: 1.35;
+  font-size: 0.68rem;
+  line-height: 1.2;
   color: #fff;
   background: #2e1b57;
 }
@@ -96,23 +96,25 @@ html.dark .hero-filmstrip-img-wrap img {
 .hero-filmstrip-caption strong {
   display: block;
   font-weight: 700;
-  margin-bottom: 0.15rem;
-  font-size: 0.78rem;
-  line-height: 1.25;
+  margin-bottom: 0.05rem;
+  font-size: 0.74rem;
+  line-height: 1.15;
 }
 
 .hero-filmstrip-trail {
   display: block;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.05rem;
+  line-height: 1.15;
 }
 
 .hero-filmstrip-price {
   display: block;
   color: #25d366;
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  line-height: 1.15;
 }
 
 html.dark .hero-filmstrip-caption {
