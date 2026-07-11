@@ -18984,5 +18984,20 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/hb-007.jpg",
     "subcategory": "personal-care"
+  },
+  {
+    "id": "hb-008",
+    "name": "MEDIX 5.5 Collagen + Peptides Body Treatment Cream",
+    "category": "health-beauty",
+    "priceKes": 2050,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/hb-008.jpg",
+    "subcategory": "skincare"
   }
 ]
