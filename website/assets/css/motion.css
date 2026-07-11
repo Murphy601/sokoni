@@ -4,17 +4,20 @@
   position: relative;
   width: 100%;
   aspect-ratio: 1;
-  max-height: 11rem;
+  min-height: 12rem;
+  max-height: 15rem;
   margin-bottom: 1rem;
   border-radius: 1rem;
   overflow: hidden;
   background: rgba(27, 16, 53, 0.04);
   border: 1px solid rgba(27, 16, 53, 0.08);
+  box-shadow: 0 8px 24px rgba(27, 16, 53, 0.08);
 }
 
 html.dark .hero-preview-square {
   background: rgba(46, 27, 87, 0.5);
   border-color: rgba(37, 211, 102, 0.2);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
 }
 
 .hero-filmstrip {
@@ -31,19 +34,65 @@ html.dark .hero-preview-square {
   visibility: hidden;
 }
 
-.hero-filmstrip-track {
+.hero-filmstrip-single {
+  position: absolute;
+  inset: 0;
   display: flex;
-  gap: 1rem;
-  animation: filmstrip-scroll 48s linear infinite;
-  will-change: transform;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0.65rem;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.45s ease, transform 0.45s ease;
 }
 
-.hero-filmstrip-item {
-  flex: 0 0 5.5rem;
-  height: 5.5rem;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  background: rgba(27, 16, 53, 0.06);
+.hero-filmstrip-single.is-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.hero-filmstrip-single img {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(100% - 2.75rem);
+  object-fit: contain;
+  border-radius: 0.65rem;
+  background: #fff;
+  padding: 0.35rem;
+}
+
+html.dark .hero-filmstrip-single img {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.hero-filmstrip-caption {
+  flex-shrink: 0;
+  margin-top: 0.45rem;
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #1b1035;
+}
+
+html.dark .hero-filmstrip-caption {
+  color: #fff;
+}
+
+.hero-filmstrip-caption strong {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.1rem;
+}
+
+.hero-filmstrip-caption span {
+  color: #25d366;
+  font-weight: 600;
+}
+
+html.dark .hero-filmstrip-caption span {
+  color: #7dffb0;
 }
 
 .hero-site-stage {
@@ -51,9 +100,9 @@ html.dark .hero-preview-square {
   inset: 0;
   z-index: 2;
   overflow: hidden;
-  padding: 0.5rem;
-  font-size: 0.65rem;
-  line-height: 1.35;
+  padding: 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
   color: #1b1035;
   background: #fff8f0;
 }
@@ -152,8 +201,8 @@ html.dark .hero-site-product {
 }
 
 .hero-site-product img {
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 3rem;
+  height: 3rem;
   object-fit: cover;
   border-radius: 0.35rem;
   flex-shrink: 0;
@@ -184,21 +233,6 @@ html.dark .hero-site-form-step {
   from {
     opacity: 0;
     transform: translateY(4px);
-  }
-}
-
-.hero-filmstrip-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-@keyframes filmstrip-scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
   }
 }
 
@@ -242,12 +276,17 @@ html.dark .hero-trust-chip {
 }
 
 #hero-phone-3d {
-  perspective: 1200px;
+  perspective: 1400px;
+}
+
+.hero-3d-stack {
+  transform-style: preserve-3d;
+  transition: transform 0.15s ease-out;
+  will-change: transform;
 }
 
 #hero-mock {
   transform-style: preserve-3d;
-  transition: transform 0.4s ease;
 }
 
 #hero-chat-stage {
@@ -346,11 +385,11 @@ html.dark .hero-trust-chip {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-filmstrip-track,
+  .hero-filmstrip-single,
   .wa-bubble,
   .reveal-on-scroll,
   .product-card,
-  #hero-mock {
+  .hero-3d-stack {
     animation: none !important;
     transition: none !important;
   }

@@ -344,7 +344,7 @@ export async function handleIncomingMessage(
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
       return sendText(
         customerKey,
-        "Karibu Sokoni! 🛒\n\nType *menu* for customer shopping.\nSuppliers: *vendor menu* · Pickup points: *pickup menu* · Admins only: configured admin phone."
+        "Karibu Sokoni! 🛒\n\nType *menu* for customer shopping.\nSuppliers: *vendor menu* · Pickup points: *pickup menu* or *pick up point* · Admins only: configured admin phone."
       );
     }
   }

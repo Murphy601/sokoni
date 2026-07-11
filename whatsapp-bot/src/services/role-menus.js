@@ -12,6 +12,11 @@ function normalize(text) {
   return String(text || "").trim().toLowerCase();
 }
 
+/** "pick up point" → "pickup point" so spaced phrases still match. */
+function collapsePickupPhrase(text) {
+  return normalize(text).replace(/\bpick\s+up\b/g, "pickup");
+}
+
 export function isCustomerMenuIntent(text) {
   const t = normalize(text);
   return (
@@ -25,14 +30,19 @@ export function isCustomerMenuIntent(text) {
 }
 
 export function isPickupMenuIntent(text) {
-  const t = normalize(text).replace(/^#/, "");
+  const raw = String(text || "").trim();
+  const t = collapsePickupPhrase(raw).replace(/^#/, "");
   return (
     t === "pickup" ||
     t === "pickup menu" ||
     t === "pickup point" ||
     t === "pickup points" ||
     t === "pickup point menu" ||
-    /^#(?:pickup|pickuppoint|pickup-point)\b/i.test(String(text || "").trim())
+    t === "become a pickup point" ||
+    t === "apply pickup point" ||
+    /^pickup\b/.test(t) ||
+    /^become a pickup\b/.test(t) ||
+    /^#(?:pickup|pickuppoint|pickup-point)\b/i.test(raw)
   );
 }
 

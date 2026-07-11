@@ -40,6 +40,9 @@
   let storyIndex = 0;
   let frameTimers = [];
   let reducedMotion = false;
+  let filmstripProducts = [];
+  let filmstripIdx = 0;
+  let filmstripTimer = null;
 
   function $(id) {
     return document.getElementById(id);
@@ -95,17 +98,32 @@
   function buildFilmstrip() {
     const wrap = $("hero-filmstrip");
     if (!wrap) return;
-    const imgs = products
+    filmstripProducts = products
       .filter((p) => p.imageUrl && p.fulfillment === "store")
-      .slice(0, 16);
-    if (!imgs.length) return;
-    const doubled = [...imgs, ...imgs];
-    wrap.innerHTML = `<div class="hero-filmstrip-track">${doubled
-      .map(
-        (p) =>
-          `<div class="hero-filmstrip-item"><img src="${esc(p.imageUrl)}" alt="" loading="lazy" decoding="async" /></div>`
-      )
-      .join("")}</div>`;
+      .slice(0, 12);
+    if (!filmstripProducts.length) return;
+    wrap.innerHTML = `<div class="hero-filmstrip-single" id="hero-filmstrip-slide"></div>`;
+    showFilmstripSlide(0);
+    if (filmstripTimer) clearInterval(filmstripTimer);
+    if (!reducedMotion) {
+      filmstripTimer = setInterval(() => {
+        filmstripIdx = (filmstripIdx + 1) % filmstripProducts.length;
+        showFilmstripSlide(filmstripIdx);
+      }, 3800);
+    }
+  }
+
+  function showFilmstripSlide(idx) {
+    const slide = $("hero-filmstrip-slide");
+    const p = filmstripProducts[idx];
+    if (!slide || !p) return;
+    const name = esc(p.name?.slice(0, 36) || "Product");
+    const price = formatKes(p.priceKes);
+    slide.classList.remove("is-active");
+    slide.innerHTML =
+      `<img src="${esc(p.imageUrl)}" alt="${name}" loading="lazy" decoding="async" />` +
+      `<div class="hero-filmstrip-caption"><strong>${name}</strong><span>${price} · Pay on delivery</span></div>`;
+    requestAnimationFrame(() => slide.classList.add("is-active"));
   }
 
   function showFilmstrip(show) {
