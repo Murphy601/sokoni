@@ -31543,5 +31543,26 @@
     "imageUrl": "assets/images/products/hb-010.jpg",
     "imageKey": "6949d0008f619031",
     "imageHash": "6949d0008f619031"
+  },
+  {
+    "id": "hb-011",
+    "name": "BELLE GLOW Advance Brightening Cream - 400ml",
+    "category": "health-beauty",
+    "subcategory": "skincare",
+    "sourcePriceKes": 3500,
+    "priceKes": 3900,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "uploadMessageId": "false_202400887484571@lid_ACC19A20E50AB3C24DAA441E3C79D616",
+    "imageUrl": "assets/images/products/hb-011.jpg",
+    "imageKey": "caa7717dbd1bb447",
+    "imageHash": "caa7717dbd1bb447"
   }
 ]
