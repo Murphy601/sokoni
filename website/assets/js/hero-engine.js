@@ -82,7 +82,10 @@
   }
 
   async function loadJson(url) {
-    const res = await fetch(url);
+    const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
+    const v = meta?.getAttribute("content") || "";
+    const bust = v ? `${url}${url.includes("?") ? "&" : "?"}v=${v}` : url;
+    const res = await fetch(bust);
     if (!res.ok) throw new Error(url);
     return res.json();
   }

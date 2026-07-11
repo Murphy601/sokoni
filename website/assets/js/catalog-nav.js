@@ -269,7 +269,7 @@
     buildProductIndex(products || []);
 
     try {
-      const res = await fetch("data/catalog-menu.json");
+      const res = await fetch(dataUrl("data/catalog-menu.json"));
       if (res.ok) menuData = await res.json();
     } catch {
       menuData = null;

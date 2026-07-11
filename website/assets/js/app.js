@@ -13,6 +13,15 @@ const REVIEWS_API =
     ? "http://localhost:3001/api/reviews"
     : "https://bot.sokonimall.com/api/reviews";
 
+function catalogCacheBust() {
+  const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
+  return meta?.getAttribute("content") || String(Date.now());
+}
+
+function dataUrl(file) {
+  return `${file}?v=${catalogCacheBust()}`;
+}
+
 const CATEGORY_META = {
   "phones-tablets": { label: "Phones & Tablets", emoji: "📱" },
   "tvs-audio": { label: "TVs & Audio", emoji: "📺" },
@@ -81,7 +90,7 @@ async function loadTiktokFeaturedIds() {
   if (tiktokFeaturedLoaded) return;
   tiktokFeaturedLoaded = true;
   try {
-    const res = await fetch("data/tiktok-featured.json");
+    const res = await fetch(dataUrl("data/tiktok-featured.json"));
     if (!res.ok) return;
     const data = await res.json();
     for (const id of data.productIds || []) VIRAL_IDS.add(id);
@@ -707,7 +716,7 @@ function bindSearch() {
 }
 
 async function loadProducts() {
-  const response = await fetch("data/products.json");
+  const response = await fetch(dataUrl("data/products.json"));
   return response.json();
 }
 

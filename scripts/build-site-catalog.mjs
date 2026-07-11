@@ -116,6 +116,22 @@ async function main() {
   };
   await writeFile(MENU_OUTPUT, JSON.stringify(menu, null, 2) + "\n", "utf-8");
 
+  const versionPath = path.join(ROOT, "website", "data", "catalog-version.json");
+  await writeFile(
+    versionPath,
+    JSON.stringify(
+      {
+        version: new Date().toISOString().slice(0, 10).replace(/-/g, ""),
+        updatedAt: new Date().toISOString(),
+        storeCount: storeItems.length,
+        totalCount: publicItems.length,
+      },
+      null,
+      2
+    ) + "\n",
+    "utf-8"
+  );
+
   const store = storeItems.length;
   const intl = publicItems.filter((p) => p.scope === "international").length;
   console.log(
