@@ -58,27 +58,46 @@ fi
 
 cd "$BOT_DIR"
 
-# Upgrade legacy free tiny models to Gemini Flash (better EN/Swahili/Sheng).
+# Ensure .env exists and upgrade legacy tiny free models → Gemini Flash.
 ENV_FILE="$BOT_DIR/.env"
-if [ -f "$ENV_FILE" ]; then
-  if grep -qE '^OPENAI_MODEL=(nvidia/nemotron-nano-9b-v2:free|google/gemma-2-9b-it:free|openai/gpt-oss-20b:free)' "$ENV_FILE"; then
-    echo "==> Upgrading OPENAI_MODEL → google/gemini-2.5-flash"
-    sed -i 's/^OPENAI_MODEL=.*/OPENAI_MODEL=google\/gemini-2.5-flash/' "$ENV_FILE"
+if [ ! -f "$ENV_FILE" ] && [ -f "$REPO/.env" ]; then
+  ENV_FILE="$REPO/.env"
+fi
+if [ ! -f "$ENV_FILE" ] && [ -f "$BOT_DIR/.env.example" ]; then
+  cp "$BOT_DIR/.env.example" "$ENV_FILE"
+  echo "==> Created $ENV_FILE from .env.example"
+fi
+
+set_env_kv() {
+  local file="$1" key="$2" val="$3"
+  if grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" 2>/dev/null; then
+    sed -i -E "s|^[[:space:]]*(export[[:space:]]+)?${key}=.*|${key}=${val}|" "$file"
+  else
+    echo "${key}=${val}" >> "$file"
   fi
-  if ! grep -q '^OPENAI_MODEL_FALLBACKS=' "$ENV_FILE"; then
-    echo 'OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free' >> "$ENV_FILE"
+}
+
+if [ -f "$ENV_FILE" ]; then
+  CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
+  if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE 'nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b'; then
+    echo "==> Upgrading OPENAI_MODEL → google/gemini-2.5-flash (was: ${CURRENT_MODEL:-unset})"
+    set_env_kv "$ENV_FILE" "OPENAI_MODEL" "google/gemini-2.5-flash"
+  fi
+  if ! grep -qE '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE"; then
+    set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free"
     echo "==> Added OPENAI_MODEL_FALLBACKS"
   fi
-  echo "==> AI model: $(grep '^OPENAI_MODEL=' "$ENV_FILE" | cut -d= -f2-)"
+  echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
+else
+  echo "WARN: No .env found — bot uses code defaults (google/gemini-2.5-flash)"
 fi
 
 npm install --omit=dev 2>/dev/null || npm install
 
 if pm2 describe "$NAME" >/dev/null 2>&1; then
-  pm2 restart "$NAME" --update-env
-else
-  pm2 start src/server.js --name "$NAME" --cwd "$BOT_DIR"
+  pm2 delete "$NAME" || true
 fi
+pm2 start src/server.js --name "$NAME" --cwd "$BOT_DIR" --update-env
 pm2 save
 
 sleep 3
