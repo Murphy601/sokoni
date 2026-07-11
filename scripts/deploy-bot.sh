@@ -80,16 +80,16 @@ set_env_kv() {
 if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
   if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE 'nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b'; then
-    echo "==> Upgrading OPENAI_MODEL → google/gemini-2.5-flash (was: ${CURRENT_MODEL:-unset})"
-    set_env_kv "$ENV_FILE" "OPENAI_MODEL" "google/gemini-2.5-flash"
+    echo "==> Upgrading OPENAI_MODEL → google/gemini-2.5-pro (was: ${CURRENT_MODEL:-unset})"
+    set_env_kv "$ENV_FILE" "OPENAI_MODEL" "google/gemini-2.5-pro"
   fi
   if ! grep -qE '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE"; then
-    set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free"
+    set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "google/gemini-2.5-flash,openai/gpt-4o-mini,google/gemini-2.5-flash-lite"
     echo "==> Added OPENAI_MODEL_FALLBACKS"
   fi
   echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
 else
-  echo "WARN: No .env found — bot uses code defaults (google/gemini-2.5-flash)"
+  echo "WARN: No .env found — bot uses code defaults (google/gemini-2.5-pro)"
 fi
 
 npm install --omit=dev 2>/dev/null || npm install

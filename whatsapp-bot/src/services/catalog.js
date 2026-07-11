@@ -196,6 +196,10 @@ const QUERY_EXPANSIONS = {
   spika: ["speaker", "speakers", "soundbar"],
   nguo: ["fashion", "clothing"],
   viatu: ["shoes", "fashion"],
+  sandal: ["sandals", "shoes", "fashion"],
+  sandals: ["sandals", "shoes", "fashion"],
+  shoe: ["shoes", "fashion"],
+  shoes: ["shoes", "fashion"],
   lotion: ["lotion", "skincare", "body", "health-beauty"],
 };
 

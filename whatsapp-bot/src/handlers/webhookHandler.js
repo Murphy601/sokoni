@@ -424,6 +424,16 @@ export async function handleIncomingMessage(
     return changeOrder(customerKey);
   }
 
+  if (await handleCatalogPagination(customerKey, text)) return;
+
+  if (isCasualGreeting(text)) {
+    return sendText(
+      customerKey,
+      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *sandals*, *Hisense TV*, *perfume*).\n\n" +
+        siteUrlLine()
+    );
+  }
+
   if (await handleActiveProductMenu(customerKey, text)) return;
 
   if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
@@ -475,14 +485,6 @@ export async function handleIncomingMessage(
   const catalogRoute = await resolveProductQuery(text);
   if (catalogRoute.action === "exact" || catalogRoute.action === "confirm") {
     return;
-  }
-
-  if (isCasualGreeting(text)) {
-    return sendText(
-      customerKey,
-      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *Hisense TV*, *washing machine*).\n\n" +
-        siteUrlLine()
-    );
   }
 
   if (isPurchaseIntent(text)) {

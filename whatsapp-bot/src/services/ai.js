@@ -8,88 +8,50 @@ import { getSession, pushMessage, setProductContext, isHumanHandoff } from "./se
 import { normalizeShopperQuery } from "./shopper-language.js";
 
 const FALLBACK_MODELS = [
+  "google/gemini-2.5-flash",
   "openai/gpt-4o-mini",
   "google/gemini-2.5-flash-lite",
-  "nvidia/nemotron-nano-9b-v2:free",
 ];
 
-const SYSTEM_PROMPT = `You are "Sokoni AI" — the shopping brain of Sokoni Mall (sokonimall.com) on WhatsApp in Kenya.
+const SYSTEM_PROMPT = `You are "Sokoni AI" — the intelligent WhatsApp assistant for Sokoni Mall (sokonimall.com), Kenya.
+
+## Core capability
+You are a sharp, warm, multilingual brain (English, Kiswahili, Sheng). You can:
+- Answer general questions honestly and briefly (life, tech tips, how things work).
+- Help customers shop from Sokoni's pay-on-delivery catalog when they want products.
+- Explain pay-on-delivery, Till payments, delivery, international partner links, and trust.
+When unsure, say so — never invent facts, prices, or products.
 
 ## What Sokoni is
-Sokoni is a pay-on-delivery store PLUS a shopping concierge for international partner stores.
-- **Store (default):** Customer orders on WhatsApp, pays cash/M-Pesa on delivery. No upfront payment.
-- **International (when asked):** AliExpress, Temu, Amazon via official partner checkout links (affiliate; disclosed once per chat).
-You are NOT the seller for international items. For store items, you represent Sokoni's COD fulfillment.
+- **Local store:** Order on WhatsApp, pay cash/M-Pesa on delivery (Till 4775847 — David Thuku Muiruri).
+- **International:** AliExpress, Temu, Amazon via partner links when customer asks (disclose affiliate once).
+You represent Sokoni for local COD orders; you are not the seller for international checkout.
 
-## Your job each turn
-1. Understand intent in the user's language (English, Kiswahili, Sheng).
-2. Use ONLY the CATALOG block provided — it is pre-searched by the system. You do NOT search yourself.
-3. Recommend clearly, compare honestly, and move the user to the next action in one message.
-4. Never invent products, prices, stock, links, delivery dates, or specs.
+## Shopping turns
+When the user wants to buy or browse:
+1. Use the CATALOG block (pre-searched by the system) — cite real items only.
+2. Mirror their language (formal, Swahili, or Sheng).
+3. Recommend up to 3 matches with name, KES price, one honest reason.
+4. End with one CTA: reply *1* to order, or *menu* to browse categories.
 
-## Conversation loop (internal)
-DETECT → (greeting / shop / compare / order intent / track / human / TikTok / international)
-ANSWER → lead with the useful conclusion in line 1
-PROVE → cite catalog facts only
-ACT → one clear CTA (reply *1*, type *menu*, or one clarifying question)
-CLOSE → invite them to continue in chat
+## Language (English, Kiswahili, Sheng)
+- *simu* / *mobi* → phone · *viatu* / *sandals* → shoes/fashion · *mafuta* / *marashi* → perfume
+- *nataka* / *nipee* → want to buy · *chini ya X* → budget under X KES
+- *bei ngapi* → price question · *form* / *poa* / *fit* → good quality (slang, not a product name)
+- *sasa* / *mambo* / *hey* → greetings — respond warmly, ask what they need
 
-## Language (English, Kiswahili, Sheng) — CRITICAL
-Understand Kenyan shopper language before answering. Common mappings:
-- *simu* / *mobi* → phone/smartphone
-- *mafuta* / *marashi* → perfume/fragrance oil
-- *nataka* / *nipee* / *niletee* → want to buy
-- *chini ya X* / *under X* → budget max X KES
-- *bei ngapi* / *kiasi gani* → asking price (answer from catalog)
-- *form* / *poa* / *fit* → good quality (not a product name)
-- *sauti* / *spika* → speaker/soundbar/audio
-- *nguo* / *viatu* → fashion/shoes
-Do NOT guess product names from slang. Match intent → CATALOG items only.
-If unclear, ask ONE short clarifying question in the user's language.
-
-## Store orders (primary path)
-When CATALOG items are pay-on-delivery:
-- Present up to 3 best matches: name, KES price, rating, one honest reason it fits.
-- CTA: "Reply *1* to order" or "Type *menu* → Browse Categories".
-- If they say nipee/nataka/yes/sawa about the last item → confirm product + reply *1* to start order.
-- Never collect payment details in chat.
-
-## TikTok / viral traffic
-If user mentions TikTok, reels, viral, "nimeona post", TikTokDeals:
-- Match energy immediately ("Ah, hio form ya TikTok! 🔥").
-- Prioritize featured/recent items in CATALOG.
-- Fast path: name the item + reply *1*.
-
-## International (only when user asks)
-If user wants import/abroad/AliExpress/Temu/Amazon/cheaper from outside:
-- Say delivery is typically 1–4 weeks.
-- Mention Kenya import duty/VAT may apply on arrival (customer pays customs, not a Sokoni fee).
-- Direct them: *menu* → Shop International.
-- On first partner link in a chat, disclose affiliate commission transparently.
-
-## Product Q&A mode
-When user asks specs, battery, size, "is it worth it", comparisons:
-- Answer using catalog fields + reasonable general knowledge about the product TYPE.
-- If spec not in catalog, say you don't have that detail; offer human help or similar catalog item.
-- Compare max 2–3 items on: price/value, rating, fit for stated use.
+## Non-shopping turns
+Greetings, small talk, general knowledge, advice: reply helpfully in 2–4 lines, then gently offer shopping help.
+Do NOT force perfume or random product lists unless the user asked for products.
 
 ## Hard rules
-- NEVER contradict the CATALOG block.
+- NEVER invent catalog items, prices, stock, or delivery dates.
 - NEVER ask for card numbers or M-Pesa PIN.
-- NEVER promise exact delivery date unless provided in catalog.
-- NEVER pretend to be human; say you're Sokoni AI — human available via menu.
-- For track order, cart, cancel, change order, human agent → tell user *menu* (handled outside you).
-- If user asks for human/agent/manager → stop selling; say team will reply in this chat.
-- "Sasa", "mambo", "habari" are greetings — respond warmly, not as product searches.
+- For *track*, *cart*, *cancel*, *human* → tell them to type *menu* (handled outside you).
+- If they want a human/agent → acknowledge; team may reply in this chat.
 
-## Output format (WhatsApp)
-Line 1: direct answer or top pick
-Lines 2–4: options or key facts
-Final line: single CTA
-Examples:
-- "Reply *1* kuanza order (pay on delivery)."
-- "Type *menu* kuchagua category."
-- "Niambie budget yako nikupe options 2 zingine."`;
+## Output (WhatsApp)
+Short, scannable lines. Emojis sparingly. Final line = one clear next step.`;
 
 function modelChain() {
   const primary = config.openai.model?.trim();
@@ -130,6 +92,14 @@ function isRecommendationQuery(text) {
 
 function isProductDetailQuery(text) {
   return /info|detail|spec|battery|size|good for|worth|compare|how long|quality|tell me about|is it/i.test(text);
+}
+
+function isShoppingIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\b(nataka|nipee|nipe|naomba|want|need|buy|order|looking for|show me|recommend|suggest|do you have|bei ngapi|price|how much|chini ya|under|below)\b/i.test(t)) {
+    return true;
+  }
+  return /\b(simu|phone|tv|laptop|perfume|mafuta|marashi|sandals?|shoes?|viatu|fridge|headphone|speaker|watch|nguo|fashion|bag|dress)\b/i.test(t);
 }
 
 function extractBudgetHint(text) {
@@ -301,8 +271,8 @@ async function callOpenRouter(messages) {
       const response = await openai.chat.completions.create({
         model,
         messages,
-        max_tokens: 450,
-        temperature: 0.25,
+        max_tokens: 500,
+        temperature: 0.35,
       });
       const reply = sanitizeReply(extractReply(response.choices[0]?.message));
       if (reply) {
@@ -348,28 +318,59 @@ export async function runAiAgent(phoneNumber, userMessage) {
       pushMessage(phoneNumber, "assistant", reply);
       return reply;
     }
-    const reply = viral
-      ? "Ah, umetoka TikTok! 🔥 Bado hatujapost deal mpya leo — type *menu* kuchagua, au niambie ukitafuta nini."
-      : international
-        ? "For international shopping (AliExpress, Temu, Amazon), type *menu* → *Shop International*. For local pay-on-delivery items, tell me what you need."
-        : "I couldn't find that in our store catalog right now. Type *menu* → *Browse Categories*, or tell me a specific item name (e.g. *Hisense TV*, *Brut perfume*).";
-    pushMessage(phoneNumber, "assistant", reply);
-    return reply;
+
+    if (!getClient()) {
+      const reply = viral
+        ? "Ah, umetoka TikTok! 🔥 Bado hatujapost deal mpya leo — type *menu* kuchagua, au niambie ukitafuta nini."
+        : international
+          ? "For international shopping (AliExpress, Temu, Amazon), type *menu* → *Shop International*. For local pay-on-delivery items, tell me what you need."
+          : isShoppingIntent(userMessage)
+            ? "I couldn't find that in our store catalog right now. Type *menu* → *Browse Categories*, or tell me a specific item name (e.g. *Hisense TV*, *sandals*)."
+            : "I'm here! Type *menu* to shop (pay on delivery), or ask me anything — I can help with general questions too.";
+      pushMessage(phoneNumber, "assistant", reply);
+      return reply;
+    }
+
+    try {
+      const shopping = isShoppingIntent(userMessage);
+      const mode = buildModeInjection({ viral, focus: null, userMessage, international });
+      const catalogNote = shopping
+        ? "CATALOG: No matching store items for this query. Say so honestly; suggest *menu* or a clearer product name. Do not invent products or prices."
+        : "CATALOG: empty — general/non-shopping turn. Answer the user's question helpfully and accurately. Only mention Sokoni shopping if it fits naturally.";
+      const messages = [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: catalogNote },
+        ...(mode ? [{ role: "system", content: mode }] : []),
+        ...session.history.slice(-14, -1),
+        { role: "user", content: userMessage },
+      ];
+      const reply = await callOpenRouter(messages);
+      pushMessage(phoneNumber, "assistant", reply);
+      return reply;
+    } catch (err) {
+      console.error("[ai] empty-catalog turn failed:", err.message);
+      const reply = isShoppingIntent(userMessage)
+        ? "I couldn't find that in our store right now. Type *menu* to browse, or describe the item more specifically."
+        : "Something went wrong on my side. Try again, or type *menu* to shop.";
+      pushMessage(phoneNumber, "assistant", reply);
+      return reply;
+    }
   }
 
   if (viral || (isRecommendationQuery(userMessage) && !isProductDetailQuery(userMessage))) {
-    const reply = formatCatalogReply(products, {
-      intro: viral
-        ? "Ah hio form ya TikTok! 🔥 Hizi ndio deals zetu za hivi karibuni:"
-        : focus
-          ? `About *${focus.name}* and similar items:`
-          : "Here are my top picks from our store:",
-    });
-    pushMessage(phoneNumber, "assistant", reply);
-    return reply;
-  }
-
-  if (!getClient()) {
+    if (!getClient()) {
+      const reply = formatCatalogReply(products, {
+        intro: viral
+          ? "Ah hio form ya TikTok! 🔥 Hizi ndio deals zetu za hivi karibuni:"
+          : focus
+            ? `About *${focus.name}* and similar items:`
+            : "Here are my top picks from our store:",
+      });
+      pushMessage(phoneNumber, "assistant", reply);
+      return reply;
+    }
+    // Let AI phrase recommendations naturally when we have a model.
+  } else if (!getClient()) {
     const reply = formatCatalogReply(products);
     pushMessage(phoneNumber, "assistant", reply);
     return reply;

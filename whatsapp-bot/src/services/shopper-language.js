@@ -6,6 +6,8 @@
 const PHRASE_REPLACEMENTS = [
   [/\bnataka\b/gi, "want"],
   [/\bnipee?\b/gi, "want"],
+  [/\bsandals?\b/gi, "sandals shoes fashion"],
+  [/\bshoes?\b/gi, "shoes fashion"],
   [/\bnipatie\b/gi, "want"],
   [/\bniletee\b/gi, "want"],
   [/\bnaomba\b/gi, "want"],

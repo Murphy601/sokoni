@@ -7,6 +7,7 @@ import {
   searchProducts,
 } from "./catalog.js";
 import { looksLikeDeliveryDetails } from "./delivery-details.js";
+import { normalizeShopperQuery } from "./shopper-language.js";
 
 import { CATALOG_PAGE_SIZE } from "./list-format.js";
 
@@ -126,18 +127,28 @@ function scoreProductMatch(query, product) {
 }
 
 function stripSearchNoise(text) {
-  return String(text || "")
-    .replace(
-      /\b(i|me|my|want|need|looking|for|show|find|get|buy|order|please|can|you|give|a|an|the|do|have|any)\b/gi,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeShopperQuery(
+    String(text || "")
+      .replace(
+        /\b(i|me|my|want|need|looking|for|show|find|get|buy|order|please|can|you|give|a|an|the|do|have|any|nataka|nipee|nipe|naomba)\b/gi,
+        " "
+      )
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function isGreetingOrSmallTalk(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return /^(sasa|mambo|habari yako|habari|uko aje|uze aje|poa|sema|hujambo|shikamoo|good morning|good evening|good afternoon|hello|hi|hey|thanks|thank you|asante|ok|okay|cool|nice)[\s!?.]*$/i.test(
+    t
+  );
 }
 
 function isWeakCatalogQuery(text) {
+  if (isGreetingOrSmallTalk(text)) return true;
   const q = stripSearchNoise(text);
-  return !q || q.length < 2 || /^(hi|hey|hello|thanks|ok|okay|yes|no|next|more|prev|previous|back)$/i.test(q);
+  return !q || q.length < 2 || /^(hi|hey|hello|thanks|ok|okay|yes|no|next|more|prev|previous|back|sasa|mambo|habari|poa)$/i.test(q);
 }
 
 export function isCatalogNavCommand(text) {
@@ -196,7 +207,7 @@ function isPerfumeBrowseIntent(text) {
 }
 
 const NON_PERFUME_PRODUCT_HINTS =
-  /\b(watch|watches|phone|phones|tablet|tablets|laptop|laptops|tv|television|fridge|refrigerator|console|consoles|gps|smartphone|headphone|headphones|speaker|speakers|camera|cameras|hisense|samsung|iphone|ipad|macbook|playstation|xbox|blender|kettle|washing|washer|dryer|monitor|keyboard|mouse|router|modem|charger|powerbank|power\s*bank|series\s*\d|android|windows|intel|amd|nvidia|mm\b|inch|gb\b|ram\b|smart\s*tv)\b/i;
+  /\b(watch|watches|phone|phones|tablet|tablets|laptop|laptops|tv|television|fridge|refrigerator|console|consoles|gps|smartphone|headphone|headphones|speaker|speakers|camera|cameras|hisense|samsung|iphone|ipad|macbook|playstation|xbox|blender|kettle|washing|washer|dryer|monitor|keyboard|mouse|router|modem|charger|powerbank|power\s*bank|series\s*\d|android|windows|intel|amd|nvidia|mm\b|inch|gb\b|ram\b|smart\s*tv|sandal|sandals|shoe|shoes|boot|boots|sneaker|sneakers|viatu|nguo|fashion|bag|bags|dress|shirt|trouser|jeans|skirt|jacket|suit|hoodie|sweater|belt|hat|cap|wallet|purse)\b/i;
 
 function isNonPerfumeProductQuery(text) {
   return NON_PERFUME_PRODUCT_HINTS.test(String(text || ""));
@@ -215,13 +226,17 @@ function isMenuOrRoleIntent(text) {
 function shouldTryPerfumeRouting(text) {
   if (isCatalogNavCommand(text)) return false;
   if (isMenuOrRoleIntent(text)) return false;
+  if (isGreetingOrSmallTalk(text)) return false;
   if (/^\d{1,2}$/.test(String(text || "").trim())) return false;
   if (isNonPerfumeProductQuery(text)) return false;
   if (isPerfumeBrowseIntent(text)) return true;
+  if (/\b(oil|oils|ml|litre|liter|attar|eau|mafuta|marashi|perfume|fragrance|cologne|scent)\b/i.test(text)) return true;
   const q = stripPerfumeNoise(text);
+  if (!q || q.length < 3) return false;
+  // Short brand-like scent queries only (e.g. "brut", "sauvage") — not open shopping requests.
+  if (/\b(nataka|nipee|want|need|buy|order|looking|recommend|show|find)\b/i.test(text)) return false;
   const words = q.split(/\s+/).filter((w) => w.length > 1);
-  if (words.length <= 2) return true;
-  return /\b(oil|oils|ml|litre|liter|attar|eau)\b/i.test(text);
+  return words.length <= 2;
 }
 
 function isYes(text) {
@@ -261,7 +276,7 @@ async function resolvePerfumeScentQuery(scentQuery, sizeMl) {
   const scents = await loadScentNames();
   const ranked = scents
     .map((name) => ({ name, score: scoreScentMatch(scentQuery, name) }))
-    .filter((r) => r.score > 0)
+    .filter((r) => r.score >= 350)
     .sort((a, b) => b.score - a.score);
 
   if (ranked.length === 0) return { action: "none" };
@@ -393,6 +408,7 @@ async function resolveGeneralProductQuery(text) {
 export async function resolveProductQuery(text) {
   const raw = String(text || "").trim();
   if (!raw || raw.length < 2) return { action: "none" };
+  if (isGreetingOrSmallTalk(raw)) return { action: "none" };
   if (isCatalogNavCommand(raw)) return { action: "none" };
   if (isMenuOrRoleIntent(raw)) return { action: "none" };
   if (looksLikeDeliveryDetails(raw)) return { action: "none" };
