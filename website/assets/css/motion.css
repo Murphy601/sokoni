@@ -1,17 +1,34 @@
 /* Hero platform story — motion layer (additive; does not replace styles.css) */
 
+.hero-preview-square {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 11rem;
+  margin-bottom: 1rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: rgba(27, 16, 53, 0.04);
+  border: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+html.dark .hero-preview-square {
+  background: rgba(46, 27, 87, 0.5);
+  border-color: rgba(37, 211, 102, 0.2);
+}
+
 .hero-filmstrip {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   overflow: hidden;
-  opacity: 0.22;
+  opacity: 1;
   pointer-events: none;
-  border-radius: 1rem;
 }
 
-html.dark .hero-filmstrip {
-  opacity: 0.18;
+.hero-filmstrip.is-hidden {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .hero-filmstrip-track {
@@ -22,11 +39,152 @@ html.dark .hero-filmstrip {
 }
 
 .hero-filmstrip-item {
-  flex: 0 0 7rem;
-  height: 7rem;
-  border-radius: 1rem;
+  flex: 0 0 5.5rem;
+  height: 5.5rem;
+  border-radius: 0.75rem;
   overflow: hidden;
   background: rgba(27, 16, 53, 0.06);
+}
+
+.hero-site-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  padding: 0.5rem;
+  font-size: 0.65rem;
+  line-height: 1.35;
+  color: #1b1035;
+  background: #fff8f0;
+}
+
+html.dark .hero-site-stage {
+  color: #fff;
+  background: #2e1b57;
+}
+
+.hero-site-stage.hidden {
+  display: none;
+}
+
+.hero-site-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(27, 16, 53, 0.08);
+  font-weight: 700;
+  font-size: 0.6rem;
+}
+
+html.dark .hero-site-bar {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-site-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+}
+
+.hero-site-card {
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  padding: 0.35rem 0.25rem;
+  text-align: center;
+  animation: site-card-in 0.4s ease forwards;
+  opacity: 0;
+}
+
+html.dark .hero-site-card {
+  background: rgba(27, 16, 53, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-site-card .emoji {
+  font-size: 1rem;
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.hero-site-card.is-highlight {
+  border-color: #25d366;
+  box-shadow: 0 0 0 1px #25d366;
+}
+
+.hero-site-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.hero-site-list-item {
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+html.dark .hero-site-list-item {
+  background: rgba(27, 16, 53, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-site-list-item.is-highlight {
+  border-color: #25d366;
+}
+
+.hero-site-product {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.35rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+html.dark .hero-site-product {
+  background: rgba(27, 16, 53, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-site-product img {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: cover;
+  border-radius: 0.35rem;
+  flex-shrink: 0;
+}
+
+.hero-site-form-step {
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  margin-bottom: 0.3rem;
+}
+
+html.dark .hero-site-form-step {
+  background: rgba(27, 16, 53, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-site-form-step strong {
+  color: #25d366;
+}
+
+@keyframes site-card-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .hero-filmstrip-item img {
@@ -90,74 +248,6 @@ html.dark .hero-trust-chip {
 #hero-mock {
   transform-style: preserve-3d;
   transition: transform 0.4s ease;
-}
-
-.hero-story-meta {
-  text-align: center;
-  margin-bottom: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(27, 16, 53, 0.08);
-}
-
-html.dark .hero-story-meta {
-  background: rgba(46, 27, 87, 0.9);
-  border-color: rgba(37, 211, 102, 0.25);
-}
-
-.hero-story-label {
-  font-size: 0.875rem;
-  font-weight: 700;
-  line-height: 1.45;
-  color: #1b1035;
-}
-
-html.dark .hero-story-label {
-  color: #25d366;
-}
-
-.hero-story-progress {
-  display: flex;
-  justify-content: center;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-}
-
-.hero-story-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 9999px;
-  background: rgba(27, 16, 53, 0.25);
-  transition: background 0.3s ease, transform 0.3s ease;
-}
-
-html.dark .hero-story-dot {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-.hero-story-dot.is-active {
-  background: #25d366;
-  transform: scale(1.25);
-}
-
-.hero-story-timer {
-  height: 4px;
-  background: rgba(27, 16, 53, 0.12);
-  border-radius: 9999px;
-  overflow: hidden;
-  margin-top: 0.5rem;
-}
-
-html.dark .hero-story-timer {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.hero-story-timer-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #25d366, #1b1035);
-  transition: width 0.15s linear;
 }
 
 #hero-chat-stage {

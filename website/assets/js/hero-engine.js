@@ -1,10 +1,35 @@
 /**
- * Hero platform story engine — 4 × ~60s DOM “videos” from live JSON.
+ * Hero platform story engine — DOM “videos” from live JSON.
  * Does not modify app.js catalog logic.
  */
 (function () {
   const STORY_MS_DEFAULT = 60000;
   const WHATSAPP = "254117422428";
+
+  const CATEGORY_META = {
+    "phones-tablets": { label: "Phones & Tablets", emoji: "📱" },
+    "tvs-audio": { label: "TVs & Audio", emoji: "📺" },
+    appliances: { label: "Appliances", emoji: "🔌" },
+    "health-beauty": { label: "Health & Beauty", emoji: "💄" },
+    "home-office": { label: "Home & Office", emoji: "🏠" },
+    fashion: { label: "Fashion", emoji: "👗" },
+    computing: { label: "Computing", emoji: "💻" },
+    gaming: { label: "Gaming", emoji: "🎮" },
+    supermarket: { label: "Supermarket", emoji: "🛒" },
+    "baby-products": { label: "Baby Products", emoji: "🍼" },
+  };
+
+  const SUBCATEGORY_LABELS = {
+    smartphones: "Smartphones",
+    tablets: "Tablets",
+    "power-banks": "Power Banks",
+    televisions: "TVs",
+    headphones: "Headphones",
+    speakers: "Speakers",
+    "kitchen-appliances": "Kitchen",
+    skincare: "Skincare",
+    fragrances: "Fragrances",
+  };
 
   let siteStory = {};
   let stories = [];
@@ -14,8 +39,6 @@
   let intlProduct = null;
   let storyIndex = 0;
   let frameTimers = [];
-  let progressRaf = null;
-  let storyStartedAt = 0;
   let reducedMotion = false;
 
   function $(id) {
@@ -85,6 +108,141 @@
       .join("")}</div>`;
   }
 
+  function showFilmstrip(show) {
+    const film = $("hero-filmstrip");
+    const site = $("hero-site-stage");
+    if (film) film.classList.toggle("is-hidden", !show);
+    if (site) site.classList.toggle("hidden", show);
+  }
+
+  function renderSitePanel(frame) {
+    const stage = $("hero-site-stage");
+    if (!stage) return;
+
+    if (frame.panel === "filmstrip") {
+      showFilmstrip(true);
+      return;
+    }
+
+    showFilmstrip(false);
+    const ctx = vars();
+    const bar = `<div class="hero-site-bar">🛒 sokonimall.com</div>`;
+
+    if (frame.panel === "categories") {
+      const cats = Object.entries(CATEGORY_META)
+        .slice(0, 8)
+        .map(
+          ([id, c], i) =>
+            `<div class="hero-site-card${frame.highlight === id ? " is-highlight" : ""}" style="animation-delay:${i * 0.05}s"><span class="emoji">${c.emoji}</span>${esc(c.label)}</div>`
+        )
+        .join("");
+      stage.innerHTML = `${bar}<div class="hero-site-grid">${cats}</div>`;
+      return;
+    }
+
+    if (frame.panel === "subcategories") {
+      const cat = CATEGORY_META[frame.category || "phones-tablets"] || { label: "Phones", emoji: "📱" };
+      const subs = ["smartphones", "tablets", "power-banks"]
+        .map(
+          (s, i) =>
+            `<div class="hero-site-list-item${frame.highlight === s ? " is-highlight" : ""}">${i + 1}. ${esc(SUBCATEGORY_LABELS[s] || s)}</div>`
+        )
+        .join("");
+      stage.innerHTML = `${bar}<p class="mb-2 font-bold">${cat.emoji} ${esc(cat.label)}</p><div class="hero-site-list">${subs}</div>`;
+      return;
+    }
+
+    if (frame.panel === "products") {
+      const list = products
+        .filter((p) => p.fulfillment === "store" && p.imageUrl)
+        .slice(0, 4);
+      const rows = list
+        .map(
+          (p, i) =>
+            `<div class="hero-site-product${frame.highlightIndex === i ? " is-highlight" : ""}"><img src="${esc(p.imageUrl)}" alt="" />` +
+            `<div><strong>${esc(p.name?.slice(0, 22) || "Product")}</strong><br/>${formatKes(p.priceKes)} · COD</div></div>`
+        )
+        .join("");
+      stage.innerHTML = `${bar}<p class="mb-2 font-bold">📱 Smartphones</p>${rows}`;
+      return;
+    }
+
+    if (frame.panel === "search") {
+      const q = frame.query || "camera phone chini ya 15k";
+      stage.innerHTML =
+        `${bar}<p class="mb-2">🔍 <strong>${esc(q)}</strong></p>` +
+        `<div class="hero-site-list-item is-highlight">${esc(featured?.name || ctx.productName)} — ${ctx.price}</div>` +
+        `<div class="hero-site-list-item">…more pay-on-delivery matches</div>`;
+      return;
+    }
+
+    if (frame.panel === "product-detail") {
+      const p = featured;
+      stage.innerHTML =
+        `${bar}` +
+        (p?.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" class="w-full h-16 object-contain rounded-lg mb-2 bg-white/50" />` : "") +
+        `<p class="font-bold">${esc(p?.name || ctx.productName)}</p>` +
+        `<p class="text-brand-green font-bold">${ctx.price} · Pay on delivery</p>` +
+        `<p class="mt-1 rounded-full bg-brand-green/20 text-center py-1 font-bold">💬 Ask on WhatsApp</p>`;
+      return;
+    }
+
+    if (frame.panel === "pickup-info") {
+      stage.innerHTML =
+        `${bar}<p class="font-bold mb-1">📍 Pickup point programme</p>` +
+        `<p>Earn KES 50+ per parcel · anywhere in Kenya</p>` +
+        `<p class="mt-2 rounded-lg bg-brand-green/15 px-2 py-1 font-bold">Apply on site → continue on WhatsApp</p>`;
+      return;
+    }
+
+    if (frame.panel === "pickup-form") {
+      const steps = [
+        ["Shop name", "Mama Grace Electronics"],
+        ["County / town", "Embu, Embu County"],
+        ["Address & hours", "Mama Ngina St · Mon–Sat 8–7"],
+        ["Facilities", "Secure storage · M-Pesa OK"],
+      ];
+      const step = steps[frame.step || 0] || steps[0];
+      stage.innerHTML =
+        `${bar}<p class="font-bold mb-2">Pickup application (site)</p>` +
+        steps
+          .map(
+            ([label, val], i) =>
+              `<div class="hero-site-form-step${i === (frame.step || 0) ? " ring-1 ring-brand-green" : ""}"><strong>${esc(label)}</strong><br/>${esc(val)}</div>`
+          )
+          .join("");
+      return;
+    }
+
+    if (frame.panel === "supplier-info") {
+      stage.innerHTML =
+        `${bar}<p class="font-bold mb-1">🏪 Sell on Sokoni</p>` +
+        `<p>Zero listing fees · WhatsApp orders · pay on delivery</p>` +
+        `<p class="mt-2 rounded-lg bg-brand-green/15 px-2 py-1 font-bold">Apply on site → prefilled on WhatsApp</p>`;
+      return;
+    }
+
+    if (frame.panel === "supplier-form") {
+      const steps = [
+        ["Business", "Nairobi Tech Hub"],
+        ["City & delivery", "Nairobi · delivers Westlands"],
+        ["Product 1", `${ctx.productName} · supply KES 12,500`],
+        ["Documents", "Permit photo (optional)"],
+      ];
+      stage.innerHTML =
+        `${bar}<p class="font-bold mb-2">Supplier application (site)</p>` +
+        steps
+          .map(
+            ([label, val], i) =>
+              `<div class="hero-site-form-step${i === (frame.step || 0) ? " ring-1 ring-brand-green" : ""}"><strong>${esc(label)}</strong><br/>${esc(val)}</div>`
+          )
+          .join("");
+      return;
+    }
+
+    stage.innerHTML = bar;
+  }
+
   function renderTrustChips() {
     const el = $("hero-trust-chips");
     if (!el || !siteStory.trustChips) return;
@@ -96,23 +254,6 @@
         return `<a class="hero-trust-chip" href="${esc(href)}" title="${esc(detail)}">${esc(c.icon)} ${esc(c.label)}</a>`;
       })
       .join("");
-  }
-
-  function renderKineticDots() {
-    const dots = $("hero-story-progress");
-    if (!dots) return;
-    dots.innerHTML = stories
-      .map((_, i) => `<span class="hero-story-dot${i === storyIndex ? " is-active" : ""}" data-i="${i}"></span>`)
-      .join("");
-  }
-
-  function updateStoryMeta() {
-    const label = $("hero-story-label");
-    const titles = siteStory.storyTitles || stories.map((s) => s.subtitle || s.title);
-    if (label) {
-      label.textContent = titles[storyIndex] || stories[storyIndex]?.subtitle || stories[storyIndex]?.title || "";
-    }
-    renderKineticDots();
   }
 
   let kineticIdx = 0;
@@ -131,8 +272,6 @@
   function clearTimers() {
     frameTimers.forEach(clearTimeout);
     frameTimers = [];
-    if (progressRaf) cancelAnimationFrame(progressRaf);
-    progressRaf = null;
   }
 
   function scrollChatToBottom() {
@@ -177,6 +316,10 @@
   }
 
   function runFrame(frame) {
+    if (frame.action === "panel") {
+      renderSitePanel(frame);
+      return;
+    }
     const ctx = vars();
     if (frame.action === "clear") {
       const stage = $("hero-chat-stage");
@@ -186,42 +329,27 @@
     appendBubble(bubbleHtml(frame, ctx));
   }
 
-  function scheduleProgress() {
-    const fill = $("hero-story-timer-fill");
-    if (!fill) return;
-    function tick() {
-      const elapsed = Date.now() - storyStartedAt;
-      const pct = Math.min(100, (elapsed / storyDurationMs) * 100);
-      fill.style.width = `${pct}%`;
-      if (elapsed < storyDurationMs) progressRaf = requestAnimationFrame(tick);
-    }
-    progressRaf = requestAnimationFrame(tick);
-  }
-
   function playStory(index) {
     clearTimers();
     storyIndex = index % stories.length;
     const story = stories[storyIndex];
     if (!story) return;
 
-    updateStoryMeta();
-    storyStartedAt = Date.now();
-    const fill = $("hero-story-timer-fill");
-    if (fill) fill.style.width = "0%";
-    scheduleProgress();
+    const duration = story.durationMs || storyDurationMs;
+    showFilmstrip(true);
 
-    const ctx = vars();
     const frames = story.frames || [];
     for (const frame of frames) {
       const t = setTimeout(() => runFrame(frame), frame.at || 0);
       frameTimers.push(t);
     }
 
-    const endTimer = setTimeout(() => playStory(storyIndex + 1), storyDurationMs);
+    const endTimer = setTimeout(() => playStory(storyIndex + 1), duration);
     frameTimers.push(endTimer);
   }
 
   function staticFallback() {
+    showFilmstrip(true);
     const stage = $("hero-chat-stage");
     if (!stage) return;
     const p = featured;
@@ -250,7 +378,6 @@
       pickProducts(productsData);
       buildFilmstrip();
       renderTrustChips();
-      renderKineticDots();
 
       const kEl = $("hero-kinetic-line");
       if (kEl && siteStory.kineticLines?.[0]) {

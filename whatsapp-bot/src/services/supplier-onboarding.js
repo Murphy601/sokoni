@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import { sendText, downloadWahaMedia } from "./whatsapp.js";
 import { getCustomerMeta, setCustomerMeta, clearMenuState } from "./session.js";
-import { createApplication, SUPPLIER_CATEGORIES } from "./suppliers.js";
+import { createApplication, SUPPLIER_CATEGORIES, getApplication } from "./suppliers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MEDIA_DIR = path.join(__dirname, "..", "..", "data", "supplier-application-media");
@@ -96,44 +96,82 @@ function parsePrice(text) {
   return m ? Number(m[1].replace(/\s/g, "")) : null;
 }
 
-async function promptStep(customerKey, step, draft) {
+function isYes(text) {
+  return /^(yes|y|ndio|sawa|ok|keep)$/i.test(String(text || "").trim());
+}
+
+function prefillHint(value, label) {
+  if (!value) return "";
+  return `\n_From site:_ *${value}*\nReply *yes* to keep or send a new ${label}.`;
+}
+
+function draftFromApplication(app) {
+  const b = app?.business || {};
+  const products = (app?.products || []).map((p) => ({
+    sku: p.sku,
+    name: p.name,
+    category: p.category,
+    supplierPriceKes: p.supplierPriceKes,
+    description: p.description || "",
+    inStock: p.inStock !== false,
+    hasPhoto: p.hasPhoto === true,
+  }));
+  return {
+    business: {
+      name: b.name || "",
+      contactName: b.contactName || "",
+      phone: b.phone || "",
+      email: b.email || "",
+      city: b.city || "",
+      delivers: b.delivers === true,
+      deliveryAreas: b.deliveryAreas || "Countrywide",
+      deliveryNote: b.deliveryNote || "",
+    },
+    products,
+    documents: [],
+    currentProduct: {},
+    sourceApplicationId: app?.id || null,
+  };
+}
+
+async function promptStep(customerKey, step, draft, { prefill = false } = {}) {
   switch (step) {
     case STEPS.BUSINESS_NAME:
       return sendText(
         customerKey,
         `🏪 *Supplier application* (step 1/10)\n\n` +
-          `What is your *business name*?\n` +
+          `What is your *business name*?${prefillHint(draft.business.name, "name")}\n` +
           `_Same details as sokonimall.com/suppliers — one question at a time._\n\n` +
           `Reply *cancel* anytime to stop.`
       );
     case STEPS.CONTACT_NAME:
       return sendText(
         customerKey,
-        `Step 2 — *Contact person* name?\n\n_Reply *skip* if not applicable._`
+        `Step 2 — *Contact person* name?${prefillHint(draft.business.contactName, "name")}\n\n_Reply *skip* if not applicable._`
       );
     case STEPS.EMAIL:
-      return sendText(customerKey, `Step 3 — *Email* for invoices? _(skip ok)_`);
+      return sendText(customerKey, `Step 3 — *Email* for invoices?${prefillHint(draft.business.email, "email")} _(skip ok)_`);
     case STEPS.CITY:
-      return sendText(customerKey, `Step 4 — *City / town* you operate from?`);
+      return sendText(customerKey, `Step 4 — *City / town* you operate from?${prefillHint(draft.business.city, "city")}`);
     case STEPS.DELIVERS:
       return sendText(
         customerKey,
-        `Step 5 — Can you *deliver* to buyers in some areas?\n\nReply *yes* or *no*.\n_(No = hub / pickup coordination only.)_`
+        `Step 5 — Can you *deliver* to buyers in some areas?${prefill ? `\n_From site:_ *${draft.business.delivers ? "yes" : "no"}*` : ""}\n\nReply *yes* or *no*.\n_(No = hub / pickup coordination only.)_`
       );
     case STEPS.DELIVERY_AREAS:
       return sendText(
         customerKey,
-        `Step 6 — Which *areas* do you deliver?\n\n_e.g. Kisumu town, Milimani, highway corridor_`
+        `Step 6 — Which *areas* do you deliver?${prefillHint(draft.business.deliveryAreas, "areas")}\n\n_e.g. Kisumu town, Milimani, highway corridor_`
       );
     case STEPS.DELIVERY_NOTE:
       return sendText(
         customerKey,
-        `Step 7 — Any *delivery notes*? _(minimum order, same-day, etc. — or reply skip)_`
+        `Step 7 — Any *delivery notes*?${prefillHint(draft.business.deliveryNote, "note")} _(minimum order, same-day, etc. — or reply skip)_`
       );
     case STEPS.PRODUCT_NAME:
       return sendText(
         customerKey,
-        `Step 8 — *Product ${draft.products.length + 1}*\n\nWhat is the *product name*?`
+        `Step 8 — *Product ${draft.products.length + 1}*\n\nWhat is the *product name*?${prefillHint(draft.currentProduct.name, "name")}`
       );
     case STEPS.PRODUCT_CATEGORY:
       return sendText(
@@ -194,14 +232,35 @@ export function isInSupplierOnboarding(customerKey) {
   return Boolean(getOnboarding(customerKey)?.step);
 }
 
-export async function startSupplierOnboarding(customerKey, { phone = "" } = {}) {
+export async function startSupplierOnboarding(customerKey, { phone = "", prefill = null } = {}) {
+  const draft = prefill ? { ...freshDraft(phone), ...prefill, business: { ...freshDraft(phone).business, ...(prefill.business || {}) } } : freshDraft(phone);
+  if (prefill?.products?.length && !draft.currentProduct?.name) {
+    draft.currentProduct = { ...prefill.products[0] };
+    draft.products = [];
+  }
   const onboarding = {
     step: STEPS.BUSINESS_NAME,
-    draft: freshDraft(phone),
+    draft,
     startedAt: Date.now(),
+    prefillMode: Boolean(prefill && (prefill.business?.name || prefill.products?.length)),
   };
   setOnboarding(customerKey, onboarding);
-  await promptStep(customerKey, STEPS.BUSINESS_NAME, onboarding.draft);
+  await promptStep(customerKey, STEPS.BUSINESS_NAME, onboarding.draft, { prefill: onboarding.prefillMode });
+  return true;
+}
+
+export async function trySupplierContinueFromRef(customerKey, text, { phone = "" } = {}) {
+  if (!/\b(SUP-\d{4}-\d{4})\b/i.test(String(text || "")) && !/supplier application|supplier on sokonimall/i.test(String(text || ""))) {
+    return false;
+  }
+  const m = String(text || "").match(/\b(SUP-\d{4}-\d{4})\b/i);
+  if (!m) return false;
+  const app = getApplication(m[1].toUpperCase());
+  if (!app) {
+    await sendText(customerKey, `No supplier application found for *${m[1]}*. Reply *vendor menu* to start fresh.`);
+    return true;
+  }
+  await startSupplierOnboarding(customerKey, { phone, prefill: draftFromApplication(app) });
   return true;
 }
 
@@ -290,6 +349,7 @@ export async function handleSupplierOnboarding(
   }
 
   const { draft } = onboarding;
+  const prefill = onboarding.prefillMode;
 
   if (hasMedia && onboarding.step === STEPS.DOCUMENTS) {
     try {
@@ -324,28 +384,34 @@ export async function handleSupplierOnboarding(
 
   switch (onboarding.step) {
     case STEPS.BUSINESS_NAME:
-      if (t.length < 2) {
-        await sendText(customerKey, "Please send your business name (at least 2 characters).");
+      if (isYes(t) && draft.business.name) {
+        /* keep */
+      } else if (t.length < 2) {
+        await sendText(customerKey, "Please send your business name (at least 2 characters) or *yes* to keep the site value.");
         return true;
+      } else {
+        draft.business.name = t;
       }
-      draft.business.name = t;
       if (!draft.business.phone && phone) draft.business.phone = digitsOnly(phone);
       onboarding.step = STEPS.CONTACT_NAME;
       break;
     case STEPS.CONTACT_NAME:
-      draft.business.contactName = lower === "skip" ? "" : t;
+      draft.business.contactName = lower === "skip" ? "" : isYes(t) ? draft.business.contactName : t;
       onboarding.step = STEPS.EMAIL;
       break;
     case STEPS.EMAIL:
-      draft.business.email = lower === "skip" ? "" : t;
+      draft.business.email = lower === "skip" ? "" : isYes(t) ? draft.business.email : t;
       onboarding.step = STEPS.CITY;
       break;
     case STEPS.CITY:
-      if (t.length < 2) {
-        await sendText(customerKey, "Please send your city or town.");
+      if (isYes(t) && draft.business.city) {
+        /* keep */
+      } else if (t.length < 2) {
+        await sendText(customerKey, "Please send your city or town, or *yes* to keep the site value.");
         return true;
+      } else {
+        draft.business.city = t;
       }
-      draft.business.city = t;
       onboarding.step = STEPS.DELIVERS;
       break;
     case STEPS.DELIVERS:
@@ -361,18 +427,26 @@ export async function handleSupplierOnboarding(
       }
       break;
     case STEPS.DELIVERY_AREAS:
-      draft.business.deliveryAreas = t;
+      draft.business.deliveryAreas = isYes(t) ? draft.business.deliveryAreas : t;
       onboarding.step = STEPS.DELIVERY_NOTE;
       break;
     case STEPS.DELIVERY_NOTE:
-      draft.business.deliveryNote = lower === "skip" ? "" : t;
+      draft.business.deliveryNote = lower === "skip" ? "" : isYes(t) ? draft.business.deliveryNote : t;
       onboarding.step = STEPS.PRODUCT_NAME;
       break;
     case STEPS.PRODUCT_NAME:
-      draft.currentProduct = { name: t };
+      if (isYes(t) && draft.currentProduct.name) {
+        /* keep */
+      } else {
+        draft.currentProduct = { name: t };
+      }
       onboarding.step = STEPS.PRODUCT_CATEGORY;
       break;
     case STEPS.PRODUCT_CATEGORY: {
+      if (isYes(t) && draft.currentProduct.category) {
+        onboarding.step = STEPS.PRODUCT_PRICE;
+        break;
+      }
       const cat = parseCategoryChoice(t);
       if (!cat) {
         await sendText(customerKey, `Reply with a number 1–${SUPPLIER_CATEGORIES.length}, or the category slug.`);
@@ -383,6 +457,10 @@ export async function handleSupplierOnboarding(
       break;
     }
     case STEPS.PRODUCT_PRICE: {
+      if (isYes(t) && draft.currentProduct.supplierPriceKes) {
+        onboarding.step = STEPS.PRODUCT_DESC;
+        break;
+      }
       const price = parsePrice(t);
       if (!price || price <= 0) {
         await sendText(customerKey, "Send a valid supply price in KES (e.g. 3500).");
@@ -393,10 +471,10 @@ export async function handleSupplierOnboarding(
       break;
     }
     case STEPS.PRODUCT_DESC:
-      draft.currentProduct.description = lower === "skip" ? "" : t;
+      draft.currentProduct.description = lower === "skip" ? "" : isYes(t) ? draft.currentProduct.description || "" : t;
       onboarding.step = STEPS.PRODUCT_PHOTO;
       setOnboarding(customerKey, onboarding);
-      await promptStep(customerKey, STEPS.PRODUCT_PHOTO, draft);
+      await promptStep(customerKey, STEPS.PRODUCT_PHOTO, draft, { prefill });
       return true;
     case STEPS.PRODUCT_PHOTO:
       if (lower === "skip") {
@@ -439,6 +517,6 @@ export async function handleSupplierOnboarding(
   }
 
   setOnboarding(customerKey, onboarding);
-  await promptStep(customerKey, onboarding.step, draft);
+  await promptStep(customerKey, onboarding.step, draft, { prefill });
   return true;
 }

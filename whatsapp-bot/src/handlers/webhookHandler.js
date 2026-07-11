@@ -31,8 +31,13 @@ import { handleProductRouter, resolveProductQuery, handleCatalogPagination } fro
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
-import { tryRoleMenu, handleVendorMenuAction } from "../services/role-menus.js";
-import { handleSupplierOnboarding, isInSupplierOnboarding } from "../services/supplier-onboarding.js";
+import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
+import { handleSupplierOnboarding, isInSupplierOnboarding, trySupplierContinueFromRef } from "../services/supplier-onboarding.js";
+import {
+  handlePickupOnboarding,
+  isInPickupOnboarding,
+  tryPickupContinueFromRef,
+} from "../services/pickup-point-onboarding.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -304,6 +309,11 @@ export async function handleIncomingMessage(
 
   const normalized = text.toLowerCase().trim();
 
+  if (isInPickupOnboarding(customerKey)) {
+    const handled = await handlePickupOnboarding(customerKey, text, { phone });
+    if (handled) return;
+  }
+
   if (isInSupplierOnboarding(customerKey)) {
     const handled = await handleSupplierOnboarding(customerKey, text, {
       phone,
@@ -316,6 +326,9 @@ export async function handleIncomingMessage(
     });
     if (handled) return;
   }
+
+  if (await tryPickupContinueFromRef(customerKey, combinedText, { phone })) return;
+  if (await trySupplierContinueFromRef(customerKey, combinedText, { phone })) return;
 
   if (await tryRoleMenu(customerKey, text, { phone })) return;
 
@@ -331,7 +344,7 @@ export async function handleIncomingMessage(
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
       return sendText(
         customerKey,
-        "Karibu Sokoni! 🛒\n\nType *menu* for customer shopping.\nSuppliers: *vendor menu* · Admins only: configured admin phone."
+        "Karibu Sokoni! 🛒\n\nType *menu* for customer shopping.\nSuppliers: *vendor menu* · Pickup points: *pickup menu* · Admins only: configured admin phone."
       );
     }
   }
@@ -511,6 +524,9 @@ export async function handleIncomingMessage(
     const option = menuState.options[choice - 1];
     if (menuState.type === "vendor_apply_gate" || menuState.type === "role_menu") {
       return handleVendorMenuAction(customerKey, option.id, { phone });
+    }
+    if (menuState.type === "pickup_apply_gate") {
+      return handlePickupMenuAction(customerKey, option.id, { phone });
     }
     if (option.id === "human_handoff") {
       return sendHumanHandoff(customerKey, {

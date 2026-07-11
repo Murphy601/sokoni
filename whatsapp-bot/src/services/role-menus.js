@@ -5,6 +5,7 @@ import { requireAdminSender } from "./admin.js";
 import { findSupplierByPhone } from "./suppliers.js";
 import { sendWelcome, formatNumberedMenu } from "./menu.js";
 import { startSupplierOnboarding } from "./supplier-onboarding.js";
+import { startPickupOnboarding } from "./pickup-point-onboarding.js";
 import { OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
 
 function normalize(text) {
@@ -20,6 +21,18 @@ export function isCustomerMenuIntent(text) {
     t === "main menu" ||
     t === "shop menu" ||
     /^customer\s+menu$/i.test(t)
+  );
+}
+
+export function isPickupMenuIntent(text) {
+  const t = normalize(text).replace(/^#/, "");
+  return (
+    t === "pickup" ||
+    t === "pickup menu" ||
+    t === "pickup point" ||
+    t === "pickup points" ||
+    t === "pickup point menu" ||
+    /^#(?:pickup|pickuppoint|pickup-point)\b/i.test(String(text || "").trim())
   );
 }
 
@@ -44,6 +57,24 @@ export function isAdminMenuIntent(text) {
 function sendNumberedMenu(to, title, options) {
   setMenuState(to, { type: "role_menu", options });
   return sendText(to, formatNumberedMenu(title, options));
+}
+
+export async function sendPickupApplyPrompt(customerKey) {
+  await sendText(
+    customerKey,
+    `📦 *Become a Sokoni pickup point*\n\n` +
+      `Earn commission for every parcel you receive and hand to customers.\n` +
+      `Same step-by-step flow as sokonimall.com/pickup-points.\n\n` +
+      `Reply *1* to start your application now, or *menu* for customer shopping.`
+  );
+  setMenuState(customerKey, {
+    type: "pickup_apply_gate",
+    options: [
+      { id: "pickup_start_apply", label: "Start pickup point application" },
+      { id: "shop_all", label: "Customer shopping menu" },
+    ],
+  });
+  return true;
 }
 
 /** Registered supplier portal — vendors only. */
@@ -98,6 +129,10 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
     return false;
   }
 
+  if (isPickupMenuIntent(trimmed)) {
+    return sendPickupApplyPrompt(customerKey);
+  }
+
   if (isVendorMenuIntent(trimmed)) {
     const supplier = findSupplierByPhone(phone);
     if (supplier) {
@@ -123,6 +158,18 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
   }
 
   return false;
+}
+
+export async function handlePickupMenuAction(customerKey, actionId, { phone = "" } = {}) {
+  switch (actionId) {
+    case "pickup_start_apply":
+      return startPickupOnboarding(customerKey, { phone });
+    case "customer_menu":
+    case "shop_all":
+      return sendWelcome(customerKey);
+    default:
+      return false;
+  }
 }
 
 export async function handleVendorMenuAction(customerKey, actionId, { phone = "" } = {}) {

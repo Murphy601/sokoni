@@ -3,6 +3,8 @@ const SUPPLIERS_API =
     ? "http://localhost:3001/api/suppliers"
     : "https://bot.sokonimall.com/api/suppliers";
 
+const WHATSAPP_NUMBER = "254117422428";
+
 const CATEGORY_LABELS = {
   "phones-tablets": "Phones & Tablets",
   "tvs-audio": "TVs & Audio",
@@ -210,11 +212,17 @@ async function submitApplication(event) {
 function initApplyPage() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("submitted")) {
+    const ref = params.get("submitted");
     const box = el("success-box");
     const form = el("apply-form");
     if (box) {
       box.classList.remove("hidden");
-      el("application-id").textContent = params.get("submitted");
+      el("application-id").textContent = ref;
+    }
+    const wa = el("continue-wa-link");
+    if (wa) {
+      const msg = `Hi Sokoni, I applied as a supplier on sokonimall.com (ref ${ref}). Continue my application on WhatsApp with prefilled steps.`;
+      wa.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
     }
     if (form) form.classList.add("hidden");
     return;
