@@ -1,3 +1,44 @@
 {
-  "reviews": []
+  "reviews": [
+    {
+      "id": "RV-1783722270780",
+      "orderId": "SK-1007",
+      "customerName": "Jimmy Malden",
+      "productName": "Aldeapo AD-M170 2.4G Bluetooth Wireless Charging Mode Mouse",
+      "stars": 4,
+      "comment": "Menu",
+      "source": "whatsapp",
+      "createdAt": 1783722270780
+    },
+    {
+      "id": "RV-1783629242295",
+      "orderId": "SK-1004",
+      "customerName": "Beth waithira",
+      "productName": "Men's Cotton T-Shirt (3-Pack)",
+      "stars": 5,
+      "comment": "Fast, secure and safe",
+      "source": "whatsapp",
+      "createdAt": 1783629242295
+    },
+    {
+      "id": "RV-1783463900491",
+      "orderId": "SK-1001",
+      "customerName": "Peter njoroge",
+      "productName": "HP 15 Core i5 Laptop 8GB/512GB SSD",
+      "stars": 5,
+      "comment": "Fast delivery plus quality assured. Thanks 😊",
+      "source": "whatsapp",
+      "createdAt": 1783463900491
+    },
+    {
+      "id": "RV-1783462296602",
+      "orderId": null,
+      "customerName": "Jimmy Malden",
+      "productName": "Laptop",
+      "stars": 5,
+      "comment": "Good customer support 👍, also I love the pricing. Good work.",
+      "source": "website",
+      "createdAt": 1783462296602
+    }
+  ]
 }
