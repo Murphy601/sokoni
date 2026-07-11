@@ -108,76 +108,28 @@
       ]
     },
     {
-      "id": "site-categories",
-      "durationMs": 32000,
+      "id": "site-browse",
+      "title": "Site browse",
+      "subtitle": "Categories → subcategories → products on sokonimall.com",
+      "durationMs": 60000,
       "frames": [
         { "at": 0, "action": "clear" },
         { "at": 0, "action": "panel", "panel": "categories" },
-        { "at": 4000, "action": "panel", "panel": "categories", "highlight": "phones-tablets" },
-        { "at": 8000, "action": "panel", "panel": "categories", "highlight": "tvs-audio" },
-        { "at": 12000, "action": "panel", "panel": "categories", "highlight": "health-beauty" },
-        { "at": 16000, "side": "in", "text": "👀 Browsing *Shop by Category* on sokonimall.com…" },
-        { "at": 22000, "action": "panel", "panel": "categories", "highlight": "computing" },
-        { "at": 28000, "side": "in", "text": "Every category links to the same pay-on-delivery catalog on WhatsApp." }
-      ]
-    },
-    {
-      "id": "site-subcategories",
-      "durationMs": 32000,
-      "frames": [
-        { "at": 0, "action": "clear" },
-        { "at": 0, "action": "panel", "panel": "categories", "highlight": "phones-tablets" },
-        { "at": 3000, "action": "panel", "panel": "subcategories", "category": "phones-tablets" },
-        { "at": 7000, "action": "panel", "panel": "subcategories", "category": "phones-tablets", "highlight": "smartphones" },
-        { "at": 11000, "action": "panel", "panel": "subcategories", "category": "phones-tablets", "highlight": "tablets" },
-        { "at": 15000, "side": "in", "text": "Tap *Phones & Tablets* → *Smartphones*, *Tablets*, *Power Banks*…" },
-        { "at": 21000, "action": "panel", "panel": "subcategories", "highlight": "power-banks" },
-        { "at": 27000, "side": "in", "text": "Subcategories filter the same live product feed — no stale listings." }
-      ]
-    },
-    {
-      "id": "site-products",
-      "durationMs": 32000,
-      "frames": [
-        { "at": 0, "action": "clear" },
-        { "at": 0, "action": "panel", "panel": "subcategories", "highlight": "smartphones" },
-        { "at": 2500, "action": "panel", "panel": "products" },
-        { "at": 6000, "action": "panel", "panel": "products", "highlightIndex": 0 },
-        { "at": 10000, "action": "panel", "panel": "products", "highlightIndex": 1 },
-        { "at": 14000, "side": "in", "text": "Scroll real deals — prices match WhatsApp. 💵 Pay on delivery badge on every item." },
-        { "at": 20000, "action": "panel", "panel": "products", "highlightIndex": 2 },
-        { "at": 26000, "side": "in", "text": "Tap any product to order on WhatsApp in one click." }
-      ]
-    },
-    {
-      "id": "site-search",
-      "durationMs": 32000,
-      "frames": [
-        { "at": 0, "action": "clear" },
-        { "at": 0, "action": "panel", "panel": "filmstrip" },
-        { "at": 500, "action": "panel", "panel": "search", "query": "camera phone chini ya 15k" },
-        { "at": 4000, "action": "panel", "panel": "search", "query": "soundbar bluetooth" },
-        { "at": 8000, "side": "in", "text": "🔍 Hero search on sokonimall.com — type what you need in English, Kiswahili or Sheng." },
-        { "at": 14000, "action": "panel", "panel": "search", "query": "perfume oil gift set" },
-        { "at": 20000, "side": "out", "text": "Hi Sokoni, I'm looking for \"camera phone chini ya 15k\" — pay on delivery." },
-        { "at": 23000, "side": "in", "text": "Same search, same catalog — site discovery → WhatsApp checkout." },
-        { "at": 28000, "action": "panel", "panel": "search", "query": "body lotion" }
-      ]
-    },
-    {
-      "id": "site-product-handoff",
-      "durationMs": 36000,
-      "frames": [
-        { "at": 0, "action": "clear" },
-        { "at": 0, "action": "panel", "panel": "products", "highlightIndex": 0 },
-        { "at": 3000, "action": "panel", "panel": "product-detail" },
-        { "at": 7000, "side": "in", "text": "Visitor opens *{{productName}}* on the site…" },
-        { "at": 11000, "side": "out", "text": "Hi Sokoni, tell me more about \"{{productName}}\" ({{price}})." },
-        { "at": 14000, "side": "in", "kind": "product", "productSlot": "featured" },
-        { "at": 19000, "side": "in", "text": "1. 🛒 Order (pay on delivery)\n2. 🤖 Ask about it\n3. ⬅ Main menu" },
-        { "at": 24000, "side": "out", "text": "1" },
-        { "at": 27000, "side": "in", "text": "🛒 Send *name, location & phone* — we'll deliver, you pay on arrival." },
-        { "at": 32000, "action": "panel", "panel": "product-detail" }
+        { "at": 3500, "action": "panel", "panel": "categories", "highlight": "phones-tablets" },
+        { "at": 7000, "action": "panel", "panel": "categories", "highlight": "tvs-audio" },
+        { "at": 10500, "action": "panel", "panel": "categories", "highlight": "health-beauty" },
+        { "at": 14000, "side": "in", "text": "👀 Browsing *Shop by Category* on sokonimall.com…" },
+        { "at": 18000, "action": "panel", "panel": "subcategories", "category": "phones-tablets", "highlight": "smartphones" },
+        { "at": 22000, "action": "panel", "panel": "subcategories", "category": "phones-tablets", "highlight": "tablets" },
+        { "at": 26000, "side": "in", "text": "Tap *Phones & Tablets* → *Smartphones*, *Tablets*, *Power Banks*…" },
+        { "at": 30000, "action": "panel", "panel": "products", "highlightIndex": 0 },
+        { "at": 34000, "action": "panel", "panel": "products", "highlightIndex": 1 },
+        { "at": 38000, "side": "in", "text": "Scroll real deals — prices match WhatsApp. 💵 Pay on delivery on every item." },
+        { "at": 42000, "action": "panel", "panel": "products", "highlightIndex": 2 },
+        { "at": 46000, "action": "panel", "panel": "search", "query": "camera phone chini ya 15k" },
+        { "at": 50000, "side": "out", "text": "Hi Sokoni, I'm looking for \"camera phone chini ya 15k\" — pay on delivery." },
+        { "at": 53000, "side": "in", "text": "Same catalog on web & WhatsApp — discover on site, checkout in chat." },
+        { "at": 57000, "action": "panel", "panel": "product-detail" }
       ]
     },
     {
@@ -192,12 +144,12 @@
         { "at": 14000, "action": "panel", "panel": "pickup-form", "step": 3 },
         { "at": 17500, "side": "in", "text": "📍 *Site application submitted* — ref *PP-2026-0042*\n\nContinue on WhatsApp for step-by-step confirmation." },
         { "at": 21000, "side": "out", "text": "pickup menu" },
-        { "at": 23000, "side": "in", "text": "📦 *Pickup point application* (step 1/8)\n\nShop name from site: *Mama Grace Electronics*\nReply *yes* to keep or type a new name." },
+        { "at": 23000, "side": "in", "text": "📦 *Pickup point application* (step 1/10)\n\nShop name from site: *Mama Grace Electronics*\nReply *yes* to keep or type a new name." },
         { "at": 27000, "side": "out", "text": "yes" },
         { "at": 29000, "side": "in", "text": "Step 2 — County: *Embu* (from site). Reply *yes* or send new county." },
         { "at": 32000, "side": "out", "text": "yes" },
         { "at": 34000, "side": "in", "text": "Step 3 — Address & hours prefilled.\nSecure storage: *yes* · Collect M-Pesa: *yes*" },
-        { "at": 38000, "side": "in", "text": "Step 8 — *Review & submit*\n\n🏪 Mama Grace Electronics\n📍 Embu · Mon–Sat 8am–7pm\n💰 KES 50+ per parcel\n\nReply *submit* to send." },
+        { "at": 38000, "side": "in", "text": "Step 10 — *Review & submit*\n\n🏪 Mama Grace Electronics\n📍 Embu · Mon–Sat 8am–7pm\n💰 KES 50+ per parcel\n\nReply *submit* to send." },
         { "at": 42000, "side": "out", "text": "submit" },
         { "at": 44000, "side": "in", "text": "✅ *Application submitted!*\nReference: *PP-2026-0042*\nWe'll WhatsApp you within 48 hours." },
         { "at": 50000, "action": "panel", "panel": "pickup-info" }
