@@ -31438,5 +31438,26 @@
     "payment": "cod",
     "inStock": true,
     "description": "Premium inspired perfume oil. 1 Litre bottle. Pay on delivery."
+  },
+  {
+    "id": "hb-006",
+    "name": "DOUBLE DOSE Ultra Whitening Molato Glow Soap - Carrot 3X Action",
+    "category": "health-beauty",
+    "subcategory": "skincare",
+    "sourcePriceKes": 500,
+    "priceKes": 650,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "uploadMessageId": "false_202400887484571@lid_AC4F24E7E574E5B44E0072A78715EE07",
+    "imageUrl": "assets/images/products/hb-006.jpg",
+    "imageKey": "6ca391501f81dedf",
+    "imageHash": "6ca391501f81dedf"
   }
 ]

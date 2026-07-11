@@ -18954,5 +18954,20 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/po-bottle-1l.jpg",
     "subcategory": "perfume-oils"
+  },
+  {
+    "id": "hb-006",
+    "name": "DOUBLE DOSE Ultra Whitening Molato Glow Soap - Carrot 3X Action",
+    "category": "health-beauty",
+    "priceKes": 650,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/hb-006.jpg",
+    "subcategory": "skincare"
   }
 ]
