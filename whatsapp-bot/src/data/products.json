@@ -31522,5 +31522,26 @@
     "imageUrl": "assets/images/products/hb-009.jpg",
     "imageKey": "ac42c38be7f22580",
     "imageHash": "ac42c38be7f22580"
+  },
+  {
+    "id": "hb-010",
+    "name": "Double Dose Ultra Whitening Molato Glow Soap - 250g",
+    "category": "health-beauty",
+    "subcategory": "skincare",
+    "sourcePriceKes": 500,
+    "priceKes": 650,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "inStock": true,
+    "uploadMessageId": "false_202400887484571@lid_AC6A95CF11552A3BA0AD206101DC0BF9",
+    "imageUrl": "assets/images/products/hb-010.jpg",
+    "imageKey": "6949d0008f619031",
+    "imageHash": "6949d0008f619031"
   }
 ]

@@ -18999,5 +18999,35 @@
     "payment": "cod",
     "imageUrl": "assets/images/products/hb-008.jpg",
     "subcategory": "skincare"
+  },
+  {
+    "id": "hb-009",
+    "name": "DOUBLE DOSE Ultra Whitening Molato Glow SOAP - Vitamin C Fast Action",
+    "category": "health-beauty",
+    "priceKes": 650,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/hb-009.jpg",
+    "subcategory": "skincare"
+  },
+  {
+    "id": "hb-010",
+    "name": "Double Dose Ultra Whitening Molato Glow Soap - 250g",
+    "category": "health-beauty",
+    "priceKes": 650,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "cod",
+    "imageUrl": "assets/images/products/hb-010.jpg",
+    "subcategory": "skincare"
   }
 ]
