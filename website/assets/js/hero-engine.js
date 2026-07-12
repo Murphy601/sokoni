@@ -107,8 +107,13 @@
     return a;
   }
 
-  /** Round-robin across category/subcategory buckets — full catalog, diverse order. */
+  /**
+   * Round-robin across category/subcategory buckets with a per-bucket cap so
+   * no single subcategory (e.g. perfume-oils with 1,200+ items) dominates.
+   * Returns a diverse, evenly-distributed loop across all categories.
+   */
   function buildDiverseFilmstrip(list) {
+    const PER_SUB_CAP = 6;
     const store = list.filter((p) => p.imageUrl && p.fulfillment === "store" && p.inStock !== false);
     const buckets = new Map();
     for (const p of store) {
@@ -116,7 +121,10 @@
       if (!buckets.has(key)) buckets.set(key, []);
       buckets.get(key).push(p);
     }
-    for (const arr of buckets.values()) shuffle(arr);
+    for (const arr of buckets.values()) {
+      shuffle(arr);
+      arr.length = Math.min(arr.length, PER_SUB_CAP);
+    }
     const keys = shuffle([...buckets.keys()]);
     const out = [];
     let more = true;
