@@ -8,9 +8,8 @@ import { getSession, pushMessage, setProductContext, isHumanHandoff } from "./se
 import { normalizeShopperQuery } from "./shopper-language.js";
 
 const FALLBACK_MODELS = [
-  "google/gemini-2.5-flash",
-  "openai/gpt-4o-mini",
-  "google/gemini-2.5-flash-lite",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "deepseek/deepseek-r1-distill-llama-70b:free",
 ];
 
 const SYSTEM_PROMPT = `You are "Sokoni AI" — the intelligent WhatsApp assistant for Sokoni Mall (sokonimall.com), Kenya.

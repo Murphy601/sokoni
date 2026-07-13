@@ -58,7 +58,7 @@ fi
 
 cd "$BOT_DIR"
 
-# Ensure .env exists and upgrade legacy tiny free models → Gemini Flash.
+# Ensure .env exists and upgrade legacy/paid chat models → free OpenRouter stack.
 ENV_FILE="$BOT_DIR/.env"
 if [ ! -f "$ENV_FILE" ] && [ -f "$REPO/.env" ]; then
   ENV_FILE="$REPO/.env"
@@ -79,17 +79,20 @@ set_env_kv() {
 
 if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
-  if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE 'nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b'; then
-    echo "==> Upgrading OPENAI_MODEL → google/gemini-2.5-pro (was: ${CURRENT_MODEL:-unset})"
-    set_env_kv "$ENV_FILE" "OPENAI_MODEL" "google/gemini-2.5-pro"
+  FREE_MODEL="google/gemini-2.0-flash-exp:free"
+  FREE_FALLBACKS="meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-distill-llama-70b:free"
+  if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE 'nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|google/gemini-2\.5-pro|google/gemini-2\.5-flash$|google/gemini-2\.5-flash-lite$'; then
+    echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
+    set_env_kv "$ENV_FILE" "OPENAI_MODEL" "$FREE_MODEL"
   fi
-  if ! grep -qE '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE"; then
-    set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "google/gemini-2.5-flash,openai/gpt-4o-mini,google/gemini-2.5-flash-lite"
-    echo "==> Added OPENAI_MODEL_FALLBACKS"
+  CURRENT_FALLBACKS="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.5-flash[^:]|nemotron-nano'; then
+    set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "$FREE_FALLBACKS"
+    echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
   echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
 else
-  echo "WARN: No .env found — bot uses code defaults (google/gemini-2.5-pro)"
+  echo "WARN: No .env found — bot uses code defaults (${FREE_MODEL:-google/gemini-2.0-flash-exp:free})"
 fi
 
 npm install --omit=dev 2>/dev/null || npm install

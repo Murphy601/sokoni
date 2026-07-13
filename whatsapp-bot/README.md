@@ -47,21 +47,21 @@ Reply with `1`, `2`, etc. for menu choices (not buttons).
 | `WAHA_SESSION` | Session name (default: `default`) |
 | `OPENAI_API_KEY` | OpenRouter API key |
 | `OPENAI_BASE_URL` | `https://openrouter.ai/api/v1` |
-| `OPENAI_MODEL` | Chat model (default: `google/gemini-2.5-flash`) |
+| `OPENAI_MODEL` | Chat model (default: `google/gemini-2.0-flash-exp:free`) |
 | `OPENAI_MODEL_FALLBACKS` | Comma-separated backup models if primary fails |
 
 ### AI model choice (English / Kiswahili / Sheng)
 
-The bot uses OpenRouter. Avoid tiny free models (e.g. `nemotron-nano-9b`) for customer chat — they misread Sheng and invent products.
+The bot uses OpenRouter. Default is **free** (`:free` suffix = no credits per message). Avoid tiny models like `nemotron-nano-9b` — they misread Sheng.
 
 | Tier | OpenRouter model | When to use |
 | --- | --- | --- |
-| **Recommended** | `google/gemini-2.5-flash` | Best balance: multilingual, fast, affordable |
-| **High thinking** | `google/gemini-2.5-pro` | Hard comparisons, vague requests, fewer wrong assumptions |
-| **Premium** | `anthropic/claude-sonnet-4` | Highest nuance for mixed EN/Swahili/Sheng |
-| **Fallback** | `openai/gpt-4o-mini` | Reliable backup if Gemini is down |
+| **Default (free)** | `google/gemini-2.0-flash-exp:free` | No OpenRouter credits; multilingual |
+| **Free fallback** | `meta-llama/llama-3.3-70b-instruct:free` | Backup if Gemini free tier is busy |
+| **Paid upgrade** | `google/gemini-2.5-flash` | Higher volume, fewer rate limits |
+| **High thinking (paid)** | `google/gemini-2.5-pro` | Hardest queries only |
 
-Set on the VM in `whatsapp-bot/.env`, then `bash scripts/deploy-bot.sh`. Menus, orders, and admin flows are unchanged — only the AI reply layer upgrades.
+Set on the VM in `whatsapp-bot/.env`, then `bash scripts/deploy-bot.sh`. Menus, orders, catalog, and admin flows are unchanged.
 
 | `PUBLIC_SITE_URL` | HTTPS site for product images |
 | `BUSINESS_WHATSAPP_NUMBER` | Your number — receives COD order alerts |

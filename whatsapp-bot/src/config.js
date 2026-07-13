@@ -20,9 +20,9 @@ export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    model: process.env.OPENAI_MODEL || "google/gemini-2.5-pro",
+    model: process.env.OPENAI_MODEL || "google/gemini-2.0-flash-exp:free",
     modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
-      "google/gemini-2.5-flash,openai/gpt-4o-mini,google/gemini-2.5-flash-lite")
+      "meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-distill-llama-70b:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
