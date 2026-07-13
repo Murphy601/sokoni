@@ -8,8 +8,8 @@ import { getSession, pushMessage, setProductContext, isHumanHandoff } from "./se
 import { normalizeShopperQuery } from "./shopper-language.js";
 
 const FALLBACK_MODELS = [
+  "qwen/qwen3-next-80b-a3b-instruct:free",
   "meta-llama/llama-3.3-70b-instruct:free",
-  "deepseek/deepseek-r1-distill-llama-70b:free",
 ];
 
 const SYSTEM_PROMPT = `You are "Sokoni AI" — the intelligent WhatsApp assistant for Sokoni Mall (sokonimall.com), Kenya.
@@ -251,6 +251,7 @@ function getClient() {
     client = new OpenAI({
       apiKey: config.openai.apiKey,
       baseURL: config.openai.baseUrl,
+      timeout: 30_000,
       defaultHeaders: {
         "HTTP-Referer": config.publicSiteUrl || "http://localhost:3001",
         "X-Title": config.brand.name,

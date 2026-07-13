@@ -79,20 +79,32 @@ set_env_kv() {
 
 if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
-  FREE_MODEL="google/gemini-2.0-flash-exp:free"
-  FREE_FALLBACKS="meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-distill-llama-70b:free"
-  if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE 'nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|google/gemini-2\.5-pro|google/gemini-2\.5-flash$|google/gemini-2\.5-flash-lite$'; then
+  FREE_MODEL="google/gemma-4-31b-it:free"
+  FREE_FALLBACKS="qwen/qwen3-next-80b-a3b-instruct:free,meta-llama/llama-3.3-70b-instruct:free"
+  FREE_VISION="google/gemma-4-31b-it:free"
+  FREE_VISION_FALLBACKS="google/gemma-4-26b-a4b-it:free,nvidia/nemotron-nano-12b-v2-vl:free"
+  if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE 'nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|google/gemini-2\.0-flash-exp:free|deepseek/deepseek-r1|google/gemini-2\.5-pro|google/gemini-2\.5-flash$|google/gemini-2\.5-flash-lite$'; then
     echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
     set_env_kv "$ENV_FILE" "OPENAI_MODEL" "$FREE_MODEL"
   fi
   CURRENT_FALLBACKS="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.5-flash[^:]|nemotron-nano'; then
+  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano'; then
     set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "$FREE_FALLBACKS"
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
+  CURRENT_VISION="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash'; then
+    set_env_kv "$ENV_FILE" "CATALOG_VISION_MODEL" "$FREE_VISION"
+    echo "==> Set CATALOG_VISION_MODEL → ${FREE_VISION}"
+  fi
+  CURRENT_VISION_FB="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash-lite'; then
+    set_env_kv "$ENV_FILE" "CATALOG_VISION_FALLBACKS" "$FREE_VISION_FALLBACKS"
+    echo "==> Set CATALOG_VISION_FALLBACKS → ${FREE_VISION_FALLBACKS}"
+  fi
   echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
 else
-  echo "WARN: No .env found — bot uses code defaults (${FREE_MODEL:-google/gemini-2.0-flash-exp:free})"
+  echo "WARN: No .env found — bot uses code defaults (google/gemma-4-31b-it:free)"
 fi
 
 npm install --omit=dev 2>/dev/null || npm install

@@ -20,17 +20,17 @@ export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    model: process.env.OPENAI_MODEL || "google/gemini-2.0-flash-exp:free",
+    model: process.env.OPENAI_MODEL || "google/gemma-4-31b-it:free",
     modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
-      "meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-distill-llama-70b:free")
+      "qwen/qwen3-next-80b-a3b-instruct:free,meta-llama/llama-3.3-70b-instruct:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
   },
   /** WhatsApp admin catalog intake (photos + #add / #price). */
   catalog: {
-    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.5-flash",
-    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemini-2.0-flash-exp:free,google/gemini-2.5-flash-lite")
+    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemma-4-31b-it:free",
+    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemma-4-26b-a4b-it:free,nvidia/nemotron-nano-12b-v2-vl:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),

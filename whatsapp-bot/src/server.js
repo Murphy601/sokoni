@@ -62,6 +62,8 @@ app.get("/health", (_req, res) => {
     status: "ok",
     build: BUILD_ID,
     aiModel: config.openai.model || null,
+    aiConfigured: Boolean(config.openai.apiKey),
+    wahaConfigured: Boolean(config.waha.apiUrl),
   });
 });
 

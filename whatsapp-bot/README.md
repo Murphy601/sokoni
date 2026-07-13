@@ -47,7 +47,7 @@ Reply with `1`, `2`, etc. for menu choices (not buttons).
 | `WAHA_SESSION` | Session name (default: `default`) |
 | `OPENAI_API_KEY` | OpenRouter API key |
 | `OPENAI_BASE_URL` | `https://openrouter.ai/api/v1` |
-| `OPENAI_MODEL` | Chat model (default: `google/gemini-2.0-flash-exp:free`) |
+| `OPENAI_MODEL` | Chat model (default: `google/gemma-4-31b-it:free`) |
 | `OPENAI_MODEL_FALLBACKS` | Comma-separated backup models if primary fails |
 
 ### AI model choice (English / Kiswahili / Sheng)
@@ -56,8 +56,8 @@ The bot uses OpenRouter. Default is **free** (`:free` suffix = no credits per me
 
 | Tier | OpenRouter model | When to use |
 | --- | --- | --- |
-| **Default (free)** | `google/gemini-2.0-flash-exp:free` | No OpenRouter credits; multilingual |
-| **Free fallback** | `meta-llama/llama-3.3-70b-instruct:free` | Backup if Gemini free tier is busy |
+| **Default (free)** | `google/gemma-4-31b-it:free` | Current OpenRouter free tier; multilingual |
+| **Free fallback** | `qwen/qwen3-next-80b-a3b-instruct:free` | Backup if Gemma is rate-limited |
 | **Paid upgrade** | `google/gemini-2.5-flash` | Higher volume, fewer rate limits |
 | **High thinking (paid)** | `google/gemini-2.5-pro` | Hardest queries only |
 
