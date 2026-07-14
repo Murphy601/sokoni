@@ -392,22 +392,6 @@
     "subcategory": "bedding"
   },
   {
-    "id": "ho-003",
-    "name": "360° Spin Mop & Bucket Set",
-    "category": "home-office",
-    "priceKes": 1599,
-    "rating": 4.5,
-    "reviews": 2000,
-    "source": "Sokoni",
-    "emoji": "🧹",
-    "scope": "local",
-    "fulfillment": "store",
-    "payment": "cod",
-    "inStock": true,
-    "imageUrl": "assets/images/products/ho-003.jpg",
-    "subcategory": "cleaning"
-  },
-  {
     "id": "ho-004",
     "name": "Modern Silent Wall Clock",
     "category": "home-office",

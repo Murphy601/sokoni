@@ -613,7 +613,8 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "cod",
-    "imageKey": "ccfe6f4ae185"
+    "imageKey": "ccfe6f4ae185",
+    "inStock": false
   },
   {
     "id": "ho-004",
