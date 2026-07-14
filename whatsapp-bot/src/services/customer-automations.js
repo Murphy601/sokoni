@@ -1,7 +1,8 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
-import { getOrdersForCustomer } from "./orders.js";
+import { getOrdersForCustomer, getOrder, updateOrderStatus } from "./orders.js";
 import { getCustomerMeta, setCustomerMeta } from "./session.js";
+import { alertAdminIssueAction } from "./ops-admin.js";
 import {
   welcomeBackMessage,
   outOfOfficeMessage,
@@ -20,6 +21,11 @@ import {
   weekendDeliveryMessage,
   sizeExchangeMessage,
   aiSurveyMessage,
+  damagedReturnMessage,
+  wrongOrderApologyMessage,
+  postDeliveryDamageMessage,
+  mpesaTroubleshootMessage,
+  delayedDeliveryMessage,
   PROMO_CODE,
   OFFER_PERCENT,
 } from "./trust-copy.js";
@@ -64,6 +70,76 @@ function referralCodeFor(customerKey) {
   return digits ? `SK${digits}` : "SOKONI";
 }
 
+function latestRelevantOrder(customerKey, phone = "") {
+  const orders = getOrdersForCustomer(customerKey, phone);
+  if (!orders.length) return null;
+  const active = orders.find((o) => !["cancelled"].includes(o.status));
+  return active || orders[0];
+}
+
+function orderIdFromText(text) {
+  const m = String(text || "").match(/\b(SK-\d+)\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+async function handleReplaceOrCancel(customerKey, action, { phone = "", displayName = "" } = {}) {
+  const meta = getCustomerMeta(customerKey) || {};
+  const orderId = meta.wrongOrderIssueId || meta.issueOrderId;
+  const order = orderId ? getOrder(orderId) : latestRelevantOrder(customerKey, phone);
+
+  if (!order) {
+    await sendText(
+      customerKey,
+      "I couldn't find your order. Reply with your order number (e.g. *SK-1042*) or type *track*."
+    );
+    return true;
+  }
+
+  if (action === "CANCEL") {
+    if (!["cancelled", "delivered"].includes(order.status)) {
+      updateOrderStatus(order.id, "cancelled");
+    }
+    setCustomerMeta(customerKey, {
+      awaitingWrongOrderFix: false,
+      wrongOrderIssueId: null,
+      issueOrderId: null,
+      awaitingCustomerAction: null,
+    });
+    await sendText(
+      customerKey,
+      `✅ Request closed for order *${order.id}*. You owe nothing on pay-on-delivery.\n\nType *menu* to shop again. 🙏`
+    );
+    await alertAdminIssueAction({
+      customerKey,
+      orderId: order.id,
+      action: "CANCEL",
+      displayName,
+      phone,
+    });
+    return true;
+  }
+
+  setCustomerMeta(customerKey, {
+    awaitingWrongOrderFix: false,
+    wrongOrderIssueId: order.id,
+    issueOrderId: order.id,
+  });
+  await sendText(
+    customerKey,
+    `✅ Replacement logged for order *${order.id}*.\n\n` +
+      `Our team will dispatch the correct item. Hand the wrong package to the rider — no return fees.\n\n` +
+      `Type *Human* if you need us urgently. 🙏`
+  );
+  await alertAdminIssueAction({
+    customerKey,
+    orderId: order.id,
+    action: "REPLACE",
+    displayName,
+    phone,
+  });
+  return true;
+}
+
 /**
  * Keyword / lifecycle automations. Returns true if the message was fully handled.
  * Does not intercept menu, track, paid, or active order flows.
@@ -71,6 +147,124 @@ function referralCodeFor(customerKey) {
 export async function tryCustomerAutomation(customerKey, text, { phone = "", displayName = "" } = {}) {
   const t = normalize(text);
   if (!t) return false;
+
+  if (/^(replace|correct)$/i.test(t)) {
+    return handleReplaceOrCancel(customerKey, "REPLACE", { phone, displayName });
+  }
+
+  if (/^cancel$/i.test(t) && (getCustomerMeta(customerKey)?.awaitingWrongOrderFix || getCustomerMeta(customerKey)?.wrongOrderIssueId)) {
+    return handleReplaceOrCancel(customerKey, "CANCEL", { phone, displayName });
+  }
+
+  if (
+    /wrong\s+(order|item|product|package)|not\s+what\s+i\s+ordered|bidhaa\s+sio|sio\s+hiyo|mix[\s-]?up|packing\s+mistake/i.test(
+      t
+    ) ||
+    /imefika\s+(vibaya|sio\s+sahihi)/i.test(t)
+  ) {
+    const order = latestRelevantOrder(customerKey, phone);
+    const oid = orderIdFromText(text) || order?.id;
+    const resolved = oid ? getOrder(oid) : order;
+    const msg = resolved
+      ? wrongOrderApologyMessage({
+          orderId: resolved.id,
+          productName: resolved.productName,
+          customerName: displayName || resolved.customerName,
+        })
+      : damagedReturnMessage({ orderId: "your order", productName: "your item", reason: "wrong item" });
+    setCustomerMeta(customerKey, {
+      awaitingWrongOrderFix: true,
+      wrongOrderIssueId: resolved?.id || null,
+    });
+    await sendText(customerKey, msg);
+    if (resolved && config.admin.primary) {
+      try {
+        await sendText(
+          config.admin.primary,
+          `⚠️ *Wrong order report*\nOrder: *${resolved.id}*\nCustomer: ${displayName || "—"} · ${phone || customerKey}\n\nSend: #apolog ${resolved.id}`
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    return true;
+  }
+
+  if (
+    /damaged|broken|faulty|imevunjika|haifanyi\s+kazi|not\s+working|cracked|dented/i.test(t)
+  ) {
+    const order = latestRelevantOrder(customerKey, phone);
+    const oid = orderIdFromText(text) || order?.id;
+    const resolved = oid ? getOrder(oid) : order;
+    if (resolved) {
+      setCustomerMeta(customerKey, { awaitingDamagePhoto: true, issueOrderId: resolved.id });
+      await sendText(
+        customerKey,
+        postDeliveryDamageMessage({
+          orderId: resolved.id,
+          productName: resolved.productName,
+          customerName: displayName || resolved.customerName,
+        })
+      );
+    } else {
+      await sendText(customerKey, damagedReturnMessage({ orderId: "your order", productName: "your item" }));
+    }
+    return true;
+  }
+
+  if (getCustomerMeta(customerKey)?.awaitingDamagePhoto) {
+    const hasMediaHint = /photo|video|image|picha|sent/i.test(t) || t.length > 20;
+    if (hasMediaHint) {
+      const issueOrderId = getCustomerMeta(customerKey)?.issueOrderId;
+      setCustomerMeta(customerKey, { awaitingDamagePhoto: false, issueOrderId: null });
+      await sendText(
+        customerKey,
+        `✅ Thanks — we've logged your damage report. A replacement will be arranged.\n\nType *Human* for urgent help. 🙏`
+      );
+      if (config.admin.primary) {
+        try {
+          await sendText(
+            config.admin.primary,
+            `📸 *Damage report + media*\nOrder: *${issueOrderId || "—"}*\nCustomer: ${displayName || "—"} · ${phone || customerKey}\nNote: ${text.slice(0, 200)}`
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      return true;
+    }
+  }
+
+  if (
+    /mpesa\s+(error|fail)|payment\s+(fail|error)|transaction\s+(fail|error)|haikubali|lipa\s+haikubali|network\s+glitch/i.test(
+      t
+    )
+  ) {
+    const order = latestRelevantOrder(customerKey, phone);
+    await sendText(
+      customerKey,
+      mpesaTroubleshootMessage({
+        orderId: order?.id || "your order",
+        amountKes: order?.priceKes,
+      })
+    );
+    return true;
+  }
+
+  if (/delay|delayed|bado\s+haijafika|where\s+is\s+my\s+order|order\s+late/i.test(t)) {
+    const order = latestRelevantOrder(customerKey, phone);
+    if (order && !["delivered", "cancelled"].includes(order.status)) {
+      await sendText(
+        customerKey,
+        delayedDeliveryMessage({
+          orderId: order.id,
+          productName: order.productName,
+          newWindow: "later today",
+        })
+      );
+      return true;
+    }
+  }
 
   if (/^(stop|unsubscribe|opt\s*out)$/i.test(t)) {
     setCustomerMeta(customerKey, { broadcastOptOut: true });

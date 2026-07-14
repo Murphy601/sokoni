@@ -33,6 +33,14 @@ import {
 import { handleCatalogCommand, isCatalogCommand } from "./catalog-admin.js";
 import { broadcastFooter, OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
 import { isBroadcastOptedOut } from "./customer-automations.js";
+import {
+  handleApologCommand,
+  handleDamageCommand,
+  handleDelayCommand,
+  handleOosCommand,
+  handleTransitCommand,
+  handleRecoverCommand,
+} from "./ops-admin.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -359,6 +367,14 @@ function adminHelpText() {
     `🔎 *#nearby SK-1042* — suggest pickup partners near customer\n` +
     `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
     `   _(or *#SK-1042 confirmed* — same as #status)_\n\n` +
+    `🙏 *Customer issue commands*\n` +
+    `• *#apolog SK-1042* — wrong-item apology (customer replies REPLACE/CANCEL)\n` +
+    `• *#wrong SK-1042 ordered:sandals received:perfume* — same as #apolog with details\n` +
+    `• *#damage SK-1042* — damaged/wrong variant return at door\n` +
+    `• *#recover SK-1042* — post-delivery damage (ask for photo)\n` +
+    `• *#delay SK-1042 later today* — delivery delay apology\n` +
+    `• *#oos SK-1042* — out of stock → cancel + notify customer\n` +
+    `• *#transit SK-1042 rider:John phone:0712… eta:2 hours* — rider on the way alert\n\n` +
     `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
     `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
     `💰 *#payouts* — supplier amounts owed\n` +
@@ -796,6 +812,30 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   if (/^#paid\b/i.test(t)) {
     const oid = t.replace(/^#paid\b/i, "").trim().split(/\s+/)[0];
     await handlePaidCommand(adminChatId, oid);
+    return true;
+  }
+  if (/^#(apolog|wrong)\b/i.test(t)) {
+    await handleApologCommand(adminChatId, t.replace(/^#(apolog|wrong)\b/i, ""));
+    return true;
+  }
+  if (/^#damage\b/i.test(t)) {
+    await handleDamageCommand(adminChatId, t.replace(/^#damage\b/i, ""));
+    return true;
+  }
+  if (/^#recover\b/i.test(t)) {
+    await handleRecoverCommand(adminChatId, t.replace(/^#recover\b/i, ""));
+    return true;
+  }
+  if (/^#delay\b/i.test(t)) {
+    await handleDelayCommand(adminChatId, t.replace(/^#delay\b/i, ""));
+    return true;
+  }
+  if (/^#oos\b/i.test(t)) {
+    await handleOosCommand(adminChatId, t.replace(/^#oos\b/i, ""));
+    return true;
+  }
+  if (/^#transit\b/i.test(t)) {
+    await handleTransitCommand(adminChatId, t.replace(/^#transit\b/i, ""));
     return true;
   }
 

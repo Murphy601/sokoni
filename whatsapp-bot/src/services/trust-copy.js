@@ -225,6 +225,28 @@ export function damagedReturnMessage({ orderId, productName, reason = "damaged /
   );
 }
 
+/** Admin or automated reply when warehouse packed / rider delivered the wrong item. */
+export function wrongOrderApologyMessage({
+  orderId,
+  productName,
+  customerName,
+  orderedItem,
+  receivedItem,
+}) {
+  const ordered = orderedItem || productName || "your item";
+  const received = receivedItem || "a different item";
+  return (
+    `Habari${customerName ? ` *${customerName}*` : ""} — pole sana 🙏\n\n` +
+    `We got order *${orderId}* wrong. You ordered *${ordered}* but received *${received}*. That's on us, not you.\n\n` +
+    `1️⃣ Keep the package sealed if you can\n` +
+    `2️⃣ Reply *REPLACE* — we'll send the correct item\n` +
+    `   OR reply *CANCEL* — we'll close it, no charge\n\n` +
+    `🛡️ Pay-on-delivery: you owe nothing for the wrong item. Hand it back to the rider at no extra cost.\n\n` +
+    `As a sorry: use code *${PROMO_CODE}* for ${OFFER_PERCENT}% off your next order.\n` +
+    `Reply here or type *Human* if you need us faster. Asante for your patience. 🙏`
+  );
+}
+
 export function mpesaTroubleshootMessage({ orderId, amountKes }) {
   const amt = Number(amountKes);
   const priceLine = Number.isFinite(amt) ? `KES ${amt.toLocaleString()}` : "your order total";
