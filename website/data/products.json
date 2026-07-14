@@ -264,22 +264,6 @@
     "subcategory": "kettles"
   },
   {
-    "id": "ap-003",
-    "name": "Ramtons Dry Iron Box",
-    "category": "appliances",
-    "priceKes": 1399,
-    "rating": 4.4,
-    "reviews": 780,
-    "source": "Sokoni",
-    "emoji": "🧺",
-    "scope": "local",
-    "fulfillment": "store",
-    "payment": "cod",
-    "inStock": true,
-    "imageUrl": "assets/images/products/ap-003.jpg",
-    "subcategory": "irons"
-  },
-  {
     "id": "ap-005",
     "name": "6.5kg Twin Tub Washing Machine",
     "category": "appliances",

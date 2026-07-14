@@ -391,7 +391,8 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "cod",
-    "imageKey": "6098dff73d56"
+    "imageKey": "6098dff73d56",
+    "inStock": false
   },
   {
     "id": "ap-004",
