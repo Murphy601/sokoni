@@ -17,6 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 const MASTER_CATALOG = path.join(__dirname, "..", "data", "products.json");
 const IMAGES_DIR = path.join(REPO_ROOT, "website", "assets", "images", "products");
+const BUILD_SCRIPT = path.join(REPO_ROOT, "scripts", "build-site-catalog.mjs");
 const SYNC_SCRIPT = path.join(REPO_ROOT, "scripts", "sync-catalog.mjs");
 const COMMIT_SCRIPT = path.join(REPO_ROOT, "scripts", "commit-catalog.mjs");
 const PRODUCT_IMAGES_MODULE = path.join(REPO_ROOT, "scripts", "lib", "product-images.mjs");
@@ -1011,9 +1012,9 @@ export async function forcePublishCatalog(adminChatId) {
   await publishCatalog({ count, adminChatId });
 }
 
-async function publishCatalog({ count = 1, adminChatId = null } = {}) {
-  console.log("[catalog-admin] publishing catalog…");
-  await runNodeScript(SYNC_SCRIPT);
+async function publishCatalog({ count = 1, adminChatId = null, mode = "fast" } = {}) {
+  console.log(`[catalog-admin] publishing catalog (${mode})…`);
+  await runNodeScript(mode === "full" ? SYNC_SCRIPT : BUILD_SCRIPT);
   if (config.catalog.autoPush) {
     try {
       await runNodeScript(COMMIT_SCRIPT);
@@ -1293,11 +1294,22 @@ export async function handleCatalogCommand(adminChatId, text) {
     const idx = products.findIndex((p) => p.id === existing.id);
     products[idx] = existing;
     await saveMaster(products);
-    schedulePublish(adminChatId);
-    await sendAdminOnlyText(
-      adminChatId,
-      `${existing.inStock ? "✅" : "🚫"} *${existing.id}* ${existing.name} — ${existing.inStock ? "back in shop" : "hidden from shop"}`
-    );
+    trackCatalogAdmin(adminChatId);
+    try {
+      await publishCatalog({ count: 1, adminChatId, mode: "fast" });
+      await sendAdminOnlyText(
+        adminChatId,
+        `${existing.inStock ? "✅" : "🚫"} *${existing.id}* ${existing.name}\n` +
+          `${existing.inStock ? "Back in shop" : "Hidden from shop"} — *pushed to website*\n` +
+          `_Live on sokonimall.com in ~1–2 min._`
+      );
+    } catch (err) {
+      await sendAdminOnlyText(
+        adminChatId,
+        `${existing.inStock ? "✅" : "🚫"} *${existing.id}* saved in catalog, but site sync failed.\n` +
+          `${err.message}\n\nTry: *#sync*`
+      );
+    }
     return true;
   }
 

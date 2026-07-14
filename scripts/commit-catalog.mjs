@@ -23,6 +23,8 @@ const GIT_ENV = {
 const CATALOG_PATHS = [
   "whatsapp-bot/src/data/products.json",
   "website/data/products.json",
+  "website/data/catalog-menu.json",
+  "website/data/catalog-version.json",
   "website/assets/images/products/",
 ];
 
