@@ -200,8 +200,9 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find|sync|import-catalog)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find|sync|import-catalog|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
+  if (/^(?:add|price|stock|find|sync|import-catalog|catalog)\b/i.test(t)) return true;
   return false;
 }
 

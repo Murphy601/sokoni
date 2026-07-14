@@ -140,7 +140,7 @@ function buildVisionPrompt(caption = "") {
 function parseCost(text) {
   const t = String(text || "");
   const patterns = [
-    /(?:cost|wholesale|supply|price|@)\s*[:=]?\s*ksh?\s*([\d,]+)/i,
+    /(?:cost|wholesale|supply|price|@)\s*[:=]?\s*(?:ksh|kes)?\s*([\d,]+)/i,
     /(?:cost|wholesale|supply|price|@)\s*[:=]?\s*([\d,]+)\s*(?:ksh|kes)\b/i,
     /\b(\d{2,6})\s*ksh\b/i,
     /\b(\d{2,6})\s*(?:ksh|kes)\b/i,
@@ -157,6 +157,22 @@ function parseCost(text) {
     }
   }
   return null;
+}
+
+function parseBareCost(part) {
+  const t = String(part || "");
+  const afterCost = t.match(/(?:cost|price|@)\s*([\d,]+)/i);
+  if (afterCost) {
+    const n = Math.round(Number(afterCost[1].replace(/,/g, "")));
+    if (n >= 10 && n <= 5_000_000) return n;
+  }
+  const matches = [...t.matchAll(/\b(\d{2,7})\b/g)];
+  let best = null;
+  for (const m of matches) {
+    const n = Math.round(Number(String(m[1]).replace(/,/g, "")));
+    if (n >= 10 && n <= 5_000_000) best = n;
+  }
+  return best;
 }
 
 /** Hints from WhatsApp caption when the photo has no price tag or name. */
@@ -445,9 +461,28 @@ const GIT_SCRIPT_ENV = {
   GIT_COMMITTER_EMAIL: "bot@sokonimall.com",
 };
 
+/** Normalize admin catalog input — help text used `add →` but parser required `#add`. */
+export function normalizeCatalogCommandLine(text) {
+  let line = primaryCatalogCommandLine(text).trim();
+  if (!line) return "";
+
+  // Help-text arrows: "add → Name" or "#add → Name"
+  line = line.replace(
+    /^#?(add|price|stock|find|sync|import-catalog|catalog|done)\s*(?:→|->|—|=>|:)\s*/i,
+    (_, cmd) => `#${cmd.toLowerCase()} `
+  );
+
+  // Bare verb without #: "add Name | cost 12000"
+  if (/^(add|price|stock|find|sync|import-catalog|catalog|done)\b/i.test(line) && !line.startsWith("#")) {
+    line = `#${line}`;
+  }
+
+  return line.trim();
+}
+
 /** True only when the message itself is a catalog command (not help text mentioning #add). */
 export function isCatalogCommand(text) {
-  const line = primaryCatalogCommandLine(text);
+  const line = normalizeCatalogCommandLine(text);
   return /^#(?:catalog|add|price|stock|find|sync|import-catalog|done)\b/i.test(line);
 }
 
@@ -455,17 +490,17 @@ export function isCatalogCommand(text) {
 export function primaryCatalogCommandLine(text) {
   const raw = String(text || "").trim();
   if (!raw) return "";
-  if (/^#(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(raw)) return raw;
+  if (/^#?(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(raw)) return raw;
   for (const line of raw.split("\n")) {
     const t = line.trim();
-    if (/^#(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(t)) return t;
+    if (/^#?(?:import-catalog|sync|catalog|add|price|stock|find|done)\b/i.test(t)) return t;
   }
   return raw;
 }
 
 /** Pull the #command line out of a message that may include links or captions. */
 export function extractCatalogCommandLine(text) {
-  return primaryCatalogCommandLine(text);
+  return normalizeCatalogCommandLine(text);
 }
 
 /** Parse: #import-catalog 254723813039  OR  #import-catalog https://wa.me/c/254723813039 */
@@ -675,15 +710,16 @@ const UPSERT_MATCH = {
   ID: "id",
 };
 
-/** Parse: #add Name | category | cost 12000 */
+/** Parse: #add Name | category | cost 12000  OR  add → Name | 12000 */
 export function parseAddCommand(text) {
-  const raw = text.replace(/^#add\b/i, "").trim();
+  const normalized = normalizeCatalogCommandLine(text);
+  const raw = normalized.replace(/^#add\b/i, "").trim();
   if (!raw) return { error: "missing_fields" };
 
   const parts = raw.split("|").map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return { error: "missing_fields" };
 
-  const name = parts[0];
+  const name = parts[0].replace(/^[→\-\>]\s*/, "").trim();
   let category = null;
   let cost = null;
 
@@ -693,26 +729,39 @@ export function parseAddCommand(text) {
       category = part;
       continue;
     }
-    const c = parseCost(part);
+    const c = parseCost(part) ?? parseBareCost(part);
     if (c != null) cost = c;
   }
 
-  if (cost == null) cost = parseCost(raw);
+  if (cost == null) cost = parseCost(raw) ?? parseBareCost(raw);
   if (!category) category = inferCategory(name);
   if (!name || cost == null) return { error: "missing_fields", name, category, cost };
 
   return { name, category, sourcePriceKes: cost, subcategory: slugifySubcategory(name, category) };
 }
 
-/** Parse: #price pt-001 cost 12000  OR  #price Tecno Spark 12000 */
+/** Parse: #price pt-001 cost 12000  OR  #price Tecno Spark | cost 13499 */
 export function parsePriceCommand(text) {
-  const raw = text.replace(/^#price\b/i, "").trim();
+  const normalized = normalizeCatalogCommandLine(text);
+  const raw = normalized.replace(/^#price\b/i, "").trim().replace(/^[→\-\>]\s*/, "");
   if (!raw) return { error: "missing_fields" };
 
-  const pipeParts = raw.split("|").map((s) => s.trim());
-  const query = pipeParts[0];
-  const cost = parseCost(pipeParts[1] || raw);
-  if (!query || cost == null) return { error: "missing_fields", query, cost };
+  if (raw.includes("|")) {
+    const pipeParts = raw.split("|").map((s) => s.trim());
+    const query = pipeParts[0];
+    const cost = parseCost(pipeParts[1] || "") ?? parseBareCost(pipeParts[1] || "");
+    if (!query || cost == null) return { error: "missing_fields", query, cost };
+    return { query, sourcePriceKes: cost };
+  }
+
+  const cost = parseCost(raw) ?? parseBareCost(raw);
+  if (cost == null) return { error: "missing_fields", query: raw, cost };
+
+  const query = raw
+    .replace(/\s+(?:cost|price|@)\s*[\d,]+(?:\s*(?:ksh|kes))?\b.*$/i, "")
+    .replace(/\s+[\d,]+\s*(?:ksh|kes)?\s*$/i, "")
+    .trim();
+  if (!query) return { error: "missing_fields", query, cost };
   return { query, sourcePriceKes: cost };
 }
 
@@ -999,23 +1048,24 @@ export function catalogHelpText() {
     `📦 *Catalog commands* (admin)\n\n` +
     `All commands start with *#* on their own line.\n\n` +
     `*Add by text:*\n` +
-    `add → Product name | category | cost 12000\n` +
+    `#add Product name | phones-tablets | cost 12000\n` +
+    `#add Product name | cost 12000\n` +
     `_category optional — bot guesses from name_\n\n` +
     `*Update price:*\n` +
-    `price → pt-001 cost 11500\n` +
-    `price → Tecno Spark 20 | cost 13499\n\n` +
+    `#price pt-001 cost 11500\n` +
+    `#price Tecno Spark 20 | cost 13499\n\n` +
     `*Stock:*\n` +
-    `stock → pt-001 off — hide from shop\n` +
-    `stock → pt-001 on — show again\n\n` +
-    `*Search:* find → tecno\n\n` +
-    `*Push to website:* sync\n\n` +
+    `#stock pt-001 off — hide from shop\n` +
+    `#stock pt-001 on — show again\n\n` +
+    `*Search:* #find tecno\n\n` +
+    `*Push to website:* #sync\n\n` +
     `*Photos (auto — no confirm):*\n` +
     `Send or forward product photos to this chat.\n\n` +
     `• *With price tag* — bot reads name + cost from the photo.\n` +
     `• *No price tag* — add a caption with cost, e.g. \`130 ksh per shoe\` or \`130ksh women sandals\`.\n` +
     `• *Many photos at once* — put the caption on the first image; same price applies to the whole album.\n` +
     `• *Import supplier catalog (many products):*\n` +
-    `  import-catalog → 254723813039, then send photo *albums* to yourself (30/batch, caption on first)\n` +
+    `  #import-catalog 254723813039 — then send photo *albums* to yourself (30/batch, caption on first)\n` +
     `  _(True one-click import needs WAHA catalog API — not in free WAHA yet.)_\n\n` +
     `AI names items from the photo even without a label.\n` +
     `Retail = cost + KES 100 + 8% (rounded to KES 50).\n\n` +
@@ -1024,7 +1074,7 @@ export function catalogHelpText() {
 }
 
 export async function handleCatalogCommand(adminChatId, text) {
-  const t = (text || "").trim();
+  const t = normalizeCatalogCommandLine(text || "");
   const phone = phoneDigitsFromChatId(adminChatId) || "";
   if (!canRunAdminCommands(adminChatId, phone)) return false;
   trackCatalogAdmin(adminChatId);
@@ -1091,7 +1141,12 @@ export async function handleCatalogCommand(adminChatId, text) {
     if (draft.error) {
       await sendAdminOnlyText(
         adminChatId,
-        `⚠️ Usage: #add Product name | phones-tablets | cost 12000\n\n${catalogHelpText()}`
+        `⚠️ Could not parse that add command.\n\n` +
+          `Examples:\n` +
+          `#add Tecno Spark 20 | phones-tablets | cost 12000\n` +
+          `#add Women sandals | fashion | 130\n` +
+          `Or send a product *photo* with caption \`130 ksh\`\n\n` +
+          `Type *#catalog* for full help.`
       );
       return true;
     }
@@ -1128,7 +1183,8 @@ export async function handleCatalogCommand(adminChatId, text) {
   }
 
   if (/^#stock\b/i.test(t)) {
-    const m = t.match(/^#stock\s+(\S+)\s+(on|off)\b/i);
+    const stockLine = t.replace(/^#stock\b/i, "").trim().replace(/^[→\-\>]\s*/, "");
+    const m = stockLine.match(/^(\S+)\s+(on|off)\b/i);
     if (!m) {
       await sendAdminOnlyText(adminChatId, `⚠️ Usage: #stock pt-001 off`);
       return true;
