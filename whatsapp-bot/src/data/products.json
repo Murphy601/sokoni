@@ -659,7 +659,8 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "cod",
-    "imageKey": "821bb7ad3683"
+    "imageKey": "821bb7ad3683",
+    "inStock": false
   },
   {
     "id": "fa-001",

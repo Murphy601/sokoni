@@ -408,22 +408,6 @@
     "subcategory": "home-decor"
   },
   {
-    "id": "ho-005",
-    "name": "A4 Exercise Books (12-Pack)",
-    "category": "home-office",
-    "priceKes": 699,
-    "rating": 4.5,
-    "reviews": 700,
-    "source": "Sokoni",
-    "emoji": "📚",
-    "scope": "local",
-    "fulfillment": "store",
-    "payment": "cod",
-    "inStock": true,
-    "imageUrl": "assets/images/products/ho-005.jpg",
-    "subcategory": "stationery"
-  },
-  {
     "id": "fa-001",
     "name": "Men's Cotton T-Shirt (3-Pack)",
     "category": "fashion",
