@@ -29,10 +29,16 @@
       if (img.dataset.fallbackBound) continue;
       img.dataset.fallbackBound = "1";
       img.addEventListener("error", () => {
-        const emoji = img.dataset.emoji || "🛍️";
+        const id = img.dataset.productId;
+        const fallback = id ? `assets/images/products/${id}.jpg` : "";
+        if (fallback && img.src !== new URL(fallback, window.location.href).href) {
+          img.src = fallback;
+          return;
+        }
         const wrap = img.closest(".product-image-wrap");
         if (wrap) {
-          wrap.innerHTML = `<div class="text-5xl text-center py-8">${emoji}</div>`;
+          wrap.innerHTML =
+            '<p class="text-xs text-brand-purple/40 text-center px-4">Photo coming soon</p>';
         }
       });
     }

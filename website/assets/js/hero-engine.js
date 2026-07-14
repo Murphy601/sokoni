@@ -368,9 +368,10 @@
 
     if (frame.kind === "product") {
       const p = frame.productSlot === "intl" ? intlProduct : featured;
-      const img = p?.imageUrl
-        ? `<img src="${esc(p.imageUrl)}" alt="${esc(p.name)}" loading="lazy" decoding="async" />`
-        : `<div style="font-size:2.5rem;text-align:center">${esc(p?.emoji || "🛍️")}</div>`;
+      const imgSrc = p?.imageUrl || (p?.id ? `assets/images/products/${p.id}.jpg` : "");
+      const img = imgSrc
+        ? `<img src="${esc(imgSrc)}" alt="${esc(p.name)}" loading="lazy" decoding="async" />`
+        : `<p class="text-xs text-brand-purple/40 text-center py-4">Photo coming soon</p>`;
       const name = esc(p?.name || ctx.productName);
       const price = formatKes(p?.priceKes);
       return `<div class="wa-bubble wa-bubble-product">${img}<p class="font-semibold">${name}</p><p class="text-brand-purple/60 text-xs">${price} · Pay on delivery 💵</p></div>`;

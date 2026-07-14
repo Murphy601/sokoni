@@ -464,15 +464,25 @@ function runSearch(query) {
 
 // ---------- Render helpers ----------
 
+function resolveProductImage(product) {
+  if (product?.imageUrl) return product.imageUrl;
+  if (product?.id) return `assets/images/products/${product.id}.jpg`;
+  return null;
+}
+
 function productImageBlock(product) {
-  if (product.imageUrl) {
+  const src = resolveProductImage(product);
+  if (src) {
+    const name = escapeHtml(product.name || "Product");
+    const id = escapeHtml(product.id || "");
     return `
       <div class="product-image-wrap mb-4 mt-4 rounded-xl overflow-hidden bg-brand-cream aspect-square flex items-center justify-center p-2">
-        <img src="${product.imageUrl}" alt="${product.name.replace(/"/g, "&quot;")}"
-             class="product-image w-full h-full object-contain" loading="lazy" decoding="async" />
+        <img src="${src}" alt="${name}"
+             class="product-image w-full h-full object-contain" loading="lazy" decoding="async"
+             data-product-id="${id}" />
       </div>`;
   }
-  return `<div class="text-5xl mb-4 text-center mt-4">${product.emoji || "🛍️"}</div>`;
+  return `<div class="product-image-wrap mb-4 mt-4 rounded-xl overflow-hidden bg-brand-cream aspect-square flex items-center justify-center p-4 text-xs text-brand-purple/40">Photo coming soon</div>`;
 }
 
 function renderStoreCard(product) {
@@ -482,6 +492,7 @@ function renderStoreCard(product) {
   return `
     <div class="product-card relative bg-white rounded-2xl border border-black/5 shadow-sm p-5 flex flex-col">
       <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">💵 Pay on Delivery</span>
+      <span class="absolute top-3 right-3 z-10 bg-brand-purple/8 text-brand-purple/70 text-[10px] font-mono font-semibold px-2 py-1 rounded-full border border-brand-purple/15">${escapeHtml(product.id || "")}</span>
       ${productImageBlock(product)}
       <h3 class="font-bold text-sm mb-1 line-clamp-2">${name}</h3>
       <p class="text-xs text-brand-purple/50 mb-2">${[
