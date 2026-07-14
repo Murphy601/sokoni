@@ -70,6 +70,7 @@ function toPublic(product) {
       scope: "local",
       fulfillment: "store",
       payment: "cod",
+      inStock: product.inStock !== false,
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
       ...(product.subcategory ? { subcategory: product.subcategory } : {}),
     };
@@ -100,7 +101,7 @@ function toPublic(product) {
 
 async function main() {
   const master = JSON.parse(await readFile(MASTER, "utf-8"));
-  const publicItems = master.map(toPublic).filter(Boolean);
+  const publicItems = master.map(toPublic).filter(Boolean).filter((p) => p.inStock !== false);
   await writeFile(OUTPUT, JSON.stringify(publicItems, null, 2) + "\n", "utf-8");
 
   const storeItems = publicItems.filter((p) => p.fulfillment === "store");

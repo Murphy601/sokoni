@@ -11,6 +11,7 @@ import { computeRetailPrice, pricingBreakdown } from "./pricing.js";
 import { invalidateProductCache } from "./catalog.js";
 import { downloadWahaMedia, sendText, phoneDigitsFromChatId, fetchWahaBusinessCatalog, extractWahaProductMessage, isWahaCatalogApiMissing } from "./whatsapp.js";
 import { isAdminSender, canRunAdminCommands } from "./admin.js";
+import { getCustomerMeta, setCustomerMeta } from "./session.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -708,7 +709,53 @@ const UPSERT_MATCH = {
   REF: "ref",
   /** #price after lookup — id only. */
   ID: "id",
+  /** Photo attaches to recent #add or name-matched text-only row. */
+  ATTACH: "attach",
 };
+
+/** After #add by text, next photo can attach to this product (no duplicate row). */
+function rememberTextCatalogProduct(adminChatId, productId) {
+  if (!adminChatId || !productId) return;
+  setCustomerMeta(adminChatId, {
+    lastCatalogProductId: productId,
+    lastCatalogAwaitingPhoto: true,
+    lastCatalogAt: Date.now(),
+  });
+}
+
+function clearAwaitingCatalogPhoto(adminChatId) {
+  const meta = getCustomerMeta(adminChatId) || {};
+  if (!meta.lastCatalogAwaitingPhoto) return;
+  setCustomerMeta(adminChatId, {
+    lastCatalogAwaitingPhoto: false,
+    lastCatalogProductId: meta.lastCatalogProductId,
+  });
+}
+
+/** Match photo upload to a text-only catalog row (admin #add then send image). */
+async function findTextProductForPhoto(draft, adminChatId) {
+  const products = await loadMaster();
+  const meta = getCustomerMeta(adminChatId) || {};
+  const recent =
+    meta.lastCatalogAt && Date.now() - meta.lastCatalogAt < 30 * 60 * 1000;
+
+  if (recent && meta.lastCatalogProductId) {
+    const target = products.find((p) => p.id === meta.lastCatalogProductId);
+    if (target && (!target.imageUrl || meta.lastCatalogAwaitingPhoto)) return target;
+  }
+
+  let best = null;
+  let bestScore = 0;
+  for (const p of products) {
+    if (p.fulfillment !== "store" || p.imageUrl) continue;
+    const score = nameSimilarity(draft.name, p.name);
+    if (score >= 0.5 && score > bestScore) {
+      best = p;
+      bestScore = score;
+    }
+  }
+  return best;
+}
 
 /** Parse: #add Name | category | cost 12000  OR  add → Name | 12000 */
 export function parseAddCommand(text) {
@@ -765,14 +812,25 @@ export function parsePriceCommand(text) {
   return { query, sourcePriceKes: cost };
 }
 
-function formatProductAck(product, { updated = false } = {}) {
+function formatProductAck(product, { updated = false, awaitingPhoto = false } = {}) {
   const bd = pricingBreakdown(product.sourcePriceKes);
   const verb = updated ? "Updated" : "Added";
   const cat = product.subcategory ? `${product.category} / ${product.subcategory}` : product.category;
+  const stock =
+    product.inStock === false ? "🚫 Hidden from shop" : "✅ Live on website";
+  const photoHint = awaitingPhoto
+    ? `\n📷 _Send a product photo now — it will attach to \`${product.id}\`_`
+    : product.imageUrl
+      ? ""
+      : `\n📷 _No photo yet — send an image to attach to \`${product.id}\`_`;
   return (
-    `✅ *${verb}* \`${product.id}\` · ${product.name}\n` +
+    `✅ *${verb}* · 🆔 \`${product.id}\`\n` +
+    `*${product.name}*\n` +
     `📂 ${cat}\n` +
-    `Cost KES ${bd.supplierPriceKes.toLocaleString()} → Retail *KES ${bd.retailPriceKes.toLocaleString()}*`
+    `Cost KES ${bd.supplierPriceKes.toLocaleString()} → Retail *KES ${bd.retailPriceKes.toLocaleString()}*\n` +
+    `${stock}\n` +
+    `_Hide:_ #stock ${product.id} off · _Show:_ #stock ${product.id} on` +
+    photoHint
   );
 }
 
@@ -1049,13 +1107,14 @@ export function catalogHelpText() {
     `All commands start with *#* on their own line.\n\n` +
     `*Add by text:*\n` +
     `#add Product name | phones-tablets | cost 12000\n` +
-    `#add Product name | cost 12000\n` +
-    `_category optional — bot guesses from name_\n\n` +
+    `_Bot replies with 🆔 \`pt-001\` — send a photo next to attach it_\n` +
+    `#add Product name | cost 12000\n\n` +
     `*Update price:*\n` +
     `#price pt-001 cost 11500\n` +
     `#price Tecno Spark 20 | cost 13499\n\n` +
-    `*Stock:*\n` +
-    `#stock pt-001 off — hide from shop\n` +
+    `*Stock (hides from website + WhatsApp shop):*\n` +
+    `#stock pt-001 off — hide\n` +
+    `#stock Tecno Spark off — works by name too\n` +
     `#stock pt-001 on — show again\n\n` +
     `*Search:* #find tecno\n\n` +
     `*Push to website:* #sync\n\n` +
@@ -1130,9 +1189,14 @@ export async function handleCatalogCommand(adminChatId, text) {
     }
     const lines = hits.map(
       ({ p }) =>
-        `\`${p.id}\` ${p.name} — cost ${p.sourcePriceKes?.toLocaleString() || "?"} → retail ${p.priceKes?.toLocaleString() || "?"}`
+        `${p.inStock === false ? "🚫" : "✅"} \`${p.id}\` ${p.name}\n` +
+        `   cost ${p.sourcePriceKes?.toLocaleString() || "?"} → retail ${p.priceKes?.toLocaleString() || "?"}${p.imageUrl ? "" : " · _no photo_"}`
     );
-    await sendAdminOnlyText(adminChatId, `🔎 *Matches for "${q}"*\n\n${lines.join("\n")}`);
+    await sendAdminOnlyText(
+      adminChatId,
+      `🔎 *Matches for "${q}"*\n\n${lines.join("\n\n")}\n\n` +
+        `_Hide:_ #stock <id> off · _Show:_ #stock <id> on · _Price:_ #price <id> cost 12000`
+    );
     return true;
   }
 
@@ -1151,7 +1215,8 @@ export async function handleCatalogCommand(adminChatId, text) {
       return true;
     }
     const { product, updated } = await upsertStoreProduct(draft, null, { matchMode: UPSERT_MATCH.ALWAYS_ADD });
-    await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
+    rememberTextCatalogProduct(adminChatId, product.id);
+    await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated, awaitingPhoto: true }));
     return true;
   }
 
@@ -1253,11 +1318,34 @@ export async function handleCatalogMedia(
     }
 
     const draft = await extractFromImage(buffer, mediaMimetype, effectiveCaption);
-    const { product, updated } = await upsertStoreProduct(draft, buffer, {
-      matchMode: UPSERT_MATCH.ALWAYS_ADD,
-      uploadMessageId: messageId || null,
-    });
-    await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
+    const attachTarget = await findTextProductForPhoto(draft, adminChatId);
+    let product;
+    let updated;
+    if (attachTarget) {
+      ({ product, updated } = await upsertStoreProduct(
+        {
+          name: draft.name || attachTarget.name,
+          category: draft.category || attachTarget.category,
+          subcategory: draft.subcategory || attachTarget.subcategory,
+          sourcePriceKes: draft.sourcePriceKes ?? attachTarget.sourcePriceKes,
+          matchQuery: attachTarget.id,
+        },
+        buffer,
+        { matchMode: UPSERT_MATCH.ID, uploadMessageId: messageId || null }
+      ));
+      clearAwaitingCatalogPhoto(adminChatId);
+      await sendAdminOnlyText(
+        adminChatId,
+        formatProductAck(product, { updated: true }) +
+          `\n\n📷 Photo attached to existing \`${attachTarget.id}\` (no duplicate row).`
+      );
+    } else {
+      ({ product, updated } = await upsertStoreProduct(draft, buffer, {
+        matchMode: UPSERT_MATCH.ALWAYS_ADD,
+        uploadMessageId: messageId || null,
+      }));
+      await sendAdminOnlyText(adminChatId, formatProductAck(product, { updated }));
+    }
   });
 
   return true;
