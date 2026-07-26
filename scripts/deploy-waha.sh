@@ -36,18 +36,19 @@ if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
 fi
 
 # docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
-docker_compose -f docker-compose.waha.yml down --remove-orphans 2>/dev/null || true
+# Do NOT use --remove-orphans — it kills sokoni_postgres (separate compose file, same project name).
+docker_compose -p sokoni-waha -f docker-compose.waha.yml down 2>/dev/null || true
 
 # Remove ghost containers left by failed --force-recreate runs.
 docker ps -aq --filter "name=waha" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
 
-docker_compose -f docker-compose.waha.yml up -d
+docker_compose -p sokoni-waha -f docker-compose.waha.yml up -d
 
 sleep 4
 WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA container is not running."
-  docker_compose -f docker-compose.waha.yml ps || true
+  docker_compose -p sokoni-waha -f docker-compose.waha.yml ps || true
   docker ps -a | grep -i waha || true
   exit 1
 fi
@@ -81,7 +82,7 @@ if [ "$life" != "0" ]; then
 fi
 
 echo "==> WAHA media config OK"
-docker_compose -f docker-compose.waha.yml ps
+docker_compose -p sokoni-waha -f docker-compose.waha.yml ps
 
 if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
   bash "$REPO/scripts/configure-waha-session.sh"

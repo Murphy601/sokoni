@@ -56,6 +56,11 @@ if [ -f "$REPO/docker-compose.waha.yml" ]; then
   fi
 fi
 
+# WAHA deploy used to stop Postgres via --remove-orphans; keep DB up when configured.
+if [ -f "$REPO/scripts/start-postgres.sh" ] && [ -f "$BOT_DIR/.env" ] && grep -q '^DATABASE_URL=.' "$BOT_DIR/.env" 2>/dev/null; then
+  bash "$REPO/scripts/start-postgres.sh" || echo "WARN: Postgres start failed — bot will fall back to products.json"
+fi
+
 cd "$BOT_DIR"
 
 # Ensure .env exists and upgrade legacy/paid chat models → free OpenRouter stack.
