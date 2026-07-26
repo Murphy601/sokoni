@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { looksLikeDeliveryDetails } from "./delivery-details.js";
 import { normalizeShopperQuery } from "./shopper-language.js";
+import { isDbEnabled } from "../db/pool.js";
+import { listProducts as listProductsFromDb } from "../db/repositories/products.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -15,14 +17,20 @@ export function invalidateProductCache() {
 }
 
 /**
- * Loads the curated product catalog. In v1 this is a static JSON file you
- * (or a VA) maintain by hand with the best products per category. Phase 2
- * can replace this with a real database and/or pull live prices from
- * supplier product-feed APIs where the affiliate program provides one
- * (Jumia and Amazon both offer limited feeds to approved affiliates).
+ * Loads the product catalog from PostgreSQL when DATABASE_URL is set,
+ * otherwise from the static JSON master file.
  */
 async function loadProducts() {
   if (!cachedProducts) {
+    if (isDbEnabled()) {
+      try {
+        cachedProducts = await listProductsFromDb();
+        return cachedProducts;
+      } catch (err) {
+        console.warn("[catalog] DB load failed, falling back to JSON:", err.message);
+        cachedProducts = null;
+      }
+    }
     const raw = await readFile(PRODUCTS_PATH, "utf-8");
     cachedProducts = JSON.parse(raw);
   }

@@ -13,6 +13,8 @@ import adminSuppliersRouter from "./routes/adminSuppliers.js";
 import pickupPointsApiRouter from "./routes/pickupPointsApi.js";
 import adminPickupPointsRouter from "./routes/adminPickupPoints.js";
 import { listReviews, addReview } from "./services/reviews.js";
+import { pingDb, isDbEnabled } from "./db/pool.js";
+import productsApiRouter from "./routes/productsApi.js";
 
 const app = express();
 
@@ -57,13 +59,17 @@ app.get("/", (_req, res) => {
   });
 });
 
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
+  const db = await pingDb();
   res.json({
     status: "ok",
     build: BUILD_ID,
     aiModel: config.openai.model || null,
     aiConfigured: Boolean(config.openai.apiKey),
     wahaConfigured: Boolean(config.waha.apiUrl),
+    dbEnabled: isDbEnabled(),
+    dbConnected: db.ok,
+    dbError: db.ok ? null : db.reason,
   });
 });
 
@@ -100,6 +106,7 @@ app.post("/api/reviews", (req, res) => {
 });
 
 app.use("/api/suppliers", suppliersApiRouter);
+app.use("/api/products", productsApiRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);
 app.use("/admin/pickup-points", adminPickupPointsRouter);

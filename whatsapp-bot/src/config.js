@@ -101,6 +101,11 @@ export const config = {
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
   /** Bot HTTPS base — serves /catalog-images for WhatsApp (immediate after admin upload). */
   botPublicUrl: (process.env.BOT_PUBLIC_URL || "https://bot.sokonimall.com").replace(/\/$/, ""),
+  /** PostgreSQL — Phase 1 marketplace database (optional; JSON catalog fallback when unset). */
+  database: {
+    url: process.env.DATABASE_URL || "",
+    poolMax: Number(process.env.DATABASE_POOL_MAX) || 10,
+  },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

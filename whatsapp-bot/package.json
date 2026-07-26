@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "db:migrate": "node src/db/migrate.js",
+    "db:seed": "node ../scripts/migrate-catalog-to-db.mjs"
   },
   "keywords": [
     "whatsapp",
@@ -21,7 +23,8 @@
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "openai": "^4.77.0"
+    "openai": "^4.77.0",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "eslint": "^9.17.0"
