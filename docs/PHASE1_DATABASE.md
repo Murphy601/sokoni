@@ -27,23 +27,21 @@ Foundation for the Depop-style Sokoni marketplace: **users, sellers, products (n
 ## Setup (VM or local)
 
 ```bash
-# 1. Start Postgres
-docker compose -f docker-compose.db.yml up -d
+# 1. Start Postgres (VM uses docker-compose v1 — not "docker compose")
+bash scripts/start-postgres.sh
 
 # 2. Configure bot
 cd whatsapp-bot
-cp .env.example .env   # if needed
-# Add: DATABASE_URL=postgresql://sokoni:sokoni@localhost:5432/sokoni
-
+# Ensure .env has exactly one line:
+# DATABASE_URL=postgresql://sokoni:sokoni@localhost:5432/sokoni
 npm install
 
-# 3. Apply schema + import catalog (~1,540 items)
-cd whatsapp-bot
+# 3. Apply schema + import catalog (~1,540 items) — optional; skip db:seed for empty DB
 npm run db:migrate
 npm run db:seed
 
 # 4. Restart bot
-npm start
+bash ../scripts/deploy-bot.sh
 ```
 
 ## Verify
