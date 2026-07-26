@@ -20,6 +20,7 @@ const ROOT = path.join(__dirname, "..");
 const MASTER = path.join(ROOT, "whatsapp-bot", "src", "data", "products.json");
 const OUTPUT = path.join(ROOT, "website", "data", "products.json");
 const MENU_OUTPUT = path.join(ROOT, "website", "data", "catalog-menu.json");
+const PAUSE_FILE = path.join(ROOT, "website", "data", "catalog-paused.json");
 
 // Retail = supplier cost + KES 100 + 8% (rounded to nearest KES 50).
 function computeRetail(sourcePriceKes) {
@@ -100,7 +101,18 @@ function toPublic(product) {
 }
 
 async function main() {
-  const master = JSON.parse(await readFile(MASTER, "utf-8"));
+  let paused = false;
+  try {
+    const pauseRaw = JSON.parse(await readFile(PAUSE_FILE, "utf-8"));
+    paused = pauseRaw?.paused === true;
+    if (paused) {
+      console.log(`Catalog paused: ${pauseRaw.reason || "storefront hidden"}`);
+    }
+  } catch {
+    /* no pause file — publish as normal */
+  }
+
+  const master = paused ? [] : JSON.parse(await readFile(MASTER, "utf-8"));
   const publicItems = master.map(toPublic).filter(Boolean).filter((p) => p.inStock !== false);
   await writeFile(OUTPUT, JSON.stringify(publicItems, null, 2) + "\n", "utf-8");
 

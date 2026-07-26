@@ -25,6 +25,7 @@ const CATALOG_PATHS = [
   "website/data/products.json",
   "website/data/catalog-menu.json",
   "website/data/catalog-version.json",
+  "website/data/catalog-paused.json",
   "website/assets/images/products/",
 ];
 

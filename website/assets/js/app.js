@@ -587,6 +587,7 @@ function revealCatalogSections() {
 function renderStoreGrid() {
   const grid = document.getElementById("local-deals-grid");
   const empty = document.getElementById("local-deals-empty");
+  const catalogRefresh = document.getElementById("catalog-refresh-empty");
   const emptyWa = document.getElementById("search-empty-wa");
   const viralEmpty = document.getElementById("viral-empty");
   if (!grid) return;
@@ -596,10 +597,12 @@ function renderStoreGrid() {
   if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
 
   const searching = hasActiveSearch();
+  const catalogEmpty = storeProducts.length === 0 && !searching;
   const showEmpty = allItems.length === 0 && searching;
   const isViralTab = activeCategory === "viral" && !searching;
 
-  grid.classList.toggle("hidden", showEmpty || (isViralTab && allItems.length === 0));
+  grid.classList.toggle("hidden", showEmpty || catalogEmpty || (isViralTab && allItems.length === 0));
+  if (catalogRefresh) catalogRefresh.classList.toggle("hidden", !catalogEmpty);
   if (empty) {
     empty.classList.toggle("hidden", !showEmpty);
     if (emptyWa && showEmpty) emptyWa.href = searchWaLink(searchQuery);
