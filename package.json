@@ -9,7 +9,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "design:lint": "designmd lint website/DESIGN.md",
-    "design:export": "designmd export website/DESIGN.md --format css-tailwind --out website/assets/css/design-tokens.css"
+    "design:export": "designmd export website/DESIGN.md --format css-tailwind --out website/assets/css/design-tokens.css",
+    "browse:build": "node scripts/build-browse-menu.mjs"
   },
   "keywords": [],
   "author": "",

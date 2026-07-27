@@ -5,6 +5,7 @@ import { query, isDbEnabled, closePool } from "./pool.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = path.join(__dirname, "..", "..", "db", "schema.sql");
+const SCHEMA_PHASE2_PATH = path.join(__dirname, "..", "..", "db", "schema-phase2-browse.sql");
 
 export async function runMigrations() {
   if (!isDbEnabled()) {
@@ -13,6 +14,14 @@ export async function runMigrations() {
   const sql = await readFile(SCHEMA_PATH, "utf-8");
   await query(sql);
   console.log("[db] schema applied:", SCHEMA_PATH);
+
+  try {
+    const phase2 = await readFile(SCHEMA_PHASE2_PATH, "utf-8");
+    await query(phase2);
+    console.log("[db] phase2 browse schema applied:", SCHEMA_PHASE2_PATH);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
 }
 
 async function main() {

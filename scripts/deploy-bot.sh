@@ -114,6 +114,18 @@ fi
 
 npm install --omit=dev 2>/dev/null || npm install
 
+if [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=.' "$ENV_FILE" 2>/dev/null; then
+  echo "==> Applying DB migrations..."
+  npm run db:migrate || echo "WARN: db:migrate failed"
+  if npm run 2>/dev/null | grep -q 'db:backfill-browse'; then
+    npm run db:backfill-browse || echo "WARN: db:backfill-browse failed"
+  fi
+fi
+
+if [ -f "$REPO/scripts/build-browse-menu.mjs" ]; then
+  node "$REPO/scripts/build-browse-menu.mjs" 2>/dev/null || true
+fi
+
 if pm2 describe "$NAME" >/dev/null 2>&1; then
   pm2 delete "$NAME" || true
 fi

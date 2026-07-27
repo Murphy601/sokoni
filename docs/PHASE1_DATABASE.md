@@ -72,9 +72,6 @@ Run migration once after deploy. WhatsApp `#add` still writes JSON today — Pha
 
 ## Restore catalog on website
 
-Website still reads `website/data/products.json` (currently paused). Phase 2 will either:
+Phase 2 loads the storefront from **`/api/products`** when the bot DB is live (see [`PHASE2_BROWSE.md`](PHASE2_BROWSE.md)).
 
-- export DB → JSON via build script, or
-- site reads `/api/products` directly
-
-To unpause storefront later: set `"paused": false` in `website/data/catalog-paused.json` and rebuild.
+Legacy JSON path (`website/data/products.json`) remains as fallback. To unpause JSON export: set `"paused": false` in `website/data/catalog-paused.json` and rebuild.

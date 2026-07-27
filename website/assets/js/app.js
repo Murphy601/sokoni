@@ -12,6 +12,10 @@ const REVIEWS_API =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:3001/api/reviews"
     : "https://bot.sokonimall.com/api/reviews";
+const PRODUCTS_API =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001/api/products"
+    : "https://bot.sokonimall.com/api/products";
 
 function catalogCacheBust() {
   const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
@@ -119,6 +123,8 @@ let intlProducts = [];
 let activeCategory = "all";
 let activeSubcategory = null;
 let activeProductId = null;
+let activeItemType = "all";
+let activePriceTier = null;
 let searchQuery = "";
 let showKes = true;
 const STORE_INITIAL_LIMIT = 48;
@@ -324,13 +330,26 @@ function filteredStoreProducts() {
   const tokens = tokenize(searchQuery);
   const maxPriceKes = parseMaxPriceKes(searchQuery);
   let items = storeProducts;
+  if (activeItemType === "new") {
+    items = items.filter((p) => !p.isSecondhand);
+  } else if (activeItemType === "secondhand") {
+    items = items.filter((p) => p.isSecondhand);
+  }
+  if (activePriceTier) {
+    const tierMax = window.SokoniBrowse?.priceTierMaxKes(activePriceTier);
+    if (tierMax != null) {
+      items = items.filter((p) => p.priceKes == null || p.priceKes <= tierMax);
+    }
+  }
   if (activeCategory === "viral") {
     items = items.filter((p) => p.viral || VIRAL_IDS.has(p.id));
   } else if (activeCategory !== "all") {
-    items = items.filter((p) => p.category === activeCategory);
-  }
-  if (activeSubcategory) {
-    items = items.filter((p) => p.subcategory === activeSubcategory);
+    items = items.filter((p) => {
+      const path = window.SokoniBrowse?.resolveBrowsePath(p) || {};
+      if (path.browse !== activeCategory) return false;
+      if (activeSubcategory && path.sub !== activeSubcategory) return false;
+      return true;
+    });
   }
   if (activeProductId) {
     items = items.filter((p) => p.id === activeProductId);
@@ -352,16 +371,27 @@ function visibleStoreProducts() {
     hasActiveSearch() ||
     activeCategory !== "all" ||
     activeSubcategory ||
-    activeProductId;
+    activeProductId ||
+    activeItemType !== "all" ||
+    activePriceTier;
   const limit = filtered ? STORE_SEARCH_LIMIT : storeDisplayLimit;
   return { all, visible: all.slice(0, limit) };
 }
 
-function setCatalogFilter({ category = "all", subcategory = null, productId = null, scroll = false } = {}) {
+function setCatalogFilter({
+  category = "all",
+  subcategory = null,
+  productId = null,
+  itemType = activeItemType,
+  priceTier = activePriceTier,
+  scroll = false,
+} = {}) {
   searchQuery = "";
   activeCategory = category || "all";
   activeSubcategory = subcategory || null;
   activeProductId = productId || null;
+  activeItemType = itemType || "all";
+  activePriceTier = priceTier || null;
   storeDisplayLimit = STORE_SEARCH_LIMIT;
 
   const input = document.getElementById("hero-search");
@@ -370,6 +400,7 @@ function setCatalogFilter({ category = "all", subcategory = null, productId = nu
   document.getElementById("search-wa-cta")?.classList.add("hidden");
 
   renderCategoryChips();
+  renderBrowseFilters();
   renderStoreGrid();
   syncCatalogNavUi();
 
@@ -397,20 +428,27 @@ function updateDealsFilterLabel() {
     el.classList.remove("hidden");
     return;
   }
-  if (activeSubcategory && activeCategory !== "all" && activeCategory !== "viral") {
-    const cat = CATEGORY_META[activeCategory]?.label || activeCategory;
-    const sub = SUBCATEGORY_LABELS[activeSubcategory] || activeSubcategory;
-    el.textContent = `Showing: ${cat} → ${sub}`;
-    el.classList.remove("hidden");
-    return;
-  }
+  const parts = [];
   if (activeCategory === "viral") {
-    el.textContent = "Showing: Viral Bargains";
-    el.classList.remove("hidden");
-    return;
+    parts.push("Viral Bargains");
+  } else if (activeCategory !== "all") {
+    const catLabel = window.SokoniBrowse?.labelForBrowse(activeCategory) || activeCategory;
+    if (activeSubcategory) {
+      const subLabel = window.SokoniBrowse?.labelForBrowse(activeCategory, activeSubcategory) || activeSubcategory;
+      parts.push(`${catLabel} → ${subLabel}`);
+    } else {
+      parts.push(catLabel);
+    }
   }
-  if (activeCategory !== "all") {
-    el.textContent = `Showing: ${CATEGORY_META[activeCategory]?.label || activeCategory}`;
+  if (activeItemType === "new") parts.push("Brand New");
+  if (activeItemType === "secondhand") parts.push("Pre-Loved");
+  if (activePriceTier) {
+    const menu = window.SokoniBrowse?.getMenu?.();
+    const tier = menu?.priceTiers?.find((t) => t.id === activePriceTier);
+    if (tier) parts.push(tier.label);
+  }
+  if (parts.length) {
+    el.textContent = `Showing: ${parts.join(" · ")}`;
     el.classList.remove("hidden");
     return;
   }
@@ -458,6 +496,7 @@ function runSearch(query) {
   }
 
   renderCategoryChips();
+  renderBrowseFilters();
   renderStoreGrid();
   syncCatalogNavUi();
 }
@@ -496,8 +535,11 @@ function renderStoreCard(product) {
       ${productImageBlock(product)}
       <h3 class="font-bold text-sm mb-1 line-clamp-2">${name}</h3>
       <p class="text-xs text-brand-purple/50 mb-2">${[
-        CATEGORY_META[product.category]?.label || product.category,
-        SUBCATEGORY_LABELS[product.subcategory] || product.subcategory,
+        window.SokoniBrowse?.labelForBrowse(
+          window.SokoniBrowse?.resolveBrowsePath(product)?.browse,
+          window.SokoniBrowse?.resolveBrowsePath(product)?.sub
+        ) || CATEGORY_META[product.category]?.label || product.category,
+        product.isSecondhand ? "Pre-Loved" : null,
       ]
         .filter(Boolean)
         .join(" · ")}</p>
@@ -527,7 +569,8 @@ function renderStoreCard(product) {
 function renderCategoryChips() {
   const grid = document.getElementById("category-grid");
   if (!grid) return;
-  const cats = [...new Set(storeProducts.map((p) => p.category))];
+  const menu = window.SokoniBrowse?.getMenu?.();
+  const browseCats = menu?.categories || [];
   const chip = (id, label, emoji) => `
     <button type="button" data-cat="${id}"
       class="cat-chip group bg-white rounded-2xl border ${activeCategory === id && !activeProductId ? "border-brand-green ring-2 ring-brand-green/30" : "border-black/5"} shadow-sm p-6 text-center hover:shadow-lg hover:-translate-y-1 transition">
@@ -538,11 +581,85 @@ function renderCategoryChips() {
   grid.innerHTML =
     chip("all", "All Products", "🛍️") +
     chip("viral", "Viral Bargains", "🔥") +
-    cats.map((c) => chip(c, CATEGORY_META[c]?.label || c, CATEGORY_META[c]?.emoji || "🛍️")).join("");
+    browseCats
+      .slice(0, 8)
+      .map((c) => chip(c.id, c.label, c.emoji || "🛍️"))
+      .join("");
   if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
-      setCatalogFilter({ category: btn.dataset.cat, subcategory: null, productId: null });
+      setCatalogFilter({
+        category: btn.dataset.cat,
+        subcategory: null,
+        productId: null,
+        priceTier: btn.dataset.cat === "sale" ? activePriceTier : null,
+      });
+    });
+  });
+}
+
+function renderBrowseFilters() {
+  const bar = document.getElementById("browse-filter-bar");
+  const itemWrap = document.getElementById("item-type-chips");
+  const priceWrap = document.getElementById("price-tier-chips");
+  if (!bar || !itemWrap || !priceWrap) return;
+
+  const menu = window.SokoniBrowse?.getMenu?.();
+  const itemTypes = menu?.itemTypes || [
+    { id: "all", label: "All Items" },
+    { id: "new", label: "Brand New" },
+    { id: "secondhand", label: "Pre-Loved / Thrift" },
+  ];
+  const priceTiers = menu?.priceTiers || [];
+
+  const filterChip = (id, label, active, dataAttr, dataVal) => `
+    <button type="button" class="browse-chip ${active ? "is-active" : ""}" ${dataAttr}="${dataVal}">${label}</button>`;
+
+  itemWrap.innerHTML = itemTypes
+    .map((t) =>
+      filterChip(
+        t.id,
+        t.label,
+        activeItemType === t.id,
+        "data-item-type",
+        t.id
+      )
+    )
+    .join("");
+
+  priceWrap.innerHTML = priceTiers
+    .map((t) =>
+      filterChip(
+        t.id,
+        t.label,
+        activePriceTier === t.id,
+        "data-price-tier",
+        t.id
+      )
+    )
+    .join("");
+
+  bar.classList.toggle("hidden", storeProducts.length === 0);
+
+  itemWrap.querySelectorAll("[data-item-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeItemType = btn.dataset.itemType || "all";
+      storeDisplayLimit = STORE_SEARCH_LIMIT;
+      renderBrowseFilters();
+      renderStoreGrid();
+      syncCatalogNavUi();
+    });
+  });
+
+  priceWrap.querySelectorAll("[data-price-tier]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tier = btn.dataset.priceTier;
+      activePriceTier = activePriceTier === tier ? null : tier;
+      if (activePriceTier && activeCategory === "all") activeCategory = "sale";
+      storeDisplayLimit = STORE_SEARCH_LIMIT;
+      renderBrowseFilters();
+      renderStoreGrid();
+      syncCatalogNavUi();
     });
   });
 }
@@ -729,9 +846,47 @@ function bindSearch() {
   });
 }
 
+async function loadProductsFromApi() {
+  const all = [];
+  let offset = 0;
+  const limit = 500;
+  while (true) {
+    const res = await fetch(`${PRODUCTS_API}?limit=${limit}&offset=${offset}`);
+    if (!res.ok) throw new Error(`products API ${res.status}`);
+    const data = await res.json();
+    const batch = data.products || [];
+    all.push(...batch);
+    const total = data.total ?? all.length;
+    if (!batch.length || batch.length < limit || all.length >= total) break;
+    offset += limit;
+  }
+  return all.map((p) => (window.SokoniBrowse?.enrichProduct(p) || p));
+}
+
 async function loadProducts() {
+  await window.SokoniBrowse?.loadMenu?.();
+  try {
+    const fromApi = await loadProductsFromApi();
+    if (fromApi.length) return fromApi;
+  } catch (err) {
+    console.warn("Products API unavailable, falling back to JSON:", err.message);
+  }
   const response = await fetch(dataUrl("data/products.json"));
-  return response.json();
+  const json = await response.json();
+  const list = Array.isArray(json) ? json : json.products || [];
+  return list.map((p) => window.SokoniBrowse?.enrichProduct(p) || p);
+}
+
+async function loadStoreMeta() {
+  try {
+    const res = await fetch(PRODUCTS_API.replace(/\/$/, "") + "/meta");
+    if (!res.ok) return;
+    const meta = await res.json();
+    const el = document.getElementById("hero-store-count");
+    if (el && meta.productCount) el.textContent = meta.productCount.toLocaleString();
+  } catch {
+    /* static fallback in HTML */
+  }
 }
 
 function starsHtml(n) {
@@ -855,6 +1010,7 @@ function bindReviewForm() {
 async function renderProducts() {
   try {
     await loadTiktokFeaturedIds();
+    await loadStoreMeta();
     const products = (await loadProducts()).filter((p) => p.inStock !== false);
     storeProducts = products.filter((p) => p.fulfillment === "store" || (p.scope === "local" && p.fulfillment !== "supplier"));
     intlProducts = products.filter((p) => p.scope === "international").slice(0, 8);
@@ -868,6 +1024,7 @@ async function renderProducts() {
     document.getElementById("currency-toggle")?.addEventListener("click", toggleCurrency);
 
     renderCategoryChips();
+    renderBrowseFilters();
     renderStoreGrid();
     renderIntlGrid();
     revealCatalogSections();
@@ -875,7 +1032,14 @@ async function renderProducts() {
     if (window.SokoniCatalogNav) {
       await window.SokoniCatalogNav.init({
         products: storeProducts,
-        navigate: (sel) => setCatalogFilter({ ...sel, scroll: sel.scroll }),
+        navigate: (sel) =>
+          setCatalogFilter({
+            category: sel.category,
+            subcategory: sel.subcategory,
+            productId: sel.productId,
+            priceTier: sel.priceTier ?? activePriceTier,
+            scroll: sel.scroll,
+          }),
       });
     }
   } catch (err) {

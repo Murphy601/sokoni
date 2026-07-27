@@ -434,3 +434,40 @@ html.dark .catalog-nav-product,
 html.dark .catalog-nav-more {
   color: rgba(236, 233, 245, 0.62);
 }
+
+/* Phase 2 — browse filter chips */
+.browse-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.12);
+  background: #ffffff;
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.browse-chip:hover {
+  border-color: rgba(37, 211, 102, 0.45);
+}
+
+.browse-chip.is-active {
+  background: rgba(37, 211, 102, 0.14);
+  border-color: #25d366;
+  color: #0b5f2d;
+}
+
+html.dark .browse-chip {
+  background: #1a1d24;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+html.dark .browse-chip.is-active {
+  background: rgba(37, 211, 102, 0.18);
+  border-color: #25d366;
+  color: #7dffb0;
+}

@@ -19,25 +19,11 @@ function mapRow(row) {
   return rowToCatalogProduct(row, urls);
 }
 
-export async function listProducts({ inStockOnly = false } = {}) {
-  let sql = `${PRODUCT_SELECT}`;
-  const params = [];
-  if (inStockOnly) {
-    sql += ` WHERE p.in_stock = TRUE AND p.is_sold = FALSE`;
-  }
-  sql += ` ORDER BY p.category, p.sub_category, p.title`;
-  const { rows } = await query(sql, params);
-  return rows.map(mapRow);
-}
-
-export async function getProductById(id) {
-  const { rows } = await query(`${PRODUCT_SELECT} WHERE p.id = $1`, [id]);
-  return rows[0] ? mapRow(rows[0]) : null;
-}
-
-export async function searchProductsDb({
+function buildSearchClauses({
   category,
   subcategory,
+  browseCategory,
+  browseSubCategory,
   keywords,
   maxPriceKes,
   minPriceKes,
@@ -47,7 +33,6 @@ export async function searchProductsDb({
   isSecondhand,
   condition,
   inStockOnly = true,
-  limit = 5000,
 } = {}) {
   const clauses = [];
   const params = [];
@@ -62,6 +47,14 @@ export async function searchProductsDb({
   if (subcategory) {
     params.push(subcategory);
     clauses.push(`p.sub_category = $${params.length}`);
+  }
+  if (browseCategory) {
+    params.push(browseCategory);
+    clauses.push(`p.browse_category = $${params.length}`);
+  }
+  if (browseSubCategory) {
+    params.push(browseSubCategory);
+    clauses.push(`p.browse_sub_category = $${params.length}`);
   }
   if (source) {
     params.push(source);
@@ -99,6 +92,8 @@ export async function searchProductsDb({
       OR LOWER(COALESCE(p.description, '')) LIKE $${i}
       OR LOWER(p.category) LIKE $${i}
       OR LOWER(COALESCE(p.sub_category, '')) LIKE $${i}
+      OR LOWER(COALESCE(p.browse_category, '')) LIKE $${i}
+      OR LOWER(COALESCE(p.browse_sub_category, '')) LIKE $${i}
       OR LOWER(COALESCE(p.brand, '')) LIKE $${i}
       OR EXISTS (
         SELECT 1 FROM jsonb_array_elements_text(p.tags) t
@@ -107,9 +102,66 @@ export async function searchProductsDb({
     )`);
   }
 
+  return { clauses, params };
+}
+
+export async function listProducts({ inStockOnly = false } = {}) {
+  let sql = `${PRODUCT_SELECT}`;
+  const params = [];
+  if (inStockOnly) {
+    sql += ` WHERE p.in_stock = TRUE AND p.is_sold = FALSE`;
+  }
+  sql += ` ORDER BY p.category, p.sub_category, p.title`;
+  const { rows } = await query(sql, params);
+  return rows.map(mapRow);
+}
+
+export async function getProductById(id) {
+  const { rows } = await query(`${PRODUCT_SELECT} WHERE p.id = $1`, [id]);
+  return rows[0] ? mapRow(rows[0]) : null;
+}
+
+export async function searchProductsDb({
+  category,
+  subcategory,
+  browseCategory,
+  browseSubCategory,
+  keywords,
+  maxPriceKes,
+  minPriceKes,
+  source,
+  scope,
+  fulfillment,
+  isSecondhand,
+  condition,
+  inStockOnly = true,
+  limit = 48,
+  offset = 0,
+} = {}) {
+  const { clauses, params } = buildSearchClauses({
+    category,
+    subcategory,
+    browseCategory,
+    browseSubCategory,
+    keywords,
+    maxPriceKes,
+    minPriceKes,
+    source,
+    scope,
+    fulfillment,
+    isSecondhand,
+    condition,
+    inStockOnly,
+  });
+
   let sql = PRODUCT_SELECT;
   if (clauses.length) sql += ` WHERE ${clauses.join(" AND ")}`;
-  sql += ` ORDER BY p.rating DESC NULLS LAST, p.review_count DESC`;
+  sql += ` ORDER BY p.rating DESC NULLS LAST, p.review_count DESC, p.title`;
+
+  if (offset > 0) {
+    params.push(offset);
+    sql += ` OFFSET $${params.length}`;
+  }
   if (limit != null && limit > 0) {
     params.push(limit);
     sql += ` LIMIT $${params.length}`;
@@ -117,6 +169,14 @@ export async function searchProductsDb({
 
   const { rows } = await query(sql, params);
   return rows.map(mapRow);
+}
+
+export async function countSearchProductsDb(filters = {}) {
+  const { clauses, params } = buildSearchClauses(filters);
+  let sql = `SELECT COUNT(*)::int AS n FROM products p`;
+  if (clauses.length) sql += ` WHERE ${clauses.join(" AND ")}`;
+  const { rows } = await query(sql, params);
+  return rows[0]?.n || 0;
 }
 
 export async function countProducts() {
@@ -141,6 +201,24 @@ export async function getCategoriesFromDb() {
     }
   }
   return categories;
+}
+
+export async function getBrowseCountsFromDb() {
+  const { rows } = await query(`
+    SELECT browse_category, browse_sub_category, COUNT(*)::int AS n
+    FROM products
+    WHERE in_stock = TRUE AND is_sold = FALSE
+      AND browse_category IS NOT NULL
+    GROUP BY browse_category, browse_sub_category
+    ORDER BY browse_category, browse_sub_category
+  `);
+  /** @type {Record<string, Record<string, number>>} */
+  const counts = {};
+  for (const row of rows) {
+    if (!counts[row.browse_category]) counts[row.browse_category] = {};
+    counts[row.browse_category][row.browse_sub_category || ""] = row.n;
+  }
+  return counts;
 }
 
 export function dbProductsAvailable() {

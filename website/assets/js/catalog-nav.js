@@ -1,6 +1,6 @@
 /**
- * Shopify-style left catalog navigator — categories → subcategories → products.
- * Floating panel on the left; syncs with app.js filters.
+ * Depop-style left browse navigator — Women / Men / Kids / Sale / etc.
+ * Syncs with app.js filters via SokoniCatalogNav.sync().
  */
 (function () {
   const MAX_PRODUCTS_PER_SUB = 8;
@@ -25,15 +25,30 @@
     return n.length <= max ? n : `${n.slice(0, max - 1)}…`;
   }
 
-  function productKey(category, subcategory) {
-    return `${category}::${subcategory}`;
+  function dataUrl(file) {
+    const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
+    const v = meta?.getAttribute("content") || String(Date.now());
+    return `${file}?v=${v}`;
+  }
+
+  function productKey(browseCat, browseSub) {
+    return `${browseCat}::${browseSub || ""}`;
+  }
+
+  function resolveBrowse(product) {
+    if (window.SokoniBrowse) return window.SokoniBrowse.resolveBrowsePath(product);
+    return {
+      browse: product.browseCategory || product.category,
+      sub: product.browseSubCategory || product.subcategory,
+    };
   }
 
   function buildProductIndex(products) {
     productsByKey = new Map();
     for (const p of products) {
-      if (!p.category || !p.subcategory) continue;
-      const key = productKey(p.category, p.subcategory);
+      const path = resolveBrowse(p);
+      if (!path.browse) continue;
+      const key = productKey(path.browse, path.sub);
       if (!productsByKey.has(key)) productsByKey.set(key, []);
       productsByKey.get(key).push(p);
     }
@@ -44,6 +59,11 @@
 
   function countForSub(categoryId, subId) {
     return productsByKey.get(productKey(categoryId, subId))?.length || 0;
+  }
+
+  function findSubDef(categoryId, subId) {
+    const cat = menuData?.categories?.find((c) => c.id === categoryId);
+    return cat?.subcategories?.find((s) => s.id === subId) || null;
   }
 
   function isActiveCategory(id) {
@@ -70,10 +90,10 @@
     let html = `
       <div class="catalog-nav-header">
         <div>
-          <p class="catalog-nav-title">Catalog</p>
-          <p class="catalog-nav-sub">Browse like WhatsApp menu</p>
+          <p class="catalog-nav-title">Browse</p>
+          <p class="catalog-nav-sub">Women · Men · Kids · Sale</p>
         </div>
-        <button type="button" class="catalog-nav-close" id="catalog-nav-close" aria-label="Close catalog menu">×</button>
+        <button type="button" class="catalog-nav-close" id="catalog-nav-close" aria-label="Close browse menu">×</button>
       </div>
       <div class="catalog-nav-scroll" id="catalog-nav-scroll">
     `;
@@ -105,7 +125,6 @@
 
       for (const sub of cat.subcategories || []) {
         const count = countForSub(cat.id, sub.id);
-        if (!count) continue;
         const subKey = `${cat.id}::${sub.id}`;
         const subExpanded = expandedSubcategories.has(subKey);
         const products = (productsByKey.get(productKey(cat.id, sub.id)) || []).slice(0, MAX_PRODUCTS_PER_SUB);
@@ -117,7 +136,7 @@
               data-nav-type="subcategory" data-category="${cat.id}" data-subcategory="${sub.id}" aria-expanded="${subExpanded}">
               <span class="catalog-nav-chevron catalog-nav-chevron--sm" aria-hidden="true"></span>
               <span class="catalog-nav-label">${escapeHtml(sub.label)}</span>
-              <span class="catalog-nav-count">${count}</span>
+              ${count ? `<span class="catalog-nav-count">${count}</span>` : ""}
             </button>
             <div class="catalog-nav-products" ${subExpanded ? "" : "hidden"}>
         `;
@@ -149,6 +168,20 @@
     bindPanelEvents(panel);
   }
 
+  function navigateFromSub(category, subcategory) {
+    const subDef = findSubDef(category, subcategory);
+    const priceTier = subDef?.priceTier || (category === "sale" ? subcategory : null);
+    if (onNavigate) {
+      onNavigate({
+        category,
+        subcategory,
+        productId: null,
+        priceTier,
+        scroll: true,
+      });
+    }
+  }
+
   function bindPanelEvents(panel) {
     panel.querySelector("#catalog-nav-close")?.addEventListener("click", closePanel);
 
@@ -166,7 +199,13 @@
             expandedCategories.add(category);
           }
           if (onNavigate) {
-            onNavigate({ category, subcategory: null, productId: null, scroll: true });
+            onNavigate({
+              category,
+              subcategory: null,
+              productId: null,
+              priceTier: category === "sale" ? null : null,
+              scroll: true,
+            });
           }
           renderPanel();
           return;
@@ -180,9 +219,7 @@
           } else {
             expandedSubcategories.add(key);
           }
-          if (onNavigate) {
-            onNavigate({ category, subcategory, productId: null, scroll: true });
-          }
+          navigateFromSub(category, subcategory);
           renderPanel();
           return;
         }
@@ -191,7 +228,13 @@
           expandedCategories.clear();
           expandedSubcategories.clear();
           if (onNavigate) {
-            onNavigate({ category, subcategory: null, productId: null, scroll: true });
+            onNavigate({
+              category,
+              subcategory: null,
+              productId: null,
+              priceTier: null,
+              scroll: true,
+            });
           }
           closePanel();
           return;
@@ -200,8 +243,15 @@
         if (type === "product") {
           expandedCategories.add(category);
           expandedSubcategories.add(`${category}::${subcategory}`);
+          const subDef = findSubDef(category, subcategory);
           if (onNavigate) {
-            onNavigate({ category, subcategory, productId, scroll: true });
+            onNavigate({
+              category,
+              subcategory,
+              productId,
+              priceTier: subDef?.priceTier || (category === "sale" ? subcategory : null),
+              scroll: true,
+            });
           }
           closePanel();
         }
@@ -215,9 +265,9 @@
     const label = toggle?.querySelector(".catalog-nav-toggle-label");
     if (!toggle) return;
     toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    toggle.setAttribute("aria-label", isOpen ? "Close catalog menu" : "Open catalog menu");
+    toggle.setAttribute("aria-label", isOpen ? "Close browse menu" : "Open browse menu");
     if (icon) icon.textContent = isOpen ? "✕" : "☰";
-    if (label) label.textContent = isOpen ? "Close" : "Catalog";
+    if (label) label.textContent = isOpen ? "Close" : "Browse";
     toggle.classList.toggle("is-open", isOpen);
   }
 
@@ -268,11 +318,15 @@
     onNavigate = navigate;
     buildProductIndex(products || []);
 
-    try {
-      const res = await fetch(dataUrl("data/catalog-menu.json"));
-      if (res.ok) menuData = await res.json();
-    } catch {
-      menuData = null;
+    await window.SokoniBrowse?.loadMenu?.();
+    menuData = window.SokoniBrowse?.getMenu?.() || null;
+    if (!menuData) {
+      try {
+        const res = await fetch(dataUrl("data/browse-menu.json"));
+        if (res.ok) menuData = await res.json();
+      } catch {
+        menuData = null;
+      }
     }
 
     const toggle = document.getElementById("catalog-nav-toggle");
