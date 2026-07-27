@@ -73,10 +73,32 @@
         <div id="api-down-banner" class="hidden rounded-xl border border-red-300/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           Sokoni server is temporarily offline — signup will work again shortly. You can also message us on WhatsApp from the shop page.
         </div>
-        <label class="block text-sm font-medium">
-          WhatsApp number *
-          <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" />
-        </label>
+
+        <!-- Step A: WhatsApp verification -->
+        <div id="onboard-verify-step" class="space-y-4">
+          <label class="block text-sm font-medium">
+            WhatsApp number *
+            <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" autocomplete="tel" />
+          </label>
+          <p class="text-sm text-brand-purple/60 dark:text-white/60">We'll send a free 6-digit code to this number on WhatsApp from <strong>Sokoni Mall</strong>.</p>
+          <div class="flex flex-wrap gap-3">
+            <button id="send-code-btn" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Send code on WhatsApp</button>
+          </div>
+          <div id="verify-code-wrap" class="hidden space-y-3">
+            <label class="block text-sm font-medium">
+              Code from WhatsApp
+              <input id="verify-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" class="sell-form-input tracking-widest text-lg" autocomplete="one-time-code" />
+            </label>
+            <div class="flex flex-wrap gap-3">
+              <button id="verify-code-btn" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Verify</button>
+              <button id="resend-code-btn" type="button" class="sell-btn-ghost text-sm">Resend code</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step B: Profile (after WhatsApp verified) -->
+        <div id="onboard-details-step" class="hidden space-y-4 pt-2 border-t border-brand-green/20">
+          <p id="verify-success-label" class="text-sm font-semibold text-brand-green">✓ WhatsApp verified</p>
         <label class="block text-sm font-medium">
           Your name or shop name *
           <input id="onboard-shop-name" type="text" required placeholder="e.g. Adiv or Adiv's Mini Mart" class="sell-form-input" />
@@ -96,7 +118,8 @@
           National ID <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
           <input id="onboard-national-id" type="text" placeholder="ID number" class="sell-form-input" />
         </label>
-        <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto">Start selling</button>
+        <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto hidden">Start selling</button>
+        </div>
         <p id="onboard-status" class="text-sm"></p>
       </section>
 

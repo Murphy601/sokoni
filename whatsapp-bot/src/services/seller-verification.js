@@ -1,0 +1,236 @@
+/**
+ * Free WhatsApp OTP for seller signup — sent via existing WAHA session (Sokoni Mall).
+ */
+import { randomInt, randomBytes } from "node:crypto";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { sendText, toChatId } from "./whatsapp.js";
+import { config } from "../config.js";
+
+function normalizePhone(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9) d = `254${d}`;
+  return d;
+}
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const STORE_FILE = path.join(__dirname, "..", "..", "data", "seller-verification-store.json");
+
+const CODE_TTL_MS = 10 * 60 * 1000;
+const VERIFIED_TTL_MS = 30 * 60 * 1000;
+const RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_VERIFY_ATTEMPTS = 5;
+const MAX_SENDS_PER_HOUR = 6;
+
+/** @type {{ pending: Record<string, object>, verified: Record<string, object> }} */
+let store = { pending: {}, verified: {} };
+let loaded = false;
+
+async function loadStore() {
+  if (loaded) return;
+  loaded = true;
+  try {
+    if (existsSync(STORE_FILE)) {
+      store = { pending: {}, verified: {}, ...JSON.parse(await readFile(STORE_FILE, "utf-8")) };
+    }
+  } catch (err) {
+    console.error("[seller-verification] load failed:", err.message);
+  }
+}
+
+async function saveStore() {
+  const dir = path.dirname(STORE_FILE);
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  await writeFile(STORE_FILE, JSON.stringify(store, null, 2) + "\n", "utf-8");
+}
+
+function isValidSignupPhone(phone) {
+  const d = normalizePhone(phone);
+  return d.length >= 12 && (/^2547\d{8}$/.test(d) || /^2541\d{8}$/.test(d));
+}
+
+function generateCode() {
+  return String(randomInt(100000, 999999));
+}
+
+function generateToken() {
+  return randomBytes(24).toString("hex");
+}
+
+function pruneExpired() {
+  const now = Date.now();
+  for (const [phone, entry] of Object.entries(store.pending)) {
+    if (!entry?.expiresAt || entry.expiresAt < now) delete store.pending[phone];
+  }
+  for (const [phone, entry] of Object.entries(store.verified)) {
+    if (!entry?.expiresAt || entry.expiresAt < now) delete store.verified[phone];
+  }
+}
+
+function sendsInLastHour(entry) {
+  const now = Date.now();
+  const windowStart = now - 60 * 60 * 1000;
+  const history = Array.isArray(entry?.sendHistory) ? entry.sendHistory : [];
+  return history.filter((t) => t >= windowStart).length;
+}
+
+function verificationMessage(code) {
+  return (
+    `🔐 *Sokoni Mall* verification\n\n` +
+    `Your signup code: *${code}*\n\n` +
+    `Valid for 10 minutes. Do not share this code with anyone.\n\n` +
+    `_If you didn't request this, ignore this message._`
+  );
+}
+
+/** POST send-code — deliver OTP on WhatsApp. */
+export async function sendSellerVerificationCode(phone) {
+  await loadStore();
+  pruneExpired();
+
+  const digits = normalizePhone(phone);
+  if (!isValidSignupPhone(digits)) {
+    return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
+  }
+
+  const now = Date.now();
+  let entry = store.pending[digits];
+
+  if (entry?.lastSentAt && now - entry.lastSentAt < RESEND_COOLDOWN_MS) {
+    const waitSec = Math.ceil((RESEND_COOLDOWN_MS - (now - entry.lastSentAt)) / 1000);
+    return {
+      error: "rate_limited",
+      message: `Wait ${waitSec} seconds before requesting another code.`,
+      retryAfterSec: waitSec,
+    };
+  }
+
+  if (entry && sendsInLastHour(entry) >= MAX_SENDS_PER_HOUR) {
+    return {
+      error: "rate_limited",
+      message: "Too many codes sent — try again in an hour or WhatsApp us for help.",
+    };
+  }
+
+  const code = generateCode();
+  const sendHistory = [...(entry?.sendHistory || []), now].slice(-20);
+
+  entry = {
+    code,
+    expiresAt: now + CODE_TTL_MS,
+    attempts: 0,
+    lastSentAt: now,
+    sendHistory,
+  };
+  store.pending[digits] = entry;
+  await saveStore();
+
+  const chatId = toChatId(digits);
+  try {
+    const resp = await sendText(chatId, verificationMessage(code));
+    if (resp?.dryRun) {
+      console.log(`[seller-verification] dry-run OTP for ${digits}: ${code}`);
+    }
+  } catch (err) {
+    delete store.pending[digits];
+    await saveStore();
+    console.error("[seller-verification] send failed:", err.message);
+    return {
+      error: "send_failed",
+      message: "Could not send WhatsApp code — make sure Sokoni WhatsApp is online and try again.",
+    };
+  }
+
+  return {
+    success: true,
+    message: "Code sent on WhatsApp from Sokoni Mall. Check your chats.",
+    expiresInSec: Math.floor(CODE_TTL_MS / 1000),
+    dryRun: !config.waha.apiUrl,
+  };
+}
+
+/** POST verify-code — check OTP and issue short-lived signup token. */
+export async function verifySellerCode(phone, codeInput) {
+  await loadStore();
+  pruneExpired();
+
+  const digits = normalizePhone(phone);
+  const code = String(codeInput || "").replace(/\D/g, "").trim();
+
+  if (!isValidSignupPhone(digits)) {
+    return { error: "invalid_phone", message: "Enter a valid WhatsApp number." };
+  }
+  if (code.length !== 6) {
+    return { error: "invalid_code", message: "Enter the 6-digit code from WhatsApp." };
+  }
+
+  const entry = store.pending[digits];
+  if (!entry) {
+    return { error: "no_code", message: "No active code — tap Send code on WhatsApp first." };
+  }
+  if (entry.expiresAt < Date.now()) {
+    delete store.pending[digits];
+    await saveStore();
+    return { error: "expired", message: "Code expired — request a new one." };
+  }
+  if (entry.attempts >= MAX_VERIFY_ATTEMPTS) {
+    delete store.pending[digits];
+    await saveStore();
+    return { error: "too_many_attempts", message: "Too many wrong tries — request a new code." };
+  }
+
+  if (entry.code !== code) {
+    entry.attempts += 1;
+    store.pending[digits] = entry;
+    await saveStore();
+    const left = MAX_VERIFY_ATTEMPTS - entry.attempts;
+    return {
+      error: "wrong_code",
+      message: left > 0 ? `Wrong code — ${left} attempt${left === 1 ? "" : "s"} left.` : "Wrong code — request a new one.",
+    };
+  }
+
+  delete store.pending[digits];
+  const token = generateToken();
+  const now = Date.now();
+  store.verified[digits] = {
+    token,
+    verifiedAt: now,
+    expiresAt: now + VERIFIED_TTL_MS,
+  };
+  await saveStore();
+
+  return {
+    success: true,
+    verificationToken: token,
+    message: "WhatsApp verified — finish your profile below.",
+    expiresInSec: Math.floor(VERIFIED_TTL_MS / 1000),
+  };
+}
+
+/** Require valid verification token before completing seller onboard. */
+export async function consumeVerificationToken(phone, token) {
+  await loadStore();
+  pruneExpired();
+
+  const digits = normalizePhone(phone);
+  const entry = store.verified[digits];
+  if (!entry || entry.token !== String(token || "")) {
+    return {
+      error: "not_verified",
+      message: "Verify your WhatsApp number first — tap Send code on WhatsApp.",
+    };
+  }
+  if (entry.expiresAt < Date.now()) {
+    delete store.verified[digits];
+    await saveStore();
+    return { error: "verification_expired", message: "Verification expired — verify WhatsApp again." };
+  }
+
+  delete store.verified[digits];
+  await saveStore();
+  return { ok: true };
+}

@@ -7,6 +7,7 @@ const ONBOARD_API = `${API_BASE}/api/seller/onboard`;
 
 const PHONE_KEY = "sokoni-seller-phone";
 const DRAFT_KEY = "sokoni-seller-draft";
+const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -114,6 +115,9 @@ function netToSeller(price) {
 let sellerProfile = null;
 let ledgerData = null;
 let activeLedgerTab = "available";
+let verificationToken = null;
+let phoneVerified = false;
+let resendCooldownTimer = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -515,6 +519,133 @@ function setOnboardStatus(msg, isError = false) {
   node.classList.toggle("text-brand-green", !isError && Boolean(msg));
 }
 
+function loadVerificationToken() {
+  try {
+    const raw = sessionStorage.getItem(VERIFY_TOKEN_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed.phone === normalizePhoneInput(getPhone()) && parsed.token && parsed.expiresAt > Date.now()) {
+      verificationToken = parsed.token;
+      phoneVerified = true;
+      showOnboardDetailsStep();
+    }
+  } catch {}
+}
+
+function saveVerificationToken(token, expiresInSec = 1800) {
+  verificationToken = token;
+  phoneVerified = true;
+  sessionStorage.setItem(
+    VERIFY_TOKEN_KEY,
+    JSON.stringify({
+      phone: normalizePhoneInput(getPhone()),
+      token,
+      expiresAt: Date.now() + expiresInSec * 1000,
+    })
+  );
+}
+
+function showOnboardDetailsStep() {
+  el("onboard-details-step")?.classList.remove("hidden");
+  el("onboard-btn")?.classList.remove("hidden");
+  el("verify-code-wrap")?.classList.remove("hidden");
+  const phoneInput = el("seller-phone");
+  if (phoneInput) phoneInput.readOnly = true;
+}
+
+function startResendCooldown(seconds) {
+  const btn = el("resend-code-btn");
+  const sendBtn = el("send-code-btn");
+  let left = seconds;
+  const tick = () => {
+    if (btn) {
+      btn.disabled = left > 0;
+      btn.textContent = left > 0 ? `Resend (${left}s)` : "Resend code";
+    }
+    if (sendBtn) sendBtn.disabled = left > 0;
+    if (left <= 0) {
+      clearInterval(resendCooldownTimer);
+      resendCooldownTimer = null;
+      return;
+    }
+    left -= 1;
+  };
+  tick();
+  clearInterval(resendCooldownTimer);
+  resendCooldownTimer = setInterval(tick, 1000);
+}
+
+async function onSendCode() {
+  const phone = getPhone();
+  if (!phone) {
+    setOnboardStatus("Enter your WhatsApp number first.", true);
+    return;
+  }
+  savePhone();
+  setOnboardStatus("Sending code on WhatsApp…");
+  el("send-code-btn").disabled = true;
+
+  try {
+    const res = await fetch(`${ONBOARD_API}/send-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: normalizePhoneInput(phone) }),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setOnboardStatus(parsed.data?.message || parsed.message || "Could not send code.", true);
+      if (parsed.data?.retryAfterSec) startResendCooldown(parsed.data.retryAfterSec);
+      else el("send-code-btn").disabled = false;
+      return;
+    }
+    el("verify-code-wrap")?.classList.remove("hidden");
+    el("verify-code-input")?.focus();
+    setOnboardStatus(parsed.data.message || "Check WhatsApp for your code from Sokoni Mall.");
+    startResendCooldown(60);
+  } catch {
+    setOnboardStatus("Could not reach Sokoni — check your connection.", true);
+    el("send-code-btn").disabled = false;
+    checkApiHealth();
+  }
+}
+
+async function onVerifyCode() {
+  const phone = getPhone();
+  const code = el("verify-code-input")?.value.trim();
+  if (!phone) {
+    setOnboardStatus("Enter your WhatsApp number.", true);
+    return;
+  }
+  if (!code || code.replace(/\D/g, "").length !== 6) {
+    setOnboardStatus("Enter the 6-digit code from WhatsApp.", true);
+    return;
+  }
+
+  setOnboardStatus("Checking code…");
+  el("verify-code-btn").disabled = true;
+
+  try {
+    const res = await fetch(`${ONBOARD_API}/verify-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: normalizePhoneInput(phone), code }),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setOnboardStatus(parsed.data?.message || parsed.message || "Wrong code.", true);
+      return;
+    }
+    saveVerificationToken(parsed.data.verificationToken, parsed.data.expiresInSec);
+    showOnboardDetailsStep();
+    setOnboardStatus(parsed.data.message || "Verified — finish your profile below.");
+    el("onboard-verify-step")?.classList.add("opacity-80");
+  } catch {
+    setOnboardStatus("Could not reach Sokoni — try again.", true);
+  } finally {
+    el("verify-code-btn").disabled = false;
+  }
+}
+
 async function onOnboard() {
   const phone = getPhone();
   const shopName = el("onboard-shop-name")?.value.trim();
@@ -534,6 +665,10 @@ async function onOnboard() {
     setOnboardStatus("Enter your M-Pesa payout number.", true);
     return;
   }
+  if (!phoneVerified || !verificationToken) {
+    setOnboardStatus("Verify your WhatsApp number first — tap Send code.", true);
+    return;
+  }
 
   savePhone();
   setOnboardStatus("Setting up your profile…");
@@ -549,16 +684,27 @@ async function onOnboard() {
         shopHandle: shopHandle || undefined,
         mpesaNumber: normalizePhoneInput(mpesaNumber),
         nationalId,
+        verificationToken,
       }),
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
       setOnboardStatus(parsed.data?.message || parsed.message || parsed.data?.error || "Setup failed.", true);
+      if (parsed.data?.error === "not_verified" || parsed.data?.error === "verification_expired") {
+        phoneVerified = false;
+        verificationToken = null;
+        sessionStorage.removeItem(VERIFY_TOKEN_KEY);
+        el("onboard-details-step")?.classList.add("hidden");
+        el("onboard-btn")?.classList.add("hidden");
+        el("seller-phone").readOnly = false;
+      }
       if (parsed.status === 502 || parsed.status === 503) checkApiHealth();
       return;
     }
     setOnboardStatus(parsed.data.message || "You're set up — add your first listing.");
     showSellerProfile(parsed.data.seller);
+    sessionStorage.removeItem(VERIFY_TOKEN_KEY);
+    verificationToken = null;
     el("api-down-banner")?.classList.add("hidden");
     await loadMyListings();
     await loadEscrowLedger();
@@ -662,6 +808,12 @@ function init() {
   el("load-listings-btn")?.addEventListener("click", loadMyListings);
   el("load-ledger-btn")?.addEventListener("click", loadEscrowLedger);
   el("onboard-btn")?.addEventListener("click", onOnboard);
+  el("send-code-btn")?.addEventListener("click", onSendCode);
+  el("verify-code-btn")?.addEventListener("click", onVerifyCode);
+  el("resend-code-btn")?.addEventListener("click", onSendCode);
+  el("verify-code-input")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") onVerifyCode();
+  });
   el("seller-phone")?.addEventListener("change", () => {
     savePhone();
     checkSellerProfile();
@@ -669,6 +821,7 @@ function init() {
 
   loadMeta().then(() => {
     checkApiHealth();
+    loadVerificationToken();
     checkSellerProfile();
   });
 }

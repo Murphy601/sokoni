@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
 import { getOrder } from "./orders.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
+import { consumeVerificationToken } from "./seller-verification.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SETTLEMENTS_FILE = path.join(__dirname, "..", "..", "data", "settlements.json");
@@ -35,6 +36,20 @@ export function requireSeller(phone) {
     };
   }
   return { supplier };
+}
+
+/** New sellers must verify WhatsApp OTP first; returning sellers skip verification. */
+export async function onboardSellerAsync(payload) {
+  const { phone, shopName, shopHandle, mpesaNumber, nationalId, verificationToken } = payload || {};
+  const normalizedPhone = normalizePhone(phone);
+
+  const existing = findSupplierByPhone(normalizedPhone);
+  if (!existing) {
+    const check = await consumeVerificationToken(normalizedPhone, verificationToken);
+    if (check.error) return check;
+  }
+
+  return onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId });
 }
 
 export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId }) {
