@@ -116,8 +116,18 @@ async function notifyAdminWithdrawal(request, supplier) {
 export async function requestSellerWithdrawal(phone, sessionToken) {
   const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
+  return createWithdrawalRequest(check.supplier);
+}
 
-  const supplier = check.supplier;
+/** WhatsApp-only withdraw — seller messaging from their registered phone. */
+export async function requestSellerWithdrawalByPhone(phone) {
+  const { requireSeller } = await import("./seller-onboard.js");
+  const check = requireSeller(phone);
+  if (check.error) return check;
+  return createWithdrawalRequest(check.supplier);
+}
+
+async function createWithdrawalRequest(supplier) {
   const mpesaNumber = supplier.mpesaNumber || supplier.phone;
   if (!mpesaNumber) {
     return { error: "missing_mpesa", message: "Add your M-Pesa payout number in seller profile." };

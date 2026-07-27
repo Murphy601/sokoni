@@ -32,6 +32,7 @@ import { getPendingOrder } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
 import { normalizeShopperQuery } from "../services/shopper-language.js";
 import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
+import { handleSellerWalletMessage } from "../services/seller-wallet.js";
 import { handleSupplierOnboarding, isInSupplierOnboarding, trySupplierContinueFromRef } from "../services/supplier-onboarding.js";
 import {
   handlePickupOnboarding,
@@ -366,6 +367,8 @@ export async function handleIncomingMessage(
   }
 
   if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
+
+  if (await handleSellerWalletMessage(customerKey, text, { phone })) return;
 
   if (/^(shop international|international shopping|🌍)$/i.test(normalized) || normalized === "international") {
     const { sendMainMenu } = await import("../services/menu.js");

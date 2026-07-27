@@ -684,22 +684,6 @@ async function handleScanCommand(adminChatId, args) {
   }
 
   const tracking = buildPublicTrackingPayload(result.order);
-  try {
-    if (result.order.customerKey) {
-      await sendText(
-        result.order.customerKey,
-        `📦 *${result.order.id}* update: *${tracking.shipmentStatusLabel}*\n\n` +
-          `${renderShipmentTimelineFromPayload(tracking)}\n\n` +
-          `_Track anytime: type *${result.order.id}* or visit sokonimall.com/track.html_`
-      );
-    }
-  } catch (err) {
-    console.warn("[admin] scan customer notify failed:", err.message);
-  }
-
-  if (result.status === "delivered") {
-    onOrderDelivered(result.order);
-  }
 
   return sendText(
     adminChatId,

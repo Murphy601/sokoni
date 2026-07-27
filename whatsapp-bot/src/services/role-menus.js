@@ -7,6 +7,7 @@ import { sendWelcome, formatNumberedMenu } from "./menu.js";
 import { startSupplierOnboarding } from "./supplier-onboarding.js";
 import { startPickupOnboarding } from "./pickup-point-onboarding.js";
 import { OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
+import { formatSellerWalletReply } from "./seller-wallet.js";
 
 function normalize(text) {
   return String(text || "").trim().toLowerCase();
@@ -91,6 +92,7 @@ export async function sendPickupApplyPrompt(customerKey) {
 export async function sendVendorMenu(customerKey, supplier) {
   const options = [
     { id: "vendor_status", label: "📋 My application / products" },
+    { id: "vendor_balance", label: "💼 Wallet & balance" },
     { id: "vendor_payouts", label: "💰 Payouts & delivery policy" },
     { id: "vendor_add_product", label: "➕ List a product (photo + AI)" },
     { id: "vendor_contact", label: "📞 Contact Sokoni ops" },
@@ -207,10 +209,13 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
         customerKey,
         `💰 *Supplier payouts*\n\n` +
           `• Buyers pay upfront via M-Pesa STK — funds held in Sokoni escrow\n` +
-          `• Sokoni remits your *supply price* 2–3 business days after delivery\n` +
+          `• Sokoni remits your earnings after delivery is confirmed\n` +
           `• Delivery: ${supplier.delivers ? supplier.deliveryAreas || "your areas" : "hub / pickup coordination"}\n\n` +
-          `Questions? Reply *vendor contact*.`
+          `Reply *balance* for live wallet totals · *WITHDRAW* to cash out.`
       );
+      return true;
+    case "vendor_balance":
+      await sendText(customerKey, formatSellerWalletReply(supplier));
       return true;
     case "vendor_add_product":
       await sendText(
