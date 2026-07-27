@@ -283,21 +283,33 @@
       <!-- Step 4: Pricing -->
       <section id="panel-pricing" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
         <h2 class="font-bold text-lg">Pricing & shipping</h2>
+        <p id="ai-weight-note" class="hidden text-sm rounded-xl bg-brand-green/10 border border-brand-green/20 px-4 py-3 text-brand-purple/80 dark:text-white/80">
+          <strong>AI detected:</strong> <span id="ai-weight-label">—</span>
+        </p>
         <label class="block text-sm font-medium">
           Listing price (KES) *
           <input id="draft-price" type="number" min="10" class="sell-form-input" />
         </label>
         <label class="block text-sm font-medium">
-          Shipping fee (KES) *
-          <input id="draft-shipping" type="number" min="150" class="sell-form-input" />
+          Estimated size / weight (from photo)
+          <select id="draft-weight-class" class="sell-form-input"></select>
           <span id="shipping-tier-hint" class="sell-tag-hint"></span>
+        </label>
+        <label class="block text-sm font-medium">
+          Shipping fee (KES)
+          <input id="draft-shipping" type="number" min="0" class="sell-form-input" />
+          <span class="sell-tag-hint">AI suggests a fee from the tier above — you can edit before posting.</span>
+        </label>
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />
+          Offer free shipping (you cover delivery — buyer pays item price only)
         </label>
         <table id="fee-breakdown-pricing" class="sell-fee-table" aria-label="Fee breakdown">
           <tbody>
             <tr><th scope="row">Item price</th><td id="fee-item">—</td></tr>
             <tr><th scope="row">Shipping</th><td id="fee-shipping">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="fee-buyer">—</td></tr>
-            <tr><th scope="row">Sokoni fee (10%)</th><td id="fee-platform">—</td></tr>
+            <tr><th scope="row">Processing &amp; platform fee (10%)</th><td id="fee-platform">—</td></tr>
             <tr class="sell-fee-net"><th scope="row">You receive</th><td id="fee-net">—</td></tr>
           </tbody>
         </table>
@@ -305,7 +317,7 @@
           Dispatch from (city)
           <input id="draft-location" placeholder="Nairobi, Mombasa…" class="sell-form-input" />
         </label>
-        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — buyer pays item + shipping upfront via M-Pesa. Sokoni holds funds in escrow until delivery.</p>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — buyer pays upfront via M-Pesa. Sokoni holds funds in escrow until delivery.</p>
       </section>
 
       <!-- Step 5: Review -->
@@ -317,7 +329,7 @@
             <tr><th scope="row">Item price</th><td id="review-fee-item">—</td></tr>
             <tr><th scope="row">Shipping</th><td id="review-fee-shipping">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="review-fee-buyer">—</td></tr>
-            <tr><th scope="row">Sokoni fee (10%)</th><td id="review-fee-platform">—</td></tr>
+            <tr><th scope="row">Processing &amp; platform fee (10%)</th><td id="review-fee-platform">—</td></tr>
             <tr class="sell-fee-net"><th scope="row">You receive</th><td id="review-fee-net">—</td></tr>
           </tbody>
         </table>

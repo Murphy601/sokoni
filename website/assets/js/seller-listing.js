@@ -131,15 +131,40 @@ function goStep(delta) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function getShippingTierLabel(classId) {
+function getShippingTier(classId) {
   const tiers = meta.shippingTiers || [];
-  const tier = tiers.find((t) => t.id === classId);
-  return tier ? `${tier.label} — typical shipping ${formatKes(tier.typicalKes)}` : "";
+  return tiers.find((t) => t.id === classId) || tiers[0] || null;
 }
 
-function computeFeeBreakdown(itemKes, shippingKes) {
+function getShippingTierLabel(classId) {
+  const tier = getShippingTier(classId);
+  if (!tier) return "";
+  const weight = tier.weightNote ? ` · ${tier.weightNote}` : "";
+  return `${tier.label}${weight} — typical ${formatKes(tier.typicalKes)} (KES ${tier.minKes}–${tier.maxKes})`;
+}
+
+function populateWeightClassSelect(selected) {
+  const select = el("draft-weight-class");
+  if (!select) return;
+  const tiers = meta.shippingTiers || [];
+  select.innerHTML = tiers
+    .map(
+      (t) =>
+        `<option value="${t.id}">${t.label} (${t.weightNote || t.id}) — ${formatKes(t.typicalKes)}</option>`
+    )
+    .join("");
+  if (selected) select.value = selected;
+  else if (tiers[0]) select.value = tiers[0].id;
+}
+
+function isFreeShipping() {
+  return Boolean(el("draft-free-shipping")?.checked);
+}
+
+function computeFeeBreakdown(itemKes, shippingKes, freeShipping = isFreeShipping()) {
   const item = Math.max(0, Math.round(Number(itemKes) || 0));
-  const shipping = Math.max(MIN_SHIPPING_KES, Math.round(Number(shippingKes) || MIN_SHIPPING_KES));
+  const shipRaw = Math.round(Number(shippingKes) || 0);
+  const shipping = freeShipping ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw || MIN_SHIPPING_KES);
   const buyerTotal = item + shipping;
   const platformFee = Math.round(buyerTotal * PLATFORM_FEE_RATE);
   return {
@@ -148,7 +173,38 @@ function computeFeeBreakdown(itemKes, shippingKes) {
     buyerTotalKes: buyerTotal,
     platformFeeKes: platformFee,
     sellerNetKes: buyerTotal - platformFee,
+    freeShipping,
   };
+}
+
+function syncShippingFromWeightClass() {
+  if (isFreeShipping()) return;
+  const tier = getShippingTier(el("draft-weight-class")?.value);
+  if (!tier || !el("draft-shipping")) return;
+  el("draft-shipping").value = String(tier.typicalKes);
+}
+
+function updateAiWeightNote(classId) {
+  const note = el("ai-weight-note");
+  const label = el("ai-weight-label");
+  if (!note || !label) return;
+  if (classId && draft.estimatedWeightClass) {
+    label.textContent = getShippingTierLabel(classId);
+    note.classList.remove("hidden");
+  } else {
+    note.classList.add("hidden");
+  }
+}
+
+function updateShippingFieldState() {
+  const free = isFreeShipping();
+  const shipInput = el("draft-shipping");
+  const weightSelect = el("draft-weight-class");
+  if (shipInput) {
+    shipInput.disabled = free;
+    if (free) shipInput.value = "0";
+  }
+  if (weightSelect) weightSelect.disabled = free;
 }
 
 function renderFeeBreakdown(fees, prefix = "fee") {
@@ -165,12 +221,13 @@ function renderFeeBreakdown(fees, prefix = "fee") {
 }
 
 function updateFeeBreakdown() {
+  updateShippingFieldState();
   const fees = computeFeeBreakdown(el("draft-price")?.value, el("draft-shipping")?.value);
   renderFeeBreakdown(fees, "fee");
+  const classId = el("draft-weight-class")?.value || draft.estimatedWeightClass;
   const hint = el("shipping-tier-hint");
-  if (hint && draft.estimatedWeightClass) {
-    hint.textContent = getShippingTierLabel(draft.estimatedWeightClass);
-  }
+  if (hint && classId) hint.textContent = getShippingTierLabel(classId);
+  updateAiWeightNote(classId);
 }
 
 function retailFromSupply(supply) {
@@ -289,7 +346,10 @@ function fillFormFromDraft() {
   el("draft-brand").value = draft.brand || "";
   el("draft-brand2").value = draft.secondaryBrand || "";
   el("draft-price").value = draft.priceKes ?? draft.sourcePriceKes ?? "";
-  el("draft-shipping").value = draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? MIN_SHIPPING_KES;
+  populateWeightClassSelect(draft.estimatedWeightClass || "small");
+  el("draft-shipping").value =
+    draft.freeShipping ? 0 : draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? getShippingTier(draft.estimatedWeightClass)?.typicalKes ?? MIN_SHIPPING_KES;
+  if (el("draft-free-shipping")) el("draft-free-shipping").checked = Boolean(draft.freeShipping);
   el("draft-color").value = draft.color || "";
   el("draft-size").value = draft.size || "";
   el("draft-location").value = draft.location || "";
@@ -299,10 +359,6 @@ function fillFormFromDraft() {
   populateSelect(el("draft-category"), Object.keys(CATEGORY_LABELS), CATEGORY_LABELS, draft.category);
   populateSelect(el("draft-condition"), meta.conditions, CONDITION_LABELS, draft.condition);
   populateBrowseSelects(draft.browseCategory, draft.browseSubCategory);
-  const hint = el("shipping-tier-hint");
-  if (hint && draft.estimatedWeightClass) {
-    hint.textContent = getShippingTierLabel(draft.estimatedWeightClass);
-  }
   updateFeeBreakdown();
 }
 
@@ -345,7 +401,11 @@ function collectDraft() {
     brand: el("draft-brand").value.trim(),
     secondaryBrand: el("draft-brand2").value.trim(),
     priceKes: Math.round(Number(el("draft-price").value) || 0),
-    shippingKes: Math.max(MIN_SHIPPING_KES, Math.round(Number(el("draft-shipping").value) || MIN_SHIPPING_KES)),
+    estimatedWeightClass: el("draft-weight-class")?.value || draft.estimatedWeightClass || "small",
+    freeShipping: isFreeShipping(),
+    shippingKes: isFreeShipping()
+      ? 0
+      : Math.max(MIN_SHIPPING_KES, Math.round(Number(el("draft-shipping").value) || MIN_SHIPPING_KES)),
     sourcePriceKes: Math.round(Number(el("draft-price").value) || 0),
     category: el("draft-category").value,
     browseCategory: el("draft-browse-cat")?.value,
@@ -397,8 +457,8 @@ async function onPublish() {
     return;
   }
   const d = collectDraft();
-  if (d.shippingKes < MIN_SHIPPING_KES) {
-    setStatus(`Shipping fee is required (minimum KES ${MIN_SHIPPING_KES}).`, true);
+  if (!d.freeShipping && d.shippingKes < MIN_SHIPPING_KES) {
+    setStatus(`Shipping fee is required (minimum KES ${MIN_SHIPPING_KES}), or tick Offer free shipping.`, true);
     goStep(-(stepIndex - STEPS.indexOf("pricing")));
     return;
   }
@@ -492,8 +552,10 @@ async function loadMeta() {
       el("draft-era").innerHTML =
         `<option value="">—</option>` + meta.eras.map((e) => `<option value="${e}">${e}</option>`).join("");
     }
+    populateWeightClassSelect(draft.estimatedWeightClass);
   } catch {
     populateBrowseSelects();
+    populateWeightClassSelect();
   }
 }
 
@@ -1015,6 +1077,12 @@ function init() {
   });
   el("draft-price")?.addEventListener("input", updateFeeBreakdown);
   el("draft-shipping")?.addEventListener("input", updateFeeBreakdown);
+  el("draft-weight-class")?.addEventListener("change", () => {
+    draft.estimatedWeightClass = el("draft-weight-class")?.value;
+    syncShippingFromWeightClass();
+    updateFeeBreakdown();
+  });
+  el("draft-free-shipping")?.addEventListener("change", updateFeeBreakdown);
 
   loadMeta().then(() => {
     checkApiHealth();

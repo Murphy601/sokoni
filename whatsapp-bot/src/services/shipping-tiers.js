@@ -1,30 +1,85 @@
-/** Seller shipping tiers + platform fee (item + shipping). No free shipping. */
+/** Seller shipping tiers + platform fee (item + shipping). Free shipping optional (seller choice). */
 
 export const PLATFORM_FEE_RATE = 0.1;
 export const MIN_SHIPPING_KES = 150;
 
+/** Preset rider/courier tiers — AI maps cover photo → class → typical fee. */
 export const SHIPPING_TIERS = [
-  { id: "small", label: "Small (< 500 g)", minKes: 150, maxKes: 250, typicalKes: 150 },
-  { id: "medium", label: "Medium (500 g – 2 kg)", minKes: 250, maxKes: 400, typicalKes: 300 },
-  { id: "large", label: "Large (2 – 10 kg)", minKes: 400, maxKes: 800, typicalKes: 550 },
-  { id: "bulky", label: "Bulky (10 kg+)", minKes: 800, maxKes: 2000, typicalKes: 1200 },
+  {
+    id: "small",
+    label: "Small — tops, cosmetics, accessories",
+    weightNote: "< 500 g",
+    minKes: 150,
+    maxKes: 200,
+    typicalKes: 175,
+    examples: "T-shirt, dress, jewelry, lipstick, phone case, yogurt",
+  },
+  {
+    id: "medium",
+    label: "Medium — shoes, trousers, hoodies",
+    weightNote: "500 g – 1.5 kg",
+    minKes: 250,
+    maxKes: 300,
+    typicalKes: 275,
+    examples: "Jeans, shoes, handbag, hoodie, headphones",
+  },
+  {
+    id: "large",
+    label: "Large — boots, jackets, electronics",
+    weightNote: "> 1.5 kg",
+    minKes: 350,
+    maxKes: 500,
+    typicalKes: 425,
+    examples: "Boots, heavy coat, laptop, blender, microwave",
+  },
 ];
 
 const WEIGHT_KEYWORDS = [
-  { id: "small", words: ["phone", "case", "charger", "earring", "ring", "lipstick", "perfume", "soap", "socks", "belt", "scarf", "cap", "hat", "yogurt", "snack", "tea", "coffee"] },
-  { id: "medium", words: ["shirt", "top", "dress", "shoe", "sandal", "bag", "handbag", "hoodie", "jeans", "trouser", "blender", "kettle", "headphone"] },
-  { id: "large", words: ["laptop", "monitor", "microwave", "cooker", "fridge", "freezer", "washing", "television", "tv", "sofa", "mattress", "chair"] },
-  { id: "bulky", words: ["wardrobe", "bed", "dining set", "freezer chest", "generator"] },
+  {
+    id: "small",
+    words: [
+      "t-shirt", "tshirt", "tee", "top", "blouse", "dress", "skirt", "jewelry", "jewellery",
+      "earring", "necklace", "ring", "bracelet", "lipstick", "cosmetic", "perfume", "makeup",
+      "soap", "lotion", "socks", "belt", "scarf", "cap", "hat", "phone case", "charger",
+      "yogurt", "yoghurt", "snack", "tea", "coffee", "spice", "sauce", "dairy", "grocer",
+    ],
+  },
+  {
+    id: "medium",
+    words: [
+      "shirt", "jeans", "trouser", "pants", "shoe", "sandal", "sneaker", "heel", "bootie",
+      "bag", "handbag", "purse", "hoodie", "sweater", "jacket light", "headphone", "kettle",
+      "blender small", "tablet",
+    ],
+  },
+  {
+    id: "large",
+    words: [
+      "boot", "coat", "jacket heavy", "parka", "laptop", "monitor", "microwave", "cooker",
+      "fridge", "freezer", "washing", "television", "tv", "speaker", "generator", "sofa",
+      "mattress", "chair", "electronics",
+    ],
+  },
 ];
 
 export function getShippingTier(id) {
   const key = String(id || "small").toLowerCase();
-  return SHIPPING_TIERS.find((t) => t.id === key) || SHIPPING_TIERS[0];
+  const normalized = key === "bulky" ? "large" : key;
+  return SHIPPING_TIERS.find((t) => t.id === normalized) || SHIPPING_TIERS[0];
+}
+
+/** Text block injected into AI vision prompts. */
+export function shippingTierPromptBlock() {
+  return SHIPPING_TIERS.map(
+    (t) =>
+      `- *${t.id}* (${t.weightNote}): KES ${t.minKes}–${t.maxKes}, typical ${t.typicalKes} — e.g. ${t.examples}`
+  ).join("\n");
 }
 
 export function clampShippingKes(amount, tierId = "small") {
   const tier = getShippingTier(tierId);
   const n = Math.round(Number(amount) || 0);
+  if (n === 0) return 0;
   return Math.max(MIN_SHIPPING_KES, Math.min(tier.maxKes, Math.max(tier.minKes, n || tier.typicalKes)));
 }
 
@@ -39,9 +94,21 @@ export function inferWeightClass(name = "") {
   return best.id;
 }
 
-/** Apply AI weight/shipping suggestion — always returns a valid shipping fee ≥ min. */
+/** Apply AI weight/shipping suggestion — respects seller free-shipping toggle. */
 export function applyAiShippingSuggestion(draft = {}) {
-  const weightClass = String(draft.estimatedWeightClass || draft.weightClass || "").toLowerCase() || inferWeightClass(draft.name);
+  if (draft.freeShipping === true) {
+    return {
+      estimatedWeightClass: draft.estimatedWeightClass || inferWeightClass(draft.name),
+      suggestedShippingFeeKsh: 0,
+      shippingKes: 0,
+      freeShipping: true,
+      shippingTierLabel: "Free shipping (seller covers delivery)",
+    };
+  }
+
+  const weightClass =
+    String(draft.estimatedWeightClass || draft.weightClass || "").toLowerCase() ||
+    inferWeightClass(draft.name);
   const tier = getShippingTier(weightClass);
   const raw =
     draft.suggestedShippingFeeKsh ??
@@ -53,13 +120,15 @@ export function applyAiShippingSuggestion(draft = {}) {
     estimatedWeightClass: tier.id,
     suggestedShippingFeeKsh: shippingKes,
     shippingKes,
-    shippingTierLabel: tier.label,
+    freeShipping: false,
+    shippingTierLabel: `${tier.label} (${tier.weightNote})`,
   };
 }
 
-export function computeFeeBreakdown(itemKes, shippingKes) {
+export function computeFeeBreakdown(itemKes, shippingKes, { freeShipping = false } = {}) {
   const item = Math.max(0, Math.round(Number(itemKes) || 0));
-  const shipping = clampShippingKes(shippingKes);
+  const shipRaw = Math.round(Number(shippingKes) || 0);
+  const shipping = freeShipping || shipRaw === 0 ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw);
   const buyerTotal = item + shipping;
   const platformFeeKes = Math.round(buyerTotal * PLATFORM_FEE_RATE);
   const sellerNetKes = buyerTotal - platformFeeKes;
@@ -70,24 +139,37 @@ export function computeFeeBreakdown(itemKes, shippingKes) {
     platformFeeKes,
     platformFeeRate: PLATFORM_FEE_RATE,
     sellerNetKes,
+    freeShipping: shipping === 0,
   };
 }
 
-export function validateShippingKes(shippingKes) {
+export function validateShippingKes(shippingKes, { freeShipping = false } = {}) {
+  if (freeShipping) return { ok: true, shippingKes: 0, freeShipping: true };
   const n = Math.round(Number(shippingKes) || 0);
   if (!Number.isFinite(n) || n < MIN_SHIPPING_KES) {
     return {
       ok: false,
       error: "invalid_shipping",
-      message: `Shipping fee is required (minimum KES ${MIN_SHIPPING_KES}).`,
+      message: `Shipping fee is required (minimum KES ${MIN_SHIPPING_KES}), or tick Offer free shipping.`,
     };
   }
-  return { ok: true, shippingKes: n };
+  return { ok: true, shippingKes: n, freeShipping: false };
 }
 
-/** Buyer-facing totals from a catalog product (defaults shipping to min if missing). */
+/** Buyer-facing totals from a catalog product. */
 export function computeProductTotals(product = {}) {
   const itemKes = Math.max(0, Math.round(Number(product.priceKes) || 0));
+  if (product.freeShipping) {
+    const fees = computeFeeBreakdown(itemKes, 0, { freeShipping: true });
+    return {
+      itemKes: fees.itemKes,
+      shippingKes: 0,
+      totalKes: fees.buyerTotalKes,
+      platformFeeKes: fees.platformFeeKes,
+      sellerNetKes: fees.sellerNetKes,
+      freeShipping: true,
+    };
+  }
   const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
   const shippingRaw =
     product.shippingKes ??
@@ -100,6 +182,7 @@ export function computeProductTotals(product = {}) {
     totalKes: fees.buyerTotalKes,
     platformFeeKes: fees.platformFeeKes,
     sellerNetKes: fees.sellerNetKes,
+    freeShipping: false,
   };
 }
 
@@ -132,6 +215,7 @@ export function formatBuyerTotalLine(orderOrProduct) {
 /** WhatsApp / bag one-liner: item + shipping = total */
 export function formatProductListPrice(product = {}) {
   const t = computeProductTotals(product);
+  if (t.freeShipping) return `KES ${t.itemKes.toLocaleString()} (free shipping)`;
   if (t.shippingKes > 0) {
     return `KES ${t.itemKes.toLocaleString()} + ${t.shippingKes.toLocaleString()} ship = ${t.totalKes.toLocaleString()}`;
   }

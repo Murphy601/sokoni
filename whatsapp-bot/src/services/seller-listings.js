@@ -251,6 +251,7 @@ async function buildProduct(supplier, enriched, media, productId) {
     isSecondhand: enriched.isSecondhand,
     location: enriched.location || supplier.city || undefined,
     shippingKes: enriched.shippingKes,
+    freeShipping: Boolean(enriched.freeShipping),
     estimatedWeightClass: enriched.estimatedWeightClass,
     shippingNote: enriched.shippingNote || (supplier.delivers ? "Seller delivery" : "Hub / pickup coordination"),
     rating: 4.5,
@@ -318,9 +319,12 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   if (!enriched.name || (!enriched.priceKes && !enriched.sourcePriceKes)) {
     return { error: "missing_fields", message: "Title and price are required." };
   }
-  const shippingCheck = validateShippingKes(enriched.shippingKes);
+  const shippingCheck = validateShippingKes(enriched.shippingKes, {
+    freeShipping: Boolean(enriched.freeShipping),
+  });
   if (!shippingCheck.ok) return shippingCheck;
   enriched.shippingKes = shippingCheck.shippingKes;
+  enriched.freeShipping = shippingCheck.freeShipping;
   if (!images.length) {
     return { error: "missing_image", message: "Add at least one product photo." };
   }
