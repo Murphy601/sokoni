@@ -662,7 +662,7 @@ async function loadMyListings() {
         const title = item.draft?.name || item.id;
         const img = item.imageUrl || item.images?.[0];
         const pid = item.productId || item.id;
-        const price = item.draft?.priceKes || item.draft?.sourcePriceKes;
+        const price = item.draft?.buyerTotalKes ?? item.draft?.priceKes || item.draft?.sourcePriceKes;
         const shareUrl = `https://sokonimall.com/?q=${encodeURIComponent(pid)}`;
         return `
           <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start" data-product-id="${pid}">

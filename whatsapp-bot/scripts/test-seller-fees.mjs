@@ -8,6 +8,7 @@ import {
   orderBuyerTotal,
   formatProductListPrice,
   inferWeightClass,
+  resolveSellerNetKes,
   MIN_SHIPPING_KES,
   validateShippingKes,
   getShippingTier,
@@ -63,6 +64,18 @@ assert("free shipping seller net 300", freeProduct.sellerNetKes === 300 && freeP
 
 assert("legacy order total 450", computeProductTotals({ priceKes: 300, shippingKes: 150 }).totalKes === 450);
 assert("seller listing list price all-in", formatProductListPrice({ sellerNetKes: 300, shippingKes: 150 }).includes("495"));
+
+const dbRow = { priceKes: 523, shippingKes: 175, sourcePriceKes: 300, platformFeeKes: 48 };
+assert("DB row resolves seller net", resolveSellerNetKes(dbRow) === 300);
+assert("DB row buyer total 523", computeProductTotals(dbRow).totalKes === 523);
+
+const dbSellerOnly = { priceKes: 523, shippingKes: 175, sellerId: 7 };
+assert("DB sellerId infers seller net", resolveSellerNetKes(dbSellerOnly) === 300);
+assert("DB sellerId buyer total 523", computeProductTotals(dbSellerOnly).totalKes === 523);
+
+const legacyYogurt = { sourcePriceKes: 276, priceKes: 300, supplierId: "seller-adiv", name: "Yogurt" };
+assert("legacy item price not treated as all-in", resolveSellerNetKes(legacyYogurt) == null);
+assert("legacy yogurt total 475", computeProductTotals(legacyYogurt).totalKes === 475);
 
 console.log(`\n${failed ? failed + " failed" : "All seller fee tests passed"}`);
 process.exit(failed ? 1 : 0);

@@ -21,6 +21,16 @@ export function rowToCatalogProduct(row, imageUrls = []) {
 
   const imageUrl = images[0] || null;
 
+  let legacy = {};
+  try {
+    legacy =
+      typeof row.legacy_json === "string"
+        ? JSON.parse(row.legacy_json)
+        : row.legacy_json && typeof row.legacy_json === "object"
+          ? row.legacy_json
+          : {};
+  } catch {}
+
   return {
     id: row.id,
     name: row.title,
@@ -40,6 +50,9 @@ export function rowToCatalogProduct(row, imageUrls = []) {
 
     priceKes: row.price_kes != null ? Number(row.price_kes) : undefined,
     shippingKes: row.shipping_kes != null ? Number(row.shipping_kes) : undefined,
+    sellerNetKes: legacy.sellerNetKes != null ? Number(legacy.sellerNetKes) : undefined,
+    platformFeeKes: legacy.platformFeeKes != null ? Number(legacy.platformFeeKes) : undefined,
+    supplierId: legacy.supplierId || undefined,
     priceUsd: row.price_usd != null ? Number(row.price_usd) : undefined,
     sourcePriceKes: row.source_price_kes != null ? Number(row.source_price_kes) : undefined,
     originalPriceKes: row.original_price_kes != null ? Number(row.original_price_kes) : undefined,
