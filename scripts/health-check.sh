@@ -56,7 +56,10 @@ except Exception as e:
     echo ""
     STATUS="$(printf '%s' "$SESSION_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")"
     if [ "$STATUS" != "WORKING" ]; then
-      echo "ERROR: session not WORKING (status=$STATUS) — scan QR or run configure-waha-session.sh"
+      echo "ERROR: session not WORKING (status=$STATUS)"
+      echo "       NOWEB store must be re-applied after every WAHA container restart."
+      echo "       Fix: bash scripts/waha-link-whatsapp.sh"
+      echo "       Or:  RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
     fi
   fi
 fi
