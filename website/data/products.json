@@ -1,1 +1,31 @@
-[]
+[
+  {
+    "id": "sm-tlom7-001",
+    "name": "Delamere Premium Yoghurt with Real Lemon Biscuit",
+    "category": "supermarket",
+    "priceKes": 300,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🛒",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/sm-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/sm-tlom7-001.jpg",
+      "assets/images/products/sm-tlom7-001-2.jpg",
+      "assets/images/products/sm-tlom7-001-3.jpg",
+      "assets/images/products/sm-tlom7-001-4.jpg"
+    ],
+    "subcategory": "groceries",
+    "browseCategory": "home",
+    "browseSubCategory": "supermarket",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "brand": "Delamere",
+    "color": "white",
+    "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack."
+  }
+]

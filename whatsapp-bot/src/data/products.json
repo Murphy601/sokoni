@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "id": "sm-tlom7-001",
+    "name": "Delamere Premium Yoghurt with Real Lemon Biscuit",
+    "category": "supermarket",
+    "subcategory": "groceries",
+    "browseCategory": "home",
+    "browseSubCategory": "supermarket",
+    "sourcePriceKes": 276,
+    "priceKes": 300,
+    "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack.",
+    "brand": "Delamere",
+    "color": "white",
+    "size": "",
+    "era": "",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "shippingNote": "Seller delivery",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "emoji": "🛒",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/sm-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/sm-tlom7-001.jpg",
+      "assets/images/products/sm-tlom7-001-2.jpg",
+      "assets/images/products/sm-tlom7-001-3.jpg",
+      "assets/images/products/sm-tlom7-001-4.jpg"
+    ],
+    "videoUrl": null,
+    "publishedAt": 1785150673817,
+    "moderation": {
+      "status": "pending_scan"
+    }
+  }
+]
