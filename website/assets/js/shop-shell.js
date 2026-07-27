@@ -44,10 +44,13 @@
 
   function toggleBag(id) {
     if (!id) return false;
-    if (bagIds.has(id)) bagIds.delete(id);
+    const wasSaved = bagIds.has(id);
+    if (wasSaved) bagIds.delete(id);
     else bagIds.add(id);
     saveBag();
-    return bagIds.has(id);
+    const saved = bagIds.has(id);
+    window.SokoniFeed?.trackSave?.(id, saved);
+    return saved;
   }
 
   function isInBag(id) {

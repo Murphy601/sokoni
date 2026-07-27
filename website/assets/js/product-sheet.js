@@ -96,6 +96,7 @@
   function open(product) {
     if (!product) return;
     currentProduct = product;
+    window.SokoniFeed?.trackView?.(product.id);
     const body = document.getElementById("product-sheet-body");
     const sheet = document.getElementById("product-sheet");
     if (!body || !sheet) return;

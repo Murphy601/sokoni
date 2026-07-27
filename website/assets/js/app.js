@@ -458,6 +458,7 @@ function updateDealsFilterLabel() {
 
 function runSearch(query) {
   searchQuery = query.trim();
+  if (searchQuery) window.SokoniFeed?.trackSearch?.(searchQuery);
   storeDisplayLimit = STORE_INITIAL_LIMIT;
   activeSubcategory = null;
   activeProductId = null;
@@ -1155,6 +1156,8 @@ async function renderProducts() {
           }),
       });
     }
+
+    if (window.SokoniFeed?.refresh) window.SokoniFeed.refresh();
   } catch (err) {
     console.error("Failed to load product catalog:", err);
     const grid = document.getElementById("local-deals-grid");
@@ -1189,6 +1192,7 @@ window.SokoniApp = {
   formatPrice,
   runSearch,
   setCatalogFilter,
+  renderDepopCard,
 };
 
 renderProducts();

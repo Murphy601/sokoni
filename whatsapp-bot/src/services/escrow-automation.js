@@ -20,6 +20,7 @@ import { getSupplier } from "./suppliers.js";
 import { invalidateProductCache } from "./catalog.js";
 import { scheduleSellerPayoutAfterDelivery, addBusinessDays } from "./settlements.js";
 import { advanceShipmentStatus } from "./shipments.js";
+import { recordPurchaseFeedEvent } from "./feed-ranking.js";
 import { isDbEnabled } from "../db/pool.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -155,6 +156,7 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   }
 
   await lockProductForOrder(updated);
+  recordPurchaseFeedEvent(updated);
   await notifyBuyerPaid(updated, payment);
   await notifySellerDropoff(updated, label);
 

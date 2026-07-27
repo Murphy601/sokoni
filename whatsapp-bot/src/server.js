@@ -21,8 +21,11 @@ import paymentsApiRouter from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
 import adminShipmentsRouter from "./routes/adminShipments.js";
 import agentApiRouter from "./routes/agentApi.js";
+import feedApiRouter from "./routes/feedApi.js";
 import { processDuePayouts } from "./services/settlements.js";
 import { agentMeta } from "./services/ai-agent.js";
+import { feedMeta } from "./services/feed-ranking.js";
+import { refreshFeedCache } from "./services/feed-ranking.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 
 const app = express();
@@ -72,6 +75,7 @@ app.get("/health", async (_req, res) => {
   const db = await pingDb();
   const checkout = checkoutMeta();
   const agent = agentMeta();
+  const feed = feedMeta();
   res.json({
     status: "ok",
     build: BUILD_ID,
@@ -79,6 +83,7 @@ app.get("/health", async (_req, res) => {
     aiConfigured: Boolean(config.openai.apiKey),
     aiAgent: agent.name,
     aiTools: agent.tools,
+    feedPhase: feed.phase,
     wahaConfigured: Boolean(config.waha.apiUrl),
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
@@ -127,6 +132,7 @@ app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/payments", paymentsApiRouter);
 app.use("/api/tracking", trackingApiRouter);
 app.use("/api/agent", agentApiRouter);
+app.use("/api/feed", feedApiRouter);
 app.use("/admin/shipments", adminShipmentsRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);
@@ -167,7 +173,18 @@ app.listen(config.port, () => {
   startTokenRefreshScheduler();
   startTiktokScheduler();
   startPayoutScheduler();
+  startFeedScheduler();
 });
+
+/** Refresh trending / price-tier feed slices hourly. */
+function startFeedScheduler() {
+  const tick = () => {
+    refreshFeedCache().catch((err) => console.error("[feed] refresh:", err.message));
+  };
+  tick();
+  setInterval(tick, 60 * 60 * 1000);
+  console.log("✓ Feed ranking scheduler enabled (hourly)");
+}
 
 /** Move scheduled seller payouts to owed after 2–3 business day escrow hold. */
 function startPayoutScheduler() {

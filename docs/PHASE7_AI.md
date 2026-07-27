@@ -68,4 +68,4 @@ Website deploys on push via Cloudflare Pages.
 
 ## Next: Phase 8
 
-Personalization / ML feed ranking (views, saves, purchases).
+Personalization & behavior-ranked feeds — see [PHASE8_FEED.md](./PHASE8_FEED.md).
