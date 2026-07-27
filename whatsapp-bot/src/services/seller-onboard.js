@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
 import { getOrder } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
+import { shipmentStatusLabel } from "./shipments.js";
+import { config } from "../config.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
 import { consumeVerificationToken } from "./seller-verification.js";
 
@@ -125,6 +127,43 @@ function loadAllOrders() {
   return [];
 }
 
+function sellerLabelUrl(orderId) {
+  const base = config.botPublicUrl || "https://bot.sokonimall.com";
+  return `${base}/api/checkout/${encodeURIComponent(orderId)}/label`;
+}
+
+/** Seller dashboard — paid orders, labels, shipment status (Phases 5–6). */
+export function getSellerOrders(supplierId) {
+  return loadAllOrders()
+    .filter((o) => o.supplierId === supplierId && o.status !== "cancelled")
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map((o) => {
+      const paid = o.customerPaymentStatus === "confirmed";
+      const shipmentStatus = o.shipmentStatus || "pending";
+      const needsDropOff =
+        paid && ["pending", "label_ready"].includes(shipmentStatus) && o.status !== "delivered";
+
+      return {
+        orderId: o.id,
+        productName: o.productName,
+        sellerNetKes: sellerOrderNet(o),
+        paid,
+        shipmentStatus,
+        shipmentStatusLabel: shipmentStatusLabel(shipmentStatus),
+        needsDropOff,
+        labelUrl: paid ? sellerLabelUrl(o.id) : null,
+        trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
+        createdAt: o.createdAt,
+      };
+    });
+}
+
+export function getSellerOrdersByPhone(phone) {
+  const check = requireSeller(phone);
+  if (check.error) return check;
+  return { orders: getSellerOrders(check.supplier.id), seller: sanitizeSeller(check.supplier) };
+}
+
 /** Escrow ledger: available / pending / in transit for seller dashboard. */
 export function getSellerEscrowLedger(supplierId) {
   const settlements = loadSettlements();
@@ -155,6 +194,8 @@ export function getSellerEscrowLedger(supplierId) {
       status: "pending",
       productName: o.productName,
       trackingCode: o.id,
+      shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus || "pending"),
+      trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
     }));
 
   const inTransit = orders
@@ -171,6 +212,8 @@ export function getSellerEscrowLedger(supplierId) {
       productName: o.productName,
       trackingCode: o.id,
       shipmentStatus: o.shipmentStatus,
+      shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus),
+      trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
     }));
 
   const availableTotal = available

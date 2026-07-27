@@ -132,6 +132,55 @@
         <p id="seller-handle" class="text-sm text-brand-green font-medium"></p>
       </div>
 
+      <div class="sell-view-tabs" role="tablist" aria-label="Seller views">
+        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">Dashboard</button>
+        <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List new item</button>
+      </div>
+
+      <div id="view-dashboard" class="space-y-6">
+        <section class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg">Orders to ship</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">Paid sales — print label and drop at a Sokoni hub.</p>
+            </div>
+            <button id="load-orders-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div id="seller-orders" class="space-y-3"></div>
+        </section>
+
+        <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="font-bold text-lg">Earnings</h2>
+            <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
+              <span class="sell-ledger-dot available"></span>Available
+              <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+            <button type="button" class="sell-ledger-tab" data-ledger="pending">
+              <span class="sell-ledger-dot pending"></span>Pending escrow
+              <p id="ledger-pending-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+            <button type="button" class="sell-ledger-tab" data-ledger="transit">
+              <span class="sell-ledger-dot transit"></span>In transit
+              <p id="ledger-transit-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+          </div>
+          <div id="ledger-detail" class="text-sm space-y-2"></div>
+        </section>
+
+        <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="font-bold text-lg">My listings</h2>
+            <button id="load-listings-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div id="my-listings" class="space-y-3"></div>
+        </section>
+      </div>
+
+      <div id="view-listing" class="hidden space-y-6">
       <p id="step-label" class="text-xs font-semibold uppercase tracking-wide text-brand-purple/50 dark:text-white/50">Step 1 of 5</p>
       <div class="sell-wizard-steps" aria-hidden="true">
         <div id="step-bar-0" class="sell-wizard-step is-active"></div>
@@ -285,37 +334,8 @@
         <button id="save-draft-btn" type="button" class="sell-btn-ghost">Save draft</button>
         <button id="post-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full shadow-lg hidden">Post listing</button>
       </div>
-
-      <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
-        <div class="flex items-center justify-between gap-4">
-          <h2 class="font-bold text-lg">Seller dashboard</h2>
-          <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
-        </div>
-        <div class="flex gap-2">
-          <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
-            <span class="sell-ledger-dot available"></span>Available
-            <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
-          </button>
-          <button type="button" class="sell-ledger-tab" data-ledger="pending">
-            <span class="sell-ledger-dot pending"></span>Pending escrow
-            <p id="ledger-pending-total" class="text-lg font-bold mt-1">—</p>
-          </button>
-          <button type="button" class="sell-ledger-tab" data-ledger="transit">
-            <span class="sell-ledger-dot transit"></span>In transit
-            <p id="ledger-transit-total" class="text-lg font-bold mt-1">—</p>
-          </button>
-        </div>
-        <div id="ledger-detail" class="text-sm space-y-2"></div>
-      </section>
-
-      <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
-        <div class="flex items-center justify-between gap-4">
-          <h2 class="font-bold text-lg">My listings</h2>
-          <button id="load-listings-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
-        </div>
-        <div id="my-listings" class="space-y-3"></div>
-      </section>
-      </div>
+      </div><!-- /view-listing -->
+      </div><!-- /listing-wizard -->
     </div>
   </main>
 
