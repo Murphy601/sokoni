@@ -27,31 +27,5 @@
     "brand": "Delamere",
     "color": "white",
     "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack."
-  },
-  {
-    "id": "hb-tlom7-001",
-    "name": "Amara For Men Intensive Body Lotion - 200ml",
-    "category": "health-beauty",
-    "priceKes": 523,
-    "rating": 4.5,
-    "reviews": 0,
-    "source": "Sokoni",
-    "emoji": "💄",
-    "scope": "local",
-    "fulfillment": "store",
-    "payment": "prepaid",
-    "inStock": true,
-    "imageUrl": "assets/images/products/hb-tlom7-001.jpg",
-    "images": [
-      "assets/images/products/hb-tlom7-001.jpg"
-    ],
-    "subcategory": "skincare",
-    "browseCategory": "men",
-    "browseSubCategory": "t-shirts",
-    "condition": "brand_new_without_tags",
-    "isSecondhand": false,
-    "brand": "Amara",
-    "color": "grey",
-    "description": "Intensive body lotion for men featuring ginseng, castor, and coconut oils for skin repair and hydration with a cooling effect."
   }
 ]

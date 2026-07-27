@@ -72,7 +72,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/hb-tlom7-001.jpg",
     "images": [
       "assets/images/products/hb-tlom7-001.jpg"
@@ -82,6 +82,9 @@
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785165846682
+    "refreshedAt": 1785165846682,
+    "isSold": true,
+    "soldAt": 1785172670111,
+    "soldOrderId": "SK-1011"
   }
 ]
