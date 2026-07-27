@@ -89,7 +89,9 @@ else
         curl -sf -X POST -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION/start" >/dev/null || true
         ;;
       SCAN_QR_CODE)
-        echo "==> Scan QR: docker logs \$(docker ps -qf 'ancestor=devlikeapro/waha:latest') 2>&1 | tail -30"
+        echo "==> Scan QR — do NOT use docker logs (ASCII is not scannable)."
+        echo "    Run: bash scripts/waha-link-whatsapp.sh"
+        echo "    Or pairing code + PNG QR saved to ~/sokoni/waha-qr.png"
         ;;
       WORKING)
         echo "==> Session WORKING"
