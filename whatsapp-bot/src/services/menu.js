@@ -72,7 +72,6 @@ export function sendMainMenu(to) {
   const options = [
     { id: "shop_all", label: "👗 Browse Shop" },
     { id: "deals_today", label: "🔥 Today's Picks" },
-    { id: "intl_shop", label: "🌍 Shop International" },
     { id: "track_order", label: "🧾 Track My Order" },
     { id: "visit_site", label: "🌐 Visit Website" },
     { id: "human_handoff", label: "🙋 Talk to a Human" },
@@ -905,10 +904,11 @@ export async function handleMenuAction(from, id) {
   if (id.startsWith("order_")) return startPrepaidOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);
-  if (id === "intl_shop") return sendInternationalMenu(from);
-  if (id === "intl_trending") return sendInternationalTrending(from);
-  if (id === "intl_custom") {
-    return sendText(from, "Tell me what you're looking for and I'll search AliExpress, Temu and Amazon for you! 🌍");
+  if (id === "intl_shop" || id === "intl_trending" || id === "intl_custom") {
+    return sendText(
+      from,
+      "Sokoni Mall is *100% local & prepaid* — brand new and pre-loved items from Kenya sellers only.\n\nType *menu* to browse, or tell me what you're looking for."
+    );
   }
   if (id === "track_order") return sendTrackOrderMenu(from, getCustomerMeta(from)?.phone || "");
   if (id === "visit_site") return sendWebsiteLink(from);

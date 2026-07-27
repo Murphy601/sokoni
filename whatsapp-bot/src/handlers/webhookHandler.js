@@ -368,8 +368,12 @@ export async function handleIncomingMessage(
   if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
 
   if (/^(shop international|international shopping|🌍)$/i.test(normalized) || normalized === "international") {
-    const { sendInternationalMenu } = await import("../services/menu.js");
-    return sendInternationalMenu(customerKey);
+    const { sendMainMenu } = await import("../services/menu.js");
+    await sendText(
+      customerKey,
+      "Sokoni Mall is *100% local & prepaid* — brand new and pre-loved items from Kenya sellers only."
+    );
+    return sendMainMenu(customerKey);
   }
 
   if (normalized === "cart" || normalized === "my cart" || normalized === "my cart?") {

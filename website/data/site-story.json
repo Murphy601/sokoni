@@ -1,5 +1,5 @@
 {
-  "tagline": "Your Market, On WhatsApp",
+  "tagline": "Kenya's #1 Prepaid Marketplace for Brand New & Pre-Loved Fits",
   "whatsappNumber": "254117422428",
   "whatsappDisplay": "+254 117 422 428",
   "mpesaTill": "4775847",
@@ -8,32 +8,31 @@
   "offerPercent": 3,
   "supportEmail": "support@sokonimall.com",
   "kineticLines": [
-    "Browse real deals → chat on WhatsApp → pay on delivery",
-    "{{storeCount}}+ pay-on-delivery items across Kenya",
+    "Browse brand new & pre-loved → pay upfront → track with SK-####",
+    "{{storeCount}}+ prepaid listings across Kenya",
     "Order in English, Kiswahili, or Sheng — same bot",
-    "Track with your SK-#### order number anytime",
-    "International? Partner links — duty may apply on arrival",
+    "100% escrow protection until delivery is confirmed",
     "Verify on {{whatsappDisplay}} before paying Till {{mpesaTill}}",
     "Privacy: your WhatsApp number is for your order only"
   ],
   "trustChips": [
     {
-      "icon": "🛵",
-      "label": "Pay on delivery",
-      "detail": "Inspect first. Pay Till {{mpesaTill}} ({{mpesaTillName}}) — not to riders.",
+      "icon": "🔒",
+      "label": "Prepaid escrow",
+      "detail": "Pay upfront via M-Pesa STK. Funds held until delivery.",
       "href": "faq.html"
     },
     {
-      "icon": "🌍",
-      "label": "International",
-      "detail": "Partner checkout. Import duty/VAT paid by you on arrival.",
-      "href": "terms.html"
+      "icon": "📦",
+      "label": "SK tracking",
+      "detail": "Every order gets SK-#### — track on web or WhatsApp.",
+      "href": "track.html"
     },
     {
-      "icon": "🤝",
-      "label": "Affiliate",
-      "detail": "We may earn a small commission — never costs you extra.",
-      "href": "terms.html"
+      "icon": "♻️",
+      "label": "Pre-loved",
+      "detail": "Thrift fashion alongside brand new drops.",
+      "href": "index.html#deals"
     },
     {
       "icon": "🔒",

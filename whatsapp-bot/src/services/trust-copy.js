@@ -120,7 +120,6 @@ export function howItWorksMessage() {
     `3️⃣ Reply *1* to order — send name, location & phone in one message.\n` +
     `4️⃣ *Pay upfront:* M-Pesa to Till *${till()}* (escrow held until delivery). Daraja STK push coming soon.\n` +
     `5️⃣ Track with your *SK-####* order number anytime.\n\n` +
-    `*International?* *menu* → *Shop International* — partner stores (AliExpress, Temu, Amazon). Customs may apply.\n\n` +
     `${config.store.deliveryNote}\n\n` +
     `Type *menu* anytime to start again.`
   );
