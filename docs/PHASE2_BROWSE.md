@@ -73,6 +73,6 @@ node scripts/build-browse-menu.mjs
 git add website/data/browse-menu.json && git commit -m "chore: rebuild browse menu"
 ```
 
-## Next: Phase 3
+## Next: Phase 4
 
-Full Depop mobile UI clone (top search bar, cart, sell CTA, product detail sheet).
+See [PHASE3_UI.md](./PHASE3_UI.md) for the mobile shop UI. Phase 4: AI listing generator (Gemini Vision).

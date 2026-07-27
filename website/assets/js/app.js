@@ -396,6 +396,7 @@ function setCatalogFilter({
 
   const input = document.getElementById("hero-search");
   if (input) input.value = "";
+  window.SokoniShopShell?.syncSearchInputs?.("");
   document.getElementById("search-status")?.classList.add("hidden");
   document.getElementById("search-wa-cta")?.classList.add("hidden");
 
@@ -462,6 +463,7 @@ function runSearch(query) {
   activeProductId = null;
   const input = document.getElementById("hero-search");
   if (input && input.value !== searchQuery) input.value = searchQuery;
+  window.SokoniShopShell?.syncSearchInputs?.(searchQuery);
 
   const status = document.getElementById("search-status");
   const waCta = document.getElementById("search-wa-cta");
@@ -522,6 +524,27 @@ function productImageBlock(product) {
       </div>`;
   }
   return `<div class="product-image-wrap mb-4 mt-4 rounded-xl overflow-hidden bg-brand-cream aspect-square flex items-center justify-center p-4 text-xs text-brand-purple/40">Photo coming soon</div>`;
+}
+
+function renderDepopCard(product) {
+  const name = escapeHtml(product.name || "Product");
+  const id = escapeHtml(product.id || "");
+  const src = resolveProductImage(product);
+  const imageInner = src
+    ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" />`
+    : `<span class="depop-card-placeholder">Photo soon</span>`;
+
+  return `
+    <button type="button" class="depop-card" data-product-id="${id}" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
+      <div class="depop-card-image-wrap">
+        ${imageInner}
+        <span class="depop-card-badge">COD</span>
+      </div>
+      <div class="depop-card-body">
+        <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
+        <p class="depop-card-title">${name}</p>
+      </div>
+    </button>`;
 }
 
 function renderStoreCard(product) {
@@ -701,6 +724,33 @@ function revealCatalogSections() {
   }
 }
 
+let storeGridClickBound = false;
+let pendingProductSheetId = null;
+
+function bindStoreGridClicks() {
+  if (storeGridClickBound) return;
+  const grid = document.getElementById("local-deals-grid");
+  if (!grid) return;
+  storeGridClickBound = true;
+  grid.addEventListener("click", (e) => {
+    const card = e.target.closest(".depop-card[data-product-id]");
+    if (!card) return;
+    const p = storeProducts.find((x) => x.id === card.dataset.productId);
+    if (p) window.SokoniProductSheet?.open(p);
+  });
+}
+
+function openPendingProductSheet() {
+  if (!pendingProductSheetId) return;
+  const id = pendingProductSheetId;
+  pendingProductSheetId = null;
+  const p = storeProducts.find((x) => x.id === id);
+  if (p) {
+    document.getElementById("deals")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.SokoniProductSheet?.open(p);
+  }
+}
+
 function renderStoreGrid() {
   const grid = document.getElementById("local-deals-grid");
   const empty = document.getElementById("local-deals-empty");
@@ -710,8 +760,7 @@ function renderStoreGrid() {
   if (!grid) return;
 
   const { all: allItems, visible: items } = visibleStoreProducts();
-  grid.innerHTML = items.map(renderStoreCard).join("");
-  if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
+  grid.innerHTML = items.map(renderDepopCard).join("");
 
   const searching = hasActiveSearch();
   const catalogEmpty = storeProducts.length === 0 && !searching;
@@ -1033,6 +1082,7 @@ async function renderProducts() {
     loadCurrencyPref();
     syncCurrencyUi();
     bindSearch();
+    bindStoreGridClicks();
     setupBrowseNudge();
     applyDeepLinkFromUrl();
 
@@ -1041,6 +1091,7 @@ async function renderProducts() {
     renderCategoryChips();
     renderBrowseFilters();
     renderStoreGrid();
+    openPendingProductSheet();
     renderIntlGrid();
     revealCatalogSections();
 
@@ -1069,13 +1120,28 @@ async function renderProducts() {
   }
 }
 
-/** ?text= or ?q= in URL pre-fills search and scrolls to store (e.g. ?text=phone under 15k). */
+/** ?text= / ?q= pre-fill search; ?product= opens detail sheet (e.g. ?product=sk-0042). */
 function applyDeepLinkFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const text = params.get("text") || params.get("q");
-  if (!text?.trim()) return;
-  runSearch(text.trim());
+  if (text?.trim()) {
+    runSearch(text.trim());
+    return;
+  }
+  const productId = params.get("product")?.trim();
+  if (!productId) return;
+  searchQuery = "";
+  activeCategory = "all";
+  activeSubcategory = null;
+  activeProductId = productId;
+  pendingProductSheetId = productId;
 }
+
+window.SokoniApp = {
+  getStoreProducts: () => storeProducts,
+  formatPrice,
+  runSearch,
+};
 
 renderProducts();
 renderReviews();

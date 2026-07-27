@@ -53,9 +53,24 @@
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
 <link rel="stylesheet" href="assets/css/motion.css" />
+<link rel="stylesheet" href="assets/css/depop-ui.css" />
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased">
-  <!-- NAV -->
+<body class="bg-brand-cream text-brand-purple font-sans antialiased has-shop-shell">
+  <!-- Phase 3 — Depop-style mobile shop bar -->
+  <header id="shop-mobile-bar" class="shop-mobile-bar" aria-label="Shop">
+    <button type="button" id="shop-browse-btn" class="shop-mobile-icon-btn" aria-label="Browse categories">☰</button>
+    <form id="shop-search-form" class="shop-mobile-search" role="search">
+      <label for="shop-search" class="sr-only">Search for anything</label>
+      <input type="search" id="shop-search" autocomplete="off" placeholder="Search for anything" />
+    </form>
+    <a id="shop-sell-btn" href="suppliers.html" class="shop-mobile-sell">Sell</a>
+    <button type="button" id="shop-bag-btn" class="shop-mobile-icon-btn shop-bag-btn" aria-label="Saved items">
+      🛍️
+      <span id="shop-bag-count" class="shop-bag-count hidden" aria-hidden="true">0</span>
+    </button>
+  </header>
+
+  <!-- NAV (desktop) -->
   <header class="sticky top-0 z-50 bg-brand-cream/90 backdrop-blur border-b border-black/5">
     <div class="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between">
       <a href="#" class="flex items-center gap-2">
@@ -313,7 +328,7 @@
           💬 Ask on WhatsApp
         </a>
       </div>
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" id="local-deals-grid">
+      <div class="depop-product-grid" id="local-deals-grid">
         <!-- filled by JS -->
       </div>
     </div>
@@ -512,7 +527,30 @@
     </a>
   </div>
 
-  <!-- Catalog navigator (Shopify-style left panel) -->
+  <!-- Phase 3 — Product detail sheet -->
+  <div id="product-sheet" class="bottom-sheet" hidden aria-hidden="true">
+    <div class="sheet-backdrop" aria-hidden="true"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="product-sheet-title">
+      <button type="button" id="product-sheet-close" class="sheet-close" aria-label="Close">&times;</button>
+      <div class="sheet-scroll" id="product-sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- Phase 3 — Saved items (bag) sheet -->
+  <div id="bag-sheet" class="bottom-sheet" hidden aria-hidden="true">
+    <div class="sheet-backdrop" aria-hidden="true"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Saved items">
+      <button type="button" id="bag-sheet-close" class="sheet-close" aria-label="Close">&times;</button>
+      <div class="sheet-scroll">
+        <h2 class="bag-sheet-title">Saved items</h2>
+        <p id="bag-sheet-empty" class="bag-sheet-empty hidden">Nothing saved yet — tap ♡ on any item while browsing.</p>
+        <ul id="bag-sheet-list" class="bag-sheet-list"></ul>
+        <a id="bag-sheet-order" href="#" target="_blank" rel="noopener" class="bag-sheet-order hidden">💬 Order all on WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Catalog navigator (browse drawer) -->
   <div id="catalog-nav-backdrop" class="catalog-nav-backdrop" hidden></div>
   <aside id="catalog-nav-panel" class="catalog-nav-panel" hidden aria-label="Store catalog"></aside>
   <button type="button" id="catalog-nav-toggle" class="catalog-nav-toggle" aria-expanded="false" aria-controls="catalog-nav-panel" aria-label="Open browse menu">
@@ -522,6 +560,8 @@
 
   <script src="assets/js/component-handler.js"></script>
   <script src="assets/js/browse.js"></script>
+  <script src="assets/js/shop-shell.js"></script>
+  <script src="assets/js/product-sheet.js"></script>
   <script src="assets/js/catalog-nav.js"></script>
   <script src="assets/js/app.js"></script>
   <script src="assets/js/hero-engine.js" defer></script>
