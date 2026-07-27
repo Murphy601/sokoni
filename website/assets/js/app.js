@@ -136,14 +136,8 @@ function waLink(message) {
 }
 
 function orderLinkFor(product) {
-  const total = product.totalKes ?? product.priceKes;
-  const ship = product.shippingKes;
-  const priceText =
-    ship != null && ship > 0
-      ? `${formatPrice(product)} + KES ${ship.toLocaleString()} shipping (total KES ${Number(total).toLocaleString()})`
-      : formatPrice(product);
   return waLink(
-    `Hi Sokoni, I'd like to order "${product.name}" (${priceText}) — prepaid. ` +
+    `Hi Sokoni, I'd like to order "${product.name}" (${formatPrice(product)}) — prepaid. ` +
       `My name, delivery location and phone are:`
   );
 }
@@ -182,25 +176,27 @@ function saveCurrencyPref() {
   } catch {}
 }
 
+function buyerPriceKes(product) {
+  if (product.totalKes != null) return Math.round(Number(product.totalKes) || 0);
+  const item = Math.round(Number(product.priceKes) || 0);
+  const ship = Math.round(Number(product.shippingKes) || 0);
+  return ship > 0 ? item + ship : item;
+}
+
 function formatPrice(product) {
-  if (product.priceKes != null) {
-    return `KES ${product.priceKes.toLocaleString()}`;
-  }
+  const kes = buyerPriceKes(product);
+  if (kes > 0) return `KES ${kes.toLocaleString()}`;
   if (product.priceUsd != null) {
     return `$${product.priceUsd}`;
   }
   return "";
 }
 
-function formatShippingLine(product) {
-  const ship = Number(product.shippingKes);
-  if (!Number.isFinite(ship) || ship <= 0) return "";
-  return `+ KES ${ship.toLocaleString()} shipping`;
+function formatShippingLine(_product) {
+  return "";
 }
 
 function formatBuyerTotal(product) {
-  const total = product.totalKes ?? (Number(product.priceKes || 0) + Number(product.shippingKes || 0));
-  if (total > 0) return `KES ${Math.round(total).toLocaleString()} total`;
   return formatPrice(product);
 }
 
@@ -564,8 +560,7 @@ function renderDepopCard(product) {
         <span class="depop-card-badge">PREPAID</span>
       </div>
       <div class="depop-card-body">
-        <p class="depop-card-price">${escapeHtml(formatPrice(product))}${formatShippingLine(product) ? `<span class="depop-card-shipping">${escapeHtml(formatShippingLine(product))}</span>` : ""}</p>
-        <p class="depop-card-total">${escapeHtml(formatBuyerTotal(product))}</p>
+        <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
         <p class="depop-card-title">${name}</p>
         ${handle ? `<p class="depop-card-seller">${escapeHtml(handle)}</p>` : ""}
       </div>
@@ -593,8 +588,6 @@ function renderStoreCard(product) {
         .join(" · ")}</p>
       <div class="flex items-baseline gap-2 mb-1 flex-wrap">
         <span class="font-extrabold text-lg">${formatPrice(product)}</span>
-        ${formatShippingLine(product) ? `<span class="text-xs text-brand-purple/60">${formatShippingLine(product)}</span>` : ""}
-        ${product.totalKes ? `<span class="text-xs font-semibold text-brand-green">${formatBuyerTotal(product)}</span>` : ""}
         ${
           product.originalPriceKes && product.priceKes && product.originalPriceKes > product.priceKes
             ? `<span class="text-xs text-brand-purple/40 line-through">KES ${product.originalPriceKes.toLocaleString()}</span>`
@@ -1155,6 +1148,7 @@ function applyDeepLinkFromUrl() {
 window.SokoniApp = {
   getStoreProducts: () => storeProducts,
   formatPrice,
+  buyerPriceKes,
   formatShippingLine,
   formatBuyerTotal,
   runSearch,

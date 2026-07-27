@@ -41,7 +41,7 @@ Body: { "status": "in_transit", "hub": "Umoja", "courier": "fargo" }
 | GET | `/api/tracking/meta` |
 | GET | `/api/tracking/SK-1042` — sanitized payload (no payment secrets) |
 
-**Website:** [track.html](../website/track.html) — enter SK-####, fetches live status from bot API.
+**Website:** [track.html](../website/track.html) — enter SK-####, visual shipment stepper, all-in price only (no item/shipping split).
 
 **WhatsApp:** Customer types `SK-1042` or `track` — shipment timeline when order is paid.
 

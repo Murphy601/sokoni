@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Pay order — Sokoni Mall</title>
-<meta name="description" content="Complete your Sokoni prepaid order — item + shipping via M-Pesa STK." />
+<meta name="description" content="Complete your Sokoni prepaid order via M-Pesa STK." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -27,7 +27,7 @@
 
   <main class="max-w-lg mx-auto px-5 py-10">
     <h1 class="font-display text-3xl font-bold mb-2">Pay your order</h1>
-    <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-8">Enter your <strong>SK-####</strong> order number from WhatsApp. You pay item + shipping upfront — funds held in escrow until delivery.</p>
+    <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-8">Enter your <strong>SK-####</strong> order number from WhatsApp. You pay upfront — funds held in escrow until delivery.</p>
 
     <form id="checkout-lookup" class="flex flex-col sm:flex-row gap-3 mb-8">
       <label for="order-id" class="sr-only">Order number</label>
@@ -45,9 +45,7 @@
 
       <table class="sell-fee-table" aria-label="Order total">
         <tbody>
-          <tr><th scope="row">Item price</th><td id="checkout-item">—</td></tr>
-          <tr><th scope="row">Shipping</th><td id="checkout-shipping">—</td></tr>
-          <tr class="sell-fee-total"><th scope="row">You pay</th><td id="checkout-total">—</td></tr>
+          <tr class="sell-fee-total"><th scope="row">Amount due</th><td id="checkout-total">—</td></tr>
         </tbody>
       </table>
 

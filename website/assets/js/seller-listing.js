@@ -561,6 +561,7 @@ function showSellerProfile(profile) {
   el("seller-profile-bar")?.classList.remove("hidden");
   el("listing-wizard")?.classList.remove("hidden");
   el("onboard-panel")?.classList.add("hidden");
+  showSellerView("dashboard");
 }
 
 async function checkSellerProfile() {
@@ -576,8 +577,6 @@ async function checkSellerProfile() {
     const data = await res.json();
     if (data.seller) {
       showSellerProfile(data.seller);
-      await loadMyListings();
-      await loadEscrowLedger();
     }
   } catch {
     /* stay on onboard */
@@ -812,13 +811,11 @@ async function onOnboard() {
       if (parsed.status === 502 || parsed.status === 503) checkApiHealth();
       return;
     }
-    setOnboardStatus(parsed.data.message || "You're set up — add your first listing.");
+    setOnboardStatus(parsed.data.message || "You're set up — your dashboard is ready.");
     showSellerProfile(parsed.data.seller);
     sessionStorage.removeItem(VERIFY_TOKEN_KEY);
     verificationToken = null;
     el("api-down-banner")?.classList.add("hidden");
-    await loadMyListings();
-    await loadEscrowLedger();
   } catch {
     setOnboardStatus("Could not reach Sokoni — check your connection and try again.", true);
     checkApiHealth();
@@ -868,14 +865,97 @@ function renderLedgerDetail() {
   }
 
   node.innerHTML = items
-    .map(
-      (item) =>
-        `<div class="flex justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
-          <span class="truncate">${item.productName || item.orderId}</span>
-          <span class="font-semibold shrink-0">${formatKes(item.amountKes)}</span>
-        </div>`
-    )
+    .map((item) => {
+      const statusLine = item.shipmentStatusLabel ? `<span class="text-xs text-brand-purple/50">${item.shipmentStatusLabel}</span>` : "";
+      const trackLink = item.trackUrl
+        ? `<a href="${item.trackUrl}" class="text-xs font-semibold text-brand-green hover:underline shrink-0">Track</a>`
+        : "";
+      return `<div class="flex flex-wrap justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
+          <div class="min-w-0">
+            <span class="block truncate">${item.productName || item.orderId}</span>
+            ${item.orderId ? `<span class="text-xs text-brand-purple/50">${item.orderId}</span>` : ""}
+            ${statusLine}
+          </div>
+          <div class="text-right shrink-0">
+            <span class="font-semibold block">${formatKes(item.amountKes)}</span>
+            ${trackLink}
+          </div>
+        </div>`;
+    })
     .join("");
+}
+
+function shipmentBadgeClass(status) {
+  if (status === "label_ready" || status === "pending") return "sell-order-badge--action";
+  if (status === "delivered") return "sell-order-badge--done";
+  return "sell-order-badge--transit";
+}
+
+function renderSellerOrders(orders) {
+  const wrap = el("seller-orders");
+  if (!wrap) return;
+
+  const active = (orders || []).filter((o) => o.paid && o.shipmentStatus !== "delivered");
+  if (!active.length) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No active orders — when someone buys, it shows here with your drop-off label.</p>`;
+    return;
+  }
+
+  wrap.innerHTML = active
+    .map((o) => {
+      const actions = [];
+      if (o.needsDropOff && o.labelUrl) {
+        actions.push(
+          `<a href="${o.labelUrl}" target="_blank" rel="noopener" class="sell-order-action sell-order-action--primary">Print label</a>`
+        );
+      }
+      if (o.trackUrl) {
+        actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
+      }
+      return `
+        <div class="sell-order-card">
+          <div class="sell-order-card-head">
+            <p class="font-semibold">${o.productName || "Order"}</p>
+            <span class="sell-order-badge ${shipmentBadgeClass(o.shipmentStatus)}">${o.shipmentStatusLabel}</span>
+          </div>
+          <p class="text-xs text-brand-purple/50 mt-1">${o.orderId} · You receive ${formatKes(o.sellerNetKes)}</p>
+          <div class="sell-order-actions">${actions.join("")}</div>
+        </div>`;
+    })
+    .join("");
+}
+
+async function loadSellerOrders() {
+  const phone = apiPhone();
+  if (!phone) return;
+
+  try {
+    const res = await fetch(`${ONBOARD_API}/orders?phone=${encodeURIComponent(phone)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    renderSellerOrders(data.orders || []);
+  } catch {}
+}
+
+function showSellerView(view) {
+  const dashboard = el("view-dashboard");
+  const listing = el("view-listing");
+  const tabDash = el("tab-dashboard");
+  const tabList = el("tab-listing");
+  const isDash = view !== "listing";
+
+  dashboard?.classList.toggle("hidden", !isDash);
+  listing?.classList.toggle("hidden", isDash);
+  tabDash?.classList.toggle("is-active", isDash);
+  tabList?.classList.toggle("is-active", !isDash);
+  tabDash?.setAttribute("aria-selected", isDash ? "true" : "false");
+  tabList?.setAttribute("aria-selected", !isDash ? "true" : "false");
+
+  if (isDash) {
+    loadSellerOrders();
+    loadEscrowLedger();
+    loadMyListings();
+  }
 }
 
 async function loadEscrowLedger() {
@@ -911,6 +991,10 @@ function init() {
   bindMediaSlots();
   bindLedgerTabs();
   updateStepUi();
+
+  el("tab-dashboard")?.addEventListener("click", () => showSellerView("dashboard"));
+  el("tab-listing")?.addEventListener("click", () => showSellerView("listing"));
+  el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));

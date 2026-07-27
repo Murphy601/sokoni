@@ -3,6 +3,7 @@ import {
   onboardSellerAsync,
   getSellerProfile,
   getSellerEscrowLedgerByPhone,
+  getSellerOrdersByPhone,
   refreshSellerListing,
 } from "../services/seller-onboard.js";
 import { sendSellerVerificationCode, verifySellerCode } from "../services/seller-verification.js";
@@ -60,6 +61,13 @@ router.get("/", (req, res) => {
 /** GET /api/seller/onboard/ledger?phone= — escrow ledger tabs */
 router.get("/ledger", (req, res) => {
   const result = getSellerEscrowLedgerByPhone(req.query.phone);
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** GET /api/seller/onboard/orders?phone= — paid orders, labels, shipment status */
+router.get("/orders", (req, res) => {
+  const result = getSellerOrdersByPhone(req.query.phone);
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });

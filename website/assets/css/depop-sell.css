@@ -310,3 +310,114 @@ html.dark .depop-card-shipping {
   color: #25d366;
   margin-top: 0.25rem;
 }
+
+/* Seller dashboard tabs + order cards (Phases 5–6) */
+.sell-view-tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  background: rgba(27, 16, 53, 0.06);
+}
+
+html.dark .sell-view-tabs {
+  background: rgba(255, 248, 240, 0.08);
+}
+
+.sell-view-tab {
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgba(27, 16, 53, 0.55);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+html.dark .sell-view-tab {
+  color: rgba(255, 248, 240, 0.55);
+}
+
+.sell-view-tab.is-active {
+  background: #25d366;
+  color: #1b1035;
+}
+
+.sell-order-card {
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+html.dark .sell-order-card {
+  border-color: rgba(255, 248, 240, 0.1);
+  background: rgba(46, 27, 87, 0.5);
+}
+
+.sell-order-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sell-order-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.sell-order-badge--action {
+  background: rgba(37, 211, 102, 0.15);
+  color: #1b1035;
+}
+
+.sell-order-badge--transit {
+  background: rgba(248, 113, 113, 0.15);
+  color: #991b1b;
+}
+
+.sell-order-badge--done {
+  background: rgba(27, 16, 53, 0.08);
+  color: rgba(27, 16, 53, 0.6);
+}
+
+.sell-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.sell-order-action {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1b1035;
+  text-decoration: none;
+}
+
+html.dark .sell-order-action {
+  color: #fff8f0;
+}
+
+.sell-order-action--primary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 0.875rem;
+  border-radius: 9999px;
+  background: #25d366;
+  color: #1b1035;
+}
+
+.sell-order-action--primary:hover {
+  opacity: 0.92;
+}

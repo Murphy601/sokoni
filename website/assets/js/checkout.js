@@ -42,8 +42,6 @@
     currentOrderId = data.orderId;
     document.getElementById("checkout-order-id").textContent = data.orderId;
     document.getElementById("checkout-product").textContent = data.productName || "Sokoni order";
-    document.getElementById("checkout-item").textContent = formatKes(data.itemKes ?? data.amountKes);
-    document.getElementById("checkout-shipping").textContent = formatKes(data.shippingKes ?? 0);
     document.getElementById("checkout-total").textContent = formatKes(data.totalKes ?? data.amountKes);
 
     const trackLink = document.getElementById("checkout-track-link");

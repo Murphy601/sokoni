@@ -22,50 +22,86 @@
     return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
   }
 
-  function stepIcon(step) {
-    if (step.done) return "✅";
-    if (step.active) return "🔵";
-    return "⚪";
+  function renderStepper(steps) {
+    if (!steps?.length) return "";
+    return `
+      <ol class="track-stepper" aria-label="Shipment progress">
+        ${steps
+          .map((step) => {
+            const state = step.done ? "done" : step.active ? "active" : "pending";
+            return `
+          <li class="track-step track-step--${state}">
+            <span class="track-step-dot" aria-hidden="true"></span>
+            <div class="track-step-body">
+              <p class="track-step-label">${step.label}</p>
+              ${step.active ? `<p class="track-step-hint">Current step</p>` : ""}
+            </div>
+          </li>`;
+          })
+          .join("")}
+      </ol>`;
+  }
+
+  function renderHistory(history) {
+    if (!history?.length) return "";
+    const rows = history
+      .slice()
+      .reverse()
+      .map(
+        (h) =>
+          `<li><span class="track-history-status">${h.label || h.status}</span>${h.hub ? ` · ${h.hub}` : ""}<time>${h.at ? new Date(h.at).toLocaleString() : ""}</time></li>`
+      )
+      .join("");
+    return `
+      <details class="track-history">
+        <summary>Recent updates</summary>
+        <ul>${rows}</ul>
+      </details>`;
   }
 
   function renderTracking(data) {
     const t = data.tracking;
     if (!t) return;
 
-    const timeline = (t.shipmentTimeline || [])
-      .map((s) => `<p class="${s.active ? "font-bold text-brand-green" : ""}">${stepIcon(s)} ${s.label}</p>`)
-      .join("");
+    const stepper = renderStepper(t.shipmentTimeline);
+    const history = renderHistory(t.history);
 
     statusEl.innerHTML = `
-      <div class="space-y-4">
-        <div>
-          <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-1">Order</p>
-          <p class="text-2xl font-bold">${t.orderId}</p>
+      <div class="track-panel space-y-5">
+        <div class="track-header">
+          <p class="track-kicker">Order</p>
+          <p class="track-order-id">${t.orderId}</p>
+          <p class="track-product">${t.productName || "Sokoni order"}</p>
+          ${t.totalKes != null ? `<p class="track-price">${formatKes(t.totalKes)}</p>` : ""}
+          <p class="track-meta">${t.paymentLine || ""}${t.fulfillment ? ` · ${t.fulfillment}` : ""}</p>
         </div>
-        <div>
-          <p class="font-semibold">${t.productName || "Sokoni order"}</p>
-          ${
-            t.totalKes != null
-              ? `<p class="text-sm text-brand-purple/60 mt-1">Item ${formatKes(t.itemKes)} · Shipping ${formatKes(t.shippingKes)} · <strong>Total ${formatKes(t.totalKes)}</strong></p>`
-              : ""
-          }
-          <p class="text-sm text-brand-purple/60 mt-1">${t.paymentLine || ""} · ${t.fulfillment || ""}</p>
-        </div>
+
         ${
-          t.courier
-            ? `<p class="text-sm">Courier: <strong>${t.courier}</strong>${t.trackingRef ? ` · Ref <strong>${t.trackingRef}</strong>` : ""}</p>`
+          t.courier || t.trackingRef
+            ? `<div class="track-courier">
+                ${t.courier ? `<p>Courier: <strong>${t.courier}</strong></p>` : ""}
+                ${t.trackingRef ? `<p>Ref: <strong>${t.trackingRef}</strong></p>` : ""}
+              </div>`
             : ""
         }
-        ${t.riderName ? `<p class="text-sm">Rider: ${t.riderName}${t.etaNote ? ` · ETA ${t.etaNote}` : ""}</p>` : ""}
-        <div class="pt-3 border-t border-black/5 dark:border-white/10 space-y-1 text-sm">
-          <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-2">Shipment timeline</p>
-          ${timeline || `<p>Status: ${t.shipmentStatusLabel || "Pending"}</p>`}
+
+        ${t.riderName ? `<p class="track-rider">Rider: ${t.riderName}${t.etaNote ? ` · ETA ${t.etaNote}` : ""}</p>` : ""}
+
+        <div class="track-timeline-wrap">
+          <p class="track-kicker">Shipment</p>
+          ${stepper || `<p class="text-sm">Status: ${t.shipmentStatusLabel || "Pending"}</p>`}
         </div>
-        <p class="text-xs text-brand-purple/40">Updated ${t.updatedAt ? new Date(t.updatedAt).toLocaleString() : "recently"}</p>
+
+        ${history}
+
+        <p class="track-updated">Updated ${t.updatedAt ? new Date(t.updatedAt).toLocaleString() : "recently"}</p>
+
         ${
           !t.paid && t.orderId
-            ? `<p class="pt-3"><a href="checkout.html?order=${encodeURIComponent(t.orderId)}" class="inline-flex items-center justify-center min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple font-bold text-sm">Pay order (item + shipping)</a></p>`
-            : ""
+            ? `<p class="pt-2"><a href="checkout.html?order=${encodeURIComponent(t.orderId)}" class="track-pay-btn">Pay order</a></p>`
+            : t.paid
+              ? `<p class="pt-2"><a href="checkout.html?order=${encodeURIComponent(t.orderId)}" class="track-pay-btn track-pay-btn--ghost">View receipt</a></p>`
+              : ""
         }
       </div>
     `;
