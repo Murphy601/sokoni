@@ -62,20 +62,16 @@
         <p class="text-sm font-semibold text-brand-green mb-2">Sell on Sokoni · Prepaid marketplace</p>
         <h1 class="font-display text-3xl font-bold mb-2">Start selling</h1>
         <p class="text-sm text-brand-purple/60 dark:text-white/60">
-          WhatsApp sign-in every visit → dashboard, withdrawals, listings. Items go <strong>live instantly</strong> — like Depop. Payouts via M-Pesa after delivery.
+          Returning sellers sign in with a WhatsApp code. New sellers verify once, set up profile, then list. Items go <strong>live instantly</strong> — payouts via M-Pesa after delivery.
         </p>
       </div>
 
       <!-- Step 0: Seller onboarding -->
       <section id="onboard-panel" class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
-        <h2 class="font-bold text-lg">Sign in with WhatsApp</h2>
-        <p class="text-sm text-brand-purple/60 dark:text-white/60">We send a 6-digit code to your WhatsApp every time you open this page — new and returning sellers.</p>
-        <div id="api-down-banner" class="hidden rounded-xl border border-red-300/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-          Sokoni server is temporarily offline — signup will work again shortly. You can also message us on WhatsApp from the shop page.
-        </div>
-
-        <!-- Step A: WhatsApp verification -->
+        <!-- Returning sellers: sign in with WhatsApp code only -->
         <div id="onboard-verify-step" class="space-y-4">
+          <h2 class="font-bold text-lg">Sign in</h2>
+          <p class="text-sm text-brand-purple/60 dark:text-white/60">Already selling on Sokoni? Enter your WhatsApp number and the code we send you — that’s it.</p>
           <label class="block text-sm font-medium">
             WhatsApp number *
             <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" autocomplete="tel" />
@@ -90,14 +86,20 @@
               <input id="verify-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" class="sell-form-input tracking-widest text-lg" autocomplete="one-time-code" />
             </label>
             <div class="flex flex-wrap gap-3">
-              <button id="verify-code-btn" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Verify</button>
+              <button id="verify-code-btn" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Sign in</button>
               <button id="resend-code-btn" type="button" class="sell-btn-ghost text-sm">Resend code</button>
             </div>
           </div>
+          <p class="text-sm text-brand-purple/60 dark:text-white/60">New seller? Verify your number above — we’ll ask for your shop name and M-Pesa details next.</p>
         </div>
 
-        <!-- Step B: Profile (after WhatsApp verified) -->
+        <div id="api-down-banner" class="hidden rounded-xl border border-red-300/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          Sokoni server is temporarily offline — sign-in will work again shortly. You can also message us on WhatsApp from the shop page.
+        </div>
+
+        <!-- First-time sellers only: profile setup after WhatsApp verified -->
         <div id="onboard-details-step" class="hidden space-y-4 pt-2 border-t border-brand-green/20">
+          <h2 class="font-bold text-lg">Create your seller profile</h2>
           <p id="verify-success-label" class="text-sm font-semibold text-brand-green">✓ WhatsApp verified</p>
         <label class="block text-sm font-medium">
           Your name or shop name *

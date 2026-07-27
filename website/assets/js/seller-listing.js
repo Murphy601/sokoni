@@ -714,7 +714,7 @@ async function tryRestoreSession() {
       return true;
     }
     if (parsed.data?.needsSetup || parsed.status === 404) {
-      showOnboardDetailsStep();
+      showSignupStep();
       setOnboardStatus("Finish your seller profile to continue.");
       return true;
     }
@@ -735,7 +735,7 @@ async function checkSellerProfile() {
     if (!parsed.ok) {
       el("listing-wizard")?.classList.add("hidden");
       el("onboard-panel")?.classList.remove("hidden");
-      showOnboardDetailsStep();
+      showSignupStep();
       return;
     }
     if (parsed.data?.seller) {
@@ -820,12 +820,45 @@ function saveVerificationToken(token, expiresInSec = 1800) {
   );
 }
 
-function showOnboardDetailsStep() {
+function showSignupStep() {
+  el("onboard-verify-step")?.classList.add("hidden");
   el("onboard-details-step")?.classList.remove("hidden");
   el("onboard-btn")?.classList.remove("hidden");
-  el("verify-code-wrap")?.classList.remove("hidden");
+  el("onboard-panel")?.classList.remove("hidden");
+  el("listing-wizard")?.classList.add("hidden");
   const phoneInput = el("seller-phone");
   if (phoneInput) phoneInput.readOnly = true;
+}
+
+async function routeAfterVerify(phoneNorm, verifyData) {
+  if (verifyData?.needsSetup === false && verifyData?.seller) {
+    showSellerProfile(verifyData.seller);
+    setOnboardStatus("");
+    return;
+  }
+  if (verifyData?.needsSetup === true) {
+    showSignupStep();
+    setOnboardStatus(verifyData.message || "Set up your seller profile to continue.");
+    return;
+  }
+
+  try {
+    const profileRes = await fetch(onboardQuery(phoneNorm), { headers: sellerAuthHeaders() });
+    const profileParsed = await parseApiResponse(profileRes);
+    if (profileParsed.ok && profileParsed.data?.seller) {
+      showSellerProfile(profileParsed.data.seller);
+      setOnboardStatus("");
+      return;
+    }
+    if (profileParsed.data?.needsSetup || profileParsed.status === 404) {
+      showSignupStep();
+      setOnboardStatus("Set up your seller profile to continue.");
+      return;
+    }
+    setOnboardStatus(profileParsed.data?.message || "Could not load your profile — try again.", true);
+  } catch {
+    setOnboardStatus("Signed in but could not load your profile — try again.", true);
+  }
 }
 
 function startResendCooldown(seconds) {
@@ -911,26 +944,7 @@ async function onVerifyCode() {
       return;
     }
     saveVerificationToken(parsed.data.sessionToken || parsed.data.verificationToken, parsed.data.expiresInSec);
-    setOnboardStatus(parsed.data.message || "Signed in — loading your dashboard…");
-
-    const phoneNorm = normalizePhoneInput(phone);
-    try {
-      const profileRes = await fetch(onboardQuery(phoneNorm), { headers: sellerAuthHeaders() });
-      const profileParsed = await parseApiResponse(profileRes);
-      if (profileParsed.ok && profileParsed.data?.seller) {
-        showSellerProfile(profileParsed.data.seller);
-        setOnboardStatus("");
-        return;
-      }
-      if (profileParsed.data?.needsSetup || profileParsed.status === 404) {
-        showOnboardDetailsStep();
-        setOnboardStatus("WhatsApp verified — finish your profile below.");
-        return;
-      }
-    } catch {}
-
-    showOnboardDetailsStep();
-    setOnboardStatus("WhatsApp verified — finish your profile below.");
+    await routeAfterVerify(normalizePhoneInput(phone), parsed.data);
   } catch {
     setOnboardStatus("Could not reach Sokoni — try again.", true);
   } finally {
