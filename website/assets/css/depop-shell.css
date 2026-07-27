@@ -24,13 +24,12 @@ body.has-depop-shell {
   }
 }
 
-/* Hide legacy chrome */
+/* Hide legacy chrome (keep browse drawer + educational sections visible) */
 body.has-depop-shell .shop-mobile-bar,
-body.has-depop-shell .catalog-nav-toggle,
-body.has-depop-shell .depop-marketing-extra,
 body.has-depop-shell .depop-wa-float,
 body.has-depop-shell #ai-nudge,
-body.has-depop-shell .depop-legacy-header {
+body.has-depop-shell .depop-legacy-header,
+body.has-depop-shell .depop-marketing-extra {
   display: none !important;
 }
 
@@ -66,17 +65,25 @@ body.has-depop-shell .depop-legacy-header {
 
 .depop-logo {
   font-family: var(--font-display, Fraunces, Georgia, serif);
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: -0.03em;
   color: #fff;
   text-decoration: none;
   flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.depop-logo span {
+  font-weight: 600;
+  opacity: 0.85;
+  font-size: 0.75em;
+  margin-left: 0.15em;
 }
 
 @media (min-width: 768px) {
   .depop-logo {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 }
 
@@ -137,6 +144,7 @@ body.has-depop-shell .depop-legacy-header {
   border-radius: 9999px;
   text-decoration: none;
   white-space: nowrap;
+  align-items: center;
 }
 
 @media (min-width: 768px) {
@@ -229,7 +237,240 @@ body.has-depop-shell .depop-legacy-header {
   color: #c084fc;
 }
 
-/* ── Hero banner ── */
+/* Mobile search row (toggle) */
+.depop-mobile-search-row {
+  display: none;
+  padding: 0 1rem 0.75rem;
+}
+
+.depop-mobile-search-row.is-open {
+  display: block;
+}
+
+@media (min-width: 640px) {
+  .depop-mobile-search-row {
+    display: none !important;
+  }
+}
+
+/* ── Hero carousel ── */
+.depop-hero-carousel {
+  background: #0a0a0a;
+  padding: 0.75rem 1rem 0;
+}
+
+.depop-hero-carousel-inner {
+  max-width: 80rem;
+  margin: 0 auto;
+  position: relative;
+}
+
+.depop-hero-slide-wrap {
+  border-radius: 1rem;
+  overflow: hidden;
+  transition: opacity 0.45s ease;
+}
+
+.depop-hero-slide-wrap.is-animating {
+  animation: depop-hero-fade 0.45s ease;
+}
+
+@keyframes depop-hero-fade {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+.depop-hero-slide {
+  padding: 1.25rem 1.25rem 2.5rem;
+  color: #fff;
+}
+
+.depop-hero-slide--fees {
+  background: linear-gradient(135deg, #1b1035 0%, #4c1d95 55%, #1b1035 100%);
+}
+
+.depop-hero-slide--ai {
+  background: linear-gradient(135deg, #831843 0%, #be185d 50%, #1b1035 100%);
+}
+
+.depop-hero-slide--prepaid {
+  background: linear-gradient(135deg, #14532d 0%, #0f766e 55%, #1b1035 100%);
+}
+
+.depop-hero-dots {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  padding: 0.5rem 0.25rem 0.75rem;
+}
+
+.depop-hero-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  padding: 0;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.depop-hero-dot.is-active {
+  width: 1.5rem;
+  background: #25d366;
+}
+
+/* ── Curated collections ── */
+.depop-collections {
+  background: #fff8f0;
+  padding: 1rem 1rem 0.5rem;
+}
+
+html.dark .depop-collections {
+  background: #1b1035;
+}
+
+.depop-collections-heading {
+  font-size: 0.875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(27, 16, 53, 0.55);
+  margin: 0 0 0.75rem;
+}
+
+html.dark .depop-collections-heading {
+  color: rgba(255, 248, 240, 0.55);
+}
+
+.depop-collections-row {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.depop-collections-row::-webkit-scrollbar {
+  display: none;
+}
+
+.depop-collection-card {
+  flex-shrink: 0;
+  min-width: 9rem;
+  padding: 1rem 1.125rem;
+  border-radius: 0.875rem;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  background: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1b1035;
+  cursor: pointer;
+  text-align: left;
+}
+
+html.dark .depop-collection-card {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fff8f0;
+}
+
+.depop-collection-card.is-active {
+  border-color: #25d366;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.25);
+}
+
+/* ── Educational sections ── */
+.depop-edu-section {
+  padding: 2.5rem 1rem;
+}
+
+.depop-edu-section--dark {
+  background: #1b1035;
+  color: #fff8f0;
+}
+
+.depop-edu-section--light {
+  background: #fff;
+  color: #1b1035;
+}
+
+html.dark .depop-edu-section--light {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff8f0;
+}
+
+.depop-edu-inner {
+  max-width: 80rem;
+  margin: 0 auto;
+}
+
+.depop-edu-title {
+  font-family: var(--font-display, Fraunces, Georgia, serif);
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+  font-weight: 800;
+  text-align: center;
+  margin: 0 0 1.5rem;
+}
+
+.depop-edu-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .depop-edu-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+.depop-edu-card {
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.depop-edu-section--light .depop-edu-card {
+  border-color: rgba(27, 16, 53, 0.08);
+  background: #fff8f0;
+}
+
+html.dark .depop-edu-section--light .depop-edu-card {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.depop-edu-card h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.depop-edu-card p {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.75;
+}
+
+.depop-edu-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background: #25d366;
+  color: #1b1035;
+  font-weight: 800;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Hero banner (legacy fallback) ── */
 .depop-hero-banner {
   background: linear-gradient(135deg, #1b1035 0%, #0a0a0a 55%, #14532d 100%);
   padding: 1.25rem 1rem 1.5rem;

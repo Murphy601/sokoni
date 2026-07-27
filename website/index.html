@@ -63,17 +63,18 @@
       🔒 100% PREPAID ESCROW PROTECTION • BRAND NEW &amp; PRE-LOVED MARKETPLACE
     </div>
     <div class="depop-main-bar">
-      <button type="button" id="shop-browse-btn" class="depop-icon-btn md:hidden" aria-label="Browse categories">☰</button>
-      <a href="index.html" class="depop-logo">SOKONI</a>
+      <button type="button" id="shop-browse-btn" class="depop-icon-btn" aria-label="Browse categories">☰</button>
+      <a href="index.html" class="depop-logo">SOKONI<span> MALL</span></a>
       <div class="depop-search-wrap hidden sm:block">
         <form id="depop-search-form" role="search">
           <span class="depop-search-icon" aria-hidden="true">🔍</span>
-          <label for="depop-search" class="sr-only">Search for anything</label>
-          <input type="search" id="depop-search" autocomplete="off" placeholder="Search vintage, streetwear, brands…" />
+          <label for="depop-search" class="sr-only">Search for vintage, brands, styles</label>
+          <input type="search" id="depop-search" autocomplete="off" placeholder="Search for vintage, brands, styles…" />
         </form>
       </div>
       <div class="depop-header-actions">
-        <a href="suppliers/list.html" class="depop-btn-sell">Sell</a>
+        <button type="button" id="depop-search-toggle" class="depop-icon-btn sm:hidden" aria-label="Search">🔍</button>
+        <a href="suppliers/list.html" class="depop-btn-sell hidden sm:inline-flex">Sell</a>
         <button type="button" id="shop-bag-btn" class="depop-icon-btn" aria-label="Saved items">
           🛍️
           <span id="shop-bag-count" class="depop-bag-count hidden" aria-hidden="true">0</span>
@@ -83,20 +84,17 @@
         </button>
       </div>
     </div>
-    <nav class="depop-cat-strip" aria-label="Categories">
-      <button type="button" data-depop-filter='{"category":"women","scroll":true}'>Women</button>
-      <button type="button" data-depop-filter='{"category":"men","scroll":true}'>Men</button>
-      <button type="button" class="tag-thrift is-active" data-depop-filter='{"itemType":"secondhand","scroll":true}'>♻️ Pre-Loved</button>
-      <button type="button" class="tag-new" data-depop-filter='{"itemType":"new","scroll":true}'>✨ Brand New</button>
-      <button type="button" data-depop-filter='{"category":"trending","scroll":true}'>🔥 Trending</button>
-      <button type="button" data-depop-filter='{"category":"sale","scroll":true}'>Hot Deals</button>
+    <nav id="depop-cat-strip" class="depop-cat-strip" aria-label="Categories">
+      <!-- populated from browse-menu.json -->
     </nav>
-    <div class="depop-search-wrap sm:hidden px-4 pb-3">
-      <form id="depop-search-form-mobile" role="search">
-        <span class="depop-search-icon" aria-hidden="true">🔍</span>
-        <label for="depop-search-mobile" class="sr-only">Search</label>
-        <input type="search" id="depop-search-mobile" autocomplete="off" placeholder="Search for anything" />
-      </form>
+    <div class="depop-mobile-search-row sm:hidden">
+      <div class="depop-search-wrap">
+        <form id="depop-search-form-mobile" role="search">
+          <span class="depop-search-icon" aria-hidden="true">🔍</span>
+          <label for="depop-search-mobile" class="sr-only">Search</label>
+          <input type="search" id="depop-search-mobile" autocomplete="off" placeholder="Search for vintage, brands, styles…" />
+        </form>
+      </div>
     </div>
   </header>
 
@@ -112,24 +110,17 @@
     <a href="#" id="search-hint-link" class="hidden"></a>
   </div>
 
-  <!-- Hero banner -->
-  <section class="depop-hero-banner" id="hero">
-    <div class="depop-hero-inner">
-      <div>
-        <span class="depop-hero-eyebrow">0% seller fees · Kenya countrywide</span>
-        <h1 class="depop-hero-title">Sell brand new or thrifted fits with 0% fees</h1>
-        <p class="depop-hero-sub">
-          Upfront prepaid security · Instant <strong>SK-####</strong> tracking ·
-          <span id="hero-store-count">1,200</span>+ listings — brand new &amp; pre-loved.
-        </p>
-        <div class="depop-hero-actions">
-          <a href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--primary">Start selling</a>
-          <a href="#deals" class="depop-hero-cta depop-hero-cta--ghost">Shop new arrivals</a>
-        </div>
-      </div>
-      <div id="hero-filmstrip-wrap" class="hidden md:block max-w-xs w-full">
-        <div id="hero-filmstrip" class="hero-filmstrip rounded-xl overflow-hidden"></div>
-      </div>
+  <!-- Dynamic hero carousel -->
+  <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Featured"></section>
+
+  <!-- Curated collections -->
+  <section class="depop-collections catalog-main max-w-7xl mx-auto px-4 md:px-5">
+    <h2 class="depop-collections-heading">Curated collections</h2>
+    <div id="depop-collections-row" class="depop-collections-row">
+      <button type="button" class="depop-collection-card" data-depop-filter='{"category":"trending","scroll":true}'>🔥 Trending Fits</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"priceTier":"under-2500","scroll":true}'>🏷️ Under 2,500 KSh</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"secondhand","scroll":true}'>♻️ Pre-Loved Gems</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"new","scroll":true}'>✨ Brand New Drops</button>
     </div>
   </section>
 
@@ -284,8 +275,53 @@
     </div>
   </section>
 
-  <!-- HOW IT WORKS -->
-  <section id="how-it-works" class="depop-marketing-extra reveal-on-scroll bg-brand-purple text-white py-20">
+  <!-- WHY SELL -->
+  <section id="why-sell" class="depop-edu-section depop-edu-section--dark reveal-on-scroll">
+    <div class="depop-edu-inner px-4 md:px-5">
+      <h2 class="depop-edu-title">Why sell on Sokoni Mall?</h2>
+      <div class="depop-edu-grid">
+        <div class="depop-edu-card">
+          <h3>⚡ 0% selling fees</h3>
+          <p>You keep 100% of what you sell. Payment is sent directly to your M-Pesa when delivery is confirmed.</p>
+        </div>
+        <div class="depop-edu-card">
+          <h3>📸 AI backgrounds</h3>
+          <p>Integrated Photoroom AI removes messy backgrounds in one tap — studio-clean photos from your bedroom mirror.</p>
+        </div>
+        <div class="depop-edu-card">
+          <h3>📦 Prepaid labels</h3>
+          <p>Print or scan a drop-off label instantly when your item sells — track every package with SK-#### codes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS (marketplace) -->
+  <section id="how-it-works" class="depop-edu-section depop-edu-section--light reveal-on-scroll">
+    <div class="depop-edu-inner px-4 md:px-5">
+      <h2 class="depop-edu-title">How Sokoni Mall works</h2>
+      <div class="depop-edu-grid">
+        <div class="depop-edu-card">
+          <span class="depop-edu-step-num">1</span>
+          <h3>Snap &amp; AI auto-list</h3>
+          <p>Upload 1–4 photos. Gemini AI fills titles, tags, backgrounds, and price suggestions automatically.</p>
+        </div>
+        <div class="depop-edu-card">
+          <span class="depop-edu-step-num">2</span>
+          <h3>Buyer pays upfront</h3>
+          <p>Payment held safely in escrow via M-Pesa or card — 100% buyer protection until delivery is confirmed.</p>
+        </div>
+        <div class="depop-edu-card">
+          <span class="depop-edu-step-num">3</span>
+          <h3>Drop off &amp; track</h3>
+          <p>Drop your package at the nearest hub using your instant SK-#### QR code. Seller paid on confirmed delivery.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEGACY HOW IT WORKS (hidden) -->
+  <section id="how-it-works-legacy" class="depop-marketing-extra reveal-on-scroll bg-brand-purple text-white py-20">
     <div class="max-w-7xl mx-auto px-5">
       <h2 class="text-2xl md:text-3xl font-extrabold text-center mb-3">How Sokoni Works</h2>
       <p class="text-white/60 text-center max-w-xl mx-auto mb-12">
@@ -391,7 +427,7 @@
   <!-- Mobile bottom nav -->
   <nav class="depop-bottom-nav" aria-label="Mobile">
     <a href="index.html" class="is-active" data-depop-nav="home"><span>🏠</span><span>Home</span></a>
-    <a href="#deals" data-depop-nav="explore"><span>🔍</span><span>Explore</span></a>
+    <a href="#deals" data-depop-nav="search"><span>🔍</span><span>Search</span></a>
     <a href="suppliers/list.html" class="depop-nav-sell" data-depop-nav="sell"><span>➕</span><span>Sell</span></a>
     <a href="https://wa.me/254117422428" data-depop-nav="inbox"><span>💬</span><span>Inbox</span></a>
     <a href="suppliers.html" data-depop-nav="profile"><span>👤</span><span>Profile</span></a>
@@ -497,9 +533,10 @@
     <span class="catalog-nav-toggle-label">Browse</span>
   </button>
 
-  <script src="assets/js/depop-nav.js"></script>
   <script src="assets/js/component-handler.js"></script>
   <script src="assets/js/browse.js"></script>
+  <script src="assets/js/depop-hero-carousel.js"></script>
+  <script src="assets/js/depop-nav.js"></script>
   <script src="assets/js/shop-shell.js"></script>
   <script src="assets/js/product-sheet.js"></script>
   <script src="assets/js/catalog-nav.js"></script>

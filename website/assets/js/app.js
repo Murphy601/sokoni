@@ -526,6 +526,24 @@ function productImageBlock(product) {
   return `<div class="product-image-wrap mb-4 mt-4 rounded-xl overflow-hidden bg-brand-cream aspect-square flex items-center justify-center p-4 text-xs text-brand-purple/40">Photo coming soon</div>`;
 }
 
+function sellerHandle(product) {
+  const name = product.source || product.businessName || "";
+  if (!name) return "";
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 18);
+  return slug ? `@${slug}` : "";
+}
+
+function conditionBadgeHtml(product) {
+  if (product.isSecondhand) {
+    const cond = product.condition || "Pre-Loved";
+    return `<span class="depop-card-condition depop-card-condition--thrift">♻️ ${escapeHtml(cond)}</span>`;
+  }
+  return `<span class="depop-card-condition depop-card-condition--new">✨ Brand New</span>`;
+}
+
 function renderDepopCard(product) {
   const name = escapeHtml(product.name || "Product");
   const id = escapeHtml(product.id || "");
@@ -533,18 +551,23 @@ function renderDepopCard(product) {
   const imageInner = src
     ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" />`
     : `<span class="depop-card-placeholder">Photo soon</span>`;
+  const handle = sellerHandle(product);
+  const saved = window.SokoniShopShell?.isInBag?.(product.id);
 
   return `
-    <button type="button" class="depop-card" data-product-id="${id}" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
+    <article class="depop-card" data-product-id="${id}" tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
       <div class="depop-card-image-wrap">
         ${imageInner}
+        ${conditionBadgeHtml(product)}
+        <button type="button" class="depop-card-heart${saved ? " is-saved" : ""}" data-save-id="${id}" aria-label="${saved ? "Remove from saved" : "Save item"}">${saved ? "♥" : "♡"}</button>
         <span class="depop-card-badge">PREPAID</span>
       </div>
       <div class="depop-card-body">
         <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
         <p class="depop-card-title">${name}</p>
+        ${handle ? `<p class="depop-card-seller">${escapeHtml(handle)}</p>` : ""}
       </div>
-    </button>`;
+    </article>`;
 }
 
 function renderStoreCard(product) {
@@ -733,8 +756,28 @@ function bindStoreGridClicks() {
   if (!grid) return;
   storeGridClickBound = true;
   grid.addEventListener("click", (e) => {
+    const heart = e.target.closest(".depop-card-heart[data-save-id]");
+    if (heart) {
+      e.preventDefault();
+      e.stopPropagation();
+      const pid = heart.dataset.saveId;
+      window.SokoniShopShell?.toggleBag?.(pid);
+      const saved = window.SokoniShopShell?.isInBag?.(pid);
+      heart.classList.toggle("is-saved", saved);
+      heart.textContent = saved ? "♥" : "♡";
+      heart.setAttribute("aria-label", saved ? "Remove from saved" : "Save item");
+      return;
+    }
     const card = e.target.closest(".depop-card[data-product-id]");
     if (!card) return;
+    const p = storeProducts.find((x) => x.id === card.dataset.productId);
+    if (p) window.SokoniProductSheet?.open(p);
+  });
+  grid.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const card = e.target.closest(".depop-card[data-product-id]");
+    if (!card || e.target.closest(".depop-card-heart")) return;
+    e.preventDefault();
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
     if (p) window.SokoniProductSheet?.open(p);
   });

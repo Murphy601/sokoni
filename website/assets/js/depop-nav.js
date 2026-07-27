@@ -1,5 +1,5 @@
 /**
- * Depop-style header — category strip, search sync, bottom nav.
+ * Depop-style header — category strip from browse-menu, search sync, bottom nav.
  */
 (function () {
   function scrollToDeals() {
@@ -14,8 +14,8 @@
     }
   }
 
-  function bindCategoryStrip() {
-    document.querySelectorAll("[data-depop-filter]").forEach((el) => {
+  function bindFilterButtons(root) {
+    root.querySelectorAll("[data-depop-filter]").forEach((el) => {
       el.addEventListener("click", (e) => {
         e.preventDefault();
         const raw = el.getAttribute("data-depop-filter");
@@ -25,11 +25,60 @@
         } catch {
           /* ignore */
         }
-        document.querySelectorAll(".depop-cat-strip .is-active").forEach((n) => n.classList.remove("is-active"));
+        document.querySelectorAll(".depop-cat-strip .is-active, .depop-collection-card.is-active").forEach((n) => {
+          n.classList.remove("is-active");
+        });
         el.classList.add("is-active");
         applyFilter(spec);
       });
     });
+  }
+
+  async function populateCategoryStrip() {
+    const strip = document.getElementById("depop-cat-strip");
+    if (!strip) return;
+
+    await window.SokoniBrowse?.loadMenu?.();
+    const menu = window.SokoniBrowse?.getMenu?.();
+    const cats = menu?.categories || [];
+
+    const staticChips = [
+      { label: "♻️ Pre-Loved", filter: { itemType: "secondhand", scroll: true }, className: "tag-thrift" },
+      { label: "✨ Brand New", filter: { itemType: "new", scroll: true }, className: "tag-new" },
+      { label: "🔥 Trending", filter: { category: "trending", scroll: true } },
+    ];
+
+    let html = cats
+      .slice(0, 10)
+      .map(
+        (c) =>
+          `<button type="button" data-depop-filter='${JSON.stringify({ category: c.id, scroll: true })}'>${c.emoji || ""} ${c.label}</button>`
+      )
+      .join("");
+
+    html += staticChips
+      .map(
+        (chip) =>
+          `<button type="button" class="${chip.className || ""}" data-depop-filter='${JSON.stringify(chip.filter)}'>${chip.label}</button>`
+      )
+      .join("");
+
+    strip.innerHTML = html;
+    bindFilterButtons(strip);
+  }
+
+  function bindCategoryStrip() {
+    const strip = document.getElementById("depop-cat-strip");
+    if (strip?.children.length) {
+      bindFilterButtons(strip);
+      return;
+    }
+    populateCategoryStrip();
+  }
+
+  function bindCollections() {
+    const row = document.getElementById("depop-collections-row");
+    if (row) bindFilterButtons(row);
   }
 
   function bindSearchForms() {
@@ -50,6 +99,20 @@
     });
   }
 
+  function focusMobileSearch() {
+    const input = document.getElementById("depop-search-mobile") || document.getElementById("depop-search");
+    input?.focus();
+    input?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function bindHeaderSearchToggle() {
+    document.getElementById("depop-search-toggle")?.addEventListener("click", () => {
+      const wrap = document.querySelector(".depop-mobile-search-row");
+      wrap?.classList.toggle("is-open");
+      focusMobileSearch();
+    });
+  }
+
   function bindBottomNav() {
     document.querySelectorAll(".depop-bottom-nav a[data-depop-nav]").forEach((link) => {
       link.addEventListener("click", (e) => {
@@ -57,6 +120,11 @@
         if (action === "explore") {
           e.preventDefault();
           window.SokoniCatalogNav?.open?.();
+        }
+        if (action === "search") {
+          e.preventDefault();
+          focusMobileSearch();
+          scrollToDeals();
         }
         if (action === "bag") {
           e.preventDefault();
@@ -66,9 +134,11 @@
     });
   }
 
-  function init() {
+  async function init() {
     bindCategoryStrip();
+    bindCollections();
     bindSearchForms();
+    bindHeaderSearchToggle();
     bindBottomNav();
   }
 

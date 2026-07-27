@@ -13,11 +13,11 @@ import { invalidateProductCache } from "./catalog.js";
 import { clearCatalogPauseCache } from "./catalog-guard.js";
 import { computeRetailPrice } from "./pricing.js";
 import {
-  generateListingFromImage,
   enrichManualDraft,
   applyListingFieldsToProduct,
   VALID_CONDITIONS,
 } from "./listing-generator.js";
+import { processListingWithStudio } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing } from "./listing-moderation.js";
@@ -104,8 +104,8 @@ export function requireApprovedSeller(phone) {
   return { supplier };
 }
 
-export async function generateSellerListingDraft(buffer, mimeType, caption = "") {
-  return generateListingFromImage(buffer, mimeType, caption);
+export async function generateSellerListingDraft(buffer, mimeType, caption = "", opts = {}) {
+  return processListingWithStudio(buffer, mimeType, caption, opts);
 }
 
 function normalizeTags(raw) {
@@ -425,6 +425,7 @@ export async function getSellerListingMeta() {
     visionModel: config.catalog.visionModel,
     dbEnabled: dbProductsAvailable(),
     instantPublish: true,
+    studioEnabled: Boolean(process.env.PHOTOROOM_API_KEY?.trim()),
     note: "Approved suppliers only. Listings go live instantly; moderation runs after publish.",
   };
 }

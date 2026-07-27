@@ -1,17 +1,6 @@
 /* Phase 3 — Depop-style mobile shop UI */
 
-/* Hide legacy floating browse on mobile (shop bar replaces it) */
 @media (max-width: 767px) {
-  body.has-depop-shell .catalog-nav-toggle {
-    display: none !important;
-  }
-}
-
-@media (max-width: 767px) {
-  .catalog-nav-toggle {
-    display: none !important;
-  }
-
   body.has-shop-shell {
     padding-top: 3.25rem;
   }
@@ -162,6 +151,7 @@ html.dark .shop-mobile-sell {
   cursor: pointer;
   border-radius: 0.25rem;
   overflow: hidden;
+  outline: none;
 }
 
 .depop-card:focus-visible {
@@ -210,6 +200,63 @@ html.dark .depop-card-placeholder {
   font-weight: 800;
   padding: 0.15rem 0.4rem;
   border-radius: 9999px;
+}
+
+.depop-card-condition {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  padding: 0.2rem 0.45rem;
+  border-radius: 9999px;
+  max-width: calc(100% - 2.5rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depop-card-condition--new {
+  background: rgba(37, 211, 102, 0.95);
+  color: #1b1035;
+}
+
+.depop-card-condition--thrift {
+  background: rgba(192, 132, 252, 0.92);
+  color: #1b1035;
+}
+
+.depop-card-heart {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1b1035;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.depop-card-heart.is-saved {
+  color: #ef4444;
+}
+
+.depop-card-seller {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(27, 16, 53, 0.5);
+  margin: 0.1rem 0 0;
+}
+
+html.dark .depop-card-seller {
+  color: rgba(255, 248, 240, 0.5);
 }
 
 .depop-card-body {

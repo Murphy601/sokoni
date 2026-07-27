@@ -176,12 +176,27 @@ async function maybeAutoGenerate() {
     }
     draft = { ...draft, ...data.draft };
     sellerInfo = data.seller;
+    if (data.studioApplied && data.cleanImageBase64) {
+      photoPreviews[0] = data.cleanImageBase64;
+      const slot = document.querySelector(".photo-slot[data-index='0']");
+      let img = slot?.querySelector("img.preview");
+      if (slot && !img) {
+        img = document.createElement("img");
+        img.className = "preview";
+        img.alt = "";
+        slot.insertBefore(img, slot.firstChild);
+      }
+      if (img) img.src = data.cleanImageBase64;
+      slot?.classList.add("has-media", "has-studio");
+      setStatus("AI cleaned background + filled draft — review each step.");
+    } else {
+      setStatus("AI filled a draft — review each step before posting.");
+    }
     fillFormFromDraft();
     if (sellerInfo?.businessName) {
       el("seller-badge").textContent = sellerInfo.businessName;
       el("seller-badge-wrap")?.classList.remove("hidden");
     }
-    setStatus("AI filled a draft — review each step before posting.");
   } catch {
     setStatus("AI unavailable — you can fill everything manually.");
   }
