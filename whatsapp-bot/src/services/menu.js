@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { sendText, sendProductCard } from "./whatsapp.js";
 import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, listBrowseProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
 import { buildBrowseSubmenus, priceTierMaxKes } from "./browse-menu.js";
+import { isCatalogPubliclyDisabled } from "./catalog-guard.js";
 import { formatListNumber, formatKes, CATALOG_PAGE_SIZE } from "./list-format.js";
 import { buildAffiliateLink, SOURCE_LABELS } from "./affiliate.js";
 import {
@@ -125,7 +126,19 @@ async function getBrowseSubmenus() {
   return browseSubmenusCache;
 }
 
+const CATALOG_REBUILD_MSG =
+  "We're rebuilding Sokoni Mall with a fresh catalog — nothing to browse yet.\n\n" +
+  "Tell me what you're looking for and we'll help you find it. Or tap *Talk to a Human* on the menu.\n\n" +
+  "_Type *menu* anytime._";
+
+async function sendCatalogRebuildNotice(to) {
+  return sendText(to, CATALOG_REBUILD_MSG);
+}
+
 export async function sendCategoryList(to) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
   const submenus = await getBrowseSubmenus();
   const options = Object.entries(submenus).map(([id, menu]) => ({
     id,
@@ -141,6 +154,9 @@ export async function isCategoryMenuId(id) {
 }
 
 export async function sendCategorySubmenu(to, categoryMenuId) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
   const submenus = await getBrowseSubmenus();
   const menu = submenus[categoryMenuId];
   if (!menu) return sendMainMenu(to);
@@ -174,6 +190,9 @@ export async function isSubcategoryRowId(id) {
 }
 
 export async function sendProductsForSubcategory(to, rowId, page = 0) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
   const target = await findSubcategoryRow(rowId);
   if (!target) return sendMainMenu(to);
   if (target.legacySubcategory === "perfume-oils") {
@@ -219,6 +238,9 @@ export async function sendProductsForSubcategory(to, rowId, page = 0) {
 
 /** Step 1: scent names only (no size) — paginated. */
 export async function sendPerfumeScentList(to, { page = 0, rowId = "sub_women_perfume-oils" } = {}) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
   const allFamilies = await listPerfumeScentFamilies();
   const total = allFamilies.length;
   const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
@@ -331,6 +353,9 @@ export async function sendPaginatedProductList(
 }
 
 export async function sendDealsOfTheDay(to) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
   const deals = await searchProducts({
     scope: "local",
     fulfillment: "store",
@@ -341,6 +366,9 @@ export async function sendDealsOfTheDay(to) {
 
 /** Show a numbered list — customer replies 1, 2, 3 to pick an item. */
 export async function sendNumberedProductList(to, products, { title = "Pick an item", footer = "" } = {}) {
+  if (!products?.length) {
+    return sendCatalogRebuildNotice(to);
+  }
   const lines = products.map(
     (p, i) =>
       `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · pay on delivery`

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDbEnabled, pingDb } from "../db/pool.js";
+import { isCatalogPubliclyDisabled } from "../services/catalog-guard.js";
 import {
   getProductById,
   searchProductsDb,
@@ -105,12 +106,14 @@ function buildListFilters(req) {
 }
 
 router.get("/meta", async (_req, res) => {
+  const disabled = await isCatalogPubliclyDisabled();
   const db = await pingDb();
   res.json({
+    catalogPaused: disabled,
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
     dbError: db.ok ? null : db.reason,
-    productCount: db.ok ? await countProducts() : null,
+    productCount: disabled ? 0 : db.ok ? await countProducts() : null,
     conditions: CONDITION_LABELS,
     itemTypes: [
       { value: "all", label: "All Items" },
@@ -159,6 +162,9 @@ router.get("/categories", async (_req, res) => {
 });
 
 router.get("/", async (req, res) => {
+  if (await isCatalogPubliclyDisabled()) {
+    return res.json({ total: 0, count: 0, offset: 0, limit: 0, products: [], catalogPaused: true });
+  }
   if (!isDbEnabled()) {
     return res.status(503).json({ error: "database_not_configured" });
   }
@@ -183,6 +189,9 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
+  if (await isCatalogPubliclyDisabled()) {
+    return res.status(404).json({ error: "catalog_paused" });
+  }
   if (!isDbEnabled()) {
     return res.status(503).json({ error: "database_not_configured" });
   }

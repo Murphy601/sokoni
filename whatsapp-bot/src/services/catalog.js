@@ -5,6 +5,7 @@ import { looksLikeDeliveryDetails } from "./delivery-details.js";
 import { normalizeShopperQuery } from "./shopper-language.js";
 import { isDbEnabled } from "../db/pool.js";
 import { listProducts as listProductsFromDb } from "../db/repositories/products.js";
+import { isCatalogPubliclyDisabled } from "./catalog-guard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -21,6 +22,9 @@ export function invalidateProductCache() {
  * otherwise from the static JSON master file.
  */
 async function loadProducts() {
+  if (await isCatalogPubliclyDisabled()) {
+    return [];
+  }
   if (!cachedProducts) {
     if (isDbEnabled()) {
       try {

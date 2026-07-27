@@ -1,5 +1,6 @@
 {
   "paused": true,
-  "reason": "Site redesign — catalog cleared from storefront. Master catalog on bot is unchanged.",
-  "pausedAt": "2026-07-27T00:00:00.000Z"
+  "reason": "Catalog wiped for Depop redesign — no products public until re-listed.",
+  "pausedAt": "2026-07-27T00:00:00.000Z",
+  "wiped": true
 }
