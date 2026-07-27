@@ -85,5 +85,11 @@ echo "==> WAHA media config OK"
 docker_compose -p sokoni-waha -f docker-compose.waha.yml ps
 
 if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
-  bash "$REPO/scripts/configure-waha-session.sh"
+  if ! bash "$REPO/scripts/configure-waha-session.sh"; then
+    echo ""
+    echo "ERROR: WAHA WhatsApp session is not WORKING — bot cannot send/receive messages."
+    echo "       Run: bash scripts/waha-link-whatsapp.sh"
+    echo "       Or:  RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
+    exit 1
+  fi
 fi
