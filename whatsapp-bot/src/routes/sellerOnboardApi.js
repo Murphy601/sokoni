@@ -6,6 +6,10 @@ import {
   getSellerOrdersByPhone,
   refreshSellerListing,
 } from "../services/seller-onboard.js";
+import {
+  getSellerWithdrawSummaryByPhone,
+  requestSellerWithdrawal,
+} from "../services/seller-withdrawals.js";
 import { sendSellerVerificationCode, verifySellerCode } from "../services/seller-verification.js";
 
 const router = Router();
@@ -68,6 +72,23 @@ router.get("/ledger", (req, res) => {
 /** GET /api/seller/onboard/orders?phone= — paid orders, labels, shipment status */
 router.get("/orders", (req, res) => {
   const result = getSellerOrdersByPhone(req.query.phone);
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** GET /api/seller/onboard/withdraw?phone= — available balance + withdrawal history */
+router.get("/withdraw", (req, res) => {
+  const result = getSellerWithdrawSummaryByPhone(req.query.phone);
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/withdraw — request manual M-Pesa payout */
+router.post("/withdraw", async (req, res) => {
+  const { phone } = req.body || {};
+  const result = await requestSellerWithdrawal(phone);
+  if (result.error === "no_balance") return res.status(400).json(result);
+  if (result.error === "withdrawal_pending") return res.status(409).json(result);
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });

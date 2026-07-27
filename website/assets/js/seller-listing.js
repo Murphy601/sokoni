@@ -999,24 +999,125 @@ async function loadSellerOrders() {
   } catch {}
 }
 
+function renderWithdrawPanel(data) {
+  el("withdraw-available").textContent = formatKes(data.availableKes || 0);
+  el("withdraw-mpesa").textContent = data.maskedMpesa || data.mpesaNumber || "—";
+
+  const pendingEl = el("withdraw-pending");
+  const reqBtn = el("withdraw-request-btn");
+  if (data.pendingRequest) {
+    pendingEl.classList.remove("hidden");
+    pendingEl.textContent = `Processing ${data.pendingRequest.id} — ${formatKes(data.pendingRequest.amountKes)} requested ${new Date(data.pendingRequest.requestedAt).toLocaleString()}.`;
+    reqBtn.disabled = true;
+    reqBtn.textContent = "Withdrawal pending";
+  } else {
+    pendingEl.classList.add("hidden");
+    reqBtn.disabled = !(data.availableKes > 0);
+    reqBtn.textContent = "Request withdrawal";
+  }
+
+  const breakdown = el("withdraw-breakdown");
+  const items = data.breakdown || [];
+  breakdown.innerHTML = items.length
+    ? items
+        .map(
+          (item) =>
+            `<div class="flex justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
+              <span class="truncate">${item.productName || item.orderId}</span>
+              <span class="font-semibold shrink-0">${formatKes(item.amountKes)}</span>
+            </div>`
+        )
+        .join("")
+    : `<p class="text-brand-purple/50 dark:text-white/50">No delivered orders ready for payout yet.</p>`;
+
+  const historyEl = el("withdraw-history");
+  const history = data.history || [];
+  historyEl.innerHTML = history.length
+    ? history
+        .map(
+          (h) =>
+            `<div class="flex justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
+              <span>${h.id} · ${h.status}</span>
+              <span class="font-semibold">${formatKes(h.amountKes)}</span>
+            </div>`
+        )
+        .join("")
+    : `<p class="text-brand-purple/50 dark:text-white/50">No withdrawals yet.</p>`;
+}
+
+async function loadWithdrawPanel() {
+  const phone = apiPhone();
+  if (!phone) return;
+
+  try {
+    const res = await fetch(`${ONBOARD_API}/withdraw?phone=${encodeURIComponent(phone)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return;
+    renderWithdrawPanel(data);
+  } catch {}
+}
+
+async function requestWithdrawal() {
+  const phone = apiPhone();
+  if (!phone) return;
+
+  const statusEl = el("withdraw-status");
+  const btn = el("withdraw-request-btn");
+  btn.disabled = true;
+  statusEl.textContent = "Submitting withdrawal request…";
+  statusEl.classList.remove("text-red-600", "dark:text-red-400");
+
+  try {
+    const res = await fetch(`${ONBOARD_API}/withdraw`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      statusEl.textContent = data.message || data.error || "Could not request withdrawal.";
+      statusEl.classList.add("text-red-600", "dark:text-red-400");
+      await loadWithdrawPanel();
+      return;
+    }
+    statusEl.textContent = data.message || "Withdrawal requested.";
+    statusEl.classList.add("text-brand-green");
+    await loadWithdrawPanel();
+    await loadEscrowLedger();
+  } catch {
+    statusEl.textContent = "Network error — try again.";
+    statusEl.classList.add("text-red-600", "dark:text-red-400");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function showSellerView(view) {
   const dashboard = el("view-dashboard");
+  const withdraw = el("view-withdraw");
   const listing = el("view-listing");
   const tabDash = el("tab-dashboard");
+  const tabWithdraw = el("tab-withdraw");
   const tabList = el("tab-listing");
-  const isDash = view !== "listing";
 
-  dashboard?.classList.toggle("hidden", !isDash);
-  listing?.classList.toggle("hidden", isDash);
-  tabDash?.classList.toggle("is-active", isDash);
-  tabList?.classList.toggle("is-active", !isDash);
-  tabDash?.setAttribute("aria-selected", isDash ? "true" : "false");
-  tabList?.setAttribute("aria-selected", !isDash ? "true" : "false");
+  dashboard?.classList.toggle("hidden", view !== "dashboard");
+  withdraw?.classList.toggle("hidden", view !== "withdraw");
+  listing?.classList.toggle("hidden", view !== "listing");
 
-  if (isDash) {
+  tabDash?.classList.toggle("is-active", view === "dashboard");
+  tabWithdraw?.classList.toggle("is-active", view === "withdraw");
+  tabList?.classList.toggle("is-active", view === "listing");
+
+  tabDash?.setAttribute("aria-selected", view === "dashboard" ? "true" : "false");
+  tabWithdraw?.setAttribute("aria-selected", view === "withdraw" ? "true" : "false");
+  tabList?.setAttribute("aria-selected", view === "listing" ? "true" : "false");
+
+  if (view === "dashboard") {
     loadSellerOrders();
     loadEscrowLedger();
     loadMyListings();
+  } else if (view === "withdraw") {
+    loadWithdrawPanel();
   }
 }
 
@@ -1055,7 +1156,10 @@ function init() {
   updateStepUi();
 
   el("tab-dashboard")?.addEventListener("click", () => showSellerView("dashboard"));
+  el("tab-withdraw")?.addEventListener("click", () => showSellerView("withdraw"));
   el("tab-listing")?.addEventListener("click", () => showSellerView("listing"));
+  el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
+  el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
