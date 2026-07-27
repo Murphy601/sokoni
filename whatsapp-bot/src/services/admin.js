@@ -57,6 +57,7 @@ import {
   handleDbOpsCommand,
 } from "./platform-admin.js";
 import { getSettlementSummary, markPayoutPaid } from "./settlements.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -629,7 +630,7 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
   const result = await applyPostPaymentAutomation(order, {
     mpesaReceiptNumber: "manual-admin",
     phoneNumber: order.phone,
-    amount: order.priceKes,
+    amount: orderBuyerTotal(order),
   });
 
   if (result?.skipped) {
@@ -642,7 +643,7 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
 
   return sendText(
     adminChatId,
-    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()} · escrow held\nCustomer + seller notified.\n\n${note}\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
+    `✅ Payment confirmed for *${order.id}* · KES ${orderBuyerTotal(order).toLocaleString()} · escrow held\nCustomer + seller notified.\n\n${note}\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
   );
 }
 

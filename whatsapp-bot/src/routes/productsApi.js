@@ -13,6 +13,7 @@ import {
   countProducts,
 } from "../db/repositories/products.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
+import { computeProductTotals } from "../services/shipping-tiers.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +29,7 @@ const PRICE_TIERS = {
 /** Public product shape — never expose source cost or supplier URL. */
 function toPublicProduct(p) {
   if (!p) return null;
+  const totals = computeProductTotals(p);
   const pub = {
     id: p.id,
     name: p.name,
@@ -43,7 +45,9 @@ function toPublicProduct(p) {
     condition: p.condition,
     conditionLabel: p.conditionLabel,
     stockQuantity: p.stockQuantity,
-    priceKes: p.priceKes,
+    priceKes: totals.itemKes,
+    shippingKes: totals.shippingKes,
+    totalKes: totals.totalKes,
     priceUsd: p.priceUsd,
     originalPriceKes: p.originalPriceKes,
     rating: p.rating,

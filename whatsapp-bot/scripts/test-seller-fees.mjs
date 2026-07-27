@@ -3,6 +3,8 @@
 import {
   applyAiShippingSuggestion,
   computeFeeBreakdown,
+  computeProductTotals,
+  orderBuyerTotal,
   inferWeightClass,
   MIN_SHIPPING_KES,
   validateShippingKes,
@@ -31,6 +33,9 @@ assert("seller net 405", fees.sellerNetKes === 405);
 assert("no free shipping — min enforced", validateShippingKes(0).ok === false);
 assert("valid shipping passes", validateShippingKes(150).ok === true);
 assert("inferWeightClass shoes → medium", inferWeightClass("Women leather shoes") === "medium");
+
+assert("order total 450", computeProductTotals({ priceKes: 300, shippingKes: 150 }).totalKes === 450);
+assert("orderBuyerTotal uses totalKes", orderBuyerTotal({ priceKes: 300, shippingKes: 150, totalKes: 450 }) === 450);
 
 console.log(`\n${failed ? failed + " failed" : "All seller fee tests passed"}`);
 process.exit(failed ? 1 : 0);

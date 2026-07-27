@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
+import { computeProductTotals, orderBuyerTotal } from "./shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -118,7 +119,12 @@ export function createOrder({ customerKey, chatId, product, details }) {
   const id = `SK-${store.seq}`;
   const now = Date.now();
   const sourcePriceKes = product.sourcePriceKes != null ? Number(product.sourcePriceKes) : null;
-  const priceKes = product.priceKes != null ? Number(product.priceKes) : null;
+  const totals = computeProductTotals(product);
+  const priceKes = totals.itemKes;
+  const shippingKes = totals.shippingKes;
+  const totalKes = totals.totalKes;
+  const platformFeeKes = totals.platformFeeKes;
+  const sellerNetKes = totals.sellerNetKes;
   const marginKes =
     sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
 
@@ -131,6 +137,10 @@ export function createOrder({ customerKey, chatId, product, details }) {
     productId: product.productId || product.id,
     productName: product.name,
     priceKes,
+    shippingKes,
+    totalKes,
+    platformFeeKes,
+    sellerNetKes,
     sourcePriceKes,
     marginKes,
     supplierId: product.supplierId || null,
@@ -228,7 +238,7 @@ export function findProcessingOrderByPhoneAmount(phone, amountKes) {
     if (o.paymentStatus !== "processing" && o.status !== "awaiting_payment") return false;
     const orderPhone = normalizePhoneDigits(o.phone || o.mpesaPhone);
     if (orderPhone !== wantPhone) return false;
-    return Math.round(Number(o.priceKes)) === wantAmt;
+    return Math.round(Number(orderBuyerTotal(o))) === wantAmt;
   });
   candidates.sort((a, b) => (b.stkSentAt || b.createdAt || 0) - (a.stkSentAt || a.createdAt || 0));
   return candidates[0] || null;

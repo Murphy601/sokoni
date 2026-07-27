@@ -281,3 +281,32 @@ html.dark .sell-ledger-tab {
 .sell-ledger-dot.available { background: #25d366; }
 .sell-ledger-dot.pending { background: #facc15; }
 .sell-ledger-dot.transit { background: #f87171; }
+
+.depop-card-shipping,
+.depop-card-total {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(27, 16, 53, 0.55);
+  margin-top: 0.15rem;
+}
+
+.depop-card-total {
+  color: #25d366;
+  font-size: 0.75rem;
+}
+
+html.dark .depop-card-shipping {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.product-sheet-shipping,
+.product-sheet-total {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.product-sheet-total {
+  color: #25d366;
+  margin-top: 0.25rem;
+}

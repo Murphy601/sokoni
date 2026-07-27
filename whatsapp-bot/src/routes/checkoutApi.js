@@ -6,6 +6,7 @@ import {
 } from "../services/prepaid-checkout.js";
 import { generateDropoffLabel } from "../services/escrow-automation.js";
 import { getOrder } from "../services/orders.js";
+import { orderBuyerTotal } from "../services/shipping-tiers.js";
 
 const router = Router();
 
@@ -36,7 +37,10 @@ router.get("/:orderId", (req, res) => {
   }
   res.json({
     orderId: order.id,
-    amountKes: order.priceKes,
+    itemKes: order.priceKes,
+    shippingKes: order.shippingKes ?? 0,
+    amountKes: orderBuyerTotal(order),
+    totalKes: orderBuyerTotal(order),
     paymentStatus: order.customerPaymentStatus,
     paymentStatusDetail: order.paymentStatus,
     escrowStatus: order.escrowStatus || "pending",

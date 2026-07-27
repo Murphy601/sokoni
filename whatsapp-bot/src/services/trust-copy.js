@@ -91,14 +91,29 @@ export function broadcastReEngageMessage() {
   );
 }
 
-export function prepaidOrderPlacedMessage({ orderId, productName, amountKes, customerName, location, phone }) {
-  const amt = Number(amountKes);
-  const priceLine = Number.isFinite(amt) ? `KES ${amt.toLocaleString()}` : "—";
+export function prepaidOrderPlacedMessage({
+  orderId,
+  productName,
+  amountKes,
+  itemKes,
+  shippingKes,
+  customerName,
+  location,
+  phone,
+}) {
+  const total = Number(amountKes);
+  const item = Number(itemKes);
+  const ship = Number(shippingKes);
+  const priceLine = Number.isFinite(total) ? `KES ${total.toLocaleString()}` : "—";
+  const breakdown =
+    Number.isFinite(ship) && ship > 0 && Number.isFinite(item)
+      ? `Item KES ${item.toLocaleString()} + shipping KES ${ship.toLocaleString()} = *${priceLine}*\n`
+      : `💰 *${priceLine}* — pay upfront (escrow protected)\n`;
   return (
     `Order received! 🎉\n` +
     `Your order number is *${orderId}*.\n\n` +
     `🛍️ *${productName}*\n` +
-    `💰 *${priceLine}* — pay upfront (escrow protected)\n` +
+    breakdown +
     `📍 ${customerName} — ${location}\n` +
     `📞 ${phone}\n\n` +
     `🔒 *Next step:* complete M-Pesa payment to activate your order.\n` +

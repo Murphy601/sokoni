@@ -4,6 +4,7 @@ import { getOrder, getOrdersForCustomer, updateOrderMeta, listRecentOrders } fro
 import { getPickupPoint } from "./pickupPoints.js";
 import { getSupplier } from "./suppliers.js";
 import { paymentVerificationPrompt, paymentConfirmedMessage } from "./trust-copy.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 
 export const CUSTOMER_PAYMENT_STATUSES = ["unpaid", "claimed", "confirmed"];
 
@@ -15,7 +16,7 @@ export function formatMpesaTillBlock(amountKes = null) {
 export function formatShortPaymentReminder(order) {
   if (!order || order.customerPaymentStatus === "confirmed") return null;
   if (order.status === "cancelled") return null;
-  const price = Number(order.priceKes);
+  const price = orderBuyerTotal(order);
   const priceLine = Number.isFinite(price) ? price.toLocaleString() : "—";
   if (order.status === "awaiting_payment" || order.customerPaymentStatus === "unpaid") {
     return (
@@ -132,7 +133,7 @@ export function buildAdminPaidClaimMessage(order) {
     `*Customer:* ${order.customerName}\n` +
     `*Customer phone:* ${order.phone}\n` +
     `*Chat:* \`${order.customerKey}\`\n` +
-    `*Amount:* KES ${order.priceKes.toLocaleString()}\n` +
+    `*Amount:* KES ${orderBuyerTotal(order).toLocaleString()}\n` +
     `*Order status:* ${order.status}\n\n` +
     storeBlock +
     `\n*Confirm:* #payconfirm ${order.id}\n` +
@@ -152,7 +153,7 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
   }
 
   if (order.customerPaymentStatus === "confirmed") {
-    await sendText(customerKey, paymentConfirmedMessage({ orderId: order.id, amountKes: order.priceKes }));
+    await sendText(customerKey, paymentConfirmedMessage({ orderId: order.id, amountKes: orderBuyerTotal(order) }));
     return true;
   }
 
@@ -171,7 +172,7 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
 
   await sendText(
     customerKey,
-    `Asante! 🙏 We received your payment notice for *${order.id}* (KES ${order.priceKes.toLocaleString()}).\n\nOur team will verify your M-Pesa payment to Till *${config.store.mpesaTill}* and confirm shortly.`
+    `Asante! 🙏 We received your payment notice for *${order.id}* (KES ${orderBuyerTotal(order).toLocaleString()}).\n\nOur team will verify your M-Pesa payment to Till *${config.store.mpesaTill}* and confirm shortly.`
   );
 
   if (config.admin.primary) {
@@ -202,7 +203,7 @@ export async function notifyStorePaymentConfirmed(order) {
   const storeChat = `${String(store.phone).replace(/\D/g, "")}@c.us`;
   const msg =
     `✅ *Payment confirmed — ${order.id}*\n\n` +
-    `Customer *${order.customerName}* (+${String(order.phone).replace(/\D/g, "")}) has paid *KES ${order.priceKes.toLocaleString()}* to Sokoni Till *${config.store.mpesaTill}*.\n\n` +
+    `Customer *${order.customerName}* (+${String(order.phone).replace(/\D/g, "")}) has paid *KES ${orderBuyerTotal(order).toLocaleString()}* to Sokoni Till *${config.store.mpesaTill}*.\n\n` +
     `*Product:* ${order.productName}\n` +
     `Release the parcel to the customer after verifying their order ID.\n\n` +
     `_Sokoni admin_`;

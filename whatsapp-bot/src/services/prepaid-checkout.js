@@ -3,6 +3,7 @@
  */
 import { config } from "../config.js";
 import { updateOrderMeta } from "./orders.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isDarajaReady, initiateStkPush } from "./daraja-mpesa.js";
 import { isPrepaidOnlyEffective } from "./platform-flags.js";
 
@@ -31,14 +32,21 @@ export function prepaidPaymentLine(order) {
 }
 
 export function formatPrepaidCheckoutPrompt(order) {
-  const amt = Number(order?.priceKes);
-  const priceLine = Number.isFinite(amt) ? `KES ${amt.toLocaleString()}` : "—";
+  const total = orderBuyerTotal(order);
+  const item = Math.round(Number(order?.priceKes) || 0);
+  const ship = Math.round(Number(order?.shippingKes) || 0);
+  const priceLine = Number.isFinite(total) ? `KES ${total.toLocaleString()}` : "—";
+  const breakdown =
+    ship > 0
+      ? `Item KES ${item.toLocaleString()} + shipping KES ${ship.toLocaleString()} = *${priceLine}*\n`
+      : "";
   const ref = order?.id || "SK-####";
 
   if (isDarajaConfigured()) {
     return (
       `💳 *Pay upfront — ${ref}*\n\n` +
-      `Amount: *${priceLine}*\n` +
+      breakdown +
+      `Total: *${priceLine}*\n` +
       `🔒 Funds stay in Sokoni escrow until delivery is confirmed.\n\n` +
       `📱 Check your phone — M-Pesa STK push sent.\n` +
       `Enter your PIN to complete payment.\n\n` +
@@ -50,7 +58,8 @@ export function formatPrepaidCheckoutPrompt(order) {
   const tillName = config.store.mpesaTillName;
   return (
     `💳 *Pay upfront — ${ref}*\n\n` +
-    `Amount: *${priceLine}*\n` +
+    breakdown +
+    `Total: *${priceLine}*\n` +
     `Your money stays in Sokoni escrow until delivery is confirmed.\n\n` +
     `Configure Daraja STK for instant auto-confirm, or pay manually:\n\n` +
     `🏢 *Buy Goods Till:* ${till}\n` +
@@ -85,7 +94,7 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     updateOrderMeta(order.id, { paymentStatus: "processing" });
     const stk = await initiateStkPush({
       phone: payPhone,
-      amount: order.priceKes,
+      amount: orderBuyerTotal(order),
       accountReference: order.id,
       description: `Order ${order.id}`,
     });

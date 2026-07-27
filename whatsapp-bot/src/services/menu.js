@@ -43,6 +43,7 @@ import {
   prepaidOrderPlacedMessage,
 } from "./trust-copy.js";
 import { welcomeMessageForCustomer } from "./customer-automations.js";
+import { computeProductTotals, orderBuyerTotal, formatBuyerTotalLine } from "./shipping-tiers.js";
 import {
   parseDeliveryDetails,
   isOrderCorrectionMessage,
@@ -683,15 +684,19 @@ export async function startCodOrder(to, productId) {
 export async function startPrepaidOrder(to, productId) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
+  const totals = computeProductTotals(product);
   setPendingOrder(to, {
     productId: product.id,
     name: product.name,
-    priceKes: product.priceKes,
+    priceKes: totals.itemKes,
+    shippingKes: totals.shippingKes,
+    totalKes: totals.totalKes,
   });
   return sendText(
     to,
     `Great choice! 🛍️\n` +
-      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (100% prepaid · escrow)\n\n` +
+      `*${product.name}*\n` +
+      `${formatBuyerTotalLine(totals)} (100% prepaid · escrow)\n\n` +
       `To place your order, reply in *one message* with:\n` +
       `1️⃣ Your full name\n` +
       `2️⃣ Delivery location (estate/town + a landmark)\n` +
@@ -769,7 +774,7 @@ export async function handleCart(to) {
   if (pending) {
     return sendText(
       to,
-      `🛒 *Your current order:*\n*${pending.name}* — KES ${pending.priceKes.toLocaleString()} (100% prepaid)\n\n` +
+      `🛒 *Your current order:*\n*${pending.name}*\n${formatBuyerTotalLine(pending)} (100% prepaid)\n\n` +
         `Send delivery details to complete, or type *cancel* / *change order*.`
     );
   }
@@ -849,7 +854,9 @@ export async function confirmPrepaidOrder(to, parsed) {
     prepaidOrderPlacedMessage({
       orderId: orderRef || "pending",
       productName: pending.name,
-      amountKes: pending.priceKes,
+      amountKes: order ? orderBuyerTotal(order) : pending.totalKes ?? pending.priceKes,
+      itemKes: order?.priceKes ?? pending.priceKes,
+      shippingKes: order?.shippingKes ?? pending.shippingKes,
       customerName: details.name,
       location: details.location,
       phone: details.phone,

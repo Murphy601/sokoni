@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getSupplier } from "./suppliers.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -45,6 +46,11 @@ export function addBusinessDays(fromMs, days) {
 
 function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
   const supplier = getSupplier(order.supplierId);
+  const buyerTotal = orderBuyerTotal(order);
+  const payoutAmountKes =
+    order.sellerNetKes != null
+      ? order.sellerNetKes
+      : order.sourcePriceKes || Math.round(buyerTotal * 0.9);
   return {
     id: `PAY-${order.id}`,
     orderId: order.id,
@@ -52,9 +58,11 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
     supplierName: supplier?.businessName || order.supplierId,
     supplierPhone: supplier?.phone || "",
     productName: order.productName,
-    payoutAmountKes: order.sourcePriceKes,
-    marginKes: order.marginKes || Math.max(0, (order.priceKes || 0) - (order.sourcePriceKes || 0)),
-    retailKes: order.priceKes,
+    payoutAmountKes,
+    marginKes: order.platformFeeKes ?? Math.max(0, buyerTotal - payoutAmountKes),
+    retailKes: buyerTotal,
+    itemKes: order.priceKes,
+    shippingKes: order.shippingKes ?? 0,
     status,
     createdAt: Date.now(),
     deliveredAt: Date.now(),
@@ -67,7 +75,9 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
  * Schedule seller payout 3 business days after delivery (Depop-style escrow release).
  */
 export function scheduleSellerPayoutAfterDelivery(order) {
-  if (!order?.supplierId || !order.sourcePriceKes) return null;
+  if (!order?.supplierId) return null;
+  const payoutBase = order.sellerNetKes ?? order.sourcePriceKes;
+  if (!payoutBase) return null;
   load();
 
   const existing = store.entries.find((e) => e.orderId === order.id && e.status !== "cancelled");

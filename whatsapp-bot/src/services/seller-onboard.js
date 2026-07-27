@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
 import { getOrder } from "./orders.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
 import { consumeVerificationToken } from "./seller-verification.js";
 
@@ -14,6 +15,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SETTLEMENTS_FILE = path.join(__dirname, "..", "..", "data", "settlements.json");
 const MASTER_CATALOG = path.join(__dirname, "..", "data", "products.json");
 const REPO_CATALOG = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
+
+function sellerOrderNet(o) {
+  return o.sellerNetKes ?? o.sourcePriceKes ?? Math.round(orderBuyerTotal(o) * 0.9);
+}
 
 export function normalizePhone(phone) {
   let d = String(phone || "").replace(/\D/g, "");
@@ -146,7 +151,7 @@ export function getSellerEscrowLedger(supplierId) {
     )
     .map((o) => ({
       orderId: o.id,
-      amountKes: o.sourcePriceKes || Math.round((o.priceKes || 0) * 0.92),
+      amountKes: sellerOrderNet(o),
       status: "pending",
       productName: o.productName,
       trackingCode: o.id,
@@ -161,7 +166,7 @@ export function getSellerEscrowLedger(supplierId) {
     )
     .map((o) => ({
       orderId: o.id,
-      amountKes: o.sourcePriceKes || Math.round((o.priceKes || 0) * 0.92),
+      amountKes: sellerOrderNet(o),
       status: "in_transit",
       productName: o.productName,
       trackingCode: o.id,
@@ -275,7 +280,7 @@ export async function releaseEscrowPayout(orderId) {
   const { getSupplier } = await import("./suppliers.js");
   const seller = getSupplier(order.supplierId);
   const mpesaPhone = seller?.mpesaNumber || seller?.phone;
-  const netAmount = order.sourcePriceKes || Math.round((order.priceKes || 0) * 0.92);
+  const netAmount = sellerOrderNet(order);
 
   if (!mpesaPhone) {
     return { error: "no_mpesa", message: "Seller M-Pesa number not on file." };

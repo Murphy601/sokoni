@@ -14,6 +14,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { CATEGORY_TAXONOMY } from "./catalog-taxonomy.mjs";
+import { computeProductTotals } from "../whatsapp-bot/src/services/shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -59,11 +60,14 @@ function toPublic(product) {
       product.priceKes != null
         ? product.priceKes
         : computeRetail(product.sourcePriceKes || 0);
+    const totals = computeProductTotals({ ...product, priceKes });
     return {
       id: product.id,
       name: product.name,
       category: product.category,
-      priceKes,
+      priceKes: totals.itemKes,
+      shippingKes: totals.shippingKes,
+      totalKes: totals.totalKes,
       rating: product.rating,
       reviews: product.reviews,
       source: "Sokoni",

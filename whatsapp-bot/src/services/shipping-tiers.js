@@ -84,3 +84,47 @@ export function validateShippingKes(shippingKes) {
   }
   return { ok: true, shippingKes: n };
 }
+
+/** Buyer-facing totals from a catalog product (defaults shipping to min if missing). */
+export function computeProductTotals(product = {}) {
+  const itemKes = Math.max(0, Math.round(Number(product.priceKes) || 0));
+  const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
+  const shippingRaw =
+    product.shippingKes ??
+    product.shippingFeeKes ??
+    getShippingTier(weightClass).typicalKes;
+  const fees = computeFeeBreakdown(itemKes, clampShippingKes(shippingRaw, weightClass));
+  return {
+    itemKes: fees.itemKes,
+    shippingKes: fees.shippingKes,
+    totalKes: fees.buyerTotalKes,
+    platformFeeKes: fees.platformFeeKes,
+    sellerNetKes: fees.sellerNetKes,
+  };
+}
+
+/** Amount the buyer pays (item + shipping). Falls back for legacy orders. */
+export function orderBuyerTotal(order = {}) {
+  if (order.totalKes != null) return Math.round(Number(order.totalKes));
+  const item = Math.round(Number(order.priceKes) || 0);
+  const ship = Math.round(Number(order.shippingKes) || 0);
+  return ship > 0 ? item + ship : item;
+}
+
+export function formatBuyerTotalLine(orderOrProduct) {
+  const totals =
+    orderOrProduct?.totalKes != null || orderOrProduct?.shippingKes != null
+      ? {
+          itemKes: Math.round(Number(orderOrProduct.priceKes ?? orderOrProduct.itemKes) || 0),
+          shippingKes: Math.round(Number(orderOrProduct.shippingKes) || 0),
+          totalKes: orderBuyerTotal(orderOrProduct),
+        }
+      : computeProductTotals(orderOrProduct);
+  const item = totals.itemKes ?? Math.round(Number(orderOrProduct.priceKes) || 0);
+  const ship = totals.shippingKes ?? 0;
+  const total = totals.totalKes ?? orderBuyerTotal(orderOrProduct);
+  if (ship > 0) {
+    return `KES ${item.toLocaleString()} + KES ${ship.toLocaleString()} shipping = *KES ${total.toLocaleString()}*`;
+  }
+  return `*KES ${total.toLocaleString()}*`;
+}

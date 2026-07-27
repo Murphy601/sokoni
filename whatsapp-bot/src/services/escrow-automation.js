@@ -22,6 +22,7 @@ import { scheduleSellerPayoutAfterDelivery, addBusinessDays } from "./settlement
 import { advanceShipmentStatus } from "./shipments.js";
 import { recordPurchaseFeedEvent } from "./feed-ranking.js";
 import { isDbEnabled } from "../db/pool.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -83,7 +84,7 @@ async function lockProductForOrder(order) {
 
 async function notifyBuyerPaid(order, payment) {
   const label = generateDropoffLabel(order);
-  const amt = payment.amount ?? order.priceKes;
+  const amt = payment.amount ?? orderBuyerTotal(order);
   await sendText(
     order.customerKey,
     `✅ *Payment received!*\n\n` +

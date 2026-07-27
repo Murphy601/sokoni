@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { getSupplier } from "./suppliers.js";
+import { orderBuyerTotal, formatBuyerTotalLine } from "./shipping-tiers.js";
 import { sendText, formatCustomerLabel } from "./whatsapp.js";
 import { formatAdminFulfillmentBlock } from "./fulfillment.js";
 import { humanHandoffAck } from "./trust-copy.js";
@@ -99,7 +100,7 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
   return (
     `🧾 *NEW PREPAID ORDER*${orderId}\n` +
     `Product: ${pending.name}\n` +
-    `Retail: KES ${pending.priceKes.toLocaleString()} (customer pays upfront — escrow)\n` +
+    `Total: ${formatBuyerTotalLine(pending)} (customer pays upfront — escrow)\n` +
     supplierBlock +
     `Customer: ${label}\n` +
     `Name: ${details.name}\n` +
