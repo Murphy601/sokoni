@@ -58,6 +58,8 @@ export async function getCategories() {
 export async function searchProducts({
   category,
   subcategory,
+  browseCategory,
+  browseSubCategory,
   keywords,
   maxPriceKes,
   minPriceKes,
@@ -67,6 +69,8 @@ export async function searchProducts({
   limit = 3,
 } = {}) {
   const products = await loadProducts();
+  const { loadBrowseMenuData, resolveBrowsePath } = await import("./browse-menu.js");
+  const menu = await loadBrowseMenuData();
 
   const keywordTokens = expandKeywordTokens(keywords);
 
@@ -74,6 +78,11 @@ export async function searchProducts({
     if (product.inStock === false) return false;
     if (category && product.category !== category) return false;
     if (subcategory && product.subcategory !== subcategory) return false;
+    if (browseCategory || browseSubCategory) {
+      const path = resolveBrowsePath(product, menu.legacyMap);
+      if (browseCategory && path.browse !== browseCategory) return false;
+      if (browseSubCategory && path.sub !== browseSubCategory) return false;
+    }
     if (source && product.source !== source) return false;
     if (scope && product.scope !== scope) return false;
     if (fulfillment && product.fulfillment !== fulfillment) return false;
@@ -115,6 +124,36 @@ export async function listCategoryProducts({ category, subcategory, scope, fulfi
     subcategory,
     scope,
     fulfillment,
+    limit: 5000,
+  });
+}
+
+/** Browse taxonomy listing (Phase 2 — Women / Men / Sale / etc.). */
+export async function listBrowseProducts({
+  browseCategory,
+  browseSubCategory,
+  maxPriceKes,
+  legacyCategory,
+  legacySubcategory,
+  scope = "local",
+  fulfillment = "store",
+} = {}) {
+  if (legacyCategory || legacySubcategory) {
+    return searchProducts({
+      category: legacyCategory,
+      subcategory: legacySubcategory,
+      scope,
+      fulfillment,
+      maxPriceKes,
+      limit: 5000,
+    });
+  }
+  return searchProducts({
+    browseCategory,
+    browseSubCategory,
+    scope,
+    fulfillment,
+    maxPriceKes,
     limit: 5000,
   });
 }

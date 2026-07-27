@@ -658,7 +658,7 @@ export async function handleProductRouter(customerKey, text) {
       }
       return sendProductDisambiguation(customerKey, result.products);
     case "browse_perfumes":
-      return sendPerfumeScentList(customerKey, { page: 0, rowId: "sub_beauty_perfume-oils" });
+      return sendPerfumeScentList(customerKey, { page: 0, rowId: "sub_women_perfume-oils" });
     default:
       return false;
   }

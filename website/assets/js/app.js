@@ -846,6 +846,17 @@ function bindSearch() {
   });
 }
 
+async function isCatalogPaused() {
+  try {
+    const res = await fetch(dataUrl("data/catalog-paused.json"));
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data.paused);
+  } catch {
+    return false;
+  }
+}
+
 async function loadProductsFromApi() {
   const all = [];
   let offset = 0;
@@ -864,6 +875,9 @@ async function loadProductsFromApi() {
 }
 
 async function loadProducts() {
+  if (await isCatalogPaused()) {
+    return [];
+  }
   await window.SokoniBrowse?.loadMenu?.();
   try {
     const fromApi = await loadProductsFromApi();
@@ -878,6 +892,7 @@ async function loadProducts() {
 }
 
 async function loadStoreMeta() {
+  if (await isCatalogPaused()) return;
   try {
     const res = await fetch(PRODUCTS_API.replace(/\/$/, "") + "/meta");
     if (!res.ok) return;

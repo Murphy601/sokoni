@@ -62,11 +62,9 @@ Cloudflare Pages deploys the website automatically on push — no local sync nee
 
 ## Storefront behaviour
 
-1. **Primary source:** `https://bot.sokonimall.com/api/products` (all in-stock items, batched)
-2. **Fallback:** `website/data/products.json` if API unavailable
-3. **`catalog-paused.json`** still empties the JSON build — site works via API when DB is live
-4. **Browse drawer** (left) + **category grid** use Depop-style taxonomy
-5. **Filter chips:** Brand New / Pre-Loved + price tiers under deals section
+1. **Catalog pause:** When `website/data/catalog-paused.json` has `"paused": true`, the site shows the empty refresh state — **no API or JSON products** on the public storefront.
+2. **When unpaused:** loads from `/api/products` (or JSON fallback).
+3. **WhatsApp bot** always uses the full master catalog + browse taxonomy (Women / Men / Sale / etc.).
 
 ## Regenerate browse menu after taxonomy edits
 

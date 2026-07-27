@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { sendText, sendProductCard } from "./whatsapp.js";
-import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
+import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, listBrowseProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
+import { buildBrowseSubmenus, priceTierMaxKes } from "./browse-menu.js";
 import { formatListNumber, formatKes, CATALOG_PAGE_SIZE } from "./list-format.js";
 import { buildAffiliateLink, SOURCE_LABELS } from "./affiliate.js";
 import {
@@ -57,7 +58,7 @@ export async function sendWelcome(to) {
 
 export function sendMainMenu(to) {
   const options = [
-    { id: "shop_all", label: "🛍️ Browse Categories" },
+    { id: "shop_all", label: "👗 Browse Shop" },
     { id: "deals_today", label: "🔥 Today's Picks" },
     { id: "intl_shop", label: "🌍 Shop International" },
     { id: "track_order", label: "🧾 Track My Order" },
@@ -114,163 +115,101 @@ const SUBCATEGORY_LABELS = {
   "baby-gear": "Baby Gear",
 };
 
-const CATEGORY_SUBMENUS = {
-  cat_phones: {
-    category: "phones-tablets",
-    label: "📱 Phones & Tablets",
-    rows: [
-      { id: "sub_phones_smartphones", title: "Smartphones", subcategory: "smartphones" },
-      { id: "sub_phones_tablets", title: "Tablets", subcategory: "tablets" },
-      { id: "sub_phones_power-banks", title: "Power Banks", subcategory: "power-banks" },
-      { id: "sub_phones_accessories", title: "Phone Accessories", subcategory: "phone-accessories" },
-    ],
-  },
-  cat_tvaudio: {
-    category: "tvs-audio",
-    label: "📺 TVs & Audio",
-    rows: [
-      { id: "sub_tvaudio_televisions", title: "Televisions", subcategory: "televisions" },
-      { id: "sub_tvaudio_headphones", title: "Headphones & Earbuds", subcategory: "headphones" },
-      { id: "sub_tvaudio_speakers", title: "Speakers", subcategory: "speakers" },
-      { id: "sub_tvaudio_home-theatre", title: "Home Theatre", subcategory: "home-theatre" },
-    ],
-  },
-  cat_appliances: {
-    category: "appliances",
-    label: "🔌 Appliances",
-    rows: [
-      { id: "sub_appliances_kitchen", title: "Kitchen Appliances", subcategory: "kitchen-appliances" },
-      { id: "sub_appliances_kettles", title: "Kettles", subcategory: "kettles" },
-      { id: "sub_appliances_blenders", title: "Blenders", subcategory: "blenders" },
-      { id: "sub_appliances_irons", title: "Irons", subcategory: "irons" },
-      { id: "sub_appliances_washing", title: "Washing Machines", subcategory: "washing-machines" },
-    ],
-  },
-  cat_beauty: {
-    category: "health-beauty",
-    label: "💄 Health & Beauty",
-    rows: [
-      { id: "sub_beauty_skincare", title: "Skincare", subcategory: "skincare" },
-      { id: "sub_beauty_haircare", title: "Hair Care", subcategory: "haircare" },
-      { id: "sub_beauty_makeup", title: "Makeup", subcategory: "makeup" },
-      { id: "sub_beauty_personal-care", title: "Personal Care", subcategory: "personal-care" },
-      { id: "sub_beauty_fragrances", title: "Fragrances", subcategory: "fragrances" },
-      { id: "sub_beauty_perfume-oils", title: "Perfume Oils", subcategory: "perfume-oils" },
-    ],
-  },
-  cat_home: {
-    category: "home-office",
-    label: "🏠 Home & Office",
-    rows: [
-      { id: "sub_home_kitchen-dining", title: "Kitchen & Dining", subcategory: "kitchen-dining" },
-      { id: "sub_home_bedding", title: "Bedding", subcategory: "bedding" },
-      { id: "sub_home_cleaning", title: "Cleaning", subcategory: "cleaning" },
-      { id: "sub_home_decor", title: "Home Decor", subcategory: "home-decor" },
-      { id: "sub_home_stationery", title: "Stationery", subcategory: "stationery" },
-    ],
-  },
-  cat_fashion: {
-    category: "fashion",
-    label: "👗 Fashion",
-    rows: [
-      { id: "sub_fashion_mens", title: "Men's Fashion", subcategory: "mens-fashion" },
-      { id: "sub_fashion_womens", title: "Women's Fashion", subcategory: "womens-fashion" },
-      { id: "sub_fashion_shoes", title: "Shoes", subcategory: "shoes" },
-      { id: "sub_fashion_bags", title: "Bags", subcategory: "bags" },
-      { id: "sub_fashion_watches", title: "Watches", subcategory: "watches" },
-    ],
-  },
-  cat_computing: {
-    category: "computing",
-    label: "💻 Computing",
-    rows: [
-      { id: "sub_computing_laptops", title: "Laptops", subcategory: "laptops" },
-      { id: "sub_computing_printers", title: "Printers", subcategory: "printers" },
-      { id: "sub_computing_storage", title: "Storage", subcategory: "storage" },
-      { id: "sub_computing_accessories", title: "Accessories", subcategory: "computer-accessories" },
-    ],
-  },
-  cat_gaming: {
-    category: "gaming",
-    label: "🎮 Gaming",
-    rows: [
-      { id: "sub_gaming_consoles", title: "Consoles", subcategory: "consoles" },
-      { id: "sub_gaming_controllers", title: "Controllers", subcategory: "controllers" },
-      { id: "sub_gaming_accessories", title: "Gaming Accessories", subcategory: "gaming-accessories" },
-    ],
-  },
-  cat_supermarket: {
-    category: "supermarket",
-    label: "🛒 Supermarket",
-    rows: [
-      { id: "sub_supermarket_food", title: "Food Cupboard", subcategory: "food-cupboard" },
-      { id: "sub_supermarket_drinks", title: "Drinks", subcategory: "drinks" },
-      { id: "sub_supermarket_household", title: "Household Supplies", subcategory: "household-supplies" },
-    ],
-  },
-  cat_baby: {
-    category: "baby-products",
-    label: "🍼 Baby Products",
-    rows: [
-      { id: "sub_baby_diapering", title: "Diapering", subcategory: "diapering" },
-      { id: "sub_baby_feeding", title: "Feeding", subcategory: "feeding" },
-      { id: "sub_baby_toys", title: "Toys", subcategory: "toys" },
-      { id: "sub_baby_gear", title: "Baby Gear", subcategory: "baby-gear" },
-    ],
-  },
-};
+/** @type {Record<string, { browseCategory: string, label: string, rows: Array<Record<string, string>> }> | null} */
+let browseSubmenusCache = null;
 
-export function sendCategoryList(to) {
-  const options = Object.entries(CATEGORY_SUBMENUS).map(([id, menu]) => ({
+async function getBrowseSubmenus() {
+  if (!browseSubmenusCache) {
+    browseSubmenusCache = await buildBrowseSubmenus();
+  }
+  return browseSubmenusCache;
+}
+
+export async function sendCategoryList(to) {
+  const submenus = await getBrowseSubmenus();
+  const options = Object.entries(submenus).map(([id, menu]) => ({
     id,
     label: menu.label,
   }));
   options.push({ id: "menu_main", label: "⬅ Main menu" });
-  return sendNumberedMenu(to, "Shop by category — all items are pay on delivery 💵", options);
+  return sendNumberedMenu(to, "Browse the shop — Women, Men, Kids, Sale & more 💵", options);
 }
 
-export function isCategoryMenuId(id) {
-  return Object.prototype.hasOwnProperty.call(CATEGORY_SUBMENUS, id);
+export async function isCategoryMenuId(id) {
+  const submenus = await getBrowseSubmenus();
+  return Object.prototype.hasOwnProperty.call(submenus, id);
 }
 
-export function sendCategorySubmenu(to, categoryMenuId) {
-  const menu = CATEGORY_SUBMENUS[categoryMenuId];
+export async function sendCategorySubmenu(to, categoryMenuId) {
+  const submenus = await getBrowseSubmenus();
+  const menu = submenus[categoryMenuId];
+  if (!menu) return sendMainMenu(to);
   const options = [
     ...menu.rows.map((row) => ({ id: row.id, label: row.title })),
     { id: "menu_main", label: "⬅ Main menu" },
   ];
-  return sendNumberedMenu(to, `${menu.label} — pick a sub-category:`, options);
+  return sendNumberedMenu(to, `${menu.label} — pick a section:`, options);
 }
 
-function findSubcategoryRow(rowId) {
-  for (const menu of Object.values(CATEGORY_SUBMENUS)) {
+async function findSubcategoryRow(rowId) {
+  const submenus = await getBrowseSubmenus();
+  for (const menu of Object.values(submenus)) {
     const row = menu.rows.find((r) => r.id === rowId);
-    if (row) return { category: menu.category, subcategory: row.subcategory };
+    if (row) {
+      return {
+        browseCategory: menu.browseCategory,
+        browseSubCategory: row.browseSubCategory || null,
+        priceTier: row.priceTier || null,
+        legacyCategory: row.legacyCategory || null,
+        legacySubcategory: row.legacySubcategory || null,
+        label: row.title,
+      };
+    }
   }
   return null;
 }
 
-export function isSubcategoryRowId(id) {
-  return Boolean(findSubcategoryRow(id));
+export async function isSubcategoryRowId(id) {
+  return Boolean(await findSubcategoryRow(id));
 }
 
 export async function sendProductsForSubcategory(to, rowId, page = 0) {
-  const target = findSubcategoryRow(rowId);
+  const target = await findSubcategoryRow(rowId);
   if (!target) return sendMainMenu(to);
-  if (target.subcategory === "perfume-oils") {
+  if (target.legacySubcategory === "perfume-oils") {
     return sendPerfumeScentList(to, { page, rowId });
   }
-  const products = await listCategoryProducts({
-    category: target.category,
-    subcategory: target.subcategory,
-    scope: "local",
-    fulfillment: "store",
-  });
+
+  const maxPriceKes = target.priceTier ? priceTierMaxKes(target.priceTier) : null;
+  let products;
+  if (target.priceTier) {
+    products = await listBrowseProducts({
+      maxPriceKes: maxPriceKes ?? undefined,
+      scope: "local",
+      fulfillment: "store",
+    });
+  } else if (target.legacySubcategory) {
+    products = await listBrowseProducts({
+      legacyCategory: target.legacyCategory || undefined,
+      legacySubcategory: target.legacySubcategory,
+      scope: "local",
+      fulfillment: "store",
+    });
+  } else {
+    products = await listBrowseProducts({
+      browseCategory: target.browseCategory,
+      browseSubCategory: target.browseSubCategory || undefined,
+      scope: "local",
+      fulfillment: "store",
+    });
+  }
+
   if (products.length === 0) {
-    await sendText(to, "I don't have picks here yet — reply *1* on the main menu to browse categories.");
+    await sendText(to, "I don't have picks here yet — reply *1* on the main menu to browse.");
     return sendMainMenu(to);
   }
-  const label = SUBCATEGORY_LABELS[target.subcategory] || target.subcategory;
+
+  const label = target.label || target.browseSubCategory || "Items";
   return sendPaginatedProductList(to, products, {
     title: `*${label}* — full catalog (${products.length} items)`,
     page,
@@ -279,7 +218,7 @@ export async function sendProductsForSubcategory(to, rowId, page = 0) {
 }
 
 /** Step 1: scent names only (no size) — paginated. */
-export async function sendPerfumeScentList(to, { page = 0, rowId = "sub_beauty_perfume-oils" } = {}) {
+export async function sendPerfumeScentList(to, { page = 0, rowId = "sub_women_perfume-oils" } = {}) {
   const allFamilies = await listPerfumeScentFamilies();
   const total = allFamilies.length;
   const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
@@ -877,8 +816,8 @@ async function sendUpsell(to, justOrdered) {
 export async function handleMenuAction(from, id) {
   if (id === "menu_main") return sendMainMenu(from);
   if (id === "shop_all") return sendCategoryList(from);
-  if (isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
-  if (isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
+  if (await isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
+  if (await isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
   if (id.startsWith("order_")) return startCodOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);
