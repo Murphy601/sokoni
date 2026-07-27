@@ -469,6 +469,43 @@ async function checkSellerProfile() {
   }
 }
 
+function normalizePhoneInput(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9) d = `254${d}`;
+  return d;
+}
+
+async function parseApiResponse(res) {
+  const text = await res.text();
+  try {
+    return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+  } catch {
+    const serverDown = res.status === 502 || res.status === 503 || res.status === 504;
+    return {
+      ok: false,
+      status: res.status,
+      data: null,
+      message: serverDown
+        ? "Sokoni server is restarting — wait a minute and try again."
+        : "Could not reach Sokoni — check your connection.",
+    };
+  }
+}
+
+async function checkApiHealth() {
+  const banner = el("api-down-banner");
+  if (!banner) return;
+  try {
+    const res = await fetch(`${API_BASE}/health`, { method: "GET" });
+    if (res.ok) {
+      banner.classList.add("hidden");
+      return;
+    }
+  } catch {}
+  banner.classList.remove("hidden");
+}
+
 function setOnboardStatus(msg, isError = false) {
   const node = el("onboard-status");
   if (!node) return;
@@ -481,7 +518,7 @@ function setOnboardStatus(msg, isError = false) {
 async function onOnboard() {
   const phone = getPhone();
   const shopName = el("onboard-shop-name")?.value.trim();
-  const shopHandle = el("onboard-shop-handle")?.value.trim();
+  let shopHandle = el("onboard-shop-handle")?.value.trim().replace(/^@/, "");
   const mpesaNumber = el("onboard-mpesa")?.value.trim();
   const nationalId = el("onboard-national-id")?.value.trim();
 
@@ -490,35 +527,44 @@ async function onOnboard() {
     return;
   }
   if (!shopName) {
-    setOnboardStatus("Shop name is required.", true);
+    setOnboardStatus("Enter your name or shop name.", true);
     return;
   }
   if (!mpesaNumber) {
-    setOnboardStatus("M-Pesa payout number is required.", true);
+    setOnboardStatus("Enter your M-Pesa payout number.", true);
     return;
   }
 
   savePhone();
-  setOnboardStatus("Creating your shop…");
+  setOnboardStatus("Setting up your profile…");
   el("onboard-btn").disabled = true;
 
   try {
     const res = await fetch(ONBOARD_API, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, shopName, shopHandle, mpesaNumber, nationalId }),
+      body: JSON.stringify({
+        phone: normalizePhoneInput(phone),
+        shopName,
+        shopHandle: shopHandle || undefined,
+        mpesaNumber: normalizePhoneInput(mpesaNumber),
+        nationalId,
+      }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setOnboardStatus(data.message || data.error || "Setup failed.", true);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setOnboardStatus(parsed.data?.message || parsed.message || parsed.data?.error || "Setup failed.", true);
+      if (parsed.status === 502 || parsed.status === 503) checkApiHealth();
       return;
     }
-    setOnboardStatus(data.message || "Shop ready — add your first listing.");
-    showSellerProfile(data.seller);
+    setOnboardStatus(parsed.data.message || "You're set up — add your first listing.");
+    showSellerProfile(parsed.data.seller);
+    el("api-down-banner")?.classList.add("hidden");
     await loadMyListings();
     await loadEscrowLedger();
   } catch {
-    setOnboardStatus("Network error — try again.", true);
+    setOnboardStatus("Could not reach Sokoni — check your connection and try again.", true);
+    checkApiHealth();
   } finally {
     el("onboard-btn").disabled = false;
   }
@@ -622,6 +668,7 @@ function init() {
   });
 
   loadMeta().then(() => {
+    checkApiHealth();
     checkSellerProfile();
   });
 }

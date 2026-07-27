@@ -68,29 +68,35 @@
 
       <!-- Step 0: Seller onboarding -->
       <section id="onboard-panel" class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
-        <h2 class="font-bold text-lg">1. Set up your shop</h2>
+        <h2 class="font-bold text-lg">1. Set up your seller profile</h2>
         <p class="text-sm text-brand-purple/60 dark:text-white/60">Takes under 60 seconds. Your WhatsApp number is your login.</p>
+        <div id="api-down-banner" class="hidden rounded-xl border border-red-300/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          Sokoni server is temporarily offline — signup will work again shortly. You can also message us on WhatsApp from the shop page.
+        </div>
         <label class="block text-sm font-medium">
           WhatsApp number *
-          <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" />
+          <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" />
         </label>
         <label class="block text-sm font-medium">
-          Shop name *
-          <input id="onboard-shop-name" type="text" required placeholder="e.g. Thrift Nairobi" class="sell-form-input" />
+          Your name or shop name *
+          <input id="onboard-shop-name" type="text" required placeholder="e.g. Adiv or Adiv's Mini Mart" class="sell-form-input" />
+          <span class="sell-tag-hint">Use your personal name if you don't have a shop name — buyers see this on your listings.</span>
         </label>
         <label class="block text-sm font-medium">
-          Shop handle
-          <input id="onboard-shop-handle" type="text" placeholder="@thrift_nairobi" class="sell-form-input" />
+          Sokoni username <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
+          <input id="onboard-shop-handle" type="text" placeholder="e.g. adiv_thrift" class="sell-form-input" />
+          <span class="sell-tag-hint">A short name for your profile — like on Instagram. Leave blank and we'll make one from your name.</span>
         </label>
         <label class="block text-sm font-medium">
           M-Pesa number for payouts *
-          <input id="onboard-mpesa" type="tel" required placeholder="2547XXXXXXXX" class="sell-form-input" />
+          <input id="onboard-mpesa" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" />
+          <span class="sell-tag-hint">Where we send your money after a sale is delivered. Can be the same as WhatsApp.</span>
         </label>
         <label class="block text-sm font-medium">
-          National ID (optional, fraud prevention)
+          National ID <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
           <input id="onboard-national-id" type="text" placeholder="ID number" class="sell-form-input" />
         </label>
-        <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto">Create shop</button>
+        <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto">Start selling</button>
         <p id="onboard-status" class="text-sm"></p>
       </section>
 

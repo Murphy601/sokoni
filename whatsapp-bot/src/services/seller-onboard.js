@@ -31,7 +31,7 @@ export function requireSeller(phone) {
   if (!supplier) {
     return {
       error: "not_onboarded",
-      message: "Set up your shop first — shop name and M-Pesa number.",
+      message: "Set up your seller profile first — name and M-Pesa number.",
     };
   }
   return { supplier };
@@ -43,10 +43,10 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
   }
   if (!String(shopName || "").trim()) {
-    return { error: "missing_shop", message: "Shop name is required." };
+    return { error: "missing_shop", message: "Enter your name or shop name." };
   }
   if (!isValidMpesaNumber(mpesaNumber)) {
-    return { error: "invalid_mpesa", message: "Invalid M-Pesa number — use 2547XXXXXXXX format." };
+    return { error: "invalid_mpesa", message: "Enter a valid M-Pesa number (07xx or 2547xx)." };
   }
 
   const result = createPeerSeller({
@@ -61,7 +61,7 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     success: true,
     seller: sanitizeSeller(result.supplier),
     existing: result.existing,
-    message: result.existing ? "Shop profile updated." : "Shop created — add your first listing.",
+    message: result.existing ? "Profile updated." : "You're set up — add your first listing below.",
   };
 }
 
