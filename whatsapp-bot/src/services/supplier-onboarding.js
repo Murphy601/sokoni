@@ -141,7 +141,7 @@ async function promptStep(customerKey, step, draft, { prefill = false } = {}) {
         customerKey,
         `🏪 *Supplier application* (step 1/10)\n\n` +
           `What is your *business name*?${prefillHint(draft.business.name, "name")}\n` +
-          `_Same details as sokonimall.com/suppliers — one question at a time._\n\n` +
+          `_List on sokonimall.com/suppliers/list or finish here — one question at a time._\n\n` +
           `Reply *cancel* anytime to stop.`
       );
     case STEPS.CONTACT_NAME:

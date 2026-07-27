@@ -128,8 +128,8 @@
       setBottomNavActive(null);
       return;
     }
-    if (path.includes("suppliers")) {
-      setBottomNavActive("profile");
+    if (path.includes("track")) {
+      setBottomNavActive("track");
       return;
     }
     if (hash === "#deals") {
@@ -157,8 +157,8 @@
           setBottomNavActive("home");
           return;
         }
-        if (action === "profile") {
-          setBottomNavActive("profile");
+        if (action === "profile" || action === "track") {
+          setBottomNavActive("track");
           return;
         }
         if (action === "explore") {

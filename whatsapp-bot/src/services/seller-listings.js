@@ -98,7 +98,7 @@ export function requireApprovedSeller(phone) {
   if (!supplier) {
     return {
       error: "not_approved",
-      message: "Only approved Sokoni suppliers can list here. Apply at sokonimall.com/suppliers first.",
+      message: "List at sokonimall.com/suppliers/list — photo, details, post live.",
     };
   }
   return { supplier };

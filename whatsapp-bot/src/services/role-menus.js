@@ -107,10 +107,10 @@ export async function sendVendorApplyPrompt(customerKey) {
   await sendText(
     customerKey,
     `🏪 *Sell on Sokoni Mall*\n\n` +
-      `This menu is for approved suppliers. You can apply here step by step (same as sokonimall.com/suppliers).\n\n` +
+      `This menu is for approved sellers. List items at sokonimall.com/suppliers/list — photo → post → live.\n\n` +
       `• Zero listing fees\n` +
-      `• WhatsApp orders + 100% prepaid escrow (M-Pesa STK)\n` +
-      `• We set retail from your supply price\n\n` +
+      `• 100% prepaid escrow (M-Pesa STK)\n` +
+      `• Paid after confirmed delivery\n\n` +
       `Reply *1* to start your application now, or *menu* for customer shopping.`
   );
   setMenuState(customerKey, {

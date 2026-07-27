@@ -167,7 +167,7 @@
         { "at": 14000, "action": "panel", "panel": "supplier-form", "step": 3 },
         { "at": 17500, "side": "in", "text": "🏪 *Site application* — ref *SUP-2026-0018*\n\nOpen WhatsApp to finish with every field prefilled." },
         { "at": 21000, "side": "out", "text": "vendor menu" },
-        { "at": 23000, "side": "in", "text": "Reply *1* to start supplier application (same as sokonimall.com/suppliers)." },
+        { "at": 23000, "side": "in", "text": "Reply *1* to list an item (same as sokonimall.com/suppliers/list)." },
         { "at": 26000, "side": "out", "text": "1" },
         { "at": 28000, "side": "in", "text": "Step 1 — Business: *Nairobi Tech Hub* (from site)\nReply *yes* or send new name." },
         { "at": 31000, "side": "out", "text": "yes" },
