@@ -37,6 +37,15 @@ fi
 
 SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" 2>/dev/null || echo "{}")"
 STATUS="$(json_field "$SESSION_JSON" status)"
+
+if [ -z "$STATUS" ]; then
+  echo "==> No session yet — creating via configure-waha-session.sh..."
+  bash "$REPO/scripts/configure-waha-session.sh"
+  sleep 3
+  SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" 2>/dev/null || echo "{}")"
+  STATUS="$(json_field "$SESSION_JSON" status)"
+fi
+
 echo "==> Current status: ${STATUS:-unknown}"
 
 if [ "$STATUS" = "WORKING" ]; then
