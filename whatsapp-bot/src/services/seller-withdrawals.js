@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { requireSeller } from "./seller-onboard.js";
+import { requireAuthenticatedSeller } from "./seller-onboard.js";
 import { config } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -55,8 +55,12 @@ export function getWithdrawableEntries(supplierId) {
   );
 }
 
-export function getSellerWithdrawSummaryByPhone(phone) {
-  const check = requireSeller(phone);
+export function getSellerWithdrawSummaryByPhone(phone, sessionToken) {
+  return getSellerWithdrawSummaryAsync(phone, sessionToken);
+}
+
+export async function getSellerWithdrawSummaryAsync(phone, sessionToken) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
 
   const supplier = check.supplier;
@@ -109,8 +113,8 @@ async function notifyAdminWithdrawal(request, supplier) {
   }
 }
 
-export async function requestSellerWithdrawal(phone) {
-  const check = requireSeller(phone);
+export async function requestSellerWithdrawal(phone, sessionToken) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
 
   const supplier = check.supplier;

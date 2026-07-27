@@ -29,7 +29,7 @@ import { processListingWithStudio } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing } from "./listing-moderation.js";
-import { requireSeller } from "./seller-onboard.js";
+import { requireAuthenticatedSeller } from "./seller-onboard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -102,8 +102,8 @@ async function saveStore() {
   await writeFile(STORE_FILE, JSON.stringify(store, null, 2) + "\n", "utf-8");
 }
 
-export function requireApprovedSeller(phone) {
-  return requireSeller(phone);
+export async function requireApprovedSeller(phone, sessionToken) {
+  return requireAuthenticatedSeller(phone, sessionToken);
 }
 
 export async function generateSellerListingDraft(buffer, mimeType, caption = "", opts = {}) {
@@ -276,9 +276,9 @@ async function buildProduct(supplier, enriched, media, productId) {
 }
 
 /** Save draft without publishing. */
-export async function saveSellerDraft({ phone, draft, images = [], videoBase64 = null }) {
+export async function saveSellerDraft({ phone, draft, images = [], videoBase64 = null, sessionToken }) {
   await loadStore();
-  const check = requireApprovedSeller(phone);
+  const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
 
   const enriched = await enrichManualDraft(draft);
@@ -310,9 +310,9 @@ export async function saveSellerDraft({ phone, draft, images = [], videoBase64 =
 }
 
 /** Post listing — live instantly (Depop-style). */
-export async function publishSellerListing({ phone, draft, images = [], videoBase64 = null, draftId = null }) {
+export async function publishSellerListing({ phone, draft, images = [], videoBase64 = null, draftId = null, sessionToken }) {
   await loadStore();
-  const check = requireApprovedSeller(phone);
+  const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
 
   const enriched = await enrichManualDraft(draft);
@@ -383,9 +383,9 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   };
 }
 
-export async function listSellerListings(phone) {
+export async function listSellerListings(phone, sessionToken) {
   await loadStore();
-  const check = requireApprovedSeller(phone);
+  const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
 
   const digits = normalizePhone(phone);

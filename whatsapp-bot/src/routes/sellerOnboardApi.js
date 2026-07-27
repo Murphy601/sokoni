@@ -10,7 +10,12 @@ import {
   getSellerWithdrawSummaryByPhone,
   requestSellerWithdrawal,
 } from "../services/seller-withdrawals.js";
-import { sendSellerVerificationCode, verifySellerCode } from "../services/seller-verification.js";
+import {
+  sendSellerVerificationCode,
+  verifySellerCode,
+  revokeSellerSession,
+  sellerSessionFromReq,
+} from "../services/seller-verification.js";
 
 const router = Router();
 
@@ -23,7 +28,7 @@ router.post("/send-code", async (req, res) => {
   res.json(result);
 });
 
-/** POST /api/seller/onboard/verify-code — confirm OTP, get signup token */
+/** POST /api/seller/onboard/verify-code — confirm OTP, get session token */
 router.post("/verify-code", async (req, res) => {
   const { phone, code } = req.body || {};
   const result = await verifySellerCode(phone, code);
@@ -34,19 +39,30 @@ router.post("/verify-code", async (req, res) => {
   res.json(result);
 });
 
+/** POST /api/seller/onboard/sign-out — revoke server session */
+router.post("/sign-out", async (req, res) => {
+  const { phone } = req.body || {};
+  const result = await revokeSellerSession(phone);
+  res.json(result);
+});
+
 /** POST /api/seller/onboard — WhatsApp phone + shop + M-Pesa setup */
 router.post("/", async (req, res) => {
-  const { phone, shopName, shopHandle, mpesaNumber, nationalId, verificationToken } = req.body || {};
+  const { phone, shopName, shopHandle, mpesaNumber, nationalId, sessionToken, verificationToken } =
+    req.body || {};
   const result = await onboardSellerAsync({
     phone,
     shopName,
     shopHandle,
     mpesaNumber,
     nationalId,
-    verificationToken,
+    sessionToken: sessionToken || verificationToken || sellerSessionFromReq(req),
   });
   if (result.error === "not_verified" || result.error === "verification_expired") {
     return res.status(403).json(result);
+  }
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
   }
   if (result.error === "invalid_mpesa" || result.error === "invalid_phone" || result.error === "missing_shop") {
     return res.status(400).json(result);
@@ -55,30 +71,43 @@ router.post("/", async (req, res) => {
   res.status(result.existing ? 200 : 201).json(result);
 });
 
-/** GET /api/seller/onboard?phone= — seller profile */
-router.get("/", (req, res) => {
-  const result = getSellerProfile(req.query.phone);
+/** GET /api/seller/onboard?phone= — seller profile (requires session) */
+router.get("/", async (req, res) => {
+  const result = await getSellerProfile(req.query.phone, sellerSessionFromReq(req));
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.needsSetup) return res.status(404).json(result);
   if (result.error) return res.status(404).json(result);
   res.json(result);
 });
 
 /** GET /api/seller/onboard/ledger?phone= — escrow ledger tabs */
-router.get("/ledger", (req, res) => {
-  const result = getSellerEscrowLedgerByPhone(req.query.phone);
+router.get("/ledger", async (req, res) => {
+  const result = await getSellerEscrowLedgerByPhone(req.query.phone, sellerSessionFromReq(req));
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });
 
 /** GET /api/seller/onboard/orders?phone= — paid orders, labels, shipment status */
-router.get("/orders", (req, res) => {
-  const result = getSellerOrdersByPhone(req.query.phone);
+router.get("/orders", async (req, res) => {
+  const result = await getSellerOrdersByPhone(req.query.phone, sellerSessionFromReq(req));
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });
 
 /** GET /api/seller/onboard/withdraw?phone= — available balance + withdrawal history */
-router.get("/withdraw", (req, res) => {
-  const result = getSellerWithdrawSummaryByPhone(req.query.phone);
+router.get("/withdraw", async (req, res) => {
+  const result = await getSellerWithdrawSummaryByPhone(req.query.phone, sellerSessionFromReq(req));
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });
@@ -86,9 +115,12 @@ router.get("/withdraw", (req, res) => {
 /** POST /api/seller/onboard/withdraw — request manual M-Pesa payout */
 router.post("/withdraw", async (req, res) => {
   const { phone } = req.body || {};
-  const result = await requestSellerWithdrawal(phone);
+  const result = await requestSellerWithdrawal(phone, sellerSessionFromReq(req));
   if (result.error === "no_balance") return res.status(400).json(result);
   if (result.error === "withdrawal_pending") return res.status(409).json(result);
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });
@@ -96,8 +128,15 @@ router.post("/withdraw", async (req, res) => {
 /** POST /api/seller/onboard/refresh — bump listing timestamp */
 router.post("/refresh", async (req, res) => {
   const { phone, productId } = req.body || {};
-  const result = await refreshSellerListing({ phone, productId });
+  const result = await refreshSellerListing({
+    phone,
+    productId,
+    sessionToken: sellerSessionFromReq(req),
+  });
   if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });

@@ -11,7 +11,7 @@ import { orderBuyerTotal } from "./shipping-tiers.js";
 import { shipmentStatusLabel } from "./shipments.js";
 import { config } from "../config.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
-import { consumeVerificationToken } from "./seller-verification.js";
+import { validateSellerSession } from "./seller-verification.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SETTLEMENTS_FILE = path.join(__dirname, "..", "..", "data", "settlements.json");
@@ -45,16 +45,20 @@ export function requireSeller(phone) {
   return { supplier };
 }
 
-/** New sellers must verify WhatsApp OTP first; returning sellers skip verification. */
-export async function onboardSellerAsync(payload) {
-  const { phone, shopName, shopHandle, mpesaNumber, nationalId, verificationToken } = payload || {};
-  const normalizedPhone = normalizePhone(phone);
+/** Require valid WhatsApp OTP session + onboarded seller profile. */
+export async function requireAuthenticatedSeller(phone, sessionToken) {
+  const session = await validateSellerSession(phone, sessionToken);
+  if (session.error) return session;
+  return requireSeller(phone);
+}
 
-  const existing = findSupplierByPhone(normalizedPhone);
-  if (!existing) {
-    const check = await consumeVerificationToken(normalizedPhone, verificationToken);
-    if (check.error) return check;
-  }
+/** New and returning sellers must verify WhatsApp OTP before every sign-in. */
+export async function onboardSellerAsync(payload) {
+  const { phone, shopName, shopHandle, mpesaNumber, nationalId, sessionToken, verificationToken } =
+    payload || {};
+  const token = sessionToken || verificationToken;
+  const session = await validateSellerSession(phone, token);
+  if (session.error) return session;
 
   return onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId });
 }
@@ -101,9 +105,14 @@ function sanitizeSeller(s) {
   };
 }
 
-export function getSellerProfile(phone) {
+export async function getSellerProfile(phone, sessionToken) {
+  const session = await validateSellerSession(phone, sessionToken);
+  if (session.error) return session;
+
   const check = requireSeller(phone);
-  if (check.error) return check;
+  if (check.error) {
+    return { needsSetup: true, error: check.error, message: check.message };
+  }
   return { seller: sanitizeSeller(check.supplier) };
 }
 
@@ -158,8 +167,8 @@ export function getSellerOrders(supplierId) {
     });
 }
 
-export function getSellerOrdersByPhone(phone) {
-  const check = requireSeller(phone);
+export async function getSellerOrdersByPhone(phone, sessionToken) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
   return { orders: getSellerOrders(check.supplier.id), seller: sanitizeSeller(check.supplier) };
 }
@@ -229,15 +238,15 @@ export function getSellerEscrowLedger(supplierId) {
   };
 }
 
-export function getSellerEscrowLedgerByPhone(phone) {
-  const check = requireSeller(phone);
+export async function getSellerEscrowLedgerByPhone(phone, sessionToken) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
   return { ledger: getSellerEscrowLedger(check.supplier.id), seller: sanitizeSeller(check.supplier) };
 }
 
 /** Bump listing to top of feed without re-uploading photos. */
-export async function refreshSellerListing({ phone, productId }) {
-  const check = requireSeller(phone);
+export async function refreshSellerListing({ phone, productId, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
 
   const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));

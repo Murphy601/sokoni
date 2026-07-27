@@ -63,6 +63,61 @@ function savePhone() {
   if (phone) localStorage.setItem(PHONE_KEY, phone);
 }
 
+function getSessionToken() {
+  return verificationToken;
+}
+
+function sellerAuthHeaders(extra = {}) {
+  const token = getSessionToken();
+  return {
+    ...extra,
+    ...(token ? { "X-Seller-Session": token } : {}),
+  };
+}
+
+function onboardQuery(phone) {
+  const params = new URLSearchParams({ phone: normalizePhoneInput(phone) });
+  const token = getSessionToken();
+  if (token) params.set("sessionToken", token);
+  return `${ONBOARD_API}?${params}`;
+}
+
+function listingsQuery(phone) {
+  const params = new URLSearchParams({ phone: normalizePhoneInput(phone) });
+  const token = getSessionToken();
+  if (token) params.set("sessionToken", token);
+  return `${LISTINGS_API}?${params}`;
+}
+
+function jsonAuthBody(payload) {
+  const token = getSessionToken();
+  return { ...payload, ...(token ? { sessionToken: token } : {}) };
+}
+
+function clearSession() {
+  verificationToken = null;
+  phoneVerified = false;
+  sellerProfile = null;
+  sessionStorage.removeItem(VERIFY_TOKEN_KEY);
+}
+
+function handleSessionExpired(data) {
+  clearSession();
+  showVerifyPanel();
+  setOnboardStatus(data?.message || "Session expired — verify WhatsApp again.", true);
+}
+
+function showVerifyPanel() {
+  el("listing-wizard")?.classList.add("hidden");
+  el("onboard-panel")?.classList.remove("hidden");
+  el("onboard-details-step")?.classList.add("hidden");
+  el("onboard-btn")?.classList.add("hidden");
+  el("onboard-verify-step")?.classList.remove("hidden", "opacity-80");
+  el("verify-code-wrap")?.classList.add("hidden");
+  const phoneInput = el("seller-phone");
+  if (phoneInput) phoneInput.readOnly = false;
+}
+
 function setStatus(msg, isError = false) {
   const node = el("form-status");
   if (!node) return;
@@ -294,15 +349,21 @@ async function maybeAutoGenerate() {
     const imageBase64 = await readFileAsDataUrl(compressed);
     const res = await fetch(`${LISTINGS_API}/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        phone,
-        imageBase64,
-        mimeType: compressed.type || "image/jpeg",
-        caption: el("photo-caption")?.value.trim() || "",
-      }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          imageBase64,
+          mimeType: compressed.type || "image/jpeg",
+          caption: el("photo-caption")?.value.trim() || "",
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
     if (!parsed.ok) {
       setStatus(
         parsed.data?.message ||
@@ -474,10 +535,14 @@ async function onPublish() {
 
     const res = await fetch(`${LISTINGS_API}/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, draft: collectDraft(), images, videoBase64 }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, draft: collectDraft(), images, videoBase64 })),
     });
     const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
     if (!parsed.ok) {
       setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Post failed.", true);
       return;
@@ -524,10 +589,14 @@ async function onSaveDraft() {
     if (videoFile) videoBase64 = await readFileAsDataUrl(videoFile);
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, draft: d, images, videoBase64 }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, draft: d, images, videoBase64 })),
     });
     const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
     if (!parsed.ok) {
       setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Save failed.", true);
       return;
@@ -566,8 +635,12 @@ async function loadMyListings() {
 
   wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading…</p>`;
   try {
-    const res = await fetch(`${LISTINGS_API}?phone=${encodeURIComponent(phone)}`);
+    const res = await fetch(listingsQuery(phone), { headers: sellerAuthHeaders() });
     const data = await res.json();
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
     if (!res.ok) {
       wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">${data.message || data.error}</p>`;
       return;
@@ -626,19 +699,47 @@ function showSellerProfile(profile) {
   showSellerView("dashboard");
 }
 
+async function tryRestoreSession() {
+  const phone = apiPhone();
+  if (!phone || !getSessionToken()) return false;
+  try {
+    const res = await fetch(onboardQuery(phone), { headers: sellerAuthHeaders() });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return false;
+    }
+    if (parsed.ok && parsed.data?.seller) {
+      showSellerProfile(parsed.data.seller);
+      return true;
+    }
+    if (parsed.data?.needsSetup || parsed.status === 404) {
+      showOnboardDetailsStep();
+      setOnboardStatus("Finish your seller profile to continue.");
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
 async function checkSellerProfile() {
   const phone = apiPhone();
-  if (!phone) return;
+  if (!phone || !getSessionToken()) return;
   try {
-    const res = await fetch(`${ONBOARD_API}?phone=${encodeURIComponent(phone)}`);
-    if (!res.ok) {
-      el("listing-wizard")?.classList.add("hidden");
-      el("onboard-panel")?.classList.remove("hidden");
+    const res = await fetch(onboardQuery(phone), { headers: sellerAuthHeaders() });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
       return;
     }
-    const data = await res.json();
-    if (data.seller) {
-      showSellerProfile(data.seller);
+    if (!parsed.ok) {
+      el("listing-wizard")?.classList.add("hidden");
+      el("onboard-panel")?.classList.remove("hidden");
+      showOnboardDetailsStep();
+      return;
+    }
+    if (parsed.data?.seller) {
+      showSellerProfile(parsed.data.seller);
     }
   } catch {
     /* stay on onboard */
@@ -691,17 +792,19 @@ function setOnboardStatus(msg, isError = false) {
   node.classList.toggle("text-brand-green", !isError && Boolean(msg));
 }
 
-function loadVerificationToken() {
+function loadSessionFromStorage() {
   try {
     const raw = sessionStorage.getItem(VERIFY_TOKEN_KEY);
-    if (!raw) return;
+    if (!raw) return false;
     const parsed = JSON.parse(raw);
     if (parsed.phone === normalizePhoneInput(getPhone()) && parsed.token && parsed.expiresAt > Date.now()) {
       verificationToken = parsed.token;
       phoneVerified = true;
-      showOnboardDetailsStep();
+      return true;
     }
+    sessionStorage.removeItem(VERIFY_TOKEN_KEY);
   } catch {}
+  return false;
 }
 
 function saveVerificationToken(token, expiresInSec = 1800) {
@@ -807,10 +910,27 @@ async function onVerifyCode() {
       setOnboardStatus(parsed.data?.message || parsed.message || "Wrong code.", true);
       return;
     }
-    saveVerificationToken(parsed.data.verificationToken, parsed.data.expiresInSec);
+    saveVerificationToken(parsed.data.sessionToken || parsed.data.verificationToken, parsed.data.expiresInSec);
+    setOnboardStatus(parsed.data.message || "Signed in — loading your dashboard…");
+
+    const phoneNorm = normalizePhoneInput(phone);
+    try {
+      const profileRes = await fetch(onboardQuery(phoneNorm), { headers: sellerAuthHeaders() });
+      const profileParsed = await parseApiResponse(profileRes);
+      if (profileParsed.ok && profileParsed.data?.seller) {
+        showSellerProfile(profileParsed.data.seller);
+        setOnboardStatus("");
+        return;
+      }
+      if (profileParsed.data?.needsSetup || profileParsed.status === 404) {
+        showOnboardDetailsStep();
+        setOnboardStatus("WhatsApp verified — finish your profile below.");
+        return;
+      }
+    } catch {}
+
     showOnboardDetailsStep();
-    setOnboardStatus(parsed.data.message || "Verified — finish your profile below.");
-    el("onboard-verify-step")?.classList.add("opacity-80");
+    setOnboardStatus("WhatsApp verified — finish your profile below.");
   } catch {
     setOnboardStatus("Could not reach Sokoni — try again.", true);
   } finally {
@@ -849,34 +969,39 @@ async function onOnboard() {
   try {
     const res = await fetch(ONBOARD_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        phone: normalizePhoneInput(phone),
-        shopName,
-        shopHandle: shopHandle || undefined,
-        mpesaNumber: normalizePhoneInput(mpesaNumber),
-        nationalId,
-        verificationToken,
-      }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: normalizePhoneInput(phone),
+          shopName,
+          shopHandle: shopHandle || undefined,
+          mpesaNumber: normalizePhoneInput(mpesaNumber),
+          nationalId,
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
     if (!parsed.ok) {
       setOnboardStatus(parsed.data?.message || parsed.message || parsed.data?.error || "Setup failed.", true);
+      if (parsed.data?.error === "session_expired" || parsed.data?.error === "session_invalid") {
+        handleSessionExpired(parsed.data);
+        return;
+      }
       if (parsed.data?.error === "not_verified" || parsed.data?.error === "verification_expired") {
-        phoneVerified = false;
-        verificationToken = null;
-        sessionStorage.removeItem(VERIFY_TOKEN_KEY);
+        clearSession();
+        showVerifyPanel();
         el("onboard-details-step")?.classList.add("hidden");
         el("onboard-btn")?.classList.add("hidden");
-        el("seller-phone").readOnly = false;
       }
       if (parsed.status === 502 || parsed.status === 503) checkApiHealth();
       return;
     }
     setOnboardStatus(parsed.data.message || "You're set up — your dashboard is ready.");
     showSellerProfile(parsed.data.seller);
-    sessionStorage.removeItem(VERIFY_TOKEN_KEY);
-    verificationToken = null;
     el("api-down-banner")?.classList.add("hidden");
   } catch {
     setOnboardStatus("Could not reach Sokoni — check your connection and try again.", true);
@@ -893,10 +1018,14 @@ async function refreshListing(productId) {
   try {
     const res = await fetch(`${ONBOARD_API}/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, productId }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, productId })),
     });
     const data = await res.json();
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
     if (!res.ok) {
       setStatus(data.message || data.error || "Refresh failed.", true);
       return;
@@ -992,7 +1121,13 @@ async function loadSellerOrders() {
   if (!phone) return;
 
   try {
-    const res = await fetch(`${ONBOARD_API}/orders?phone=${encodeURIComponent(phone)}`);
+    const res = await fetch(`${ONBOARD_API}/orders?phone=${encodeURIComponent(phone)}&sessionToken=${encodeURIComponent(getSessionToken() || "")}`, {
+      headers: sellerAuthHeaders(),
+    });
+    if (res.status === 401) {
+      handleSessionExpired(await res.json().catch(() => ({})));
+      return;
+    }
     if (!res.ok) return;
     const data = await res.json();
     renderSellerOrders(data.orders || []);
@@ -1050,8 +1185,14 @@ async function loadWithdrawPanel() {
   if (!phone) return;
 
   try {
-    const res = await fetch(`${ONBOARD_API}/withdraw?phone=${encodeURIComponent(phone)}`);
+    const res = await fetch(`${ONBOARD_API}/withdraw?phone=${encodeURIComponent(phone)}&sessionToken=${encodeURIComponent(getSessionToken() || "")}`, {
+      headers: sellerAuthHeaders(),
+    });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
     if (!res.ok) return;
     renderWithdrawPanel(data);
   } catch {}
@@ -1070,10 +1211,14 @@ async function requestWithdrawal() {
   try {
     const res = await fetch(`${ONBOARD_API}/withdraw`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone })),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
     if (!res.ok) {
       statusEl.textContent = data.message || data.error || "Could not request withdrawal.";
       statusEl.classList.add("text-red-600", "dark:text-red-400");
@@ -1126,7 +1271,13 @@ async function loadEscrowLedger() {
   if (!phone) return;
 
   try {
-    const res = await fetch(`${ONBOARD_API}/ledger?phone=${encodeURIComponent(phone)}`);
+    const res = await fetch(`${ONBOARD_API}/ledger?phone=${encodeURIComponent(phone)}&sessionToken=${encodeURIComponent(getSessionToken() || "")}`, {
+      headers: sellerAuthHeaders(),
+    });
+    if (res.status === 401) {
+      handleSessionExpired(await res.json().catch(() => ({})));
+      return;
+    }
     if (!res.ok) return;
     const data = await res.json();
     ledgerData = data.ledger;
@@ -1145,6 +1296,24 @@ function bindLedgerTabs() {
       renderLedgerDetail();
     });
   });
+}
+
+async function onSignOut() {
+  const phone = apiPhone();
+  clearSession();
+  showVerifyPanel();
+  setOnboardStatus("");
+  setStatus("");
+  if (phone) {
+    try {
+      await fetch(`${ONBOARD_API}/sign-out`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+    } catch {}
+    await onSendCode();
+  }
 }
 
 function init() {
@@ -1175,9 +1344,11 @@ function init() {
   el("verify-code-input")?.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") onVerifyCode();
   });
+  el("sign-out-btn")?.addEventListener("click", onSignOut);
   el("seller-phone")?.addEventListener("change", () => {
     savePhone();
-    checkSellerProfile();
+    clearSession();
+    showVerifyPanel();
   });
   el("draft-price")?.addEventListener("input", updateFeeBreakdown);
   el("draft-shipping")?.addEventListener("input", updateFeeBreakdown);
@@ -1188,10 +1359,12 @@ function init() {
   });
   el("draft-free-shipping")?.addEventListener("change", updateFeeBreakdown);
 
-  loadMeta().then(() => {
+  loadMeta().then(async () => {
     checkApiHealth();
-    loadVerificationToken();
-    checkSellerProfile();
+    const hadSession = loadSessionFromStorage();
+    if (hadSession && (await tryRestoreSession())) return;
+    showVerifyPanel();
+    if (apiPhone()) await onSendCode();
   });
 }
 
