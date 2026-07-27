@@ -1,0 +1,48 @@
+name: Bot Deploy
+
+# Pull latest main on the GCP VM and restart the Sokoni bot after merges.
+# Required repo secrets:
+#   VM_HOST          — e.g. 104.197.128.235
+#   VM_USER          — e.g. daviemuiruri3888
+#   VM_SSH_KEY       — private key with access to the VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "whatsapp-bot/**"
+      - "scripts/deploy-bot.sh"
+      - "scripts/deploy-waha.sh"
+      - "scripts/configure-waha-session.sh"
+      - "scripts/start-postgres.sh"
+      - "scripts/verify-bot-import.mjs"
+      - "docker-compose.waha.yml"
+      - ".github/workflows/bot-deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: bot-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      !contains(github.event.head_commit.message, '[skip deploy]')
+    steps:
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd ~/sokoni
+            git fetch origin main
+            git checkout main
+            git pull --rebase origin main
+            bash scripts/deploy-bot.sh
