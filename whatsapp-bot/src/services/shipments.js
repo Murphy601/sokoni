@@ -99,6 +99,8 @@ export function advanceShipmentStatus(orderId, nextStatus, meta = {}) {
     return { error: "invalid_status", valid: SHIPMENT_STATUSES };
   }
 
+  const prevStatus = getEffectiveShipmentStatus(order);
+
   const entry = {
     status,
     at: Date.now(),
@@ -131,6 +133,11 @@ export function advanceShipmentStatus(orderId, nextStatus, meta = {}) {
 
   const updated = getOrder(orderId);
   mirrorShipmentToDb(updated).catch(() => {});
+
+  import("./order-notifications.js")
+    .then(({ notifyShipmentStatusChange }) => notifyShipmentStatusChange(updated, { prevStatus }))
+    .catch((err) => console.warn("[shipments] notify failed:", err.message));
+
   return { order: updated, status };
 }
 

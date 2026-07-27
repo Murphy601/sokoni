@@ -7,7 +7,6 @@ import {
   assignCourier,
   buildPublicTrackingPayload,
 } from "../services/shipments.js";
-import { sendText, toChatId } from "../services/whatsapp.js";
 
 const router = Router();
 
@@ -52,10 +51,6 @@ router.post("/:orderId/scan", (req, res) => {
 
   if (result.error) return res.status(400).json(result);
 
-  notifyShipmentParties(result.order).catch((err) => {
-    console.warn("[admin/shipments] notify failed:", err.message);
-  });
-
   res.json({
     ok: true,
     orderId: result.order.id,
@@ -70,39 +65,5 @@ router.post("/:orderId/courier", (req, res) => {
   if (result.error) return res.status(404).json(result);
   res.json({ ok: true, order: result.order });
 });
-
-async function notifyShipmentParties(order) {
-  if (!order?.customerKey) return;
-  const status = order.shipmentStatus;
-  let msg = "";
-
-  if (status === "dropped_off") {
-    msg =
-      `📦 *${order.id}* — dropped at hub${order.dropOffHub ? ` (*${order.dropOffHub}*)` : ""}.\n` +
-      `Your parcel is being processed for dispatch.`;
-  } else if (status === "in_transit") {
-    msg =
-      `🚚 *${order.id}* is *in transit*!\n` +
-      `${order.courierName ? `Courier: *${order.courierName}*\n` : ""}` +
-      `${order.courierTrackingRef ? `Ref: *${order.courierTrackingRef}*\n` : ""}` +
-      `_We'll notify you when it's ready for collection or delivery._`;
-  } else if (status === "at_pickup_point") {
-    msg = `📍 *${order.id}* arrived at pickup point — ready for collection soon.`;
-  } else if (status === "delivered") {
-    msg = `🎉 *${order.id} delivered!* Enjoy your *${order.productName}*.`;
-  }
-
-  if (msg) await sendText(order.customerKey, msg);
-
-  if (order.supplierId && ["dropped_off", "in_transit"].includes(status)) {
-    const supPhone = order.supplierPhone;
-    if (supPhone) {
-      await sendText(
-        toChatId(supPhone),
-        `📦 *${order.id}* shipment update: *${status.replace(/_/g, " ")}*`
-      );
-    }
-  }
-}
 
 export default router;
