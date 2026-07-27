@@ -6,17 +6,30 @@ import {
   saveSellerDraft,
   listSellerListings,
   getSellerListingMeta,
-  VALID_CONDITIONS,
 } from "../services/seller-listings.js";
+import { sellerSessionFromReq } from "../services/seller-verification.js";
 
 const router = Router();
+
+function sessionAuthStatus(result) {
+  if (
+    result.error === "session_required" ||
+    result.error === "session_invalid" ||
+    result.error === "session_expired"
+  ) {
+    return 401;
+  }
+  if (result.error === "not_onboarded") return 403;
+  return 403;
+}
 
 /** POST /api/seller/listings/generate — approved seller + photo → AI draft (+ optional studio clean) */
 router.post("/generate", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg", caption = "", skipStudio = false } = req.body || {};
-  const check = requireApprovedSeller(phone);
+  const sessionToken = sellerSessionFromReq(req);
+  const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) {
-    return res.status(check.error === "not_onboarded" ? 403 : 403).json({ error: check.error, message: check.message });
+    return res.status(sessionAuthStatus(check)).json({ error: check.error, message: check.message });
   }
 
   if (!imageBase64) {
@@ -40,9 +53,10 @@ router.post("/generate", async (req, res) => {
 /** POST /api/seller/listings/studio — background removal only (preview) */
 router.post("/studio", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
-  const check = requireApprovedSeller(phone);
+  const sessionToken = sellerSessionFromReq(req);
+  const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) {
-    return res.status(check.error === "not_onboarded" ? 403 : 403).json({ error: check.error, message: check.message });
+    return res.status(sessionAuthStatus(check)).json({ error: check.error, message: check.message });
   }
   if (!imageBase64) {
     return res.status(400).json({ error: "missing_image" });
@@ -68,7 +82,17 @@ router.post("/publish", async (req, res) => {
     : imageBase64
       ? [imageBase64]
       : [];
-  const result = await publishSellerListing({ phone, draft, images: imageList, videoBase64, draftId });
+  const result = await publishSellerListing({
+    phone,
+    draft,
+    images: imageList,
+    videoBase64,
+    draftId,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
   if (result.error) return res.status(400).json(result);
   res.status(201).json(result);
@@ -78,7 +102,16 @@ router.post("/publish", async (req, res) => {
 router.post("/draft", async (req, res) => {
   const { phone, draft, images, imageBase64, videoBase64 } = req.body || {};
   const imageList = Array.isArray(images) ? images : imageBase64 ? [imageBase64] : [];
-  const result = await saveSellerDraft({ phone, draft, images: imageList, videoBase64 });
+  const result = await saveSellerDraft({
+    phone,
+    draft,
+    images: imageList,
+    videoBase64,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
   if (result.error) return res.status(400).json(result);
   res.status(201).json(result);
@@ -86,7 +119,10 @@ router.post("/draft", async (req, res) => {
 
 /** GET /api/seller/listings?phone=254... — seller drafts + live listings */
 router.get("/", async (req, res) => {
-  const result = await listSellerListings(req.query.phone);
+  const result = await listSellerListings(req.query.phone, sellerSessionFromReq(req));
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
   if (result.error) return res.status(403).json(result);
   res.json(result);
 });

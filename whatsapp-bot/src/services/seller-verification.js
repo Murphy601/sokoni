@@ -1,5 +1,6 @@
 /**
- * Free WhatsApp OTP for seller signup — sent via existing WAHA session (Sokoni Mall).
+ * Free WhatsApp OTP for seller sign-in — sent via existing WAHA session (Sokoni Mall).
+ * Every visit requires a fresh code; session lasts for the browser tab (sessionStorage).
  */
 import { randomInt, randomBytes } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -20,13 +21,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORE_FILE = path.join(__dirname, "..", "..", "data", "seller-verification-store.json");
 
 const CODE_TTL_MS = 10 * 60 * 1000;
-const VERIFIED_TTL_MS = 30 * 60 * 1000;
+/** Seller session after OTP — valid until browser session ends (client uses sessionStorage). */
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 const MAX_SENDS_PER_HOUR = 6;
 
-/** @type {{ pending: Record<string, object>, verified: Record<string, object> }} */
-let store = { pending: {}, verified: {} };
+/** @type {{ pending: Record<string, object>, sessions: Record<string, object> }} */
+let store = { pending: {}, sessions: {} };
 let loaded = false;
 
 async function loadStore() {
@@ -34,7 +36,11 @@ async function loadStore() {
   loaded = true;
   try {
     if (existsSync(STORE_FILE)) {
-      store = { pending: {}, verified: {}, ...JSON.parse(await readFile(STORE_FILE, "utf-8")) };
+      const raw = JSON.parse(await readFile(STORE_FILE, "utf-8"));
+      store = { pending: {}, sessions: {}, ...raw };
+      if (raw.verified && !raw.sessions) {
+        store.sessions = {};
+      }
     }
   } catch (err) {
     console.error("[seller-verification] load failed:", err.message);
@@ -65,8 +71,8 @@ function pruneExpired() {
   for (const [phone, entry] of Object.entries(store.pending)) {
     if (!entry?.expiresAt || entry.expiresAt < now) delete store.pending[phone];
   }
-  for (const [phone, entry] of Object.entries(store.verified)) {
-    if (!entry?.expiresAt || entry.expiresAt < now) delete store.verified[phone];
+  for (const [phone, entry] of Object.entries(store.sessions || {})) {
+    if (!entry?.expiresAt || entry.expiresAt < now) delete store.sessions[phone];
   }
 }
 
@@ -79,11 +85,69 @@ function sendsInLastHour(entry) {
 
 function verificationMessage(code) {
   return (
-    `🔐 *Sokoni Mall* verification\n\n` +
-    `Your signup code: *${code}*\n\n` +
+    `🔐 *Sokoni Mall* sign-in code\n\n` +
+    `Your code: *${code}*\n\n` +
     `Valid for 10 minutes. Do not share this code with anyone.\n\n` +
     `_If you didn't request this, ignore this message._`
   );
+}
+
+function createSessionForPhone(digits) {
+  const token = generateToken();
+  const now = Date.now();
+  store.sessions = store.sessions || {};
+  store.sessions[digits] = {
+    token,
+    verifiedAt: now,
+    expiresAt: now + SESSION_TTL_MS,
+  };
+  return { token, expiresInSec: Math.floor(SESSION_TTL_MS / 1000) };
+}
+
+/** Validate seller session token (required on every API call). */
+export async function validateSellerSession(phone, sessionToken) {
+  await loadStore();
+  pruneExpired();
+
+  const digits = normalizePhone(phone);
+  const token = String(sessionToken || "").trim();
+  if (!isValidSignupPhone(digits)) {
+    return { error: "invalid_phone", message: "Enter a valid WhatsApp number." };
+  }
+  if (!token) {
+    return {
+      error: "session_required",
+      message: "Sign in with the WhatsApp code sent to your phone.",
+    };
+  }
+
+  const entry = store.sessions?.[digits];
+  if (!entry || entry.token !== token) {
+    return {
+      error: "session_invalid",
+      message: "Session expired — verify WhatsApp again to continue.",
+    };
+  }
+  if (entry.expiresAt < Date.now()) {
+    delete store.sessions[digits];
+    await saveStore();
+    return {
+      error: "session_expired",
+      message: "Session expired — request a new WhatsApp code.",
+    };
+  }
+
+  return { ok: true, phone: digits };
+}
+
+export async function revokeSellerSession(phone) {
+  await loadStore();
+  const digits = normalizePhone(phone);
+  if (store.sessions?.[digits]) {
+    delete store.sessions[digits];
+    await saveStore();
+  }
+  return { ok: true };
 }
 
 /** POST send-code — deliver OTP on WhatsApp. */
@@ -152,7 +216,7 @@ export async function sendSellerVerificationCode(phone) {
   };
 }
 
-/** POST verify-code — check OTP and issue short-lived signup token. */
+/** POST verify-code — check OTP and issue seller session token. */
 export async function verifySellerCode(phone, codeInput) {
   await loadStore();
   pruneExpired();
@@ -194,43 +258,29 @@ export async function verifySellerCode(phone, codeInput) {
   }
 
   delete store.pending[digits];
-  const token = generateToken();
-  const now = Date.now();
-  store.verified[digits] = {
-    token,
-    verifiedAt: now,
-    expiresAt: now + VERIFIED_TTL_MS,
-  };
+  const session = createSessionForPhone(digits);
   await saveStore();
 
   return {
     success: true,
-    verificationToken: token,
-    message: "WhatsApp verified — finish your profile below.",
-    expiresInSec: Math.floor(VERIFIED_TTL_MS / 1000),
+    sessionToken: session.token,
+    verificationToken: session.token,
+    message: "Signed in — loading your seller dashboard…",
+    expiresInSec: session.expiresInSec,
   };
 }
 
-/** Require valid verification token before completing seller onboard. */
+/** @deprecated Use validateSellerSession — kept for compatibility. */
 export async function consumeVerificationToken(phone, token) {
-  await loadStore();
-  pruneExpired();
+  return validateSellerSession(phone, token);
+}
 
-  const digits = normalizePhone(phone);
-  const entry = store.verified[digits];
-  if (!entry || entry.token !== String(token || "")) {
-    return {
-      error: "not_verified",
-      message: "Verify your WhatsApp number first — tap Send code on WhatsApp.",
-    };
-  }
-  if (entry.expiresAt < Date.now()) {
-    delete store.verified[digits];
-    await saveStore();
-    return { error: "verification_expired", message: "Verification expired — verify WhatsApp again." };
-  }
-
-  delete store.verified[digits];
-  await saveStore();
-  return { ok: true };
+export function sellerSessionFromReq(req) {
+  return (
+    req.query?.sessionToken ||
+    req.headers["x-seller-session"] ||
+    req.body?.sessionToken ||
+    req.body?.verificationToken ||
+    null
+  );
 }
