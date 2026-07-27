@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sendText, toChatId } from "./whatsapp.js";
 import { config } from "../config.js";
+import { findSupplierByPhone } from "./suppliers.js";
 
 function normalizePhone(phone) {
   let d = String(phone || "").replace(/\D/g, "");
@@ -261,11 +262,27 @@ export async function verifySellerCode(phone, codeInput) {
   const session = createSessionForPhone(digits);
   await saveStore();
 
+  const existing = findSupplierByPhone(digits);
+  const needsSetup = !existing;
+
   return {
     success: true,
     sessionToken: session.token,
     verificationToken: session.token,
-    message: "Signed in — loading your seller dashboard…",
+    needsSetup,
+    seller: existing
+      ? {
+          id: existing.id,
+          businessName: existing.businessName,
+          shopHandle: existing.shopHandle || null,
+          phone: existing.phone,
+          mpesaNumber: existing.mpesaNumber || null,
+          isSellerVerified: Boolean(existing.isSellerVerified),
+        }
+      : null,
+    message: needsSetup
+      ? "WhatsApp verified — set up your seller profile below."
+      : "Signed in — loading your dashboard…",
     expiresInSec: session.expiresInSec,
   };
 }
