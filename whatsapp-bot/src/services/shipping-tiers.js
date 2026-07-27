@@ -177,36 +177,77 @@ export function validateShippingKes(shippingKes, { freeShipping = false } = {}) 
   return { ok: true, shippingKes: n, freeShipping: false };
 }
 
-/** Buyer-facing totals from a catalog product. */
-export function computeProductTotals(product = {}) {
-  const sellerNetExplicit = product.sellerNetKes != null ? Math.round(Number(product.sellerNetKes)) : null;
+function sellerNetMatchesAllInTotal(sellerNet, product, shipping) {
+  const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
+  if (storedTotal == null) return false;
+  const ship = product.freeShipping ? 0 : Math.round(Number(shipping) || 0);
+  const fees = computeFeeBreakdown(sellerNet, ship, { freeShipping: product.freeShipping });
+  return Math.abs(storedTotal - fees.buyerTotalKes) <= 5;
+}
 
-  if (sellerNetExplicit != null && sellerNetExplicit >= 0) {
-    if (product.freeShipping) {
-      const fees = computeFeeBreakdown(sellerNetExplicit, 0, { freeShipping: true });
-      return {
-        itemKes: fees.sellerNetKes,
-        shippingKes: 0,
-        totalKes: fees.buyerTotalKes,
-        platformFeeKes: fees.platformFeeKes,
-        sellerNetKes: fees.sellerNetKes,
-        freeShipping: true,
-      };
-    }
-    const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
-    const shippingRaw =
-      product.shippingKes ??
-      product.shippingFeeKes ??
-      getShippingTier(weightClass).typicalKes;
-    const fees = computeFeeBreakdown(sellerNetExplicit, clampShippingKes(shippingRaw, weightClass));
+/** Resolve seller net from explicit field or peer-listing shape (sourcePriceKes + all-in priceKes). */
+export function resolveSellerNetKes(product = {}) {
+  if (product.sellerNetKes != null) return Math.round(Number(product.sellerNetKes));
+
+  const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
+  const shipping = product.shippingKes != null ? Math.round(Number(product.shippingKes)) : null;
+
+  if (product.sourcePriceKes != null) {
+    const sellerNet = Math.round(Number(product.sourcePriceKes));
+    if (product.platformFeeKes != null) return sellerNet;
+    if (shipping != null && sellerNetMatchesAllInTotal(sellerNet, product, shipping)) return sellerNet;
+  }
+
+  // DB seller rows: price_kes is buyer all-in when it matches fee breakdown from inferred net.
+  if (product.sellerId != null && storedTotal != null) {
+    const ship = product.freeShipping ? 0 : Math.round(Number(shipping) || 0);
+    const subtotal = Math.round(storedTotal / (1 + PLATFORM_FEE_RATE));
+    const inferredNet = subtotal - ship;
+    if (inferredNet >= 0 && sellerNetMatchesAllInTotal(inferredNet, product, ship)) return inferredNet;
+  }
+
+  return null;
+}
+
+function totalsFromSellerNet(product, sellerNet) {
+  if (product.freeShipping) {
+    const fees = computeFeeBreakdown(sellerNet, 0, { freeShipping: true });
+    const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
     return {
       itemKes: fees.sellerNetKes,
-      shippingKes: fees.shippingKes,
-      totalKes: fees.buyerTotalKes,
+      shippingKes: 0,
+      totalKes: storedTotal != null && Math.abs(storedTotal - fees.buyerTotalKes) <= 5 ? storedTotal : fees.buyerTotalKes,
       platformFeeKes: fees.platformFeeKes,
       sellerNetKes: fees.sellerNetKes,
-      freeShipping: false,
+      freeShipping: true,
     };
+  }
+
+  const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
+  const shippingRaw =
+    product.shippingKes ??
+    product.shippingFeeKes ??
+    getShippingTier(weightClass).typicalKes;
+  const fees = computeFeeBreakdown(sellerNet, clampShippingKes(shippingRaw, weightClass));
+  const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
+  return {
+    itemKes: fees.sellerNetKes,
+    shippingKes: fees.shippingKes,
+    totalKes:
+      storedTotal != null && Math.abs(storedTotal - fees.buyerTotalKes) <= 5
+        ? storedTotal
+        : fees.buyerTotalKes,
+    platformFeeKes: fees.platformFeeKes,
+    sellerNetKes: fees.sellerNetKes,
+    freeShipping: false,
+  };
+}
+
+/** Buyer-facing totals from a catalog product. */
+export function computeProductTotals(product = {}) {
+  const sellerNet = resolveSellerNetKes(product);
+  if (sellerNet != null && sellerNet >= 0) {
+    return totalsFromSellerNet(product, sellerNet);
   }
 
   const itemKes = Math.max(0, Math.round(Number(product.priceKes) || 0));
@@ -266,7 +307,7 @@ export function formatBuyerTotalLine(orderOrProduct) {
 /** WhatsApp / bag one-liner — buyer all-in total for seller listings; legacy item+ship otherwise. */
 export function formatProductListPrice(product = {}) {
   const t = computeProductTotals(product);
-  if (product.sellerNetKes != null) {
+  if (resolveSellerNetKes(product) != null) {
     return `KES ${t.totalKes.toLocaleString()}`;
   }
   if (t.freeShipping) return `KES ${t.itemKes.toLocaleString()} (free shipping)`;

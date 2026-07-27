@@ -408,7 +408,9 @@ export async function listSellerListings(phone, sessionToken) {
         draft: {
           name: p.name,
           sourcePriceKes: p.sourcePriceKes,
+          sellerNetKes: p.sellerNetKes ?? p.sourcePriceKes,
           priceKes: p.priceKes,
+          buyerTotalKes: p.priceKes,
         },
         imageUrl: p.imageUrl,
         images: p.images,
