@@ -14,12 +14,21 @@ export function formatMpesaTillBlock(amountKes = null) {
 
 export function formatShortPaymentReminder(order) {
   if (!order || order.customerPaymentStatus === "confirmed") return null;
+  if (order.status === "cancelled") return null;
   const price = Number(order.priceKes);
   const priceLine = Number.isFinite(price) ? price.toLocaleString() : "—";
+  if (order.status === "awaiting_payment" || order.customerPaymentStatus === "unpaid") {
+    return (
+      `💳 *Payment due — ${order.id}*\n\n` +
+      `Pay *KES ${priceLine}* upfront to activate your order (escrow protected).\n` +
+      `Use Till *${config.store.mpesaTill}* with reference *${order.id}*.\n\n` +
+      `Reply *paid* after M-Pesa. We dispatch only after verification.`
+    );
+  }
   return (
     `💳 *Payment reminder — ${order.id}*\n\n` +
-    `On delivery, pay *KES ${priceLine}* to M-Pesa Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}).\n\n` +
-    `Do not pay riders or anyone else. Reply *paid* after you send payment.`
+    `Complete payment of *KES ${priceLine}* to Till *${config.store.mpesaTill}*.\n\n` +
+    `Reply *paid* after you send payment.`
   );
 }
 
@@ -91,7 +100,9 @@ function pickOrderForPaidClaim(customerKey, text = "", phone = "") {
     (o) =>
       o.customerPaymentStatus !== "confirmed" &&
       !["cancelled"].includes(o.status) &&
-      ["confirmed", "packed", "out_for_delivery", "delivered"].includes(o.status)
+      ["awaiting_payment", "confirmed", "packed", "out_for_delivery", "delivered", "received"].includes(
+        o.status
+      )
   );
   if (active.length === 0) {
     return (
@@ -99,7 +110,7 @@ function pickOrderForPaidClaim(customerKey, text = "", phone = "") {
       null
     );
   }
-  const priority = ["out_for_delivery", "delivered", "packed", "confirmed"];
+  const priority = ["awaiting_payment", "out_for_delivery", "delivered", "packed", "confirmed", "received"];
   for (const st of priority) {
     const hit = active.find((o) => o.status === st);
     if (hit) return hit;

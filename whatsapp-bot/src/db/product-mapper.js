@@ -52,7 +52,7 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     sourceUrl: row.source_url || undefined,
     scope: row.scope || "local",
     fulfillment: row.fulfillment || "store",
-    payment: row.payment || "cod",
+    payment: row.payment || "prepaid",
     emoji: row.emoji || undefined,
     tags: Array.isArray(row.tags) ? row.tags : [],
 
@@ -106,7 +106,7 @@ export function jsonToDbProduct(json, sellerId = null) {
     source_url: json.sourceUrl || null,
     scope: json.scope || "local",
     fulfillment: json.fulfillment || "store",
-    payment: json.payment || "cod",
+    payment: json.payment || "prepaid",
     emoji: json.emoji || null,
     tags: JSON.stringify(json.tags || []),
     in_stock: json.inStock !== false,

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { isPrepaidOnly } from "./prepaid-checkout.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -10,9 +11,21 @@ const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
  * Lightweight file-backed order + contact store. Good enough for a single
  * WAHA instance. Swap for a real DB when you scale to multiple stores/staff.
  */
-export const ORDER_STATUSES = ["received", "confirmed", "packed", "out_for_delivery", "delivered", "cancelled"];
+export const ORDER_STATUSES = [
+  "awaiting_payment",
+  "received",
+  "confirmed",
+  "packed",
+  "out_for_delivery",
+  "delivered",
+  "cancelled",
+];
 
 const STATUS_ALIASES = {
+  awaiting_payment: "awaiting_payment",
+  awaiting: "awaiting_payment",
+  unpaid: "awaiting_payment",
+  payment: "awaiting_payment",
   received: "received",
   new: "received",
   confirm: "confirmed",
@@ -35,6 +48,7 @@ const STATUS_ALIASES = {
 };
 
 const STATUS_LABELS = {
+  awaiting_payment: "💳 Awaiting payment",
   received: "🆕 Received",
   confirmed: "✅ Confirmed",
   packed: "📦 Packed",
@@ -97,6 +111,7 @@ export function getAllContacts() {
   return Object.entries(store.contacts).map(([key, c]) => ({ customerKey: key, ...c }));
 }
 
+
 export function createOrder({ customerKey, chatId, product, details }) {
   load();
   store.seq += 1;
@@ -106,6 +121,8 @@ export function createOrder({ customerKey, chatId, product, details }) {
   const priceKes = product.priceKes != null ? Number(product.priceKes) : null;
   const marginKes =
     sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
+
+  const prepaid = isPrepaidOnly();
 
   const order = {
     id,
@@ -121,7 +138,9 @@ export function createOrder({ customerKey, chatId, product, details }) {
     customerName: details.name,
     location: details.location,
     phone: details.phone,
-    status: "received",
+    status: prepaid ? "awaiting_payment" : "received",
+    paymentModel: prepaid ? "prepaid" : "cod",
+    escrowStatus: prepaid ? "pending" : null,
     deliveryMode: "pending",
     shareCustomerContact: false,
     supplierNotified: false,
@@ -137,7 +156,7 @@ export function createOrder({ customerKey, chatId, product, details }) {
     fulfillmentStorePhone: null,
     fulfillmentStoreCity: null,
     storeNotifiedPaymentAt: null,
-    history: [{ status: "received", at: now }],
+    history: [{ status: prepaid ? "awaiting_payment" : "received", at: now }],
     reviewPromptSent: false,
     createdAt: now,
     updatedAt: now,

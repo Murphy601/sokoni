@@ -35,7 +35,7 @@ export function setProductContext(phoneNumber, product) {
 }
 
 /**
- * Pay-on-delivery order state. When a customer taps "Order (COD)" we stash the
+ * Prepaid order state. When a customer taps "Order" we stash the
  * chosen product and wait for their delivery details in the next message.
  */
 export function setPendingOrder(phoneNumber, order) {

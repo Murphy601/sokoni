@@ -31,7 +31,7 @@ function persist() {
   }
 }
 
-/** Record supplier payout owed when order is delivered (COD collected). */
+/** Record supplier payout owed when order is delivered (escrow released). */
 export function recordDeliveryPayout(order) {
   if (!order?.supplierId || !order.sourcePriceKes) return null;
   load();

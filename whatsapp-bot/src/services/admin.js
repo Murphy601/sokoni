@@ -17,6 +17,8 @@ import {
   normalizeStatus,
 } from "./orders.js";
 import { getSupplier } from "./suppliers.js";
+import { planFulfillment, applyFulfillmentPlan } from "./fulfillment.js";
+import { canFulfillOrder } from "./prepaid-checkout.js";
 import { getPickupPoint } from "./pickupPoints.js";
 import {
   buildAdminPaidClaimMessage,
@@ -421,6 +423,21 @@ async function handleStatusCommand(adminChatId, args) {
       `Usage: #status SK-1042 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
     );
   }
+  const order = getOrder(orderId);
+  if (!order) {
+    return sendText(adminChatId, `⚠️ Order *${orderId}* not found. Try #orders.`);
+  }
+  const next = normalizeStatus(statusInput);
+  if (
+    next &&
+    ["confirmed", "packed", "out_for_delivery", "delivered"].includes(next) &&
+    !canFulfillOrder(order)
+  ) {
+    return sendText(
+      adminChatId,
+      `⚠️ *${order.id}* — payment not confirmed. Run #payconfirm ${order.id} first.`
+    );
+  }
   const result = updateOrderStatus(orderId, statusInput);
   if (!result) {
     return sendText(adminChatId, `⚠️ Order *${orderId}* not found. Try #orders.`);
@@ -437,7 +454,10 @@ async function handleStatusCommand(adminChatId, args) {
   await notifyCustomerOfStatus(result.order);
   if (result.status === "delivered" && result.order.supplierId) {
     const payout = recordDeliveryPayout(result.order);
-    updateOrderMeta(result.order.id, { payoutStatus: payout ? "owed" : result.order.payoutStatus });
+    updateOrderMeta(result.order.id, {
+      payoutStatus: payout ? "owed" : result.order.payoutStatus,
+      escrowStatus: "released",
+    });
   }
   const payoutNote =
     result.status === "delivered" && result.order.sourcePriceKes
@@ -458,6 +478,13 @@ async function handleFulfillCommand(adminChatId, args) {
   }
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  if (!canFulfillOrder(order)) {
+    return sendText(
+      adminChatId,
+      `⚠️ *${order.id}* — customer has not paid yet.\nRun #payconfirm ${order.id} after verifying M-Pesa, then #fulfill.`
+    );
+  }
 
   const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
   if (!supplier?.phone) {
@@ -560,12 +587,20 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
   updateOrderMeta(order.id, {
     customerPaymentStatus: "confirmed",
     customerPaidConfirmedAt: Date.now(),
+    escrowStatus: "held",
   });
+
+  let updated = getOrder(order.id);
+  if (updated?.status === "awaiting_payment") {
+    updateOrderStatus(order.id, "confirmed");
+    const plan = planFulfillment(updated.location);
+    updated = applyFulfillmentPlan(order.id, plan) || getOrder(order.id);
+  }
 
   try {
     await sendText(
       order.customerKey,
-      `✅ *Payment confirmed* for *${order.id}*!\n\nWe verified your M-Pesa payment of KES ${order.priceKes.toLocaleString()} to Till *${config.store.mpesaTill}*. Your order will be released shortly. Asante! 🙏`
+      `✅ *Payment confirmed* for *${order.id}*!\n\nWe verified your M-Pesa payment of KES ${order.priceKes.toLocaleString()} — funds held in escrow until delivery. Your order is now being processed. Asante! 🙏`
     );
   } catch (err) {
     console.warn("[admin] customer pay confirm notify failed:", err.message);
@@ -573,7 +608,7 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
 
   return sendText(
     adminChatId,
-    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()}\nCustomer notified.\n\nNext: #notify-store ${order.id}`
+    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()} · escrow held\nCustomer notified.\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
   );
 }
 

@@ -13,9 +13,10 @@ import adminSuppliersRouter from "./routes/adminSuppliers.js";
 import pickupPointsApiRouter from "./routes/pickupPointsApi.js";
 import adminPickupPointsRouter from "./routes/adminPickupPoints.js";
 import { listReviews, addReview } from "./services/reviews.js";
-import { pingDb, isDbEnabled } from "./db/pool.js";
+import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
+import checkoutApiRouter from "./routes/checkoutApi.js";
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.get("/", (_req, res) => {
 
 app.get("/health", async (_req, res) => {
   const db = await pingDb();
+  const checkout = checkoutMeta();
   res.json({
     status: "ok",
     build: BUILD_ID,
@@ -71,6 +73,8 @@ app.get("/health", async (_req, res) => {
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
     dbError: db.ok ? null : db.reason,
+    prepaidOnly: checkout.prepaidOnly,
+    darajaConfigured: checkout.darajaConfigured,
   });
 });
 
@@ -109,6 +113,7 @@ app.post("/api/reviews", (req, res) => {
 app.use("/api/suppliers", suppliersApiRouter);
 app.use("/api/products", productsApiRouter);
 app.use("/api/seller/listings", sellerListingsApiRouter);
+app.use("/api/checkout", checkoutApiRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);
 app.use("/admin/pickup-points", adminPickupPointsRouter);

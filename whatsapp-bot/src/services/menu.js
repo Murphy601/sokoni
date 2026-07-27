@@ -24,12 +24,18 @@ import {
 } from "./orders.js";
 import { getFeaturedProductIds } from "./tiktok.js";
 import { siteUrlLine } from "./reviews.js";
-import { formatShortPaymentReminder, formatMpesaTillBlock } from "./payment.js";
+import {
+  formatPrepaidCheckoutPrompt,
+  initiateMpesaCheckout,
+  isPrepaidOnly,
+  prepaidPaymentLine,
+} from "./prepaid-checkout.js";
+import { formatShortPaymentReminder } from "./payment.js";
 import { planFulfillment, applyFulfillmentPlan, formatFulfillmentConfirmBlock, formatFulfillmentLine } from "./fulfillment.js";
 import {
   welcomeMessage,
   howItWorksMessage,
-  orderConfirmedMessage,
+  prepaidOrderPlacedMessage,
 } from "./trust-copy.js";
 import { welcomeMessageForCustomer } from "./customer-automations.js";
 import {
@@ -67,7 +73,7 @@ export function sendMainMenu(to) {
     { id: "human_handoff", label: "🙋 Talk to a Human" },
     { id: "how_it_works", label: "❓ How Sokoni Works" },
   ];
-  return sendNumberedMenu(to, "Karibu Sokoni Mall! Pay on delivery only 💵", options);
+  return sendNumberedMenu(to, "Karibu Sokoni Mall! 100% prepaid · escrow protected 🔒", options);
 }
 
 const SUBCATEGORY_LABELS = {
@@ -283,7 +289,7 @@ export async function sendPerfumeSizePicker(to, scentFamily) {
 
   const lines = variants.map((p, i) => {
     const label = p.volumeMl === 1000 ? "1 Litre" : `${p.volumeMl}ml`;
-    return `${formatListNumber(i + 1)} *${label}* — ${formatKes(p.priceKes)} · pay on delivery`;
+    return `${formatListNumber(i + 1)} *${label}* — ${formatKes(p.priceKes)} · 100% prepaid`;
   });
 
   setMenuState(to, {
@@ -318,7 +324,7 @@ export async function sendPaginatedProductList(
 
   const lines = pageProducts.map(
     (p, i) =>
-      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · pay on delivery`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   let navFooter = "";
@@ -361,7 +367,7 @@ export async function sendDealsOfTheDay(to) {
     fulfillment: "store",
     limit: 5,
   });
-  return sendNumberedProductList(to, deals, { title: "🔥 Today's Picks — pay on delivery 💵" });
+  return sendNumberedProductList(to, deals, { title: "🔥 Today's Picks — 100% prepaid 💵" });
 }
 
 /** Show a numbered list — customer replies 1, 2, 3 to pick an item. */
@@ -371,7 +377,7 @@ export async function sendNumberedProductList(to, products, { title = "Pick an i
   }
   const lines = products.map(
     (p, i) =>
-      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · pay on delivery`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   const options = products.map((p) => ({
@@ -435,7 +441,13 @@ export async function sendInternationalTrending(to) {
   }
 }
 
-const STATUS_STEPS = ["received", "confirmed", "packed", "out_for_delivery", "delivered"];
+const STATUS_STEPS = ["awaiting_payment", "confirmed", "packed", "out_for_delivery", "delivered"];
+
+function timelineStatus(order) {
+  if (!order) return "received";
+  if (order.status === "received" && order.paymentModel === "prepaid") return "awaiting_payment";
+  return order.status;
+}
 
 function formatOrderKes(amount) {
   const n = Number(amount);
@@ -444,9 +456,10 @@ function formatOrderKes(amount) {
 }
 
 function paymentLineForOrder(order) {
+  if (isPrepaidOnly() || order.paymentModel === "prepaid") return prepaidPaymentLine(order);
   if (order.customerPaymentStatus === "confirmed") return "✅ Payment confirmed";
   if (order.customerPaymentStatus === "claimed") return "⏳ Payment pending verification";
-  return "pay on delivery";
+  return "100% prepaid";
 }
 
 async function sendPaymentReminderSafe(to, order) {
@@ -459,11 +472,13 @@ async function sendPaymentReminderSafe(to, order) {
   }
 }
 
-async function sendTillIntroSafe(to, amountKes) {
+async function sendPrepaidCheckoutSafe(to, order) {
+  if (!order) return;
   try {
-    await sendText(to, formatMpesaTillBlock(amountKes));
+    await initiateMpesaCheckout(order);
+    await sendText(to, formatPrepaidCheckoutPrompt(order));
   } catch (err) {
-    console.error("[payment] till intro failed:", err.message);
+    console.error("[checkout] prepaid prompt failed:", err.message);
   }
 }
 
@@ -471,7 +486,7 @@ function pickPaymentReminderOrder(orders) {
   const eligible = orders.filter(
     (o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled"
   );
-  const priority = ["out_for_delivery", "packed", "confirmed", "received"];
+  const priority = ["awaiting_payment", "out_for_delivery", "packed", "confirmed", "received"];
   for (const st of priority) {
     const hit = eligible.find((o) => o.status === st);
     if (hit) return hit;
@@ -495,11 +510,13 @@ function orderBelongsToCustomer(order, customerKey, phone = "") {
   return orderPhone === want;
 }
 
-function renderStatusTimeline(currentStatus) {
+function renderStatusTimeline(order) {
+  const currentStatus = timelineStatus(order);
   if (currentStatus === "cancelled") return "❌ This order was cancelled.";
   const idx = STATUS_STEPS.indexOf(currentStatus);
+  const safeIdx = idx >= 0 ? idx : 0;
   return STATUS_STEPS.map((s, i) => {
-    const mark = i < idx ? "✅" : i === idx ? "🔵" : "⚪";
+    const mark = i < safeIdx ? "✅" : i === safeIdx ? "🔵" : "⚪";
     return `${mark} ${statusLabel(s)}`;
   }).join("\n");
 }
@@ -511,7 +528,7 @@ function renderOrderCard(order) {
     `💰 KES ${formatOrderKes(order.priceKes)} — ${paymentLineForOrder(order)}\n` +
     `📍 ${order.location}\n` +
     `🚚 ${formatFulfillmentLine(order)}\n\n` +
-    `${renderStatusTimeline(order.status)}`
+    `${renderStatusTimeline(order)}`
   );
 }
 
@@ -541,7 +558,7 @@ export async function sendTrackOrderMenu(to, phone = "") {
         to,
         `📦 *Track your Sokoni order*\n\n` +
           `You don't have any orders yet.\n\n` +
-          `Type *menu* → browse → reply *1* on an item to order. All orders are *pay on delivery* 💵`
+          `Type *menu* → browse → reply *1* on an item to order. All orders are *100% prepaid* 💵`
       );
     }
 
@@ -616,7 +633,7 @@ export function sendWebsiteLink(to) {
   return sendText(
     to,
     `${siteUrlLine("Shop Sokoni online")}\n\n` +
-      `Browse all categories, hot deals & viral bargains — then order here on WhatsApp (pay on delivery 💵).\n\n` +
+      `Browse all categories, hot deals & viral bargains — then order here on WhatsApp (100% prepaid 💵).\n\n` +
       `_Type *menu* to continue shopping in chat._`
   );
 }
@@ -627,6 +644,10 @@ export async function sendProductFollowUpContext(id) {
 }
 
 export async function startCodOrder(to, productId) {
+  return startPrepaidOrder(to, productId);
+}
+
+export async function startPrepaidOrder(to, productId) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
   setPendingOrder(to, {
@@ -637,12 +658,13 @@ export async function startCodOrder(to, productId) {
   return sendText(
     to,
     `Great choice! 🛍️\n` +
-      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (pay on delivery)\n\n` +
+      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (100% prepaid · escrow)\n\n` +
       `To place your order, reply in *one message* with:\n` +
       `1️⃣ Your full name\n` +
       `2️⃣ Delivery location (estate/town + a landmark)\n` +
       `3️⃣ Phone number for the rider\n\n` +
       `_Example: Jane Wanjiru, Umoja 1 near the market, 07xx xxx xxx_\n\n` +
+      `You'll pay upfront via M-Pesa before we dispatch — no COD.\n\n` +
       `Wrong item? Type *cancel* or tell me the correct product name.`
   );
 }
@@ -662,7 +684,7 @@ export async function tryHandlePendingOrder(to, text) {
 
   if (isOrderCorrectionMessage(text)) {
     const alt = await findProductFromMessage(text);
-    if (alt) return startCodOrder(to, alt.id);
+    if (alt) return startPrepaidOrder(to, alt.id);
     clearPendingOrder(to);
     await sendText(
       to,
@@ -675,7 +697,7 @@ export async function tryHandlePendingOrder(to, text) {
   if (!parsed) {
     if (!looksLikeDeliveryDetails(text)) {
       const alt = await findProductFromMessage(text);
-      if (alt && alt.id !== pending.productId) return startCodOrder(to, alt.id);
+      if (alt && alt.id !== pending.productId) return startPrepaidOrder(to, alt.id);
     }
     await sendText(
       to,
@@ -687,7 +709,7 @@ export async function tryHandlePendingOrder(to, text) {
     return true;
   }
 
-  return confirmCodOrder(to, parsed);
+  return confirmPrepaidOrder(to, parsed);
 }
 
 export async function cancelOrder(to) {
@@ -714,17 +736,17 @@ export async function handleCart(to) {
   if (pending) {
     return sendText(
       to,
-      `🛒 *Your current order:*\n*${pending.name}* — KES ${pending.priceKes.toLocaleString()} (pay on delivery)\n\n` +
+      `🛒 *Your current order:*\n*${pending.name}* — KES ${pending.priceKes.toLocaleString()} (100% prepaid)\n\n` +
         `Send delivery details to complete, or type *cancel* / *change order*.`
     );
   }
   return sendText(
     to,
-    "Sokoni orders one item at a time (pay on delivery — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
+    "Sokoni orders one item at a time (100% prepaid — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
   );
 }
 
-export async function confirmCodOrder(to, parsed) {
+export async function confirmPrepaidOrder(to, parsed) {
   const pending = getPendingOrder(to);
   if (!pending) return false;
 
@@ -758,10 +780,6 @@ export async function confirmCodOrder(to, parsed) {
       product: productForOrder,
       details,
     });
-    if (order?.id) {
-      const plan = planFulfillment(details.location);
-      order = applyFulfillmentPlan(order.id, plan) || order;
-    }
   } catch (err) {
     console.error("[order] createOrder failed (continuing):", err.message);
   }
@@ -785,7 +803,7 @@ export async function confirmCodOrder(to, parsed) {
       await fetch(config.adminNotifyUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "cod_order", from: to, order, details }),
+        body: JSON.stringify({ type: "prepaid_order", from: to, order, details }),
       });
     } catch (err) {
       console.error("Failed to notify admin of order:", err.message);
@@ -795,7 +813,7 @@ export async function confirmCodOrder(to, parsed) {
   const orderRef = order?.id;
   await sendText(
     to,
-    orderConfirmedMessage({
+    prepaidOrderPlacedMessage({
       orderId: orderRef || "pending",
       productName: pending.name,
       amountKes: pending.priceKes,
@@ -804,13 +822,17 @@ export async function confirmCodOrder(to, parsed) {
       phone: details.phone,
     }) +
       (order ? `\nStatus: ${statusLabel(order.status)}` : "") +
-      (order ? formatFulfillmentConfirmBlock(order) : "") +
       `\n\n${siteUrlLine()}`
   );
 
-  await sendTillIntroSafe(to, pending.priceKes);
+  if (order) await sendPrepaidCheckoutSafe(to, order);
   await sendUpsell(to, pending);
   return true;
+}
+
+/** @deprecated alias — Phase 5 prepaid-only */
+export async function confirmCodOrder(to, parsed) {
+  return confirmPrepaidOrder(to, parsed);
 }
 
 /** Suggest a popular add-on after an order (TakeApp-style best-seller nudge). */
@@ -832,7 +854,7 @@ async function sendUpsell(to, justOrdered) {
       to,
       `🔥 *Customers also love…*\n\n` +
         `*${suggestion.name}*\n` +
-        `KES ${suggestion.priceKes.toLocaleString()} · ⭐ ${suggestion.rating} · pay on delivery\n\n` +
+        `KES ${suggestion.priceKes.toLocaleString()} · ⭐ ${suggestion.rating} · 100% prepaid\n\n` +
         `Add it too? Reply *1* to order, or *menu* to keep shopping.`
     );
   } catch (err) {
@@ -846,7 +868,7 @@ export async function handleMenuAction(from, id) {
   if (id === "shop_all") return sendCategoryList(from);
   if (await isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
   if (await isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
-  if (id.startsWith("order_")) return startCodOrder(from, id.replace("order_", ""));
+  if (id.startsWith("order_")) return startPrepaidOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);
   if (id === "intl_shop") return sendInternationalMenu(from);

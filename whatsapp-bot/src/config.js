@@ -45,8 +45,8 @@ export const config = {
     amazon: process.env.AMAZON_AFFILIATE_TAG || "demo-amazon",
   },
   /**
-   * Main store settings. Sokoni sells at its own price (supplier cost + markup)
-   * and the customer pays on delivery (cash/M-Pesa to the rider).
+   * Main store settings. Phase 5: 100% prepaid escrow for local catalog.
+   * Daraja STK push plugs in via prepaid-checkout.js when MPESA_* env vars are set.
    */
   contact: {
     phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
@@ -65,14 +65,24 @@ export const config = {
     humanSupportEnd: process.env.HUMAN_SUPPORT_END || "21:00",
   },
   store: {
+    /** Phase 5 — local catalog is prepaid-only (set PREPAID_ONLY=false to allow legacy COD). */
+    prepaidOnly: process.env.PREPAID_ONLY !== "false",
     markupKes: Number(process.env.STORE_MARKUP_KES) || 100,
     businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
-    codAreas: process.env.STORE_COD_AREAS || "Nairobi & environs",
+    codAreas: process.env.STORE_COD_AREAS || "Kenya countrywide",
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
-      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay via M-Pesa Till on delivery only.",
+      "Delivery in 1-3 days within Nairobi; countrywide via courier. 100% prepaid upfront — funds held in escrow until delivery.",
     mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
     mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+  },
+  /** Safaricom Daraja — STK push (Phase 5.1). Leave unset until integrated. */
+  mpesa: {
+    consumerKey: process.env.MPESA_CONSUMER_KEY || "",
+    consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
+    passkey: process.env.MPESA_PASSKEY || "",
+    shortcode: process.env.MPESA_SHORTCODE || "",
+    callbackUrl: process.env.MPESA_CALLBACK_URL || "",
   },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**

@@ -84,6 +84,6 @@ node scripts/test-listing-generator.mjs
 curl https://bot.sokonimall.com/api/seller/listings/meta
 ```
 
-## Next: Phase 5
+## Next: Phase 5.1
 
-M-Pesa STK push and checkout flow.
+Safaricom Daraja STK push — see [PHASE5_CHECKOUT.md](./PHASE5_CHECKOUT.md).

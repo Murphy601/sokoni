@@ -97,9 +97,9 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
   }
 
   return (
-    `🧾 *NEW COD ORDER*${orderId}\n` +
+    `🧾 *NEW PREPAID ORDER*${orderId}\n` +
     `Product: ${pending.name}\n` +
-    `Retail: KES ${pending.priceKes.toLocaleString()} (customer pays on delivery)\n` +
+    `Retail: KES ${pending.priceKes.toLocaleString()} (customer pays upfront — escrow)\n` +
     supplierBlock +
     `Customer: ${label}\n` +
     `Name: ${details.name}\n` +
@@ -112,6 +112,7 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
     `#status ${order?.id || "<id>"} confirmed\n` +
     `#pickup ${order?.id || "SK-xxxx"} <pp-id> — assign pickup point\n` +
     `Till: *${config.store.mpesaTill}* (${config.store.mpesaTillName})\n` +
+    `#payconfirm ${order?.id || "SK-xxxx"} — after M-Pesa verified\n` +
     `#${order?.id || "SK-xxxx"} Message to customer`
   );
 }

@@ -236,7 +236,7 @@ async function buildListingPrompt(caption = "") {
     `BROWSE PATHS (browseCategory / browseSubCategory):\n${browseLines}\n\n` +
     (caption ? `WhatsApp caption: "${caption}"\n\n` : "") +
     `Example:\n` +
-    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. Pay on delivery across Kenya."}`
+    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. 100% prepaid across Kenya."}`
   );
 }
 
@@ -293,7 +293,7 @@ export async function finalizeListingDraft(parsed, caption = "") {
   parsed.priceKes = computeRetailPrice(parsed.sourcePriceKes);
 
   if (!parsed.description) {
-    parsed.description = `${parsed.name}. Pay on delivery across Kenya.`;
+    parsed.description = `${parsed.name}. 100% prepaid across Kenya.`;
   }
 
   return parsed;

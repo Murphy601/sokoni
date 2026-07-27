@@ -24,7 +24,7 @@ When unsure, say so — never invent facts, prices, or products.
 ## What Sokoni is
 - **Local store:** Order on WhatsApp, pay cash/M-Pesa on delivery (Till 4775847 — David Thuku Muiruri).
 - **International:** AliExpress, Temu, Amazon via partner links when customer asks (disclose affiliate once).
-You represent Sokoni for local COD orders; you are not the seller for international checkout.
+You represent Sokoni for local prepaid escrow orders; you are not the seller for international checkout.
 
 ## Shopping turns
 When the user wants to buy or browse:
@@ -59,7 +59,7 @@ function modelChain() {
 }
 
 function formatProductLine(p) {
-  return `• *${p.name}* — KES ${p.priceKes?.toLocaleString()} (pay on delivery) ⭐ ${p.rating}`;
+  return `• *${p.name}* — KES ${p.priceKes?.toLocaleString()} (prepaid upfront) ⭐ ${p.rating}`;
 }
 
 function formatCatalogReply(products, { intro } = {}) {
@@ -165,7 +165,7 @@ async function gatherProducts(userMessage, phoneNumber) {
 function formatCatalogLine(p, index) {
   const tags = (p.tags || []).slice(0, 3).join(",");
   const cat = [p.category, p.subcategory].filter(Boolean).join("/");
-  const fulfillment = p.fulfillment === "store" ? "STORE|pay on delivery" : "INTL|partner checkout";
+  const fulfillment = p.fulfillment === "store" ? "STORE|prepaid upfront" : "INTL|partner checkout";
   return `${index}) id:${p.id} | ${p.name} | KES ${p.priceKes?.toLocaleString()} | ⭐${p.rating} (${p.reviews || 0}) | ${fulfillment} | cat:${cat}${tags ? ` | tags:${tags}` : ""}`;
 }
 
@@ -187,13 +187,13 @@ function buildCatalogBlock(products, focus, { userMessage = "", viral = false } 
 
   if (focus && lines.length > 0) {
     return (
-      `CATALOG (authoritative — only use these):\n[STORE | pay on delivery]\n${lines.join("\n")}\n\n` +
+      `CATALOG (authoritative — only use these):\n[STORE | prepaid upfront]\n${lines.join("\n")}\n\n` +
       `CUSTOMER CONTEXT:\n${context}\n\n` +
       `FOCUS PRODUCT (answer about this first):\n${lines[0]}`
     );
   }
   if (lines.length === 0) return null;
-  return `CATALOG (authoritative — only use these):\n[STORE | pay on delivery]\n${lines.join("\n")}\n\nCUSTOMER CONTEXT:\n${context}`;
+  return `CATALOG (authoritative — only use these):\n[STORE | prepaid upfront]\n${lines.join("\n")}\n\nCUSTOMER CONTEXT:\n${context}`;
 }
 
 function buildModeInjection({ viral, focus, userMessage, international }) {
@@ -201,7 +201,7 @@ function buildModeInjection({ viral, focus, userMessage, international }) {
 
   if (viral) {
     modes.push(
-      `MODE: TIKTOK_VIRAL\nUser likely came from @SokoniMall TikTok. Be fast and hype-but-honest.\nShow featured catalog items first. Short Sheng welcome OK.\nPrimary CTA: reply *1* to order pay on delivery.`
+      `MODE: TIKTOK_VIRAL\nUser likely came from @SokoniMall TikTok. Be fast and hype-but-honest.\nShow featured catalog items first. Short Sheng welcome OK.\nPrimary CTA: reply *1* to order prepaid upfront.`
     );
   }
 
@@ -303,7 +303,7 @@ export async function runAiAgent(phoneNumber, userMessage) {
 
   if (isCasualGreeting(userMessage)) {
     const reply =
-      "Poa! 😊 Niko fit. Unatafuta nini leo? Type *menu* to browse our store (pay on delivery), or tell me what you need.";
+      "Poa! 😊 Niko fit. Unatafuta nini leo? Type *menu* to browse our store (prepaid upfront), or tell me what you need.";
     pushMessage(phoneNumber, "assistant", reply);
     return reply;
   }
@@ -326,7 +326,7 @@ export async function runAiAgent(phoneNumber, userMessage) {
           ? "For international shopping (AliExpress, Temu, Amazon), type *menu* → *Shop International*. For local pay-on-delivery items, tell me what you need."
           : isShoppingIntent(userMessage)
             ? "I couldn't find that in our store catalog right now. Type *menu* → *Browse Categories*, or tell me a specific item name (e.g. *Hisense TV*, *sandals*)."
-            : "I'm here! Type *menu* to shop (pay on delivery), or ask me anything — I can help with general questions too.";
+            : "I'm here! Type *menu* to shop (prepaid upfront), or ask me anything — I can help with general questions too.";
       pushMessage(phoneNumber, "assistant", reply);
       return reply;
     }

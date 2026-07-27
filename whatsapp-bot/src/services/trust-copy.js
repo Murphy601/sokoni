@@ -30,11 +30,12 @@ export function tillExplainLine() {
 
 export function paymentTrustDisclosure() {
   return (
-    `Countrywide pay-on-delivery, zero upfront deposits. Inspect your order first, then pay via M-Pesa Till *${till()}*.\n\n` +
-    `During our founder-led launch phase, this till is registered directly to Sokoni Mall's founder, *${tillName()}* — ` +
-    `so you're paying a named, accountable individual, not an anonymous account. Business till transition in progress.\n\n` +
+    `Countrywide *100% prepaid* checkout — funds held in Sokoni escrow until delivery is confirmed.\n` +
+    `Pay via M-Pesa (STK push via Safaricom Daraja coming soon; manual till until then).\n\n` +
+    `During our founder-led launch phase, payments go to Buy Goods Till *${till()}* — registered to *${tillName()}*.\n\n` +
     `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
-    `✅ *Verify:* call or WhatsApp us before paying to confirm your order number.`
+    `✅ *Verify:* call or WhatsApp us before paying to confirm your SK-#### order number.\n` +
+    `_No pay-on-delivery. No COD._`
   );
 }
 
@@ -72,7 +73,7 @@ export function welcomeBackMessage(customerName = "") {
     `${hi} Welcome back to *Sokoni Mall* 🎉🛍️\n` +
     `Great to see you again — our catalog has fresh local deals.\n\n` +
     `🛡️ *Your safety checklist:*\n` +
-    `• Strict Pay on Delivery — no deposits upfront\n` +
+    `• 100% prepaid — escrow until delivery confirmed\n` +
     `• Official checkout: Till *${till()}* (*${tillName()}*)\n` +
     `• ${offerLine("this week")}\n\n` +
     `What can our AI find for you today?`
@@ -83,41 +84,43 @@ export function broadcastReEngageMessage() {
   return (
     `Habari! It's the *Sokoni Mall* team 👋\n` +
     `We've upgraded our WhatsApp shopping assistant!\n\n` +
-    `• Pay on Delivery — inspect first, pay after\n` +
+    `• 100% prepaid escrow — pay before dispatch\n` +
     `• Till *${till()}* — founder *${tillName()}* (named, accountable checkout)\n` +
     `• ${offerLine()}\n\n` +
     `Text us what you need in English, Kiswahili, or Sheng! 👇`
   );
 }
 
-export function orderConfirmedMessage({ orderId, productName, amountKes, customerName, location, phone }) {
+export function prepaidOrderPlacedMessage({ orderId, productName, amountKes, customerName, location, phone }) {
   const amt = Number(amountKes);
   const priceLine = Number.isFinite(amt) ? `KES ${amt.toLocaleString()}` : "—";
   return (
-    `Order Confirmed! 🎉\n` +
+    `Order received! 🎉\n` +
     `Your order number is *${orderId}*.\n\n` +
     `🛍️ *${productName}*\n` +
-    `💰 *${priceLine}* — pay strictly on delivery\n` +
+    `💰 *${priceLine}* — pay upfront (escrow protected)\n` +
     `📍 ${customerName} — ${location}\n` +
     `📞 ${phone}\n\n` +
-    `⚠️ *Payment security reminder:*\n` +
-    `We will *NEVER* ask for a commitment fee, delivery deposit, or upfront payment.\n` +
-    `When your package arrives, inspect it first, then pay to Buy Goods Till *${till()}* (founder *${tillName()}* — named, accountable checkout).\n` +
-    `✅ Verify on ${formatPhoneDisplay()} before paying if you want to confirm this order.\n` +
-    `Do not pay cash to the rider. Reply *paid* here once done.\n\n` +
+    `🔒 *Next step:* complete M-Pesa payment to activate your order.\n` +
+    `We pack & dispatch only after payment is verified.\n` +
     `Track anytime: type *track* or *${orderId}*. Thank you for shopping with Sokoni! 🙏`
   );
+}
+
+/** @deprecated use prepaidOrderPlacedMessage */
+export function orderConfirmedMessage(args) {
+  return prepaidOrderPlacedMessage(args);
 }
 
 export function howItWorksMessage() {
   return (
     `*How Sokoni Mall works* 🛍️\n\n` +
     `1️⃣ Chat us on WhatsApp (${formatPhoneDisplay()}) or browse sokonimall.com.\n` +
-    `2️⃣ Our AI finds products from our *pay-on-delivery* local catalog.\n` +
+    `2️⃣ Our AI finds products from our *prepaid* local catalog.\n` +
     `3️⃣ Reply *1* to order — send name, location & phone in one message.\n` +
-    `4️⃣ *Safe Pay on Delivery:* inspect first, then pay Till *${till()}* (founder *${tillName()}*). Verify on ${formatPhoneDisplay()} before paying.\n` +
+    `4️⃣ *Pay upfront:* M-Pesa to Till *${till()}* (escrow held until delivery). Daraja STK push coming soon.\n` +
     `5️⃣ Track with your *SK-####* order number anytime.\n\n` +
-    `*International?* *menu* → *Shop International* — partner stores (AliExpress, Temu, Amazon). Customs may apply; no pay-on-delivery.\n\n` +
+    `*International?* *menu* → *Shop International* — partner stores (AliExpress, Temu, Amazon). Customs may apply.\n\n` +
     `${config.store.deliveryNote}\n\n` +
     `Type *menu* anytime to start again.`
   );
@@ -127,13 +130,13 @@ export function paymentVerificationPrompt(amountKes = null) {
   const amt = amountKes != null && Number.isFinite(Number(amountKes)) ? Number(amountKes) : null;
   const amountLine = amt != null ? `Amount: *KES ${amt.toLocaleString()}*\n\n` : "";
   return (
-    `Payment Verification 🔑\n\n` +
-    `Once you're satisfied with your delivery:\n\n` +
+    `Payment — prepaid escrow 🔑\n\n` +
+    `Complete payment *before* we dispatch your order:\n\n` +
     amountLine +
     `🏢 *Buy Goods Till:* ${till()}\n` +
-    `👤 *Registered to:* ${tillName()} (Sokoni Mall founder — named, accountable checkout)\n\n` +
-    `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your order number before paying.\n` +
-    `After paying, paste your M-Pesa confirmation or reply with the transaction code. 🧾`
+    `👤 *Registered to:* ${tillName()} (Sokoni Mall founder)\n\n` +
+    `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your SK-#### order number.\n` +
+    `After paying, paste your M-Pesa confirmation or reply *paid* with the transaction code. 🧾`
   );
 }
 
@@ -507,5 +510,5 @@ export function internationalCustomsMessage({ orderId, productName, newDate }) {
 }
 
 export function broadcastFooter() {
-  return `\n\n_Type *menu* to shop — pay on delivery 💵 · ${offerLine()} · Reply *STOP* to opt out_`;
+  return `\n\n_Type *menu* to shop — 100% prepaid 🔒 · ${offerLine()} · Reply *STOP* to opt out_`;
 }

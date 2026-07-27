@@ -257,7 +257,7 @@ async function buildProduct(supplier, enriched, media, productId) {
     tags,
     scope: "local",
     fulfillment: "store",
-    payment: "cod",
+    payment: "prepaid",
     inStock: true,
     imageUrl: media.imageUrl,
     images: media.images,
