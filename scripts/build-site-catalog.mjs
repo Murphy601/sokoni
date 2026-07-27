@@ -70,7 +70,7 @@ function toPublic(product) {
       emoji,
       scope: "local",
       fulfillment: "store",
-      payment: "cod",
+      payment: "prepaid",
       inStock: product.inStock !== false,
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
       ...(product.images?.length ? { images: product.images } : {}),

@@ -79,7 +79,7 @@ function mapJsonToInsert(json, sellerId) {
     source_url: json.sourceUrl || null,
     scope: json.scope || "local",
     fulfillment: json.fulfillment || (isIntl ? null : "store"),
-    payment: json.payment || "cod",
+    payment: json.payment || (isIntl ? "other" : "prepaid"),
     emoji: json.emoji || null,
     tags: JSON.stringify(json.tags || []),
     in_stock: json.inStock !== false,

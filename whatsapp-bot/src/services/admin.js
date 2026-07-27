@@ -48,6 +48,15 @@ import {
   handleTransitCommand,
   handleRecoverCommand,
 } from "./ops-admin.js";
+import {
+  handleOpsCommand,
+  handleSyncCommand,
+  handleCatalogCommand,
+  handleStockCommand,
+  handleFlagsCommand,
+  handleDbOpsCommand,
+} from "./platform-admin.js";
+import { getSettlementSummary, markPayoutPaid } from "./settlements.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -206,7 +215,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -391,7 +400,12 @@ function adminHelpText() {
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
     `🆔 *#SK-1042 <message>* — message one customer\n` +
-    `🏪 Seller listings — GET /admin/suppliers/seller-listings/pending?token=...\n` +
+    `🏪 Seller listings — GET /admin/suppliers/seller-listings/pending?token=...\n\n` +
+    `🛠️ *Platform ops (Phase 9)*\n` +
+    `• *#ops* — catalog pause/live, DB, flags\n` +
+    `• *#catalog live* · *#catalog pause* · *#sync* · *#sync push*\n` +
+    `• *#stock prod_abc in|out* · *#flags prepaid on|off*\n` +
+    `• *#db migrate* · *#db seed* · REST \`/admin/ops/status?token=...\`\n\n` +
     `❓ *#help* — this list`
   );
 }
@@ -843,7 +857,7 @@ function getBroadcastRecipients() {
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
   const embedded = t.match(
-    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby)\b[\s\S]*/i
+    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db)\b[\s\S]*/i
   );
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
@@ -955,6 +969,30 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#scan\b/i.test(t)) {
     await handleScanCommand(adminChatId, t.replace(/^#scan\b/i, ""));
+    return true;
+  }
+  if (/^#ops\b/i.test(t)) {
+    await handleOpsCommand(adminChatId);
+    return true;
+  }
+  if (/^#sync\b/i.test(t)) {
+    await handleSyncCommand(adminChatId, t.replace(/^#sync\b/i, ""));
+    return true;
+  }
+  if (/^#catalog\b/i.test(t)) {
+    await handleCatalogCommand(adminChatId, t.replace(/^#catalog\b/i, ""));
+    return true;
+  }
+  if (/^#stock\b/i.test(t)) {
+    await handleStockCommand(adminChatId, t.replace(/^#stock\b/i, ""));
+    return true;
+  }
+  if (/^#flags\b/i.test(t)) {
+    await handleFlagsCommand(adminChatId, t.replace(/^#flags\b/i, ""));
+    return true;
+  }
+  if (/^#db\b/i.test(t)) {
+    await handleDbOpsCommand(adminChatId, t.replace(/^#db\b/i, ""));
     return true;
   }
 

@@ -68,6 +68,6 @@ Cloudflare Pages deploys `website/` on push.
 - [ ] Pay order → `purchase` boosts product in trending
 - [ ] Homepage shows feed rails above new arrivals
 
-## Next: Phase 9
+## Next: Phase 10
 
-Platform ops, admin API, catalog → Postgres migration — see roadmap.
+Seller analytics, moderation queue UI, and Postgres-backed orders — see roadmap.

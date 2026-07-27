@@ -4,11 +4,12 @@
 import { config } from "../config.js";
 import { updateOrderMeta } from "./orders.js";
 import { isDarajaReady, initiateStkPush } from "./daraja-mpesa.js";
+import { isPrepaidOnlyEffective } from "./platform-flags.js";
 
 export const ESCROW_STATUSES = ["pending", "held", "released", "refunded"];
 
 export function isPrepaidOnly() {
-  return config.store.prepaidOnly !== false;
+  return isPrepaidOnlyEffective();
 }
 
 export function isDarajaConfigured() {
