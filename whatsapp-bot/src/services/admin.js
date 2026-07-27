@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
-import { sendText, customerKeyFromChatId, phoneDigitsFromChatId } from "./whatsapp.js";
+import { sendText, customerKeyFromChatId, phoneDigitsFromChatId, isBotEcho, wasRecentBotSend } from "./whatsapp.js";
 import { sendReviewPrompt } from "./reviews.js";
 import { setHumanHandoff } from "./session.js";
 import {
@@ -1024,12 +1024,17 @@ export async function handleAdminIncoming({ customerKey, text, quotedText, phone
 }
 
 /** Handle messages sent by the store owner (fromMe). Admin #commands only from ADMIN_PHONES. */
-export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedText }) {
+export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedText, messageId = null }) {
   console.log("[admin:outgoing]", {
     to: toChatId,
     text: text?.slice(0, 60),
     quoted: quotedText?.slice(0, 80),
   });
+
+  // Bot API sends also arrive as fromMe — never treat those as human handoff.
+  if (isBotEcho(messageId, toChatId) || wasRecentBotSend(toChatId)) {
+    return false;
+  }
 
   const fromPhone = phoneDigitsFromChatId(fromChatId);
   const allowBusinessOwner = isBusinessOwnerSender(fromChatId);
