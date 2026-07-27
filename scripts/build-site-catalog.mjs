@@ -56,11 +56,7 @@ function toPublic(product) {
 
   // Store items: pay-on-delivery. Never expose cost price or supplier.
   if (product.fulfillment === "store") {
-    const priceKes =
-      product.priceKes != null
-        ? product.priceKes
-        : computeRetail(product.sourcePriceKes || 0);
-    const totals = computeProductTotals({ ...product, priceKes });
+    const totals = computeProductTotals(product);
     return {
       id: product.id,
       name: product.name,

@@ -6,8 +6,7 @@ import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
-import { computeRetailPrice } from "./pricing.js";
-import { applyAiShippingSuggestion, shippingTierPromptBlock } from "./shipping-tiers.js";
+import { applyAiShippingSuggestion, shippingTierPromptBlock, computeFeeBreakdown } from "./shipping-tiers.js";
 import { geminiVisionAvailable, geminiVisionListingJson } from "./gemini-vision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -224,9 +223,9 @@ async function buildListingPrompt(caption = "") {
     `Study the product photo. Many supplier photos have NO price sticker and NO printed name.\n\n` +
     `TASK — reply ONLY JSON (no markdown):\n` +
     `1. *name* — clear English title (brand if visible, else item type + colour + style)\n` +
-    `2. *sourcePriceKes* — store cost in KES (integer)\n` +
+    `2. *sellerNetKes* — what the seller wants to receive in KES (integer). Use caption price as-is — do NOT add markup.\n` +
     (capHints?.cost != null
-      ? `   - Caption price for this batch: use *${capHints.cost}*, ignore stickers.\n`
+      ? `   - Caption price for this batch: use *${capHints.cost}* as sellerNetKes, ignore stickers.\n`
       : `   - From sticker/tag, caption, or 0 if unknown.\n`) +
     `3. *category* + *subcategory* — legacy catalog (see below)\n` +
     `4. *browseCategory* + *browseSubCategory* — Depop-style drawer path (see BROWSE)\n` +
@@ -244,7 +243,7 @@ async function buildListingPrompt(caption = "") {
     `BROWSE PATHS (browseCategory / browseSubCategory):\n${browseLines}\n\n` +
     (caption ? `WhatsApp caption: "${caption}"\n\n` : "") +
     `Example:\n` +
-    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. 100% prepaid across Kenya.","estimatedWeightClass":"medium","suggestedShippingFeeKsh":275}`
+    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sellerNetKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. 100% prepaid across Kenya.","estimatedWeightClass":"medium","suggestedShippingFeeKsh":275}`
   );
 }
 
@@ -298,7 +297,10 @@ export async function finalizeListingDraft(parsed, caption = "") {
   });
   parsed.browseCategory = browse.browse;
   parsed.browseSubCategory = browse.sub;
-  parsed.priceKes = computeRetailPrice(parsed.sourcePriceKes);
+  const sellerNet = Math.round(Number(parsed.sellerNetKes ?? parsed.sourcePriceKes) || 0);
+  parsed.sellerNetKes = sellerNet;
+  parsed.sourcePriceKes = sellerNet;
+  parsed.priceKes = sellerNet;
 
   if (!parsed.description) {
     parsed.description = `${parsed.name}. 100% prepaid across Kenya.`;
@@ -328,16 +330,10 @@ export async function enrichManualDraft(draft, caption = "") {
   });
   base.browseCategory = browse.browse;
   base.browseSubCategory = browse.sub;
-  const listingPrice = Math.round(Number(base.priceKes) || 0);
-  base.sourcePriceKes = Math.round(Number(base.sourcePriceKes) || 0);
-  if (listingPrice > 0) {
-    base.priceKes = listingPrice;
-    if (!base.sourcePriceKes) base.sourcePriceKes = Math.round(listingPrice * 0.92);
-  } else if (base.sourcePriceKes > 0) {
-    base.priceKes = computeRetailPrice(base.sourcePriceKes);
-  } else {
-    base.priceKes = 0;
-  }
+  const sellerNet = Math.round(Number(base.sellerNetKes ?? base.priceKes ?? base.sourcePriceKes) || 0);
+  base.sellerNetKes = sellerNet;
+  base.sourcePriceKes = sellerNet;
+  base.priceKes = sellerNet;
   if (base.shippingKes != null || base.freeShipping) {
     Object.assign(base, applyAiShippingSuggestion(base));
   } else {
@@ -357,12 +353,15 @@ export function applyListingFieldsToProduct(product, draft) {
   if (draft.brand) product.brand = draft.brand;
   if (draft.color) product.color = draft.color;
   if (draft.description) product.description = draft.description;
-  if (draft.sourcePriceKes != null) {
-    product.sourcePriceKes = draft.sourcePriceKes;
-    product.priceKes = draft.priceKes != null ? draft.priceKes : computeRetailPrice(draft.sourcePriceKes);
-  } else if (draft.priceKes != null) {
-    product.priceKes = draft.priceKes;
-    product.sourcePriceKes = Math.round(draft.priceKes * 0.92);
+  if (draft.sourcePriceKes != null || draft.sellerNetKes != null || draft.priceKes != null) {
+    const sellerNet = Math.round(Number(draft.sellerNetKes ?? draft.sourcePriceKes ?? draft.priceKes) || 0);
+    product.sellerNetKes = sellerNet;
+    product.sourcePriceKes = sellerNet;
+    const fees = computeFeeBreakdown(sellerNet, product.shippingKes ?? draft.shippingKes, {
+      freeShipping: product.freeShipping ?? draft.freeShipping,
+    });
+    product.priceKes = fees.buyerTotalKes;
+    product.platformFeeKes = fees.platformFeeKes;
   }
   if (draft.shippingKes != null) product.shippingKes = Math.round(Number(draft.shippingKes));
   if (draft.freeShipping != null) product.freeShipping = Boolean(draft.freeShipping);

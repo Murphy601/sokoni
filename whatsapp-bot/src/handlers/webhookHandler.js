@@ -446,11 +446,6 @@ export async function handleIncomingMessage(
 
   if (await handleProductRouter(customerKey, text)) return;
 
-  const catalogRoute = await resolveProductQuery(text);
-  if (catalogRoute.action === "exact" || catalogRoute.action === "confirm") {
-    return;
-  }
-
   if (isPurchaseIntent(text)) {
     const session = getSession(customerKey);
     if (session.lastProductContext) {
@@ -521,12 +516,14 @@ export async function handleIncomingMessage(
 
   if (await tryProductSearch(customerKey, combinedText)) return;
 
-  const session = getSession(customerKey);
-  if (session.lastProductContext && catalogRoute.action !== "none") return;
-
   try {
     const reply = await runAiAgent(customerKey, combinedText, phone);
-    if (!reply) return;
+    if (!reply) {
+      return sendText(
+        customerKey,
+        "Samahani, sikupata ulichomaanisha. Type *menu* to browse, or tell me what you're looking for."
+      );
+    }
     return sendText(customerKey, reply);
   } catch (err) {
     console.error("Unexpected reply error:", err.message);

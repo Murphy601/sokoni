@@ -12,7 +12,6 @@ import { geminiVisionAvailable } from "./gemini-vision.js";
 import { sendText } from "./whatsapp.js";
 import { invalidateProductCache } from "./catalog.js";
 import { clearCatalogPauseCache } from "./catalog-guard.js";
-import { computeRetailPrice } from "./pricing.js";
 import {
   SHIPPING_TIERS,
   PLATFORM_FEE_RATE,
@@ -231,6 +230,8 @@ function linkSupplierProduct(supplier, productId) {
 async function buildProduct(supplier, enriched, media, productId) {
   const brands = normalizeBrands(enriched);
   const tags = normalizeTags(enriched.tags);
+  const sellerNet = Math.round(Number(enriched.sellerNetKes ?? enriched.priceKes ?? enriched.sourcePriceKes) || 0);
+  const fees = computeFeeBreakdown(sellerNet, enriched.shippingKes, { freeShipping: enriched.freeShipping });
 
   const product = {
     id: productId,
@@ -239,8 +240,10 @@ async function buildProduct(supplier, enriched, media, productId) {
     subcategory: enriched.subcategory,
     browseCategory: enriched.browseCategory,
     browseSubCategory: enriched.browseSubCategory,
-    sourcePriceKes: enriched.sourcePriceKes,
-    priceKes: enriched.priceKes || computeRetailPrice(enriched.sourcePriceKes),
+    sellerNetKes: fees.sellerNetKes,
+    sourcePriceKes: fees.sellerNetKes,
+    priceKes: fees.buyerTotalKes,
+    platformFeeKes: fees.platformFeeKes,
     description: enriched.description,
     brand: brands[0] || enriched.brand || undefined,
     secondaryBrand: brands[1] || undefined,
@@ -250,7 +253,7 @@ async function buildProduct(supplier, enriched, media, productId) {
     condition: enriched.condition,
     isSecondhand: enriched.isSecondhand,
     location: enriched.location || supplier.city || undefined,
-    shippingKes: enriched.shippingKes,
+    shippingKes: fees.shippingKes,
     freeShipping: Boolean(enriched.freeShipping),
     estimatedWeightClass: enriched.estimatedWeightClass,
     shippingNote: enriched.shippingNote || (supplier.delivers ? "Seller delivery" : "Hub / pickup coordination"),
@@ -366,7 +369,7 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
       await sendText(
         `${sellerPhone}@c.us`,
         `✅ *Listing live*\n*${product.name}*\n🆔 \`${productId}\`\n` +
-          `Retail KES ${product.priceKes?.toLocaleString()} — visible on Sokoni now.`
+          `Live on Sokoni — buyer pays KES ${product.priceKes?.toLocaleString()}, you receive KES ${product.sellerNetKes?.toLocaleString()}.`
       );
     } catch {}
   }

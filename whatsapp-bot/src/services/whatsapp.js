@@ -53,10 +53,18 @@ async function callWaha(endpoint, body) {
     console.log("[waha:dry-run]", endpoint, JSON.stringify(body, null, 2));
     return { dryRun: true };
   }
-  const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, {
-    headers: wahaHeaders({ "Content-Type": "application/json" }),
-  });
-  return data;
+  try {
+    const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, {
+      headers: wahaHeaders({ "Content-Type": "application/json" }),
+      timeout: 30000,
+    });
+    return data;
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.message || err.response?.data?.error || err.message;
+    console.error(`[waha] ${endpoint} failed${status ? ` (${status})` : ""}:`, detail);
+    throw err;
+  }
 }
 
 /** WAHA expects @ encoded in chatId path only — not the full message id. */
@@ -486,13 +494,18 @@ export function normalizeBotMessageSpacing(text) {
 
 export async function sendText(to, text) {
   const body = normalizeBotMessageSpacing(text);
-  const resp = await callWaha("/api/sendText", {
-    session: config.waha.session,
-    chatId: toChatId(to),
-    text: body,
-  });
-  rememberSend(resp, to);
-  return resp;
+  try {
+    const resp = await callWaha("/api/sendText", {
+      session: config.waha.session,
+      chatId: toChatId(to),
+      text: body,
+    });
+    rememberSend(resp, to);
+    return resp;
+  } catch (err) {
+    console.error("[whatsapp] sendText failed:", toChatId(to), err.message);
+    throw err;
+  }
 }
 
 /** Public HTTPS URL for a catalog image (prefers bot server for WhatsApp). */

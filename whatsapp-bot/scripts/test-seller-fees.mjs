@@ -3,6 +3,7 @@
 import {
   applyAiShippingSuggestion,
   computeFeeBreakdown,
+  computeFeeBreakdownLegacy,
   computeProductTotals,
   orderBuyerTotal,
   formatProductListPrice,
@@ -37,9 +38,13 @@ const shoes = applyAiShippingSuggestion({ name: "Women leather shoes", estimated
 assert("shoes medium fee 275", shoes.shippingKes === 275);
 
 const fees = computeFeeBreakdown(300, 150);
-assert("buyer pays 450", fees.buyerTotalKes === 450);
+assert("seller net 300", fees.sellerNetKes === 300);
+assert("buyer pays 495", fees.buyerTotalKes === 495);
 assert("platform fee 45", fees.platformFeeKes === 45);
-assert("seller net 405", fees.sellerNetKes === 405);
+
+const legacyFees = computeFeeBreakdownLegacy(300, 150);
+assert("legacy buyer pays 450", legacyFees.buyerTotalKes === 450);
+assert("legacy seller net 405", legacyFees.sellerNetKes === 405);
 
 assert("free shipping validates", validateShippingKes(0, { freeShipping: true }).ok === true);
 assert("no shipping without free flag fails", validateShippingKes(0).ok === false);
@@ -49,11 +54,15 @@ assert("inferWeightClass dress → small", inferWeightClass("Summer floral dress
 assert("inferWeightClass shoes → medium", inferWeightClass("Women leather shoes") === "medium");
 assert("inferWeightClass boots → large", inferWeightClass("Leather winter boots") === "large");
 
-const freeProduct = computeProductTotals({ priceKes: 300, freeShipping: true });
-assert("free shipping product total 300", freeProduct.totalKes === 300 && freeProduct.shippingKes === 0);
+const sellerListing = computeProductTotals({ sellerNetKes: 300, shippingKes: 150 });
+assert("seller listing buyer pays 495", sellerListing.totalKes === 495);
+assert("seller listing net 300", sellerListing.sellerNetKes === 300);
 
-assert("order total 450", computeProductTotals({ priceKes: 300, shippingKes: 150 }).totalKes === 450);
-assert("product list price includes shipping", formatProductListPrice({ priceKes: 300, shippingKes: 150 }).includes("450"));
+const freeProduct = computeProductTotals({ sellerNetKes: 300, freeShipping: true });
+assert("free shipping seller net 300", freeProduct.sellerNetKes === 300 && freeProduct.totalKes === 330);
+
+assert("legacy order total 450", computeProductTotals({ priceKes: 300, shippingKes: 150 }).totalKes === 450);
+assert("seller listing list price all-in", formatProductListPrice({ sellerNetKes: 300, shippingKes: 150 }).includes("495"));
 
 console.log(`\n${failed ? failed + " failed" : "All seller fee tests passed"}`);
 process.exit(failed ? 1 : 0);
