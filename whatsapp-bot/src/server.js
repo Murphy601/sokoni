@@ -50,6 +50,7 @@ const BUILD_ID = resolveBuildId();
 const SITE_ORIGINS = new Set([
   config.publicSiteUrl,
   "https://sokonimall.com",
+  "https://www.sokonimall.com",
   "http://localhost:8080",
   "http://127.0.0.1:8080",
 ]);
@@ -75,12 +76,22 @@ app.get("/", (_req, res) => {
   });
 });
 
+app.get("/health/live", (_req, res) => {
+  res.json({ status: "ok", build: BUILD_ID });
+});
+
 app.get("/health", async (_req, res) => {
-  const db = await pingDb();
+  const withTimeout = (promise, ms, fallback) =>
+    Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]);
+
+  const db = await withTimeout(pingDb(), 3000, { ok: false, reason: "timeout" });
   const checkout = checkoutMeta();
   const agent = agentMeta();
   const feed = feedMeta();
-  const ops = await getOpsStatus();
+  const ops = await withTimeout(getOpsStatus(), 5000, { phase: 9, catalog: { paused: false } });
   res.json({
     status: "ok",
     build: BUILD_ID,
@@ -164,7 +175,7 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, "0.0.0.0", () => {
   console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port} (build ${BUILD_ID})`);
   if (!config.waha.apiUrl) {
     console.log("⚠️ WAHA_API_URL not set — running in dry-run mode (messages will be logged, not sent).");

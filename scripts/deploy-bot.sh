@@ -137,10 +137,28 @@ fi
 pm2 start src/server.js --name "$NAME" --cwd "$BOT_DIR" --update-env
 pm2 save
 
-sleep 3
+echo "==> Waiting for bot health (up to 30s)..."
+HEALTH_OK=0
+for i in $(seq 1 15); do
+  if curl -sf --max-time 3 "http://127.0.0.1:3001/health/live" >/dev/null 2>&1; then
+    HEALTH_OK=1
+    break
+  fi
+  sleep 2
+done
+
 echo "==> Local health:"
-curl -s "http://127.0.0.1:3001/health" || true
-echo ""
+if [ "$HEALTH_OK" = "1" ]; then
+  curl -s --max-time 8 "http://127.0.0.1:3001/health" || echo "(full health timed out — live probe OK)"
+  echo ""
+else
+  echo "ERROR: bot not responding on :3001"
+  echo "==> Recent PM2 logs:"
+  pm2 logs "$NAME" --lines 40 --nostream 2>/dev/null || true
+  echo ""
+  echo "Fix: pm2 logs $NAME --lines 100"
+  exit 1
+fi
 echo "==> PM2 status:"
 pm2 describe "$NAME" | sed -n '1,25p'
 echo ""

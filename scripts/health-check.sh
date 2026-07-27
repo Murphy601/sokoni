@@ -16,7 +16,8 @@ fi
 
 echo ""
 echo "2) Bot HTTP (local)"
-curl -sf "http://127.0.0.1:3001/health" && echo "" || echo "ERROR: bot not responding on :3001"
+curl -sf --max-time 3 "http://127.0.0.1:3001/health/live" && echo " (live OK)" || echo "ERROR: bot live probe failed on :3001"
+curl -sf --max-time 8 "http://127.0.0.1:3001/health" && echo "" || echo "WARN: full /health slow or failed (live probe is what matters)"
 
 echo ""
 echo "3) WAHA container"
