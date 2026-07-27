@@ -8,8 +8,9 @@ import { channelPrompt } from "./ai-prompts.js";
 import { runToolRouter, formatToolResultsForPrompt } from "./ai-tools.js";
 
 const FALLBACK_MODELS = [
-  "qwen/qwen3-next-80b-a3b-instruct:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "meta-llama/llama-3.2-3b-instruct:free",
+  "qwen/qwen3-coder:free",
 ];
 
 let client = null;

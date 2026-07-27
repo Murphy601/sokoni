@@ -8,8 +8,9 @@ const client = new OpenAI({
 });
 
 const models = [
-  process.env.OPENAI_MODEL || "google/gemma-4-31b-it:free",
-  ...(process.env.OPENAI_MODEL_FALLBACKS || "qwen/qwen3-next-80b-a3b-instruct:free,meta-llama/llama-3.3-70b-instruct:free")
+  process.env.OPENAI_MODEL || "openrouter/free",
+  ...(process.env.OPENAI_MODEL_FALLBACKS ||
+    "google/gemma-4-26b-a4b-it:free,meta-llama/llama-3.2-3b-instruct:free,qwen/qwen3-coder:free")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
