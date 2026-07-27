@@ -39,5 +39,48 @@
       "status": "pending_scan"
     },
     "refreshedAt": 1785156926532
+  },
+  {
+    "id": "hb-tlom7-001",
+    "name": "Amara For Men Intensive Body Lotion - 200ml",
+    "category": "health-beauty",
+    "subcategory": "skincare",
+    "browseCategory": "men",
+    "browseSubCategory": "t-shirts",
+    "sellerNetKes": 300,
+    "sourcePriceKes": 300,
+    "priceKes": 523,
+    "platformFeeKes": 48,
+    "description": "Intensive body lotion for men featuring ginseng, castor, and coconut oils for skin repair and hydration with a cooling effect.",
+    "brand": "Amara",
+    "color": "grey",
+    "size": "200ml",
+    "era": "",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "location": "Kenol",
+    "shippingKes": 175,
+    "freeShipping": false,
+    "estimatedWeightClass": "small",
+    "shippingNote": "Seller delivery",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "emoji": "💄",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/hb-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/hb-tlom7-001.jpg"
+    ],
+    "videoUrl": null,
+    "publishedAt": 1785165398996,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]
