@@ -29,6 +29,7 @@ import {
   initiateMpesaCheckout,
   isPrepaidOnly,
   prepaidPaymentLine,
+  checkoutUrlForOrder,
 } from "./prepaid-checkout.js";
 import {
   renderShipmentTimelineText,
@@ -43,7 +44,7 @@ import {
   prepaidOrderPlacedMessage,
 } from "./trust-copy.js";
 import { welcomeMessageForCustomer } from "./customer-automations.js";
-import { computeProductTotals, orderBuyerTotal, formatBuyerTotalLine } from "./shipping-tiers.js";
+import { computeProductTotals, orderBuyerTotal, formatBuyerTotalLine, formatProductListPrice } from "./shipping-tiers.js";
 import {
   parseDeliveryDetails,
   isOrderCorrectionMessage,
@@ -294,7 +295,7 @@ export async function sendPerfumeSizePicker(to, scentFamily) {
 
   const lines = variants.map((p, i) => {
     const label = p.volumeMl === 1000 ? "1 Litre" : `${p.volumeMl}ml`;
-    return `${formatListNumber(i + 1)} *${label}* — ${formatKes(p.priceKes)} · 100% prepaid`;
+    return `${formatListNumber(i + 1)} *${label}* — ${formatProductListPrice(p)} · 100% prepaid`;
   });
 
   setMenuState(to, {
@@ -329,7 +330,7 @@ export async function sendPaginatedProductList(
 
   const lines = pageProducts.map(
     (p, i) =>
-      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · 100% prepaid`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatProductListPrice(p)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   let navFooter = "";
@@ -382,12 +383,12 @@ export async function sendNumberedProductList(to, products, { title = "Pick an i
   }
   const lines = products.map(
     (p, i) =>
-      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · 100% prepaid`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatProductListPrice(p)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   const options = products.map((p) => ({
     id: `pick_${p.id}`,
-    label: `${p.name} — KES ${p.priceKes.toLocaleString()}`,
+    label: `${p.name} — ${formatProductListPrice(p)}`,
   }));
   options.push({ id: "menu_main", label: "⬅ Main menu" });
 
@@ -862,7 +863,8 @@ export async function confirmPrepaidOrder(to, parsed) {
       phone: details.phone,
     }) +
       (order ? `\nStatus: ${statusLabel(order.status)}` : "") +
-      `\n\n${siteUrlLine()}`
+      `\n\n${siteUrlLine()}` +
+      (orderRef ? `\n💳 Pay online: ${checkoutUrlForOrder(orderRef)}` : "")
   );
 
   if (order) await sendPrepaidCheckoutSafe(to, order);
@@ -894,7 +896,7 @@ async function sendUpsell(to, justOrdered) {
       to,
       `🔥 *Customers also love…*\n\n` +
         `*${suggestion.name}*\n` +
-        `KES ${suggestion.priceKes.toLocaleString()} · ⭐ ${suggestion.rating} · 100% prepaid\n\n` +
+        `KES ${formatProductListPrice(suggestion)} · ⭐ ${suggestion.rating} · 100% prepaid\n\n` +
         `Add it too? Reply *1* to order, or *menu* to keep shopping.`
     );
   } catch (err) {

@@ -230,17 +230,17 @@ const UPSERT_CATALOG_SQL = `
   INSERT INTO products (
     id, seller_id, title, description, category, sub_category, browse_category, browse_sub_category,
     brand, color, is_secondhand, condition, stock_quantity,
-    price_kes, price_usd, source_price_kes, original_price_kes, retail_per_ml_kes, volume_ml,
+    price_kes, shipping_kes, price_usd, source_price_kes, original_price_kes, retail_per_ml_kes, volume_ml,
     rating, review_count, source, source_url, scope, fulfillment, payment, emoji, tags,
     in_stock, is_sold, tracking_code, primary_image_url, image_key, image_hash,
     upload_message_id, est_delivery_days, legacy_json, updated_at
   ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8,
     $9, $10, $11, $12, $13,
-    $14, $15, $16, $17, $18, $19,
-    $20, $21, $22, $23, $24, $25, $26, $27, $28::jsonb,
-    $29, $30, $31, $32, $33, $34,
-    $35, $36, $37::jsonb, NOW()
+    $14, $15, $16, $17, $18, $19, $20,
+    $21, $22, $23, $24, $25, $26, $27, $28, $29::jsonb,
+    $30, $31, $32, $33, $34, $35,
+    $36, $37, $38::jsonb, NOW()
   )
   ON CONFLICT (id) DO UPDATE SET
     seller_id = EXCLUDED.seller_id,
@@ -256,6 +256,7 @@ const UPSERT_CATALOG_SQL = `
     condition = EXCLUDED.condition,
     stock_quantity = EXCLUDED.stock_quantity,
     price_kes = EXCLUDED.price_kes,
+    shipping_kes = EXCLUDED.shipping_kes,
     price_usd = EXCLUDED.price_usd,
     source_price_kes = EXCLUDED.source_price_kes,
     original_price_kes = EXCLUDED.original_price_kes,
@@ -292,6 +293,7 @@ export async function upsertCatalogProduct(catalogProduct) {
     row.condition,
     row.stock_quantity,
     row.price_kes,
+    row.shipping_kes,
     row.price_usd,
     row.source_price_kes,
     row.original_price_kes,

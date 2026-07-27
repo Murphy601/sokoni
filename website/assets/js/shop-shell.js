@@ -1,9 +1,10 @@
 /**
- * Phase 3 — Depop-style mobile shop shell (top bar, bag, sell).
+ * Phase 5 — Saved bag with item + shipping totals.
  */
 (function () {
   const BAG_KEY = "sokoni-bag";
   const WHATSAPP_NUMBER = "254117422428";
+  const MIN_SHIPPING = 150;
 
   /** @type {Set<string>} */
   let bagIds = new Set();
@@ -65,16 +66,28 @@
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
   }
 
-  function formatPrice(product) {
-    if (product.priceKes != null) return `KES ${product.priceKes.toLocaleString()}`;
-    if (product.priceUsd != null) return `$${product.priceUsd}`;
-    return "";
+  function lineTotals(product) {
+    if (window.SokoniApp?.formatBuyerTotal && window.SokoniApp?.formatShippingLine) {
+      const item = Math.round(Number(product.priceKes) || 0);
+      const ship = Math.round(Number(product.shippingKes) || MIN_SHIPPING);
+      const total = product.totalKes ?? item + ship;
+      return { item, ship, total };
+    }
+    const item = Math.round(Number(product.priceKes) || 0);
+    const ship = Math.round(Number(product.shippingKes) || MIN_SHIPPING);
+    return { item, ship, total: product.totalKes ?? item + ship };
+  }
+
+  function formatPriceLine(product) {
+    const { item, ship, total } = lineTotals(product);
+    return `KES ${item.toLocaleString()} + ${ship.toLocaleString()} ship = ${total.toLocaleString()}`;
   }
 
   function renderBagSheet() {
     const list = document.getElementById("bag-sheet-list");
     const empty = document.getElementById("bag-sheet-empty");
     const orderBtn = document.getElementById("bag-sheet-order");
+    const summary = document.getElementById("bag-sheet-summary");
     if (!list) return;
 
     const items = bagProducts();
@@ -82,30 +95,51 @@
       list.innerHTML = "";
       empty?.classList.remove("hidden");
       if (orderBtn) orderBtn.classList.add("hidden");
+      summary?.classList.add("hidden");
       return;
     }
 
     empty?.classList.add("hidden");
-    if (orderBtn) {
-      orderBtn.classList.remove("hidden");
-      const lines = items.map((p) => `• ${p.name} (${formatPrice(p)})`).join("\n");
-      orderBtn.href = waLink(
-        `Hi Sokoni, I'd like to order these saved items (prepaid):\n\n${lines}\n\nMy name, delivery location and phone:`
-      );
-    }
+    let itemsSubtotal = 0;
+    let shippingSubtotal = 0;
 
     list.innerHTML = items
-      .map(
-        (p) => `
+      .map((p) => {
+        const { item, ship, total } = lineTotals(p);
+        itemsSubtotal += item;
+        shippingSubtotal += ship;
+        return `
       <li class="bag-sheet-item">
         <button type="button" class="bag-sheet-open" data-product-id="${p.id}">
           <span class="bag-sheet-item-name">${escapeHtml(p.name)}</span>
-          <span class="bag-sheet-item-price">${escapeHtml(formatPrice(p))}</span>
+          <span class="bag-sheet-item-price">${escapeHtml(formatPriceLine(p))}</span>
         </button>
         <button type="button" class="bag-sheet-remove" data-remove-id="${p.id}" aria-label="Remove">×</button>
-      </li>`
-      )
+      </li>`;
+      })
       .join("");
+
+    const grandTotal = itemsSubtotal + shippingSubtotal;
+    if (summary) {
+      summary.classList.remove("hidden");
+      summary.innerHTML = `
+        <table class="sell-fee-table" aria-label="Bag total">
+          <tbody>
+            <tr><th scope="row">Items</th><td>KES ${itemsSubtotal.toLocaleString()}</td></tr>
+            <tr><th scope="row">Shipping</th><td>KES ${shippingSubtotal.toLocaleString()}</td></tr>
+            <tr class="sell-fee-total"><th scope="row">Estimated total</th><td>KES ${grandTotal.toLocaleString()}</td></tr>
+          </tbody>
+        </table>
+        <p class="text-xs text-brand-purple/50 mt-2">Sokoni orders one item at a time on WhatsApp — shipping per item.</p>`;
+    }
+
+    if (orderBtn) {
+      orderBtn.classList.remove("hidden");
+      const lines = items.map((p) => `• ${p.name} (${formatPriceLine(p)})`).join("\n");
+      orderBtn.href = waLink(
+        `Hi Sokoni, I'd like to order these saved items (prepaid, item + shipping):\n\n${lines}\n\nEstimated total KES ${grandTotal.toLocaleString()}\n\nMy name, delivery location and phone:`
+      );
+    }
   }
 
   function escapeHtml(str) {

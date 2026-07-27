@@ -18,6 +18,10 @@
     return digits ? `SK-${digits}` : t;
   }
 
+  function formatKes(n) {
+    return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
+  }
+
   function stepIcon(step) {
     if (step.done) return "✅";
     if (step.active) return "🔵";
@@ -40,6 +44,11 @@
         </div>
         <div>
           <p class="font-semibold">${t.productName || "Sokoni order"}</p>
+          ${
+            t.totalKes != null
+              ? `<p class="text-sm text-brand-purple/60 mt-1">Item ${formatKes(t.itemKes)} · Shipping ${formatKes(t.shippingKes)} · <strong>Total ${formatKes(t.totalKes)}</strong></p>`
+              : ""
+          }
           <p class="text-sm text-brand-purple/60 mt-1">${t.paymentLine || ""} · ${t.fulfillment || ""}</p>
         </div>
         ${
@@ -53,6 +62,11 @@
           ${timeline || `<p>Status: ${t.shipmentStatusLabel || "Pending"}</p>`}
         </div>
         <p class="text-xs text-brand-purple/40">Updated ${t.updatedAt ? new Date(t.updatedAt).toLocaleString() : "recently"}</p>
+        ${
+          !t.paid && t.orderId
+            ? `<p class="pt-3"><a href="checkout.html?order=${encodeURIComponent(t.orderId)}" class="inline-flex items-center justify-center min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple font-bold text-sm">Pay order (item + shipping)</a></p>`
+            : ""
+        }
       </div>
     `;
     statusEl.classList.remove("hidden");

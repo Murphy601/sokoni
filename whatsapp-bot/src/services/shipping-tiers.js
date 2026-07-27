@@ -128,3 +128,12 @@ export function formatBuyerTotalLine(orderOrProduct) {
   }
   return `*KES ${total.toLocaleString()}*`;
 }
+
+/** WhatsApp / bag one-liner: item + shipping = total */
+export function formatProductListPrice(product = {}) {
+  const t = computeProductTotals(product);
+  if (t.shippingKes > 0) {
+    return `KES ${t.itemKes.toLocaleString()} + ${t.shippingKes.toLocaleString()} ship = ${t.totalKes.toLocaleString()}`;
+  }
+  return `KES ${t.itemKes.toLocaleString()}`;
+}

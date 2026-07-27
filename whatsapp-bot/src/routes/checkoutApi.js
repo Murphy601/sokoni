@@ -1,12 +1,9 @@
 import { Router } from "express";
-import {
-  checkoutMeta,
-  formatPrepaidCheckoutPrompt,
-  initiateMpesaCheckout,
-} from "../services/prepaid-checkout.js";
+import { checkoutMeta, formatPrepaidCheckoutPrompt, initiateMpesaCheckout, checkoutUrlForOrder } from "../services/prepaid-checkout.js";
 import { generateDropoffLabel } from "../services/escrow-automation.js";
 import { getOrder } from "../services/orders.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
+import { config } from "../config.js";
 
 const router = Router();
 
@@ -37,6 +34,7 @@ router.get("/:orderId", (req, res) => {
   }
   res.json({
     orderId: order.id,
+    productName: order.productName,
     itemKes: order.priceKes,
     shippingKes: order.shippingKes ?? 0,
     amountKes: orderBuyerTotal(order),
@@ -47,6 +45,8 @@ router.get("/:orderId", (req, res) => {
     shipmentStatus: order.shipmentStatus,
     dropOffCode: order.dropOffCode,
     labelUrl: order.labelUrl,
+    checkoutUrl: checkoutUrlForOrder(order.id),
+    trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`,
     instructions: formatPrepaidCheckoutPrompt(order),
     meta: checkoutMeta(),
   });

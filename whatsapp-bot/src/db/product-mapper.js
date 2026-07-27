@@ -39,6 +39,7 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     stockQuantity: Number(row.stock_quantity) || 1,
 
     priceKes: row.price_kes != null ? Number(row.price_kes) : undefined,
+    shippingKes: row.shipping_kes != null ? Number(row.shipping_kes) : undefined,
     priceUsd: row.price_usd != null ? Number(row.price_usd) : undefined,
     sourcePriceKes: row.source_price_kes != null ? Number(row.source_price_kes) : undefined,
     originalPriceKes: row.original_price_kes != null ? Number(row.original_price_kes) : undefined,
@@ -95,6 +96,7 @@ export function jsonToDbProduct(json, sellerId = null) {
     condition: json.condition || "brand_new_without_tags",
     stock_quantity: stockQty,
     price_kes: json.priceKes ?? null,
+    shipping_kes: json.shippingKes ?? null,
     price_usd: json.priceUsd ?? null,
     source_price_kes: json.sourcePriceKes ?? null,
     original_price_kes: json.originalPriceKes ?? null,

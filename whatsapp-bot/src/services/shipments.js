@@ -2,6 +2,7 @@
  * Phase 6 — Shipment status, hub scans, and public SK-#### tracking.
  */
 import { getOrder, updateOrderMeta, updateOrderStatus, statusLabel } from "./orders.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 import { formatFulfillmentLine } from "./fulfillment.js";
 import { isDbEnabled } from "../db/pool.js";
 
@@ -211,6 +212,9 @@ export function buildPublicTrackingPayload(order) {
   return {
     orderId: order.id,
     productName: order.productName,
+    itemKes: order.priceKes ?? null,
+    shippingKes: order.shippingKes ?? null,
+    totalKes: orderBuyerTotal(order),
     paid: order.customerPaymentStatus === "confirmed",
     paymentLine: order.customerPaymentStatus === "confirmed" ? "Paid — escrow held" : "Awaiting payment",
     orderStatus,

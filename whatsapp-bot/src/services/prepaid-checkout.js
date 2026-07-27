@@ -1,6 +1,3 @@
-/**
- * Phase 5 — Prepaid-only checkout with escrow hold + Daraja STK automation.
- */
 import { config } from "../config.js";
 import { updateOrderMeta } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
@@ -31,6 +28,11 @@ export function prepaidPaymentLine(order) {
   return "💳 Pay upfront (escrow)";
 }
 
+export function checkoutUrlForOrder(orderId) {
+  const base = config.publicSiteUrl || "https://sokonimall.com";
+  return `${base}/checkout.html?order=${encodeURIComponent(orderId || "")}`;
+}
+
 export function formatPrepaidCheckoutPrompt(order) {
   const total = orderBuyerTotal(order);
   const item = Math.round(Number(order?.priceKes) || 0);
@@ -50,7 +52,8 @@ export function formatPrepaidCheckoutPrompt(order) {
       `🔒 Funds stay in Sokoni escrow until delivery is confirmed.\n\n` +
       `📱 Check your phone — M-Pesa STK push sent.\n` +
       `Enter your PIN to complete payment.\n\n` +
-      `_Payment confirms automatically — no admin step needed._`
+      `_Payment confirms automatically — no admin step needed._` +
+      (order?.id ? `\n\n🌐 Pay on web: ${checkoutUrlForOrder(order.id)}` : "")
     );
   }
 
@@ -65,6 +68,7 @@ export function formatPrepaidCheckoutPrompt(order) {
     `🏢 *Buy Goods Till:* ${till}\n` +
     `👤 *Registered to:* ${tillName}\n` +
     `📝 *Reference:* ${ref}\n\n` +
+    (order?.id ? `🌐 Pay on web: ${checkoutUrlForOrder(order.id)}\n\n` : "") +
     `Reply *paid* after M-Pesa (manual verify until Daraja is live).`
   );
 }
