@@ -114,11 +114,16 @@ fi
 
 npm install --omit=dev 2>/dev/null || npm install
 
-if [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=.' "$ENV_FILE" 2>/dev/null; then
+  if [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=.' "$ENV_FILE" 2>/dev/null; then
   echo "==> Applying DB migrations..."
   npm run db:migrate || echo "WARN: db:migrate failed"
   if npm run 2>/dev/null | grep -q 'db:backfill-browse'; then
-    npm run db:backfill-browse || echo "WARN: db:backfill-browse failed"
+    PAUSE_FILE="$REPO/website/data/catalog-paused.json"
+    if [ -f "$PAUSE_FILE" ] && grep -q '"paused"[[:space:]]*:[[:space:]]*true' "$PAUSE_FILE" 2>/dev/null; then
+      echo "==> Catalog paused — skipping browse backfill"
+    else
+      npm run db:backfill-browse || echo "WARN: db:backfill-browse failed"
+    fi
   fi
 fi
 

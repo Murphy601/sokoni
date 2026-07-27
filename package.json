@@ -11,7 +11,7 @@
     "design:lint": "designmd lint website/DESIGN.md",
     "design:export": "designmd export website/DESIGN.md --format css-tailwind --out website/assets/css/design-tokens.css",
     "browse:build": "node scripts/build-browse-menu.mjs",
-    "catalog:clear": "node scripts/clear-all-catalog.mjs"
+    "catalog:clear": "node whatsapp-bot/scripts/clear-all-catalog.mjs"
   },
   "keywords": [],
   "author": "",
