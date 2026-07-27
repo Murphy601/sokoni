@@ -34,9 +34,10 @@
       "assets/images/products/sm-tlom7-001-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785150673817,
+    "publishedAt": 1785156926532,
     "moderation": {
       "status": "pending_scan"
-    }
+    },
+    "refreshedAt": 1785156926532
   }
 ]
