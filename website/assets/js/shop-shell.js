@@ -87,7 +87,7 @@
       orderBtn.classList.remove("hidden");
       const lines = items.map((p) => `• ${p.name} (${formatPrice(p)})`).join("\n");
       orderBtn.href = waLink(
-        `Hi Sokoni, I'd like to order these saved items (pay on delivery):\n\n${lines}\n\nMy name, delivery location and phone:`
+        `Hi Sokoni, I'd like to order these saved items (prepaid):\n\n${lines}\n\nMy name, delivery location and phone:`
       );
     }
 
@@ -127,10 +127,11 @@
   }
 
   function syncSearchInputs(value) {
-    const hero = document.getElementById("hero-search");
-    const shop = document.getElementById("shop-search");
-    if (hero && hero.value !== value) hero.value = value;
-    if (shop && shop.value !== value) shop.value = value;
+    const ids = ["hero-search", "shop-search", "depop-search", "depop-search-mobile"];
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && el.value !== value) el.value = value;
+    });
   }
 
   function bindSearch() {

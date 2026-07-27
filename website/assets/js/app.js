@@ -105,15 +105,15 @@ async function loadTiktokFeaturedIds() {
 
 const NUDGE_COPY = {
   "phones-tablets": {
-    text: "Need a phone under KES 15,000? Order on WhatsApp — pay when it arrives 💵",
-    wa: "Hi Sokoni, nataka simu poa chini ya 15k — pay on delivery. What do you recommend?",
+    text: "Need a phone under KES 15,000? Prepay & get instant SK tracking 📦",
+    wa: "Hi Sokoni, nataka simu poa chini ya 15k — prepaid. What do you recommend?",
   },
   deals: {
     text: "Browse 1,200+ store deals. Reply on WhatsApp — no upfront payment.",
-    wa: "Hi Sokoni, I was browsing your store and need help picking the best deal (pay on delivery).",
+    wa: "Hi Sokoni, I was browsing your store and need help picking the best deal (prepaid checkout).",
   },
   default: {
-    text: "Tell Sokoni AI what you need — English, Kiswahili or Sheng — order pay on delivery.",
+    text: "Tell Sokoni AI what you need — English, Kiswahili or Sheng — prepaid checkout.",
     wa: "Hi Sokoni, I was browsing sokonimall.com and need help finding the right product.",
   },
 };
@@ -139,7 +139,7 @@ function waLink(message) {
 
 function orderLinkFor(product) {
   return waLink(
-    `Hi Sokoni, I'd like to order "${product.name}" (${formatPrice(product)}) — Pay on Delivery. ` +
+    `Hi Sokoni, I'd like to order "${product.name}" (${formatPrice(product)}) — prepaid. ` +
       `My name, delivery location and phone are:`
   );
 }
@@ -152,14 +152,14 @@ function searchWaLink(query) {
   const q = (query || "").trim();
   return waLink(
     q
-      ? `Hi Sokoni, I'm looking for "${q}" in your store — pay on delivery. What do you have?`
-      : "Hi Sokoni, I want to shop from your store 🛒 (pay on delivery)"
+      ? `Hi Sokoni, I'm looking for "${q}" in your store — prepaid checkout. What do you have?`
+      : "Hi Sokoni, I want to shop from your store 🛒 (prepaid)"
   );
 }
 
 function categoryWaLink(categoryId) {
   const label = CATEGORY_META[categoryId]?.label || categoryId;
-  return waLink(`Hi Sokoni, I want to browse ${label} — pay on delivery.`);
+  return waLink(`Hi Sokoni, I want to browse ${label} — prepaid.`);
 }
 
 // ---------- Currency ----------
@@ -538,7 +538,7 @@ function renderDepopCard(product) {
     <button type="button" class="depop-card" data-product-id="${id}" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
       <div class="depop-card-image-wrap">
         ${imageInner}
-        <span class="depop-card-badge">COD</span>
+        <span class="depop-card-badge">PREPAID</span>
       </div>
       <div class="depop-card-body">
         <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
@@ -553,7 +553,7 @@ function renderStoreCard(product) {
   const reviews = Number(product.reviews) || 0;
   return `
     <div class="product-card relative bg-white rounded-2xl border border-black/5 shadow-sm p-5 flex flex-col">
-      <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">💵 Pay on Delivery</span>
+      <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">🔒 Prepaid</span>
       <span class="absolute top-3 right-3 z-10 bg-brand-purple/8 text-brand-purple/70 text-[10px] font-mono font-semibold px-2 py-1 rounded-full border border-brand-purple/15">${escapeHtml(product.id || "")}</span>
       ${productImageBlock(product)}
       <h3 class="font-bold text-sm mb-1 line-clamp-2">${name}</h3>
@@ -578,7 +578,7 @@ function renderStoreCard(product) {
       <div class="mt-auto flex flex-col gap-2">
         <a href="${orderLinkFor(product)}" target="_blank" rel="noopener"
            class="text-center bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
-          🛒 Order — Pay on Delivery
+          🛒 Buy — prepaid
         </a>
         <a href="${askLinkFor(product)}" target="_blank" rel="noopener"
            class="text-center text-xs text-brand-purple/60 underline hover:text-brand-purple">
@@ -1141,6 +1141,7 @@ window.SokoniApp = {
   getStoreProducts: () => storeProducts,
   formatPrice,
   runSearch,
+  setCatalogFilter,
 };
 
 renderProducts();

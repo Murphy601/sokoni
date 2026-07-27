@@ -32,7 +32,7 @@
 
   function orderLink(product) {
     return waLink(
-      `Hi Sokoni, I'd like to order "${product.name}" (${formatPrice(product)}) — Pay on Delivery. ` +
+      `Hi Sokoni, I'd like to order "${product.name}" (${formatPrice(product)}) — prepaid. ` +
         `My name, delivery location and phone are:`
     );
   }
@@ -75,7 +75,7 @@
       </div>
       <div class="product-sheet-actions">
         <a href="${orderLink(product)}" target="_blank" rel="noopener" class="product-sheet-order btn-whatsapp">
-          🛒 Order — Pay on Delivery
+          🛒 Buy — prepaid
         </a>
         <button type="button" id="product-sheet-save" class="product-sheet-save ${saved ? "is-saved" : ""}">
           ${saved ? "♥ Saved" : "♡ Save for later"}

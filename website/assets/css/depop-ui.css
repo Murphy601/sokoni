@@ -2,6 +2,12 @@
 
 /* Hide legacy floating browse on mobile (shop bar replaces it) */
 @media (max-width: 767px) {
+  body.has-depop-shell .catalog-nav-toggle {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
   .catalog-nav-toggle {
     display: none !important;
   }
