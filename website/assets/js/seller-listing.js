@@ -68,11 +68,8 @@ function getSessionToken() {
 }
 
 function sellerAuthHeaders(extra = {}) {
-  const token = getSessionToken();
-  return {
-    ...extra,
-    ...(token ? { "X-Seller-Session": token } : {}),
-  };
+  // Session token goes in query/body (sessionToken) — avoid custom headers so CORS preflight stays simple.
+  return { ...extra };
 }
 
 function onboardQuery(phone) {
