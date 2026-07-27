@@ -34,11 +34,11 @@
       "assets/images/products/sm-tlom7-001-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785156926532,
+    "publishedAt": 1785165724325,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785156926532
+    "refreshedAt": 1785165724325
   },
   {
     "id": "hb-tlom7-001",
@@ -78,9 +78,10 @@
       "assets/images/products/hb-tlom7-001.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785165398996,
+    "publishedAt": 1785165846682,
     "moderation": {
       "status": "pending_scan"
-    }
+    },
+    "refreshedAt": 1785165846682
   }
 ]
