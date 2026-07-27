@@ -162,4 +162,12 @@ fi
 echo "==> PM2 status:"
 pm2 describe "$NAME" | sed -n '1,25p'
 echo ""
-echo "Done. Public check: curl https://bot.sokonimall.com/health"
+echo "==> Public health:"
+if curl -sf --max-time 10 "https://bot.sokonimall.com/health/live" >/dev/null 2>&1; then
+  curl -s --max-time 10 "https://bot.sokonimall.com/health/live" && echo ""
+else
+  echo "WARN: https://bot.sokonimall.com still unreachable (502 = nginx or Cloudflare)"
+  echo "      If local health OK: sudo nginx -t && sudo systemctl reload nginx"
+fi
+echo ""
+echo "Done."
