@@ -113,18 +113,57 @@
     });
   }
 
+  function setBottomNavActive(navKey) {
+    document.querySelectorAll(".depop-bottom-nav__item[data-depop-nav]").forEach((el) => {
+      const key = el.getAttribute("data-depop-nav");
+      if (key === "sell") return;
+      el.classList.toggle("is-active", Boolean(navKey) && key === navKey);
+    });
+  }
+
+  function syncBottomNavFromLocation() {
+    const path = (window.location.pathname || "").toLowerCase();
+    const hash = window.location.hash;
+    if (path.includes("suppliers/list")) {
+      setBottomNavActive(null);
+      return;
+    }
+    if (path.includes("suppliers")) {
+      setBottomNavActive("profile");
+      return;
+    }
+    if (hash === "#deals") {
+      setBottomNavActive("search");
+      return;
+    }
+    setBottomNavActive("home");
+  }
+
   function bindBottomNav() {
-    document.querySelectorAll(".depop-bottom-nav a[data-depop-nav]").forEach((link) => {
+    syncBottomNavFromLocation();
+    window.addEventListener("hashchange", syncBottomNavFromLocation);
+
+    document.querySelectorAll(".depop-bottom-nav__item[data-depop-nav]").forEach((link) => {
       link.addEventListener("click", (e) => {
         const action = link.getAttribute("data-depop-nav");
+        if (action === "search") {
+          e.preventDefault();
+          setBottomNavActive("search");
+          focusMobileSearch();
+          scrollToDeals();
+          return;
+        }
+        if (action === "home") {
+          setBottomNavActive("home");
+          return;
+        }
+        if (action === "profile") {
+          setBottomNavActive("profile");
+          return;
+        }
         if (action === "explore") {
           e.preventDefault();
           window.SokoniCatalogNav?.open?.();
-        }
-        if (action === "search") {
-          e.preventDefault();
-          focusMobileSearch();
-          scrollToDeals();
         }
         if (action === "bag") {
           e.preventDefault();
@@ -140,6 +179,8 @@
     bindSearchForms();
     bindHeaderSearchToggle();
     bindBottomNav();
+    const footer = document.getElementById("site-footer");
+    if (footer) bindFilterButtons(footer);
   }
 
   if (document.readyState === "loading") {

@@ -108,8 +108,72 @@ footer,
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-h1, h2, h3, .font-display {
+h1, h3, .font-display {
   font-family: var(--font-display);
+}
+
+.has-depop-shell h2.depop-section-heading,
+.has-depop-shell h2.depop-edu-title,
+.has-depop-shell .depop-collections-heading {
+  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Depop category grid cards */
+.depop-cat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  padding: 1rem 0.75rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.depop-cat-card:hover {
+  border-color: #52525b;
+}
+
+.depop-cat-card.is-active {
+  border-color: var(--depop-red, #ff2300);
+  box-shadow: 0 0 0 1px rgba(255, 35, 0, 0.35);
+}
+
+.depop-cat-card__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  margin-bottom: 0.375rem;
+}
+
+.depop-cat-card__label {
+  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+  line-height: 1.25;
+}
+
+@media (min-width: 768px) {
+  .depop-cat-card {
+    aspect-ratio: auto;
+    min-height: 5.5rem;
+    padding: 1.25rem 1rem;
+  }
+
+  .depop-cat-card__icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .depop-cat-card__label {
+    font-size: 0.8125rem;
+  }
 }
 
 /* Base surfaces */
@@ -146,10 +210,15 @@ html.dark .product-card:hover {
   box-shadow: 0 14px 34px -12px rgba(37, 211, 102, 0.35);
 }
 
-/* Category tiles */
-html.dark .cat-chip {
+/* Category tiles — legacy fallback */
+html.dark .cat-chip:not(.depop-cat-card) {
   background-color: #1a1d24 !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.dark .depop-cat-card {
+  background-color: #18181b !important;
+  border-color: #27272a !important;
 }
 
 /* Keep product image tiles light so photos stay vibrant/legible */
@@ -250,9 +319,11 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
 }
 
 .catalog-nav-title {
+  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 0.95rem;
-  font-weight: 700;
-  color: #1b1035;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
   margin: 0;
 }
 
@@ -467,7 +538,46 @@ html.dark .browse-chip {
 }
 
 html.dark .browse-chip.is-active {
-  background: rgba(37, 211, 102, 0.18);
-  border-color: #25d366;
-  color: #7dffb0;
+  background: rgba(255, 35, 0, 0.18);
+  border-color: #ff2300;
+  color: #ffb4a8;
+}
+
+/* Depop palette utilities */
+body.has-depop-shell {
+  background-color: #000000;
+  color: #ffffff;
+  font-family: Inter, "DM Sans", sans-serif;
+}
+
+.depop-card-shell {
+  background-color: #121212;
+  border: 1px solid #2c2c2c;
+  border-radius: 8px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.depop-card-shell:hover {
+  border-color: #ff2300;
+}
+
+.btn-depop-primary {
+  background-color: #ff2300;
+  color: #ffffff;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  transition: opacity 0.2s ease;
+}
+
+.btn-depop-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-depop-secondary {
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
 }

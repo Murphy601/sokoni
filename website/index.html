@@ -12,7 +12,7 @@
 <meta property="og:description" content="Brand new & pre-loved marketplace — 100% prepaid, instant SK tracking across Kenya." />
 <meta property="og:image" content="assets/images/logo-og.png" />
 <meta property="og:type" content="website" />
-<meta name="theme-color" content="#25D366" />
+<meta name="theme-color" content="#000000" />
 <meta name="sokoni-catalog-version" content="20260712" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -22,14 +22,22 @@
       extend: {
         colors: {
           brand: {
-            green: '#25D366',
-            purple: '#1B1035',
-            purpleLight: '#2E1B57',
-            cream: '#FFF8F0',
+            green: '#FF2300',
+            purple: '#000000',
+            purpleLight: '#121212',
+            cream: '#121212',
+          },
+          depop: {
+            red: '#FF2300',
+            black: '#000000',
+            darkBg: '#121212',
+            cardDark: '#1E1E1E',
+            borderDark: '#2C2C2C',
+            grayText: '#8E8E93',
           },
         },
         fontFamily: {
-          sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          sans: ['Inter', '"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
           display: ['Fraunces', 'Georgia', 'serif'],
         },
       },
@@ -49,19 +57,16 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
 <link rel="stylesheet" href="assets/css/motion.css" />
 <link rel="stylesheet" href="assets/css/depop-ui.css" />
 <link rel="stylesheet" href="assets/css/depop-shell.css" />
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased has-depop-shell">
+<body class="bg-black text-white font-sans antialiased has-depop-shell">
   <!-- Depop-style shell header -->
   <header class="depop-shell-header" aria-label="Sokoni Mall">
-    <div class="depop-top-banner">
-      🔒 100% PREPAID ESCROW PROTECTION • BRAND NEW &amp; PRE-LOVED MARKETPLACE
-    </div>
     <div class="depop-main-bar">
       <button type="button" id="shop-browse-btn" class="depop-icon-btn" aria-label="Browse categories">☰</button>
       <a href="index.html" class="depop-logo">SOKONI<span> MALL</span></a>
@@ -130,12 +135,12 @@
   <div class="depop-main-content">
 
   <!-- DEALS -->
-  <section id="deals" class="reveal-on-scroll bg-white dark:bg-brand-purple/95 py-8 md:py-12">
+  <section id="deals" class="reveal-on-scroll bg-depop-darkBg py-8 md:py-12">
     <div class="max-w-7xl mx-auto px-4 md:px-5 catalog-main">
       <div class="flex items-end justify-between mb-4 md:mb-6">
         <div>
           <h2 class="depop-section-heading">New arrivals</h2>
-          <p class="text-brand-purple/60 dark:text-white/60 mt-1 text-sm">Brand new &amp; pre-loved — prepaid upfront, SK tracking on every order.</p>
+          <p class="text-zinc-400 mt-1 text-sm">Brand new &amp; pre-loved — prepaid upfront, SK tracking on every order.</p>
         </div>
       </div>
       <p id="catalog-filter-label" class="hidden text-sm font-semibold text-brand-green mb-4"></p>
@@ -166,10 +171,10 @@
     <div class="flex items-end justify-between mb-6">
       <div>
         <h2 class="depop-section-heading">Browse categories</h2>
-        <p class="text-brand-purple/60 dark:text-white/60 mt-1 text-sm">Women, men, brand new, pre-loved &amp; more.</p>
+        <p class="text-zinc-400 mt-1 text-sm">Women, men, brand new, pre-loved &amp; more.</p>
       </div>
     </div>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4" id="category-grid"></div>
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" id="category-grid"></div>
   </section>
 
   <!-- FEATURES (collapsed on storefront) -->
@@ -261,27 +266,6 @@
     </div>
   </section>
 
-  <!-- INTERNATIONAL -->
-  <section id="international" class="reveal-on-scroll py-16">
-    <div class="max-w-7xl mx-auto px-5">
-      <div class="flex items-end justify-between mb-8">
-        <div>
-          <h2 class="text-2xl md:text-3xl font-extrabold">🌍 Shop International</h2>
-          <p class="text-brand-purple/60 mt-1">AliExpress, Temu &amp; Amazon — delivered to your door, 1-4 weeks.</p>
-        </div>
-      </div>
-      <p class="text-xs text-brand-purple/50 bg-white border border-black/5 rounded-xl px-4 py-3 mb-6 max-w-2xl">
-        ℹ️ These ship from overseas, not Kenya. Kenya import duty + VAT may apply on arrival and is
-        paid by you, on top of the item price — this is standard for any international order, not
-        a Sokoni fee. Not every item ships to Kenya; always confirm at checkout.
-        <span id="currency-note" class="block mt-2 text-brand-purple/40"></span>
-      </p>
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" id="intl-grid">
-        <!-- filled by JS -->
-      </div>
-    </div>
-  </section>
-
   <!-- WHY SELL -->
   <section id="why-sell" class="depop-edu-section depop-edu-section--dark reveal-on-scroll">
     <div class="depop-edu-inner px-4 md:px-5">
@@ -343,7 +327,7 @@
         <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
           <div class="w-12 h-12 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-xl font-bold mb-4">2</div>
           <h3 class="font-bold text-lg mb-2">🤖 Our AI finds your best match</h3>
-          <p class="text-white/60 text-sm">We search our Sokoni Store catalog (pay on delivery) and match you to the right item. International? We link you to partner stores.</p>
+          <p class="text-white/60 text-sm">We search our prepaid local catalog and match you to the right item — brand new or pre-loved.</p>
         </div>
         <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
           <div class="w-12 h-12 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-xl font-bold mb-4">3</div>
@@ -352,8 +336,7 @@
         </div>
       </div>
       <p class="text-center text-white/40 text-xs mt-10 max-w-2xl mx-auto">
-        <strong>Local catalog</strong> — Sokoni fulfills with strict pay-on-delivery (Till 4775847).
-        <strong>International section below</strong> — external affiliate partner links only; customs and partner policies apply.
+        <strong>100% prepaid</strong> — M-Pesa escrow until delivery is confirmed. Track every order with SK-####.
       </p>
     </div>
   </section>
@@ -424,7 +407,7 @@
     <p class="text-brand-purple/60 mb-8 max-w-lg mx-auto">Save our number, say hi, and let Sokoni find what you need — same chat from order to delivery.</p>
     <a href="https://wa.me/254117422428?text=Hi%20Sokoni%2C%20I%20want%20to%20shop%20%F0%9F%9B%92"
        target="_blank" rel="noopener"
-       class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-8 py-4 rounded-full shadow-lg shadow-green-500/30 hover:scale-105 transition text-lg">
+       class="inline-flex items-center gap-2 bg-brand-green text-white font-bold px-8 py-4 rounded-full shadow-lg hover:opacity-90 transition text-lg">
       💬 Chat with Sokoni AI Now
     </a>
   </section>
@@ -432,64 +415,72 @@
   </div><!-- /.depop-main-content -->
 
   <!-- Mobile bottom nav -->
-  <nav class="depop-bottom-nav" aria-label="Mobile">
-    <a href="index.html" class="is-active" data-depop-nav="home"><span>🏠</span><span>Home</span></a>
-    <a href="#deals" data-depop-nav="search"><span>🔍</span><span>Search</span></a>
-    <a href="suppliers/list.html" class="depop-nav-sell" data-depop-nav="sell"><span>➕</span><span>Sell</span></a>
-    <a href="https://wa.me/254117422428" data-depop-nav="inbox"><span>💬</span><span>Inbox</span></a>
-    <a href="suppliers.html" data-depop-nav="profile"><span>👤</span><span>Profile</span></a>
+  <nav class="depop-bottom-nav md:hidden" aria-label="Mobile">
+    <div class="depop-bottom-nav-inner">
+      <a href="index.html" class="depop-bottom-nav__item is-active" data-depop-nav="home">
+        <span class="depop-bottom-nav__icon" aria-hidden="true">🏠</span>
+        <span class="depop-bottom-nav__label">Home</span>
+      </a>
+      <a href="#deals" class="depop-bottom-nav__item" data-depop-nav="search">
+        <span class="depop-bottom-nav__icon" aria-hidden="true">🔍</span>
+        <span class="depop-bottom-nav__label">Search</span>
+      </a>
+      <a href="suppliers/list.html" class="depop-bottom-nav__item depop-bottom-nav__item--sell" data-depop-nav="sell">
+        <span class="depop-bottom-nav__icon" aria-hidden="true">➕</span>
+        <span class="depop-bottom-nav__label">Sell</span>
+      </a>
+      <a href="https://wa.me/254117422428" class="depop-bottom-nav__item" data-depop-nav="inbox" target="_blank" rel="noopener">
+        <span class="depop-bottom-nav__icon" aria-hidden="true">💬</span>
+        <span class="depop-bottom-nav__label">Inbox</span>
+      </a>
+      <a href="suppliers.html" class="depop-bottom-nav__item" data-depop-nav="profile">
+        <span class="depop-bottom-nav__icon" aria-hidden="true">👤</span>
+        <span class="depop-bottom-nav__label">Profile</span>
+      </a>
+    </div>
   </nav>
 
   <!-- FOOTER -->
-  <footer class="bg-brand-purple text-white/70 pt-14 pb-8">
-    <div class="max-w-7xl mx-auto px-5 grid md:grid-cols-4 gap-10 mb-10">
-      <div>
-        <div class="flex items-center gap-3 mb-3">
-          <img src="assets/images/logo-512.png" alt="" class="h-16 w-16 shrink-0 rounded-xl" width="64" height="64" aria-hidden="true" />
-          <span class="font-serif font-bold text-2xl text-white tracking-tight">Sokoni</span>
-        </div>
-        <p class="text-sm">Sokoni Mall Enterprise — Kenya-born shopping on WhatsApp. Countrywide delivery &amp; pickup.</p>
-        <p class="text-xs mt-2 text-white/50">support@sokonimall.com · +254 117 422 428 · Nairobi, Kenya</p>
+  <footer id="site-footer" class="bg-black text-white border-t border-zinc-800 py-12 px-6">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div class="space-y-3">
+        <h3 class="text-lg font-bold tracking-tight text-white">SOKONI MALL</h3>
+        <p class="text-zinc-400 text-sm font-normal leading-relaxed">
+          Kenya's #1 prepaid marketplace for brand new merchandise and pre-loved fashion. Fast drop-off logistics &amp; 100% Escrow Protection.
+        </p>
+        <p class="text-zinc-500 text-xs font-normal">support@sokonimall.com • Nairobi, Kenya</p>
       </div>
       <div>
-        <h4 class="text-white font-semibold mb-3">Shop</h4>
-        <ul class="space-y-2 text-sm">
-          <li><a href="#categories" class="hover:text-brand-green">Categories</a></li>
-          <li><a href="#deals" class="hover:text-brand-green">Hot Deals</a></li>
-          <li><a href="#international" class="hover:text-brand-green">International</a></li>
+        <h4 class="text-sm font-semibold text-white tracking-wide uppercase mb-3">Shop</h4>
+        <ul class="space-y-2">
+          <li><a href="#deals" data-depop-filter='{"category":"fashion","subcategory":"womens-fashion","scroll":true}' class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Women</a></li>
+          <li><a href="#deals" data-depop-filter='{"category":"fashion","subcategory":"mens-fashion","scroll":true}' class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Men</a></li>
+          <li><a href="#deals" data-depop-filter='{"itemType":"new","scroll":true}' class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Brand New</a></li>
+          <li><a href="#deals" data-depop-filter='{"itemType":"secondhand","scroll":true}' class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Pre-Loved / Thrift</a></li>
+          <li><a href="#deals" data-depop-filter='{"category":"deals","scroll":true}' class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Hot Deals</a></li>
         </ul>
       </div>
       <div>
-        <h4 class="text-white font-semibold mb-3">Company</h4>
-        <ul class="space-y-2 text-sm">
-          <li><a href="about.html" class="hover:text-brand-green">About Us</a></li>
-          <li><a href="faq.html" class="hover:text-brand-green">FAQ</a></li>
-          <li><a href="#how-it-works" class="hover:text-brand-green">How It Works</a></li>
-          <li><a href="#reviews" class="hover:text-brand-green">Reviews</a></li>
-          <li><a href="suppliers.html" class="hover:text-brand-green">Become a Supplier</a></li>
-          <li><a href="pickup-points.html" class="hover:text-brand-green">Become a Pickup Point</a></li>
-          <li><a href="terms.html" class="hover:text-brand-green">Terms of Service</a></li>
-          <li><a href="privacy.html" class="hover:text-brand-green">Privacy Policy</a></li>
+        <h4 class="text-sm font-semibold text-white tracking-wide uppercase mb-3">Company</h4>
+        <ul class="space-y-2">
+          <li><a href="about.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">About Us</a></li>
+          <li><a href="#how-it-works" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">How It Works</a></li>
+          <li><a href="faq.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">FAQ</a></li>
+          <li><a href="terms.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Terms of Service</a></li>
+          <li><a href="privacy.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Privacy Policy</a></li>
         </ul>
       </div>
       <div>
-        <h4 class="text-white font-semibold mb-3">Get in Touch</h4>
-        <ul class="space-y-2 text-sm">
-          <li><a href="https://wa.me/254117422428" class="hover:text-brand-green">WhatsApp +254 117 422 428</a></li>
-          <li><a href="mailto:support@sokonimall.com" class="hover:text-brand-green">support@sokonimall.com</a></li>
-          <li><a href="#" class="hover:text-brand-green">Instagram</a></li>
-          <li><a href="#" class="hover:text-brand-green">TikTok</a></li>
+        <h4 class="text-sm font-semibold text-white tracking-wide uppercase mb-3">Get in Touch</h4>
+        <ul class="space-y-2">
+          <li><a href="https://instagram.com" target="_blank" rel="noopener" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Instagram</a></li>
+          <li><a href="https://tiktok.com" target="_blank" rel="noopener" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">TikTok</a></li>
+          <li><a href="mailto:support@sokonimall.com" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">support@sokonimall.com</a></li>
         </ul>
       </div>
     </div>
-    <div class="max-w-7xl mx-auto px-5 border-t border-white/10 pt-6 text-xs text-white/40 text-center">
-      &copy; <span id="year"></span> Sokoni Mall Enterprise. 100% prepaid marketplace — brand new &amp; pre-loved.
-      <span class="block mt-1">International links may earn a small affiliate commission at no extra cost to you.</span>
-      <span class="block mt-2">
-        <a href="terms.html" class="hover:text-brand-green underline-offset-2 hover:underline">Terms of Service</a>
-        ·
-        <a href="privacy.html" class="hover:text-brand-green underline-offset-2 hover:underline">Privacy Policy</a>
-      </span>
+    <div class="max-w-7xl mx-auto mt-12 pt-6 border-t border-zinc-900 text-center text-xs text-zinc-500">
+      © <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace. All rights reserved.
     </div>
   </footer>
 

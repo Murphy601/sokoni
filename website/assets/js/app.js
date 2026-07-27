@@ -7,7 +7,6 @@ const MPESA_TILL = "4775847";
 const MPESA_TILL_NAME = "David Thuku Muiruri";
 const OFFER_PERCENT = 3;
 const PROMO_CODE = "SOKONI3";
-const USD_TO_KES = 130; // Approximate display rate for international items
 const REVIEWS_API =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:3001/api/reviews"
@@ -119,7 +118,6 @@ const NUDGE_COPY = {
 };
 
 let storeProducts = [];
-let intlProducts = [];
 let activeCategory = "all";
 let activeSubcategory = null;
 let activeProductId = null;
@@ -180,15 +178,9 @@ function saveCurrencyPref() {
 
 function formatPrice(product) {
   if (product.priceKes != null) {
-    if (!showKes && product.priceUsd == null) {
-      return `≈ $${Math.round(product.priceKes / USD_TO_KES)}`;
-    }
     return `KES ${product.priceKes.toLocaleString()}`;
   }
   if (product.priceUsd != null) {
-    if (showKes) {
-      return `≈ KES ${Math.round(product.priceUsd * USD_TO_KES).toLocaleString()}`;
-    }
     return `$${product.priceUsd}`;
   }
   return "";
@@ -196,21 +188,11 @@ function formatPrice(product) {
 
 function syncCurrencyUi() {
   const label = document.getElementById("currency-label");
-  const note = document.getElementById("currency-note");
-  if (label) label.textContent = showKes ? "KES" : "USD";
-  if (note) {
-    note.textContent = showKes
-      ? `International prices shown as approx. KES (1 USD ≈ ${USD_TO_KES} KES). Final price at supplier checkout.`
-      : "International prices in USD. Tap KES in the header for approximate shilling conversion.";
-  }
+  if (label) label.textContent = "KES";
 }
 
 function toggleCurrency() {
-  showKes = !showKes;
-  saveCurrencyPref();
-  syncCurrencyUi();
-  renderStoreGrid();
-  renderIntlGrid();
+  /* legacy hook — local catalog is KES-only */
 }
 
 // ---------- Search ----------
@@ -618,13 +600,15 @@ function renderCategoryChips() {
   if (!grid) return;
   const menu = window.SokoniBrowse?.getMenu?.();
   const browseCats = menu?.categories || [];
-  const chip = (id, label, emoji) => `
+  const chip = (id, label, emoji) => {
+    const active = activeCategory === id && !activeProductId;
+    return `
     <button type="button" data-cat="${id}"
-      class="cat-chip group bg-white rounded-2xl border ${activeCategory === id && !activeProductId ? "border-brand-green ring-2 ring-brand-green/30" : "border-black/5"} shadow-sm p-6 text-center hover:shadow-lg hover:-translate-y-1 transition">
-      <div class="text-4xl mb-3">${emoji}</div>
-      <p class="font-semibold text-sm group-hover:text-brand-green">${label}</p>
-    </button>
-  `;
+      class="depop-cat-card cat-chip ${active ? "is-active" : ""}">
+      <span class="depop-cat-card__icon" aria-hidden="true">${emoji}</span>
+      <span class="depop-cat-card__label">${label}</span>
+    </button>`;
+  };
   grid.innerHTML =
     chip("all", "All Products", "🛍️") +
     chip("viral", "Viral Bargains", "🔥") +
@@ -743,7 +727,7 @@ function renderStoreMoreButton(allCount, visibleCount) {
 }
 
 function revealCatalogSections() {
-  for (const id of ["categories", "deals", "international"]) {
+  for (const id of ["categories", "deals"]) {
     document.getElementById(id)?.classList.add("is-visible");
   }
 }
@@ -831,42 +815,6 @@ function discountBadge(product) {
   const pct = Math.round((1 - product.priceKes / product.originalPriceKes) * 100);
   return `<span class="absolute top-3 left-3 bg-brand-green text-brand-purple text-xs font-bold px-2 py-1 rounded-full">-${pct}%</span>`;
 }
-
-function renderAffiliateCard(product) {
-  const askUrl = askLinkFor(product);
-  return `
-    <div class="product-card relative bg-white rounded-2xl border border-black/5 shadow-sm p-5 flex flex-col">
-      ${discountBadge(product)}
-      ${productImageBlock(product)}
-      <h3 class="font-bold text-sm mb-1 line-clamp-2">${product.name}</h3>
-      <p class="text-xs text-brand-purple/50 mb-2">${product.source}${product.estDelivery ? ` · ${product.estDelivery}` : ""}</p>
-      <div class="flex items-baseline gap-2 mb-1">
-        <span class="font-extrabold text-lg">${formatPrice(product)}</span>
-        ${
-          product.originalPriceKes && product.priceKes && product.originalPriceKes > product.priceKes
-            ? `<span class="text-xs text-brand-purple/40 line-through">KES ${product.originalPriceKes.toLocaleString()}</span>`
-            : ""
-        }
-      </div>
-      <p class="text-xs text-brand-purple/50 mb-4">⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews)</p>
-      <div class="mt-auto flex flex-col gap-2">
-        <a href="${askUrl}" target="_blank" rel="noopener"
-           class="text-center bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
-          💬 Ask on WhatsApp
-        </a>
-      </div>
-    </div>
-  `;
-}
-
-function renderIntlGrid() {
-  const intlGrid = document.getElementById("intl-grid");
-  if (!intlGrid) return;
-  intlGrid.innerHTML = intlProducts.map(renderAffiliateCard).join("");
-  if (window.SokoniComponents) SokoniComponents.upgradeIn(intlGrid);
-}
-
-// ---------- AI browse nudge ----------
 
 function setupBrowseNudge() {
   const nudge = document.getElementById("ai-nudge");
@@ -1125,7 +1073,6 @@ async function renderProducts() {
     await loadStoreMeta();
     const products = (await loadProducts()).filter((p) => p.inStock !== false);
     storeProducts = products.filter((p) => p.fulfillment === "store" || (p.scope === "local" && p.fulfillment !== "supplier"));
-    intlProducts = products.filter((p) => p.scope === "international").slice(0, 8);
 
     loadCurrencyPref();
     syncCurrencyUi();
@@ -1134,13 +1081,10 @@ async function renderProducts() {
     setupBrowseNudge();
     applyDeepLinkFromUrl();
 
-    document.getElementById("currency-toggle")?.addEventListener("click", toggleCurrency);
-
     renderCategoryChips();
     renderBrowseFilters();
     renderStoreGrid();
     openPendingProductSheet();
-    renderIntlGrid();
     revealCatalogSections();
 
     if (window.SokoniCatalogNav) {
