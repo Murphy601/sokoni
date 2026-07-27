@@ -22,7 +22,7 @@ export const config = {
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
     model: process.env.OPENAI_MODEL || "openrouter/free",
     modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
-      "google/gemma-4-26b-a4b-it:free,meta-llama/llama-3.2-3b-instruct:free,qwen/qwen3-coder:free")
+      "google/gemma-4-26b-a4b-it:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),

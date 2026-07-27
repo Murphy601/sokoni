@@ -7,11 +7,7 @@ import { getSession, pushMessage, isHumanHandoff } from "./session.js";
 import { channelPrompt } from "./ai-prompts.js";
 import { runToolRouter, formatToolResultsForPrompt } from "./ai-tools.js";
 
-const FALLBACK_MODELS = [
-  "google/gemma-4-26b-a4b-it:free",
-  "meta-llama/llama-3.2-3b-instruct:free",
-  "qwen/qwen3-coder:free",
-];
+const FALLBACK_MODELS = ["google/gemma-4-26b-a4b-it:free"];
 
 let client = null;
 

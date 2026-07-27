@@ -85,16 +85,16 @@ set_env_kv() {
 if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
   FREE_MODEL="openrouter/free"
-  FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free,meta-llama/llama-3.2-3b-instruct:free,qwen/qwen3-coder:free"
+  FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free"
   FREE_VISION="google/gemma-4-26b-a4b-it:free"
   FREE_VISION_FALLBACKS="openrouter/free,nvidia/nemotron-nano-12b-v2-vl:free"
-  DEPRECATED_MODELS='nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|gemini-2\.0-flash-exp|deepseek-r1|gemini-2\.5-pro|gemini-2\.5-flash|gemini-2\.5-flash-lite|gemma-4-31b-it:free|qwen/qwen3-next-80b|llama-3\.3-70b-instruct:free'
+  DEPRECATED_MODELS='nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|gemini-2\.0-flash-exp|deepseek-r1|gemini-2\.5-pro|gemini-2\.5-flash|gemini-2\.5-flash-lite|gemma-4-31b-it:free|qwen/qwen3-next-80b|llama-3\.3-70b-instruct:free|llama-3\.2-3b-instruct:free|qwen/qwen3-coder:free'
   if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE "$DEPRECATED_MODELS"; then
     echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
     set_env_kv "$ENV_FILE" "OPENAI_MODEL" "$FREE_MODEL"
   fi
   CURRENT_FALLBACKS="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b'; then
+  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b|llama-3\.2-3b|qwen/qwen3-coder'; then
     set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "$FREE_FALLBACKS"
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
