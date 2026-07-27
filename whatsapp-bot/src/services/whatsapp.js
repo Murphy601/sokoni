@@ -429,7 +429,17 @@ export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
 const botSentIds = new Set();
 const BOT_IDS_MAX = 1000;
 const recentSends = new Map(); // normalized chatId -> timestamp
-const RECENT_SEND_WINDOW_MS = 6000;
+const RECENT_SEND_WINDOW_MS = 45000;
+
+/** True if the bot sent to this chat recently (outgoing webhook echo guard). */
+export function wasRecentBotSend(destinationChatId) {
+  try {
+    const ts = recentSends.get(toChatId(destinationChatId));
+    return Boolean(ts && Date.now() - ts < RECENT_SEND_WINDOW_MS);
+  } catch {
+    return false;
+  }
+}
 
 function idStrings(idLike) {
   const out = [];

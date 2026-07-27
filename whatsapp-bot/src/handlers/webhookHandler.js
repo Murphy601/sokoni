@@ -8,8 +8,9 @@ import {
   handleCart,
   startCodOrder,
   sendHumanHandoff,
+  tryNumberedMenuReply,
 } from "../services/menu.js";
-import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId } from "../services/whatsapp.js";
+import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend } from "../services/whatsapp.js";
 import { runAiAgent } from "../services/ai.js";
 import {
   getMenuState,
@@ -334,6 +335,9 @@ export async function handleIncomingMessage(
     return sendTrackOrderMenu(customerKey, phone);
   }
 
+  // Numbered menu replies (1, 2, 3…) — before handoff silence swallows them.
+  if (await tryNumberedMenuReply(customerKey, text, { phone })) return;
+
   // Human handoff — bot stays silent except menu / track (handled above)
   if (isHumanHandoff(customerKey)) {
     if (normalized === "menu") {
@@ -540,7 +544,13 @@ export async function handleWahaWebhook(body) {
 
   if (parsed.direction === "outgoing") {
     if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
-    return handleAdminOutgoing(parsed);
+    return handleAdminOutgoing({
+      fromChatId: parsed.fromChatId,
+      toChatId: parsed.toChatId,
+      text: parsed.text,
+      quotedText: parsed.quotedText,
+      messageId: parsed.messageId,
+    });
   }
 
   if (shouldRouteIncomingAsAdmin(body, parsed)) {

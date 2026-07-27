@@ -10,6 +10,7 @@ import {
   getPendingOrder,
   clearPendingOrder,
   setMenuState,
+  getMenuState,
   setProductContext,
   clearHumanHandoff,
   getCustomerMeta,
@@ -58,8 +59,58 @@ export function formatNumberedMenu(title, options) {
 }
 
 function sendNumberedMenu(to, title, options) {
-  setMenuState(to, { options });
+  setMenuState(to, { type: "numbered_menu", options });
   return sendText(to, formatNumberedMenu(title, options));
+}
+
+function parseMenuChoice(text) {
+  const match = String(text || "").trim().match(/^(\d{1,2})$/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Route a numbered reply (1, 2, 3…) to the active menu. Returns true if handled.
+ * Must run before human-handoff silence and before free-text product/AI routing.
+ */
+export async function tryNumberedMenuReply(customerKey, text, { phone = "" } = {}) {
+  const choice = parseMenuChoice(text);
+  if (!choice) return false;
+
+  const menuState = getMenuState(customerKey);
+  if (!menuState?.options?.length || choice > menuState.options.length) return false;
+
+  if (menuState.type === "product_list" || menuState.type === "product_list_paged") {
+    if (menuState.productIds?.[choice - 1]) {
+      return showProductActions(customerKey, menuState.productIds[choice - 1]);
+    }
+    return false;
+  }
+
+  const option = menuState.options[choice - 1];
+  if (!option?.id) return false;
+
+  clearHumanHandoff(customerKey);
+
+  if (menuState.type === "vendor_apply_gate" || menuState.type === "role_menu") {
+    const { handleVendorMenuAction } = await import("./role-menus.js");
+    return handleVendorMenuAction(customerKey, option.id, { phone });
+  }
+  if (menuState.type === "pickup_apply_gate") {
+    const { handlePickupMenuAction } = await import("./role-menus.js");
+    return handlePickupMenuAction(customerKey, option.id, { phone });
+  }
+  if (option.id === "human_handoff") {
+    const meta = getCustomerMeta(customerKey) || {};
+    return sendHumanHandoff(customerKey, { ...meta, phone, lastMessage: text });
+  }
+
+  try {
+    return await handleMenuAction(customerKey, option.id);
+  } catch (err) {
+    console.error("[menu] numbered reply failed:", err.message);
+    await sendText(customerKey, "Sorry, something went wrong. Type *menu* to try again.");
+    return true;
+  }
 }
 
 export async function sendWelcome(to) {
