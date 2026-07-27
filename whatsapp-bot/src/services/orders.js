@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { isPrepaidOnly } from "./prepaid-checkout.js";
+import { computeProductTotals, orderBuyerTotal } from "./shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -10,9 +12,21 @@ const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
  * Lightweight file-backed order + contact store. Good enough for a single
  * WAHA instance. Swap for a real DB when you scale to multiple stores/staff.
  */
-export const ORDER_STATUSES = ["received", "confirmed", "packed", "out_for_delivery", "delivered", "cancelled"];
+export const ORDER_STATUSES = [
+  "awaiting_payment",
+  "received",
+  "confirmed",
+  "packed",
+  "out_for_delivery",
+  "delivered",
+  "cancelled",
+];
 
 const STATUS_ALIASES = {
+  awaiting_payment: "awaiting_payment",
+  awaiting: "awaiting_payment",
+  unpaid: "awaiting_payment",
+  payment: "awaiting_payment",
   received: "received",
   new: "received",
   confirm: "confirmed",
@@ -35,6 +49,7 @@ const STATUS_ALIASES = {
 };
 
 const STATUS_LABELS = {
+  awaiting_payment: "💳 Awaiting payment",
   received: "🆕 Received",
   confirmed: "✅ Confirmed",
   packed: "📦 Packed",
@@ -97,27 +112,89 @@ export function getAllContacts() {
   return Object.entries(store.contacts).map(([key, c]) => ({ customerKey: key, ...c }));
 }
 
+
 export function createOrder({ customerKey, chatId, product, details }) {
   load();
   store.seq += 1;
   const id = `SK-${store.seq}`;
   const now = Date.now();
+  const sourcePriceKes = product.sourcePriceKes != null ? Number(product.sourcePriceKes) : null;
+  const totals = computeProductTotals(product);
+  const priceKes = totals.itemKes;
+  const shippingKes = totals.shippingKes;
+  const totalKes = totals.totalKes;
+  const platformFeeKes = totals.platformFeeKes;
+  const sellerNetKes = totals.sellerNetKes;
+  const marginKes =
+    sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
+
+  const prepaid = isPrepaidOnly();
+
   const order = {
     id,
     customerKey,
     chatId: chatId || customerKey,
     productId: product.productId || product.id,
     productName: product.name,
-    priceKes: product.priceKes,
+    priceKes,
+    shippingKes,
+    totalKes,
+    platformFeeKes,
+    sellerNetKes,
+    sourcePriceKes,
+    marginKes,
+    supplierId: product.supplierId || null,
+    supplierSku: product.supplierSku || null,
     customerName: details.name,
     location: details.location,
     phone: details.phone,
-    status: "received",
-    history: [{ status: "received", at: now }],
+    status: prepaid ? "awaiting_payment" : "received",
+    paymentModel: prepaid ? "prepaid" : "cod",
+    escrowStatus: prepaid ? "pending" : null,
+    deliveryMode: "pending",
+    shareCustomerContact: false,
+    supplierNotified: false,
+    payoutStatus: sourcePriceKes != null ? "pending" : "n/a",
+    customerPaymentStatus: "unpaid",
+    paymentStatus: "pending",
+    checkoutRequestId: null,
+    merchantRequestId: null,
+    mpesaReceipt: null,
+    mpesaPhone: null,
+    paidAt: null,
+    dropOffCode: null,
+    labelUrl: null,
+    qrPayload: null,
+    shipmentStatus: "pending",
+    shipmentHistory: [],
+    payoutEligibleAt: null,
+    autoPayment: false,
+    customerPaidClaimedAt: null,
+    customerPaidConfirmedAt: null,
+    pickupPointId: null,
+    pickupPointName: null,
+    pickupPointPhone: null,
+    fulfillmentStoreId: null,
+    fulfillmentStoreName: null,
+    fulfillmentStorePhone: null,
+    fulfillmentStoreCity: null,
+    storeNotifiedPaymentAt: null,
+    history: [{ status: prepaid ? "awaiting_payment" : "received", at: now }],
+    reviewPromptSent: false,
     createdAt: now,
     updatedAt: now,
   };
   store.orders[id] = order;
+  persist();
+  return order;
+}
+
+export function markReviewPromptSent(id) {
+  load();
+  const order = getOrder(id);
+  if (!order || order.reviewPromptSent) return order;
+  order.reviewPromptSent = true;
+  order.updatedAt = Date.now();
   persist();
   return order;
 }
@@ -129,10 +206,72 @@ export function getOrder(id) {
   return store.orders[key] || null;
 }
 
-export function getOrdersForCustomer(customerKey) {
+export function findOrderByCheckoutRequestId(checkoutRequestId) {
+  if (!checkoutRequestId) return null;
   load();
+  return (
+    Object.values(store.orders).find((o) => o.checkoutRequestId === checkoutRequestId) || null
+  );
+}
+
+export function findAwaitingPaymentOrderForCustomer(customerKey, phone = "") {
+  const orders = getOrdersForCustomer(customerKey, phone);
+  return (
+    orders.find(
+      (o) =>
+        o.status === "awaiting_payment" &&
+        o.customerPaymentStatus !== "confirmed" &&
+        o.status !== "cancelled"
+    ) || null
+  );
+}
+
+/** Fallback match when Daraja callback omits CheckoutRequestID linkage. */
+export function findProcessingOrderByPhoneAmount(phone, amountKes) {
+  load();
+  const wantPhone = normalizePhoneDigits(phone);
+  const wantAmt = Math.round(Number(amountKes));
+  if (!wantPhone || !Number.isFinite(wantAmt)) return null;
+
+  const candidates = Object.values(store.orders).filter((o) => {
+    if (o.customerPaymentStatus === "confirmed") return false;
+    if (o.paymentStatus !== "processing" && o.status !== "awaiting_payment") return false;
+    const orderPhone = normalizePhoneDigits(o.phone || o.mpesaPhone);
+    if (orderPhone !== wantPhone) return false;
+    return Math.round(Number(orderBuyerTotal(o))) === wantAmt;
+  });
+  candidates.sort((a, b) => (b.stkSentAt || b.createdAt || 0) - (a.stkSentAt || a.createdAt || 0));
+  return candidates[0] || null;
+}
+
+function normalizePhoneDigits(raw) {
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9 && /^[17]/.test(d)) d = `254${d}`;
+  if (!d.startsWith("254") && d.length >= 9) d = `254${d}`;
+  return d;
+}
+
+export function getOrdersForCustomer(customerKey, phone = "") {
+  load();
+  const digits = String(phone || "").replace(/\D/g, "");
+  const norm = (d) => {
+    if (!d) return "";
+    if (d.startsWith("254")) return d;
+    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
+    if (d.length === 9) return `254${d}`;
+    return d;
+  };
+  const want = norm(digits);
+
   return Object.values(store.orders)
-    .filter((o) => o.customerKey === customerKey)
+    .filter((o) => {
+      if (o.customerKey === customerKey) return true;
+      if (!want) return false;
+      const orderPhone = norm(String(o.phone || "").replace(/\D/g, ""));
+      const orderKeyPhone = norm(String(o.customerKey || "").replace(/\D/g, ""));
+      return orderPhone === want || orderKeyPhone === want;
+    })
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
@@ -148,9 +287,18 @@ export function updateOrderStatus(id, statusInput) {
   if (!order) return null;
   const status = normalizeStatus(statusInput);
   if (!status) return { error: "invalid_status", order };
+  if (order.status === status) return { order, status, unchanged: true };
   order.status = status;
   order.history.push({ status, at: Date.now() });
   order.updatedAt = Date.now();
   persist();
   return { order, status };
+}
+
+export function updateOrderMeta(id, patch) {
+  const order = getOrder(id);
+  if (!order) return null;
+  Object.assign(order, patch, { updatedAt: Date.now() });
+  persist();
+  return order;
 }

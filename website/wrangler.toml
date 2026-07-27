@@ -1,0 +1,8 @@
+# Static storefront — deployed via Cloudflare Workers Builds
+# Deploy command (from repo root path "website"): npx wrangler deploy
+
+name = "sokoni"
+compatibility_date = "2024-07-01"
+
+[assets]
+directory = "."

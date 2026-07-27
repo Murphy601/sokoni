@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sell on Sokoni — List a Product</title>
+<meta name="description" content="List brand new or pre-loved items on Sokoni — upload photos, add details, post live instantly." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['Fraunces', 'Georgia', 'serif'],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/design-tokens.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/depop-sell.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="../index.html" class="text-sm font-medium hover:text-brand-green transition">← Shop</a>
+      <span class="text-xs font-semibold text-brand-green">Sell</span>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-5 py-8 pb-16">
+    <div id="success-box" class="hidden rounded-3xl border border-brand-green/40 bg-brand-green/10 p-8 text-center mb-8">
+      <p class="text-3xl mb-3">✅</p>
+      <h1 class="font-display text-2xl font-bold mb-2">Listing posted</h1>
+      <p class="text-sm text-brand-purple/70 dark:text-white/70 mb-2">Product ID: <strong id="success-ref"></strong></p>
+      <p id="success-status" class="text-sm mb-4">Your listing is live on Sokoni.</p>
+      <a href="../index.html" class="inline-block text-sm font-semibold text-brand-green hover:underline">View shop</a>
+    </div>
+
+    <div id="wizard-root" class="space-y-6">
+      <div>
+        <p class="text-sm font-semibold text-brand-green mb-2">Sell on Sokoni · Prepaid marketplace</p>
+        <h1 class="font-display text-3xl font-bold mb-2">Start selling</h1>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">
+          WhatsApp sign-in every visit → dashboard, withdrawals, listings. Items go <strong>live instantly</strong> — like Depop. Payouts via M-Pesa after delivery.
+        </p>
+      </div>
+
+      <!-- Step 0: Seller onboarding -->
+      <section id="onboard-panel" class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Sign in with WhatsApp</h2>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">We send a 6-digit code to your WhatsApp every time you open this page — new and returning sellers.</p>
+        <div id="api-down-banner" class="hidden rounded-xl border border-red-300/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          Sokoni server is temporarily offline — signup will work again shortly. You can also message us on WhatsApp from the shop page.
+        </div>
+
+        <!-- Step A: WhatsApp verification -->
+        <div id="onboard-verify-step" class="space-y-4">
+          <label class="block text-sm font-medium">
+            WhatsApp number *
+            <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" autocomplete="tel" />
+          </label>
+          <p class="text-sm text-brand-purple/60 dark:text-white/60">We'll send a free 6-digit code to this number on WhatsApp from <strong>Sokoni Mall</strong>.</p>
+          <div class="flex flex-wrap gap-3">
+            <button id="send-code-btn" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Send code on WhatsApp</button>
+          </div>
+          <div id="verify-code-wrap" class="hidden space-y-3">
+            <label class="block text-sm font-medium">
+              Code from WhatsApp
+              <input id="verify-code-input" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" class="sell-form-input tracking-widest text-lg" autocomplete="one-time-code" />
+            </label>
+            <div class="flex flex-wrap gap-3">
+              <button id="verify-code-btn" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Verify</button>
+              <button id="resend-code-btn" type="button" class="sell-btn-ghost text-sm">Resend code</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step B: Profile (after WhatsApp verified) -->
+        <div id="onboard-details-step" class="hidden space-y-4 pt-2 border-t border-brand-green/20">
+          <p id="verify-success-label" class="text-sm font-semibold text-brand-green">✓ WhatsApp verified</p>
+        <label class="block text-sm font-medium">
+          Your name or shop name *
+          <input id="onboard-shop-name" type="text" required placeholder="e.g. Adiv or Adiv's Mini Mart" class="sell-form-input" />
+          <span class="sell-tag-hint">Use your personal name if you don't have a shop name — buyers see this on your listings.</span>
+        </label>
+        <label class="block text-sm font-medium">
+          Sokoni username <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
+          <input id="onboard-shop-handle" type="text" placeholder="e.g. adiv_thrift" class="sell-form-input" />
+          <span class="sell-tag-hint">A short name for your profile — like on Instagram. Leave blank and we'll make one from your name.</span>
+        </label>
+        <label class="block text-sm font-medium">
+          M-Pesa number for payouts *
+          <input id="onboard-mpesa" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" />
+          <span class="sell-tag-hint">Where we send your money after a sale is delivered. Can be the same as WhatsApp.</span>
+        </label>
+        <label class="block text-sm font-medium">
+          National ID <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
+          <input id="onboard-national-id" type="text" placeholder="ID number" class="sell-form-input" />
+        </label>
+        <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto hidden">Start selling</button>
+        </div>
+        <p id="onboard-status" class="text-sm"></p>
+      </section>
+
+      <div id="listing-wizard" class="hidden space-y-6">
+      <div id="seller-profile-bar" class="hidden rounded-2xl border border-brand-green/30 bg-brand-green/10 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p class="text-xs text-brand-purple/60 dark:text-white/60">Selling as</p>
+          <p id="seller-badge" class="font-semibold"></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <p id="seller-handle" class="text-sm text-brand-green font-medium"></p>
+          <button type="button" id="sign-out-btn" class="text-xs font-semibold text-brand-purple/70 dark:text-white/70 hover:text-brand-green underline">Sign out</button>
+        </div>
+      </div>
+
+      <div class="sell-view-tabs" role="tablist" aria-label="Seller views">
+        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">Dashboard</button>
+        <button type="button" id="tab-withdraw" class="sell-view-tab" role="tab" aria-selected="false">Withdraw</button>
+        <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List new item</button>
+      </div>
+
+      <div id="view-dashboard" class="space-y-6">
+        <section class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg">Orders to ship</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">Paid sales — print label and drop at a Sokoni hub.</p>
+            </div>
+            <button id="load-orders-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div id="seller-orders" class="space-y-3"></div>
+        </section>
+
+        <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="font-bold text-lg">Earnings</h2>
+            <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
+              <span class="sell-ledger-dot available"></span>Available
+              <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+            <button type="button" class="sell-ledger-tab" data-ledger="pending">
+              <span class="sell-ledger-dot pending"></span>Pending escrow
+              <p id="ledger-pending-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+            <button type="button" class="sell-ledger-tab" data-ledger="transit">
+              <span class="sell-ledger-dot transit"></span>In transit
+              <p id="ledger-transit-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+          </div>
+          <div id="ledger-detail" class="text-sm space-y-2"></div>
+        </section>
+
+        <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="font-bold text-lg">My listings</h2>
+            <button id="load-listings-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div id="my-listings" class="space-y-3"></div>
+        </section>
+      </div>
+
+      <div id="view-withdraw" class="hidden space-y-6">
+        <section class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-5">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg">Manual withdraw</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">Transfer available earnings to your M-Pesa payout number.</p>
+            </div>
+            <button id="load-withdraw-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+
+          <div class="rounded-2xl bg-white/70 dark:bg-brand-purpleLight/40 border border-brand-green/20 p-5">
+            <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-1">Available to withdraw</p>
+            <p id="withdraw-available" class="text-3xl font-bold text-brand-green">—</p>
+            <p class="text-sm text-brand-purple/60 dark:text-white/60 mt-2">
+              Payout M-Pesa: <strong id="withdraw-mpesa">—</strong>
+            </p>
+          </div>
+
+          <p id="withdraw-pending" class="hidden text-sm rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-amber-900 dark:text-amber-200"></p>
+
+          <button id="withdraw-request-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto">
+            Request withdrawal
+          </button>
+
+          <p id="withdraw-status" class="text-sm"></p>
+
+          <div>
+            <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-2">Included orders</p>
+            <div id="withdraw-breakdown" class="text-sm space-y-2"></div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-2">Withdrawal history</p>
+            <div id="withdraw-history" class="text-sm space-y-2"></div>
+          </div>
+
+          <p class="text-xs text-brand-purple/50 dark:text-white/50">
+            Manual M-Pesa transfer within 1–2 business days after you request. Funds must be delivered and escrow released first.
+          </p>
+        </section>
+      </div>
+
+      <div id="view-listing" class="hidden space-y-6">
+      <p id="step-label" class="text-xs font-semibold uppercase tracking-wide text-brand-purple/50 dark:text-white/50">Step 1 of 5</p>
+      <div class="sell-wizard-steps" aria-hidden="true">
+        <div id="step-bar-0" class="sell-wizard-step is-active"></div>
+        <div id="step-bar-1" class="sell-wizard-step"></div>
+        <div id="step-bar-2" class="sell-wizard-step"></div>
+        <div id="step-bar-3" class="sell-wizard-step"></div>
+        <div id="step-bar-4" class="sell-wizard-step"></div>
+      </div>
+
+      <!-- Step 1: Media -->
+      <section id="panel-media" class="sell-panel is-active rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Product photos (1 required)</h2>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">Cover photo required. Up to 4 photos total. Optional short video.</p>
+        <div class="sell-media-grid">
+          <div id="media-slot-0" class="sell-media-slot sell-media-slot-cover"><span class="sell-slot-label">📷 Cover *</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
+          <div id="media-slot-1" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
+          <div id="media-slot-2" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-2" /></div>
+          <div id="media-slot-3" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-3" /></div>
+        </div>
+        <label class="block text-sm font-medium">
+          Caption hint for AI (optional)
+          <input id="photo-caption" type="text" placeholder="e.g. 130 ksh women sandals burgundy" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          Video (optional)
+          <input id="video-input" type="file" accept="video/*" class="mt-1 w-full text-sm" />
+        </label>
+        <div id="video-preview-wrap" class="hidden">
+          <video id="video-preview" controls class="max-h-40 rounded-xl"></video>
+        </div>
+      </section>
+
+      <!-- Step 2: Details -->
+      <section id="panel-details" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Title, description & tags</h2>
+        <label class="block text-sm font-medium">
+          Title *
+          <input id="draft-name" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          Description
+          <textarea id="draft-description" rows="4" placeholder="Material, fit, flaws, sizing…" class="sell-form-input"></textarea>
+        </label>
+        <label class="block text-sm font-medium">
+          Style tags (up to 5)
+          <input id="draft-tags" placeholder="#streetwear #vintage90s" class="sell-form-input" />
+          <span class="sell-tag-hint">Hashtags help buyers find your item in search.</span>
+        </label>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">
+            Brand tag 1
+            <input id="draft-brand" class="sell-form-input" />
+          </label>
+          <label class="block text-sm font-medium">
+            Brand tag 2
+            <input id="draft-brand2" class="sell-form-input" />
+          </label>
+        </div>
+      </section>
+
+      <!-- Step 3: Attributes -->
+      <section id="panel-attributes" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Category & attributes</h2>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">
+            Browse category
+            <select id="draft-browse-cat" class="sell-form-input"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Sub-category
+            <select id="draft-browse-sub" class="sell-form-input"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Catalog category
+            <select id="draft-category" class="sell-form-input"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Condition
+            <select id="draft-condition" class="sell-form-input"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Size
+            <input id="draft-size" placeholder="M, 42, One size…" class="sell-form-input" />
+          </label>
+          <label class="block text-sm font-medium">
+            Colour
+            <input id="draft-color" class="sell-form-input" />
+          </label>
+          <label class="block text-sm font-medium">
+            Era / source
+            <select id="draft-era" class="sell-form-input"></select>
+          </label>
+        </div>
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input id="draft-secondhand" type="checkbox" class="rounded border-brand-purple/30" />
+          Pre-loved / secondhand
+        </label>
+      </section>
+
+      <!-- Step 4: Pricing -->
+      <section id="panel-pricing" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Pricing & shipping</h2>
+        <p id="ai-weight-note" class="hidden text-sm rounded-xl bg-brand-green/10 border border-brand-green/20 px-4 py-3 text-brand-purple/80 dark:text-white/80">
+          <strong>AI detected:</strong> <span id="ai-weight-label">—</span>
+        </p>
+        <label class="block text-sm font-medium">
+          Listing price (KES) *
+          <input id="draft-price" type="number" min="10" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          Estimated size / weight (from photo)
+          <select id="draft-weight-class" class="sell-form-input"></select>
+          <span id="shipping-tier-hint" class="sell-tag-hint"></span>
+        </label>
+        <label class="block text-sm font-medium">
+          Shipping fee (KES)
+          <input id="draft-shipping" type="number" min="0" class="sell-form-input" />
+          <span class="sell-tag-hint">AI suggests a fee from the tier above — you can edit before posting.</span>
+        </label>
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />
+          Offer free shipping (you cover delivery — buyer pays item price only)
+        </label>
+        <table id="fee-breakdown-pricing" class="sell-fee-table" aria-label="Fee breakdown">
+          <tbody>
+            <tr><th scope="row">Item price</th><td id="fee-item">—</td></tr>
+            <tr><th scope="row">Shipping</th><td id="fee-shipping">—</td></tr>
+            <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="fee-buyer">—</td></tr>
+            <tr><th scope="row">Processing &amp; platform fee (10%)</th><td id="fee-platform">—</td></tr>
+            <tr class="sell-fee-net"><th scope="row">You receive</th><td id="fee-net">—</td></tr>
+          </tbody>
+        </table>
+        <label class="block text-sm font-medium">
+          Dispatch from (city)
+          <input id="draft-location" placeholder="Nairobi, Mombasa…" class="sell-form-input" />
+        </label>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — buyer pays upfront via M-Pesa. Sokoni holds funds in escrow until delivery.</p>
+      </section>
+
+      <!-- Step 5: Review -->
+      <section id="panel-review" class="sell-panel rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Review & post</h2>
+        <div id="review-summary" class="text-sm"></div>
+        <table id="fee-breakdown-review" class="sell-fee-table" aria-label="Fee breakdown">
+          <tbody>
+            <tr><th scope="row">Item price</th><td id="review-fee-item">—</td></tr>
+            <tr><th scope="row">Shipping</th><td id="review-fee-shipping">—</td></tr>
+            <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="review-fee-buyer">—</td></tr>
+            <tr><th scope="row">Processing &amp; platform fee (10%)</th><td id="review-fee-platform">—</td></tr>
+            <tr class="sell-fee-net"><th scope="row">You receive</th><td id="review-fee-net">—</td></tr>
+          </tbody>
+        </table>
+        <p class="text-xs text-brand-purple/60 dark:text-white/60">
+          Tapping <strong>Post listing</strong> publishes instantly. Listings that break policy (off-platform contact, prohibited items) may be hidden after automated review.
+        </p>
+      </section>
+
+      <p id="form-status" class="text-sm"></p>
+
+      <div class="sell-nav-row">
+        <button id="btn-back" type="button" class="sell-btn-ghost">Back</button>
+        <button id="btn-next" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Continue</button>
+        <button id="save-draft-btn" type="button" class="sell-btn-ghost">Save draft</button>
+        <button id="post-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full shadow-lg hidden">Post listing</button>
+      </div>
+      </div><!-- /view-listing -->
+      </div><!-- /listing-wizard -->
+    </div>
+  </main>
+
+  <script src="../assets/js/seller-listing.js"></script>
+</body>
+</html>

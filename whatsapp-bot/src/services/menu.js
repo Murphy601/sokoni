@@ -1,6 +1,9 @@
 import { config } from "../config.js";
 import { sendText, sendProductCard } from "./whatsapp.js";
-import { searchProducts, getProductById, findProductFromMessage } from "./catalog.js";
+import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, listBrowseProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
+import { buildBrowseSubmenus, priceTierMaxKes } from "./browse-menu.js";
+import { isCatalogPubliclyDisabled } from "./catalog-guard.js";
+import { formatListNumber, formatKes, CATALOG_PAGE_SIZE } from "./list-format.js";
 import { buildAffiliateLink, SOURCE_LABELS } from "./affiliate.js";
 import {
   setPendingOrder,
@@ -20,8 +23,36 @@ import {
   getOrder,
 } from "./orders.js";
 import { getFeaturedProductIds } from "./tiktok.js";
+import { siteUrlLine } from "./reviews.js";
+import {
+  formatPrepaidCheckoutPrompt,
+  initiateMpesaCheckout,
+  isPrepaidOnly,
+  prepaidPaymentLine,
+  checkoutUrlForOrder,
+} from "./prepaid-checkout.js";
+import {
+  renderShipmentTimelineText,
+  getEffectiveShipmentStatus,
+  shipmentStatusLabel,
+} from "./shipments.js";
+import { formatShortPaymentReminder } from "./payment.js";
+import { planFulfillment, applyFulfillmentPlan, formatFulfillmentConfirmBlock, formatFulfillmentLine } from "./fulfillment.js";
+import {
+  welcomeMessage,
+  howItWorksMessage,
+  prepaidOrderPlacedMessage,
+} from "./trust-copy.js";
+import { welcomeMessageForCustomer } from "./customer-automations.js";
+import { computeProductTotals, orderBuyerTotal, formatBuyerTotalLine, formatProductListPrice } from "./shipping-tiers.js";
+import {
+  parseDeliveryDetails,
+  isOrderCorrectionMessage,
+  deliveryDetailsHint,
+  looksLikeDeliveryDetails,
+} from "./delivery-details.js";
 
-function formatNumberedMenu(title, options) {
+export function formatNumberedMenu(title, options) {
   const lines = options.map((o, i) => `${i + 1}. ${o.label}`);
   return `${title}\n\n${lines.join("\n")}\n\n_Reply with the number (e.g. 1)_`;
 }
@@ -32,200 +63,332 @@ function sendNumberedMenu(to, title, options) {
 }
 
 export async function sendWelcome(to) {
-  await sendText(
-    to,
-    `👋 Karibu! I'm *${config.brand.name} AI* — your shopping buddy on WhatsApp.\n` +
-      `Tell me what you're looking for, or reply with a number from the menu 👇`
-  );
+  const meta = getCustomerMeta(to) || {};
+  const phone = meta.phone || "";
+  const back = welcomeMessageForCustomer(to, phone, meta.displayName);
+  await sendText(to, back || welcomeMessage());
   return sendMainMenu(to);
 }
 
 export function sendMainMenu(to) {
   const options = [
-    { id: "shop_all", label: "🛍️ Browse Categories" },
+    { id: "shop_all", label: "👗 Browse Shop" },
     { id: "deals_today", label: "🔥 Today's Picks" },
     { id: "track_order", label: "🧾 Track My Order" },
+    { id: "visit_site", label: "🌐 Visit Website" },
     { id: "human_handoff", label: "🙋 Talk to a Human" },
     { id: "how_it_works", label: "❓ How Sokoni Works" },
   ];
-  return sendNumberedMenu(to, "Karibu Sokoni! Everything is *pay on delivery* 💵", options);
+  return sendNumberedMenu(to, "Karibu Sokoni Mall! 100% prepaid · escrow protected 🔒", options);
 }
 
-const CATEGORY_SUBMENUS = {
-  cat_phones: {
-    category: "phones-tablets",
-    label: "📱 Phones & Tablets",
-    rows: [
-      { id: "sub_phones_smartphones", title: "Smartphones", subcategory: "smartphones" },
-      { id: "sub_phones_tablets", title: "Tablets", subcategory: "tablets" },
-      { id: "sub_phones_power-banks", title: "Power Banks", subcategory: "power-banks" },
-      { id: "sub_phones_accessories", title: "Phone Accessories", subcategory: "phone-accessories" },
-    ],
-  },
-  cat_tvaudio: {
-    category: "tvs-audio",
-    label: "📺 TVs & Audio",
-    rows: [
-      { id: "sub_tvaudio_televisions", title: "Televisions", subcategory: "televisions" },
-      { id: "sub_tvaudio_headphones", title: "Headphones & Earbuds", subcategory: "headphones" },
-      { id: "sub_tvaudio_speakers", title: "Speakers", subcategory: "speakers" },
-      { id: "sub_tvaudio_home-theatre", title: "Home Theatre", subcategory: "home-theatre" },
-    ],
-  },
-  cat_appliances: {
-    category: "appliances",
-    label: "🔌 Appliances",
-    rows: [
-      { id: "sub_appliances_kitchen", title: "Kitchen Appliances", subcategory: "kitchen-appliances" },
-      { id: "sub_appliances_kettles", title: "Kettles", subcategory: "kettles" },
-      { id: "sub_appliances_blenders", title: "Blenders", subcategory: "blenders" },
-      { id: "sub_appliances_irons", title: "Irons", subcategory: "irons" },
-      { id: "sub_appliances_washing", title: "Washing Machines", subcategory: "washing-machines" },
-    ],
-  },
-  cat_beauty: {
-    category: "health-beauty",
-    label: "💄 Health & Beauty",
-    rows: [
-      { id: "sub_beauty_skincare", title: "Skincare", subcategory: "skincare" },
-      { id: "sub_beauty_haircare", title: "Hair Care", subcategory: "haircare" },
-      { id: "sub_beauty_makeup", title: "Makeup", subcategory: "makeup" },
-      { id: "sub_beauty_personal-care", title: "Personal Care", subcategory: "personal-care" },
-      { id: "sub_beauty_fragrances", title: "Fragrances", subcategory: "fragrances" },
-    ],
-  },
-  cat_home: {
-    category: "home-office",
-    label: "🏠 Home & Office",
-    rows: [
-      { id: "sub_home_kitchen-dining", title: "Kitchen & Dining", subcategory: "kitchen-dining" },
-      { id: "sub_home_bedding", title: "Bedding", subcategory: "bedding" },
-      { id: "sub_home_cleaning", title: "Cleaning", subcategory: "cleaning" },
-      { id: "sub_home_decor", title: "Home Decor", subcategory: "home-decor" },
-      { id: "sub_home_stationery", title: "Stationery", subcategory: "stationery" },
-    ],
-  },
-  cat_fashion: {
-    category: "fashion",
-    label: "👗 Fashion",
-    rows: [
-      { id: "sub_fashion_mens", title: "Men's Fashion", subcategory: "mens-fashion" },
-      { id: "sub_fashion_womens", title: "Women's Fashion", subcategory: "womens-fashion" },
-      { id: "sub_fashion_shoes", title: "Shoes", subcategory: "shoes" },
-      { id: "sub_fashion_bags", title: "Bags", subcategory: "bags" },
-      { id: "sub_fashion_watches", title: "Watches", subcategory: "watches" },
-    ],
-  },
-  cat_computing: {
-    category: "computing",
-    label: "💻 Computing",
-    rows: [
-      { id: "sub_computing_laptops", title: "Laptops", subcategory: "laptops" },
-      { id: "sub_computing_printers", title: "Printers", subcategory: "printers" },
-      { id: "sub_computing_storage", title: "Storage", subcategory: "storage" },
-      { id: "sub_computing_accessories", title: "Accessories", subcategory: "computer-accessories" },
-    ],
-  },
-  cat_gaming: {
-    category: "gaming",
-    label: "🎮 Gaming",
-    rows: [
-      { id: "sub_gaming_consoles", title: "Consoles", subcategory: "consoles" },
-      { id: "sub_gaming_controllers", title: "Controllers", subcategory: "controllers" },
-      { id: "sub_gaming_accessories", title: "Gaming Accessories", subcategory: "gaming-accessories" },
-    ],
-  },
-  cat_supermarket: {
-    category: "supermarket",
-    label: "🛒 Supermarket",
-    rows: [
-      { id: "sub_supermarket_food", title: "Food Cupboard", subcategory: "food-cupboard" },
-      { id: "sub_supermarket_drinks", title: "Drinks", subcategory: "drinks" },
-      { id: "sub_supermarket_household", title: "Household Supplies", subcategory: "household-supplies" },
-    ],
-  },
-  cat_baby: {
-    category: "baby-products",
-    label: "🍼 Baby Products",
-    rows: [
-      { id: "sub_baby_diapering", title: "Diapering", subcategory: "diapering" },
-      { id: "sub_baby_feeding", title: "Feeding", subcategory: "feeding" },
-      { id: "sub_baby_toys", title: "Toys", subcategory: "toys" },
-      { id: "sub_baby_gear", title: "Baby Gear", subcategory: "baby-gear" },
-    ],
-  },
+const SUBCATEGORY_LABELS = {
+  smartphones: "Smartphones",
+  tablets: "Tablets",
+  "power-banks": "Power Banks",
+  "phone-accessories": "Phone Accessories",
+  televisions: "Televisions",
+  headphones: "Headphones & Earbuds",
+  speakers: "Speakers",
+  "home-theatre": "Home Theatre",
+  "kitchen-appliances": "Kitchen Appliances",
+  kettles: "Kettles",
+  blenders: "Blenders",
+  irons: "Irons",
+  "washing-machines": "Washing Machines",
+  skincare: "Skincare",
+  haircare: "Hair Care",
+  makeup: "Makeup",
+  "personal-care": "Personal Care",
+  fragrances: "Fragrances",
+  "perfume-oils": "Perfume Oils",
+  "kitchen-dining": "Kitchen & Dining",
+  bedding: "Bedding",
+  cleaning: "Cleaning",
+  "home-decor": "Home Decor",
+  stationery: "Stationery",
+  "mens-fashion": "Men's Fashion",
+  "womens-fashion": "Women's Fashion",
+  shoes: "Shoes",
+  bags: "Bags",
+  watches: "Watches",
+  laptops: "Laptops",
+  printers: "Printers",
+  storage: "Storage",
+  "computer-accessories": "Accessories",
+  consoles: "Consoles",
+  controllers: "Controllers",
+  "gaming-accessories": "Gaming Accessories",
+  "food-cupboard": "Food Cupboard",
+  drinks: "Drinks",
+  "household-supplies": "Household Supplies",
+  diapering: "Diapering",
+  feeding: "Feeding",
+  toys: "Toys",
+  "baby-gear": "Baby Gear",
 };
 
-export function sendCategoryList(to) {
-  const options = Object.entries(CATEGORY_SUBMENUS).map(([id, menu]) => ({
+/** @type {Record<string, { browseCategory: string, label: string, rows: Array<Record<string, string>> }> | null} */
+let browseSubmenusCache = null;
+
+async function getBrowseSubmenus() {
+  if (!browseSubmenusCache) {
+    browseSubmenusCache = await buildBrowseSubmenus();
+  }
+  return browseSubmenusCache;
+}
+
+const CATALOG_REBUILD_MSG =
+  "We're rebuilding Sokoni Mall with a fresh catalog — nothing to browse yet.\n\n" +
+  "Tell me what you're looking for and we'll help you find it. Or tap *Talk to a Human* on the menu.\n\n" +
+  "_Type *menu* anytime._";
+
+async function sendCatalogRebuildNotice(to) {
+  return sendText(to, CATALOG_REBUILD_MSG);
+}
+
+export async function sendCategoryList(to) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
+  const submenus = await getBrowseSubmenus();
+  const options = Object.entries(submenus).map(([id, menu]) => ({
     id,
     label: menu.label,
   }));
   options.push({ id: "menu_main", label: "⬅ Main menu" });
-  return sendNumberedMenu(to, "Shop by category — all items are pay on delivery 💵", options);
+  return sendNumberedMenu(to, "Browse the shop — Women, Men, Kids, Sale & more 💵", options);
 }
 
-export function isCategoryMenuId(id) {
-  return Object.prototype.hasOwnProperty.call(CATEGORY_SUBMENUS, id);
+export async function isCategoryMenuId(id) {
+  const submenus = await getBrowseSubmenus();
+  return Object.prototype.hasOwnProperty.call(submenus, id);
 }
 
-export function sendCategorySubmenu(to, categoryMenuId) {
-  const menu = CATEGORY_SUBMENUS[categoryMenuId];
+export async function sendCategorySubmenu(to, categoryMenuId) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
+  const submenus = await getBrowseSubmenus();
+  const menu = submenus[categoryMenuId];
+  if (!menu) return sendMainMenu(to);
   const options = [
     ...menu.rows.map((row) => ({ id: row.id, label: row.title })),
     { id: "menu_main", label: "⬅ Main menu" },
   ];
-  return sendNumberedMenu(to, `${menu.label} — pick a sub-category:`, options);
+  return sendNumberedMenu(to, `${menu.label} — pick a section:`, options);
 }
 
-function findSubcategoryRow(rowId) {
-  for (const menu of Object.values(CATEGORY_SUBMENUS)) {
+async function findSubcategoryRow(rowId) {
+  const submenus = await getBrowseSubmenus();
+  for (const menu of Object.values(submenus)) {
     const row = menu.rows.find((r) => r.id === rowId);
-    if (row) return { category: menu.category, subcategory: row.subcategory };
+    if (row) {
+      return {
+        browseCategory: menu.browseCategory,
+        browseSubCategory: row.browseSubCategory || null,
+        priceTier: row.priceTier || null,
+        legacyCategory: row.legacyCategory || null,
+        legacySubcategory: row.legacySubcategory || null,
+        label: row.title,
+      };
+    }
   }
   return null;
 }
 
-export function isSubcategoryRowId(id) {
-  return Boolean(findSubcategoryRow(id));
+export async function isSubcategoryRowId(id) {
+  return Boolean(await findSubcategoryRow(id));
 }
 
-export async function sendProductsForSubcategory(to, rowId) {
-  const target = findSubcategoryRow(rowId);
+export async function sendProductsForSubcategory(to, rowId, page = 0) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
+  const target = await findSubcategoryRow(rowId);
   if (!target) return sendMainMenu(to);
-  const products = await searchProducts({
-    category: target.category,
-    subcategory: target.subcategory,
-    scope: "local",
-    fulfillment: "store",
-    limit: 4,
-  });
+  if (target.legacySubcategory === "perfume-oils") {
+    return sendPerfumeScentList(to, { page, rowId });
+  }
+
+  const maxPriceKes = target.priceTier ? priceTierMaxKes(target.priceTier) : null;
+  let products;
+  if (target.priceTier) {
+    products = await listBrowseProducts({
+      maxPriceKes: maxPriceKes ?? undefined,
+      scope: "local",
+      fulfillment: "store",
+    });
+  } else if (target.legacySubcategory) {
+    products = await listBrowseProducts({
+      legacyCategory: target.legacyCategory || undefined,
+      legacySubcategory: target.legacySubcategory,
+      scope: "local",
+      fulfillment: "store",
+    });
+  } else {
+    products = await listBrowseProducts({
+      browseCategory: target.browseCategory,
+      browseSubCategory: target.browseSubCategory || undefined,
+      scope: "local",
+      fulfillment: "store",
+    });
+  }
+
   if (products.length === 0) {
-    await sendText(to, "I don't have picks here yet — reply *1* on the main menu to browse categories.");
+    await sendText(to, "I don't have picks here yet — reply *1* on the main menu to browse.");
     return sendMainMenu(to);
   }
-  return sendNumberedProductList(to, products, { title: "Here are my top picks 👇" });
+
+  const label = target.label || target.browseSubCategory || "Items";
+  return sendPaginatedProductList(to, products, {
+    title: `*${label}* — full catalog (${products.length} items)`,
+    page,
+    rowId,
+  });
+}
+
+/** Step 1: scent names only (no size) — paginated. */
+export async function sendPerfumeScentList(to, { page = 0, rowId = "sub_women_perfume-oils" } = {}) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
+  const allFamilies = await listPerfumeScentFamilies();
+  const total = allFamilies.length;
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const start = safePage * CATALOG_PAGE_SIZE;
+  const pageFamilies = allFamilies.slice(start, start + CATALOG_PAGE_SIZE);
+
+  const lines = pageFamilies.map((name, i) => `${formatListNumber(i + 1)} *${name}*`);
+
+  let navFooter = "";
+  if (totalPages > 1) {
+    navFooter = `\n\n📄 Page ${safePage + 1} of ${totalPages} · ${total} scents`;
+    if (safePage + 1 < totalPages) navFooter += `\nReply *next* for more.`;
+    if (safePage > 0) navFooter += `\nReply *prev* for previous page.`;
+  }
+
+  setMenuState(to, {
+    type: "scent_list_paged",
+    scentFamilies: allFamilies,
+    pageFamilies,
+    page: safePage,
+    pageSize: CATALOG_PAGE_SIZE,
+    rowId,
+  });
+
+  return sendText(
+    to,
+    `*Perfume Oils* — pick a scent (${total} available)\n\n${lines.join("\n")}\n\n` +
+      `*Reply with the number* (e.g. 1) or type the scent name (e.g. *BRUT*).${navFooter}\n` +
+      `_Type *menu* anytime._`
+  );
+}
+
+/** Step 2: sizes + images for one scent. */
+export async function sendPerfumeSizePicker(to, scentFamily) {
+  const variants = await getPerfumeVariantsForFamily(scentFamily);
+  if (variants.length === 0) {
+    return sendText(to, `Sorry, *${scentFamily}* isn't available right now. Type *menu* to browse.`);
+  }
+
+  const lines = variants.map((p, i) => {
+    const label = p.volumeMl === 1000 ? "1 Litre" : `${p.volumeMl}ml`;
+    return `${formatListNumber(i + 1)} *${label}* — ${formatProductListPrice(p)} · 100% prepaid`;
+  });
+
+  setMenuState(to, {
+    type: "size_pick",
+    scentFamily,
+    productIds: variants.map((p) => p.id),
+  });
+
+  await sendText(
+    to,
+    `You chose: *${scentFamily}*\n\n*Pick your size:*\n\n${lines.join("\n\n")}\n\n` +
+      `*Reply with the number* to order that size.\n_Type *menu* anytime._`
+  );
+
+  for (const product of variants) {
+    await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+  }
+  return true;
+}
+
+/** Paginated product list — reply *next* / *prev* to browse large categories. */
+export async function sendPaginatedProductList(
+  to,
+  allProducts,
+  { title = "Pick an item", page = 0, footer = "", rowId = null } = {}
+) {
+  const total = allProducts.length;
+  const totalPages = Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const start = safePage * CATALOG_PAGE_SIZE;
+  const pageProducts = allProducts.slice(start, start + CATALOG_PAGE_SIZE);
+
+  const lines = pageProducts.map(
+    (p, i) =>
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatProductListPrice(p)} · ⭐ ${p.rating} · 100% prepaid`
+  );
+
+  let navFooter = "";
+  if (totalPages > 1) {
+    navFooter = `\n\n📄 Page ${safePage + 1} of ${totalPages}`;
+    if (safePage + 1 < totalPages) navFooter += `\nReply *next* for more items.`;
+    if (safePage > 0) navFooter += `\nReply *prev* for previous page.`;
+  }
+
+  setMenuState(to, {
+    type: "product_list_paged",
+    allProductIds: allProducts.map((p) => p.id),
+    page: safePage,
+    pageSize: CATALOG_PAGE_SIZE,
+    productIds: pageProducts.map((p) => p.id),
+    rowId,
+  });
+
+  await sendText(
+    to,
+    `${title}\n\n${lines.join("\n\n")}\n\n` +
+      `*Reply with the number* (e.g. 1) to order that item.${navFooter}${footer}\n` +
+      `_Type *menu* anytime._`
+  );
+
+  if (total <= 6) {
+    for (const product of pageProducts) {
+      await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
 }
 
 export async function sendDealsOfTheDay(to) {
+  if (await isCatalogPubliclyDisabled()) {
+    return sendCatalogRebuildNotice(to);
+  }
   const deals = await searchProducts({
     scope: "local",
     fulfillment: "store",
     limit: 5,
   });
-  return sendNumberedProductList(to, deals, { title: "🔥 Today's Picks — pay on delivery 💵" });
+  return sendNumberedProductList(to, deals, { title: "🔥 Today's Picks — 100% prepaid 💵" });
 }
 
 /** Show a numbered list — customer replies 1, 2, 3 to pick an item. */
-export async function sendNumberedProductList(to, products, { title = "Pick an item" } = {}) {
+export async function sendNumberedProductList(to, products, { title = "Pick an item", footer = "" } = {}) {
+  if (!products?.length) {
+    return sendCatalogRebuildNotice(to);
+  }
   const lines = products.map(
     (p, i) =>
-      `${i + 1}. *${p.name}*\n   KES ${p.priceKes.toLocaleString()} · ⭐ ${p.rating} · pay on delivery`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatProductListPrice(p)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   const options = products.map((p) => ({
     id: `pick_${p.id}`,
-    label: `${p.name} — KES ${p.priceKes.toLocaleString()}`,
+    label: `${p.name} — ${formatProductListPrice(p)}`,
   }));
   options.push({ id: "menu_main", label: "⬅ Main menu" });
 
@@ -240,11 +403,12 @@ export async function sendNumberedProductList(to, products, { title = "Pick an i
     `${title}\n\n${lines.join("\n\n")}\n\n` +
       `*Reply with the number* (e.g. 1) to order that item.\n` +
       `Or swipe-reply on a product line and type *1* to order it.\n` +
-      `_Type *menu* anytime._`
+      `_Type *menu* anytime._${footer}`
   );
 
   for (const product of products) {
     await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: false });
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 
@@ -253,7 +417,9 @@ export async function showProductActions(to, productId) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
   setProductContext(to, product);
-  await sendProductCard(to, product, null, SOURCE_LABELS[product.source], { setActions: true });
+  const affiliateUrl =
+    product.fulfillment === "store" ? null : buildAffiliateLink(product, to);
+  return sendProductCard(to, product, affiliateUrl, SOURCE_LABELS[product.source], { setActions: true });
 }
 
 export async function sendInternationalMenu(to) {
@@ -281,67 +447,180 @@ export async function sendInternationalTrending(to) {
   }
 }
 
-const STATUS_STEPS = ["received", "confirmed", "packed", "out_for_delivery", "delivered"];
+const STATUS_STEPS = ["awaiting_payment", "confirmed", "packed", "out_for_delivery", "delivered"];
 
-function renderStatusTimeline(currentStatus) {
+function timelineStatus(order) {
+  if (!order) return "received";
+  if (order.status === "received" && order.paymentModel === "prepaid") return "awaiting_payment";
+  return order.status;
+}
+
+function formatOrderKes(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString();
+}
+
+function paymentLineForOrder(order) {
+  if (isPrepaidOnly() || order.paymentModel === "prepaid") return prepaidPaymentLine(order);
+  if (order.customerPaymentStatus === "confirmed") return "✅ Payment confirmed";
+  if (order.customerPaymentStatus === "claimed") return "⏳ Payment pending verification";
+  return "100% prepaid";
+}
+
+async function sendPaymentReminderSafe(to, order) {
+  if (!order) return;
+  try {
+    const reminder = formatShortPaymentReminder(order);
+    if (reminder) await sendText(to, reminder);
+  } catch (err) {
+    console.error("[payment] reminder failed:", err.message);
+  }
+}
+
+async function sendPrepaidCheckoutSafe(to, order) {
+  if (!order) return;
+  try {
+    const fresh = getOrder(order.id) || order;
+    const meta = getCustomerMeta(to) || {};
+    const phone = fresh.phone || meta.phone;
+    const result = await initiateMpesaCheckout(fresh, { phone });
+    const updated = getOrder(order.id) || fresh;
+
+    if (result.alreadyPaid) return;
+
+    if (result.ok) {
+      await sendText(to, formatPrepaidCheckoutPrompt(updated));
+      return;
+    }
+
+    await sendText(
+      to,
+      `⚠️ Couldn't start M-Pesa payment${result.message ? `: ${result.message}` : ""}.\n\n` +
+        `Reply *pay* to retry STK push.\n\n` +
+        formatPrepaidCheckoutPrompt(updated)
+    );
+  } catch (err) {
+    console.error("[checkout] prepaid prompt failed:", err.message);
+    await sendText(to, formatPrepaidCheckoutPrompt(order));
+  }
+}
+
+function pickPaymentReminderOrder(orders) {
+  const eligible = orders.filter(
+    (o) => o.customerPaymentStatus !== "confirmed" && o.status !== "cancelled"
+  );
+  const priority = ["awaiting_payment", "out_for_delivery", "packed", "confirmed", "received"];
+  for (const st of priority) {
+    const hit = eligible.find((o) => o.status === st);
+    if (hit) return hit;
+  }
+  return eligible[0] || null;
+}
+
+function orderBelongsToCustomer(order, customerKey, phone = "") {
+  if (!order) return false;
+  if (order.customerKey === customerKey) return true;
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return false;
+  const norm = (d) => {
+    if (d.startsWith("254")) return d;
+    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
+    if (d.length === 9) return `254${d}`;
+    return d;
+  };
+  const want = norm(digits);
+  const orderPhone = norm(String(order.phone || "").replace(/\D/g, ""));
+  return orderPhone === want;
+}
+
+function renderStatusTimeline(order) {
+  const currentStatus = timelineStatus(order);
   if (currentStatus === "cancelled") return "❌ This order was cancelled.";
+
+  if (order.customerPaymentStatus === "confirmed" || getEffectiveShipmentStatus(order) !== "pending") {
+    const shipLine = shipmentStatusLabel(getEffectiveShipmentStatus(order));
+    return `*Shipment*\n${renderShipmentTimelineText(order)}\n_Current: ${shipLine}_`;
+  }
+
   const idx = STATUS_STEPS.indexOf(currentStatus);
+  const safeIdx = idx >= 0 ? idx : 0;
   return STATUS_STEPS.map((s, i) => {
-    const mark = i < idx ? "✅" : i === idx ? "🔵" : "⚪";
+    const mark = i < safeIdx ? "✅" : i === safeIdx ? "🔵" : "⚪";
     return `${mark} ${statusLabel(s)}`;
   }).join("\n");
 }
 
 function renderOrderCard(order) {
+  const courierLine =
+    order.courierName || order.courierTrackingRef
+      ? `🚚 Courier: ${order.courierName || "—"}${order.courierTrackingRef ? ` · Ref *${order.courierTrackingRef}*` : ""}\n`
+      : "";
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
-    `💰 KES ${order.priceKes.toLocaleString()} — pay on delivery\n` +
-    `📍 ${order.location}\n\n` +
-    `${renderStatusTimeline(order.status)}`
+    `💰 ${formatBuyerTotalLine(order)} — ${paymentLineForOrder(order)}\n` +
+    `📍 ${order.location}\n` +
+    `🚚 ${formatFulfillmentLine(order)}\n` +
+    courierLine +
+    `\n${renderStatusTimeline(order)}`
   );
 }
 
 /** Show a specific order by ID (customer typed e.g. SK-1042). */
-export function sendOrderStatus(to, orderId) {
+export async function sendOrderStatus(to, orderId, phone = "") {
   const order = getOrder(orderId);
-  if (!order || order.customerKey !== to) {
+  if (!orderBelongsToCustomer(order, to, phone)) {
     return sendText(to, `I couldn't find order *${orderId}* on this number. Type *track* to see your orders.`);
   }
-  return sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
+  try {
+    await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
+    await sendPaymentReminderSafe(to, order);
+    return true;
+  } catch (err) {
+    console.error("[track] sendOrderStatus failed:", err.message);
+    return sendText(to, "Sorry, could not load that order. Type *track* to try again.");
+  }
 }
 
-export async function sendTrackOrderMenu(to) {
-  const orders = getOrdersForCustomer(to);
-  const pending = getPendingOrder(to);
+export async function sendTrackOrderMenu(to, phone = "") {
+  try {
+    const orders = getOrdersForCustomer(to, phone);
+    const pending = getPendingOrder(to);
 
-  if (orders.length === 0 && !pending) {
-    return sendText(
+    if (orders.length === 0 && !pending) {
+      return sendText(
+        to,
+        `📦 *Track your Sokoni order*\n\n` +
+          `You don't have any orders yet.\n\n` +
+          `Type *menu* → browse → reply *1* on an item to order. All orders are *100% prepaid* 💵`
+      );
+    }
+
+    const blocks = [];
+    if (pending) {
+      blocks.push(
+        `⏳ *Order not finished*\n` +
+          `${pending.name} — ${formatBuyerTotalLine(pending)}\n` +
+          `Send your name, location & phone to complete it, or type *cancel*.`
+      );
+    }
+    for (const order of orders.slice(0, 3)) {
+      blocks.push(renderOrderCard(order));
+    }
+
+    await sendText(
       to,
-      `📦 *Track your Sokoni order*\n\n` +
-        `You don't have any orders yet.\n\n` +
-        `Type *menu* → browse → reply *1* on an item to order. All orders are *pay on delivery* 💵`
+      `📦 *Your Sokoni orders*\n\n` +
+        blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
+        `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
     );
+    await sendPaymentReminderSafe(to, pickPaymentReminderOrder(orders));
+    return true;
+  } catch (err) {
+    console.error("[track] sendTrackOrderMenu failed:", err.message);
+    return sendText(to, "Sorry, could not load your orders. Type *track* again or *menu* for help.");
   }
-
-  const blocks = [];
-  if (pending) {
-    blocks.push(
-      `⏳ *Order not finished*\n` +
-        `${pending.name} — KES ${pending.priceKes.toLocaleString()}\n` +
-        `Send your name, location & phone to complete it, or type *cancel*.`
-    );
-  }
-  for (const order of orders.slice(0, 3)) {
-    blocks.push(renderOrderCard(order));
-  }
-
-  return sendText(
-    to,
-    `📦 *Your Sokoni orders*\n\n` +
-      blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
-      `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
-  );
 }
 
 /** Recent TikTok/viral featured deals (synced from backend cron). */
@@ -382,14 +661,15 @@ export async function sendHumanHandoff(customerKey, { chatId, displayName, phone
 }
 
 export function sendHowItWorks(to) {
+  return sendText(to, `${howItWorksMessage()}\n\n${siteUrlLine()}`);
+}
+
+export function sendWebsiteLink(to) {
   return sendText(
     to,
-    `*How ${config.brand.name} works* 🛍️\n\n` +
-      `1️⃣ Browse our store and pick what you like (reply with numbers from the menu).\n` +
-      `2️⃣ Reply *1* to order and share your name, location & phone in one message.\n` +
-      `3️⃣ We deliver to you — and you *pay on delivery* (cash or M-Pesa to the rider).\n\n` +
-      `No paying upfront, no risk. ${config.store.deliveryNote}\n\n` +
-      `Type "menu" anytime to start again.`
+    `${siteUrlLine("Shop Sokoni online")}\n\n` +
+      `Browse all categories, hot deals & viral bargains — then order here on WhatsApp (100% prepaid 💵).\n\n` +
+      `_Type *menu* to continue shopping in chat._`
   );
 }
 
@@ -399,111 +679,33 @@ export async function sendProductFollowUpContext(id) {
 }
 
 export async function startCodOrder(to, productId) {
+  return startPrepaidOrder(to, productId);
+}
+
+export async function startPrepaidOrder(to, productId) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
+  const totals = computeProductTotals(product);
   setPendingOrder(to, {
     productId: product.id,
     name: product.name,
-    priceKes: product.priceKes,
+    priceKes: totals.itemKes,
+    shippingKes: totals.shippingKes,
+    totalKes: totals.totalKes,
   });
   return sendText(
     to,
     `Great choice! 🛍️\n` +
-      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (pay on delivery)\n\n` +
+      `*${product.name}*\n` +
+      `${formatBuyerTotalLine(totals)} (100% prepaid · escrow)\n\n` +
       `To place your order, reply in *one message* with:\n` +
       `1️⃣ Your full name\n` +
       `2️⃣ Delivery location (estate/town + a landmark)\n` +
       `3️⃣ Phone number for the rider\n\n` +
       `_Example: Jane Wanjiru, Umoja 1 near the market, 07xx xxx xxx_\n\n` +
+      `You'll pay upfront via M-Pesa before we dispatch — no COD.\n\n` +
       `Wrong item? Type *cancel* or tell me the correct product name.`
   );
-}
-
-function normalizeKenyanPhone(raw) {
-  const digits = String(raw).replace(/\D/g, "");
-  if (digits.startsWith("254") && digits.length === 12) return `0${digits.slice(3)}`;
-  if (digits.startsWith("0") && digits.length === 10) return digits;
-  if (digits.length === 9 && /^[17]/.test(digits)) return `0${digits}`;
-  return null;
-}
-
-function isOrderCorrectionMessage(text) {
-  const lower = text.toLowerCase();
-  return (
-    /^(cancel|stop|nevermind|abort)(\s+order)?$/i.test(lower) ||
-    /cancel order|change order|wrong item|wrong product/i.test(lower) ||
-    /change|instead|wrong|not .*want|i choose|i wanted/i.test(lower) ||
-    (/\bnot\b/i.test(lower) && /tv|phone|redmi|hisense|samsung|infinix|item|product/i.test(lower))
-  );
-}
-
-/**
- * Strict parse — order only completes when name, location, and phone are all present.
- * Returns null if anything is missing or the message looks like a product/correction.
- */
-function parseDeliveryDetails(text) {
-  const t = text.trim();
-  if (!t || t.length < 12) return null;
-
-  if (/^(yes|ok|okay|sure|confirm|proceed|done|thanks?|thank you|hi|hello|menu|\d{1,2})$/i.test(t)) {
-    return null;
-  }
-
-  if (isOrderCorrectionMessage(t)) return null;
-
-  const phoneMatch = t.match(/(?:\+?254|0)\d[\d\s-]{7,12}\d/);
-  if (!phoneMatch) return null;
-
-  const phone = normalizeKenyanPhone(phoneMatch[0]);
-  if (!phone) return null;
-
-  const withoutPhone = t
-    .replace(phoneMatch[0], "")
-    .replace(/[,;]\s*$/, "")
-    .trim();
-
-  const parts = withoutPhone
-    .split(/[,;]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (parts.length < 2) return null;
-
-  const name = parts[0];
-  const location = parts.slice(1).join(", ");
-
-  if (name.length < 3 || name.split(/\s+/).length < 2) return null;
-  if (location.length < 8) return null;
-  if (/^(i want|i choose|looking for|send|show|hisense|redmi|samsung|infinix|smart tv|phone)/i.test(name)) {
-    return null;
-  }
-  if (!/[a-z]/i.test(location)) return null;
-
-  return { name, location, phone, raw: t };
-}
-
-function deliveryDetailsHint(_parsedAttempt, text) {
-  const t = text.trim();
-  const hasPhone = /(?:\+?254|0)\d[\d\s-]{7,12}\d/.test(t);
-  const parts = t
-    .replace(/(?:\+?254|0)\d[\d\s-]{7,12}\d/g, "")
-    .split(/[,;]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (!hasPhone) {
-    return "Please include your *phone number* for the rider (e.g. 0712345678).";
-  }
-  if (parts.length < 2) {
-    return "Please send *name and location* separated by a comma.";
-  }
-  if (parts[0].split(/\s+/).length < 2) {
-    return "Please include your *full name* (first and last name).";
-  }
-  if (parts.slice(1).join(", ").length < 8) {
-    return "Please include a clearer *delivery location* (estate/town + landmark).";
-  }
-  return "Please send all three in one message: *full name, location, phone*.";
 }
 
 /** Handle messages while customer is mid-order (before confirm). */
@@ -521,7 +723,7 @@ export async function tryHandlePendingOrder(to, text) {
 
   if (isOrderCorrectionMessage(text)) {
     const alt = await findProductFromMessage(text);
-    if (alt) return startCodOrder(to, alt.id);
+    if (alt) return startPrepaidOrder(to, alt.id);
     clearPendingOrder(to);
     await sendText(
       to,
@@ -532,19 +734,21 @@ export async function tryHandlePendingOrder(to, text) {
 
   const parsed = parseDeliveryDetails(text);
   if (!parsed) {
-    const alt = await findProductFromMessage(text);
-    if (alt && alt.id !== pending.productId) return startCodOrder(to, alt.id);
+    if (!looksLikeDeliveryDetails(text)) {
+      const alt = await findProductFromMessage(text);
+      if (alt && alt.id !== pending.productId) return startPrepaidOrder(to, alt.id);
+    }
     await sendText(
       to,
       `Still ordering *${pending.name}*.\n\n` +
-        `${deliveryDetailsHint(null, text)}\n\n` +
+        `${deliveryDetailsHint(text)}\n\n` +
         `_Example: Jane Wanjiru, Umoja 1 near the market, 0712345678_\n\n` +
         `Wrong item? Type *cancel* or say e.g. "I want Hisense TV instead".`
     );
     return true;
   }
 
-  return confirmCodOrder(to, parsed);
+  return confirmPrepaidOrder(to, parsed);
 }
 
 export async function cancelOrder(to) {
@@ -571,17 +775,17 @@ export async function handleCart(to) {
   if (pending) {
     return sendText(
       to,
-      `🛒 *Your current order:*\n*${pending.name}* — KES ${pending.priceKes.toLocaleString()} (pay on delivery)\n\n` +
+      `🛒 *Your current order:*\n*${pending.name}*\n${formatBuyerTotalLine(pending)} (100% prepaid)\n\n` +
         `Send delivery details to complete, or type *cancel* / *change order*.`
     );
   }
   return sendText(
     to,
-    "Sokoni orders one item at a time (pay on delivery — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
+    "Sokoni orders one item at a time (100% prepaid — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
   );
 }
 
-export async function confirmCodOrder(to, parsed) {
+export async function confirmPrepaidOrder(to, parsed) {
   const pending = getPendingOrder(to);
   if (!pending) return false;
 
@@ -591,7 +795,7 @@ export async function confirmCodOrder(to, parsed) {
     await sendText(
       to,
       `I can't place the order yet — I still need your delivery details.\n\n` +
-        `${deliveryDetailsHint(null, typeof parsed === "string" ? parsed : "")}\n\n` +
+        `${deliveryDetailsHint(typeof parsed === "string" ? parsed : text)}\n\n` +
         `_Example: Jane Wanjiru, Umoja 1 near the market, 0712345678_`
     );
     return true;
@@ -602,12 +806,17 @@ export async function confirmCodOrder(to, parsed) {
   setCustomerMeta(to, { phone: details.phone.replace(/\D/g, "") });
 
   const meta = getCustomerMeta(to) || {};
+  const catalogProduct = pending.productId ? await getProductById(pending.productId) : null;
+  const productForOrder = catalogProduct
+    ? { ...catalogProduct, productId: catalogProduct.id }
+    : pending;
+
   let order = null;
   try {
     order = createOrder({
       customerKey: to,
       chatId: meta.chatId || to,
-      product: pending,
+      product: productForOrder,
       details,
     });
   } catch (err) {
@@ -633,7 +842,7 @@ export async function confirmCodOrder(to, parsed) {
       await fetch(config.adminNotifyUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "cod_order", from: to, order, details }),
+        body: JSON.stringify({ type: "prepaid_order", from: to, order, details }),
       });
     } catch (err) {
       console.error("Failed to notify admin of order:", err.message);
@@ -643,22 +852,29 @@ export async function confirmCodOrder(to, parsed) {
   const orderRef = order?.id;
   await sendText(
     to,
-    `✅ *Order received!*${orderRef ? `  ·  *${orderRef}*` : ""}\n\n` +
-      `🧾 *Order summary*\n` +
-      `━━━━━━━━━━━━━━━\n` +
-      `🛍️ ${pending.name}\n` +
-      `💰 KES ${pending.priceKes.toLocaleString()} — *pay on delivery*\n` +
-      `━━━━━━━━━━━━━━━\n` +
-      `📍 ${details.name} — ${details.location}\n` +
-      `📞 ${details.phone}\n\n` +
-      `${order ? `Status: ${statusLabel(order.status)}\n` : ""}` +
-      `Our team will confirm shortly. ${config.store.deliveryNote}\n\n` +
-      `${orderRef ? `_Track anytime: type *track* or *${orderRef}*._\n` : ""}` +
-      `Asante for shopping with Sokoni! 🙏`
+    prepaidOrderPlacedMessage({
+      orderId: orderRef || "pending",
+      productName: pending.name,
+      amountKes: order ? orderBuyerTotal(order) : pending.totalKes ?? pending.priceKes,
+      itemKes: order?.priceKes ?? pending.priceKes,
+      shippingKes: order?.shippingKes ?? pending.shippingKes,
+      customerName: details.name,
+      location: details.location,
+      phone: details.phone,
+    }) +
+      (order ? `\nStatus: ${statusLabel(order.status)}` : "") +
+      `\n\n${siteUrlLine()}` +
+      (orderRef ? `\n💳 Pay online: ${checkoutUrlForOrder(orderRef)}` : "")
   );
 
+  if (order) await sendPrepaidCheckoutSafe(to, order);
   await sendUpsell(to, pending);
   return true;
+}
+
+/** @deprecated alias — Phase 5 prepaid-only */
+export async function confirmCodOrder(to, parsed) {
+  return confirmPrepaidOrder(to, parsed);
 }
 
 /** Suggest a popular add-on after an order (TakeApp-style best-seller nudge). */
@@ -680,7 +896,7 @@ async function sendUpsell(to, justOrdered) {
       to,
       `🔥 *Customers also love…*\n\n` +
         `*${suggestion.name}*\n` +
-        `KES ${suggestion.priceKes.toLocaleString()} · ⭐ ${suggestion.rating} · pay on delivery\n\n` +
+        `KES ${formatProductListPrice(suggestion)} · ⭐ ${suggestion.rating} · 100% prepaid\n\n` +
         `Add it too? Reply *1* to order, or *menu* to keep shopping.`
     );
   } catch (err) {
@@ -692,22 +908,29 @@ async function sendUpsell(to, justOrdered) {
 export async function handleMenuAction(from, id) {
   if (id === "menu_main") return sendMainMenu(from);
   if (id === "shop_all") return sendCategoryList(from);
-  if (isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
-  if (isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
-  if (id.startsWith("order_")) return startCodOrder(from, id.replace("order_", ""));
+  if (await isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
+  if (await isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
+  if (id.startsWith("order_")) return startPrepaidOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);
-  if (id === "intl_shop") return sendInternationalMenu(from);
-  if (id === "intl_trending") return sendInternationalTrending(from);
-  if (id === "intl_custom") {
-    return sendText(from, "Tell me what you're looking for and I'll search AliExpress, Temu and Amazon for you! 🌍");
+  if (id === "intl_shop" || id === "intl_trending" || id === "intl_custom") {
+    return sendText(
+      from,
+      "Sokoni Mall is *100% local & prepaid* — brand new and pre-loved items from Kenya sellers only.\n\nType *menu* to browse, or tell me what you're looking for."
+    );
   }
-  if (id === "track_order") return sendTrackOrderMenu(from);
+  if (id === "track_order") return sendTrackOrderMenu(from, getCustomerMeta(from)?.phone || "");
+  if (id === "visit_site") return sendWebsiteLink(from);
   if (id === "human_handoff") {
     const meta = getCustomerMeta(from) || {};
     return sendHumanHandoff(from, { ...meta, lastMessage: "Menu → Talk to a Human" });
   }
   if (id === "how_it_works") return sendHowItWorks(from);
+  if (id.startsWith("vendor_")) {
+    const { handleVendorMenuAction } = await import("./role-menus.js");
+    const phone = getCustomerMeta(from)?.phone || "";
+    return handleVendorMenuAction(from, id, { phone });
+  }
   if (id.startsWith("ask_ai_")) {
     const product = await sendProductFollowUpContext(id);
     if (product) {

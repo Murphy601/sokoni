@@ -20,8 +20,18 @@ services:
       # NOWEB = no Chromium browser (more reliable on Windows Docker)
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_PRINT_QR: "true"
+      # Save incoming images/files so the bot can download them (required for catalog photos)
+      WHATSAPP_DOWNLOAD_MEDIA: "true"
+      # Keep files until manually cleared — default 180s deletes files during large album uploads
+      WHATSAPP_FILES_LIFETIME: "0"
+      WHATSAPP_FILES_FOLDER: /app/.media
+    extra_hosts:
+      # Lets WAHA reach the bot on the host (pm2 :3001) from inside the container.
+      - "host.docker.internal:host-gateway"
     volumes:
       - waha_sessions:/app/.sessions
+      - waha_media:/app/.media
 
 volumes:
   waha_sessions:
+  waha_media:

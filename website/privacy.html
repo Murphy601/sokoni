@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy Policy — Sokoni Mall</title>
+<meta name="description" content="Privacy Policy for Sokoni Mall — how we handle your data when you shop, sell, or track orders on WhatsApp and sokonimall.com." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#FF2300', purple: '#000000', purpleLight: '#121212', cream: '#121212' },
+        },
+        fontFamily: {
+          sans: ['Inter', '"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-black text-zinc-300 font-sans antialiased">
+  <header class="border-b border-zinc-800 bg-black/90 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium text-zinc-400 hover:text-white transition">← Back to Sokoni</a>
+      <a href="terms.html" class="text-sm text-zinc-500 hover:text-white transition">Terms of Service</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-5 py-12 legal-prose">
+    <h1 class="text-3xl font-bold text-white tracking-tight mb-2">Privacy Policy</h1>
+    <p class="text-sm text-zinc-500 mb-10">Last updated: 27 July 2026 · Applies to sokonimall.com, Sokoni Mall on WhatsApp, seller listings, and pickup point applications</p>
+
+    <p><strong>Sokoni Mall Enterprise</strong> (“we”, “us”) respects your privacy. This Policy explains what we collect, why, and your choices when you use our prepaid marketplace and WhatsApp assistant.</p>
+
+    <h2>1. Information we collect</h2>
+    <ul>
+      <li><strong>WhatsApp messages</strong> — text you send to our business number, including order details, names, delivery addresses, and phone numbers.</li>
+      <li><strong>Order data</strong> — products ordered, SK-#### order IDs, shipment status, escrow status, and M-Pesa payment confirmations.</li>
+      <li><strong>Payment data</strong> — M-Pesa STK callbacks (amount, receipt number, phone); manual <em>paid</em> claims you send in chat for till verification.</li>
+      <li><strong>Reviews</strong> — star ratings and comments you submit on WhatsApp or our website.</li>
+      <li><strong>Seller listings</strong> — photos, titles, descriptions, prices, tags, condition (brand new / pre-loved), and seller contact details submitted at <a href="suppliers/list.html">sokonimall.com/suppliers/list</a>.</li>
+      <li><strong>Feed &amp; browse behaviour</strong> — anonymous session events (views, saves, clicks) on the website to improve recommendations.</li>
+      <li><strong>Pickup point applications</strong> — shop name, contact, location, hours, and M-Pesa details if you apply at <a href="pickup-points.html">pickup-points.html</a>.</li>
+      <li><strong>Website usage</strong> — browser type, pages viewed, and preferences stored locally (e.g. dark mode, saved bag) via localStorage.</li>
+      <li><strong>Technical logs</strong> — IP addresses, timestamps, and error data for security and debugging.</li>
+    </ul>
+    <p>We do not collect M-Pesa PINs, card numbers, or passwords through WhatsApp or our website.</p>
+
+    <h2>2. How we use information</h2>
+    <ul>
+      <li>Process prepaid orders and hold funds in escrow until delivery</li>
+      <li>Send order, shipment, and payout updates</li>
+      <li>Moderate seller listings and enforce marketplace policies</li>
+      <li>Review pickup point applications and pay commissions</li>
+      <li>Power Sokoni Plug AI search and support (local catalog only)</li>
+      <li>Improve feed ranking and product recommendations</li>
+      <li>Display customer reviews on our website (first name and comment)</li>
+      <li>Post marketing content (e.g. TikTok) featuring products — not your private messages</li>
+      <li>Prevent fraud and abuse</li>
+    </ul>
+
+    <h2>3. Conversational AI</h2>
+    <p>By using Sokoni Plug on WhatsApp or <a href="ask.html">ask.html</a>, you agree to processing necessary to fulfill requests:</p>
+    <ul>
+      <li><strong>What we send to AI:</strong> your message text and relevant catalog/order context — not M-Pesa PINs or card data.</li>
+      <li><strong>Scope:</strong> local Sokoni listings only. The assistant does not search international marketplaces.</li>
+      <li><strong>Providers:</strong> secure API layers (e.g. OpenAI via our backend). Sub-processors do not receive financial credentials.</li>
+      <li><strong>We do not sell</strong> your chat history or phone number to third-party marketers.</li>
+    </ul>
+
+    <h2>4. Third-party services</h2>
+    <p>We use trusted providers including:</p>
+    <ul>
+      <li><strong>WhatsApp / WAHA</strong> — messaging</li>
+      <li><strong>Safaricom Daraja</strong> — M-Pesa STK payments</li>
+      <li><strong>Cloudflare</strong> — website hosting and security</li>
+      <li><strong>AI providers</strong> — conversational replies</li>
+      <li><strong>TikTok</strong> — optional social posting</li>
+    </ul>
+    <p>Each provider has its own privacy policy. WhatsApp is operated by Meta; your use of WhatsApp is also subject to Meta's policies.</p>
+
+    <h2>5. Sharing</h2>
+    <p>We do not sell your personal data. We may share information with:</p>
+    <ul>
+      <li><strong>Sellers</strong> — order and item details needed to fulfill; buyer contact when required for hub drop-off or delivery.</li>
+      <li><strong>Logistics partners &amp; pickup points</strong> — name, phone, and SK-#### needed for delivery or collection.</li>
+      <li><strong>Service providers</strong> — who help us operate payments, hosting, and messaging under contract.</li>
+      <li><strong>Authorities</strong> — when required by law.</li>
+    </ul>
+    <p><strong>Sellers:</strong> listing photos and descriptions appear on the public storefront. Your phone may be used internally for payout and order coordination.</p>
+    <p><strong>Pickup points:</strong> approved partners may appear on our website (shop name, area, hours). We contact applicants on WhatsApp for operational updates.</p>
+
+    <h2>6. Retention</h2>
+    <p>We keep order, payment, and contact records as long as needed for business, legal, escrow, and support purposes, then delete or anonymise when no longer required.</p>
+
+    <h2>7. Security</h2>
+    <p>We use reasonable measures (HTTPS, access controls, token-gated admin APIs). No online service is 100% secure.</p>
+
+    <h2>8. Your rights</h2>
+    <p>Under applicable Kenyan data-protection law, you may request access, correction, or deletion of your personal data. Contact us on WhatsApp or email and we will respond within a reasonable time.</p>
+
+    <h2>9. Children</h2>
+    <p>Sokoni is not directed at children under 13. We do not knowingly collect data from children.</p>
+
+    <h2>10. Cross-border processing</h2>
+    <p>Some providers (AI, Cloudflare) may process data outside Kenya. We use them only where necessary to provide the service.</p>
+
+    <h2>11. Changes</h2>
+    <p>We may update this Policy. The “Last updated” date will change. Material changes may be announced on our website or WhatsApp channel.</p>
+
+    <h2>12. Contact</h2>
+    <p>Privacy questions or data requests:</p>
+    <ul>
+      <li>WhatsApp / calls: <a href="https://wa.me/254117422428">+254 117 422 428</a></li>
+      <li>Email: <a href="mailto:support@sokonimall.com">support@sokonimall.com</a></li>
+      <li>Website: <a href="https://sokonimall.com">sokonimall.com</a></li>
+    </ul>
+  </main>
+
+  <footer class="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500">
+    <p><a href="index.html" class="hover:text-white transition-colors">Home</a> · <a href="faq.html" class="hover:text-white transition-colors">FAQ</a> · <a href="terms.html" class="hover:text-white transition-colors">Terms</a> · <a href="privacy.html" class="hover:text-white transition-colors">Privacy</a></p>
+    <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace.</p>
+  </footer>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

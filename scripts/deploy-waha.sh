@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Start/recreate WAHA with media settings required for WhatsApp catalog photo uploads.
+# Safe on docker-compose v1 (no --force-recreate — that triggers ContainerConfig KeyError).
+set -euo pipefail
+
+REPO="${SOKONI_REPO:-$HOME/sokoni}"
+COMPOSE_FILE="$REPO/docker-compose.waha.yml"
+
+# GCP VM may have docker-compose (v1) instead of "docker compose" (v2 plugin).
+docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    echo "ERROR: Docker Compose not found."
+    echo "Install one of:"
+    echo "  sudo apt install docker-compose-plugin   # docker compose"
+    echo "  sudo apt install docker-compose            # docker-compose"
+    exit 1
+  fi
+}
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "ERROR: Missing $COMPOSE_FILE — run: cd ~/sokoni && git pull origin main"
+  exit 1
+fi
+
+echo "==> Starting WAHA from $COMPOSE_FILE"
+cd "$REPO"
+
+# Pull latest image so catalog API endpoints are available (sessions/volumes are preserved).
+if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
+  echo "==> Pulling latest devlikeapro/waha:latest (set SKIP_WAHA_PULL=1 to skip)"
+  docker pull devlikeapro/waha:latest || echo "WARN: docker pull failed — continuing with cached image"
+fi
+
+# docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
+# Do NOT use --remove-orphans — it kills sokoni_postgres (separate compose file, same project name).
+docker_compose -p sokoni-waha -f docker-compose.waha.yml down 2>/dev/null || true
+
+# Remove ghost containers left by failed --force-recreate runs.
+docker ps -aq --filter "name=waha" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+
+docker_compose -p sokoni-waha -f docker-compose.waha.yml up -d
+
+sleep 4
+WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1)"
+if [ -z "$WAHA_CID" ]; then
+  echo "ERROR: WAHA container is not running."
+  docker_compose -p sokoni-waha -f docker-compose.waha.yml ps || true
+  docker ps -a | grep -i waha || true
+  exit 1
+fi
+
+echo "==> WAHA container: $WAHA_CID"
+echo "==> WAHA WhatsApp env:"
+docker exec "$WAHA_CID" env | grep -E '^WHATSAPP_' | sort || true
+
+missing=0
+for key in WHATSAPP_DOWNLOAD_MEDIA WHATSAPP_FILES_LIFETIME WHATSAPP_FILES_FOLDER; do
+  if ! docker exec "$WAHA_CID" env | grep -q "^${key}="; then
+    echo "ERROR: Missing $key in WAHA container."
+    missing=1
+  fi
+done
+
+if [ "$missing" -ne 0 ]; then
+  echo "Fix: bash scripts/deploy-waha.sh"
+  exit 1
+fi
+
+dl="$(docker exec "$WAHA_CID" env | grep '^WHATSAPP_DOWNLOAD_MEDIA=' | cut -d= -f2-)"
+life="$(docker exec "$WAHA_CID" env | grep '^WHATSAPP_FILES_LIFETIME=' | cut -d= -f2-)"
+if [ "$dl" != "true" ]; then
+  echo "ERROR: WHATSAPP_DOWNLOAD_MEDIA must be true (got: $dl)"
+  exit 1
+fi
+if [ "$life" != "0" ]; then
+  echo "ERROR: WHATSAPP_FILES_LIFETIME must be 0 for large album uploads (got: $life)"
+  exit 1
+fi
+
+echo "==> WAHA media config OK"
+docker_compose -p sokoni-waha -f docker-compose.waha.yml ps
+
+if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
+  bash "$REPO/scripts/configure-waha-session.sh"
+fi

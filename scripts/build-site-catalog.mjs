@@ -13,15 +13,22 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { CATEGORY_TAXONOMY } from "./catalog-taxonomy.mjs";
+import { computeProductTotals } from "../whatsapp-bot/src/services/shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const MASTER = path.join(ROOT, "whatsapp-bot", "src", "data", "products.json");
 const OUTPUT = path.join(ROOT, "website", "data", "products.json");
+const MENU_OUTPUT = path.join(ROOT, "website", "data", "catalog-menu.json");
+const PAUSE_FILE = path.join(ROOT, "website", "data", "catalog-paused.json");
 
-// Flat margin added to supplier cost (buy at 300 -> sell at 400). Keep this in
-// sync with RESELLER_MARKUP_KES / config.store.markupKes in the bot.
-const MARKUP_KES = 100;
+// Retail = supplier cost + KES 100 + 8% (rounded to nearest KES 50).
+function computeRetail(sourcePriceKes) {
+  const cost = Math.max(0, Number(sourcePriceKes) || 0);
+  const raw = cost + 100 + Math.round(cost * 0.08);
+  return Math.ceil(raw / 50) * 50;
+}
 
 const SOURCE_LABELS = {
   aliexpress: "AliExpress",
@@ -52,20 +59,32 @@ function toPublic(product) {
     const priceKes =
       product.priceKes != null
         ? product.priceKes
-        : (product.sourcePriceKes || 0) + MARKUP_KES;
+        : computeRetail(product.sourcePriceKes || 0);
+    const totals = computeProductTotals({ ...product, priceKes });
     return {
       id: product.id,
       name: product.name,
       category: product.category,
-      priceKes,
+      priceKes: totals.totalKes,
       rating: product.rating,
       reviews: product.reviews,
       source: "Sokoni",
       emoji,
       scope: "local",
       fulfillment: "store",
-      payment: "cod",
+      payment: "prepaid",
+      inStock: product.inStock !== false,
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
+      ...(product.images?.length ? { images: product.images } : {}),
+      ...(product.subcategory ? { subcategory: product.subcategory } : {}),
+      ...(product.browseCategory ? { browseCategory: product.browseCategory } : {}),
+      ...(product.browseSubCategory ? { browseSubCategory: product.browseSubCategory } : {}),
+      ...(product.condition ? { condition: product.condition } : {}),
+      ...(product.isSecondhand != null ? { isSecondhand: product.isSecondhand } : {}),
+      ...(product.brand ? { brand: product.brand } : {}),
+      ...(product.color ? { color: product.color } : {}),
+      ...(product.tags?.length ? { tags: product.tags } : {}),
+      ...(product.description ? { description: product.description } : {}),
     };
   }
 
@@ -93,11 +112,51 @@ function toPublic(product) {
 }
 
 async function main() {
-  const master = JSON.parse(await readFile(MASTER, "utf-8"));
-  const publicItems = master.map(toPublic).filter(Boolean);
+  let paused = false;
+  try {
+    const pauseRaw = JSON.parse(await readFile(PAUSE_FILE, "utf-8"));
+    paused = pauseRaw?.paused === true;
+    if (paused) {
+      console.log(`Catalog paused: ${pauseRaw.reason || "storefront hidden"}`);
+    }
+  } catch {
+    /* no pause file — publish as normal */
+  }
+
+  const master = paused ? [] : JSON.parse(await readFile(MASTER, "utf-8"));
+  const publicItems = master.map(toPublic).filter(Boolean).filter((p) => p.inStock !== false);
   await writeFile(OUTPUT, JSON.stringify(publicItems, null, 2) + "\n", "utf-8");
 
-  const store = publicItems.filter((p) => p.fulfillment === "store").length;
+  const storeItems = publicItems.filter((p) => p.fulfillment === "store");
+  const storeCats = new Set(storeItems.map((p) => p.category));
+  const menu = {
+    version: 1,
+    categories: CATEGORY_TAXONOMY.filter((c) => storeCats.has(c.id)).map((cat) => ({
+      ...cat,
+      subcategories: cat.subcategories.filter((sub) =>
+        storeItems.some((p) => p.category === cat.id && p.subcategory === sub.id)
+      ),
+    })),
+  };
+  await writeFile(MENU_OUTPUT, JSON.stringify(menu, null, 2) + "\n", "utf-8");
+
+  const versionPath = path.join(ROOT, "website", "data", "catalog-version.json");
+  await writeFile(
+    versionPath,
+    JSON.stringify(
+      {
+        version: new Date().toISOString().slice(0, 10).replace(/-/g, ""),
+        updatedAt: new Date().toISOString(),
+        storeCount: storeItems.length,
+        totalCount: publicItems.length,
+      },
+      null,
+      2
+    ) + "\n",
+    "utf-8"
+  );
+
+  const store = storeItems.length;
   const intl = publicItems.filter((p) => p.scope === "international").length;
   console.log(
     `Built ${OUTPUT}\n  store (pay-on-delivery): ${store}\n  international: ${intl}\n  total: ${publicItems.length}`

@@ -1,0 +1,423 @@
+/* Phase 4 — Depop-style seller listing wizard */
+
+.sell-wizard-steps {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1.5rem;
+}
+
+.sell-wizard-step {
+  flex: 1;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(27, 16, 53, 0.12);
+  transition: background 0.2s ease;
+}
+
+html.dark .sell-wizard-step {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sell-wizard-step.is-active,
+.sell-wizard-step.is-done {
+  background: #25d366;
+}
+
+.sell-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .sell-media-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.sell-media-slot {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 1rem;
+  border: 2px dashed rgba(27, 16, 53, 0.15);
+  background: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+html.dark .sell-media-slot {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(46, 27, 87, 0.5);
+}
+
+.sell-media-slot img.preview,
+.sell-media-slot video.preview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sell-media-slot img,
+.sell-media-slot video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sell-media-slot .sell-slot-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(27, 16, 53, 0.45);
+  pointer-events: none;
+}
+
+html.dark .sell-media-slot .sell-slot-label {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sell-media-slot.has-media .sell-slot-label {
+  display: none;
+}
+
+.sell-media-slot-cover {
+  border-color: rgba(37, 211, 102, 0.55);
+  border-style: dashed;
+}
+
+.sell-media-slot-optional {
+  border-color: rgba(27, 16, 53, 0.1);
+}
+
+html.dark .sell-media-slot-optional {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.sell-fee-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.sell-fee-table th,
+.sell-fee-table td {
+  padding: 0.5rem 0;
+  text-align: left;
+  border-bottom: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+.sell-fee-table td {
+  text-align: right;
+  font-weight: 600;
+}
+
+html.dark .sell-fee-table th,
+html.dark .sell-fee-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.sell-fee-table .sell-fee-total th,
+.sell-fee-table .sell-fee-total td {
+  font-weight: 700;
+  padding-top: 0.75rem;
+}
+
+.sell-fee-table .sell-fee-net th,
+.sell-fee-table .sell-fee-net td {
+  color: #25d366;
+  font-weight: 700;
+  border-bottom: none;
+}
+
+.sell-media-slot input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.sell-panel {
+  display: none;
+}
+
+.sell-panel.is-active {
+  display: block;
+}
+
+.sell-nav-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.sell-btn-ghost {
+  border: 1px solid rgba(27, 16, 53, 0.15);
+  background: transparent;
+  color: #1b1035;
+  font-weight: 600;
+  padding: 0.75rem 1.25rem;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+html.dark .sell-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff8f0;
+}
+
+.sell-tag-hint {
+  font-size: 0.75rem;
+  color: rgba(27, 16, 53, 0.5);
+}
+
+html.dark .sell-tag-hint {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sell-price-range {
+  font-size: 0.875rem;
+  color: rgba(27, 16, 53, 0.65);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(37, 211, 102, 0.08);
+}
+
+html.dark .sell-price-range {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sell-wizard-step {
+    transition: none;
+  }
+}
+
+/* Form inputs — explicit contrast in light + dark mode */
+.sell-form-input,
+.sell-form-input select,
+.sell-form-input textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(27, 16, 53, 0.15);
+  background: #ffffff;
+  color: #1b1035;
+  caret-color: #1b1035;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.sell-form-input:focus,
+.sell-form-input select:focus,
+.sell-form-input textarea:focus {
+  outline: none;
+  border-color: #25d366;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.35);
+}
+
+html.dark .sell-form-input,
+html.dark .sell-form-input select,
+html.dark .sell-form-input textarea {
+  background: rgba(46, 27, 87, 0.75);
+  color: #fff8f0;
+  caret-color: #fff8f0;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sell-form-input::placeholder,
+.sell-form-input textarea::placeholder {
+  color: rgba(27, 16, 53, 0.45);
+}
+
+html.dark .sell-form-input::placeholder,
+html.dark .sell-form-input textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.sell-ledger-tab {
+  flex: 1;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(27, 16, 53, 0.1);
+  background: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+html.dark .sell-ledger-tab {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(46, 27, 87, 0.4);
+  color: #fff8f0;
+}
+
+.sell-ledger-tab.is-active {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.12);
+}
+
+.sell-ledger-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  margin-right: 0.25rem;
+}
+
+.sell-ledger-dot.available { background: #25d366; }
+.sell-ledger-dot.pending { background: #facc15; }
+.sell-ledger-dot.transit { background: #f87171; }
+
+.depop-card-shipping,
+.depop-card-total {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(27, 16, 53, 0.55);
+  margin-top: 0.15rem;
+}
+
+.depop-card-total {
+  color: #25d366;
+  font-size: 0.75rem;
+}
+
+html.dark .depop-card-shipping {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.product-sheet-shipping,
+.product-sheet-total {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.product-sheet-total {
+  color: #25d366;
+  margin-top: 0.25rem;
+}
+
+/* Seller dashboard tabs + order cards (Phases 5–6) */
+.sell-view-tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  background: rgba(27, 16, 53, 0.06);
+}
+
+html.dark .sell-view-tabs {
+  background: rgba(255, 248, 240, 0.08);
+}
+
+.sell-view-tab {
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgba(27, 16, 53, 0.55);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+html.dark .sell-view-tab {
+  color: rgba(255, 248, 240, 0.55);
+}
+
+.sell-view-tab.is-active {
+  background: #25d366;
+  color: #1b1035;
+}
+
+.sell-order-card {
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+html.dark .sell-order-card {
+  border-color: rgba(255, 248, 240, 0.1);
+  background: rgba(46, 27, 87, 0.5);
+}
+
+.sell-order-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sell-order-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.sell-order-badge--action {
+  background: rgba(37, 211, 102, 0.15);
+  color: #1b1035;
+}
+
+.sell-order-badge--transit {
+  background: rgba(248, 113, 113, 0.15);
+  color: #991b1b;
+}
+
+.sell-order-badge--done {
+  background: rgba(27, 16, 53, 0.08);
+  color: rgba(27, 16, 53, 0.6);
+}
+
+.sell-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.sell-order-action {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1b1035;
+  text-decoration: none;
+}
+
+html.dark .sell-order-action {
+  color: #fff8f0;
+}
+
+.sell-order-action--primary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 0.875rem;
+  border-radius: 9999px;
+  background: #25d366;
+  color: #1b1035;
+}
+
+.sell-order-action--primary:hover {
+  opacity: 0.92;
+}

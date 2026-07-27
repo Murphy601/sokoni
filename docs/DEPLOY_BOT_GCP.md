@@ -88,7 +88,8 @@ WAHA_SESSION=default
 
 OPENAI_API_KEY=sk-or-v1-...your key...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=nvidia/nemotron-nano-9b-v2:free
+OPENAI_MODEL=google/gemini-2.5-flash
+OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free
 
 PORT=3001
 PUBLIC_SITE_URL=https://sokonimall.com
@@ -167,10 +168,22 @@ Test from your PC: `https://bot.sokonimall.com/health` → `{"status":"ok"}`
 ## Phase G — Connect WhatsApp (WAHA)
 
 ```bash
-curl -X POST http://localhost:3000/api/sessions/start \
+curl -X POST http://localhost:3000/api/sessions \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: sokoni-local-dev-key" \
-  -d '{"name":"default"}'
+  -d '{
+    "name": "default",
+    "config": {
+      "noweb": { "store": { "enabled": true, "fullSync": false } },
+      "webhooks": [{ "url": "http://host.docker.internal:3001/webhook", "events": ["message.any"] }]
+    }
+  }'
+```
+
+Or run the helper after WAHA is up:
+
+```bash
+bash scripts/configure-waha-session.sh
 ```
 
 Get the QR. NOWEB prints it in logs — easiest:
@@ -181,13 +194,22 @@ docker logs $(docker ps -qf "ancestor=devlikeapro/waha:latest") 2>&1 | tail -40
 
 Scan the QR with the phone that owns **+254117422428** (Settings → Linked devices).
 
-Set the webhook (WAHA → bot, same machine):
+Set the webhook (WAHA → bot, same machine) — usually done by `configure-waha-session.sh`:
 
 ```bash
 curl -X PUT http://localhost:3000/api/sessions/default \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: sokoni-local-dev-key" \
-  -d '{"config":{"webhooks":[{"url":"http://localhost:3001/webhook","events":["message.any"]}]}}'
+  -d '{"config":{"webhooks":[{"url":"http://host.docker.internal:3001/webhook","events":["message.any"]}]}}'
+```
+
+**VM deploy (use `docker-compose`, not `docker compose` on this host):**
+
+```bash
+cd ~/sokoni && git pull origin main
+bash scripts/deploy-waha.sh    # starts WAHA + configures session/webhook
+bash scripts/deploy-bot.sh     # restarts pm2 even if WAHA step warns
+bash scripts/health-check.sh   # session must show WORKING
 ```
 
 Test: from another phone, send `menu` to +254117422428.

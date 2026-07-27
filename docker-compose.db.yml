@@ -1,0 +1,26 @@
+# Local PostgreSQL for Sokoni Phase 1 development / VM
+# Usage:
+#   docker compose -f docker-compose.db.yml up -d
+#   DATABASE_URL=postgresql://sokoni:sokoni@localhost:5432/sokoni node scripts/migrate-catalog-to-db.mjs
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sokoni_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sokoni
+      POSTGRES_PASSWORD: sokoni
+      POSTGRES_DB: sokoni
+    ports:
+      - "5432:5432"
+    volumes:
+      - sokoni_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sokoni -d sokoni"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sokoni_pg_data:

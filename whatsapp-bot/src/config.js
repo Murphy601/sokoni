@@ -17,10 +17,35 @@ export const config = {
     apiKey: process.env.WAHA_API_KEY || "",
     session: process.env.WAHA_SESSION || "default",
   },
+  /** WhatsApp + web chat AI (text only — keep on free OpenRouter models). */
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    model: process.env.OPENAI_MODEL || "nvidia/nemotron-nano-9b-v2:free",
+    model: process.env.OPENAI_MODEL || "openrouter/free",
+    modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
+      "google/gemma-4-26b-a4b-it:free")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+  /** Optional Google Gemini direct API — fallback for seller photos only (not WhatsApp chat). */
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    visionModel: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
+    visionModels: (process.env.GEMINI_VISION_MODELS || "gemini-2.5-flash,gemini-2.0-flash-lite,gemini-2.0-flash")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+  /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
+  catalog: {
+    visionModel: process.env.CATALOG_VISION_MODEL || "krea/krea-2-medium-turbo",
+    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemma-4-26b-a4b-it:free")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    autoPush: process.env.CATALOG_AUTO_PUSH === "true",
+    publishDebounceMs: Number(process.env.CATALOG_PUBLISH_DEBOUNCE_MS) || 30_000,
   },
   affiliates: {
     kilimall: process.env.KILIMALL_AFFILIATE_ID || "demo-kilimall",
@@ -30,16 +55,46 @@ export const config = {
     amazon: process.env.AMAZON_AFFILIATE_TAG || "demo-amazon",
   },
   /**
-   * Main store settings. Sokoni sells at its own price (supplier cost + markup)
-   * and the customer pays on delivery (cash/M-Pesa to the rider).
+   * Main store settings. Phase 5: 100% prepaid escrow for local catalog.
+   * Daraja STK push plugs in via prepaid-checkout.js when MPESA_* env vars are set.
    */
+  contact: {
+    phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
+    phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "+254 117 422 428",
+    email: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
+    founderName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+    location: process.env.BUSINESS_LOCATION || "Sokoni Mall Startup Hub, Nairobi, Kenya",
+  },
+  offers: {
+    maxDiscountPercent: Number(process.env.MAX_OFFER_PERCENT) || 3,
+    promoCode: process.env.PROMO_CODE || "SOKONI3",
+  },
+  businessHours: {
+    timezone: process.env.BUSINESS_TIMEZONE || "Africa/Nairobi",
+    humanSupportStart: process.env.HUMAN_SUPPORT_START || "07:30",
+    humanSupportEnd: process.env.HUMAN_SUPPORT_END || "21:00",
+  },
   store: {
+    /** Phase 5 — local catalog is prepaid-only (set PREPAID_ONLY=false to allow legacy COD). */
+    prepaidOnly: process.env.PREPAID_ONLY !== "false",
     markupKes: Number(process.env.STORE_MARKUP_KES) || 100,
     businessNumber: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
-    codAreas: process.env.STORE_COD_AREAS || "Nairobi & environs",
+    codAreas: process.env.STORE_COD_AREAS || "Kenya countrywide",
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
-      "Delivery in 1-3 days within Nairobi; countrywide via courier. Pay cash/M-Pesa on delivery.",
+      "Delivery in 1-3 days within Nairobi; countrywide via courier. 100% prepaid upfront — funds held in escrow until delivery.",
+    mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
+    mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+  },
+  /** Safaricom Daraja — STK push + escrow auto-confirm (Phase 5.1). */
+  mpesa: {
+    consumerKey: process.env.MPESA_CONSUMER_KEY || "",
+    consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
+    passkey: process.env.MPESA_PASSKEY || "",
+    shortcode: process.env.MPESA_SHORTCODE || "",
+    callbackUrl: process.env.MPESA_CALLBACK_URL || "",
+    env: process.env.MPESA_ENV === "production" ? "production" : "sandbox",
+    transactionType: process.env.MPESA_TRANSACTION_TYPE || "CustomerBuyGoodsOnline",
   },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**
@@ -66,6 +121,13 @@ export const config = {
   })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
+  /** Bot HTTPS base — serves /catalog-images for WhatsApp (immediate after admin upload). */
+  botPublicUrl: (process.env.BOT_PUBLIC_URL || "https://bot.sokonimall.com").replace(/\/$/, ""),
+  /** PostgreSQL — Phase 1 marketplace database (optional; JSON catalog fallback when unset). */
+  database: {
+    url: process.env.DATABASE_URL || "",
+    poolMax: Number(process.env.DATABASE_POOL_MAX) || 10,
+  },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

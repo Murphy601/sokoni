@@ -1,0 +1,16 @@
+---
+description: Sokoni website design system — read DESIGN.md before editing website/
+globs: website/**/*
+alwaysApply: false
+---
+
+# Sokoni website design
+
+Before editing any file under `website/`:
+
+1. Read `website/DESIGN.md` (tokens + voice + Do/Don'ts).
+2. Follow `.cursor/skills/sokoni-design/SKILL.md` for components and quality gates.
+3. Voice: trusted **local shop assistant on WhatsApp**, **countrywide Kenya** — never single-city focus.
+4. Green `#25D366` = actions only. Cream `#FFF8F0` = surfaces. Fraunces + DM Sans typography.
+5. Do not modify `whatsapp-bot/` for website styling tasks.
+6. After `DESIGN.md` token edits, run `npm run design:lint`.

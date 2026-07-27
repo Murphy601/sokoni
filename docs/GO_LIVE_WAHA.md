@@ -15,7 +15,7 @@ real WhatsApp number (`+254117422428`) and the bot sends/receives messages throu
 | WAHA | Docker on Oracle Cloud Always Free VM | WhatsApp connection |
 | Sokoni bot | Same VM (Node.js) | AI + menus + orders |
 | Website + images | Cloudflare Pages | Product photos for WhatsApp |
-| AI | OpenRouter free model | `google/gemma-2-9b-it:free` |
+| AI | OpenRouter (`google/gemini-2.5-flash`) | English, Kiswahili, Sheng shopping chat |
 | Image search | Serper (optional) | Auto product photos when adding items |
 
 **Recommended:** one **Oracle Cloud Always Free** ARM VM runs WAHA + the bot. Host the static
@@ -34,7 +34,8 @@ WAHA_API_URL=http://localhost:3000
 WAHA_SESSION=default
 OPENAI_API_KEY=sk-or-v1-...          # OpenRouter key
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=google/gemma-2-9b-it:free
+OPENAI_MODEL=google/gemini-2.5-flash
+OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free
 PORT=8080
 PUBLIC_SITE_URL=https://YOUR-SITE.pages.dev
 BUSINESS_WHATSAPP_NUMBER=254117422428

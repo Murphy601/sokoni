@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "supermarket",
+      "label": "Supermarket",
+      "emoji": "🛒",
+      "subcategories": []
+    }
+  ]
+}

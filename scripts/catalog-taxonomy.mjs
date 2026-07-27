@@ -1,0 +1,119 @@
+/**
+ * Canonical category → subcategory taxonomy (aligned with WhatsApp menu.js).
+ * Used to build website/data/catalog-menu.json.
+ */
+export const CATEGORY_TAXONOMY = [
+  {
+    id: "phones-tablets",
+    label: "Phones & Tablets",
+    emoji: "📱",
+    subcategories: [
+      { id: "smartphones", label: "Smartphones" },
+      { id: "tablets", label: "Tablets" },
+      { id: "power-banks", label: "Power Banks" },
+      { id: "phone-accessories", label: "Phone Accessories" },
+    ],
+  },
+  {
+    id: "tvs-audio",
+    label: "TVs & Audio",
+    emoji: "📺",
+    subcategories: [
+      { id: "televisions", label: "Televisions" },
+      { id: "headphones", label: "Headphones & Earbuds" },
+      { id: "speakers", label: "Speakers" },
+      { id: "home-theatre", label: "Home Theatre" },
+    ],
+  },
+  {
+    id: "appliances",
+    label: "Appliances",
+    emoji: "🔌",
+    subcategories: [
+      { id: "kitchen-appliances", label: "Kitchen Appliances" },
+      { id: "kettles", label: "Kettles" },
+      { id: "blenders", label: "Blenders" },
+      { id: "irons", label: "Irons" },
+      { id: "washing-machines", label: "Washing Machines" },
+    ],
+  },
+  {
+    id: "health-beauty",
+    label: "Health & Beauty",
+    emoji: "💄",
+    subcategories: [
+      { id: "skincare", label: "Skincare" },
+      { id: "haircare", label: "Hair Care" },
+      { id: "makeup", label: "Makeup" },
+      { id: "personal-care", label: "Personal Care" },
+      { id: "fragrances", label: "Fragrances" },
+      { id: "perfume-oils", label: "Perfume Oils" },
+    ],
+  },
+  {
+    id: "home-office",
+    label: "Home & Office",
+    emoji: "🏠",
+    subcategories: [
+      { id: "kitchen-dining", label: "Kitchen & Dining" },
+      { id: "bedding", label: "Bedding" },
+      { id: "cleaning", label: "Cleaning" },
+      { id: "home-decor", label: "Home Decor" },
+      { id: "stationery", label: "Stationery" },
+    ],
+  },
+  {
+    id: "fashion",
+    label: "Fashion",
+    emoji: "👗",
+    subcategories: [
+      { id: "mens-fashion", label: "Men's Fashion" },
+      { id: "womens-fashion", label: "Women's Fashion" },
+      { id: "shoes", label: "Shoes" },
+      { id: "bags", label: "Bags" },
+      { id: "watches", label: "Watches" },
+    ],
+  },
+  {
+    id: "computing",
+    label: "Computing",
+    emoji: "💻",
+    subcategories: [
+      { id: "laptops", label: "Laptops" },
+      { id: "printers", label: "Printers" },
+      { id: "storage", label: "Storage" },
+      { id: "computer-accessories", label: "Accessories" },
+    ],
+  },
+  {
+    id: "gaming",
+    label: "Gaming",
+    emoji: "🎮",
+    subcategories: [
+      { id: "consoles", label: "Consoles" },
+      { id: "controllers", label: "Controllers" },
+      { id: "gaming-accessories", label: "Gaming Accessories" },
+    ],
+  },
+  {
+    id: "supermarket",
+    label: "Supermarket",
+    emoji: "🛒",
+    subcategories: [
+      { id: "food-cupboard", label: "Food Cupboard" },
+      { id: "drinks", label: "Drinks" },
+      { id: "household-supplies", label: "Household Supplies" },
+    ],
+  },
+  {
+    id: "baby-products",
+    label: "Baby Products",
+    emoji: "🍼",
+    subcategories: [
+      { id: "diapering", label: "Diapering" },
+      { id: "feeding", label: "Feeding" },
+      { id: "toys", label: "Toys" },
+      { id: "baby-gear", label: "Baby Gear" },
+    ],
+  },
+];

@@ -1,5 +1,10 @@
 import { config } from "../config.js";
+import { getSupplier } from "./suppliers.js";
+import { orderBuyerTotal, formatBuyerTotalLine } from "./shipping-tiers.js";
 import { sendText, formatCustomerLabel } from "./whatsapp.js";
+import { formatAdminFulfillmentBlock } from "./fulfillment.js";
+import { humanHandoffAck } from "./trust-copy.js";
+import { isAfterHumanHours } from "./customer-automations.js";
 import {
   setHumanHandoff,
   getHumanHandoff,
@@ -69,10 +74,7 @@ export async function handleCustomerWhileHandoff(customerKey) {
 
   if (!handoff.ackSent) {
     setHumanHandoff(customerKey, { ...handoff, ackSent: true });
-    await sendText(
-      customerKey,
-      "You're connected with our team 👋 We'll reply here shortly.\n\nType *menu* anytime to return to the shopping bot."
-    );
+    await sendText(customerKey, humanHandoffAck(isAfterHumanHours()));
   }
   return true;
 }
@@ -81,15 +83,37 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
   const meta = getCustomerMeta(customerKey);
   const label = formatCustomerLabel(meta, customerKey);
   const orderId = order?.id ? `  ·  *${order.id}*` : "";
+
+  let supplierBlock = "";
+  if (order?.supplierId) {
+    const sup = getSupplier(order.supplierId);
+    supplierBlock =
+      `\n*Supplier:* ${sup?.businessName || order.supplierId}\n` +
+      `Supply: KES ${(order.sourcePriceKes || 0).toLocaleString()} · ` +
+      `Margin: KES ${(order.marginKes || 0).toLocaleString()}\n` +
+      (sup?.delivers
+        ? `Delivers: yes (${sup.deliveryAreas || "countrywide"})\n`
+        : `Delivers: no — arrange pickup/hub\n`) +
+      (sup?.phone ? `Supplier WA: +${sup.phone}\n` : "");
+  }
+
   return (
-    `🧾 *NEW COD ORDER*${orderId}\n` +
+    `🧾 *NEW PREPAID ORDER*${orderId}\n` +
     `Product: ${pending.name}\n` +
-    `Price: KES ${pending.priceKes} (pay on delivery)\n` +
+    `Total: ${formatBuyerTotalLine(pending)} (customer pays upfront — escrow)\n` +
+    supplierBlock +
     `Customer: ${label}\n` +
     `Name: ${details.name}\n` +
     `Location: ${details.location}\n` +
     `Phone: ${details.phone}\n\n` +
-    `Update: ${order?.id ? `#status ${order.id} confirmed` : "#status <id> confirmed"}\n` +
-    `Message them: #${order?.id || "SK-xxxx"} Your message here`
+    `${formatAdminFulfillmentBlock(order, details.location)}\n\n` +
+    `*Next steps:*\n` +
+    `${order?.id ? `#fulfill ${order.id}` : "#fulfill SK-xxxx"} — ping supplier (no customer contact)\n` +
+    `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SK-xxxx share"} — supplier delivers (includes address)\n` +
+    `#status ${order?.id || "<id>"} confirmed\n` +
+    `#pickup ${order?.id || "SK-xxxx"} <pp-id> — assign pickup point\n` +
+    `Till: *${config.store.mpesaTill}* (${config.store.mpesaTillName})\n` +
+    `#payconfirm ${order?.id || "SK-xxxx"} — after M-Pesa verified\n` +
+    `#${order?.id || "SK-xxxx"} Message to customer`
   );
 }

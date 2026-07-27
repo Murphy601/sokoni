@@ -1,0 +1,44 @@
+{
+  "tagline": "Kenya's #1 Prepaid Marketplace for Brand New & Pre-Loved Fits",
+  "whatsappNumber": "254117422428",
+  "whatsappDisplay": "+254 117 422 428",
+  "mpesaTill": "4775847",
+  "mpesaTillName": "David Thuku Muiruri",
+  "promoCode": "SOKONI3",
+  "offerPercent": 3,
+  "supportEmail": "support@sokonimall.com",
+  "kineticLines": [
+    "Browse brand new & pre-loved → pay upfront → track with SK-####",
+    "{{storeCount}}+ prepaid listings across Kenya",
+    "Order in English, Kiswahili, or Sheng — same bot",
+    "100% escrow protection until delivery is confirmed",
+    "Verify on {{whatsappDisplay}} before paying Till {{mpesaTill}}",
+    "Privacy: your WhatsApp number is for your order only"
+  ],
+  "trustChips": [
+    {
+      "icon": "🔒",
+      "label": "Prepaid escrow",
+      "detail": "Pay upfront via M-Pesa STK. Funds held until delivery.",
+      "href": "faq.html"
+    },
+    {
+      "icon": "📦",
+      "label": "SK tracking",
+      "detail": "Every order gets SK-#### — track on web or WhatsApp.",
+      "href": "track.html"
+    },
+    {
+      "icon": "♻️",
+      "label": "Pre-loved",
+      "detail": "Thrift fashion alongside brand new drops.",
+      "href": "index.html#deals"
+    },
+    {
+      "icon": "🔒",
+      "label": "Privacy",
+      "detail": "We don't sell your chat data. Orders use your WhatsApp number.",
+      "href": "privacy.html"
+    }
+  ]
+}

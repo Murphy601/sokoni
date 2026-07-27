@@ -18,11 +18,26 @@ import {
   clearHumanHandoff,
   setCustomerMeta,
 } from "../services/session.js";
-import { searchProducts, findProductFromMessage } from "../services/catalog.js";
+import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, extractCustomerMeta } from "../services/admin.js";
+import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
+import { extractWahaProductMessage } from "../services/whatsapp.js";
+import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
+import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
+import { handleProductRouter, resolveProductQuery, handleCatalogPagination } from "../services/product-router.js";
+import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
+import { getPendingOrder } from "../services/session.js";
+import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
+import { normalizeShopperQuery } from "../services/shopper-language.js";
+import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
+import { handleSupplierOnboarding, isInSupplierOnboarding, trySupplierContinueFromRef } from "../services/supplier-onboarding.js";
+import {
+  handlePickupOnboarding,
+  isInPickupOnboarding,
+  tryPickupContinueFromRef,
+} from "../services/pickup-point-onboarding.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -76,27 +91,71 @@ function messageIdFrom(payload) {
   return payload?._data?.id?._serialized || payload?._data?.id?.id || null;
 }
 
+function extractAlbumId(payload) {
+  const d = payload?._data || {};
+  return (
+    payload?.albumId ||
+    d.albumId ||
+    d.album?.id ||
+    d.groupedId ||
+    d.mediaData?.albumId ||
+    d.message?.albumId ||
+    null
+  );
+}
+
+function extractMedia(payload) {
+  const media = payload?.media || payload?._data?.media || null;
+  const mediaError = media?.error || payload?._data?.media?.error || null;
+  return {
+    hasMedia: Boolean(payload?.hasMedia && (media?.url || payload?.id)),
+    mediaUrl: media?.url || null,
+    mediaMimetype: media?.mimetype || media?.mimeType || "image/jpeg",
+    mediaFilename: media?.filename || null,
+    mediaError,
+  };
+}
+
+/** Album container messages have no real file — skip them; individual photos follow separately. */
+function isAlbumPlaceholder(payload) {
+  const d = payload?._data || {};
+  const type = String(d.type || payload?.type || "").toLowerCase();
+  if (!/album|multi_vcard|product_catalog/.test(type)) return false;
+  const media = payload?.media || d.media;
+  return !media?.url;
+}
+
 export function parseWahaMessage(body) {
   // WAHA delivers incoming via "message" and the bot's OWN outgoing via
   // "message.any". We subscribe to message.any so admin actions are seen too.
   if (body?.event !== "message" && body?.event !== "message.any") return null;
   const payload = body.payload;
-  if (!payload || !payload.body?.trim()) return null;
-  if (payload.hasMedia && !payload.body) return null;
+  if (!payload) return null;
+
+  const text = String(payload.body || "").trim();
+  const mediaInfo = extractMedia(payload);
+  const hasProductCard = Boolean(extractWahaProductMessage(payload));
+  if (!text && !mediaInfo.hasMedia && !hasProductCard) return null;
   if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
 
-  const text = payload.body.trim();
   const quotedText = extractQuotedText(payload);
   const messageId = messageIdFrom(payload);
+  const albumId = extractAlbumId(payload);
+  const isAlbumPlaceholderMsg = isAlbumPlaceholder(payload);
 
   if (payload.fromMe) {
     return {
       direction: "outgoing",
       messageId,
+      albumId,
+      isAlbumPlaceholder: isAlbumPlaceholderMsg,
       fromChatId: customerKeyFromChatId(payload.from),
       toChatId: customerKeyFromChatId(payload.to),
       text,
       quotedText,
+      session: body.session || config.waha.session,
+      rawPayload: payload,
+      ...mediaInfo,
     };
   }
 
@@ -106,10 +165,17 @@ export function parseWahaMessage(body) {
   return {
     direction: "incoming",
     messageId,
+    albumId,
+    isAlbumPlaceholder: isAlbumPlaceholderMsg,
+    fromChatId: customerKeyFromChatId(payload.from),
+    toChatId: customerKeyFromChatId(payload.to),
     customerKey: meta.chatId,
     text,
     quotedText,
     combinedText,
+    session: body.session || config.waha.session,
+    rawPayload: payload,
+    ...mediaInfo,
     ...meta,
   };
 }
@@ -117,8 +183,12 @@ export function parseWahaMessage(body) {
 async function tryProductSearch(customerKey, text) {
   if (isCasualGreeting(text)) return false;
 
+  const routed = await resolveProductQuery(text);
+  if (routed.action !== "none") return false;
+
+  const searchText = normalizeShopperQuery(text);
   const products = await searchProducts({
-    keywords: text,
+    keywords: searchText,
     fulfillment: "store",
     scope: "local",
     limit: 4,
@@ -126,8 +196,11 @@ async function tryProductSearch(customerKey, text) {
   if (products.length === 0) return false;
 
   const isProductIntent =
-    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(text) ||
-    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix/i.test(text);
+    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(searchText) ||
+    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix|simu|perfume|mafuta|sauti|spika/i.test(
+      searchText
+    ) ||
+    /nataka|nipee|nipe|chini ya|bei/i.test(String(text || "").toLowerCase());
 
   if (!isProductIntent && products.length > 1) return false;
 
@@ -135,46 +208,138 @@ async function tryProductSearch(customerKey, text) {
   return true;
 }
 
+function isProductMenuChoice(text) {
+  return /^[123]$/.test(String(text || "").trim());
+}
+
+async function handleActiveProductMenu(customerKey, text) {
+  const menuState = getMenuState(customerKey);
+  if (menuState?.type !== "product" || !menuState.productId) return false;
+
+  const choice = parseNumericChoice(text);
+  if (!choice || !menuState.options?.[choice - 1]) return false;
+
+  const option = menuState.options[choice - 1];
+  if (option.id === "human_handoff") {
+    return sendHumanHandoff(customerKey, { lastMessage: text });
+  }
+  return handleMenuAction(customerKey, option.id);
+}
+
 export async function handleIncomingMessage(
   customerKey,
   text,
-  { quotedText = "", combinedText = text, displayName = "", phone = "", chatId = customerKey } = {}
+  {
+    quotedText = "",
+    combinedText = text,
+    displayName = "",
+    phone = "",
+    chatId = customerKey,
+    hasMedia = false,
+    mediaUrl = null,
+    mediaMimetype = null,
+    messageId = null,
+    wahaSession = null,
+  } = {}
 ) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
 
   const normalized = text.toLowerCase().trim();
 
-  // Customers must never see admin console — even if they type "admin" or #help.
+  if (isInPickupOnboarding(customerKey)) {
+    const handled = await handlePickupOnboarding(customerKey, text, { phone });
+    if (handled) return;
+  }
+
+  if (isInSupplierOnboarding(customerKey)) {
+    const handled = await handleSupplierOnboarding(customerKey, text, {
+      phone,
+      hasMedia,
+      mediaUrl,
+      mediaMimetype,
+      messageId,
+      chatId,
+      session: wahaSession,
+    });
+    if (handled) return;
+  }
+
+  if (await tryPickupContinueFromRef(customerKey, combinedText, { phone })) return;
+  if (await trySupplierContinueFromRef(customerKey, combinedText, { phone })) return;
+
+  if (await tryRoleMenu(customerKey, text, { phone })) return;
+
+  if (await handleReviewReply(customerKey, text)) return;
+
+  if (/^(pay|retry|stk|lipa)\b/i.test(normalized)) {
+    const { findAwaitingPaymentOrderForCustomer, getOrder } = await import("../services/orders.js");
+    const {
+      initiateMpesaCheckout,
+      formatPrepaidCheckoutPrompt,
+      isDarajaConfigured,
+    } = await import("../services/prepaid-checkout.js");
+
+    const order = findAwaitingPaymentOrderForCustomer(customerKey, phone);
+    if (!order) {
+      return sendText(customerKey, "No unpaid order found. Type *menu* to browse and order.");
+    }
+    if (order.customerPaymentStatus === "confirmed") {
+      return sendText(customerKey, `✅ *${order.id}* is already paid. Type *track* for status.`);
+    }
+    if (!isDarajaConfigured()) {
+      return sendText(customerKey, formatPrepaidCheckoutPrompt(order));
+    }
+    const result = await initiateMpesaCheckout(order, { phone: order.phone || phone });
+    const prompt = formatPrepaidCheckoutPrompt(getOrder(order.id) || order);
+    if (result.ok) return sendText(customerKey, prompt);
+    return sendText(
+      customerKey,
+      `⚠️ STK push failed${result.message ? `: ${result.message}` : ""}.\n\nReply *pay* to try again.\n\n${prompt}`
+    );
+  }
+
+  if (/^(paid|nimelipa|nimepay|payment done|done paying)\b/i.test(normalized)) {
+    const { handleCustomerPaidClaim } = await import("../services/payment.js");
+    return handleCustomerPaidClaim(customerKey, text, phone);
+  }
+
+  // Customers must never see admin console
   if (!requireAdminSender(customerKey, phone)) {
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
       return sendText(
         customerKey,
-        "Karibu Sokoni! 🛒\n\nType *menu* to browse and order (pay on delivery).\nNeed a person? *menu* → *Talk to a Human*."
+        "Karibu Sokoni! 🛒\n\nType *menu* for customer shopping.\nSuppliers: *vendor menu* · Pickup points: *pickup menu* or *pick up point* · Admins only: configured admin phone."
       );
     }
   }
 
-  // Human handoff FIRST — bot must stay silent (only "menu" exits)
+  // Track always works — even during human handoff (admin may have replied manually)
+  const orderIdMatch =
+    !containsAdminCommand(text) &&
+    !isAdminSender(customerKey, phone) &&
+    text.trim().match(/\bSK-?(\d{3,})\b/i);
+  if (orderIdMatch) {
+    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`, phone);
+  }
+  if (
+    /^track\b/i.test(normalized) ||
+    normalized === "track order" ||
+    normalized === "my order" ||
+    normalized === "my orders"
+  ) {
+    console.log("[track] request from", customerKey, phone || "(no phone)");
+    const { sendTrackOrderMenu } = await import("../services/menu.js");
+    return sendTrackOrderMenu(customerKey, phone);
+  }
+
+  // Human handoff — bot stays silent except menu / track (handled above)
   if (isHumanHandoff(customerKey)) {
     if (normalized === "menu") {
       clearHumanHandoff(customerKey);
       return sendWelcome(customerKey);
     }
     return handleCustomerWhileHandoff(customerKey);
-  }
-
-  // Order-number lookup — never treat admin #commands as customer track requests
-  const orderIdMatch =
-    !containsAdminCommand(text) &&
-    !isAdminSender(customerKey, phone) &&
-    text.trim().match(/\bSK-?(\d{3,})\b/i);
-  if (orderIdMatch) {
-    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`);
-  }
-  if (normalized === "track" || normalized === "track order" || normalized === "my order" || normalized === "my orders") {
-    const { sendTrackOrderMenu } = await import("../services/menu.js");
-    return sendTrackOrderMenu(customerKey);
   }
 
   if (
@@ -191,11 +356,24 @@ export async function handleIncomingMessage(
   }
 
   if (RESET_KEYWORDS.has(normalized)) {
+    await maybeSendOutOfOffice(customerKey);
     return sendWelcome(customerKey);
   }
 
   if (CATALOG_ALIASES.has(normalized)) {
+    await maybeSendOutOfOffice(customerKey);
     return sendWelcome(customerKey);
+  }
+
+  if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
+
+  if (/^(shop international|international shopping|🌍)$/i.test(normalized) || normalized === "international") {
+    const { sendMainMenu } = await import("../services/menu.js");
+    await sendText(
+      customerKey,
+      "Sokoni Mall is *100% local & prepaid* — brand new and pre-loved items from Kenya sellers only."
+    );
+    return sendMainMenu(customerKey);
   }
 
   if (normalized === "cart" || normalized === "my cart" || normalized === "my cart?") {
@@ -210,6 +388,18 @@ export async function handleIncomingMessage(
     return changeOrder(customerKey);
   }
 
+  if (await handleCatalogPagination(customerKey, text)) return;
+
+  if (isCasualGreeting(text)) {
+    return sendText(
+      customerKey,
+      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *sandals*, *Hisense TV*, *perfume*).\n\n" +
+        siteUrlLine()
+    );
+  }
+
+  if (await handleActiveProductMenu(customerKey, text)) return;
+
   if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
     const product = await findProductFromMessage(combinedText);
     if (product) {
@@ -219,6 +409,11 @@ export async function handleIncomingMessage(
   }
 
   if (quotedText) {
+    const menuState = getMenuState(customerKey);
+    if (menuState?.type === "product" && menuState.productId && (text === "1" || /^order$/i.test(text))) {
+      return startCodOrder(customerKey, menuState.productId);
+    }
+
     const quotedProduct = await findProductFromMessage(quotedText);
     if (quotedProduct) {
       if (text === "1" || /^order$/i.test(text)) {
@@ -234,11 +429,26 @@ export async function handleIncomingMessage(
   const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
   if (pendingHandled) return;
 
-  if (isCasualGreeting(text)) {
+  if (looksLikeDeliveryDetails(combinedText) && !getPendingOrder(customerKey)) {
     return sendText(
       customerKey,
-      "Poa! 😊 Niko fit. Unatafuta nini leo?\n\nType *menu* to browse, or tell me what you need (e.g. *Hisense TV*, *washing machine*)."
+      "I have your name and location 👍 To place the order, first pick an item (*menu* → category → reply with the number → *1* to order), then send those details again."
     );
+  }
+
+  const websiteProduct = await findProductFromWebsiteMessage(combinedText);
+  if (websiteProduct) {
+    const { showProductActions } = await import("../services/menu.js");
+    return showProductActions(customerKey, websiteProduct.id);
+  }
+
+  if (await handleCatalogPagination(customerKey, text)) return;
+
+  if (await handleProductRouter(customerKey, text)) return;
+
+  const catalogRoute = await resolveProductQuery(text);
+  if (catalogRoute.action === "exact" || catalogRoute.action === "confirm") {
+    return;
   }
 
   if (isPurchaseIntent(text)) {
@@ -249,16 +459,46 @@ export async function handleIncomingMessage(
     return sendText(customerKey, "Which item do you want? Type *menu* → browse → reply with the item number.");
   }
 
-  const choice = parseNumericChoice(text);
   const menuState = getMenuState(customerKey);
 
-  if (choice && menuState?.type === "product_list" && menuState.productIds?.[choice - 1]) {
+  if (menuState?.type === "product" && isProductMenuChoice(text)) {
+    return handleActiveProductMenu(customerKey, text);
+  }
+
+  const choice = parseNumericChoice(text);
+
+  if (choice && menuState?.type === "product_list_paged") {
+    const pageCount = menuState.productIds?.length || 0;
+    if (choice > pageCount) {
+      const pageNum = (menuState.page || 0) + 1;
+      const pageSize = menuState.pageSize || 10;
+      const totalPages = Math.max(1, Math.ceil((menuState.allProductIds?.length || 0) / pageSize));
+      const hasMore = pageNum < totalPages;
+      return sendText(
+        customerKey,
+        `On page ${pageNum}, reply *1–${pageCount}* to pick an item.` +
+          (hasMore ? ` Or reply *next* for more.` : "")
+      );
+    }
+  }
+
+  if (
+    choice &&
+    (menuState?.type === "product_list_paged" || menuState?.type === "product_list") &&
+    menuState.productIds?.[choice - 1]
+  ) {
     const { showProductActions } = await import("../services/menu.js");
     return showProductActions(customerKey, menuState.productIds[choice - 1]);
   }
 
-  if (choice && menuState?.options?.length >= choice) {
+  if (choice && menuState?.options?.length >= choice && menuState?.type !== "product_list") {
     const option = menuState.options[choice - 1];
+    if (menuState.type === "vendor_apply_gate" || menuState.type === "role_menu") {
+      return handleVendorMenuAction(customerKey, option.id, { phone });
+    }
+    if (menuState.type === "pickup_apply_gate") {
+      return handlePickupMenuAction(customerKey, option.id, { phone });
+    }
     if (option.id === "human_handoff") {
       return sendHumanHandoff(customerKey, {
         chatId,
@@ -281,8 +521,11 @@ export async function handleIncomingMessage(
 
   if (await tryProductSearch(customerKey, combinedText)) return;
 
+  const session = getSession(customerKey);
+  if (session.lastProductContext && catalogRoute.action !== "none") return;
+
   try {
-    const reply = await runAiAgent(customerKey, combinedText);
+    const reply = await runAiAgent(customerKey, combinedText, phone);
     if (!reply) return;
     return sendText(customerKey, reply);
   } catch (err) {
@@ -291,24 +534,12 @@ export async function handleIncomingMessage(
   }
 }
 
-function looksLikeAdminAction(text, fromChatId) {
-  if (!containsAdminCommand(text) && !/^orders?\b/i.test((text || "").trim())) {
-    return false;
-  }
-  return requireAdminSender(fromChatId, phoneDigitsFromChatId(fromChatId));
-}
-
 export async function handleWahaWebhook(body) {
   const parsed = parseWahaMessage(body);
   if (!parsed) return;
 
   if (parsed.direction === "outgoing") {
-    // Ignore the bot's OWN outgoing messages (echoes). Only act on messages
-    // the human store owner actually typed (admin commands, quote-replies,
-    // or a manual reply inside a customer's chat).
-    if (!looksLikeAdminAction(parsed.text, parsed.fromChatId) && isBotEcho(parsed.messageId, parsed.toChatId)) {
-      return;
-    }
+    if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
     return handleAdminOutgoing(parsed);
   }
 
@@ -320,11 +551,18 @@ export async function handleWahaWebhook(body) {
     if (handled !== false) return handled;
   }
 
-  return handleIncomingMessage(parsed.customerKey, parsed.text, {
+  if (!parsed.text && !parsed.hasMedia) return;
+
+  return handleIncomingMessage(parsed.customerKey, parsed.text || "", {
     quotedText: parsed.quotedText,
-    combinedText: parsed.combinedText,
+    combinedText: parsed.combinedText || parsed.text || "",
     displayName: parsed.displayName,
     phone: parsed.phone,
     chatId: parsed.chatId,
+    hasMedia: parsed.hasMedia,
+    mediaUrl: parsed.mediaUrl,
+    mediaMimetype: parsed.mediaMimetype,
+    messageId: parsed.messageId,
+    session: parsed.session,
   });
 }
