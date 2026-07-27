@@ -8,6 +8,8 @@ const ONBOARD_API = `${API_BASE}/api/seller/onboard`;
 const PHONE_KEY = "sokoni-seller-phone";
 const DRAFT_KEY = "sokoni-seller-draft";
 const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
+const PLATFORM_FEE_RATE = 0.1;
+const MIN_SHIPPING_KES = 150;
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -124,17 +126,56 @@ function updateStepUi() {
 function goStep(delta) {
   stepIndex = Math.max(0, Math.min(STEPS.length - 1, stepIndex + delta));
   updateStepUi();
+  if (STEPS[stepIndex] === "pricing") updateFeeBreakdown();
   if (STEPS[stepIndex] === "review") fillReview();
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function getShippingTierLabel(classId) {
+  const tiers = meta.shippingTiers || [];
+  const tier = tiers.find((t) => t.id === classId);
+  return tier ? `${tier.label} — typical shipping ${formatKes(tier.typicalKes)}` : "";
+}
+
+function computeFeeBreakdown(itemKes, shippingKes) {
+  const item = Math.max(0, Math.round(Number(itemKes) || 0));
+  const shipping = Math.max(MIN_SHIPPING_KES, Math.round(Number(shippingKes) || MIN_SHIPPING_KES));
+  const buyerTotal = item + shipping;
+  const platformFee = Math.round(buyerTotal * PLATFORM_FEE_RATE);
+  return {
+    itemKes: item,
+    shippingKes: shipping,
+    buyerTotalKes: buyerTotal,
+    platformFeeKes: platformFee,
+    sellerNetKes: buyerTotal - platformFee,
+  };
+}
+
+function renderFeeBreakdown(fees, prefix = "fee") {
+  const set = (id, val) => {
+    const node = el(`${prefix}-${id}`);
+    if (node) node.textContent = formatKes(val);
+  };
+  set("item", fees.itemKes);
+  set("shipping", fees.shippingKes);
+  set("buyer", fees.buyerTotalKes);
+  const platformNode = el(`${prefix}-platform`);
+  if (platformNode) platformNode.textContent = `− ${formatKes(fees.platformFeeKes)}`;
+  set("net", fees.sellerNetKes);
+}
+
+function updateFeeBreakdown() {
+  const fees = computeFeeBreakdown(el("draft-price")?.value, el("draft-shipping")?.value);
+  renderFeeBreakdown(fees, "fee");
+  const hint = el("shipping-tier-hint");
+  if (hint && draft.estimatedWeightClass) {
+    hint.textContent = getShippingTierLabel(draft.estimatedWeightClass);
+  }
 }
 
 function retailFromSupply(supply) {
   const cost = Math.max(0, Number(supply) || 0);
   return Math.ceil((cost + 100 + Math.round(cost * 0.08)) / 50) * 50;
-}
-
-function netToSeller(price) {
-  return Math.round(Math.max(0, Number(price) || 0) * 0.92);
 }
 
 let sellerProfile = null;
@@ -248,6 +289,7 @@ function fillFormFromDraft() {
   el("draft-brand").value = draft.brand || "";
   el("draft-brand2").value = draft.secondaryBrand || "";
   el("draft-price").value = draft.priceKes ?? draft.sourcePriceKes ?? "";
+  el("draft-shipping").value = draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? MIN_SHIPPING_KES;
   el("draft-color").value = draft.color || "";
   el("draft-size").value = draft.size || "";
   el("draft-location").value = draft.location || "";
@@ -257,6 +299,11 @@ function fillFormFromDraft() {
   populateSelect(el("draft-category"), Object.keys(CATEGORY_LABELS), CATEGORY_LABELS, draft.category);
   populateSelect(el("draft-condition"), meta.conditions, CONDITION_LABELS, draft.condition);
   populateBrowseSelects(draft.browseCategory, draft.browseSubCategory);
+  const hint = el("shipping-tier-hint");
+  if (hint && draft.estimatedWeightClass) {
+    hint.textContent = getShippingTierLabel(draft.estimatedWeightClass);
+  }
+  updateFeeBreakdown();
 }
 
 function populateBrowseSelects(browseCat, browseSub) {
@@ -298,7 +345,8 @@ function collectDraft() {
     brand: el("draft-brand").value.trim(),
     secondaryBrand: el("draft-brand2").value.trim(),
     priceKes: Math.round(Number(el("draft-price").value) || 0),
-    sourcePriceKes: netToSeller(el("draft-price").value),
+    shippingKes: Math.max(MIN_SHIPPING_KES, Math.round(Number(el("draft-shipping").value) || MIN_SHIPPING_KES)),
+    sourcePriceKes: Math.round(Number(el("draft-price").value) || 0),
     category: el("draft-category").value,
     browseCategory: el("draft-browse-cat")?.value,
     browseSubCategory: el("draft-browse-sub")?.value,
@@ -313,12 +361,13 @@ function collectDraft() {
 
 function fillReview() {
   const d = collectDraft();
+  const fees = computeFeeBreakdown(d.priceKes, d.shippingKes);
   el("review-summary").innerHTML = `
     <p class="font-semibold text-lg">${d.name || "—"}</p>
     <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-2">${d.description || "—"}</p>
-    <p class="text-sm mt-3">Price ${formatKes(d.priceKes)} · You receive ~${formatKes(netToSeller(d.priceKes))}</p>
-    <p class="text-sm">${d.browseCategory || ""} → ${d.browseSubCategory || ""} · ${CONDITION_LABELS[d.condition] || d.condition}</p>
+    <p class="text-sm mt-3">${d.browseCategory || ""} → ${d.browseSubCategory || ""} · ${CONDITION_LABELS[d.condition] || d.condition}</p>
     <p class="text-xs mt-2 text-brand-purple/50">${(d.tags || []).map((t) => `#${t}`).join(" ")}</p>`;
+  renderFeeBreakdown(fees, "review-fee");
 }
 
 async function collectImagesBase64() {
@@ -345,6 +394,12 @@ async function onPublish() {
   if (!photoFiles[0]) {
     setStatus("Add at least one photo.", true);
     goStep(-(stepIndex));
+    return;
+  }
+  const d = collectDraft();
+  if (d.shippingKes < MIN_SHIPPING_KES) {
+    setStatus(`Shipping fee is required (minimum KES ${MIN_SHIPPING_KES}).`, true);
+    goStep(-(stepIndex - STEPS.indexOf("pricing")));
     return;
   }
 
@@ -874,6 +929,8 @@ function init() {
     savePhone();
     checkSellerProfile();
   });
+  el("draft-price")?.addEventListener("input", updateFeeBreakdown);
+  el("draft-shipping")?.addEventListener("input", updateFeeBreakdown);
 
   loadMeta().then(() => {
     checkApiHealth();

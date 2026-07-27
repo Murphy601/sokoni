@@ -14,6 +14,13 @@ import { invalidateProductCache } from "./catalog.js";
 import { clearCatalogPauseCache } from "./catalog-guard.js";
 import { computeRetailPrice } from "./pricing.js";
 import {
+  SHIPPING_TIERS,
+  PLATFORM_FEE_RATE,
+  MIN_SHIPPING_KES,
+  validateShippingKes,
+  computeFeeBreakdown,
+} from "./shipping-tiers.js";
+import {
   enrichManualDraft,
   applyListingFieldsToProduct,
   VALID_CONDITIONS,
@@ -243,6 +250,8 @@ async function buildProduct(supplier, enriched, media, productId) {
     condition: enriched.condition,
     isSecondhand: enriched.isSecondhand,
     location: enriched.location || supplier.city || undefined,
+    shippingKes: enriched.shippingKes,
+    estimatedWeightClass: enriched.estimatedWeightClass,
     shippingNote: enriched.shippingNote || (supplier.delivers ? "Seller delivery" : "Hub / pickup coordination"),
     rating: 4.5,
     reviews: 0,
@@ -309,6 +318,9 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   if (!enriched.name || (!enriched.priceKes && !enriched.sourcePriceKes)) {
     return { error: "missing_fields", message: "Title and price are required." };
   }
+  const shippingCheck = validateShippingKes(enriched.shippingKes);
+  if (!shippingCheck.ok) return shippingCheck;
+  enriched.shippingKes = shippingCheck.shippingKes;
   if (!images.length) {
     return { error: "missing_image", message: "Add at least one product photo." };
   }
@@ -416,6 +428,9 @@ export async function getSellerListingMeta() {
     maxTags: MAX_TAGS,
     maxBrands: MAX_BRANDS,
     browseTaxonomy,
+    shippingTiers: SHIPPING_TIERS,
+    platformFeeRate: PLATFORM_FEE_RATE,
+    minShippingKes: MIN_SHIPPING_KES,
     eras: ["vintage", "80s", "90s", "y2k", "handmade"],
     visionModel: config.catalog.visionModel,
     visionProvider: "openrouter",
@@ -427,4 +442,4 @@ export async function getSellerListingMeta() {
   };
 }
 
-export { listFlaggedListings, takedownListing, restoreListing, VALID_CONDITIONS };
+export { listFlaggedListings, takedownListing, restoreListing, VALID_CONDITIONS, computeFeeBreakdown };

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
 import { computeRetailPrice } from "./pricing.js";
+import { applyAiShippingSuggestion } from "./shipping-tiers.js";
 import { geminiVisionAvailable, geminiVisionListingJson } from "./gemini-vision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -232,12 +233,14 @@ async function buildListingPrompt(caption = "") {
     `5. *condition* — one of: ${VALID_CONDITIONS.join(", ")}\n` +
     `6. *isSecondhand* — true for thrift/pre-loved/vintage, else false\n` +
     `7. *brand*, *color* — strings or null\n` +
-    `8. *description* — 1–2 sentence shopper-friendly description\n\n` +
+    `8. *description* — 1–2 sentence shopper-friendly description\n` +
+    `9. *estimatedWeightClass* — one of: small, medium, large, bulky (from photo size/weight)\n` +
+    `10. *suggestedShippingFeeKsh* — integer KES shipping fee for Kenya delivery (min 150)\n\n` +
     `LEGACY CATEGORIES:\n${categoryLines}\n\n` +
     `BROWSE PATHS (browseCategory / browseSubCategory):\n${browseLines}\n\n` +
     (caption ? `WhatsApp caption: "${caption}"\n\n` : "") +
     `Example:\n` +
-    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. 100% prepaid across Kenya."}`
+    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. 100% prepaid across Kenya.","estimatedWeightClass":"medium","suggestedShippingFeeKsh":300}`
   );
 }
 
@@ -297,6 +300,8 @@ export async function finalizeListingDraft(parsed, caption = "") {
     parsed.description = `${parsed.name}. 100% prepaid across Kenya.`;
   }
 
+  Object.assign(parsed, applyAiShippingSuggestion(parsed));
+
   return parsed;
 }
 
@@ -329,6 +334,11 @@ export async function enrichManualDraft(draft, caption = "") {
   } else {
     base.priceKes = 0;
   }
+  if (base.shippingKes != null) {
+    Object.assign(base, applyAiShippingSuggestion(base));
+  } else {
+    Object.assign(base, applyAiShippingSuggestion({ name: base.name }));
+  }
   return base;
 }
 
@@ -350,6 +360,8 @@ export function applyListingFieldsToProduct(product, draft) {
     product.priceKes = draft.priceKes;
     product.sourcePriceKes = Math.round(draft.priceKes * 0.92);
   }
+  if (draft.shippingKes != null) product.shippingKes = Math.round(Number(draft.shippingKes));
+  if (draft.estimatedWeightClass) product.estimatedWeightClass = draft.estimatedWeightClass;
   return product;
 }
 

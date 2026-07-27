@@ -143,13 +143,13 @@
 
       <!-- Step 1: Media -->
       <section id="panel-media" class="sell-panel is-active rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
-        <h2 class="font-bold text-lg">Photos & video</h2>
-        <p class="text-sm text-brand-purple/60 dark:text-white/60">Up to 4 photos. First photo is the cover thumbnail. Optional short video.</p>
+        <h2 class="font-bold text-lg">Product photos (1 required)</h2>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">Cover photo required. Up to 4 photos total. Optional short video.</p>
         <div class="sell-media-grid">
-          <div id="media-slot-0" class="sell-media-slot"><span class="sell-slot-label">📷 Cover</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
-          <div id="media-slot-1" class="sell-media-slot"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
-          <div id="media-slot-2" class="sell-media-slot"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-2" /></div>
-          <div id="media-slot-3" class="sell-media-slot"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-3" /></div>
+          <div id="media-slot-0" class="sell-media-slot sell-media-slot-cover"><span class="sell-slot-label">📷 Cover *</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
+          <div id="media-slot-1" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
+          <div id="media-slot-2" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-2" /></div>
+          <div id="media-slot-3" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-3" /></div>
         </div>
         <label class="block text-sm font-medium">
           Caption hint for AI (optional)
@@ -233,23 +233,45 @@
 
       <!-- Step 4: Pricing -->
       <section id="panel-pricing" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
-        <h2 class="font-bold text-lg">Pricing & location</h2>
+        <h2 class="font-bold text-lg">Pricing & shipping</h2>
         <label class="block text-sm font-medium">
           Listing price (KES) *
           <input id="draft-price" type="number" min="10" class="sell-form-input" />
         </label>
-        <p class="text-xs text-brand-purple/50 dark:text-white/50">Buyers pay this upfront via M-Pesa. You receive ~92% after delivery (Sokoni commission 8%).</p>
+        <label class="block text-sm font-medium">
+          Shipping fee (KES) *
+          <input id="draft-shipping" type="number" min="150" class="sell-form-input" />
+          <span id="shipping-tier-hint" class="sell-tag-hint"></span>
+        </label>
+        <table id="fee-breakdown-pricing" class="sell-fee-table" aria-label="Fee breakdown">
+          <tbody>
+            <tr><th scope="row">Item price</th><td id="fee-item">—</td></tr>
+            <tr><th scope="row">Shipping</th><td id="fee-shipping">—</td></tr>
+            <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="fee-buyer">—</td></tr>
+            <tr><th scope="row">Sokoni fee (10%)</th><td id="fee-platform">—</td></tr>
+            <tr class="sell-fee-net"><th scope="row">You receive</th><td id="fee-net">—</td></tr>
+          </tbody>
+        </table>
         <label class="block text-sm font-medium">
           Dispatch from (city)
           <input id="draft-location" placeholder="Nairobi, Mombasa…" class="sell-form-input" />
         </label>
-        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — funds held in Sokoni escrow until delivery confirmed.</p>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — buyer pays item + shipping upfront via M-Pesa. Sokoni holds funds in escrow until delivery.</p>
       </section>
 
       <!-- Step 5: Review -->
       <section id="panel-review" class="sell-panel rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
         <h2 class="font-bold text-lg">Review & post</h2>
         <div id="review-summary" class="text-sm"></div>
+        <table id="fee-breakdown-review" class="sell-fee-table" aria-label="Fee breakdown">
+          <tbody>
+            <tr><th scope="row">Item price</th><td id="review-fee-item">—</td></tr>
+            <tr><th scope="row">Shipping</th><td id="review-fee-shipping">—</td></tr>
+            <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="review-fee-buyer">—</td></tr>
+            <tr><th scope="row">Sokoni fee (10%)</th><td id="review-fee-platform">—</td></tr>
+            <tr class="sell-fee-net"><th scope="row">You receive</th><td id="review-fee-net">—</td></tr>
+          </tbody>
+        </table>
         <p class="text-xs text-brand-purple/60 dark:text-white/60">
           Tapping <strong>Post listing</strong> publishes instantly. Listings that break policy (off-platform contact, prohibited items) may be hidden after automated review.
         </p>

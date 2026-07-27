@@ -25,6 +25,19 @@ export function normalizeGeminiListingJson(parsed) {
   }
   if (!out.sourcePriceKes && out.priceKes != null) out.sourcePriceKes = out.priceKes;
   if (!out.description && out.desc) out.description = out.desc;
+  if (!out.estimatedWeightClass && out.weightClass) out.estimatedWeightClass = out.weightClass;
+  if (!out.estimatedWeightClass && out.estimated_weight_class) {
+    out.estimatedWeightClass = out.estimated_weight_class;
+  }
+  if (out.suggestedShippingFeeKsh == null && out.suggestedShippingKes != null) {
+    out.suggestedShippingFeeKsh = out.suggestedShippingKes;
+  }
+  if (out.suggestedShippingFeeKsh == null && out.shippingKes != null) {
+    out.suggestedShippingFeeKsh = out.shippingKes;
+  }
+  if (out.suggestedShippingFeeKsh == null && out.shipping_fee_ksh != null) {
+    out.suggestedShippingFeeKsh = out.shipping_fee_ksh;
+  }
   return out;
 }
 

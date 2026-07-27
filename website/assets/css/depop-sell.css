@@ -89,6 +89,56 @@ html.dark .sell-media-slot .sell-slot-label {
   display: none;
 }
 
+.sell-media-slot-cover {
+  border-color: rgba(37, 211, 102, 0.55);
+  border-style: dashed;
+}
+
+.sell-media-slot-optional {
+  border-color: rgba(27, 16, 53, 0.1);
+}
+
+html.dark .sell-media-slot-optional {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.sell-fee-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.sell-fee-table th,
+.sell-fee-table td {
+  padding: 0.5rem 0;
+  text-align: left;
+  border-bottom: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+.sell-fee-table td {
+  text-align: right;
+  font-weight: 600;
+}
+
+html.dark .sell-fee-table th,
+html.dark .sell-fee-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.sell-fee-table .sell-fee-total th,
+.sell-fee-table .sell-fee-total td {
+  font-weight: 700;
+  padding-top: 0.75rem;
+}
+
+.sell-fee-table .sell-fee-net th,
+.sell-fee-table .sell-fee-net td {
+  color: #25d366;
+  font-weight: 700;
+  border-bottom: none;
+}
+
 .sell-media-slot input[type="file"] {
   position: absolute;
   inset: 0;
