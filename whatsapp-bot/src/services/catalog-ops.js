@@ -1,8 +1,9 @@
 /**
  * Phase 9 — Catalog pause/live, sync, stock, migration helpers.
+ * Note: mkdirSync/existsSync come from node:fs (not fs/promises).
  */
-import { readFile, writeFile, mkdirSync, existsSync } from "node:fs/promises";
-import { existsSync as existsSyncSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { mkdirSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -29,7 +30,7 @@ async function readJson(file, fallback) {
 
 async function writeJson(file, data) {
   const dir = path.dirname(file);
-  if (!existsSyncSync(dir)) await mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   await writeFile(file, JSON.stringify(data, null, 2) + "\n", "utf-8");
 }
 
@@ -87,7 +88,7 @@ export async function unpauseCatalog(note = "Catalog live") {
 /** Rebuild website/data/products.json from master (no git push). */
 export async function syncPublicCatalog() {
   const script = path.join(REPO_ROOT, "scripts", "build-site-catalog.mjs");
-  if (!existsSyncSync(script)) {
+  if (!existsSync(script)) {
     throw new Error("build-site-catalog.mjs not found");
   }
   execSync(`node "${script}"`, { cwd: REPO_ROOT, encoding: "utf-8", stdio: "pipe" });
@@ -104,7 +105,7 @@ export async function syncPublicCatalog() {
 /** Full publish: build + git commit/push (VM only). */
 export async function publishCatalogToGit() {
   const script = path.join(REPO_ROOT, "scripts", "publish-catalog-now.mjs");
-  if (!existsSyncSync(script)) throw new Error("publish-catalog-now.mjs not found");
+  if (!existsSync(script)) throw new Error("publish-catalog-now.mjs not found");
   execSync(`node "${script}"`, { cwd: REPO_ROOT, encoding: "utf-8", stdio: "inherit" });
   return getOpsStatus();
 }
@@ -116,7 +117,7 @@ export async function setProductStock(productId, inStock) {
   let updated = false;
 
   for (const file of paths) {
-    if (!existsSyncSync(file)) continue;
+    if (!existsSync(file)) continue;
     const products = await readJson(file, []);
     if (!Array.isArray(products)) continue;
     const idx = products.findIndex((p) => p.id === id);

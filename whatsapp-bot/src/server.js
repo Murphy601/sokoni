@@ -29,7 +29,6 @@ import { processDuePayouts } from "./services/settlements.js";
 import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
-import { getOpsStatus } from "./services/catalog-ops.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 
 const app = express();
@@ -91,7 +90,13 @@ app.get("/health", async (_req, res) => {
   const checkout = checkoutMeta();
   const agent = agentMeta();
   const feed = feedMeta();
-  const ops = await withTimeout(getOpsStatus(), 5000, { phase: 9, catalog: { paused: false } });
+  let ops = { phase: 9, catalog: { paused: false } };
+  try {
+    const { getOpsStatus } = await import("./services/catalog-ops.js");
+    ops = await withTimeout(getOpsStatus(), 5000, ops);
+  } catch (err) {
+    ops = { phase: 9, catalog: { paused: false }, opsError: err.message };
+  }
   res.json({
     status: "ok",
     build: BUILD_ID,

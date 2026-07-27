@@ -131,6 +131,12 @@ if [ -f "$REPO/scripts/build-browse-menu.mjs" ]; then
   node "$REPO/scripts/build-browse-menu.mjs" 2>/dev/null || true
 fi
 
+echo "==> Verifying bot module imports..."
+if ! node "$REPO/scripts/verify-bot-import.mjs"; then
+  echo "ERROR: bot modules failed to load — fix before starting pm2"
+  exit 1
+fi
+
 if pm2 describe "$NAME" >/dev/null 2>&1; then
   pm2 delete "$NAME" || true
 fi
