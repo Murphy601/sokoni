@@ -213,18 +213,20 @@ function isFreeShipping() {
   return Boolean(el("draft-free-shipping")?.checked);
 }
 
-function computeFeeBreakdown(itemKes, shippingKes, freeShipping = isFreeShipping()) {
-  const item = Math.max(0, Math.round(Number(itemKes) || 0));
+function computeFeeBreakdown(sellerNetKes, shippingKes, freeShipping = isFreeShipping()) {
+  const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
   const shipRaw = Math.round(Number(shippingKes) || 0);
   const shipping = freeShipping ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw || MIN_SHIPPING_KES);
-  const buyerTotal = item + shipping;
-  const platformFee = Math.round(buyerTotal * PLATFORM_FEE_RATE);
+  const subtotal = sellerNet + shipping;
+  const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE);
+  const buyerTotal = subtotal + platformFee;
   return {
-    itemKes: item,
+    sellerNetKes: sellerNet,
+    itemKes: sellerNet,
     shippingKes: shipping,
+    subtotalKes: subtotal,
     buyerTotalKes: buyerTotal,
     platformFeeKes: platformFee,
-    sellerNetKes: buyerTotal - platformFee,
     freeShipping,
   };
 }
@@ -264,11 +266,11 @@ function renderFeeBreakdown(fees, prefix = "fee") {
     const node = el(`${prefix}-${id}`);
     if (node) node.textContent = formatKes(val);
   };
-  set("item", fees.itemKes);
+  set("item", fees.sellerNetKes);
   set("shipping", fees.shippingKes);
   set("buyer", fees.buyerTotalKes);
   const platformNode = el(`${prefix}-platform`);
-  if (platformNode) platformNode.textContent = `− ${formatKes(fees.platformFeeKes)}`;
+  if (platformNode) platformNode.textContent = formatKes(fees.platformFeeKes);
   set("net", fees.sellerNetKes);
 }
 
@@ -403,7 +405,7 @@ function fillFormFromDraft() {
   el("draft-tags").value = (draft.tags || []).map((t) => `#${t}`).join(" ");
   el("draft-brand").value = draft.brand || "";
   el("draft-brand2").value = draft.secondaryBrand || "";
-  el("draft-price").value = draft.priceKes ?? draft.sourcePriceKes ?? "";
+  el("draft-price").value = draft.sellerNetKes ?? draft.priceKes ?? draft.sourcePriceKes ?? "";
   populateWeightClassSelect(draft.estimatedWeightClass || "small");
   el("draft-shipping").value =
     draft.freeShipping ? 0 : draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? getShippingTier(draft.estimatedWeightClass)?.typicalKes ?? MIN_SHIPPING_KES;
@@ -458,13 +460,14 @@ function collectDraft() {
     tags,
     brand: el("draft-brand").value.trim(),
     secondaryBrand: el("draft-brand2").value.trim(),
+    sellerNetKes: Math.round(Number(el("draft-price").value) || 0),
     priceKes: Math.round(Number(el("draft-price").value) || 0),
+    sourcePriceKes: Math.round(Number(el("draft-price").value) || 0),
     estimatedWeightClass: el("draft-weight-class")?.value || draft.estimatedWeightClass || "small",
     freeShipping: isFreeShipping(),
     shippingKes: isFreeShipping()
       ? 0
       : Math.max(MIN_SHIPPING_KES, Math.round(Number(el("draft-shipping").value) || MIN_SHIPPING_KES)),
-    sourcePriceKes: Math.round(Number(el("draft-price").value) || 0),
     category: el("draft-category").value,
     browseCategory: el("draft-browse-cat")?.value,
     browseSubCategory: el("draft-browse-sub")?.value,
@@ -479,7 +482,7 @@ function collectDraft() {
 
 function fillReview() {
   const d = collectDraft();
-  const fees = computeFeeBreakdown(d.priceKes, d.shippingKes);
+  const fees = computeFeeBreakdown(d.sellerNetKes ?? d.priceKes, d.shippingKes);
   el("review-summary").innerHTML = `
     <p class="font-semibold text-lg">${d.name || "—"}</p>
     <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-2">${d.description || "—"}</p>

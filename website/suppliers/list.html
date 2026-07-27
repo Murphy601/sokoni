@@ -335,8 +335,9 @@
           <strong>AI detected:</strong> <span id="ai-weight-label">—</span>
         </p>
         <label class="block text-sm font-medium">
-          Listing price (KES) *
+          Your price — what you receive (KES) *
           <input id="draft-price" type="number" min="10" class="sell-form-input" />
+          <span class="sell-tag-hint">This is your payout after delivery — shipping and platform fee are added for the buyer.</span>
         </label>
         <label class="block text-sm font-medium">
           Estimated size / weight (from photo)
@@ -350,15 +351,15 @@
         </label>
         <label class="flex items-center gap-2 text-sm font-medium">
           <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />
-          Offer free shipping (you cover delivery — buyer pays item price only)
+          Offer free shipping (you cover delivery — buyer pays your price + platform fee only)
         </label>
         <table id="fee-breakdown-pricing" class="sell-fee-table" aria-label="Fee breakdown">
           <tbody>
-            <tr><th scope="row">Item price</th><td id="fee-item">—</td></tr>
+            <tr><th scope="row">You receive</th><td id="fee-item">—</td></tr>
             <tr><th scope="row">Shipping</th><td id="fee-shipping">—</td></tr>
+            <tr><th scope="row">Platform fee (10%)</th><td id="fee-platform">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="fee-buyer">—</td></tr>
-            <tr><th scope="row">Processing &amp; platform fee (10%)</th><td id="fee-platform">—</td></tr>
-            <tr class="sell-fee-net"><th scope="row">You receive</th><td id="fee-net">—</td></tr>
+            <tr class="sell-fee-net hidden"><th scope="row">You receive</th><td id="fee-net">—</td></tr>
           </tbody>
         </table>
         <label class="block text-sm font-medium">

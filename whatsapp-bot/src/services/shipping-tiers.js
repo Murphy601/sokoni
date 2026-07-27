@@ -125,7 +125,28 @@ export function applyAiShippingSuggestion(draft = {}) {
   };
 }
 
-export function computeFeeBreakdown(itemKes, shippingKes, { freeShipping = false } = {}) {
+/** Seller net + shipping → buyer total with platform fee added on top (not deducted from seller). */
+export function computeFeeBreakdown(sellerNetKes, shippingKes, { freeShipping = false } = {}) {
+  const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
+  const shipRaw = Math.round(Number(shippingKes) || 0);
+  const shipping = freeShipping || shipRaw === 0 ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw);
+  const subtotalKes = sellerNet + shipping;
+  const platformFeeKes = Math.round(subtotalKes * PLATFORM_FEE_RATE);
+  const buyerTotalKes = subtotalKes + platformFeeKes;
+  return {
+    sellerNetKes: sellerNet,
+    itemKes: sellerNet,
+    shippingKes: shipping,
+    subtotalKes,
+    platformFeeKes,
+    platformFeeRate: PLATFORM_FEE_RATE,
+    buyerTotalKes,
+    freeShipping: shipping === 0,
+  };
+}
+
+/** Legacy catalog items where priceKes was buyer item portion (fee deducted, not added on top). */
+export function computeFeeBreakdownLegacy(itemKes, shippingKes, { freeShipping = false } = {}) {
   const item = Math.max(0, Math.round(Number(itemKes) || 0));
   const shipRaw = Math.round(Number(shippingKes) || 0);
   const shipping = freeShipping || shipRaw === 0 ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw);
@@ -158,9 +179,39 @@ export function validateShippingKes(shippingKes, { freeShipping = false } = {}) 
 
 /** Buyer-facing totals from a catalog product. */
 export function computeProductTotals(product = {}) {
+  const sellerNetExplicit = product.sellerNetKes != null ? Math.round(Number(product.sellerNetKes)) : null;
+
+  if (sellerNetExplicit != null && sellerNetExplicit >= 0) {
+    if (product.freeShipping) {
+      const fees = computeFeeBreakdown(sellerNetExplicit, 0, { freeShipping: true });
+      return {
+        itemKes: fees.sellerNetKes,
+        shippingKes: 0,
+        totalKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        sellerNetKes: fees.sellerNetKes,
+        freeShipping: true,
+      };
+    }
+    const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
+    const shippingRaw =
+      product.shippingKes ??
+      product.shippingFeeKes ??
+      getShippingTier(weightClass).typicalKes;
+    const fees = computeFeeBreakdown(sellerNetExplicit, clampShippingKes(shippingRaw, weightClass));
+    return {
+      itemKes: fees.sellerNetKes,
+      shippingKes: fees.shippingKes,
+      totalKes: fees.buyerTotalKes,
+      platformFeeKes: fees.platformFeeKes,
+      sellerNetKes: fees.sellerNetKes,
+      freeShipping: false,
+    };
+  }
+
   const itemKes = Math.max(0, Math.round(Number(product.priceKes) || 0));
   if (product.freeShipping) {
-    const fees = computeFeeBreakdown(itemKes, 0, { freeShipping: true });
+    const fees = computeFeeBreakdownLegacy(itemKes, 0, { freeShipping: true });
     return {
       itemKes: fees.itemKes,
       shippingKes: 0,
@@ -175,7 +226,7 @@ export function computeProductTotals(product = {}) {
     product.shippingKes ??
     product.shippingFeeKes ??
     getShippingTier(weightClass).typicalKes;
-  const fees = computeFeeBreakdown(itemKes, clampShippingKes(shippingRaw, weightClass));
+  const fees = computeFeeBreakdownLegacy(itemKes, clampShippingKes(shippingRaw, weightClass));
   return {
     itemKes: fees.itemKes,
     shippingKes: fees.shippingKes,
@@ -212,9 +263,12 @@ export function formatBuyerTotalLine(orderOrProduct) {
   return `*KES ${total.toLocaleString()}*`;
 }
 
-/** WhatsApp / bag one-liner: item + shipping = total */
+/** WhatsApp / bag one-liner — buyer all-in total for seller listings; legacy item+ship otherwise. */
 export function formatProductListPrice(product = {}) {
   const t = computeProductTotals(product);
+  if (product.sellerNetKes != null) {
+    return `KES ${t.totalKes.toLocaleString()}`;
+  }
   if (t.freeShipping) return `KES ${t.itemKes.toLocaleString()} (free shipping)`;
   if (t.shippingKes > 0) {
     return `KES ${t.itemKes.toLocaleString()} + ${t.shippingKes.toLocaleString()} ship = ${t.totalKes.toLocaleString()}`;

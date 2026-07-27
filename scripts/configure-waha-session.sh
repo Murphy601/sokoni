@@ -100,6 +100,33 @@ else
   fi
 fi
 
+wait_session_working() {
+  local i status
+  for i in $(seq 1 45); do
+    SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" 2>/dev/null || echo "")"
+    status="$(json_field "$SESSION_JSON" status)"
+    if [ "$status" = "WORKING" ]; then
+      echo "==> Session WORKING — WhatsApp send/receive ready"
+      return 0
+    fi
+    if [ "$status" = "SCAN_QR_CODE" ]; then
+      echo "ERROR: WhatsApp session needs pairing — bot cannot reply until linked."
+      echo "       Run: bash scripts/waha-link-whatsapp.sh"
+      return 1
+    fi
+    if [ "$i" -le 3 ] || [ $((i % 5)) -eq 0 ]; then
+      echo "==> Waiting for session WORKING (status=${status:-unknown}, ${i}/45)..."
+    fi
+    sleep 2
+  done
+  status="$(json_field "$(curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" 2>/dev/null || echo "")" status)"
+  echo "WARN: Session still not WORKING (status=${status:-unknown}) — WhatsApp replies may fail."
+  echo "      Run: bash scripts/waha-link-whatsapp.sh"
+  return 1
+}
+
+wait_session_working || true
+
 echo "==> Final session:"
 curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | head -c 500
 echo ""
