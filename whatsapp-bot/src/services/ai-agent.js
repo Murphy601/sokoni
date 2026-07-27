@@ -1,5 +1,6 @@
 /**
  * Phase 7 — Unified AI agent (WhatsApp + web) with shared tool layer.
+ * Uses OPENAI_MODEL only (free chat). Never uses CATALOG_VISION_MODEL (seller photos).
  */
 import OpenAI from "openai";
 import { config } from "../config.js";

@@ -8,6 +8,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
+import { geminiVisionAvailable } from "./gemini-vision.js";
 import { sendText } from "./whatsapp.js";
 import { invalidateProductCache } from "./catalog.js";
 import { clearCatalogPauseCache } from "./catalog-guard.js";
@@ -417,6 +418,8 @@ export async function getSellerListingMeta() {
     browseTaxonomy,
     eras: ["vintage", "80s", "90s", "y2k", "handmade"],
     visionModel: config.catalog.visionModel,
+    visionProvider: "openrouter",
+    geminiVisionEnabled: geminiVisionAvailable(),
     dbEnabled: dbProductsAvailable(),
     instantPublish: true,
     studioEnabled: Boolean(process.env.PHOTOROOM_API_KEY?.trim()),

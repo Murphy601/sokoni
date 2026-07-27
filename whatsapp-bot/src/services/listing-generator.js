@@ -1,12 +1,13 @@
 /**
- * Phase 4 — AI listing generator (Gemini Vision via OpenRouter).
- * Photo → title, cost, legacy category, Depop browse path, condition, brand, color.
+ * Phase 4 — Seller listing photo AI (CATALOG_VISION_MODEL via OpenRouter).
+ * Used by sell page + listing studio only — NOT WhatsApp chat (see ai-agent.js).
  */
 import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
 import { computeRetailPrice } from "./pricing.js";
+import { geminiVisionAvailable, geminiVisionListingJson } from "./gemini-vision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TAXONOMY_PATH = path.join(__dirname, "..", "..", "..", "scripts", "browse-taxonomy.mjs");
@@ -362,47 +363,73 @@ export async function formatListingBrowseLabel(product) {
 }
 
 /**
- * Generate a listing draft from a product photo (Gemini Vision via OpenRouter).
+ * Generate a listing draft from a product photo (OpenRouter vision, then Gemini/caption).
  * @param {Buffer} buffer
  * @param {string} mimetype
  * @param {string} [caption]
  */
 export async function generateListingFromImage(buffer, mimetype, caption = "") {
-  const client = getVisionClient();
-  if (!client) throw new Error("OPENAI_API_KEY not set — vision listing unavailable");
-
-  const base64 = buffer.toString("base64");
-  const dataUrl = `data:${mimetype || "image/jpeg"};base64,${base64}`;
   const prompt = await buildListingPrompt(caption);
-  const messages = [
-    {
-      role: "user",
-      content: [
-        { type: "text", text: prompt },
-        { type: "image_url", image_url: { url: dataUrl } },
-      ],
-    },
-  ];
-
   let lastError = null;
-  for (const model of visionModelChain()) {
+
+  const client = getVisionClient();
+  if (client) {
+    const base64 = buffer.toString("base64");
+    const dataUrl = `data:${mimetype || "image/jpeg"};base64,${base64}`;
+    const messages = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: dataUrl } },
+        ],
+      },
+    ];
+
+    for (const model of visionModelChain()) {
+      try {
+        const response = await client.chat.completions.create({
+          model,
+          messages,
+          max_tokens: 600,
+          temperature: 0.1,
+        });
+
+        const raw = response.choices[0]?.message?.content?.trim() || "";
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("Vision model returned no JSON");
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.error && (!caption || !parseCost(caption))) throw new Error(parsed.error);
+
+        await finalizeListingDraft(parsed, caption);
+        console.log(
+          `[listing-generator] ok via openrouter/${model}:`,
+          parsed.name,
+          parsed.sourcePriceKes,
+          parsed.browseCategory,
+          parsed.browseSubCategory
+        );
+        return parsed;
+      } catch (err) {
+        lastError = err;
+        console.warn(`[listing-generator] openrouter failed (${model}):`, err.message);
+      }
+    }
+  } else {
+    lastError = new Error("OPENAI_API_KEY not set — OpenRouter vision unavailable");
+  }
+
+  if (geminiVisionAvailable()) {
     try {
-      const response = await client.chat.completions.create({
-        model,
-        messages,
-        max_tokens: 600,
-        temperature: 0.1,
+      const { parsed, model } = await geminiVisionListingJson({
+        prompt,
+        imageBuffer: buffer,
+        mimeType: mimetype,
       });
-
-      const raw = response.choices[0]?.message?.content?.trim() || "";
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("Vision model returned no JSON");
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(parsed.error);
-
+      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(String(parsed.error));
       await finalizeListingDraft(parsed, caption);
       console.log(
-        `[listing-generator] ok via ${model}:`,
+        `[listing-generator] ok via gemini/${model}:`,
         parsed.name,
         parsed.sourcePriceKes,
         parsed.browseCategory,
@@ -411,9 +438,41 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
       return parsed;
     } catch (err) {
       lastError = err;
-      console.warn(`[listing-generator] vision failed (${model}):`, err.message);
+      console.warn("[listing-generator] Gemini vision fallback failed:", err.message);
     }
   }
 
-  throw lastError || new Error("All vision models failed");
+  const capCost = parseCost(caption);
+  const hints = parseCaptionHints(caption);
+  if (capCost != null || hints.nameHint) {
+    try {
+      const stub = {
+        name: hints.nameHint || "Product listing",
+        sourcePriceKes: capCost || hints.cost || 0,
+        category: hints.category || "fashion",
+        subcategory: hints.subcategory,
+        isSecondhand: hints.isSecondhand,
+      };
+      await finalizeListingDraft(stub, caption);
+      console.log("[listing-generator] caption-only fallback:", stub.name, stub.sourcePriceKes);
+      return stub;
+    } catch (capErr) {
+      lastError = capErr;
+    }
+  }
+
+  throw lastError || new Error("All vision models failed — add a caption with price e.g. `130 ksh women sandals`");
+}
+
+/** Build a draft from WhatsApp-style caption only (no photo). */
+export async function generateListingFromCaption(caption = "") {
+  const hints = parseCaptionHints(caption);
+  const stub = {
+    name: hints.nameHint || "",
+    sourcePriceKes: hints.cost || parseCost(caption) || 0,
+    category: hints.category || "fashion",
+    subcategory: hints.subcategory,
+    isSecondhand: hints.isSecondhand,
+  };
+  return finalizeListingDraft(stub, caption);
 }

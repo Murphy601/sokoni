@@ -52,6 +52,10 @@ function getPhone() {
   return String(el("seller-phone")?.value || localStorage.getItem(PHONE_KEY) || "").trim();
 }
 
+function apiPhone() {
+  return normalizePhoneInput(getPhone());
+}
+
 function savePhone() {
   const phone = getPhone();
   if (phone) localStorage.setItem(PHONE_KEY, phone);
@@ -73,6 +77,27 @@ function readFileAsDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/** Shrink phone photos so API payload stays under server limit. */
+async function compressImageFile(file, maxDim = 1280, quality = 0.82) {
+  if (!file?.type?.startsWith("image/")) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob || blob.size >= file.size * 0.95) return file;
+    return new File([blob], (file.name || "photo").replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
 }
 
 function populateSelect(select, options, labels, selected) {
@@ -140,7 +165,7 @@ function bindMediaSlots() {
       }
       if (img) img.src = photoPreviews[i];
       slot?.classList.add("has-media");
-      if (i === 0 && getPhone()) maybeAutoGenerate();
+      if (i === 0 && sellerProfile) maybeAutoGenerate();
     });
   }
 
@@ -158,27 +183,38 @@ function bindMediaSlots() {
 
 async function maybeAutoGenerate() {
   if (!photoFiles[0] || draft.name) return;
-  const phone = getPhone();
+  if (!sellerProfile) {
+    setStatus("Finish seller setup first, then add photos.", true);
+    return;
+  }
+  const phone = apiPhone();
   if (!phone) return;
 
   setStatus("AI reading your first photo…");
   try {
-    const imageBase64 = await readFileAsDataUrl(photoFiles[0]);
+    const compressed = await compressImageFile(photoFiles[0]);
+    const imageBase64 = await readFileAsDataUrl(compressed);
     const res = await fetch(`${LISTINGS_API}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         phone,
         imageBase64,
-        mimeType: photoFiles[0].type || "image/jpeg",
+        mimeType: compressed.type || "image/jpeg",
         caption: el("photo-caption")?.value.trim() || "",
       }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setStatus(data.message || "AI skipped — fill in manually.", true);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setStatus(
+        parsed.data?.message ||
+          parsed.message ||
+          "AI skipped — add a caption like `130 ksh women sandals` or fill in manually.",
+        true
+      );
       return;
     }
+    const data = parsed.data;
     draft = { ...draft, ...data.draft };
     sellerInfo = data.seller;
     if (data.studioApplied && data.cleanImageBase64) {
@@ -195,12 +231,13 @@ async function maybeAutoGenerate() {
       slot?.classList.add("has-media", "has-studio");
       setStatus("AI cleaned background + filled draft — review each step.");
     } else {
-      setStatus("AI filled a draft — review each step before posting.");
+      setStatus(data.message || "AI filled a draft — review each step before posting.");
     }
     fillFormFromDraft();
     if (sellerInfo?.businessName) showSellerProfile(sellerInfo);
   } catch {
-    setStatus("AI unavailable — you can fill everything manually.");
+    setStatus("Could not reach Sokoni — check your connection and try again.", true);
+    checkApiHealth();
   }
 }
 
@@ -287,15 +324,22 @@ function fillReview() {
 async function collectImagesBase64() {
   const images = [];
   for (const file of photoFiles) {
-    if (file) images.push(await readFileAsDataUrl(file));
+    if (file) {
+      const compressed = await compressImageFile(file);
+      images.push(await readFileAsDataUrl(compressed));
+    }
   }
   return images;
 }
 
 async function onPublish() {
-  const phone = getPhone();
+  const phone = apiPhone();
   if (!phone) {
     setStatus("Enter your WhatsApp number.", true);
+    return;
+  }
+  if (!sellerProfile) {
+    setStatus("Finish seller setup first.", true);
     return;
   }
   if (!photoFiles[0]) {
@@ -318,11 +362,12 @@ async function onPublish() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, draft: collectDraft(), images, videoBase64 }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setStatus(data.message || data.error || "Post failed.", true);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Post failed.", true);
       return;
     }
+    const data = parsed.data;
 
     el("success-box")?.classList.remove("hidden");
     el("success-ref").textContent = data.productId || "";
@@ -341,9 +386,19 @@ async function onPublish() {
 }
 
 async function onSaveDraft() {
-  const phone = getPhone();
+  const phone = apiPhone();
   if (!phone) {
     setStatus("Enter your WhatsApp number.", true);
+    return;
+  }
+  if (!sellerProfile) {
+    setStatus("Finish seller setup first — verify WhatsApp and tap Start selling.", true);
+    return;
+  }
+  const d = collectDraft();
+  if (!d.name) {
+    setStatus("Add a title before saving — or use the photo caption field with price e.g. `130 ksh sandals`.", true);
+    goStep(1);
     return;
   }
   savePhone();
@@ -355,17 +410,18 @@ async function onSaveDraft() {
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, draft: collectDraft(), images, videoBase64 }),
+      body: JSON.stringify({ phone, draft: d, images, videoBase64 }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setStatus(data.message || data.error || "Save failed.", true);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Save failed.", true);
       return;
     }
-    setStatus(`Draft saved (${data.draftId}).`);
+    setStatus(`Draft saved (${parsed.data.draftId}).`);
     await loadMyListings();
   } catch {
-    setStatus("Network error.", true);
+    setStatus("Could not reach Sokoni — check your connection.", true);
+    checkApiHealth();
   }
 }
 
@@ -387,7 +443,7 @@ async function loadMeta() {
 }
 
 async function loadMyListings() {
-  const phone = getPhone();
+  const phone = apiPhone();
   const wrap = el("my-listings");
   if (!phone || !wrap) return;
 
@@ -453,7 +509,7 @@ function showSellerProfile(profile) {
 }
 
 async function checkSellerProfile() {
-  const phone = getPhone();
+  const phone = apiPhone();
   if (!phone) return;
   try {
     const res = await fetch(`${ONBOARD_API}?phone=${encodeURIComponent(phone)}`);
@@ -717,7 +773,7 @@ async function onOnboard() {
 }
 
 async function refreshListing(productId) {
-  const phone = getPhone();
+  const phone = apiPhone();
   if (!phone || !productId) return;
   setStatus("Refreshing listing…");
   try {
@@ -768,7 +824,7 @@ function renderLedgerDetail() {
 }
 
 async function loadEscrowLedger() {
-  const phone = getPhone();
+  const phone = apiPhone();
   if (!phone) return;
 
   try {

@@ -65,7 +65,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({ limit: "25mb" }));
 
 app.get("/", (_req, res) => {
   res.json({
@@ -101,6 +101,7 @@ app.get("/health", async (_req, res) => {
     status: "ok",
     build: BUILD_ID,
     aiModel: config.openai.model || null,
+    catalogVisionModel: config.catalog.visionModel || null,
     aiConfigured: Boolean(config.openai.apiKey),
     aiAgent: agent.name,
     aiTools: agent.tools,

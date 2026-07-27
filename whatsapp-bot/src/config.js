@@ -17,6 +17,7 @@ export const config = {
     apiKey: process.env.WAHA_API_KEY || "",
     session: process.env.WAHA_SESSION || "default",
   },
+  /** WhatsApp + web chat AI (text only — keep on free OpenRouter models). */
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
@@ -27,10 +28,19 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
-  /** Seller AI listing (vision model + optional auto-push after approval). */
+  /** Optional Google Gemini direct API — fallback for seller photos only (not WhatsApp chat). */
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    visionModel: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
+    visionModels: (process.env.GEMINI_VISION_MODELS || "gemini-2.5-flash,gemini-2.0-flash-lite,gemini-2.0-flash")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+  /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
   catalog: {
-    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemma-4-26b-a4b-it:free",
-    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "openrouter/free,nvidia/nemotron-nano-12b-v2-vl:free")
+    visionModel: process.env.CATALOG_VISION_MODEL || "krea/krea-2-medium-turbo",
+    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemma-4-26b-a4b-it:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),

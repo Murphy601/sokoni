@@ -12,7 +12,8 @@
     "db:seed": "node scripts/migrate-catalog-to-db.mjs",
     "db:backfill-browse": "node scripts/backfill-browse-categories.mjs",
     "catalog:clear": "node scripts/clear-all-catalog.mjs",
-    "test:listing": "node scripts/test-listing-generator.mjs"
+    "test:listing": "node scripts/test-listing-generator.mjs",
+    "test:gemini": "node scripts/test-gemini-vision.mjs"
   },
   "keywords": [
     "whatsapp",
