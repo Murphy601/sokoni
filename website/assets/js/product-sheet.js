@@ -20,20 +20,6 @@
     return "";
   }
 
-  function formatShippingLine(product) {
-    if (window.SokoniApp?.formatShippingLine) return window.SokoniApp.formatShippingLine(product);
-    const ship = Number(product.shippingKes);
-    if (!Number.isFinite(ship) || ship <= 0) return "";
-    return `+ KES ${ship.toLocaleString()} shipping`;
-  }
-
-  function formatBuyerTotal(product) {
-    if (window.SokoniApp?.formatBuyerTotal) return window.SokoniApp.formatBuyerTotal(product);
-    const total = product.totalKes ?? (Number(product.priceKes || 0) + Number(product.shippingKes || 0));
-    if (total > 0) return `KES ${Math.round(total).toLocaleString()} total`;
-    return formatPrice(product);
-  }
-
   function resolveImage(product) {
     if (product?.imageUrl) return product.imageUrl;
     if (product?.id) return `assets/images/products/${product.id}.jpg`;
@@ -45,14 +31,8 @@
   }
 
   function orderLink(product) {
-    const total = product.totalKes ?? product.priceKes;
-    const ship = product.shippingKes;
-    const priceText =
-      ship != null && ship > 0
-        ? `${formatPrice(product)} + KES ${ship.toLocaleString()} shipping (total KES ${Number(total).toLocaleString()})`
-        : formatPrice(product);
     return waLink(
-      `Hi Sokoni, I'd like to order "${product.name}" (${priceText}) — prepaid. ` +
+      `Hi Sokoni, I'd like to order "${product.name}" (${formatPrice(product)}) — prepaid. ` +
         `My name, delivery location and phone are:`
     );
   }
@@ -82,8 +62,7 @@
         }
       </div>
       <div class="product-sheet-meta">
-        <p class="product-sheet-price">${escapeHtml(formatPrice(product))}${formatShippingLine(product) ? ` <span class="product-sheet-shipping">${escapeHtml(formatShippingLine(product))}</span>` : ""}</p>
-        <p class="product-sheet-total">${escapeHtml(formatBuyerTotal(product))}</p>
+        <p class="product-sheet-price">${escapeHtml(formatPrice(product))}</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
         <p class="product-sheet-tags">${escapeHtml([browseLabel(product), secondhand, condition].filter(Boolean).join(" · "))}</p>
         <p class="product-sheet-id">${escapeHtml(product.id || "")}</p>

@@ -212,8 +212,6 @@ export function buildPublicTrackingPayload(order) {
   return {
     orderId: order.id,
     productName: order.productName,
-    itemKes: order.priceKes ?? null,
-    shippingKes: order.shippingKes ?? null,
     totalKes: orderBuyerTotal(order),
     paid: order.customerPaymentStatus === "confirmed",
     paymentLine: order.customerPaymentStatus === "confirmed" ? "Paid — escrow held" : "Awaiting payment",

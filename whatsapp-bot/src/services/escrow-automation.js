@@ -85,6 +85,7 @@ async function lockProductForOrder(order) {
 async function notifyBuyerPaid(order, payment) {
   const label = generateDropoffLabel(order);
   const amt = payment.amount ?? orderBuyerTotal(order);
+  const trackUrl = `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`;
   await sendText(
     order.customerKey,
     `✅ *Payment received!*\n\n` +
@@ -94,7 +95,8 @@ async function notifyBuyerPaid(order, payment) {
       `🔒 Funds held in Sokoni escrow until delivery is confirmed.\n\n` +
       `📦 Tracking: *${label.trackingCode}*\n` +
       `Seller will drop off using prepaid label *${label.dropOffCode}*.\n\n` +
-      `Track anytime: type *track* or *${order.id}*`
+      `Track anytime: type *track* or *${order.id}*\n` +
+      `🌐 Live status: ${trackUrl}`
   );
 }
 

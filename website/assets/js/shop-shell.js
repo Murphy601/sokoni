@@ -1,10 +1,9 @@
 /**
- * Phase 5 — Saved bag with item + shipping totals.
+ * Phase 5 — Saved bag with all-in prepaid totals.
  */
 (function () {
   const BAG_KEY = "sokoni-bag";
   const WHATSAPP_NUMBER = "254117422428";
-  const MIN_SHIPPING = 150;
 
   /** @type {Set<string>} */
   let bagIds = new Set();
@@ -66,21 +65,19 @@
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
   }
 
-  function lineTotals(product) {
-    if (window.SokoniApp?.formatBuyerTotal && window.SokoniApp?.formatShippingLine) {
-      const item = Math.round(Number(product.priceKes) || 0);
-      const ship = Math.round(Number(product.shippingKes) || MIN_SHIPPING);
-      const total = product.totalKes ?? item + ship;
-      return { item, ship, total };
+  function buyerTotal(product) {
+    if (window.SokoniApp?.buyerPriceKes) {
+      return Math.round(Number(window.SokoniApp.buyerPriceKes(product)) || 0);
     }
+    if (product.totalKes != null) return Math.round(Number(product.totalKes) || 0);
     const item = Math.round(Number(product.priceKes) || 0);
-    const ship = Math.round(Number(product.shippingKes) || MIN_SHIPPING);
-    return { item, ship, total: product.totalKes ?? item + ship };
+    const ship = Math.round(Number(product.shippingKes) || 0);
+    return ship > 0 ? item + ship : item;
   }
 
   function formatPriceLine(product) {
-    const { item, ship, total } = lineTotals(product);
-    return `KES ${item.toLocaleString()} + ${ship.toLocaleString()} ship = ${total.toLocaleString()}`;
+    const total = buyerTotal(product);
+    return `KES ${total.toLocaleString()}`;
   }
 
   function renderBagSheet() {
@@ -100,14 +97,12 @@
     }
 
     empty?.classList.add("hidden");
-    let itemsSubtotal = 0;
-    let shippingSubtotal = 0;
+    let grandTotal = 0;
 
     list.innerHTML = items
       .map((p) => {
-        const { item, ship, total } = lineTotals(p);
-        itemsSubtotal += item;
-        shippingSubtotal += ship;
+        const total = buyerTotal(p);
+        grandTotal += total;
         return `
       <li class="bag-sheet-item">
         <button type="button" class="bag-sheet-open" data-product-id="${p.id}">
@@ -119,25 +114,22 @@
       })
       .join("");
 
-    const grandTotal = itemsSubtotal + shippingSubtotal;
     if (summary) {
       summary.classList.remove("hidden");
       summary.innerHTML = `
         <table class="sell-fee-table" aria-label="Bag total">
           <tbody>
-            <tr><th scope="row">Items</th><td>KES ${itemsSubtotal.toLocaleString()}</td></tr>
-            <tr><th scope="row">Shipping</th><td>KES ${shippingSubtotal.toLocaleString()}</td></tr>
             <tr class="sell-fee-total"><th scope="row">Estimated total</th><td>KES ${grandTotal.toLocaleString()}</td></tr>
           </tbody>
         </table>
-        <p class="text-xs text-brand-purple/50 mt-2">Sokoni orders one item at a time on WhatsApp — shipping per item.</p>`;
+        <p class="text-xs text-brand-purple/50 mt-2">All prices include delivery. Sokoni orders one item at a time on WhatsApp.</p>`;
     }
 
     if (orderBtn) {
       orderBtn.classList.remove("hidden");
       const lines = items.map((p) => `• ${p.name} (${formatPriceLine(p)})`).join("\n");
       orderBtn.href = waLink(
-        `Hi Sokoni, I'd like to order these saved items (prepaid, item + shipping):\n\n${lines}\n\nEstimated total KES ${grandTotal.toLocaleString()}\n\nMy name, delivery location and phone:`
+        `Hi Sokoni, I'd like to order these saved items (prepaid):\n\n${lines}\n\nEstimated total KES ${grandTotal.toLocaleString()}\n\nMy name, delivery location and phone:`
       );
     }
   }

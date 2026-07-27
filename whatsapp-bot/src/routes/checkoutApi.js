@@ -35,8 +35,6 @@ router.get("/:orderId", (req, res) => {
   res.json({
     orderId: order.id,
     productName: order.productName,
-    itemKes: order.priceKes,
-    shippingKes: order.shippingKes ?? 0,
     amountKes: orderBuyerTotal(order),
     totalKes: orderBuyerTotal(order),
     paymentStatus: order.customerPaymentStatus,
