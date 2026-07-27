@@ -318,8 +318,16 @@ export async function enrichManualDraft(draft, caption = "") {
   });
   base.browseCategory = browse.browse;
   base.browseSubCategory = browse.sub;
+  const listingPrice = Math.round(Number(base.priceKes) || 0);
   base.sourcePriceKes = Math.round(Number(base.sourcePriceKes) || 0);
-  base.priceKes = computeRetailPrice(base.sourcePriceKes);
+  if (listingPrice > 0) {
+    base.priceKes = listingPrice;
+    if (!base.sourcePriceKes) base.sourcePriceKes = Math.round(listingPrice * 0.92);
+  } else if (base.sourcePriceKes > 0) {
+    base.priceKes = computeRetailPrice(base.sourcePriceKes);
+  } else {
+    base.priceKes = 0;
+  }
   return base;
 }
 
@@ -336,7 +344,10 @@ export function applyListingFieldsToProduct(product, draft) {
   if (draft.description) product.description = draft.description;
   if (draft.sourcePriceKes != null) {
     product.sourcePriceKes = draft.sourcePriceKes;
-    product.priceKes = computeRetailPrice(draft.sourcePriceKes);
+    product.priceKes = draft.priceKes != null ? draft.priceKes : computeRetailPrice(draft.sourcePriceKes);
+  } else if (draft.priceKes != null) {
+    product.priceKes = draft.priceKes;
+    product.sourcePriceKes = Math.round(draft.priceKes * 0.92);
   }
   return product;
 }

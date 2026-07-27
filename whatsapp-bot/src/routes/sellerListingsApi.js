@@ -16,7 +16,7 @@ router.post("/generate", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg", caption = "", skipStudio = false } = req.body || {};
   const check = requireApprovedSeller(phone);
   if (check.error) {
-    return res.status(403).json({ error: check.error, message: check.message });
+    return res.status(check.error === "not_onboarded" ? 403 : 403).json({ error: check.error, message: check.message });
   }
 
   if (!imageBase64) {
@@ -42,7 +42,7 @@ router.post("/studio", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
   const check = requireApprovedSeller(phone);
   if (check.error) {
-    return res.status(403).json({ error: check.error, message: check.message });
+    return res.status(check.error === "not_onboarded" ? 403 : 403).json({ error: check.error, message: check.message });
   }
   if (!imageBase64) {
     return res.status(400).json({ error: "missing_image" });
@@ -69,7 +69,7 @@ router.post("/publish", async (req, res) => {
       ? [imageBase64]
       : [];
   const result = await publishSellerListing({ phone, draft, images: imageList, videoBase64, draftId });
-  if (result.error === "not_approved") return res.status(403).json(result);
+  if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
   if (result.error) return res.status(400).json(result);
   res.status(201).json(result);
 });
@@ -79,7 +79,7 @@ router.post("/draft", async (req, res) => {
   const { phone, draft, images, imageBase64, videoBase64 } = req.body || {};
   const imageList = Array.isArray(images) ? images : imageBase64 ? [imageBase64] : [];
   const result = await saveSellerDraft({ phone, draft, images: imageList, videoBase64 });
-  if (result.error === "not_approved") return res.status(403).json(result);
+  if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
   if (result.error) return res.status(400).json(result);
   res.status(201).json(result);
 });

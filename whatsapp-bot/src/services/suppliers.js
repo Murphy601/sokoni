@@ -262,6 +262,46 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
   return { supplier, products: added, application: app };
 }
 
+export function createPeerSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId = "" }) {
+  loadSuppliers();
+  const existing = findSupplierByPhone(phone);
+  if (existing) {
+    if (mpesaNumber) existing.mpesaNumber = mpesaNumber;
+    if (shopHandle) existing.shopHandle = shopHandle;
+    if (nationalId) existing.nationalId = nationalId;
+    existing.isSellerVerified = true;
+    existing.role = "SELLER";
+    persistSuppliers();
+    return { supplier: existing, existing: true };
+  }
+
+  const handle = String(shopHandle || shopName || "shop")
+    .replace(/^@/, "")
+    .trim();
+  const id = `seller-${slugify(handle)}-${Date.now().toString(36).slice(-4)}`;
+  const supplier = {
+    id,
+    businessName: String(shopName || handle).trim(),
+    shopHandle: handle ? `@${handle.replace(/^@/, "")}` : null,
+    contactName: String(shopName || handle).trim(),
+    phone: normalizePhoneDigits(phone),
+    mpesaNumber: normalizePhoneDigits(mpesaNumber),
+    nationalId: String(nationalId || "").trim() || null,
+    isSellerVerified: true,
+    role: "SELLER",
+    peerSeller: true,
+    approvedAt: Date.now(),
+    productIds: [],
+    city: "",
+    delivers: true,
+    deliveryAreas: "Countrywide",
+  };
+
+  supplierStore.suppliers[id] = supplier;
+  persistSuppliers();
+  return { supplier, existing: false };
+}
+
 export function rejectApplication(applicationId, reason = "") {
   loadApps();
   const app = appStore.applications[applicationId];

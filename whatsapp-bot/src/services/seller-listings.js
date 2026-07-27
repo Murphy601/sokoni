@@ -21,6 +21,7 @@ import { processListingWithStudio } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing } from "./listing-moderation.js";
+import { requireSeller } from "./seller-onboard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -94,14 +95,7 @@ async function saveStore() {
 }
 
 export function requireApprovedSeller(phone) {
-  const supplier = findSupplierByPhone(phone);
-  if (!supplier) {
-    return {
-      error: "not_approved",
-      message: "List at sokonimall.com/suppliers/list — photo, details, post live.",
-    };
-  }
-  return { supplier };
+  return requireSeller(phone);
 }
 
 export async function generateSellerListingDraft(buffer, mimeType, caption = "", opts = {}) {
@@ -311,8 +305,8 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   if (check.error) return check;
 
   const enriched = await enrichManualDraft(draft);
-  if (!enriched.name || !enriched.sourcePriceKes) {
-    return { error: "missing_fields", message: "Title and supply price are required." };
+  if (!enriched.name || (!enriched.priceKes && !enriched.sourcePriceKes)) {
+    return { error: "missing_fields", message: "Title and price are required." };
   }
   if (!images.length) {
     return { error: "missing_image", message: "Add at least one product photo." };
@@ -426,7 +420,7 @@ export async function getSellerListingMeta() {
     dbEnabled: dbProductsAvailable(),
     instantPublish: true,
     studioEnabled: Boolean(process.env.PHOTOROOM_API_KEY?.trim()),
-    note: "Approved suppliers only. Listings go live instantly; moderation runs after publish.",
+    note: "Set up your shop (phone + M-Pesa), then list. Listings go live instantly; moderation runs after publish.",
   };
 }
 

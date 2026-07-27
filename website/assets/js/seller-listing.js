@@ -1,7 +1,9 @@
-const LISTINGS_API =
+const API_BASE =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "http://localhost:3001/api/seller/listings"
-    : "https://bot.sokonimall.com/api/seller/listings";
+    ? "http://localhost:3001"
+    : "https://bot.sokonimall.com";
+const LISTINGS_API = `${API_BASE}/api/seller/listings`;
+const ONBOARD_API = `${API_BASE}/api/seller/onboard`;
 
 const PHONE_KEY = "sokoni-seller-phone";
 const DRAFT_KEY = "sokoni-seller-draft";
@@ -105,13 +107,13 @@ function retailFromSupply(supply) {
   return Math.ceil((cost + 100 + Math.round(cost * 0.08)) / 50) * 50;
 }
 
-function suggestedRange(supply) {
-  const mid = retailFromSupply(supply);
-  if (!mid) return "—";
-  const low = Math.max(50, Math.floor(mid * 0.85 / 50) * 50);
-  const high = Math.ceil(mid * 1.15 / 50) * 50;
-  return `${formatKes(low)} – ${formatKes(high)}`;
+function netToSeller(price) {
+  return Math.round(Math.max(0, Number(price) || 0) * 0.92);
 }
+
+let sellerProfile = null;
+let ledgerData = null;
+let activeLedgerTab = "available";
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -137,7 +139,6 @@ function bindMediaSlots() {
       if (i === 0 && getPhone()) maybeAutoGenerate();
     });
   }
-}
 
   el("video-input")?.addEventListener("change", (ev) => {
     const file = ev.target.files?.[0];
@@ -178,7 +179,7 @@ async function maybeAutoGenerate() {
     sellerInfo = data.seller;
     if (data.studioApplied && data.cleanImageBase64) {
       photoPreviews[0] = data.cleanImageBase64;
-      const slot = document.querySelector(".photo-slot[data-index='0']");
+      const slot = el("media-slot-0");
       let img = slot?.querySelector("img.preview");
       if (slot && !img) {
         img = document.createElement("img");
@@ -193,10 +194,7 @@ async function maybeAutoGenerate() {
       setStatus("AI filled a draft — review each step before posting.");
     }
     fillFormFromDraft();
-    if (sellerInfo?.businessName) {
-      el("seller-badge").textContent = sellerInfo.businessName;
-      el("seller-badge-wrap")?.classList.remove("hidden");
-    }
+    if (sellerInfo?.businessName) showSellerProfile(sellerInfo);
   } catch {
     setStatus("AI unavailable — you can fill everything manually.");
   }
@@ -208,14 +206,12 @@ function fillFormFromDraft() {
   el("draft-tags").value = (draft.tags || []).map((t) => `#${t}`).join(" ");
   el("draft-brand").value = draft.brand || "";
   el("draft-brand2").value = draft.secondaryBrand || "";
-  el("draft-supply").value = draft.sourcePriceKes ?? "";
+  el("draft-price").value = draft.priceKes ?? draft.sourcePriceKes ?? "";
   el("draft-color").value = draft.color || "";
   el("draft-size").value = draft.size || "";
   el("draft-location").value = draft.location || "";
   el("draft-era").value = draft.era || "";
   el("draft-secondhand").checked = Boolean(draft.isSecondhand);
-  el("draft-retail").textContent = formatKes(draft.priceKes || retailFromSupply(draft.sourcePriceKes));
-  el("price-range").textContent = suggestedRange(draft.sourcePriceKes);
 
   populateSelect(el("draft-category"), Object.keys(CATEGORY_LABELS), CATEGORY_LABELS, draft.category);
   populateSelect(el("draft-condition"), meta.conditions, CONDITION_LABELS, draft.condition);
@@ -260,7 +256,8 @@ function collectDraft() {
     tags,
     brand: el("draft-brand").value.trim(),
     secondaryBrand: el("draft-brand2").value.trim(),
-    sourcePriceKes: Math.round(Number(el("draft-supply").value) || 0),
+    priceKes: Math.round(Number(el("draft-price").value) || 0),
+    sourcePriceKes: netToSeller(el("draft-price").value),
     category: el("draft-category").value,
     browseCategory: el("draft-browse-cat")?.value,
     browseSubCategory: el("draft-browse-sub")?.value,
@@ -278,7 +275,7 @@ function fillReview() {
   el("review-summary").innerHTML = `
     <p class="font-semibold text-lg">${d.name || "—"}</p>
     <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-2">${d.description || "—"}</p>
-    <p class="text-sm mt-3">Supply ${formatKes(d.sourcePriceKes)} → Retail ~${formatKes(retailFromSupply(d.sourcePriceKes))}</p>
+    <p class="text-sm mt-3">Price ${formatKes(d.priceKes)} · You receive ~${formatKes(netToSeller(d.priceKes))}</p>
     <p class="text-sm">${d.browseCategory || ""} → ${d.browseSubCategory || ""} · ${CONDITION_LABELS[d.condition] || d.condition}</p>
     <p class="text-xs mt-2 text-brand-purple/50">${(d.tags || []).map((t) => `#${t}`).join(" ")}</p>`;
 }
@@ -400,7 +397,7 @@ async function loadMyListings() {
     }
     const items = [...(data.listings || []), ...(data.drafts || [])];
     if (!items.length) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet.</p>`;
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet — add your first item above.</p>`;
       return;
     }
     wrap.innerHTML = items
@@ -408,26 +405,200 @@ async function loadMyListings() {
         const status = item.status || "draft";
         const badge =
           status === "live"
-            ? "bg-brand-green/20 text-brand-purple"
+            ? "bg-brand-green/20 text-brand-purple dark:text-brand-green"
             : status === "hidden"
               ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-              : "bg-brand-purple/10 text-brand-purple dark:bg-white/10";
+              : "bg-brand-purple/10 text-brand-purple dark:bg-white/10 dark:text-white";
         const title = item.draft?.name || item.id;
         const img = item.imageUrl || item.images?.[0];
+        const pid = item.productId || item.id;
+        const price = item.draft?.priceKes || item.draft?.sourcePriceKes;
+        const shareUrl = `https://sokonimall.com/?q=${encodeURIComponent(pid)}`;
         return `
-          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start">
+          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start" data-product-id="${pid}">
             ${img ? `<img src="../${img}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : ""}
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate">${title}</p>
-              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${item.productId || item.id}</p>
+              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${pid}${price ? ` · ${formatKes(price)}` : ""}</p>
               <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${status}</span>
+              ${status === "live" ? `
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button type="button" class="text-xs font-semibold text-brand-green hover:underline refresh-listing-btn" data-id="${pid}">↻ Refresh listing</button>
+                <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${title} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-green hover:underline">Share to WhatsApp</a>
+              </div>` : ""}
             </div>
           </div>`;
       })
       .join("");
+
+    wrap.querySelectorAll(".refresh-listing-btn").forEach((btn) => {
+      btn.addEventListener("click", () => refreshListing(btn.dataset.id));
+    });
   } catch {
     wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error.</p>`;
   }
+}
+
+function showSellerProfile(profile) {
+  sellerProfile = profile;
+  el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
+  if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
+  el("seller-profile-bar")?.classList.remove("hidden");
+  el("listing-wizard")?.classList.remove("hidden");
+  el("onboard-panel")?.classList.add("hidden");
+}
+
+async function checkSellerProfile() {
+  const phone = getPhone();
+  if (!phone) return;
+  try {
+    const res = await fetch(`${ONBOARD_API}?phone=${encodeURIComponent(phone)}`);
+    if (!res.ok) {
+      el("listing-wizard")?.classList.add("hidden");
+      el("onboard-panel")?.classList.remove("hidden");
+      return;
+    }
+    const data = await res.json();
+    if (data.seller) {
+      showSellerProfile(data.seller);
+      await loadMyListings();
+      await loadEscrowLedger();
+    }
+  } catch {
+    /* stay on onboard */
+  }
+}
+
+function setOnboardStatus(msg, isError = false) {
+  const node = el("onboard-status");
+  if (!node) return;
+  node.textContent = msg || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(msg));
+}
+
+async function onOnboard() {
+  const phone = getPhone();
+  const shopName = el("onboard-shop-name")?.value.trim();
+  const shopHandle = el("onboard-shop-handle")?.value.trim();
+  const mpesaNumber = el("onboard-mpesa")?.value.trim();
+  const nationalId = el("onboard-national-id")?.value.trim();
+
+  if (!phone) {
+    setOnboardStatus("Enter your WhatsApp number.", true);
+    return;
+  }
+  if (!shopName) {
+    setOnboardStatus("Shop name is required.", true);
+    return;
+  }
+  if (!mpesaNumber) {
+    setOnboardStatus("M-Pesa payout number is required.", true);
+    return;
+  }
+
+  savePhone();
+  setOnboardStatus("Creating your shop…");
+  el("onboard-btn").disabled = true;
+
+  try {
+    const res = await fetch(ONBOARD_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, shopName, shopHandle, mpesaNumber, nationalId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setOnboardStatus(data.message || data.error || "Setup failed.", true);
+      return;
+    }
+    setOnboardStatus(data.message || "Shop ready — add your first listing.");
+    showSellerProfile(data.seller);
+    await loadMyListings();
+    await loadEscrowLedger();
+  } catch {
+    setOnboardStatus("Network error — try again.", true);
+  } finally {
+    el("onboard-btn").disabled = false;
+  }
+}
+
+async function refreshListing(productId) {
+  const phone = getPhone();
+  if (!phone || !productId) return;
+  setStatus("Refreshing listing…");
+  try {
+    const res = await fetch(`${ONBOARD_API}/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, productId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(data.message || data.error || "Refresh failed.", true);
+      return;
+    }
+    setStatus(data.message || "Listing refreshed.");
+    await loadMyListings();
+  } catch {
+    setStatus("Network error.", true);
+  }
+}
+
+function renderLedgerDetail() {
+  const node = el("ledger-detail");
+  if (!node || !ledgerData) return;
+
+  const tab = activeLedgerTab;
+  const section =
+    tab === "available"
+      ? ledgerData.available
+      : tab === "pending"
+        ? ledgerData.pendingEscrow
+        : ledgerData.inTransit;
+
+  const items = section?.items || [];
+  if (!items.length) {
+    node.innerHTML = `<p class="text-brand-purple/50 dark:text-white/50">Nothing here yet.</p>`;
+    return;
+  }
+
+  node.innerHTML = items
+    .map(
+      (item) =>
+        `<div class="flex justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
+          <span class="truncate">${item.productName || item.orderId}</span>
+          <span class="font-semibold shrink-0">${formatKes(item.amountKes)}</span>
+        </div>`
+    )
+    .join("");
+}
+
+async function loadEscrowLedger() {
+  const phone = getPhone();
+  if (!phone) return;
+
+  try {
+    const res = await fetch(`${ONBOARD_API}/ledger?phone=${encodeURIComponent(phone)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    ledgerData = data.ledger;
+    el("ledger-available-total").textContent = formatKes(ledgerData.available?.totalKes || 0);
+    el("ledger-pending-total").textContent = formatKes(ledgerData.pendingEscrow?.totalKes || 0);
+    el("ledger-transit-total").textContent = formatKes(ledgerData.inTransit?.totalKes || 0);
+    renderLedgerDetail();
+  } catch {}
+}
+
+function bindLedgerTabs() {
+  document.querySelectorAll(".sell-ledger-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      activeLedgerTab = tab.dataset.ledger || "available";
+      document.querySelectorAll(".sell-ledger-tab").forEach((t) => t.classList.toggle("is-active", t === tab));
+      renderLedgerDetail();
+    });
+  });
 }
 
 function init() {
@@ -435,6 +606,7 @@ function init() {
   if (saved && el("seller-phone")) el("seller-phone").value = saved;
 
   bindMediaSlots();
+  bindLedgerTabs();
   updateStepUi();
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
@@ -442,14 +614,16 @@ function init() {
   el("post-btn")?.addEventListener("click", onPublish);
   el("save-draft-btn")?.addEventListener("click", onSaveDraft);
   el("load-listings-btn")?.addEventListener("click", loadMyListings);
-  el("seller-phone")?.addEventListener("change", savePhone);
-  el("draft-supply")?.addEventListener("input", () => {
-    const supply = Number(el("draft-supply").value);
-    el("draft-retail").textContent = formatKes(retailFromSupply(supply));
-    el("price-range").textContent = suggestedRange(supply);
+  el("load-ledger-btn")?.addEventListener("click", loadEscrowLedger);
+  el("onboard-btn")?.addEventListener("click", onOnboard);
+  el("seller-phone")?.addEventListener("change", () => {
+    savePhone();
+    checkSellerProfile();
   });
 
-  loadMeta().then(loadMyListings);
+  loadMeta().then(() => {
+    checkSellerProfile();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

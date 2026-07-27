@@ -60,22 +60,48 @@
     <div id="wizard-root" class="space-y-6">
       <div>
         <p class="text-sm font-semibold text-brand-green mb-2">Sell on Sokoni · Prepaid marketplace</p>
-        <h1 class="font-display text-3xl font-bold mb-2">Add a listing</h1>
+        <h1 class="font-display text-3xl font-bold mb-2">Start selling</h1>
         <p class="text-sm text-brand-purple/60 dark:text-white/60">
-          Upload photos → add details → post. Your item goes <strong>live instantly</strong> — like Depop. Sokoni scans listings after publish.
+          WhatsApp verify → shop setup → first listing. Items go <strong>live instantly</strong> — like Depop. Payouts via M-Pesa after delivery.
         </p>
       </div>
 
-      <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-5">
+      <!-- Step 0: Seller onboarding -->
+      <section id="onboard-panel" class="rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
+        <h2 class="font-bold text-lg">1. Set up your shop</h2>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">Takes under 60 seconds. Your WhatsApp number is your login.</p>
         <label class="block text-sm font-medium">
-          WhatsApp number on your supplier account *
-          <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx"
-                 class="mt-1 w-full rounded-xl border border-brand-purple/15 dark:border-white/15 px-3 py-2.5 bg-white/80 dark:bg-brand-purpleLight/40 focus:ring-2 focus:ring-brand-green focus:outline-none" />
+          WhatsApp number *
+          <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" />
         </label>
-        <p id="seller-badge-wrap" class="hidden mt-2">
-          <span id="seller-badge" class="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-brand-green/20 text-brand-purple"></span>
-        </p>
+        <label class="block text-sm font-medium">
+          Shop name *
+          <input id="onboard-shop-name" type="text" required placeholder="e.g. Thrift Nairobi" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          Shop handle
+          <input id="onboard-shop-handle" type="text" placeholder="@thrift_nairobi" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          M-Pesa number for payouts *
+          <input id="onboard-mpesa" type="tel" required placeholder="2547XXXXXXXX" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          National ID (optional, fraud prevention)
+          <input id="onboard-national-id" type="text" placeholder="ID number" class="sell-form-input" />
+        </label>
+        <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto">Create shop</button>
+        <p id="onboard-status" class="text-sm"></p>
       </section>
+
+      <div id="listing-wizard" class="hidden space-y-6">
+      <div id="seller-profile-bar" class="hidden rounded-2xl border border-brand-green/30 bg-brand-green/10 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p class="text-xs text-brand-purple/60 dark:text-white/60">Selling as</p>
+          <p id="seller-badge" class="font-semibold"></p>
+        </div>
+        <p id="seller-handle" class="text-sm text-brand-green font-medium"></p>
+      </div>
 
       <p id="step-label" class="text-xs font-semibold uppercase tracking-wide text-brand-purple/50 dark:text-white/50">Step 1 of 5</p>
       <div class="sell-wizard-steps" aria-hidden="true">
@@ -98,8 +124,7 @@
         </div>
         <label class="block text-sm font-medium">
           Caption hint for AI (optional)
-          <input id="photo-caption" type="text" placeholder="e.g. 130 ksh women sandals burgundy"
-                 class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          <input id="photo-caption" type="text" placeholder="e.g. 130 ksh women sandals burgundy" class="sell-form-input" />
         </label>
         <label class="block text-sm font-medium">
           Video (optional)
@@ -115,25 +140,25 @@
         <h2 class="font-bold text-lg">Title, description & tags</h2>
         <label class="block text-sm font-medium">
           Title *
-          <input id="draft-name" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          <input id="draft-name" class="sell-form-input" />
         </label>
         <label class="block text-sm font-medium">
           Description
-          <textarea id="draft-description" rows="4" placeholder="Material, fit, flaws, sizing…" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></textarea>
+          <textarea id="draft-description" rows="4" placeholder="Material, fit, flaws, sizing…" class="sell-form-input"></textarea>
         </label>
         <label class="block text-sm font-medium">
           Style tags (up to 5)
-          <input id="draft-tags" placeholder="#streetwear #vintage90s" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          <input id="draft-tags" placeholder="#streetwear #vintage90s" class="sell-form-input" />
           <span class="sell-tag-hint">Hashtags help buyers find your item in search.</span>
         </label>
         <div class="grid sm:grid-cols-2 gap-4">
           <label class="block text-sm font-medium">
             Brand tag 1
-            <input id="draft-brand" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+            <input id="draft-brand" class="sell-form-input" />
           </label>
           <label class="block text-sm font-medium">
             Brand tag 2
-            <input id="draft-brand2" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+            <input id="draft-brand2" class="sell-form-input" />
           </label>
         </div>
       </section>
@@ -144,31 +169,31 @@
         <div class="grid sm:grid-cols-2 gap-4">
           <label class="block text-sm font-medium">
             Browse category
-            <select id="draft-browse-cat" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+            <select id="draft-browse-cat" class="sell-form-input"></select>
           </label>
           <label class="block text-sm font-medium">
             Sub-category
-            <select id="draft-browse-sub" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+            <select id="draft-browse-sub" class="sell-form-input"></select>
           </label>
           <label class="block text-sm font-medium">
             Catalog category
-            <select id="draft-category" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+            <select id="draft-category" class="sell-form-input"></select>
           </label>
           <label class="block text-sm font-medium">
             Condition
-            <select id="draft-condition" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+            <select id="draft-condition" class="sell-form-input"></select>
           </label>
           <label class="block text-sm font-medium">
             Size
-            <input id="draft-size" placeholder="M, 42, One size…" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+            <input id="draft-size" placeholder="M, 42, One size…" class="sell-form-input" />
           </label>
           <label class="block text-sm font-medium">
             Colour
-            <input id="draft-color" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+            <input id="draft-color" class="sell-form-input" />
           </label>
           <label class="block text-sm font-medium">
             Era / source
-            <select id="draft-era" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+            <select id="draft-era" class="sell-form-input"></select>
           </label>
         </div>
         <label class="flex items-center gap-2 text-sm font-medium">
@@ -181,24 +206,15 @@
       <section id="panel-pricing" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
         <h2 class="font-bold text-lg">Pricing & location</h2>
         <label class="block text-sm font-medium">
-          Your supply price (KES) *
-          <input id="draft-supply" type="number" min="10" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          Listing price (KES) *
+          <input id="draft-price" type="number" min="10" class="sell-form-input" />
         </label>
-        <div class="grid sm:grid-cols-2 gap-4">
-          <div>
-            <p class="text-sm font-medium">Shelf price (customer pays)</p>
-            <p id="draft-retail" class="text-2xl font-bold text-brand-green mt-1">—</p>
-          </div>
-          <div class="sell-price-range">
-            <p class="font-semibold text-sm">Suggested range</p>
-            <p id="price-range" class="mt-1">—</p>
-          </div>
-        </div>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">Buyers pay this upfront via M-Pesa. You receive ~92% after delivery (Sokoni commission 8%).</p>
         <label class="block text-sm font-medium">
           Dispatch from (city)
-          <input id="draft-location" placeholder="Nairobi, Mombasa…" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          <input id="draft-location" placeholder="Nairobi, Mombasa…" class="sell-form-input" />
         </label>
-        <p class="text-xs text-brand-purple/50 dark:text-white/50">Delivery is coordinated on WhatsApp — pay on delivery countrywide.</p>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — funds held in Sokoni escrow until delivery confirmed.</p>
       </section>
 
       <!-- Step 5: Review -->
@@ -221,11 +237,34 @@
 
       <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
         <div class="flex items-center justify-between gap-4">
+          <h2 class="font-bold text-lg">Seller dashboard</h2>
+          <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
+            <span class="sell-ledger-dot available"></span>Available
+            <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
+          </button>
+          <button type="button" class="sell-ledger-tab" data-ledger="pending">
+            <span class="sell-ledger-dot pending"></span>Pending escrow
+            <p id="ledger-pending-total" class="text-lg font-bold mt-1">—</p>
+          </button>
+          <button type="button" class="sell-ledger-tab" data-ledger="transit">
+            <span class="sell-ledger-dot transit"></span>In transit
+            <p id="ledger-transit-total" class="text-lg font-bold mt-1">—</p>
+          </button>
+        </div>
+        <div id="ledger-detail" class="text-sm space-y-2"></div>
+      </section>
+
+      <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <div class="flex items-center justify-between gap-4">
           <h2 class="font-bold text-lg">My listings</h2>
           <button id="load-listings-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
         </div>
         <div id="my-listings" class="space-y-3"></div>
       </section>
+      </div>
     </div>
   </main>
 

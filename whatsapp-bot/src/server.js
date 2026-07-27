@@ -16,6 +16,8 @@ import { listReviews, addReview } from "./services/reviews.js";
 import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
+import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
+import ordersApiRouter from "./routes/ordersApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
 import paymentsApiRouter from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
@@ -133,6 +135,8 @@ app.post("/api/reviews", (req, res) => {
 app.use("/api/suppliers", suppliersApiRouter);
 app.use("/api/products", productsApiRouter);
 app.use("/api/seller/listings", sellerListingsApiRouter);
+app.use("/api/seller/onboard", sellerOnboardApiRouter);
+app.use("/api/orders", ordersApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/payments", paymentsApiRouter);
 app.use("/api/tracking", trackingApiRouter);
