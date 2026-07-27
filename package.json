@@ -8,6 +8,8 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev",
     "design:lint": "designmd lint website/DESIGN.md",
     "design:export": "designmd export website/DESIGN.md --format css-tailwind --out website/assets/css/design-tokens.css",
     "browse:build": "node scripts/build-browse-menu.mjs",
@@ -20,6 +22,7 @@
     "sharp": "^0.35.3"
   },
   "devDependencies": {
+    "wrangler": "^4.107.1",
     "@google/design.md": "^0.3.0"
   }
 }
