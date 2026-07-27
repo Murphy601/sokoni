@@ -17,6 +17,11 @@ import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
+import paymentsApiRouter from "./routes/paymentsApi.js";
+import trackingApiRouter from "./routes/trackingApi.js";
+import adminShipmentsRouter from "./routes/adminShipments.js";
+import { processDuePayouts } from "./services/settlements.js";
+import { pingDb, isDbEnabled } from "./db/pool.js";
 
 const app = express();
 
@@ -114,6 +119,9 @@ app.use("/api/suppliers", suppliersApiRouter);
 app.use("/api/products", productsApiRouter);
 app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
+app.use("/api/payments", paymentsApiRouter);
+app.use("/api/tracking", trackingApiRouter);
+app.use("/admin/shipments", adminShipmentsRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);
 app.use("/admin/pickup-points", adminPickupPointsRouter);
@@ -152,7 +160,23 @@ app.listen(config.port, () => {
   }
   startTokenRefreshScheduler();
   startTiktokScheduler();
+  startPayoutScheduler();
 });
+
+/** Move scheduled seller payouts to owed after 2–3 business day escrow hold. */
+function startPayoutScheduler() {
+  const tick = () => {
+    try {
+      const n = processDuePayouts();
+      if (n > 0) console.log(`[settlements] ${n} seller payout(s) now owed`);
+    } catch (err) {
+      console.error("[settlements] payout cron:", err.message);
+    }
+  };
+  tick();
+  setInterval(tick, 60 * 60 * 1000);
+  console.log("✓ Seller payout scheduler enabled (hourly)");
+}
 
 /** Parse "HH:MM" slots for daily posting. */
 function parsePostTimes(times) {

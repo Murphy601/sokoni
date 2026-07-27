@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Track Order — Sokoni Mall</title>
+<meta name="description" content="Track your Sokoni Mall order with SK-#### — live shipment status across Kenya." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' } }, fontFamily: { sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], display: ['Fraunces', 'Georgia', 'serif'] } } } };
+</script>
+<script>
+  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+</script>
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-20">
+    <div class="max-w-2xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Back to Sokoni</a>
+      <a href="faq.html" class="text-sm text-brand-purple/60 dark:text-white/60 hover:text-brand-green">FAQ</a>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-5 py-10">
+    <h1 class="font-display text-3xl font-bold mb-2">Track your order</h1>
+    <p class="text-brand-purple/60 dark:text-white/60 mb-8">Enter your <strong>SK-####</strong> order number for live shipment status.</p>
+
+    <form id="track-form" class="flex flex-col sm:flex-row gap-3 mb-10">
+      <label for="order-id" class="sr-only">Order number</label>
+      <input
+        id="order-id"
+        name="order"
+        type="text"
+        inputmode="text"
+        autocomplete="off"
+        placeholder="SK-1042"
+        class="flex-1 min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purpleLight px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-green"
+        required
+      />
+      <button type="submit" class="min-h-[48px] px-6 rounded-full bg-brand-green text-brand-purple font-bold hover:scale-[1.02] transition">
+        Track
+      </button>
+    </form>
+
+    <div id="track-status" class="hidden rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight p-6 shadow-sm" aria-live="polite"></div>
+    <div id="track-error" class="hidden rounded-2xl border border-red-200 bg-red-50 text-red-900 px-5 py-4 text-sm" role="alert"></div>
+    <div id="track-loading" class="hidden text-sm text-brand-purple/50">Loading tracking…</div>
+
+    <div class="mt-12 rounded-2xl bg-[#ECE5DD] p-5">
+      <p class="text-sm font-semibold mb-3">Prefer WhatsApp?</p>
+      <p class="text-sm text-brand-purple/70 mb-4">Type your order number or <em>track</em> in chat for the same live timeline.</p>
+      <a href="https://wa.me/254117422428?text=track" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-5 py-3 rounded-full text-sm">
+        Open WhatsApp
+      </a>
+    </div>
+  </main>
+
+  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-sm text-brand-purple/50 dark:text-white/50 mt-12">
+    <p><a href="index.html" class="hover:text-brand-green">Home</a> · <a href="terms.html" class="hover:text-brand-green">Terms</a></p>
+    <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise</p>
+  </footer>
+
+  <script src="assets/js/track.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

@@ -1,23 +1,28 @@
-# Phase 5 — Prepaid-only checkout (escrow)
+# Phase 5 — Prepaid escrow + Daraja automation
 
 Sokoni Mall is **100% prepaid** for the local catalog. No pay-on-delivery (COD).
 
-Safaricom **Daraja** (M-Pesa STK push) will be integrated in Phase 5.1 — the plumbing is in place now.
+When Safaricom **Daraja** is configured, payment confirms **automatically** via STK callback — no admin `#payconfirm` needed.
 
-## Buyer flow
+## Escrow cycle (Depop-style)
 
 ```
-Browse → Order details → Pay upfront (escrow) → Verified → Packed → Delivered → Seller paid
+Buyer checkout → STK push → funds held in escrow
+     → prepaid drop-off label / QR generated
+     → seller dispatches → In Transit (courier scan)
+     → Delivered → seller payout scheduled (2–3 business days)
 ```
+
+## Buyer flow (WhatsApp)
 
 1. Customer picks an item and sends name, location, phone.
 2. Order is created as `awaiting_payment` with `escrowStatus: pending`.
-3. Customer receives M-Pesa payment instructions (manual till until Daraja STK is live).
-4. Customer replies `paid` → admin `#payconfirm SK-####` → payment held in escrow.
-5. Fulfillment starts only after payment is confirmed.
-6. On delivery, escrow releases and seller payout is recorded.
+3. **Daraja live:** STK push sent automatically; customer enters M-Pesa PIN.
+4. **Daraja callback** (`ResultCode === 0`) → order `PAID`, product locked, label generated, buyer + seller notified, fulfillment starts.
+5. On delivery (`#status SK-#### delivered`), escrow releases and seller payout is **scheduled** for 3 business days later.
+6. Hourly cron promotes due payouts to `owed` (`#payouts`).
 
-## Daraja (coming soon)
+## Daraja configuration
 
 Set in `whatsapp-bot/.env`:
 
@@ -26,37 +31,51 @@ MPESA_CONSUMER_KEY=
 MPESA_CONSUMER_SECRET=
 MPESA_PASSKEY=
 MPESA_SHORTCODE=
-MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/checkout/daraja/callback
+MPESA_ENV=sandbox
+MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline
+MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/mpesa-callback
 ```
 
-When configured, `POST /api/checkout/:orderId/stk` will trigger STK push instead of manual till copy.
+Register the callback URL in the [Safaricom Daraja portal](https://developer.safaricom.co.ke/).
+
+**Manual fallback** (Daraja unset): customer pays till + replies `paid` → admin `#payconfirm`.
 
 ## API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/checkout/meta` | Prepaid model, Daraja readiness |
-| GET | `/api/checkout/SK-1042` | Checkout instructions for an order |
-| POST | `/api/checkout/SK-1042/stk` | STK stub (501 until Daraja wired) |
+| GET | `/api/checkout/SK-1042` | Checkout status for an order |
+| GET | `/api/checkout/SK-1042/label` | Prepaid drop-off label / QR payload |
+| POST | `/api/checkout/SK-1042/stk` | Initiate Daraja STK push |
+| POST | `/api/payments/mpesa-callback` | Safaricom STK callback (auto-confirm) |
+| POST | `/api/payments/daraja/callback` | Alias for mpesa-callback |
 
-## Bot commands (unchanged)
+## Bot commands
 
-- Customer: `paid` after M-Pesa payment
-- Admin: `#payconfirm SK-####` → verifies payment, starts fulfillment
-- Admin: `#payments` → pending payment claims
-- Admin: `#fulfill SK-####` → blocked until payment confirmed
+| Who | Command | When |
+|-----|---------|------|
+| Customer | *(automatic)* | STK sent after order placement |
+| Customer | `pay` | Retry STK push |
+| Customer | `paid` | Manual till fallback only |
+| Admin | `#payments` | Unpaid orders or manual claims |
+| Admin | `#payconfirm SK-####` | Manual verify (fallback) |
+| Admin | `#fulfill SK-####` | Blocked until payment confirmed |
+| Admin | `#status SK-#### delivered` | Triggers escrow release + payout schedule |
 
 ## Files
 
 | Area | Files |
 |------|--------|
-| Checkout service | `whatsapp-bot/src/services/prepaid-checkout.js` |
-| API | `whatsapp-bot/src/routes/checkoutApi.js` |
-| Orders | `whatsapp-bot/src/services/orders.js` — `awaiting_payment`, `paymentModel`, `escrowStatus` |
-| WhatsApp flow | `whatsapp-bot/src/services/menu.js` — prepaid order path |
-| Copy | `whatsapp-bot/src/services/trust-copy.js` |
-| Payments | `whatsapp-bot/src/services/payment.js` |
-| Admin | `whatsapp-bot/src/services/admin.js` — payconfirm gates fulfillment |
+| Daraja | `whatsapp-bot/src/services/daraja-mpesa.js` |
+| Escrow automation | `whatsapp-bot/src/services/escrow-automation.js` |
+| Checkout | `whatsapp-bot/src/services/prepaid-checkout.js` |
+| Payments API | `whatsapp-bot/src/routes/paymentsApi.js` |
+| Checkout API | `whatsapp-bot/src/routes/checkoutApi.js` |
+| Orders | `whatsapp-bot/src/services/orders.js` |
+| Settlements | `whatsapp-bot/src/services/settlements.js` |
+| WhatsApp flow | `whatsapp-bot/src/services/menu.js`, `webhookHandler.js` |
+| Admin | `whatsapp-bot/src/services/admin.js` |
 
 ## Deploy
 
@@ -66,10 +85,6 @@ bash ~/sokoni/scripts/deploy-bot.sh
 
 Cloudflare Pages deploys `website/` automatically on push to `main`.
 
-## Test plan
+## Next: Phase 6
 
-- [ ] Place order on WhatsApp → status `awaiting_payment`, prepaid checkout message
-- [ ] `#fulfill` before `#payconfirm` → blocked
-- [ ] Customer `paid` → `#payconfirm` → order moves to confirmed, fulfillment plan applied
-- [ ] `GET /api/checkout/meta` → `prepaidOnly: true`, `darajaConfigured: false`
-- [ ] Website FAQ/terms say prepaid escrow, not COD
+Kenya courier logistics & SK-#### tracking — see [PHASE6_LOGISTICS.md](./PHASE6_LOGISTICS.md).

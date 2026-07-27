@@ -18,7 +18,13 @@ import {
 } from "./orders.js";
 import { getSupplier } from "./suppliers.js";
 import { planFulfillment, applyFulfillmentPlan } from "./fulfillment.js";
-import { canFulfillOrder } from "./prepaid-checkout.js";
+import { canFulfillOrder, isDarajaConfigured } from "./prepaid-checkout.js";
+import { applyPostPaymentAutomation, onOrderDelivered } from "./escrow-automation.js";
+import {
+  scanShipmentAtHub,
+  advanceShipmentStatus,
+  buildPublicTrackingPayload,
+} from "./shipments.js";
 import { getPickupPoint } from "./pickupPoints.js";
 import {
   buildAdminPaidClaimMessage,
@@ -200,7 +206,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -262,21 +268,21 @@ function isAdminRelayAttempt(text) {
 
 const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
-    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Pay KES ${o.priceKes.toLocaleString()} on delivery to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}) only — not to riders. Asante! 🙏`,
+    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Payment secured in Sokoni escrow — nothing more to pay on delivery. Asante! 🙏`,
   packed: (o) =>
     o.deliveryMode === "pickup_point" && o.pickupPointName
       ? `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready at pickup partner *${o.pickupPointName}*. We'll send the shop address in the next message 📍`
       : `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready and waiting for a rider. We'll let you know when it's on the way. 🛵`,
   out_for_delivery: (o) =>
     o.deliveryMode === "pickup_point" && o.pickupPointName
-      ? `📍 *Order ${o.id} is ready for collection!*\n\nCollect your *${o.productName}* from *${o.pickupPointName}*. Inspect first, then pay *KES ${o.priceKes.toLocaleString()}* to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}).`
-      : `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with *${o.productName}*. Inspect on arrival, then pay *KES ${o.priceKes.toLocaleString()}* to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName}). Keep your phone on 📞`,
+      ? `📍 *Order ${o.id} is ready for collection!*\n\nCollect your *${o.productName}* from *${o.pickupPointName}*. Already paid — show order ID *${o.id}* at the shop.`
+      : `🛵 *Order ${o.id} is out for delivery!*\n\nYour rider is on the way with *${o.productName}*. Already paid upfront — inspect on arrival. Keep your phone on 📞`,
   delivered: (o) =>
     o.deliveryMode === "pickup_point"
       ? `🎉 *Order ${o.id} collected!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni Mall! Type *menu* anytime.`
-      : `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for testing Sokoni Mall during our beta! Type *menu* anytime.`,
+      : `🎉 *Order ${o.id} delivered!*\n\nEnjoy your *${o.productName}* 💚 Asante for shopping with Sokoni Mall! Type *menu* anytime.`,
   cancelled: (o) =>
-    `❌ *Order ${o.id} was cancelled.*\n\nYou owe nothing — zero upfront deposit policy. Type *menu* to reorder or find alternatives.`,
+    `❌ *Order ${o.id} was cancelled.*\n\nPrepaid orders are refunded if payment was taken. Type *menu* to reorder or find alternatives.`,
 };
 
 async function notifyCustomerPickupDetails(order, { force = false } = {}) {
@@ -358,11 +364,13 @@ function adminHelpText() {
     `Type *admin* or *#help* anytime for this menu.\n` +
     `Customers: *menu* · Suppliers: *vendor menu*\n\n` +
     `📋 *#orders* — recent orders\n` +
-    `💰 *#payments* — customer *paid* claims awaiting confirmation\n` +
-    `✅ *#payconfirm SK-1042* — confirm customer M-Pesa payment\n` +
+    `💰 *#payments* — unpaid prepaid orders (or manual *paid* claims)\n` +
+    `✅ *#payconfirm SK-1042* — manual payment verify (Daraja auto-confirms when live)\n` +
     `📦 *#notify-store SK-1042* — tell store/pickup point to release parcel\n` +
     `📍 *#pickup SK-1042 pp-xxxx* — assign / override pickup point\n` +
     `🔎 *#nearby SK-1042* — suggest pickup partners near customer\n` +
+    `📦 *#scan SK-1042* — hub drop-off scan (advances shipment status)\n` +
+    `   _Or #scan SK-1042 in_transit hub:Umoja · #scan SK-1042 delivered_\n` +
     `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
     `   _(or *#SK-1042 confirmed* — same as #status)_\n\n` +
     `🙏 *Customer issue commands*\n` +
@@ -452,16 +460,13 @@ async function handleStatusCommand(adminChatId, args) {
     );
   }
   await notifyCustomerOfStatus(result.order);
-  if (result.status === "delivered" && result.order.supplierId) {
-    const payout = recordDeliveryPayout(result.order);
-    updateOrderMeta(result.order.id, {
-      payoutStatus: payout ? "owed" : result.order.payoutStatus,
-      escrowStatus: "released",
-    });
+  if (result.status === "delivered") {
+    advanceShipmentStatus(result.order.id, "delivered", { actor: "admin_status", note: "#status delivered" });
+    onOrderDelivered(getOrder(result.order.id) || result.order);
   }
   const payoutNote =
     result.status === "delivered" && result.order.sourcePriceKes
-      ? `\nSupplier owed: KES ${result.order.sourcePriceKes.toLocaleString()} (#payouts)`
+      ? `\nSeller payout scheduled (2–3 business days). Check #payouts.`
       : "";
   return sendText(
     adminChatId,
@@ -560,6 +565,25 @@ async function handlePayoutsCommand(adminChatId) {
 }
 
 async function handlePaymentsCommand(adminChatId) {
+  if (isDarajaConfigured()) {
+    const awaiting = listRecentOrders(50).filter(
+      (o) => o.status === "awaiting_payment" && o.customerPaymentStatus !== "confirmed"
+    );
+    if (awaiting.length === 0) {
+      return sendText(
+        adminChatId,
+        "💰 No unpaid prepaid orders. Daraja STK auto-confirms payment — no #payconfirm needed."
+      );
+    }
+    const lines = awaiting.slice(0, 10).map(
+      (o) => `*${o.id}* · KES ${o.priceKes.toLocaleString()} · ${o.customerName} · STK ${o.paymentStatus || "pending"}`
+    );
+    return sendText(
+      adminChatId,
+      `💰 *Awaiting M-Pesa (${awaiting.length})*\n\n${lines.join("\n")}\n\nPayments confirm automatically via Daraja callback.`
+    );
+  }
+
   const pending = filterPendingPaymentClaims(listRecentOrders(50));
   if (pending.length === 0) {
     return sendText(adminChatId, "💰 No pending customer payment claims. Customers reply *paid* after paying the till.");
@@ -584,32 +608,95 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
-  updateOrderMeta(order.id, {
-    customerPaymentStatus: "confirmed",
-    customerPaidConfirmedAt: Date.now(),
-    escrowStatus: "held",
-  });
-
-  let updated = getOrder(order.id);
-  if (updated?.status === "awaiting_payment") {
-    updateOrderStatus(order.id, "confirmed");
-    const plan = planFulfillment(updated.location);
-    updated = applyFulfillmentPlan(order.id, plan) || getOrder(order.id);
+  if (order.customerPaymentStatus === "confirmed") {
+    return sendText(adminChatId, `ℹ️ *${order.id}* is already paid.`);
   }
 
-  try {
-    await sendText(
-      order.customerKey,
-      `✅ *Payment confirmed* for *${order.id}*!\n\nWe verified your M-Pesa payment of KES ${order.priceKes.toLocaleString()} — funds held in escrow until delivery. Your order is now being processed. Asante! 🙏`
+  const result = await applyPostPaymentAutomation(order, {
+    mpesaReceiptNumber: "manual-admin",
+    phoneNumber: order.phone,
+    amount: order.priceKes,
+  });
+
+  if (result?.skipped) {
+    return sendText(adminChatId, `ℹ️ *${order.id}* already paid.`);
+  }
+
+  const note = isDarajaConfigured()
+    ? "Manual fallback — Daraja normally auto-confirms."
+    : "Manual till verify — set MPESA_* for auto STK.";
+
+  return sendText(
+    adminChatId,
+    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()} · escrow held\nCustomer + seller notified.\n\n${note}\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
+  );
+}
+
+async function handleScanCommand(adminChatId, args) {
+  const orderId = args.trim().match(/\b(SK-\d+)\b/i)?.[1]?.toUpperCase();
+  if (!orderId) {
+    return sendText(
+      adminChatId,
+      "Usage: #scan SK-1042\nOr: #scan SK-1042 in_transit hub:Umoja\nOr: #scan SK-1042 delivered"
     );
+  }
+
+  const order = getOrder(orderId);
+  if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
+
+  const tail = args.replace(/\bSK-\d+\b/i, "").trim();
+  const forceMatch = tail.match(/\b(label_ready|dropped_off|in_transit|at_pickup_point|delivered)\b/i);
+  const hubMatch = tail.match(/\bhub:(\S+)/i);
+  const courierMatch = tail.match(/\bcourier:(\S+)/i);
+
+  const result = forceMatch
+    ? advanceShipmentStatus(orderId, forceMatch[1].toLowerCase(), {
+        hubName: hubMatch?.[1]?.replace(/_/g, " "),
+        courierName: courierMatch?.[1]?.replace(/_/g, " "),
+        actor: "admin_scan",
+      })
+    : scanShipmentAtHub(orderId, {
+        hubName: hubMatch?.[1]?.replace(/_/g, " "),
+        courierName: courierMatch?.[1]?.replace(/_/g, " "),
+        actor: "admin_scan",
+      });
+
+  if (result.error === "no_next_status") {
+    return sendText(adminChatId, `ℹ️ *${orderId}* shipment already at final step (${order.shipmentStatus}).`);
+  }
+  if (result.error) {
+    return sendText(adminChatId, `⚠️ Scan failed: ${result.error}`);
+  }
+
+  const tracking = buildPublicTrackingPayload(result.order);
+  try {
+    if (result.order.customerKey) {
+      await sendText(
+        result.order.customerKey,
+        `📦 *${result.order.id}* update: *${tracking.shipmentStatusLabel}*\n\n` +
+          `${renderShipmentTimelineFromPayload(tracking)}\n\n` +
+          `_Track anytime: type *${result.order.id}* or visit sokonimall.com/track.html_`
+      );
+    }
   } catch (err) {
-    console.warn("[admin] customer pay confirm notify failed:", err.message);
+    console.warn("[admin] scan customer notify failed:", err.message);
+  }
+
+  if (result.status === "delivered") {
+    onOrderDelivered(result.order);
   }
 
   return sendText(
     adminChatId,
-    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()} · escrow held\nCustomer notified.\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
+    `✅ *${orderId}* → ${tracking.shipmentStatusLabel}\nCustomer notified.\n\n` +
+      `${tracking.shipmentTimeline.map((s) => `${s.done ? "✅" : s.active ? "🔵" : "⚪"} ${s.label}`).join("\n")}`
   );
+}
+
+function renderShipmentTimelineFromPayload(tracking) {
+  return (tracking.shipmentTimeline || [])
+    .map((s) => `${s.done ? "✅" : s.active ? "🔵" : "⚪"} ${s.label}`)
+    .join("\n");
 }
 
 async function handleNotifyStoreCommand(adminChatId, orderId) {
@@ -864,6 +951,10 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#transit\b/i.test(t)) {
     await handleTransitCommand(adminChatId, t.replace(/^#transit\b/i, ""));
+    return true;
+  }
+  if (/^#scan\b/i.test(t)) {
+    await handleScanCommand(adminChatId, t.replace(/^#scan\b/i, ""));
     return true;
   }
 

@@ -31,16 +31,21 @@ function persist() {
   }
 }
 
-/** Record supplier payout owed when order is delivered (escrow released). */
-export function recordDeliveryPayout(order) {
-  if (!order?.supplierId || !order.sourcePriceKes) return null;
-  load();
+/** Add N business days (Mon–Fri) in Africa/Nairobi calendar. */
+export function addBusinessDays(fromMs, days) {
+  let d = new Date(fromMs);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added += 1;
+  }
+  return d.getTime();
+}
 
-  const existing = store.entries.find((e) => e.orderId === order.id && e.status !== "cancelled");
-  if (existing) return existing;
-
+function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
   const supplier = getSupplier(order.supplierId);
-  const entry = {
+  return {
     id: `PAY-${order.id}`,
     orderId: order.id,
     supplierId: order.supplierId,
@@ -50,12 +55,56 @@ export function recordDeliveryPayout(order) {
     payoutAmountKes: order.sourcePriceKes,
     marginKes: order.marginKes || Math.max(0, (order.priceKes || 0) - (order.sourcePriceKes || 0)),
     retailKes: order.priceKes,
-    status: "owed",
+    status,
     createdAt: Date.now(),
     deliveredAt: Date.now(),
+    payoutEligibleAt,
     paidAt: null,
   };
+}
 
+/**
+ * Schedule seller payout 3 business days after delivery (Depop-style escrow release).
+ */
+export function scheduleSellerPayoutAfterDelivery(order) {
+  if (!order?.supplierId || !order.sourcePriceKes) return null;
+  load();
+
+  const existing = store.entries.find((e) => e.orderId === order.id && e.status !== "cancelled");
+  if (existing) return existing;
+
+  const eligibleAt = order.payoutEligibleAt || addBusinessDays(Date.now(), 3);
+  const entry = buildPayoutEntry(order, { status: "scheduled", payoutEligibleAt: eligibleAt });
+  store.entries.unshift(entry);
+  if (store.entries.length > 500) store.entries.length = 500;
+  persist();
+  return entry;
+}
+
+/** Promote scheduled payouts whose hold period has elapsed. */
+export function processDuePayouts() {
+  load();
+  const now = Date.now();
+  let promoted = 0;
+  for (const entry of store.entries) {
+    if (entry.status !== "scheduled") continue;
+    if (!entry.payoutEligibleAt || entry.payoutEligibleAt > now) continue;
+    entry.status = "owed";
+    promoted += 1;
+  }
+  if (promoted) persist();
+  return promoted;
+}
+
+/** Record supplier payout owed immediately (legacy / manual). */
+export function recordDeliveryPayout(order) {
+  if (!order?.supplierId || !order.sourcePriceKes) return null;
+  load();
+
+  const existing = store.entries.find((e) => e.orderId === order.id && e.status !== "cancelled");
+  if (existing) return existing;
+
+  const entry = buildPayoutEntry(order, { status: "owed", payoutEligibleAt: null });
   store.entries.unshift(entry);
   if (store.entries.length > 500) store.entries.length = 500;
   persist();
@@ -65,6 +114,11 @@ export function recordDeliveryPayout(order) {
 export function listOwedPayouts(limit = 20) {
   load();
   return store.entries.filter((e) => e.status === "owed").slice(0, limit);
+}
+
+export function listScheduledPayouts(limit = 20) {
+  load();
+  return store.entries.filter((e) => e.status === "scheduled").slice(0, limit);
 }
 
 export function markPayoutPaid(orderId) {
@@ -80,6 +134,14 @@ export function markPayoutPaid(orderId) {
 export function getSettlementSummary() {
   load();
   const owed = store.entries.filter((e) => e.status === "owed");
+  const scheduled = store.entries.filter((e) => e.status === "scheduled");
   const totalOwed = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
-  return { count: owed.length, totalOwedKes: totalOwed, entries: owed };
+  const totalScheduled = scheduled.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
+  return {
+    count: owed.length,
+    scheduledCount: scheduled.length,
+    totalOwedKes: totalOwed,
+    totalScheduledKes: totalScheduled,
+    entries: owed,
+  };
 }

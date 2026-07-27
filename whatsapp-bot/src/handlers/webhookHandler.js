@@ -272,6 +272,33 @@ export async function handleIncomingMessage(
 
   if (await handleReviewReply(customerKey, text)) return;
 
+  if (/^(pay|retry|stk|lipa)\b/i.test(normalized)) {
+    const { findAwaitingPaymentOrderForCustomer, getOrder } = await import("../services/orders.js");
+    const {
+      initiateMpesaCheckout,
+      formatPrepaidCheckoutPrompt,
+      isDarajaConfigured,
+    } = await import("../services/prepaid-checkout.js");
+
+    const order = findAwaitingPaymentOrderForCustomer(customerKey, phone);
+    if (!order) {
+      return sendText(customerKey, "No unpaid order found. Type *menu* to browse and order.");
+    }
+    if (order.customerPaymentStatus === "confirmed") {
+      return sendText(customerKey, `✅ *${order.id}* is already paid. Type *track* for status.`);
+    }
+    if (!isDarajaConfigured()) {
+      return sendText(customerKey, formatPrepaidCheckoutPrompt(order));
+    }
+    const result = await initiateMpesaCheckout(order, { phone: order.phone || phone });
+    const prompt = formatPrepaidCheckoutPrompt(getOrder(order.id) || order);
+    if (result.ok) return sendText(customerKey, prompt);
+    return sendText(
+      customerKey,
+      `⚠️ STK push failed${result.message ? `: ${result.message}` : ""}.\n\nReply *pay* to try again.\n\n${prompt}`
+    );
+  }
+
   if (/^(paid|nimelipa|nimepay|payment done|done paying)\b/i.test(normalized)) {
     const { handleCustomerPaidClaim } = await import("../services/payment.js");
     return handleCustomerPaidClaim(customerKey, text, phone);

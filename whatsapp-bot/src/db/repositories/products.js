@@ -337,3 +337,15 @@ export async function upsertCatalogProduct(catalogProduct) {
 
   return catalogProduct.id;
 }
+
+/** Mark catalog row sold after prepaid escrow payment confirms. */
+export async function markProductSold(productId, orderId) {
+  if (!productId) return false;
+  await query(
+    `UPDATE products
+     SET in_stock = false, is_sold = true, tracking_code = COALESCE(tracking_code, $2), updated_at = NOW()
+     WHERE id = $1`,
+    [productId, orderId ? String(orderId) : null]
+  );
+  return true;
+}

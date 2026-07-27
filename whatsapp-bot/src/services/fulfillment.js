@@ -216,7 +216,7 @@ export function formatFulfillmentConfirmBlock(order) {
       order.pickupPointLandmark ? `🧭 Near ${order.pickupPointLandmark}` : "",
       order.pickupPointHours ? `🕐 ${order.pickupPointHours}` : "",
       "",
-      `_We'll notify you here when your parcel is ready to collect. Pay on delivery via M-Pesa Till or at the shop._`,
+      `_We'll notify you here when your parcel is ready to collect. Already paid upfront — show order ID at the shop._`,
     ].filter(Boolean);
     return `\n\n${lines.join("\n")}`;
   }
@@ -255,8 +255,8 @@ export function formatPickupReadyMessage(order) {
     order.pickupPointHours ? `🕐 ${order.pickupPointHours}` : "",
     order.pickupPointPhone ? `📞 Shop: +${String(order.pickupPointPhone).replace(/\D/g, "")}` : "",
     ``,
-    `Bring your order ID *${order.id}* and pay on delivery (M-Pesa Till *${config.store.mpesaTill}* or at the shop).`,
-    `_Reply *paid* after you pay. Type *track* anytime for status._`,
+    `Bring your order ID *${order.id}* — already paid via Sokoni escrow.`,
+    `_Type *track* anytime for status._`,
   ].filter((line) => line !== undefined);
   return lines.join("\n");
 }

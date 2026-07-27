@@ -109,7 +109,7 @@ export async function sendVendorApplyPrompt(customerKey) {
     `🏪 *Sell on Sokoni Mall*\n\n` +
       `This menu is for approved suppliers. You can apply here step by step (same as sokonimall.com/suppliers).\n\n` +
       `• Zero listing fees\n` +
-      `• WhatsApp orders + pay-on-delivery via Till *${config.store.mpesaTill}*\n` +
+      `• WhatsApp orders + 100% prepaid escrow (M-Pesa STK)\n` +
       `• We set retail from your supply price\n\n` +
       `Reply *1* to start your application now, or *menu* for customer shopping.`
   );
@@ -132,7 +132,7 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
     if (!requireAdminSender(customerKey, phone)) {
       await sendText(
         customerKey,
-        "Karibu Sokoni! 🛒\n\nType *menu* to browse and order (pay on delivery).\nNeed a person? *menu* → *Talk to a Human*."
+        "Karibu Sokoni! 🛒\n\nType *menu* to browse and order (100% prepaid · escrow protected).\nNeed a person? *menu* → *Talk to a Human*."
       );
       return true;
     }
@@ -206,8 +206,8 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
       await sendText(
         customerKey,
         `💰 *Supplier payouts*\n\n` +
-          `• Customer pays on delivery to Till *${config.store.mpesaTill}* (${config.store.mpesaTillName})\n` +
-          `• Sokoni remits your *supply price* after successful delivery\n` +
+          `• Buyers pay upfront via M-Pesa STK — funds held in Sokoni escrow\n` +
+          `• Sokoni remits your *supply price* 2–3 business days after delivery\n` +
           `• Delivery: ${supplier.delivers ? supplier.deliveryAreas || "your areas" : "hub / pickup coordination"}\n\n` +
           `Questions? Reply *vendor contact*.`
       );
@@ -243,7 +243,7 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
 export function customerHelpMenuText() {
   return (
     `🛍️ *Customer shortcuts*\n\n` +
-    `• *menu* — browse & order (pay on delivery)\n` +
+    `• *menu* — browse & order (100% prepaid)\n` +
     `• *track* — order status\n` +
     `• *discount* — ${OFFER_PERCENT}% off code *${PROMO_CODE}*\n` +
     `• *referral* · *gift wrap* · *scam* — trust & extras\n` +

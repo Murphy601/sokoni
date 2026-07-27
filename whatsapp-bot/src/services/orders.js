@@ -146,6 +146,19 @@ export function createOrder({ customerKey, chatId, product, details }) {
     supplierNotified: false,
     payoutStatus: sourcePriceKes != null ? "pending" : "n/a",
     customerPaymentStatus: "unpaid",
+    paymentStatus: "pending",
+    checkoutRequestId: null,
+    merchantRequestId: null,
+    mpesaReceipt: null,
+    mpesaPhone: null,
+    paidAt: null,
+    dropOffCode: null,
+    labelUrl: null,
+    qrPayload: null,
+    shipmentStatus: "pending",
+    shipmentHistory: [],
+    payoutEligibleAt: null,
+    autoPayment: false,
     customerPaidClaimedAt: null,
     customerPaidConfirmedAt: null,
     pickupPointId: null,
@@ -181,6 +194,52 @@ export function getOrder(id) {
   if (!id) return null;
   const key = String(id).toUpperCase().startsWith("SK-") ? String(id).toUpperCase() : `SK-${String(id).replace(/\D/g, "")}`;
   return store.orders[key] || null;
+}
+
+export function findOrderByCheckoutRequestId(checkoutRequestId) {
+  if (!checkoutRequestId) return null;
+  load();
+  return (
+    Object.values(store.orders).find((o) => o.checkoutRequestId === checkoutRequestId) || null
+  );
+}
+
+export function findAwaitingPaymentOrderForCustomer(customerKey, phone = "") {
+  const orders = getOrdersForCustomer(customerKey, phone);
+  return (
+    orders.find(
+      (o) =>
+        o.status === "awaiting_payment" &&
+        o.customerPaymentStatus !== "confirmed" &&
+        o.status !== "cancelled"
+    ) || null
+  );
+}
+
+/** Fallback match when Daraja callback omits CheckoutRequestID linkage. */
+export function findProcessingOrderByPhoneAmount(phone, amountKes) {
+  load();
+  const wantPhone = normalizePhoneDigits(phone);
+  const wantAmt = Math.round(Number(amountKes));
+  if (!wantPhone || !Number.isFinite(wantAmt)) return null;
+
+  const candidates = Object.values(store.orders).filter((o) => {
+    if (o.customerPaymentStatus === "confirmed") return false;
+    if (o.paymentStatus !== "processing" && o.status !== "awaiting_payment") return false;
+    const orderPhone = normalizePhoneDigits(o.phone || o.mpesaPhone);
+    if (orderPhone !== wantPhone) return false;
+    return Math.round(Number(o.priceKes)) === wantAmt;
+  });
+  candidates.sort((a, b) => (b.stkSentAt || b.createdAt || 0) - (a.stkSentAt || a.createdAt || 0));
+  return candidates[0] || null;
+}
+
+function normalizePhoneDigits(raw) {
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9 && /^[17]/.test(d)) d = `254${d}`;
+  if (!d.startsWith("254") && d.length >= 9) d = `254${d}`;
+  return d;
 }
 
 export function getOrdersForCustomer(customerKey, phone = "") {

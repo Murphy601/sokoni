@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
 import { getOrder, updateOrderMeta, updateOrderStatus } from "./orders.js";
+import { advanceShipmentStatus } from "./shipments.js";
 import {
   wrongOrderApologyMessage,
   damagedReturnMessage,
@@ -177,7 +178,13 @@ export async function handleTransitCommand(adminChatId, args) {
     if (order.status !== "out_for_delivery") {
       updateOrderStatus(orderId, "out_for_delivery");
     }
-    return sendText(adminChatId, `✅ Transit alert sent for *${order.id}*.`);
+    advanceShipmentStatus(orderId, "in_transit", {
+      riderName: flags.rider || null,
+      riderPhone: flags.phone || null,
+      etaNote: flags.eta || null,
+      actor: "admin_transit",
+    });
+    return sendText(adminChatId, `✅ Transit alert sent for *${order.id}* · shipment in transit.`);
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed: ${err.message}`);
   }

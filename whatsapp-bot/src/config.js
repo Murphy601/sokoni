@@ -76,13 +76,15 @@ export const config = {
     mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
     mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },
-  /** Safaricom Daraja — STK push (Phase 5.1). Leave unset until integrated. */
+  /** Safaricom Daraja — STK push + escrow auto-confirm (Phase 5.1). */
   mpesa: {
     consumerKey: process.env.MPESA_CONSUMER_KEY || "",
     consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
     passkey: process.env.MPESA_PASSKEY || "",
     shortcode: process.env.MPESA_SHORTCODE || "",
     callbackUrl: process.env.MPESA_CALLBACK_URL || "",
+    env: process.env.MPESA_ENV === "production" ? "production" : "sandbox",
+    transactionType: process.env.MPESA_TRANSACTION_TYPE || "CustomerBuyGoodsOnline",
   },
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**

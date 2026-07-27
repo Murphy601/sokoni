@@ -30,6 +30,11 @@ import {
   isPrepaidOnly,
   prepaidPaymentLine,
 } from "./prepaid-checkout.js";
+import {
+  renderShipmentTimelineText,
+  getEffectiveShipmentStatus,
+  shipmentStatusLabel,
+} from "./shipments.js";
 import { formatShortPaymentReminder } from "./payment.js";
 import { planFulfillment, applyFulfillmentPlan, formatFulfillmentConfirmBlock, formatFulfillmentLine } from "./fulfillment.js";
 import {
@@ -475,10 +480,28 @@ async function sendPaymentReminderSafe(to, order) {
 async function sendPrepaidCheckoutSafe(to, order) {
   if (!order) return;
   try {
-    await initiateMpesaCheckout(order);
-    await sendText(to, formatPrepaidCheckoutPrompt(order));
+    const fresh = getOrder(order.id) || order;
+    const meta = getCustomerMeta(to) || {};
+    const phone = fresh.phone || meta.phone;
+    const result = await initiateMpesaCheckout(fresh, { phone });
+    const updated = getOrder(order.id) || fresh;
+
+    if (result.alreadyPaid) return;
+
+    if (result.ok) {
+      await sendText(to, formatPrepaidCheckoutPrompt(updated));
+      return;
+    }
+
+    await sendText(
+      to,
+      `⚠️ Couldn't start M-Pesa payment${result.message ? `: ${result.message}` : ""}.\n\n` +
+        `Reply *pay* to retry STK push.\n\n` +
+        formatPrepaidCheckoutPrompt(updated)
+    );
   } catch (err) {
     console.error("[checkout] prepaid prompt failed:", err.message);
+    await sendText(to, formatPrepaidCheckoutPrompt(order));
   }
 }
 
@@ -513,6 +536,12 @@ function orderBelongsToCustomer(order, customerKey, phone = "") {
 function renderStatusTimeline(order) {
   const currentStatus = timelineStatus(order);
   if (currentStatus === "cancelled") return "❌ This order was cancelled.";
+
+  if (order.customerPaymentStatus === "confirmed" || getEffectiveShipmentStatus(order) !== "pending") {
+    const shipLine = shipmentStatusLabel(getEffectiveShipmentStatus(order));
+    return `*Shipment*\n${renderShipmentTimelineText(order)}\n_Current: ${shipLine}_`;
+  }
+
   const idx = STATUS_STEPS.indexOf(currentStatus);
   const safeIdx = idx >= 0 ? idx : 0;
   return STATUS_STEPS.map((s, i) => {
@@ -522,13 +551,18 @@ function renderStatusTimeline(order) {
 }
 
 function renderOrderCard(order) {
+  const courierLine =
+    order.courierName || order.courierTrackingRef
+      ? `🚚 Courier: ${order.courierName || "—"}${order.courierTrackingRef ? ` · Ref *${order.courierTrackingRef}*` : ""}\n`
+      : "";
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
     `💰 KES ${formatOrderKes(order.priceKes)} — ${paymentLineForOrder(order)}\n` +
     `📍 ${order.location}\n` +
-    `🚚 ${formatFulfillmentLine(order)}\n\n` +
-    `${renderStatusTimeline(order)}`
+    `🚚 ${formatFulfillmentLine(order)}\n` +
+    courierLine +
+    `\n${renderStatusTimeline(order)}`
   );
 }
 
