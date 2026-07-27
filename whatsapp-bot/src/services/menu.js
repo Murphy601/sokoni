@@ -558,7 +558,7 @@ function renderOrderCard(order) {
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
-    `💰 KES ${formatOrderKes(order.priceKes)} — ${paymentLineForOrder(order)}\n` +
+    `💰 ${formatBuyerTotalLine(order)} — ${paymentLineForOrder(order)}\n` +
     `📍 ${order.location}\n` +
     `🚚 ${formatFulfillmentLine(order)}\n` +
     courierLine +
@@ -600,7 +600,7 @@ export async function sendTrackOrderMenu(to, phone = "") {
     if (pending) {
       blocks.push(
         `⏳ *Order not finished*\n` +
-          `${pending.name} — KES ${formatOrderKes(pending.priceKes)}\n` +
+          `${pending.name} — ${formatBuyerTotalLine(pending)}\n` +
           `Send your name, location & phone to complete it, or type *cancel*.`
       );
     }
