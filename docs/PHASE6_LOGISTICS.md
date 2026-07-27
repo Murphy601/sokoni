@@ -80,4 +80,4 @@ Cloudflare Pages deploys `website/` on push to `main`.
 
 ## Next: Phase 7
 
-Unified AI layer (web + WhatsApp) on shared catalog/orders API — see roadmap in project docs.
+Unified AI layer — see [PHASE7_AI.md](./PHASE7_AI.md).

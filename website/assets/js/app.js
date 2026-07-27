@@ -105,16 +105,16 @@ async function loadTiktokFeaturedIds() {
 
 const NUDGE_COPY = {
   "phones-tablets": {
-    text: "Need a phone under KES 15,000? Prepay & get instant SK tracking 📦",
-    wa: "Hi Sokoni, nataka simu poa chini ya 15k — prepaid. What do you recommend?",
+    text: "Need a phone under KES 15,000? Ask Sokoni AI — prepaid & SK tracking 📦",
+    ask: "phone under 15000",
   },
   deals: {
-    text: "Browse 1,200+ store deals. Reply on WhatsApp — no upfront payment.",
-    wa: "Hi Sokoni, I was browsing your store and need help picking the best deal (prepaid checkout).",
+    text: "Browse hot deals — ask Sokoni AI or order prepaid on WhatsApp.",
+    ask: "best deals today under 5000",
   },
   default: {
-    text: "Tell Sokoni AI what you need — English, Kiswahili or Sheng — prepaid checkout.",
-    wa: "Hi Sokoni, I was browsing sokonimall.com and need help finding the right product.",
+    text: "Tell Sokoni AI what you need — English, Kiswahili or Sheng.",
+    ask: "help me find something",
   },
 };
 
@@ -886,7 +886,11 @@ function setupBrowseNudge() {
     const textEl = document.getElementById("ai-nudge-text");
     const linkEl = document.getElementById("ai-nudge-link");
     if (textEl) textEl.textContent = copy.text;
-    if (linkEl) linkEl.href = waLink(copy.wa);
+    if (linkEl) {
+      const q = copy.ask || "help me find something";
+      linkEl.href = `ask.html?q=${encodeURIComponent(q)}`;
+      linkEl.removeAttribute("target");
+    }
     nudge.classList.remove("hidden");
   }
 

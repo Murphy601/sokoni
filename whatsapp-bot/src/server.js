@@ -20,7 +20,9 @@ import checkoutApiRouter from "./routes/checkoutApi.js";
 import paymentsApiRouter from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
 import adminShipmentsRouter from "./routes/adminShipments.js";
+import agentApiRouter from "./routes/agentApi.js";
 import { processDuePayouts } from "./services/settlements.js";
+import { agentMeta } from "./services/ai-agent.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 
 const app = express();
@@ -69,11 +71,14 @@ app.get("/", (_req, res) => {
 app.get("/health", async (_req, res) => {
   const db = await pingDb();
   const checkout = checkoutMeta();
+  const agent = agentMeta();
   res.json({
     status: "ok",
     build: BUILD_ID,
     aiModel: config.openai.model || null,
     aiConfigured: Boolean(config.openai.apiKey),
+    aiAgent: agent.name,
+    aiTools: agent.tools,
     wahaConfigured: Boolean(config.waha.apiUrl),
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
@@ -121,6 +126,7 @@ app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/payments", paymentsApiRouter);
 app.use("/api/tracking", trackingApiRouter);
+app.use("/api/agent", agentApiRouter);
 app.use("/admin/shipments", adminShipmentsRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);

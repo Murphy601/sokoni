@@ -521,7 +521,7 @@ export async function handleIncomingMessage(
   if (session.lastProductContext && catalogRoute.action !== "none") return;
 
   try {
-    const reply = await runAiAgent(customerKey, combinedText);
+    const reply = await runAiAgent(customerKey, combinedText, phone);
     if (!reply) return;
     return sendText(customerKey, reply);
   } catch (err) {
