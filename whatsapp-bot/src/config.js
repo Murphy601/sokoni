@@ -27,7 +27,7 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
-  /** WhatsApp admin catalog intake (photos + #add / #price). */
+  /** Seller AI listing (vision model + optional auto-push after approval). */
   catalog: {
     visionModel: process.env.CATALOG_VISION_MODEL || "google/gemma-4-31b-it:free",
     visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemma-4-26b-a4b-it:free,nvidia/nemotron-nano-12b-v2-vl:free")

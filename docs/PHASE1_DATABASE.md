@@ -68,7 +68,7 @@ Use a managed Postgres or install on the VM. Example:
 DATABASE_URL=postgresql://sokoni:STRONG_PASSWORD@127.0.0.1:5432/sokoni
 ```
 
-Run migration once after deploy. WhatsApp `#add` still writes JSON today — Phase 2 will write to DB directly.
+Run migration once after deploy. Seller listings (Phase 4) upsert to Postgres on admin approve when `DATABASE_URL` is set.
 
 ## Restore catalog on website
 

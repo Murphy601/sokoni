@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sell on Sokoni — List a Product</title>
+<meta name="description" content="Approved Sokoni suppliers: upload photos, add details, post listing — live instantly on the marketplace." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['Fraunces', 'Georgia', 'serif'],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/design-tokens.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/depop-sell.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="../suppliers.html" class="text-sm font-medium hover:text-brand-green transition">← Selling hub</a>
+      <span class="text-xs font-semibold text-brand-green">Sell</span>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-5 py-8 pb-16">
+    <div id="success-box" class="hidden rounded-3xl border border-brand-green/40 bg-brand-green/10 p-8 text-center mb-8">
+      <p class="text-3xl mb-3">✅</p>
+      <h1 class="font-display text-2xl font-bold mb-2">Listing posted</h1>
+      <p class="text-sm text-brand-purple/70 dark:text-white/70 mb-2">Product ID: <strong id="success-ref"></strong></p>
+      <p id="success-status" class="text-sm mb-4">Your listing is live on Sokoni.</p>
+      <a href="../index.html" class="inline-block text-sm font-semibold text-brand-green hover:underline">View shop</a>
+    </div>
+
+    <div id="wizard-root" class="space-y-6">
+      <div>
+        <p class="text-sm font-semibold text-brand-green mb-2">Selling hub · Approved suppliers</p>
+        <h1 class="font-display text-3xl font-bold mb-2">Add a listing</h1>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">
+          Upload photos → add details → post. Your item goes <strong>live instantly</strong> — like Depop. Sokoni scans listings after publish.
+        </p>
+      </div>
+
+      <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-5">
+        <label class="block text-sm font-medium">
+          WhatsApp number on your supplier account *
+          <input id="seller-phone" type="tel" required placeholder="07xx or 2547xx"
+                 class="mt-1 w-full rounded-xl border border-brand-purple/15 dark:border-white/15 px-3 py-2.5 bg-white/80 dark:bg-brand-purpleLight/40 focus:ring-2 focus:ring-brand-green focus:outline-none" />
+        </label>
+        <p id="seller-badge-wrap" class="hidden mt-2">
+          <span id="seller-badge" class="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-brand-green/20 text-brand-purple"></span>
+        </p>
+      </section>
+
+      <p id="step-label" class="text-xs font-semibold uppercase tracking-wide text-brand-purple/50 dark:text-white/50">Step 1 of 5</p>
+      <div class="sell-wizard-steps" aria-hidden="true">
+        <div id="step-bar-0" class="sell-wizard-step is-active"></div>
+        <div id="step-bar-1" class="sell-wizard-step"></div>
+        <div id="step-bar-2" class="sell-wizard-step"></div>
+        <div id="step-bar-3" class="sell-wizard-step"></div>
+        <div id="step-bar-4" class="sell-wizard-step"></div>
+      </div>
+
+      <!-- Step 1: Media -->
+      <section id="panel-media" class="sell-panel is-active rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Photos & video</h2>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">Up to 4 photos. First photo is the cover thumbnail. Optional short video.</p>
+        <div class="sell-media-grid">
+          <div id="media-slot-0" class="sell-media-slot"><span class="sell-slot-label">📷 Cover</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
+          <div id="media-slot-1" class="sell-media-slot"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
+          <div id="media-slot-2" class="sell-media-slot"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-2" /></div>
+          <div id="media-slot-3" class="sell-media-slot"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-3" /></div>
+        </div>
+        <label class="block text-sm font-medium">
+          Caption hint for AI (optional)
+          <input id="photo-caption" type="text" placeholder="e.g. 130 ksh women sandals burgundy"
+                 class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+        </label>
+        <label class="block text-sm font-medium">
+          Video (optional)
+          <input id="video-input" type="file" accept="video/*" class="mt-1 w-full text-sm" />
+        </label>
+        <div id="video-preview-wrap" class="hidden">
+          <video id="video-preview" controls class="max-h-40 rounded-xl"></video>
+        </div>
+      </section>
+
+      <!-- Step 2: Details -->
+      <section id="panel-details" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Title, description & tags</h2>
+        <label class="block text-sm font-medium">
+          Title *
+          <input id="draft-name" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+        </label>
+        <label class="block text-sm font-medium">
+          Description
+          <textarea id="draft-description" rows="4" placeholder="Material, fit, flaws, sizing…" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></textarea>
+        </label>
+        <label class="block text-sm font-medium">
+          Style tags (up to 5)
+          <input id="draft-tags" placeholder="#streetwear #vintage90s" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          <span class="sell-tag-hint">Hashtags help buyers find your item in search.</span>
+        </label>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">
+            Brand tag 1
+            <input id="draft-brand" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">
+            Brand tag 2
+            <input id="draft-brand2" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+        </div>
+      </section>
+
+      <!-- Step 3: Attributes -->
+      <section id="panel-attributes" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Category & attributes</h2>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">
+            Browse category
+            <select id="draft-browse-cat" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Sub-category
+            <select id="draft-browse-sub" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Catalog category
+            <select id="draft-category" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Condition
+            <select id="draft-condition" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+          </label>
+          <label class="block text-sm font-medium">
+            Size
+            <input id="draft-size" placeholder="M, 42, One size…" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">
+            Colour
+            <input id="draft-color" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+          </label>
+          <label class="block text-sm font-medium">
+            Era / source
+            <select id="draft-era" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5"></select>
+          </label>
+        </div>
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input id="draft-secondhand" type="checkbox" class="rounded border-brand-purple/30" />
+          Pre-loved / secondhand
+        </label>
+      </section>
+
+      <!-- Step 4: Pricing -->
+      <section id="panel-pricing" class="sell-panel rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Pricing & location</h2>
+        <label class="block text-sm font-medium">
+          Your supply price (KES) *
+          <input id="draft-supply" type="number" min="10" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+        </label>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <p class="text-sm font-medium">Shelf price (customer pays)</p>
+            <p id="draft-retail" class="text-2xl font-bold text-brand-green mt-1">—</p>
+          </div>
+          <div class="sell-price-range">
+            <p class="font-semibold text-sm">Suggested range</p>
+            <p id="price-range" class="mt-1">—</p>
+          </div>
+        </div>
+        <label class="block text-sm font-medium">
+          Dispatch from (city)
+          <input id="draft-location" placeholder="Nairobi, Mombasa…" class="mt-1 w-full rounded-xl border border-brand-purple/15 px-3 py-2.5" />
+        </label>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">Delivery is coordinated on WhatsApp — pay on delivery countrywide.</p>
+      </section>
+
+      <!-- Step 5: Review -->
+      <section id="panel-review" class="sell-panel rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Review & post</h2>
+        <div id="review-summary" class="text-sm"></div>
+        <p class="text-xs text-brand-purple/60 dark:text-white/60">
+          Tapping <strong>Post listing</strong> publishes instantly. Listings that break policy (off-platform contact, prohibited items) may be hidden after automated review.
+        </p>
+      </section>
+
+      <p id="form-status" class="text-sm"></p>
+
+      <div class="sell-nav-row">
+        <button id="btn-back" type="button" class="sell-btn-ghost">Back</button>
+        <button id="btn-next" type="button" class="btn-whatsapp font-bold px-6 py-3 rounded-full">Continue</button>
+        <button id="save-draft-btn" type="button" class="sell-btn-ghost">Save draft</button>
+        <button id="post-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full shadow-lg hidden">Post listing</button>
+      </div>
+
+      <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+        <div class="flex items-center justify-between gap-4">
+          <h2 class="font-bold text-lg">My listings</h2>
+          <button id="load-listings-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+        </div>
+        <div id="my-listings" class="space-y-3"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="../assets/js/seller-listing.js"></script>
+</body>
+</html>

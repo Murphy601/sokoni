@@ -1,5 +1,6 @@
 import { query, isDbEnabled } from "../pool.js";
-import { rowToCatalogProduct } from "../product-mapper.js";
+import { rowToCatalogProduct, jsonToDbProduct } from "../product-mapper.js";
+import { ensureDefaultSeller } from "./sellers.js";
 
 const PRODUCT_SELECT = `
   SELECT p.*,
@@ -223,4 +224,116 @@ export async function getBrowseCountsFromDb() {
 
 export function dbProductsAvailable() {
   return isDbEnabled();
+}
+
+const UPSERT_CATALOG_SQL = `
+  INSERT INTO products (
+    id, seller_id, title, description, category, sub_category, browse_category, browse_sub_category,
+    brand, color, is_secondhand, condition, stock_quantity,
+    price_kes, price_usd, source_price_kes, original_price_kes, retail_per_ml_kes, volume_ml,
+    rating, review_count, source, source_url, scope, fulfillment, payment, emoji, tags,
+    in_stock, is_sold, tracking_code, primary_image_url, image_key, image_hash,
+    upload_message_id, est_delivery_days, legacy_json, updated_at
+  ) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8,
+    $9, $10, $11, $12, $13,
+    $14, $15, $16, $17, $18, $19,
+    $20, $21, $22, $23, $24, $25, $26, $27, $28::jsonb,
+    $29, $30, $31, $32, $33, $34,
+    $35, $36, $37::jsonb, NOW()
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    seller_id = EXCLUDED.seller_id,
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    category = EXCLUDED.category,
+    sub_category = EXCLUDED.sub_category,
+    browse_category = EXCLUDED.browse_category,
+    browse_sub_category = EXCLUDED.browse_sub_category,
+    brand = EXCLUDED.brand,
+    color = EXCLUDED.color,
+    is_secondhand = EXCLUDED.is_secondhand,
+    condition = EXCLUDED.condition,
+    stock_quantity = EXCLUDED.stock_quantity,
+    price_kes = EXCLUDED.price_kes,
+    price_usd = EXCLUDED.price_usd,
+    source_price_kes = EXCLUDED.source_price_kes,
+    original_price_kes = EXCLUDED.original_price_kes,
+    in_stock = EXCLUDED.in_stock,
+    is_sold = EXCLUDED.is_sold,
+    primary_image_url = EXCLUDED.primary_image_url,
+    image_key = EXCLUDED.image_key,
+    image_hash = EXCLUDED.image_hash,
+    upload_message_id = EXCLUDED.upload_message_id,
+    legacy_json = EXCLUDED.legacy_json,
+    updated_at = NOW()
+`;
+
+/**
+ * Upsert one catalog product from the legacy JSON shape into PostgreSQL.
+ * @param {Record<string, unknown>} catalogProduct
+ */
+export async function upsertCatalogProduct(catalogProduct) {
+  if (!isDbEnabled()) return null;
+  const sellerId = await ensureDefaultSeller();
+  const row = jsonToDbProduct(catalogProduct, sellerId);
+  await query(UPSERT_CATALOG_SQL, [
+    row.id,
+    row.seller_id,
+    row.title,
+    row.description,
+    row.category,
+    row.sub_category,
+    row.browse_category,
+    row.browse_sub_category,
+    row.brand,
+    row.color,
+    row.is_secondhand,
+    row.condition,
+    row.stock_quantity,
+    row.price_kes,
+    row.price_usd,
+    row.source_price_kes,
+    row.original_price_kes,
+    row.retail_per_ml_kes,
+    row.volume_ml,
+    row.rating,
+    row.review_count,
+    row.source,
+    row.source_url,
+    row.scope,
+    row.fulfillment,
+    row.payment,
+    row.emoji,
+    row.tags,
+    row.in_stock,
+    row.is_sold,
+    row.tracking_code,
+    row.primary_image_url,
+    row.image_key,
+    row.image_hash,
+    row.upload_message_id,
+    row.est_delivery_days,
+    row.legacy_json,
+  ]);
+
+  const imageUrl = catalogProduct.imageUrl || null;
+  const allImages =
+    Array.isArray(catalogProduct.images) && catalogProduct.images.length
+      ? catalogProduct.images
+      : imageUrl
+        ? [imageUrl]
+        : [];
+  if (allImages.length) {
+    await query(`DELETE FROM product_images WHERE product_id = $1`, [catalogProduct.id]);
+    for (let i = 0; i < allImages.length; i += 1) {
+      await query(`INSERT INTO product_images (product_id, url, sort_order) VALUES ($1, $2, $3)`, [
+        catalogProduct.id,
+        allImages[i],
+        i,
+      ]);
+    }
+  }
+
+  return catalogProduct.id;
 }

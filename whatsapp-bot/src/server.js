@@ -15,6 +15,7 @@ import adminPickupPointsRouter from "./routes/adminPickupPoints.js";
 import { listReviews, addReview } from "./services/reviews.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 import productsApiRouter from "./routes/productsApi.js";
+import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
 
 const app = express();
 
@@ -49,7 +50,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
 
 app.get("/", (_req, res) => {
   res.json({
@@ -107,6 +108,7 @@ app.post("/api/reviews", (req, res) => {
 
 app.use("/api/suppliers", suppliersApiRouter);
 app.use("/api/products", productsApiRouter);
+app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);
 app.use("/admin/pickup-points", adminPickupPointsRouter);

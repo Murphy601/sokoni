@@ -11,7 +11,8 @@
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node scripts/migrate-catalog-to-db.mjs",
     "db:backfill-browse": "node scripts/backfill-browse-categories.mjs",
-    "catalog:clear": "node scripts/clear-all-catalog.mjs"
+    "catalog:clear": "node scripts/clear-all-catalog.mjs",
+    "test:listing": "node scripts/test-listing-generator.mjs"
   },
   "keywords": [
     "whatsapp",

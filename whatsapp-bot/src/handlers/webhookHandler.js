@@ -21,7 +21,6 @@ import {
 import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
 import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
-import { handleCatalogCommand, handleCatalogMedia, isCatalogCommand, isCatalogMedia, extractCatalogCommandLine, handleShareImportMessage } from "../services/catalog-admin.js";
 import { extractWahaProductMessage } from "../services/whatsapp.js";
 import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
@@ -126,14 +125,6 @@ function isAlbumPlaceholder(payload) {
   return !media?.url;
 }
 
-function isSelfOrBusinessChat(chatId) {
-  if (!chatId) return false;
-  const digits = phoneDigitsFromChatId(chatId);
-  const business = String(config.store.businessNumber || "").replace(/\D/g, "");
-  if (!digits || !business) return false;
-  return digits === business || digits.endsWith(business.slice(-9));
-}
-
 export function parseWahaMessage(body) {
   // WAHA delivers incoming via "message" and the bot's OWN outgoing via
   // "message.any". We subscribe to message.any so admin actions are seen too.
@@ -187,64 +178,6 @@ export function parseWahaMessage(body) {
     ...mediaInfo,
     ...meta,
   };
-}
-
-function shouldRouteAdminCatalog(parsed) {
-  if (!parsed.hasMedia || !isCatalogMedia(parsed.mediaMimetype)) return false;
-  if (parsed.isAlbumPlaceholder) return false;
-
-  if (parsed.direction === "incoming") {
-    return canRunAdminCommands(parsed.customerKey, parsed.phone);
-  }
-
-  if (parsed.direction === "outgoing") {
-    const fromPhone = phoneDigitsFromChatId(parsed.fromChatId);
-    const allowBusinessOwner = isBusinessOwnerSender(parsed.fromChatId);
-    if (!canRunAdminCommands(parsed.fromChatId, fromPhone, { allowBusinessOwner })) return false;
-    // Only ingest catalog photos in self-chat — never while replying to a customer thread.
-    return isSelfOrBusinessChat(parsed.toChatId);
-  }
-
-  return false;
-}
-
-/** Chat where the admin typed — replies must go here (not only self-chat). */
-function adminActionChat(parsed) {
-  if (parsed.direction === "incoming") return parsed.customerKey;
-  return parsed.toChatId || parsed.fromChatId;
-}
-
-async function routeAdminCatalog(parsed) {
-  const phone =
-    parsed.phone ||
-    phoneDigitsFromChatId(parsed.customerKey || parsed.fromChatId) ||
-    "";
-  const adminChat = adminActionChat(parsed);
-  const allowBusinessOwner =
-    parsed.direction === "outgoing" && isBusinessOwnerSender(parsed.fromChatId);
-
-  if (await handleShareImportMessage(parsed, adminChat)) return true;
-
-  if (parsed.hasMedia && shouldRouteAdminCatalog(parsed)) {
-    return handleCatalogMedia(adminChat, {
-      mediaUrl: parsed.mediaUrl,
-      mediaMimetype: parsed.mediaMimetype,
-      caption: parsed.text,
-      messageId: parsed.messageId,
-      chatId: parsed.direction === "incoming" ? parsed.customerKey : parsed.toChatId || parsed.fromChatId,
-      fromChatId: parsed.fromChatId,
-      toChatId: parsed.toChatId,
-      session: parsed.session,
-      albumId: parsed.albumId,
-    });
-  }
-
-  if (parsed.text && isCatalogCommand(parsed.text)) {
-    if (!canRunAdminCommands(adminChat, phone, { allowBusinessOwner })) return false;
-    return handleCatalogCommand(adminChat, extractCatalogCommandLine(parsed.text));
-  }
-
-  return false;
 }
 
 async function tryProductSearch(customerKey, text) {
@@ -575,18 +508,9 @@ export async function handleWahaWebhook(body) {
   if (!parsed) return;
 
   if (parsed.direction === "outgoing") {
-    // Always ignore the bot's own replies first — help text embeds #catalog / #add
-    // examples that would otherwise re-trigger catalog intake.
     if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
-
-    const catalogHandled = await routeAdminCatalog(parsed);
-    if (catalogHandled) return catalogHandled;
-
     return handleAdminOutgoing(parsed);
   }
-
-  const catalogHandled = await routeAdminCatalog(parsed);
-  if (catalogHandled) return catalogHandled;
 
   if (shouldRouteIncomingAsAdmin(body, parsed)) {
     const handled = await handleAdminIncoming({

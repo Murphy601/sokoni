@@ -92,7 +92,7 @@ export async function sendVendorMenu(customerKey, supplier) {
   const options = [
     { id: "vendor_status", label: "📋 My application / products" },
     { id: "vendor_payouts", label: "💰 Payouts & delivery policy" },
-    { id: "vendor_add_product", label: "➕ Add another product (chat)" },
+    { id: "vendor_add_product", label: "➕ List a product (photo + AI)" },
     { id: "vendor_contact", label: "📞 Contact Sokoni ops" },
     { id: "customer_menu", label: "🛍️ Switch to customer shopping" },
   ];
@@ -215,14 +215,13 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
     case "vendor_add_product":
       await sendText(
         customerKey,
-        `➕ *Add a product*\n\n` +
-          `Reply with one message:\n` +
-          `*Product name | category | supply price*\n\n` +
-          `_Example: Bluetooth speaker | computing | 3500_\n\n` +
-          `Optional: send a product photo in the next message.\n` +
-          `Our team will review and list it.`
+        `➕ *Sell on Sokoni*\n\n` +
+          `Open sokonimall.com/suppliers/list.html\n\n` +
+          `1. Upload up to 4 photos (+ optional video)\n` +
+          `2. Add title, tags, category & price\n` +
+          `3. Tap *Post listing* — live instantly\n\n` +
+          `_Like Depop — no waiting for admin approval._`
       );
-      setMenuState(customerKey, { type: "vendor_add_product", supplierId: supplier.id });
       return true;
     case "vendor_contact":
       await sendText(

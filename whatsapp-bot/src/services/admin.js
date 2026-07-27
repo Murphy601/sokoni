@@ -30,7 +30,6 @@ import {
   formatPickupReadyMessage,
   rankPickupPointsForLocation,
 } from "./fulfillment.js";
-import { handleCatalogCommand, isCatalogCommand } from "./catalog-admin.js";
 import { broadcastFooter, OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
 import { isBroadcastOptedOut } from "./customer-automations.js";
 import {
@@ -160,7 +159,6 @@ export function tryRegisterAdminFromMessage(chatId, phone = "", text = "") {
     chatId?.includes("@lid") &&
     config.admin.phones.length === 1 &&
     (containsAdminCommand(text) ||
-      isCatalogCommand(text) ||
       /^admin\b/i.test((text || "").trim()) ||
       /^orders?\b/i.test((text || "").trim()))
   ) {
@@ -200,9 +198,8 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find|sync|import-catalog|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
-  if (/^(?:add|price|stock|find|sync|import-catalog|catalog)\b/i.test(t)) return true;
   return false;
 }
 
@@ -245,7 +242,6 @@ export function shouldRouteIncomingAsAdmin(body, parsed) {
   if (/^admin\b/i.test(text)) return true;
   if (/^orders?\b/i.test(text)) return true;
   if (containsAdminCommand(parsed.text)) return true;
-  if (isCatalogCommand(parsed.text)) return true;
   return false;
 }
 
@@ -258,7 +254,6 @@ function isBusinessChat(chatId) {
 function isAdminRelayAttempt(text) {
   const t = normalizeAdminCommand((text || "").trim());
   if (containsAdminCommand(t)) return true;
-  if (isCatalogCommand(t)) return true;
   if (/^admin\b/i.test(t) || /^orders?\b/i.test(t)) return true;
   return false;
 }
@@ -386,7 +381,7 @@ function adminHelpText() {
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
     `🆔 *#SK-1042 <message>* — message one customer\n` +
-    `📦 *#catalog* — add/update products (photos + text commands)\n` +
+    `🏪 Seller listings — GET /admin/suppliers/seller-listings/pending?token=...\n` +
     `❓ *#help* — this list`
   );
 }
@@ -726,7 +721,7 @@ function getBroadcastRecipients() {
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
   const embedded = t.match(
-    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|catalog|add|price|stock|find|sync|import-catalog)\b[\s\S]*/i
+    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby)\b[\s\S]*/i
   );
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
@@ -763,9 +758,6 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   if (/^admin\b/i.test(t) || /^#help\b/i.test(t)) {
     await sendText(adminChatId, adminHelpText());
     return true;
-  }
-  if (isCatalogCommand(t)) {
-    return handleCatalogCommand(adminChatId, t);
   }
   if (/^#orders?\b/i.test(t) || /^orders?\b/i.test(t)) {
     await handleOrdersCommand(adminChatId);

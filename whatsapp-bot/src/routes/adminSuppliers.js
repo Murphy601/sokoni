@@ -8,6 +8,11 @@ import {
   listSuppliers,
 } from "../services/suppliers.js";
 import { getSettlementSummary, markPayoutPaid } from "../services/settlements.js";
+import {
+  listFlaggedListings,
+  takedownListing,
+  restoreListing,
+} from "../services/seller-listings.js";
 
 const router = Router();
 
@@ -68,6 +73,23 @@ router.post("/payouts/:orderId/paid", (req, res) => {
   const entry = markPayoutPaid(orderId);
   if (!entry) return res.status(404).json({ error: "not_found" });
   res.json({ entry });
+});
+
+router.get("/seller-listings/flagged", async (_req, res) => {
+  const listings = await listFlaggedListings();
+  res.json({ listings });
+});
+
+router.post("/seller-listings/:id/takedown", async (req, res) => {
+  const result = await takedownListing(req.params.id, req.body?.reason || "");
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
+});
+
+router.post("/seller-listings/:id/restore", async (req, res) => {
+  const result = await restoreListing(req.params.id);
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
 });
 
 export default router;

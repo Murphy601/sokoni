@@ -1,0 +1,144 @@
+/* Phase 4 — Depop-style seller listing wizard */
+
+.sell-wizard-steps {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1.5rem;
+}
+
+.sell-wizard-step {
+  flex: 1;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(27, 16, 53, 0.12);
+  transition: background 0.2s ease;
+}
+
+html.dark .sell-wizard-step {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sell-wizard-step.is-active,
+.sell-wizard-step.is-done {
+  background: #25d366;
+}
+
+.sell-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .sell-media-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.sell-media-slot {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 1rem;
+  border: 2px dashed rgba(27, 16, 53, 0.15);
+  background: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+html.dark .sell-media-slot {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(46, 27, 87, 0.5);
+}
+
+.sell-media-slot img,
+.sell-media-slot video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sell-media-slot .sell-slot-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(27, 16, 53, 0.45);
+  pointer-events: none;
+}
+
+html.dark .sell-media-slot .sell-slot-label {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sell-media-slot.has-media .sell-slot-label {
+  display: none;
+}
+
+.sell-media-slot input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.sell-panel {
+  display: none;
+}
+
+.sell-panel.is-active {
+  display: block;
+}
+
+.sell-nav-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.sell-btn-ghost {
+  border: 1px solid rgba(27, 16, 53, 0.15);
+  background: transparent;
+  color: #1b1035;
+  font-weight: 600;
+  padding: 0.75rem 1.25rem;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+html.dark .sell-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff8f0;
+}
+
+.sell-tag-hint {
+  font-size: 0.75rem;
+  color: rgba(27, 16, 53, 0.5);
+}
+
+html.dark .sell-tag-hint {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sell-price-range {
+  font-size: 0.875rem;
+  color: rgba(27, 16, 53, 0.65);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(37, 211, 102, 0.08);
+}
+
+html.dark .sell-price-range {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sell-wizard-step {
+    transition: none;
+  }
+}

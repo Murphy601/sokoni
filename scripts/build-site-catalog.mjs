@@ -73,7 +73,16 @@ function toPublic(product) {
       payment: "cod",
       inStock: product.inStock !== false,
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
+      ...(product.images?.length ? { images: product.images } : {}),
       ...(product.subcategory ? { subcategory: product.subcategory } : {}),
+      ...(product.browseCategory ? { browseCategory: product.browseCategory } : {}),
+      ...(product.browseSubCategory ? { browseSubCategory: product.browseSubCategory } : {}),
+      ...(product.condition ? { condition: product.condition } : {}),
+      ...(product.isSecondhand != null ? { isSecondhand: product.isSecondhand } : {}),
+      ...(product.brand ? { brand: product.brand } : {}),
+      ...(product.color ? { color: product.color } : {}),
+      ...(product.tags?.length ? { tags: product.tags } : {}),
+      ...(product.description ? { description: product.description } : {}),
     };
   }
 
