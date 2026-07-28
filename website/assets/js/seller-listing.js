@@ -12,7 +12,16 @@ const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
 const SELLER_OFFERS_POLL_MS = 45000;
-const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "reminded", "cooling-down", "not-reminded", "declined"]);
+const SELLER_OFFER_FILTERS = new Set([
+  "pending",
+  "all",
+  "accepted",
+  "reminded",
+  "cooling-down",
+  "ready-reminder",
+  "not-reminded",
+  "declined",
+]);
 const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
 const HANDLED_HISTORY_LIMIT = 40;
 const OFFER_REMINDER_COOLDOWN_MS = 90000;
@@ -1308,6 +1317,23 @@ function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
       return status === "accepted" && Number.isInteger(id) && id > 0 && reminderCooldownMsLeftForOffer(id) > 0;
     });
   }
+  if (normalized === "ready-reminder") {
+    const sellerUserId = currentSellerSocialUserId();
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      const buyerUserId = offerBuyerUserId(offer);
+      const canChat =
+        Number.isInteger(sellerUserId) &&
+        sellerUserId > 0 &&
+        Number.isInteger(buyerUserId) &&
+        buyerUserId > 0 &&
+        sellerUserId !== buyerUserId;
+      return status === "accepted" && Number.isInteger(id) && id > 0 && canChat && reminderCooldownMsLeftForOffer(id) <= 0;
+    });
+  }
   if (normalized === "reminded") {
     return offers.filter((offer) => {
       const status = String(offer?.status || "")
@@ -1691,6 +1717,11 @@ function updateReminderCooldownHint(stats = reminderCooldownStats()) {
   hint.textContent = `${offerCountLabel(count, "reminder")} cooling down · next unlock in ${formatReminderCooldown(nextMs)}.`;
 }
 
+function offerFilterUsesReminderCooldown(filter = activeSellerOffersFilter) {
+  const normalized = normalizeOfferFilter(filter);
+  return normalized === "cooling-down" || normalized === "ready-reminder";
+}
+
 function stopReminderCooldownTicker() {
   if (reminderCooldownTickTimer) {
     window.clearInterval(reminderCooldownTickTimer);
@@ -1717,7 +1748,7 @@ function ensureReminderCooldownTicker() {
     const tickStats = reminderCooldownStats(Date.now());
     syncReminderCooldownButtonsUi();
     updateReminderCooldownHint(tickStats);
-    if (activeSellerOffersFilter === "cooling-down") {
+    if (offerFilterUsesReminderCooldown(activeSellerOffersFilter)) {
       renderOfferCacheView();
       return;
     }
@@ -1816,6 +1847,7 @@ function offerFilterLabel(filter = activeSellerOffersFilter) {
   if (filter === "accepted") return "accepted offer";
   if (filter === "reminded") return "reminded offer";
   if (filter === "cooling-down") return "cooling-down offer";
+  if (filter === "ready-reminder") return "ready-to-remind offer";
   if (filter === "not-reminded") return "not-reminded offer";
   if (filter === "declined") return "declined offer";
   if (filter === "pending") return "pending offer";
@@ -2039,6 +2071,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
   if (filter === "accepted") return "No accepted offers yet.";
   if (filter === "reminded") return "No reminded offers yet.";
   if (filter === "cooling-down") return "No reminder cooldowns running right now.";
+  if (filter === "ready-reminder") return "No accepted chats ready for a reminder yet.";
   if (filter === "not-reminded") return "No accepted offers waiting for a first reminder.";
   if (filter === "declined") return "No declined offers yet.";
   return "No offers in this view right now.";
