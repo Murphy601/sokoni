@@ -1323,11 +1323,14 @@ function latestUndoableHandledOfferId() {
 }
 
 function updateUndoLastDoneButton() {
-  const button = el("offers-undo-handled-btn");
-  if (!button) return;
+  const undoButton = el("offers-undo-handled-btn");
+  const reopenButton = el("offers-undo-open-btn");
   const hasUndoable = Number.isInteger(latestUndoableHandledOfferId());
-  button.classList.toggle("hidden", !hasUndoable);
-  button.disabled = !hasUndoable;
+  [undoButton, reopenButton].forEach((button) => {
+    if (!button) return;
+    button.classList.toggle("hidden", !hasUndoable);
+    button.disabled = !hasUndoable;
+  });
 }
 
 function isAcceptedOfferHandled(offerOrId) {
@@ -1781,20 +1784,44 @@ function resetHandledAcceptedOffersQueue() {
   setOffersStatus("Quick queue reset — all accepted chats are active again.");
 }
 
-function undoLastHandledAcceptedOffer() {
+function restoreLastHandledAcceptedOffer() {
   const offerId = popUndoableHandledOfferId();
-  if (!offerId) {
+  if (!offerId) return { offerId: null, offer: null };
+  const offer = offerByIdFromCache(offerId);
+  if (!setAcceptedOfferHandled(offerId, false)) return { offerId: null, offer: null };
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  return { offerId, offer };
+}
+
+function undoLastHandledAcceptedOffer() {
+  const restored = restoreLastHandledAcceptedOffer();
+  if (!restored.offerId) {
     renderOfferCacheView();
     setOffersStatus("Nothing to undo yet. Mark an accepted chat done first.");
     return;
   }
-  const offer = offerByIdFromCache(offerId);
-  if (!setAcceptedOfferHandled(offerId, false)) return;
-  acceptedQuickCursor = 0;
-  renderOfferCacheView();
   setOffersStatus(
-    offer ? `${offerBuyerLabel(offer)} moved back to active quick queue.` : "Last handled chat moved back to active quick queue."
+    restored.offer
+      ? `${offerBuyerLabel(restored.offer)} moved back to active quick queue.`
+      : "Last handled chat moved back to active quick queue."
   );
+}
+
+function undoLastHandledAndReopenChat() {
+  const restored = restoreLastHandledAcceptedOffer();
+  if (!restored.offerId) {
+    renderOfferCacheView();
+    setOffersStatus("Nothing to reopen yet. Mark an accepted chat done first.");
+    return;
+  }
+  if (!restored.offer) {
+    setOffersStatus("Last handled chat restored to queue. Refresh offers to reopen it.", true);
+    return;
+  }
+  if (!openOfferChatFromOffer(restored.offer, "Restored and opening chat with")) {
+    setOffersStatus(`${offerBuyerLabel(restored.offer)} moved back to active quick queue. Chat link is not ready yet.`, true);
+  }
 }
 
 function markDoneAndOpenNextAcceptedChat(button) {
@@ -1862,6 +1889,19 @@ function bindOfferFilterButtons() {
   syncOfferFilterButtons();
 }
 
+function openOfferChatFromOffer(offer, statusPrefix = "Opening chat with") {
+  const sellerUserId = currentSellerSocialUserId();
+  const buyerUserId = offerBuyerUserId(offer);
+  if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) return false;
+  const url = inboxLinkForOffer(offer, sellerUserId, buyerUserId);
+  setOffersStatus(`${statusPrefix} ${offerBuyerLabel(offer)}...`);
+  const popup = window.open(url, "_blank", "noopener");
+  if (!popup) {
+    window.location.href = url;
+  }
+  return true;
+}
+
 function openNextAcceptedOfferChat() {
   const sellerUserId = currentSellerSocialUserId();
   if (!sellerUserId) {
@@ -1883,13 +1923,8 @@ function openNextAcceptedOfferChat() {
   acceptedQuickCursor = (index + 1) % ready.length;
   updateQuickModeHint();
 
-  const buyerUserId = offerBuyerUserId(offer);
-  const url = inboxLinkForOffer(offer, sellerUserId, buyerUserId);
-  setOffersStatus(`Opening chat with ${offerBuyerLabel(offer)}...`);
-
-  const popup = window.open(url, "_blank", "noopener");
-  if (!popup) {
-    window.location.href = url;
+  if (!openOfferChatFromOffer(offer)) {
+    setOffersStatus("Could not resolve buyer chat profile for this offer.", true);
   }
 }
 
@@ -2196,6 +2231,7 @@ function init() {
   el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
   el("offers-reset-handled-btn")?.addEventListener("click", resetHandledAcceptedOffersQueue);
   el("offers-undo-handled-btn")?.addEventListener("click", undoLastHandledAcceptedOffer);
+  el("offers-undo-open-btn")?.addEventListener("click", undoLastHandledAndReopenChat);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));

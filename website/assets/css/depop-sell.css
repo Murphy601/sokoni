@@ -527,6 +527,29 @@ html.dark .sell-offer-undo-btn {
   color: #fff8f0;
 }
 
+.sell-offer-undo-open-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid #25d366;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0 0.85rem;
+  cursor: pointer;
+}
+
+.sell-offer-undo-open-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+html.dark .sell-offer-undo-open-btn {
+  border-color: rgba(37, 211, 102, 0.85);
+  background: rgba(37, 211, 102, 0.28);
+  color: #fff8f0;
+}
+
 .sell-offer-filters {
   display: flex;
   flex-wrap: wrap;
