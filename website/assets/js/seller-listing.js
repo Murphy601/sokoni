@@ -18,6 +18,7 @@ const HANDLED_HISTORY_LIMIT = 40;
 const OFFER_REMINDER_COOLDOWN_MS = 90000;
 const REMINDER_COOLDOWN_TICK_MS = 1000;
 const OFFER_REMINDER_COOLDOWN_KEY = "sokoni-seller-offer-reminder-cooldowns";
+const OFFER_REMINDER_SENT_AT_KEY = "sokoni-seller-offer-reminder-sent-at";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -116,6 +117,7 @@ function clearSession() {
   clearHandledAcceptedOffersStorage();
   stopReminderCooldownTicker();
   clearReminderCooldownsStorage();
+  clearReminderLastSentAtStorage();
   updateReminderCooldownHint({ count: 0, nextMs: 0 });
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
@@ -339,6 +341,8 @@ let handledOfferHistory = [];
 let reminderCooldownByOfferId = new Map();
 let reminderCooldownTickTimer = null;
 let reminderCooldownStorageKey = null;
+let reminderLastSentAtByOfferId = new Map();
+let reminderLastSentStorageKey = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -742,6 +746,7 @@ function showSellerProfile(profile) {
   sellerSocialUserIdPromise = null;
   stopReminderCooldownTicker();
   loadReminderCooldowns();
+  loadReminderLastSentAt();
   updateReminderCooldownHint(reminderCooldownStats());
   loadHandledAcceptedOffers();
   updateHandledResetButton();
@@ -1342,6 +1347,56 @@ function clearReminderCooldownsStorage() {
   reminderCooldownStorageKey = null;
 }
 
+function reminderLastSentStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${OFFER_REMINDER_SENT_AT_KEY}:${sellerPhone}` : `${OFFER_REMINDER_SENT_AT_KEY}:default`;
+}
+
+function loadReminderLastSentAt() {
+  reminderLastSentStorageKey = reminderLastSentStorageKeyForCurrentSeller();
+  reminderLastSentAtByOfferId = new Map();
+  try {
+    const raw = sessionStorage.getItem(reminderLastSentStorageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((entry) => {
+      if (!Array.isArray(entry) || entry.length < 2) return;
+      const offerId = Number(entry[0]);
+      const sentAt = Number(entry[1]);
+      if (!Number.isInteger(offerId) || offerId < 1) return;
+      if (!Number.isFinite(sentAt) || sentAt < 1) return;
+      reminderLastSentAtByOfferId.set(offerId, sentAt);
+    });
+  } catch {}
+}
+
+function saveReminderLastSentAt() {
+  if (!reminderLastSentStorageKey) {
+    reminderLastSentStorageKey = reminderLastSentStorageKeyForCurrentSeller();
+  }
+  if (!reminderLastSentStorageKey) return;
+  try {
+    const entries = Array.from(reminderLastSentAtByOfferId.entries())
+      .map(([offerId, sentAt]) => [Number(offerId), Number(sentAt)])
+      .filter(([offerId, sentAt]) => Number.isInteger(offerId) && offerId > 0 && Number.isFinite(sentAt) && sentAt > 0)
+      .sort((a, b) => a[0] - b[0]);
+    if (!entries.length) {
+      sessionStorage.removeItem(reminderLastSentStorageKey);
+      return;
+    }
+    sessionStorage.setItem(reminderLastSentStorageKey, JSON.stringify(entries));
+  } catch {}
+}
+
+function clearReminderLastSentAtStorage() {
+  try {
+    if (reminderLastSentStorageKey) sessionStorage.removeItem(reminderLastSentStorageKey);
+  } catch {}
+  reminderLastSentAtByOfferId = new Map();
+  reminderLastSentStorageKey = null;
+}
+
 function updateHandledResetButton() {
   const button = el("offers-reset-handled-btn");
   if (!button) return;
@@ -1397,6 +1452,34 @@ function updateUndoLastDoneButton() {
   });
 }
 
+function reminderLastSentAtForOffer(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return null;
+  const sentAt = Number(reminderLastSentAtByOfferId.get(id) || 0);
+  return Number.isFinite(sentAt) && sentAt > 0 ? sentAt : null;
+}
+
+function setReminderLastSentAtForOffer(offerId, sentAtMs = Date.now()) {
+  const id = Number(offerId);
+  const sentAt = Number(sentAtMs);
+  if (!Number.isInteger(id) || id < 1 || !Number.isFinite(sentAt) || sentAt < 1) return false;
+  reminderLastSentAtByOfferId.set(id, sentAt);
+  saveReminderLastSentAt();
+  return true;
+}
+
+function formatReminderLastSentLabel(offerId) {
+  const sentAt = reminderLastSentAtForOffer(offerId);
+  if (!sentAt) return "";
+  const date = new Date(sentAt);
+  if (Number.isNaN(date.getTime())) return "";
+  const formatted = new Intl.DateTimeFormat("en-KE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+  return `Last reminder sent ${formatted}.`;
+}
+
 function formatReminderCooldown(msLeft) {
   const totalSeconds = Math.max(1, Math.ceil((Number(msLeft) || 0) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -1444,6 +1527,24 @@ function reconcileReminderCooldowns(offers = sellerOffersCache) {
     }
   });
   if (changed) saveReminderCooldowns();
+}
+
+function reconcileReminderLastSentAt(offers = sellerOffersCache) {
+  const offerIds = new Set(
+    (offers || [])
+      .map((offer) => Number(offer?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+  let changed = false;
+  Array.from(reminderLastSentAtByOfferId.entries()).forEach(([rawId, rawSentAt]) => {
+    const id = Number(rawId);
+    const sentAt = Number(rawSentAt);
+    if (!offerIds.has(id) || !Number.isFinite(sentAt) || sentAt < 1) {
+      reminderLastSentAtByOfferId.delete(id);
+      changed = true;
+    }
+  });
+  if (changed) saveReminderLastSentAt();
 }
 
 function defaultReminderButtonLabel(button) {
@@ -1808,6 +1909,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
               </button>
             </div>`
           : "";
+      const reminderSentNote = status === "accepted" ? formatReminderLastSentLabel(id) : "";
       const handledNote = handledInQuickQueue
         ? `<p class="text-xs text-brand-green mt-2">Handled in quick mode queue.</p>`
         : "";
@@ -1822,6 +1924,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
           <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
             formatOfferExpiry(offer?.expiresAt, status)
           )}</p>
+          ${reminderSentNote ? `<p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(reminderSentNote)}</p>` : ""}
           ${handledNote}
           ${actionBlock}
         </article>`;
@@ -1841,6 +1944,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
 
 function renderOfferCacheView() {
   reconcileReminderCooldowns(sellerOffersCache);
+  reconcileReminderLastSentAt(sellerOffersCache);
   const total = sellerOffersCache.length;
   const pending = pendingOffersCount(sellerOffersCache);
   const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
@@ -1988,6 +2092,7 @@ async function sendAcceptedOfferReminder(button) {
   }
   delete button.dataset.reminderBusy;
   setReminderCooldownForOffer(offerId);
+  setReminderLastSentAtForOffer(offerId);
   renderOfferCacheView();
   setOffersStatus(`Reminder sent in inbox. Next reminder in ${formatReminderCooldown(OFFER_REMINDER_COOLDOWN_MS)}.`);
 }
@@ -2120,6 +2225,7 @@ async function remindAndMoveToNextAcceptedChat(button) {
   }
   delete button.dataset.reminderBusy;
   setReminderCooldownForOffer(offerId);
+  setReminderLastSentAtForOffer(offerId);
 
   const moved = moveAcceptedOfferToNextChat(offerId, offer);
   if (!moved.ok) {
@@ -2264,6 +2370,7 @@ async function loadSellerOffers({ silent = false } = {}) {
       sellerOffersCache = [];
       stopReminderCooldownTicker();
       clearReminderCooldownsStorage();
+      clearReminderLastSentAtStorage();
       updateReminderCooldownHint({ count: 0, nextMs: 0 });
       acceptedQuickCursor = 0;
       renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
@@ -2292,6 +2399,7 @@ async function loadSellerOffers({ silent = false } = {}) {
     const pending = pendingOffersCount(offers);
     sellerOffersCache = offers;
     reconcileReminderCooldowns(sellerOffersCache);
+    reconcileReminderLastSentAt(sellerOffersCache);
     reconcileHandledAcceptedOffers(sellerOffersCache);
     const readyChats = acceptedOffersReadyForChat(sellerOffersCache);
     if (!readyChats.length || acceptedQuickCursor >= readyChats.length) {
