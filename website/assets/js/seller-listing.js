@@ -1562,6 +1562,11 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         sellerUserId !== buyerUserId;
       const canManageQuickQueue = Number.isInteger(id) && id > 0 && status === "accepted" && canChat;
       const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
+      const remindNextButton = canManageQuickQueue && !handledInQuickQueue
+        ? `<button type="button" class="sell-offer-action sell-offer-action--remind-next offer-remind-next-btn" data-offer-id="${id}">
+              Remind + next
+            </button>`
+        : "";
       const doneNextButton = canManageQuickQueue && !handledInQuickQueue
         ? `<button type="button" class="sell-offer-action sell-offer-action--done-next offer-done-next-btn" data-offer-id="${id}">
               Done + next chat
@@ -1584,6 +1589,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
               <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}">
                 Send reminder
               </button>
+              ${remindNextButton}
               ${doneNextButton}
               <button
                 type="button"
@@ -1713,26 +1719,12 @@ function reminderMessageForOffer(offer) {
   return `Hi! I accepted your offer of ${amount} for "${productTitle}". Please complete checkout on Sokoni within 24 hours so I can prepare shipping.`;
 }
 
-async function sendAcceptedOfferReminder(button) {
-  const offerId = Number(button?.dataset?.offerId);
-  if (!Number.isInteger(offerId) || offerId < 1) return;
-  const offer = offerByIdFromCache(offerId);
-  if (!offer) {
-    setOffersStatus("Offer not found. Refresh and try again.", true);
-    return;
-  }
-
+async function sendReminderForOffer(offer) {
   const sellerUserId = currentSellerSocialUserId();
   const buyerUserId = offerBuyerUserId(offer);
   if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) {
-    setOffersStatus("Could not resolve buyer chat profile for this offer.", true);
-    return;
+    return { ok: false, message: "Could not resolve buyer chat profile for this offer.", isError: true };
   }
-
-  const previousLabel = button.textContent;
-  button.disabled = true;
-  button.textContent = "Sending...";
-  setOffersStatus("Sending reminder...");
   try {
     const res = await fetch(`${SOCIAL_API}/chat/send`, {
       method: "POST",
@@ -1745,22 +1737,44 @@ async function sendAcceptedOfferReminder(button) {
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
-      setOffersStatus(parsed.data?.message || parsed.message || "Could not send reminder right now.", true);
-      button.disabled = false;
-      button.textContent = previousLabel;
-      return;
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not send reminder right now.",
+        isError: true,
+      };
     }
-    button.textContent = "Reminder sent";
-    setOffersStatus("Reminder sent in inbox.");
-    window.setTimeout(() => {
-      button.disabled = false;
-      button.textContent = previousLabel;
-    }, 4000);
+    return { ok: true };
   } catch {
-    setOffersStatus("Network error while sending reminder.", true);
+    return { ok: false, message: "Network error while sending reminder.", isError: true };
+  }
+}
+
+async function sendAcceptedOfferReminder(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const offer = offerByIdFromCache(offerId);
+  if (!offer) {
+    setOffersStatus("Offer not found. Refresh and try again.", true);
+    return;
+  }
+
+  const previousLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Sending...";
+  setOffersStatus("Sending reminder...");
+  const reminder = await sendReminderForOffer(offer);
+  if (!reminder.ok) {
+    setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     button.disabled = false;
     button.textContent = previousLabel;
+    return;
   }
+  button.textContent = "Reminder sent";
+  setOffersStatus("Reminder sent in inbox.");
+  window.setTimeout(() => {
+    button.disabled = false;
+    button.textContent = previousLabel;
+  }, 4000);
 }
 
 function toggleAcceptedOfferHandled(button) {
@@ -1824,7 +1838,40 @@ function undoLastHandledAndReopenChat() {
   }
 }
 
-function markDoneAndOpenNextAcceptedChat(button) {
+function moveAcceptedOfferToNextChat(offerId, offer) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) {
+    return { ok: false, message: "Offer not found. Refresh and try again.", isError: true };
+  }
+  const cachedOffer = offer || offerByIdFromCache(id);
+  if (!cachedOffer) {
+    return { ok: false, message: "Offer not found. Refresh and try again.", isError: true };
+  }
+  if (isAcceptedOfferHandled(id)) {
+    return { ok: false, message: "This offer is already marked handled. Tap Mark active to return it to queue." };
+  }
+
+  const readyBefore = acceptedOffersReadyForChat();
+  const currentIndex = readyBefore.findIndex((candidate) => Number(candidate?.id) === id);
+  if (!setAcceptedOfferHandled(id, true, { trackHistory: true })) {
+    return { ok: false, message: "Could not update quick queue right now.", isError: true };
+  }
+
+  const readyAfter = acceptedOffersReadyForChat();
+  if (!readyAfter.length) {
+    acceptedQuickCursor = 0;
+    renderOfferCacheView();
+    return { ok: true, opened: false, offer: cachedOffer };
+  }
+
+  const nextIndex = currentIndex < 0 ? 0 : currentIndex % readyAfter.length;
+  acceptedQuickCursor = nextIndex;
+  renderOfferCacheView();
+  openNextAcceptedOfferChat();
+  return { ok: true, opened: true, offer: cachedOffer };
+}
+
+async function remindAndMoveToNextAcceptedChat(button) {
   const offerId = Number(button?.dataset?.offerId);
   if (!Number.isInteger(offerId) || offerId < 1) return;
   if (isAcceptedOfferHandled(offerId)) {
@@ -1837,22 +1884,42 @@ function markDoneAndOpenNextAcceptedChat(button) {
     return;
   }
 
-  const readyBefore = acceptedOffersReadyForChat();
-  const currentIndex = readyBefore.findIndex((candidate) => Number(candidate?.id) === offerId);
-  if (!setAcceptedOfferHandled(offerId, true, { trackHistory: true })) return;
-
-  const readyAfter = acceptedOffersReadyForChat();
-  if (!readyAfter.length) {
-    acceptedQuickCursor = 0;
-    renderOfferCacheView();
-    setOffersStatus(`Marked ${offerBuyerLabel(offer)} done. No more accepted chats in queue.`);
+  const previousLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Sending...";
+  setOffersStatus("Sending reminder then moving to next chat...");
+  const reminder = await sendReminderForOffer(offer);
+  if (!reminder.ok) {
+    button.disabled = false;
+    button.textContent = previousLabel;
+    setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     return;
   }
 
-  const nextIndex = currentIndex < 0 ? 0 : currentIndex % readyAfter.length;
-  acceptedQuickCursor = nextIndex;
-  renderOfferCacheView();
-  openNextAcceptedOfferChat();
+  const moved = moveAcceptedOfferToNextChat(offerId, offer);
+  if (!moved.ok) {
+    button.disabled = false;
+    button.textContent = previousLabel;
+    setOffersStatus(moved.message || "Could not update quick queue right now.", moved.isError !== false);
+    return;
+  }
+  if (!moved.opened) {
+    setOffersStatus(`Reminder sent. Marked ${offerBuyerLabel(offer)} done. No more accepted chats in queue.`);
+  }
+}
+
+function markDoneAndOpenNextAcceptedChat(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const offer = offerByIdFromCache(offerId);
+  const moved = moveAcceptedOfferToNextChat(offerId, offer);
+  if (!moved.ok) {
+    setOffersStatus(moved.message || "Could not update quick queue right now.", moved.isError !== false);
+    return;
+  }
+  if (!moved.opened) {
+    setOffersStatus(`Marked ${offerBuyerLabel(moved.offer || offer)} done. No more accepted chats in queue.`);
+  }
 }
 
 function bindOfferActionButtons() {
@@ -1866,6 +1933,11 @@ function bindOfferActionButtons() {
   wrap.querySelectorAll(".offer-reminder-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       sendAcceptedOfferReminder(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-remind-next-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      remindAndMoveToNextAcceptedChat(btn);
     });
   });
   wrap.querySelectorAll(".offer-handled-btn").forEach((btn) => {
