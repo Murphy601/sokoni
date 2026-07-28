@@ -19,6 +19,7 @@ const SELLER_OFFER_FILTERS = new Set([
   "reminded",
   "cooling-down",
   "ready-reminder",
+  "chat-blocked",
   "not-reminded",
   "handled",
   "declined",
@@ -1335,6 +1336,20 @@ function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
       return status === "accepted" && Number.isInteger(id) && id > 0 && canChat && reminderCooldownMsLeftForOffer(id) <= 0;
     });
   }
+  if (normalized === "chat-blocked") {
+    const chatReadyIds = new Set(
+      acceptedOffersEligibleForChat(offers)
+        .map((offer) => Number(offer?.id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && !chatReadyIds.has(id);
+    });
+  }
   if (normalized === "reminded") {
     return offers.filter((offer) => {
       const status = String(offer?.status || "")
@@ -1858,6 +1873,7 @@ function offerFilterLabel(filter = activeSellerOffersFilter) {
   if (filter === "reminded") return "reminded offer";
   if (filter === "cooling-down") return "cooling-down offer";
   if (filter === "ready-reminder") return "ready-to-remind offer";
+  if (filter === "chat-blocked") return "chat-blocked offer";
   if (filter === "not-reminded") return "not-reminded offer";
   if (filter === "handled") return "handled offer";
   if (filter === "declined") return "declined offer";
@@ -2083,6 +2099,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
   if (filter === "reminded") return "No reminded offers yet.";
   if (filter === "cooling-down") return "No reminder cooldowns running right now.";
   if (filter === "ready-reminder") return "No accepted chats ready for a reminder yet.";
+  if (filter === "chat-blocked") return "No accepted offers are blocked from chat right now.";
   if (filter === "not-reminded") return "No accepted offers waiting for a first reminder.";
   if (filter === "handled") return "No handled accepted offers in queue right now.";
   if (filter === "declined") return "No declined offers yet.";
