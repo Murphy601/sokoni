@@ -132,6 +132,7 @@ function clearSession() {
   clearReminderCooldownsStorage();
   clearReminderLastSentAtStorage();
   updateReminderCooldownHint({ count: 0, nextMs: 0 });
+  updateAcceptedTriageHint([]);
   sellerOffersCache = [];
   acceptedQuickCursor = 0;
   stopSellerOffersPolling();
@@ -763,6 +764,7 @@ function showSellerProfile(profile) {
   loadReminderCooldowns();
   loadReminderLastSentAt();
   updateReminderCooldownHint(reminderCooldownStats());
+  updateAcceptedTriageHint(sellerOffersCache);
   loadHandledAcceptedOffers();
   updateHandledResetButton();
   updateUndoLastDoneButton();
@@ -1742,6 +1744,71 @@ function updateReminderCooldownHint(stats = reminderCooldownStats()) {
   hint.textContent = `${offerCountLabel(count, "reminder")} cooling down · next unlock in ${formatReminderCooldown(nextMs)}.`;
 }
 
+function acceptedTriageStats(offers = sellerOffersCache) {
+  const sellerUserId = currentSellerSocialUserId();
+  let accepted = 0;
+  let ready = 0;
+  let cooling = 0;
+  let blocked = 0;
+  let handled = 0;
+
+  (offers || []).forEach((offer) => {
+    const status = String(offer?.status || "")
+      .trim()
+      .toLowerCase();
+    if (status !== "accepted") return;
+
+    accepted += 1;
+    const id = Number(offer?.id);
+    const buyerUserId = offerBuyerUserId(offer);
+    const canChat =
+      Number.isInteger(id) &&
+      id > 0 &&
+      Number.isInteger(sellerUserId) &&
+      sellerUserId > 0 &&
+      Number.isInteger(buyerUserId) &&
+      buyerUserId > 0 &&
+      sellerUserId !== buyerUserId;
+
+    if (!canChat) {
+      blocked += 1;
+      return;
+    }
+
+    if (isAcceptedOfferHandled(id)) {
+      handled += 1;
+      return;
+    }
+
+    const cooldownMs = reminderCooldownMsLeftForOffer(id);
+    if (cooldownMs > 0) {
+      cooling += 1;
+      return;
+    }
+
+    ready += 1;
+  });
+
+  return { accepted, ready, cooling, blocked, handled };
+}
+
+function updateAcceptedTriageHint(offers = sellerOffersCache) {
+  const hint = el("seller-offers-accepted-summary");
+  if (!hint) return;
+  const stats = acceptedTriageStats(offers);
+  if (!stats.accepted) {
+    hint.textContent = "";
+    hint.classList.add("hidden");
+    return;
+  }
+
+  hint.classList.remove("hidden");
+  hint.textContent = `Accepted triage · ${offerCountLabel(stats.ready, "ready chat")} · ${offerCountLabel(
+    stats.cooling,
+    "cooling reminder"
+  )} · ${offerCountLabel(stats.blocked, "chat blocked")} · ${offerCountLabel(stats.handled, "handled queue")}.`;
+}
+
 function offerFilterUsesReminderCooldown(filter = activeSellerOffersFilter) {
   const normalized = normalizeOfferFilter(filter);
   return normalized === "cooling-down" || normalized === "ready-reminder";
@@ -1760,6 +1827,7 @@ function ensureReminderCooldownTicker() {
   const shouldRun = currentSellerView === "dashboard" && stats.count > 0;
   syncReminderCooldownButtonsUi(nowMs);
   updateReminderCooldownHint(stats);
+  updateAcceptedTriageHint(sellerOffersCache);
   if (!shouldRun) {
     stopReminderCooldownTicker();
     return;
@@ -1773,6 +1841,7 @@ function ensureReminderCooldownTicker() {
     const tickStats = reminderCooldownStats(Date.now());
     syncReminderCooldownButtonsUi();
     updateReminderCooldownHint(tickStats);
+    updateAcceptedTriageHint(sellerOffersCache);
     if (offerFilterUsesReminderCooldown(activeSellerOffersFilter)) {
       renderOfferCacheView();
       return;
@@ -2110,6 +2179,7 @@ function renderOfferCacheView() {
   reconcileReminderCooldowns(sellerOffersCache);
   reconcileReminderLastSentAt(sellerOffersCache);
   syncOfferFilterButtons();
+  updateAcceptedTriageHint(sellerOffersCache);
   const total = sellerOffersCache.length;
   const pending = pendingOffersCount(sellerOffersCache);
   const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
