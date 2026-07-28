@@ -549,10 +549,21 @@ function sellerHandle(product) {
   return slug ? `@${slug}` : "";
 }
 
+function viewerQueryValue() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("viewer") || params.get("viewerUserId");
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return "";
+  return String(n);
+}
+
 function sellerShopLink(product) {
   const handle = normalizeHandleValue(sellerHandle(product));
   if (!handle) return "";
-  return `shop.html?handle=${encodeURIComponent(handle)}`;
+  const params = new URLSearchParams({ handle });
+  const viewer = viewerQueryValue();
+  if (viewer) params.set("viewer", viewer);
+  return `shop.html?${params.toString()}`;
 }
 
 function conditionBadgeHtml(product) {

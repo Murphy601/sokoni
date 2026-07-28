@@ -12,6 +12,7 @@ const state = {
   viewerUserId: null,
   following: false,
   currentShop: null,
+  reviewsRequestToken: 0,
 };
 
 function el(id) {
@@ -43,6 +44,20 @@ function formatKes(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "KES —";
   return `KES ${Math.round(amount).toLocaleString()}`;
+}
+
+function formatReviewDate(value) {
+  if (!value) return "";
+  try {
+    return new Intl.DateTimeFormat("en-KE", { dateStyle: "medium" }).format(new Date(value));
+  } catch {
+    return "";
+  }
+}
+
+function reviewStars(value) {
+  const score = Math.max(1, Math.min(5, Number(value) || 0));
+  return `${"★".repeat(score)}${"☆".repeat(5 - score)}`;
 }
 
 function statusMessage(message, isError = false) {
@@ -107,6 +122,97 @@ function inboxLinkForShop(shop) {
   return `inbox.html?${params.toString()}`;
 }
 
+function resetReviewsUi() {
+  state.reviewsRequestToken += 1;
+  const list = el("shop-reviews-list");
+  const count = el("shop-reviews-count");
+  const empty = el("shop-reviews-empty");
+  if (list) list.innerHTML = "";
+  if (count) count.textContent = "No ratings yet";
+  if (empty) {
+    empty.textContent = "No reviews yet. Buyers can rate this shop after delivered orders.";
+    empty.classList.add("hidden");
+  }
+}
+
+function reviewCard(review) {
+  const buyerId = Number(review?.buyerUserId);
+  const buyerLabel = Number.isInteger(buyerId) && buyerId > 0 ? `Buyer #${buyerId}` : "Verified buyer";
+  const comment = String(review?.comment || "").trim();
+  const date = formatReviewDate(review?.createdAt);
+  return `
+    <article class="rounded-2xl border border-black/5 dark:border-white/10 bg-brand-cream/45 dark:bg-white/5 p-4">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-sm font-semibold">${escapeHtml(buyerLabel)}</p>
+        <p class="text-[11px] text-brand-purple/55 dark:text-white/60">${escapeHtml(date)}</p>
+      </div>
+      <p class="text-sm mt-1">${escapeHtml(reviewStars(review?.rating))}</p>
+      ${
+        comment
+          ? `<p class="text-sm text-brand-purple/70 dark:text-white/75 mt-2">${escapeHtml(comment)}</p>`
+          : `<p class="text-xs text-brand-purple/55 dark:text-white/65 mt-2">Rated after delivery.</p>`
+      }
+    </article>`;
+}
+
+async function loadShopReviews(shop, stats = {}) {
+  const list = el("shop-reviews-list");
+  const count = el("shop-reviews-count");
+  const empty = el("shop-reviews-empty");
+  if (!list || !count || !empty) return;
+
+  const shopUserId = Number(shop?.userId);
+  const statsTotal = Number(stats?.totalReviews || 0);
+  if (!Number.isInteger(shopUserId) || shopUserId < 1) {
+    list.innerHTML = "";
+    count.textContent = statsTotal > 0 ? `${statsTotal.toLocaleString()} ratings` : "No ratings yet";
+    empty.textContent = "No reviews yet. Buyers can rate this shop after delivered orders.";
+    empty.classList.remove("hidden");
+    return;
+  }
+
+  const token = state.reviewsRequestToken + 1;
+  state.reviewsRequestToken = token;
+  list.innerHTML = "";
+  empty.classList.add("hidden");
+  count.textContent = statsTotal > 0 ? `${statsTotal.toLocaleString()} ratings` : "Loading ratings...";
+
+  try {
+    const res = await fetch(`${SHOP_API_BASE}/reviews/seller/${shopUserId}?limit=8`);
+    const data = await res.json();
+    if (token !== state.reviewsRequestToken) return;
+
+    if (!res.ok) {
+      count.textContent = "Ratings unavailable right now";
+      empty.textContent = "Could not load reviews right now. Please try again in a moment.";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    const reviews = Array.isArray(data?.reviews) ? data.reviews : [];
+    const shownCount = reviews.length;
+    const total = statsTotal > 0 ? statsTotal : Number(data?.count || shownCount);
+    if (!shownCount) {
+      count.textContent = total > 0 ? `${total.toLocaleString()} ratings` : "No ratings yet";
+      empty.textContent = "No reviews yet. Buyers can rate this shop after delivered orders.";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    if (total > shownCount) {
+      count.textContent = `Latest ${shownCount.toLocaleString()} of ${total.toLocaleString()} ratings`;
+    } else {
+      count.textContent = `${total.toLocaleString()} rating${total === 1 ? "" : "s"}`;
+    }
+    list.innerHTML = reviews.map((review) => reviewCard(review)).join("");
+  } catch {
+    if (token !== state.reviewsRequestToken) return;
+    count.textContent = "Ratings unavailable right now";
+    empty.textContent = "Could not load reviews right now. Please try again in a moment.";
+    empty.classList.remove("hidden");
+  }
+}
+
 function renderShopHeader(payload) {
   const shop = payload.shop || {};
   const stats = payload.stats || {};
@@ -167,6 +273,7 @@ function renderShopHeader(payload) {
 
   renderFollowButton(shop, stats);
   renderMessageButton(shop);
+  void loadShopReviews(shop, stats);
 }
 
 function renderFollowButton(shop, stats) {
@@ -350,6 +457,7 @@ async function loadShop(handle) {
   statusMessage("Loading shop...");
   el("shop-products-grid").innerHTML = "";
   el("shop-products-empty")?.classList.add("hidden");
+  resetReviewsUi();
 
   try {
     const res = await fetch(`${SHOP_API_BASE}/shop/${encodeURIComponent(clean)}?limit=24`);

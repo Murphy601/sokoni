@@ -87,6 +87,7 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     estDeliveryDays: row.est_delivery_days || undefined,
 
     sellerId: row.seller_id != null ? Number(row.seller_id) : undefined,
+    sellerUserId: row.seller_user_id != null ? Number(row.seller_user_id) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

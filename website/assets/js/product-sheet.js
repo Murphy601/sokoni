@@ -3,7 +3,13 @@
  */
 (function () {
   const WHATSAPP_NUMBER = "254117422428";
+  const API_BASE =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      ? "http://localhost:3001"
+      : "https://bot.sokonimall.com";
+  const SOCIAL_API_BASE = `${API_BASE}/api/social`;
   let currentProduct = null;
+  let viewerUserId = null;
 
   function escapeHtml(str) {
     return String(str)
@@ -76,7 +82,73 @@
   function sellerShopLink(product) {
     const handle = normalizeHandleValue(sellerHandle(product));
     if (!handle) return "";
-    return `shop.html?handle=${encodeURIComponent(handle)}`;
+    const params = new URLSearchParams({ handle });
+    const viewer = viewerQueryValue();
+    if (viewer) params.set("viewer", viewer);
+    return `shop.html?${params.toString()}`;
+  }
+
+  function parseViewerUserId() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("viewer") || params.get("viewerUserId");
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) return null;
+    return n;
+  }
+
+  function viewerQueryValue() {
+    const viewerId = parseViewerUserId();
+    return viewerId ? String(viewerId) : "";
+  }
+
+  function resolveSellerUserId(product) {
+    const raw = product?.sellerUserId ?? product?.seller?.id ?? null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) return null;
+    return n;
+  }
+
+  function resolveListedPriceKes(product) {
+    const amount = Number(product?.priceKes ?? product?.priceKsh ?? null);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return Math.round(amount);
+  }
+
+  function defaultOfferKes(product) {
+    const listed = resolveListedPriceKes(product);
+    if (!listed) return null;
+    const discounted = Math.round((listed * 0.9) / 50) * 50;
+    return Math.max(1, Math.min(listed, discounted));
+  }
+
+  function offerActionBlock(product) {
+    const sellerId = resolveSellerUserId(product);
+    const listedPrice = resolveListedPriceKes(product);
+    if (!viewerUserId || !sellerId || !listedPrice || viewerUserId === sellerId) return "";
+    const suggested = defaultOfferKes(product);
+    return `
+      <button type="button" id="product-sheet-offer-toggle" class="product-sheet-save">💸 Make an offer</button>
+      <form id="product-sheet-offer-form" class="product-sheet-offer-form" hidden>
+        <label for="product-sheet-offer-amount" class="product-sheet-offer-label">Offer amount (KES)</label>
+        <div class="product-sheet-offer-row">
+          <input
+            id="product-sheet-offer-amount"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max="${listedPrice}"
+            step="1"
+            value="${suggested || ""}"
+            class="product-sheet-offer-input"
+            required
+          />
+          <button type="submit" id="product-sheet-offer-submit" class="product-sheet-offer-submit">
+            Send
+          </button>
+        </div>
+      </form>
+      <p id="product-sheet-offer-status" class="product-sheet-offer-status"></p>
+    `;
   }
 
   function renderBody(product) {
@@ -86,6 +158,7 @@
     const secondhand = product.isSecondhand ? "Pre-Loved" : "Brand New";
     const handle = sellerHandle(product);
     const shopLink = sellerShopLink(product);
+    const offerAction = offerActionBlock(product);
 
     return `
       <div class="product-sheet-gallery">
@@ -114,6 +187,7 @@
         <button type="button" id="product-sheet-save" class="product-sheet-save ${saved ? "is-saved" : ""}">
           ${saved ? "♥ Saved" : "♡ Save for later"}
         </button>
+        ${offerAction}
         ${
           handle && shopLink
             ? `<a href="${shopLink}" class="product-sheet-ask">🏪 View ${escapeHtml(handle)} shop</a>`
@@ -121,6 +195,85 @@
         }
         <a href="${askLink(product)}" target="_blank" rel="noopener" class="product-sheet-ask">💬 Ask on WhatsApp</a>
       </div>`;
+  }
+
+  function setOfferStatus(message, tone = "info") {
+    const statusNode = document.getElementById("product-sheet-offer-status");
+    if (!statusNode) return;
+    statusNode.textContent = message || "";
+    statusNode.classList.remove("is-error", "is-success");
+    if (tone === "error") statusNode.classList.add("is-error");
+    if (tone === "success") statusNode.classList.add("is-success");
+  }
+
+  async function submitOffer(product) {
+    const sellerUserId = resolveSellerUserId(product);
+    const buyerUserId = viewerUserId;
+    const amountInput = document.getElementById("product-sheet-offer-amount");
+    const submitBtn = document.getElementById("product-sheet-offer-submit");
+    const listedPrice = resolveListedPriceKes(product);
+    if (!amountInput || !submitBtn || !buyerUserId || !sellerUserId || !listedPrice) return;
+
+    const amount = Number(amountInput.value);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setOfferStatus("Enter a valid offer amount in KES.", "error");
+      amountInput.focus();
+      return;
+    }
+    if (amount > listedPrice) {
+      setOfferStatus(`Offer must be KES ${listedPrice.toLocaleString()} or below.`, "error");
+      amountInput.focus();
+      return;
+    }
+
+    submitBtn.disabled = true;
+    setOfferStatus("Sending offer...");
+    try {
+      const res = await fetch(`${SOCIAL_API_BASE}/offers/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: product.id,
+          buyerUserId,
+          sellerUserId,
+          amountKsh: Math.round(amount),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOfferStatus(data?.message || data?.error || "Could not send offer right now.", "error");
+        return;
+      }
+      setOfferStatus("Offer sent. Seller has up to 24 hours to respond.", "success");
+    } catch {
+      setOfferStatus("Network error while sending offer. Please try again.", "error");
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  function setupOfferUi(product) {
+    const toggle = document.getElementById("product-sheet-offer-toggle");
+    const form = document.getElementById("product-sheet-offer-form");
+    const amountInput = document.getElementById("product-sheet-offer-amount");
+    if (!toggle || !form || !amountInput) return;
+
+    toggle.addEventListener("click", () => {
+      form.hidden = !form.hidden;
+      if (!form.hidden) {
+        amountInput.focus();
+        amountInput.select();
+      }
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await submitOffer(product);
+    });
+
+    amountInput.addEventListener("input", () => {
+      setOfferStatus("");
+    });
   }
 
   function syncSaveButton(productId) {
@@ -140,6 +293,7 @@
     const sheet = document.getElementById("product-sheet");
     if (!body || !sheet) return;
     body.innerHTML = renderBody(product);
+    setupOfferUi(product);
     sheet.classList.add("is-open");
     sheet.removeAttribute("hidden");
     document.body.classList.add("sheet-open");
@@ -153,6 +307,7 @@
   }
 
   function init() {
+    viewerUserId = parseViewerUserId();
     document.getElementById("product-sheet-close")?.addEventListener("click", close);
     document.querySelector("#product-sheet .sheet-backdrop")?.addEventListener("click", close);
     document.getElementById("product-sheet-body")?.addEventListener("click", (e) => {
