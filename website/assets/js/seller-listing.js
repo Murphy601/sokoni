@@ -17,6 +17,7 @@ const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
 const HANDLED_HISTORY_LIMIT = 40;
 const OFFER_REMINDER_COOLDOWN_MS = 90000;
 const REMINDER_COOLDOWN_TICK_MS = 1000;
+const OFFER_REMINDER_COOLDOWN_KEY = "sokoni-seller-offer-reminder-cooldowns";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -114,7 +115,7 @@ function clearSession() {
   sellerSocialUserIdPromise = null;
   clearHandledAcceptedOffersStorage();
   stopReminderCooldownTicker();
-  reminderCooldownByOfferId = new Map();
+  clearReminderCooldownsStorage();
   updateReminderCooldownHint({ count: 0, nextMs: 0 });
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
@@ -337,6 +338,7 @@ let handledOffersStorageKey = null;
 let handledOfferHistory = [];
 let reminderCooldownByOfferId = new Map();
 let reminderCooldownTickTimer = null;
+let reminderCooldownStorageKey = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -739,8 +741,8 @@ function showSellerProfile(profile) {
   }
   sellerSocialUserIdPromise = null;
   stopReminderCooldownTicker();
-  reminderCooldownByOfferId = new Map();
-  updateReminderCooldownHint({ count: 0, nextMs: 0 });
+  loadReminderCooldowns();
+  updateReminderCooldownHint(reminderCooldownStats());
   loadHandledAcceptedOffers();
   updateHandledResetButton();
   updateUndoLastDoneButton();
@@ -1288,6 +1290,58 @@ function clearHandledAcceptedOffersStorage() {
   handledOffersStorageKey = null;
 }
 
+function reminderCooldownStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${OFFER_REMINDER_COOLDOWN_KEY}:${sellerPhone}` : `${OFFER_REMINDER_COOLDOWN_KEY}:default`;
+}
+
+function loadReminderCooldowns() {
+  reminderCooldownStorageKey = reminderCooldownStorageKeyForCurrentSeller();
+  reminderCooldownByOfferId = new Map();
+  const nowMs = Date.now();
+  try {
+    const raw = sessionStorage.getItem(reminderCooldownStorageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((entry) => {
+      if (!Array.isArray(entry) || entry.length < 2) return;
+      const offerId = Number(entry[0]);
+      const expiresAt = Number(entry[1]);
+      if (!Number.isInteger(offerId) || offerId < 1) return;
+      if (!Number.isFinite(expiresAt) || expiresAt <= nowMs) return;
+      reminderCooldownByOfferId.set(offerId, expiresAt);
+    });
+  } catch {}
+}
+
+function saveReminderCooldowns() {
+  if (!reminderCooldownStorageKey) {
+    reminderCooldownStorageKey = reminderCooldownStorageKeyForCurrentSeller();
+  }
+  if (!reminderCooldownStorageKey) return;
+  try {
+    const nowMs = Date.now();
+    const entries = Array.from(reminderCooldownByOfferId.entries())
+      .map(([offerId, expiresAt]) => [Number(offerId), Number(expiresAt)])
+      .filter(([offerId, expiresAt]) => Number.isInteger(offerId) && offerId > 0 && Number.isFinite(expiresAt) && expiresAt > nowMs)
+      .sort((a, b) => a[0] - b[0]);
+    if (!entries.length) {
+      sessionStorage.removeItem(reminderCooldownStorageKey);
+      return;
+    }
+    sessionStorage.setItem(reminderCooldownStorageKey, JSON.stringify(entries));
+  } catch {}
+}
+
+function clearReminderCooldownsStorage() {
+  try {
+    if (reminderCooldownStorageKey) sessionStorage.removeItem(reminderCooldownStorageKey);
+  } catch {}
+  reminderCooldownByOfferId = new Map();
+  reminderCooldownStorageKey = null;
+}
+
 function updateHandledResetButton() {
   const button = el("offers-reset-handled-btn");
   if (!button) return;
@@ -1369,6 +1423,7 @@ function setReminderCooldownForOffer(offerId, durationMs = OFFER_REMINDER_COOLDO
   const cooldownMs = Math.max(1000, Number(durationMs) || OFFER_REMINDER_COOLDOWN_MS);
   const expiresAt = Date.now() + cooldownMs;
   reminderCooldownByOfferId.set(id, expiresAt);
+  saveReminderCooldowns();
   return expiresAt;
 }
 
@@ -1379,13 +1434,16 @@ function reconcileReminderCooldowns(offers = sellerOffersCache) {
       .map((offer) => Number(offer?.id))
       .filter((id) => Number.isInteger(id) && id > 0)
   );
+  let changed = false;
   Array.from(reminderCooldownByOfferId.entries()).forEach(([rawId, rawExpiresAt]) => {
     const id = Number(rawId);
     const expiresAt = Number(rawExpiresAt);
     if (!offerIds.has(id) || !Number.isFinite(expiresAt) || expiresAt <= nowMs) {
       reminderCooldownByOfferId.delete(id);
+      changed = true;
     }
   });
+  if (changed) saveReminderCooldowns();
 }
 
 function defaultReminderButtonLabel(button) {
@@ -2204,8 +2262,8 @@ async function loadSellerOffers({ silent = false } = {}) {
     if (!sellerUserId) {
       setDashboardOfferBadge(0);
       sellerOffersCache = [];
-      reminderCooldownByOfferId = new Map();
       stopReminderCooldownTicker();
+      clearReminderCooldownsStorage();
       updateReminderCooldownHint({ count: 0, nextMs: 0 });
       acceptedQuickCursor = 0;
       renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
