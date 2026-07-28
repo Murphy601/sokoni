@@ -393,6 +393,13 @@ html.dark .sell-order-card {
   gap: 0.75rem;
 }
 
+.sell-offer-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
 .sell-order-badge {
   font-size: 0.65rem;
   font-weight: 700;
@@ -416,6 +423,18 @@ html.dark .sell-order-card {
 .sell-order-badge--done {
   background: rgba(27, 16, 53, 0.08);
   color: rgba(27, 16, 53, 0.6);
+}
+
+.sell-order-badge--reminded {
+  background: rgba(37, 211, 102, 0.14);
+  color: rgba(27, 16, 53, 0.75);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+html.dark .sell-order-badge--reminded {
+  background: rgba(37, 211, 102, 0.24);
+  color: #fff8f0;
 }
 
 .sell-order-actions {

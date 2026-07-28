@@ -1910,6 +1910,9 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
             </div>`
           : "";
       const reminderSentNote = status === "accepted" ? formatReminderLastSentLabel(id) : "";
+      const remindedBadge = reminderSentNote
+        ? `<span class="sell-order-badge sell-order-badge--reminded">Reminded</span>`
+        : "";
       const handledNote = handledInQuickQueue
         ? `<p class="text-xs text-brand-green mt-2">Handled in quick mode queue.</p>`
         : "";
@@ -1917,7 +1920,10 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         <article class="sell-offer-card sell-order-card" data-offer-row="${Number.isInteger(id) ? id : ""}">
           <div class="sell-order-card-head">
             <p class="font-semibold">${escapeHtml(productTitle)}</p>
-            <span class="sell-order-badge ${offerStatusBadgeClass(status)}">${escapeHtml(offerStatusLabel(status))}</span>
+            <div class="sell-offer-card-badges">
+              <span class="sell-order-badge ${offerStatusBadgeClass(status)}">${escapeHtml(offerStatusLabel(status))}</span>
+              ${remindedBadge}
+            </div>
           </div>
           <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(offerBuyerLabel(offer))}</p>
           <p class="text-sm mt-2"><strong>Offered:</strong> ${escapeHtml(amount)}${escapeHtml(listedLine)}</p>
