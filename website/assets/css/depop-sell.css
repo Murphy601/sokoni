@@ -504,6 +504,29 @@ html.dark .sell-offer-reset-btn {
   color: rgba(255, 248, 240, 0.82);
 }
 
+.sell-offer-undo-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid rgba(37, 211, 102, 0.58);
+  background: rgba(37, 211, 102, 0.14);
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 0.85rem;
+  cursor: pointer;
+}
+
+.sell-offer-undo-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+html.dark .sell-offer-undo-btn {
+  border-color: rgba(37, 211, 102, 0.62);
+  background: rgba(37, 211, 102, 0.24);
+  color: #fff8f0;
+}
+
 .sell-offer-filters {
   display: flex;
   flex-wrap: wrap;

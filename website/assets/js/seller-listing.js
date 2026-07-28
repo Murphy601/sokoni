@@ -14,6 +14,7 @@ const MIN_SHIPPING_KES = 150;
 const SELLER_OFFERS_POLL_MS = 45000;
 const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "declined"]);
 const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
+const HANDLED_HISTORY_LIMIT = 40;
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -328,6 +329,7 @@ let sellerOffersCache = [];
 let acceptedQuickCursor = 0;
 let handledAcceptedOfferIds = new Set();
 let handledOffersStorageKey = null;
+let handledOfferHistory = [];
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -731,6 +733,7 @@ function showSellerProfile(profile) {
   sellerSocialUserIdPromise = null;
   loadHandledAcceptedOffers();
   updateHandledResetButton();
+  updateUndoLastDoneButton();
   el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
   if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
   el("seller-profile-bar")?.classList.remove("hidden");
@@ -1238,6 +1241,7 @@ function handledOffersStorageKeyForCurrentSeller() {
 function loadHandledAcceptedOffers() {
   handledOffersStorageKey = handledOffersStorageKeyForCurrentSeller();
   handledAcceptedOfferIds = new Set();
+  handledOfferHistory = [];
   try {
     const raw = sessionStorage.getItem(handledOffersStorageKey);
     if (!raw) return;
@@ -1270,6 +1274,7 @@ function clearHandledAcceptedOffersStorage() {
     if (handledOffersStorageKey) sessionStorage.removeItem(handledOffersStorageKey);
   } catch {}
   handledAcceptedOfferIds = new Set();
+  handledOfferHistory = [];
   handledOffersStorageKey = null;
 }
 
@@ -1281,16 +1286,65 @@ function updateHandledResetButton() {
   button.disabled = !hasHandled;
 }
 
+function rememberHandledOfferHistory(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return;
+  handledOfferHistory = handledOfferHistory.filter((entry) => entry !== id);
+  handledOfferHistory.push(id);
+  if (handledOfferHistory.length > HANDLED_HISTORY_LIMIT) {
+    handledOfferHistory = handledOfferHistory.slice(-HANDLED_HISTORY_LIMIT);
+  }
+}
+
+function removeHandledOfferFromHistory(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return;
+  handledOfferHistory = handledOfferHistory.filter((entry) => entry !== id);
+}
+
+function popUndoableHandledOfferId() {
+  while (handledOfferHistory.length) {
+    const id = Number(handledOfferHistory.pop());
+    if (Number.isInteger(id) && id > 0 && handledAcceptedOfferIds.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
+function latestUndoableHandledOfferId() {
+  for (let index = handledOfferHistory.length - 1; index >= 0; index -= 1) {
+    const id = Number(handledOfferHistory[index]);
+    if (Number.isInteger(id) && id > 0 && handledAcceptedOfferIds.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
+function updateUndoLastDoneButton() {
+  const button = el("offers-undo-handled-btn");
+  if (!button) return;
+  const hasUndoable = Number.isInteger(latestUndoableHandledOfferId());
+  button.classList.toggle("hidden", !hasUndoable);
+  button.disabled = !hasUndoable;
+}
+
 function isAcceptedOfferHandled(offerOrId) {
   const id = Number(typeof offerOrId === "object" ? offerOrId?.id : offerOrId);
   return Number.isInteger(id) && id > 0 ? handledAcceptedOfferIds.has(id) : false;
 }
 
-function setAcceptedOfferHandled(offerId, handled = true) {
+function setAcceptedOfferHandled(offerId, handled = true, { trackHistory = false } = {}) {
   const id = Number(offerId);
   if (!Number.isInteger(id) || id < 1) return false;
-  if (handled) handledAcceptedOfferIds.add(id);
-  else handledAcceptedOfferIds.delete(id);
+  if (handled) {
+    handledAcceptedOfferIds.add(id);
+    if (trackHistory) rememberHandledOfferHistory(id);
+  } else {
+    handledAcceptedOfferIds.delete(id);
+    removeHandledOfferFromHistory(id);
+  }
   saveHandledAcceptedOffers();
   return true;
 }
@@ -1305,6 +1359,7 @@ function reconcileHandledAcceptedOffers(offers = sellerOffersCache) {
   Array.from(handledAcceptedOfferIds.values()).forEach((id) => {
     if (!eligibleIds.has(id)) {
       handledAcceptedOfferIds.delete(id);
+      removeHandledOfferFromHistory(id);
       changed = true;
     }
   });
@@ -1337,6 +1392,7 @@ function updateQuickModeHint() {
   const button = el("offers-quick-chat-btn");
   if (!hint || !button) return;
   updateHandledResetButton();
+  updateUndoLastDoneButton();
 
   const chatEligible = acceptedOffersEligibleForChat();
   const ready = acceptedOffersReadyForChat();
@@ -1708,7 +1764,8 @@ function toggleAcceptedOfferHandled(button) {
   const offerId = Number(button?.dataset?.offerId);
   if (!Number.isInteger(offerId) || offerId < 1) return;
   const currentlyHandled = button.dataset.handled === "1" || isAcceptedOfferHandled(offerId);
-  if (!setAcceptedOfferHandled(offerId, !currentlyHandled)) return;
+  const nextHandledState = !currentlyHandled;
+  if (!setAcceptedOfferHandled(offerId, nextHandledState, { trackHistory: nextHandledState })) return;
   acceptedQuickCursor = 0;
   renderOfferCacheView();
   setOffersStatus(currentlyHandled ? "Offer moved back into quick queue." : "Offer marked handled in quick queue.");
@@ -1717,10 +1774,27 @@ function toggleAcceptedOfferHandled(button) {
 function resetHandledAcceptedOffersQueue() {
   if (!handledAcceptedOfferIds.size) return;
   handledAcceptedOfferIds = new Set();
+  handledOfferHistory = [];
   saveHandledAcceptedOffers();
   acceptedQuickCursor = 0;
   renderOfferCacheView();
   setOffersStatus("Quick queue reset — all accepted chats are active again.");
+}
+
+function undoLastHandledAcceptedOffer() {
+  const offerId = popUndoableHandledOfferId();
+  if (!offerId) {
+    renderOfferCacheView();
+    setOffersStatus("Nothing to undo yet. Mark an accepted chat done first.");
+    return;
+  }
+  const offer = offerByIdFromCache(offerId);
+  if (!setAcceptedOfferHandled(offerId, false)) return;
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  setOffersStatus(
+    offer ? `${offerBuyerLabel(offer)} moved back to active quick queue.` : "Last handled chat moved back to active quick queue."
+  );
 }
 
 function markDoneAndOpenNextAcceptedChat(button) {
@@ -1738,7 +1812,7 @@ function markDoneAndOpenNextAcceptedChat(button) {
 
   const readyBefore = acceptedOffersReadyForChat();
   const currentIndex = readyBefore.findIndex((candidate) => Number(candidate?.id) === offerId);
-  if (!setAcceptedOfferHandled(offerId, true)) return;
+  if (!setAcceptedOfferHandled(offerId, true, { trackHistory: true })) return;
 
   const readyAfter = acceptedOffersReadyForChat();
   if (!readyAfter.length) {
@@ -2121,6 +2195,7 @@ function init() {
   el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
   el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
   el("offers-reset-handled-btn")?.addEventListener("click", resetHandledAcceptedOffersQueue);
+  el("offers-undo-handled-btn")?.addEventListener("click", undoLastHandledAcceptedOffer);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));
