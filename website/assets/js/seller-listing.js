@@ -1279,6 +1279,29 @@ function pendingOffersCount(offers = []) {
   }).length;
 }
 
+function offerBuyerUserId(offer) {
+  const buyerId = Number(offer?.buyerUserId ?? offer?.buyer?.id);
+  return Number.isInteger(buyerId) && buyerId > 0 ? buyerId : null;
+}
+
+function currentSellerSocialUserId() {
+  const sellerId = Number(sellerProfile?.socialUserId ?? sellerProfile?.userId);
+  return Number.isInteger(sellerId) && sellerId > 0 ? sellerId : null;
+}
+
+function inboxLinkForOffer(offer, sellerUserId, buyerUserId) {
+  if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) {
+    return "../inbox.html";
+  }
+  const params = new URLSearchParams({
+    viewer: String(sellerUserId),
+    with: String(buyerUserId),
+  });
+  const buyerHandle = normalizeHandleForLookup(offer?.buyer?.handle || "");
+  if (buyerHandle) params.set("handle", buyerHandle);
+  return `../inbox.html?${params.toString()}`;
+}
+
 async function resolveSellerSocialUserId(force = false) {
   if (!sellerProfile) return null;
 
@@ -1330,6 +1353,33 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
       const listed = Number(offer?.product?.priceKsh ?? offer?.product?.priceKes);
       const listedLine = Number.isFinite(listed) && listed > 0 ? ` · Listed ${formatKes(listed)}` : "";
       const canRespond = Number.isInteger(id) && id > 0 && status === "pending";
+      const sellerUserId = currentSellerSocialUserId();
+      const buyerUserId = offerBuyerUserId(offer);
+      const canChat =
+        Number.isInteger(sellerUserId) &&
+        sellerUserId > 0 &&
+        Number.isInteger(buyerUserId) &&
+        buyerUserId > 0 &&
+        sellerUserId !== buyerUserId;
+      const actionBlock = canRespond
+        ? `<div class="sell-offer-actions">
+            <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
+              Accept
+            </button>
+            <button type="button" class="sell-offer-action sell-offer-action--decline offer-action-btn" data-offer-id="${id}" data-action="declined">
+              Decline
+            </button>
+          </div>`
+        : status === "accepted" && canChat
+          ? `<div class="sell-offer-actions">
+              <a href="${inboxLinkForOffer(offer, sellerUserId, buyerUserId)}" class="sell-offer-action sell-offer-action--chat">
+                Open chat
+              </a>
+              <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}">
+                Send reminder
+              </button>
+            </div>`
+          : "";
       return `
         <article class="sell-offer-card sell-order-card" data-offer-row="${Number.isInteger(id) ? id : ""}">
           <div class="sell-order-card-head">
@@ -1341,18 +1391,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
           <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
             formatOfferExpiry(offer?.expiresAt, status)
           )}</p>
-          ${
-            canRespond
-              ? `<div class="sell-offer-actions">
-                  <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
-                    Accept
-                  </button>
-                  <button type="button" class="sell-offer-action sell-offer-action--decline offer-action-btn" data-offer-id="${id}" data-action="declined">
-                    Decline
-                  </button>
-                </div>`
-              : ""
-          }
+          ${actionBlock}
         </article>`;
     })
     .join("");
@@ -1385,7 +1424,7 @@ function renderOfferCacheView() {
   }
   const label = offerFilterLabel(activeSellerOffersFilter);
   setOffersStatus(
-    `${offerCountLabel(visible.length, label)} · ${offerCountLabel(pending, "pending")} · ${offerCountLabel(
+    `${offerCountLabel(visible.length, label)} · ${offerCountLabel(pending, "pending offer")} · ${offerCountLabel(
       total,
       "total offer"
     )}.`
@@ -1442,12 +1481,79 @@ async function respondToSellerOffer(button) {
   }
 }
 
+function offerByIdFromCache(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return null;
+  return sellerOffersCache.find((offer) => Number(offer?.id) === id) || null;
+}
+
+function reminderMessageForOffer(offer) {
+  const productTitle = offer?.product?.title || "your item";
+  const amount = formatKes(offer?.amountKsh || 0);
+  return `Hi! I accepted your offer of ${amount} for "${productTitle}". Please complete checkout on Sokoni within 24 hours so I can prepare shipping.`;
+}
+
+async function sendAcceptedOfferReminder(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const offer = offerByIdFromCache(offerId);
+  if (!offer) {
+    setOffersStatus("Offer not found. Refresh and try again.", true);
+    return;
+  }
+
+  const sellerUserId = currentSellerSocialUserId();
+  const buyerUserId = offerBuyerUserId(offer);
+  if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) {
+    setOffersStatus("Could not resolve buyer chat profile for this offer.", true);
+    return;
+  }
+
+  const previousLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Sending...";
+  setOffersStatus("Sending reminder...");
+  try {
+    const res = await fetch(`${SOCIAL_API}/chat/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        senderUserId: sellerUserId,
+        receiverUserId: buyerUserId,
+        content: reminderMessageForOffer(offer),
+      }),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setOffersStatus(parsed.data?.message || parsed.message || "Could not send reminder right now.", true);
+      button.disabled = false;
+      button.textContent = previousLabel;
+      return;
+    }
+    button.textContent = "Reminder sent";
+    setOffersStatus("Reminder sent in inbox.");
+    window.setTimeout(() => {
+      button.disabled = false;
+      button.textContent = previousLabel;
+    }, 4000);
+  } catch {
+    setOffersStatus("Network error while sending reminder.", true);
+    button.disabled = false;
+    button.textContent = previousLabel;
+  }
+}
+
 function bindOfferActionButtons() {
   const wrap = el("seller-offers");
   if (!wrap) return;
   wrap.querySelectorAll(".offer-action-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       respondToSellerOffer(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-reminder-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sendAcceptedOfferReminder(btn);
     });
   });
 }
