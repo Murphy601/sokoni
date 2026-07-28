@@ -12,6 +12,7 @@ const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
 const SELLER_OFFERS_POLL_MS = 45000;
+const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "declined"]);
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -107,9 +108,12 @@ function clearSession() {
   phoneVerified = false;
   sellerProfile = null;
   sellerSocialUserIdPromise = null;
+  sellerOffersCache = [];
+  activeSellerOffersFilter = "pending";
   stopSellerOffersPolling();
   currentSellerView = "dashboard";
   setDashboardOfferBadge(0);
+  syncOfferFilterButtons();
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
 }
 
@@ -314,6 +318,8 @@ let sellerSocialUserIdPromise = null;
 let sellerOffersPollTimer = null;
 let sellerOffersRequestInFlight = false;
 let currentSellerView = "dashboard";
+let activeSellerOffersFilter = "pending";
+let sellerOffersCache = [];
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -1185,6 +1191,47 @@ function setDashboardOfferBadge(pendingCount = 0) {
   badge.setAttribute("aria-label", `${count} pending offer${count === 1 ? "" : "s"}`);
 }
 
+function normalizeOfferFilter(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return SELLER_OFFER_FILTERS.has(normalized) ? normalized : "pending";
+}
+
+function syncOfferFilterButtons() {
+  const buttons = document.querySelectorAll("[data-offer-filter]");
+  buttons.forEach((button) => {
+    const filter = normalizeOfferFilter(button.dataset.offerFilter);
+    const active = filter === activeSellerOffersFilter;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
+  const normalized = normalizeOfferFilter(filter);
+  if (normalized === "all") return offers;
+  return offers.filter((offer) => {
+    return (
+      String(offer?.status || "")
+        .trim()
+        .toLowerCase() === normalized
+    );
+  });
+}
+
+function offerFilterLabel(filter = activeSellerOffersFilter) {
+  if (filter === "accepted") return "accepted offer";
+  if (filter === "declined") return "declined offer";
+  if (filter === "pending") return "pending offer";
+  return "offer";
+}
+
+function offerCountLabel(count, noun) {
+  const safe = Math.max(0, Number(count) || 0);
+  return `${safe.toLocaleString()} ${noun}${safe === 1 ? "" : "s"}`;
+}
+
 function offerStatusLabel(status) {
   if (status === "pending") return "Pending";
   if (status === "accepted") return "Accepted";
@@ -1263,12 +1310,12 @@ async function resolveSellerSocialUserId(force = false) {
   return sellerSocialUserIdPromise;
 }
 
-function renderSellerOffers(offers = []) {
+function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. New offers will appear here.") {
   const wrap = el("seller-offers");
   if (!wrap) return;
 
   if (!offers.length) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No buyer offers yet. New offers will appear here.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
 
@@ -1309,6 +1356,46 @@ function renderSellerOffers(offers = []) {
         </article>`;
     })
     .join("");
+}
+
+function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
+  if (!totalOffers) {
+    return "No buyer offers yet. New offers will appear here.";
+  }
+  if (filter === "pending") return "No pending offers right now.";
+  if (filter === "accepted") return "No accepted offers yet.";
+  if (filter === "declined") return "No declined offers yet.";
+  return "No offers in this view right now.";
+}
+
+function renderOfferCacheView() {
+  const total = sellerOffersCache.length;
+  const pending = pendingOffersCount(sellerOffersCache);
+  const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
+  renderSellerOffers(visible, emptyOfferMessage(total, activeSellerOffersFilter));
+  bindOfferActionButtons();
+
+  if (!total) {
+    setOffersStatus("No buyer offers yet.");
+    return;
+  }
+  if (activeSellerOffersFilter === "all") {
+    setOffersStatus(`${offerCountLabel(total, "offer")} in inbox · ${offerCountLabel(pending, "pending offer")}.`);
+    return;
+  }
+  const label = offerFilterLabel(activeSellerOffersFilter);
+  setOffersStatus(
+    `${offerCountLabel(visible.length, label)} · ${offerCountLabel(pending, "pending")} · ${offerCountLabel(
+      total,
+      "total offer"
+    )}.`
+  );
+}
+
+function setActiveOfferFilter(filter) {
+  activeSellerOffersFilter = normalizeOfferFilter(filter);
+  syncOfferFilterButtons();
+  renderOfferCacheView();
 }
 
 async function respondToSellerOffer(button) {
@@ -1365,6 +1452,15 @@ function bindOfferActionButtons() {
   });
 }
 
+function bindOfferFilterButtons() {
+  document.querySelectorAll("[data-offer-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setActiveOfferFilter(button.dataset.offerFilter);
+    });
+  });
+  syncOfferFilterButtons();
+}
+
 function stopSellerOffersPolling() {
   if (sellerOffersPollTimer) {
     window.clearInterval(sellerOffersPollTimer);
@@ -1396,7 +1492,8 @@ async function loadSellerOffers({ silent = false } = {}) {
     const sellerUserId = await resolveSellerSocialUserId();
     if (!sellerUserId) {
       setDashboardOfferBadge(0);
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Offers inbox appears after your shop handle links to your social profile.</p>`;
+      sellerOffersCache = [];
+      renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
       setOffersStatus("No linked social profile yet.");
       return;
     }
@@ -1419,18 +1516,9 @@ async function loadSellerOffers({ silent = false } = {}) {
 
     const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
     const pending = pendingOffersCount(offers);
+    sellerOffersCache = offers;
     setDashboardOfferBadge(pending);
-    renderSellerOffers(offers);
-    bindOfferActionButtons();
-    if (offers.length) {
-      setOffersStatus(
-        pending > 0
-          ? `${pending.toLocaleString()} pending · ${offers.length.toLocaleString()} total offers.`
-          : `${offers.length.toLocaleString()} offer${offers.length === 1 ? "" : "s"} in inbox.`
-      );
-    } else {
-      setOffersStatus("No buyer offers yet.");
-    }
+    renderOfferCacheView();
   } catch {
     if (!silent) {
       wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading offers.</p>`;
@@ -1656,6 +1744,7 @@ function init() {
 
   bindMediaSlots();
   bindLedgerTabs();
+  bindOfferFilterButtons();
   updateStepUi();
 
   el("tab-dashboard")?.addEventListener("click", () => showSellerView("dashboard"));

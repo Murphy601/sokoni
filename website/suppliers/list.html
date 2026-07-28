@@ -167,6 +167,12 @@
             <button id="load-offers-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
           </div>
           <p id="seller-offers-status" class="text-sm text-brand-purple/60 dark:text-white/60"></p>
+          <div id="seller-offers-filters" class="sell-offer-filters" role="tablist" aria-label="Offer status filters">
+            <button type="button" class="sell-offer-filter is-active" data-offer-filter="pending" role="tab" aria-selected="true">Pending</button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="all" role="tab" aria-selected="false">All</button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="accepted" role="tab" aria-selected="false">Accepted</button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="declined" role="tab" aria-selected="false">Declined</button>
+          </div>
           <div id="seller-offers" class="space-y-3"></div>
         </section>
 
