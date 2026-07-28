@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isDbEnabled, pingDb } from "../db/pool.js";
 import { isCatalogPubliclyDisabled } from "../services/catalog-guard.js";
 import {
+  createProductListing,
   getProductById,
   searchProductsDb,
   countSearchProductsDb,
@@ -40,6 +41,8 @@ function toPublicProduct(p) {
     browseSubCategory: p.browseSubCategory,
     brand: p.brand,
     color: p.color,
+    size: p.size,
+    genderFit: p.genderFit,
     description: p.description,
     isSecondhand: p.isSecondhand,
     condition: p.condition,
@@ -106,6 +109,30 @@ function buildListFilters(req) {
     inStockOnly: req.query.includeHidden !== "true",
   };
 }
+
+function createProductErrorStatus(error) {
+  if (error === "database_not_configured") return 503;
+  if (error === "seller_not_found") return 404;
+  return 400;
+}
+
+/**
+ * POST /api/products/create
+ * Mandatory metadata: size, condition, genderFit (+ title, price, cover image).
+ */
+router.post("/create", async (req, res) => {
+  try {
+    const result = await createProductListing(req.body || {});
+    if (result.error) {
+      return res
+        .status(createProductErrorStatus(result.error))
+        .json({ error: result.error, message: result.message });
+    }
+    res.status(201).json({ success: true, product: toPublicProduct(result.product) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get("/meta", async (_req, res) => {
   const disabled = await isCatalogPubliclyDisabled();

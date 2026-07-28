@@ -41,6 +41,8 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     browseSubCategory: row.browse_sub_category || undefined,
     brand: row.brand || undefined,
     color: row.color || undefined,
+    size: row.size_label || undefined,
+    genderFit: row.gender_fit || undefined,
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),
@@ -105,6 +107,11 @@ export function jsonToDbProduct(json, sellerId = null) {
     browse_sub_category: json.browseSubCategory || null,
     brand: json.brand || null,
     color: json.color || null,
+    size_label: json.size || json.sizeLabel || null,
+    gender_fit:
+      typeof json.genderFit === "string"
+        ? String(json.genderFit).trim().toLowerCase() || null
+        : null,
     is_secondhand: Boolean(json.isSecondhand),
     condition: json.condition || "brand_new_without_tags",
     stock_quantity: stockQty,

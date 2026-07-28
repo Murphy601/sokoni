@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = path.join(__dirname, "..", "..", "db", "schema.sql");
 const SCHEMA_PHASE2_PATH = path.join(__dirname, "..", "..", "db", "schema-phase2-browse.sql");
 const SCHEMA_PHASE5_PATH = path.join(__dirname, "..", "..", "db", "schema-phase5-shipping.sql");
+const SCHEMA_PHASE10_PATH = path.join(__dirname, "..", "..", "db", "schema-phase10-social.sql");
 
 export async function runMigrations() {
   if (!isDbEnabled()) {
@@ -28,6 +29,14 @@ export async function runMigrations() {
     const phase5 = await readFile(SCHEMA_PHASE5_PATH, "utf-8");
     await query(phase5);
     console.log("[db] phase5 shipping schema applied:", SCHEMA_PHASE5_PATH);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+
+  try {
+    const phase10 = await readFile(SCHEMA_PHASE10_PATH, "utf-8");
+    await query(phase10);
+    console.log("[db] phase10 social schema applied:", SCHEMA_PHASE10_PATH);
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }

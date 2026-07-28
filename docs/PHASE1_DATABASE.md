@@ -7,6 +7,7 @@ Foundation for the Depop-style Sokoni marketplace: **users, sellers, products (n
 | Path | Purpose |
 |------|---------|
 | `whatsapp-bot/db/schema.sql` | Full PostgreSQL schema |
+| `whatsapp-bot/db/schema-phase10-social.sql` | Additive social marketplace foundation (users profile fields, follows, likes, offers, messages, order_reviews, product metadata) |
 | `whatsapp-bot/src/db/pool.js` | Connection pool |
 | `whatsapp-bot/src/db/migrate.js` | Apply schema |
 | `whatsapp-bot/src/db/product-mapper.js` | DB ↔ legacy catalog shape |
@@ -20,9 +21,28 @@ Foundation for the Depop-style Sokoni marketplace: **users, sellers, products (n
 
 - **Condition enum:** `brand_new_with_tags`, `brand_new_without_tags`, `like_new`, `gently_used`, `fair_condition`
 - **`is_secondhand`** — filter Brand New vs Pre-Loved
+- **`size_label` + `gender_fit`** — mandatory listing metadata for social marketplace cards
 - **`stock_quantity`** — 1 for unique thrift pieces; >1 for retail
 - **`product_images`** — 1–4 URLs per listing (Phase 4 upload UI)
 - **Private fields kept in DB:** `source_price_kes`, `source_url` (never returned by public API)
+
+## New listing create endpoint (Phase 1 foundation)
+
+`POST /api/products/create`
+
+Required fields:
+
+- `title`
+- `priceKsh`
+- `images` (array, at least one URL for cover)
+- `size`
+- `condition` (`BRAND_NEW`, `LIKE_NEW`, `GOOD`, `FAIR` or existing Sokoni condition values)
+- `genderFit` (`MENS`, `WOMENS`, `UNISEX`, `KIDS`)
+
+Optional:
+
+- `sellerId` (falls back to default seller if omitted)
+- `description`, `category`, `subCategory`, `brand`
 
 ## Setup (VM or local)
 

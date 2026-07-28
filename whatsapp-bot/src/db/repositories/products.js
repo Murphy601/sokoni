@@ -1,6 +1,6 @@
 import { query, isDbEnabled } from "../pool.js";
 import { rowToCatalogProduct, jsonToDbProduct } from "../product-mapper.js";
-import { ensureDefaultSeller } from "./sellers.js";
+import { ensureDefaultSeller, getSellerById } from "./sellers.js";
 
 const PRODUCT_SELECT = `
   SELECT p.*,
@@ -18,6 +18,51 @@ const PRODUCT_SELECT = `
 function mapRow(row) {
   const urls = Array.isArray(row.image_urls) ? row.image_urls : [];
   return rowToCatalogProduct(row, urls);
+}
+
+const GENDER_FIT_VALUES = ["mens", "womens", "unisex", "kids"];
+const GENDER_FIT_ALIASES = {
+  mens: "mens",
+  women: "womens",
+  womens: "womens",
+  unisex: "unisex",
+  kids: "kids",
+  m: "mens",
+  w: "womens",
+};
+
+const CREATE_CONDITION_MAP = {
+  brand_new: "brand_new_without_tags",
+  like_new: "like_new",
+  good: "gently_used",
+  fair: "fair_condition",
+  brand_new_with_tags: "brand_new_with_tags",
+  brand_new_without_tags: "brand_new_without_tags",
+  gently_used: "gently_used",
+  fair_condition: "fair_condition",
+};
+
+function normalizeCreateCondition(value) {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase();
+  return CREATE_CONDITION_MAP[key] || null;
+}
+
+function normalizeGenderFit(value) {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase();
+  return GENDER_FIT_ALIASES[key] || null;
+}
+
+function inferIsSecondhand(condition) {
+  return ["like_new", "gently_used", "fair_condition"].includes(condition);
+}
+
+function createProductId() {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `prod_${Date.now().toString(36)}_${suffix}`;
 }
 
 function buildSearchClauses({
@@ -120,6 +165,126 @@ export async function listProducts({ inStockOnly = false } = {}) {
 export async function getProductById(id) {
   const { rows } = await query(`${PRODUCT_SELECT} WHERE p.id = $1`, [id]);
   return rows[0] ? mapRow(rows[0]) : null;
+}
+
+/**
+ * Create a product listing with mandatory social-marketplace metadata.
+ */
+export async function createProductListing({
+  sellerId,
+  title,
+  description = "",
+  priceKsh,
+  images = [],
+  category = "fashion",
+  subCategory = null,
+  size,
+  condition,
+  brand,
+  genderFit,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const cleanTitle = String(title || "").trim();
+  const cleanDescription = String(description || "").trim();
+  const amount = Number(priceKsh);
+  const imageUrls = Array.isArray(images)
+    ? images.map((u) => String(u || "").trim()).filter(Boolean)
+    : [];
+  const sizeLabel = String(size || "").trim();
+  const normalizedCondition = normalizeCreateCondition(condition);
+  const normalizedGenderFit = normalizeGenderFit(genderFit);
+
+  if (!cleanTitle || !Number.isFinite(amount) || amount <= 0 || imageUrls.length < 1) {
+    return { error: "missing_required", message: "Title, price, and cover image are required." };
+  }
+  if (!sizeLabel || !normalizedCondition || !normalizedGenderFit) {
+    return {
+      error: "missing_metadata",
+      message: "Missing mandatory metadata (Size, Condition, Gender Fit).",
+    };
+  }
+
+  let resolvedSellerId = null;
+  if (sellerId != null && String(sellerId).trim() !== "") {
+    const numericSellerId = Number(sellerId);
+    if (!Number.isInteger(numericSellerId) || numericSellerId < 1) {
+      return { error: "invalid_seller", message: "sellerId must be a valid numeric seller ID." };
+    }
+    const seller = await getSellerById(numericSellerId);
+    if (!seller) {
+      return { error: "seller_not_found", message: "Seller profile not found." };
+    }
+    resolvedSellerId = numericSellerId;
+  } else {
+    resolvedSellerId = await ensureDefaultSeller();
+  }
+
+  const productId = createProductId();
+  const safeBrand = String(brand || "").trim() || "Unbranded / Thrift";
+  const isSecondhand = inferIsSecondhand(normalizedCondition);
+  const safeCategory = String(category || "fashion").trim() || "fashion";
+  const safeSubCategory = String(subCategory || "").trim() || null;
+
+  await query(
+    `INSERT INTO products (
+      id, seller_id, title, description, category, sub_category, brand,
+      size_label, gender_fit, is_secondhand, condition, stock_quantity,
+      price_kes, source, scope, fulfillment, payment, tags, in_stock, is_sold,
+      primary_image_url, legacy_json, created_at, updated_at
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7,
+      $8, $9, $10, $11, $12,
+      $13, $14, $15, $16, $17, $18::jsonb, $19, $20,
+      $21, $22::jsonb, NOW(), NOW()
+    )`,
+    [
+      productId,
+      resolvedSellerId,
+      cleanTitle,
+      cleanDescription || null,
+      safeCategory,
+      safeSubCategory,
+      safeBrand,
+      sizeLabel,
+      normalizedGenderFit,
+      isSecondhand,
+      normalizedCondition,
+      1,
+      amount,
+      "Sokoni",
+      "local",
+      "store",
+      "prepaid",
+      "[]",
+      true,
+      false,
+      imageUrls[0],
+      JSON.stringify({
+        title: cleanTitle,
+        priceKsh: amount,
+        category: safeCategory,
+        subCategory: safeSubCategory,
+        size: sizeLabel,
+        condition: normalizedCondition,
+        brand: safeBrand,
+        genderFit: normalizedGenderFit,
+      }),
+    ]
+  );
+
+  for (let i = 0; i < imageUrls.length; i += 1) {
+    await query(`INSERT INTO product_images (product_id, url, sort_order) VALUES ($1, $2, $3)`, [
+      productId,
+      imageUrls[i],
+      i,
+    ]);
+  }
+
+  const product = await getProductById(productId);
+  return { success: true, product };
 }
 
 export async function searchProductsDb({
