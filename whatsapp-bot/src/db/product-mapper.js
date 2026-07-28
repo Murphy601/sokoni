@@ -43,6 +43,9 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     color: row.color || undefined,
     size: row.size_label || undefined,
     genderFit: row.gender_fit || undefined,
+    sellerHandle: row.seller_handle || undefined,
+    shopHandle: row.seller_slug || undefined,
+    businessName: row.seller_business_name || undefined,
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),

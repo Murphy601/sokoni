@@ -540,7 +540,7 @@ function sellerHandle(product) {
   );
   if (direct) return `@${direct}`;
 
-  const name = product.source || product.businessName || "";
+  const name = product.businessName || product.source || "";
   if (!name) return "";
   const slug = name
     .toLowerCase()

@@ -4,12 +4,18 @@ import { ensureDefaultSeller, getSellerById } from "./sellers.js";
 
 const PRODUCT_SELECT = `
   SELECT p.*,
+    s.business_name AS seller_business_name,
+    s.slug AS seller_slug,
+    su.handle AS seller_handle,
+    su.shop_name AS seller_shop_name,
     COALESCE(
       (SELECT json_agg(pi.url ORDER BY pi.sort_order)
        FROM product_images pi WHERE pi.product_id = p.id),
       '[]'::json
     ) AS image_urls
   FROM products p
+  LEFT JOIN sellers s ON s.id = p.seller_id
+  LEFT JOIN users su ON su.id = COALESCE(p.seller_user_id, s.user_id)
 `;
 
 /**
@@ -209,6 +215,7 @@ export async function createProductListing({
 
   let resolvedSellerId = null;
   let resolvedSellerUserId = null;
+  let resolvedSellerProfile = null;
   if (sellerId != null && String(sellerId).trim() !== "") {
     const numericSellerId = Number(sellerId);
     if (!Number.isInteger(numericSellerId) || numericSellerId < 1) {
@@ -218,6 +225,7 @@ export async function createProductListing({
     if (!seller) {
       return { error: "seller_not_found", message: "Seller profile not found." };
     }
+    resolvedSellerProfile = seller;
     resolvedSellerId = numericSellerId;
     resolvedSellerUserId =
       seller.user_id != null && Number.isInteger(Number(seller.user_id))
@@ -226,6 +234,7 @@ export async function createProductListing({
   } else {
     resolvedSellerId = await ensureDefaultSeller();
     const seller = await getSellerById(resolvedSellerId);
+    resolvedSellerProfile = seller || null;
     resolvedSellerUserId =
       seller?.user_id != null && Number.isInteger(Number(seller.user_id))
         ? Number(seller.user_id)
@@ -237,6 +246,7 @@ export async function createProductListing({
   const isSecondhand = inferIsSecondhand(normalizedCondition);
   const safeCategory = String(category || "fashion").trim() || "fashion";
   const safeSubCategory = String(subCategory || "").trim() || null;
+  const sourceName = String(resolvedSellerProfile?.business_name || "Sokoni").trim() || "Sokoni";
 
   await query(
     `INSERT INTO products (
@@ -265,7 +275,7 @@ export async function createProductListing({
       normalizedCondition,
       1,
       amount,
-      "Sokoni",
+      sourceName,
       "local",
       "store",
       "prepaid",
@@ -275,6 +285,8 @@ export async function createProductListing({
       imageUrls[0],
       JSON.stringify({
         sellerUserId: resolvedSellerUserId,
+        sellerId: resolvedSellerId,
+        shopHandle: resolvedSellerProfile?.slug || null,
         title: cleanTitle,
         priceKsh: amount,
         category: safeCategory,

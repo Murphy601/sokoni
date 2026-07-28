@@ -47,11 +47,45 @@
     return window.SokoniBrowse?.labelForBrowse(path.browse, path.sub) || "";
   }
 
+  function normalizeHandleValue(value) {
+    const clean = String(value || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase();
+    return clean.replace(/[^a-z0-9._-]+/g, "").slice(0, 40);
+  }
+
+  function sellerHandle(product) {
+    const direct = normalizeHandleValue(
+      product?.sellerHandle ||
+        product?.shopHandle ||
+        product?.seller?.handle ||
+        product?.handle
+    );
+    if (direct) return `@${direct}`;
+
+    const name = product?.businessName || product?.source || "";
+    if (!name) return "";
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 18);
+    return slug ? `@${slug}` : "";
+  }
+
+  function sellerShopLink(product) {
+    const handle = normalizeHandleValue(sellerHandle(product));
+    if (!handle) return "";
+    return `shop.html?handle=${encodeURIComponent(handle)}`;
+  }
+
   function renderBody(product) {
     const src = resolveImage(product);
     const saved = window.SokoniShopShell?.isInBag(product.id);
     const condition = product.conditionLabel || product.condition || "";
     const secondhand = product.isSecondhand ? "Pre-Loved" : "Brand New";
+    const handle = sellerHandle(product);
+    const shopLink = sellerShopLink(product);
 
     return `
       <div class="product-sheet-gallery">
@@ -80,6 +114,11 @@
         <button type="button" id="product-sheet-save" class="product-sheet-save ${saved ? "is-saved" : ""}">
           ${saved ? "♥ Saved" : "♡ Save for later"}
         </button>
+        ${
+          handle && shopLink
+            ? `<a href="${shopLink}" class="product-sheet-ask">🏪 View ${escapeHtml(handle)} shop</a>`
+            : ""
+        }
         <a href="${askLink(product)}" target="_blank" rel="noopener" class="product-sheet-ask">💬 Ask on WhatsApp</a>
       </div>`;
   }
