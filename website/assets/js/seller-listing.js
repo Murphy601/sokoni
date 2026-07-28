@@ -19,6 +19,7 @@ const OFFER_REMINDER_COOLDOWN_MS = 90000;
 const REMINDER_COOLDOWN_TICK_MS = 1000;
 const OFFER_REMINDER_COOLDOWN_KEY = "sokoni-seller-offer-reminder-cooldowns";
 const OFFER_REMINDER_SENT_AT_KEY = "sokoni-seller-offer-reminder-sent-at";
+const OFFER_FILTER_PREFERENCE_KEY = "sokoni-seller-offer-filter";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -114,13 +115,13 @@ function clearSession() {
   phoneVerified = false;
   sellerProfile = null;
   sellerSocialUserIdPromise = null;
+  clearActiveOfferFilterPreference();
   clearHandledAcceptedOffersStorage();
   stopReminderCooldownTicker();
   clearReminderCooldownsStorage();
   clearReminderLastSentAtStorage();
   updateReminderCooldownHint({ count: 0, nextMs: 0 });
   sellerOffersCache = [];
-  activeSellerOffersFilter = "pending";
   acceptedQuickCursor = 0;
   stopSellerOffersPolling();
   currentSellerView = "dashboard";
@@ -343,6 +344,7 @@ let reminderCooldownTickTimer = null;
 let reminderCooldownStorageKey = null;
 let reminderLastSentAtByOfferId = new Map();
 let reminderLastSentStorageKey = null;
+let offerFilterStorageKey = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -743,6 +745,8 @@ function showSellerProfile(profile) {
   if (Number.isInteger(knownUserId) && knownUserId > 0) {
     sellerProfile.socialUserId = knownUserId;
   }
+  loadActiveOfferFilterPreference();
+  syncOfferFilterButtons();
   sellerSocialUserIdPromise = null;
   stopReminderCooldownTicker();
   loadReminderCooldowns();
@@ -1226,6 +1230,45 @@ function normalizeOfferFilter(value) {
     .trim()
     .toLowerCase();
   return SELLER_OFFER_FILTERS.has(normalized) ? normalized : "pending";
+}
+
+function offerFilterStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${OFFER_FILTER_PREFERENCE_KEY}:${sellerPhone}` : `${OFFER_FILTER_PREFERENCE_KEY}:default`;
+}
+
+function loadActiveOfferFilterPreference() {
+  offerFilterStorageKey = offerFilterStorageKeyForCurrentSeller();
+  activeSellerOffersFilter = "pending";
+  try {
+    const saved = sessionStorage.getItem(offerFilterStorageKey);
+    if (!saved) return;
+    activeSellerOffersFilter = normalizeOfferFilter(saved);
+  } catch {}
+}
+
+function saveActiveOfferFilterPreference() {
+  if (!offerFilterStorageKey) {
+    offerFilterStorageKey = offerFilterStorageKeyForCurrentSeller();
+  }
+  if (!offerFilterStorageKey) return;
+  const normalized = normalizeOfferFilter(activeSellerOffersFilter);
+  try {
+    if (normalized === "pending") {
+      sessionStorage.removeItem(offerFilterStorageKey);
+      return;
+    }
+    sessionStorage.setItem(offerFilterStorageKey, normalized);
+  } catch {}
+}
+
+function clearActiveOfferFilterPreference() {
+  const key = offerFilterStorageKey || offerFilterStorageKeyForCurrentSeller();
+  try {
+    if (key) sessionStorage.removeItem(key);
+  } catch {}
+  offerFilterStorageKey = null;
+  activeSellerOffersFilter = "pending";
 }
 
 function syncOfferFilterButtons() {
@@ -2016,6 +2059,7 @@ function renderOfferCacheView() {
 
 function setActiveOfferFilter(filter) {
   activeSellerOffersFilter = normalizeOfferFilter(filter);
+  saveActiveOfferFilterPreference();
   renderOfferCacheView();
 }
 
