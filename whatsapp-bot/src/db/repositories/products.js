@@ -208,6 +208,7 @@ export async function createProductListing({
   }
 
   let resolvedSellerId = null;
+  let resolvedSellerUserId = null;
   if (sellerId != null && String(sellerId).trim() !== "") {
     const numericSellerId = Number(sellerId);
     if (!Number.isInteger(numericSellerId) || numericSellerId < 1) {
@@ -218,8 +219,17 @@ export async function createProductListing({
       return { error: "seller_not_found", message: "Seller profile not found." };
     }
     resolvedSellerId = numericSellerId;
+    resolvedSellerUserId =
+      seller.user_id != null && Number.isInteger(Number(seller.user_id))
+        ? Number(seller.user_id)
+        : null;
   } else {
     resolvedSellerId = await ensureDefaultSeller();
+    const seller = await getSellerById(resolvedSellerId);
+    resolvedSellerUserId =
+      seller?.user_id != null && Number.isInteger(Number(seller.user_id))
+        ? Number(seller.user_id)
+        : null;
   }
 
   const productId = createProductId();
@@ -230,19 +240,20 @@ export async function createProductListing({
 
   await query(
     `INSERT INTO products (
-      id, seller_id, title, description, category, sub_category, brand,
+      id, seller_id, seller_user_id, title, description, category, sub_category, brand,
       size_label, gender_fit, is_secondhand, condition, stock_quantity,
       price_kes, source, scope, fulfillment, payment, tags, in_stock, is_sold,
       primary_image_url, legacy_json, created_at, updated_at
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7,
-      $8, $9, $10, $11, $12,
-      $13, $14, $15, $16, $17, $18::jsonb, $19, $20,
-      $21, $22::jsonb, NOW(), NOW()
+      $1, $2, $3, $4, $5, $6, $7, $8,
+      $9, $10, $11, $12, $13,
+      $14, $15, $16, $17, $18, $19::jsonb, $20, $21,
+      $22, $23::jsonb, NOW(), NOW()
     )`,
     [
       productId,
       resolvedSellerId,
+      resolvedSellerUserId,
       cleanTitle,
       cleanDescription || null,
       safeCategory,
@@ -263,6 +274,7 @@ export async function createProductListing({
       false,
       imageUrls[0],
       JSON.stringify({
+        sellerUserId: resolvedSellerUserId,
         title: cleanTitle,
         priceKsh: amount,
         category: safeCategory,

@@ -11,6 +11,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$ BEGIN
+  ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'completed';
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- Users: social + seller profile fields
 -- ---------------------------------------------------------------------------

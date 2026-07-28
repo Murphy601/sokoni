@@ -25,6 +25,12 @@ function normalizeHandle(value) {
     .toLowerCase();
 }
 
+function formatHandle(value, fallback = "") {
+  const raw = String(value || fallback || "").trim();
+  if (!raw) return "";
+  return raw.startsWith("@") ? raw : `@${raw}`;
+}
+
 const OFFER_STATUSES = new Set(["pending", "accepted", "declined", "expired"]);
 
 const FORBIDDEN_PATTERNS = [
@@ -233,9 +239,9 @@ export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } 
        role,
        is_seller_verified
      FROM users
-     WHERE LOWER(handle) = $1
+     WHERE LOWER(handle) = $1 OR LOWER(handle) = $2
      LIMIT 1`,
-    [cleanHandle]
+    [cleanHandle, `@${cleanHandle}`]
   );
   const user = userResult.rows[0] || null;
 
@@ -265,7 +271,7 @@ export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } 
       shop: {
         userId: Number(user.id),
         sellerId: linkedSeller?.id != null ? Number(linkedSeller.id) : null,
-        handle: user.handle || `@${cleanHandle}`,
+        handle: formatHandle(user.handle, cleanHandle),
         shopName:
           user.shop_name ||
           linkedSeller?.business_name ||
@@ -348,7 +354,7 @@ export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } 
     shop: {
       userId: sellerUser?.id != null ? Number(sellerUser.id) : null,
       sellerId: Number(seller.id),
-      handle: sellerUser?.handle || `@${seller.slug}`,
+      handle: formatHandle(sellerUser?.handle, seller.slug),
       shopName:
         sellerUser?.shop_name ||
         seller.business_name ||
@@ -543,12 +549,12 @@ function mapOfferRow(row) {
     },
     buyer: {
       id: Number(row.buyer_user_id),
-      handle: row.buyer_handle || null,
+      handle: row.buyer_handle ? formatHandle(row.buyer_handle) : null,
       shopName: row.buyer_shop_name || null,
     },
     seller: {
       id: Number(row.seller_user_id),
-      handle: row.seller_handle || null,
+      handle: row.seller_handle ? formatHandle(row.seller_handle) : null,
       shopName: row.seller_shop_name || null,
     },
   };
