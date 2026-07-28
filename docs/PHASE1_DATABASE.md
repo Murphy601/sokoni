@@ -41,8 +41,18 @@ Required fields:
 
 Optional:
 
-- `sellerId` (falls back to default seller if omitted)
+- `sellerId` (optional hint; must match authenticated seller session when provided)
 - `description`, `category`, `subCategory`, `brand`
+
+Seller auth (required):
+
+- `phone`
+- `sessionToken` (or `verificationToken`)
+
+Notes:
+
+- Seller identity is now resolved from verified seller session + shop handle link.
+- If `sellerId` is supplied and does not match the authenticated seller profile, request is rejected.
 
 ## Social foundation endpoints (additive)
 
@@ -130,13 +140,20 @@ Respond (seller):
 ```json
 {
   "sellerUserId": 2,
-  "action": "accepted"
+  "action": "accepted",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "seller-session-token"
 }
 ```
 
 List offers:
 
 `GET /api/social/offers?userId=1&role=buyer&status=pending`
+
+Seller role auth note:
+
+- `GET /api/social/offers` with `role=seller` now requires `phone` + `sessionToken`.
+- `userId` must match the authenticated seller social profile (or is enforced from session).
 
 ### In-app messaging (moderated)
 
@@ -151,6 +168,11 @@ Send message:
   "content": "Hi, is this still available?"
 }
 ```
+
+Seller send auth note:
+
+- Seller-triggered messages should include `phone` + `sessionToken`.
+- When seller session context is present, `senderUserId` must match the authenticated seller profile.
 
 Thread:
 

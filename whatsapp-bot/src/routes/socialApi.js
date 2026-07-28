@@ -11,6 +11,7 @@ import {
   sendDirectMessage,
   toggleFollow,
 } from "../db/repositories/social.js";
+import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 
 const router = Router();
 
@@ -105,9 +106,29 @@ router.post("/offers/create", async (req, res) => {
 /** POST /api/social/offers/:offerId/respond — seller accepts/declines */
 router.post("/offers/:offerId/respond", async (req, res) => {
   try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerUserId = Number(req.body?.sellerUserId);
+    if (
+      Number.isInteger(requestedSellerUserId) &&
+      requestedSellerUserId > 0 &&
+      requestedSellerUserId !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
     const result = await respondToOffer({
       offerId: req.params.offerId,
-      sellerUserId: req.body?.sellerUserId,
+      sellerUserId: auth.sellerUserId,
       action: req.body?.action,
     });
     if (result.error) {
@@ -125,8 +146,35 @@ router.post("/offers/:offerId/respond", async (req, res) => {
 /** GET /api/social/offers?userId=1&role=buyer|seller&status=pending */
 router.get("/offers", async (req, res) => {
   try {
+    const normalizedRole = String(req.query.role || "buyer")
+      .trim()
+      .toLowerCase();
+
+    let userId = req.query.userId;
+    if (normalizedRole === "seller") {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+      const requestedSellerUserId = Number(req.query.userId);
+      if (
+        Number.isInteger(requestedSellerUserId) &&
+        requestedSellerUserId > 0 &&
+        requestedSellerUserId !== auth.sellerUserId
+      ) {
+        return res.status(403).json({
+          error: "seller_session_mismatch",
+          message: "Seller session does not match the seller profile in this request.",
+        });
+      }
+      userId = auth.sellerUserId;
+    }
+
     const result = await listOffers({
-      userId: req.query.userId,
+      userId,
       role: req.query.role,
       status: req.query.status,
       limit: req.query.limit,
@@ -147,7 +195,35 @@ router.get("/offers", async (req, res) => {
 /** POST /api/social/chat/send — moderated in-app DM */
 router.post("/chat/send", async (req, res) => {
   try {
-    const result = await sendDirectMessage(req.body || {});
+    const payload = { ...(req.body || {}) };
+    const hasSellerSessionContext = Boolean(
+      payload.phone ||
+        payload.sessionToken ||
+        payload.verificationToken ||
+        req.query?.phone ||
+        req.query?.sessionToken ||
+        req.headers["x-seller-session"]
+    );
+
+    if (hasSellerSessionContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+      const requestedSenderId = Number(payload.senderUserId);
+      if (Number.isInteger(requestedSenderId) && requestedSenderId > 0 && requestedSenderId !== auth.sellerUserId) {
+        return res.status(403).json({
+          error: "seller_session_mismatch",
+          message: "Seller session does not match the sender profile in this request.",
+        });
+      }
+      payload.senderUserId = auth.sellerUserId;
+    }
+
+    const result = await sendDirectMessage(payload);
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,

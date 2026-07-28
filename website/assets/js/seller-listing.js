@@ -2284,7 +2284,13 @@ async function respondToSellerOffer(button) {
     const res = await fetch(`${SOCIAL_API}/offers/${offerId}/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sellerUserId, action }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+          action,
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
@@ -2326,11 +2332,14 @@ async function sendReminderForOffer(offer) {
     const res = await fetch(`${SOCIAL_API}/chat/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        senderUserId: sellerUserId,
-        receiverUserId: buyerUserId,
-        content: reminderMessageForOffer(offer),
-      }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          senderUserId: sellerUserId,
+          receiverUserId: buyerUserId,
+          content: reminderMessageForOffer(offer),
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
@@ -2669,6 +2678,10 @@ async function loadSellerOffers({ silent = false } = {}) {
       status: "all",
       limit: "30",
     });
+    const phone = apiPhone();
+    if (phone) params.set("phone", phone);
+    const sessionToken = getSessionToken();
+    if (sessionToken) params.set("sessionToken", sessionToken);
     const res = await fetch(`${SOCIAL_API}/offers?${params}`);
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {

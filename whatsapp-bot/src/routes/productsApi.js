@@ -16,6 +16,7 @@ import {
 import { toggleProductLike } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
+import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -133,7 +134,24 @@ function socialErrorStatus(error) {
  */
 router.post("/create", async (req, res) => {
   try {
-    const result = await createProductListing(req.body || {});
+    const auth = await resolveAuthenticatedSellerSocialContext(req, { requireSellerRecord: true });
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerId = Number(req.body?.sellerId);
+    if (Number.isInteger(requestedSellerId) && requestedSellerId > 0 && requestedSellerId !== auth.sellerId) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const payload = { ...(req.body || {}), sellerId: auth.sellerId };
+    const result = await createProductListing(payload);
     if (result.error) {
       return res
         .status(createProductErrorStatus(result.error))
