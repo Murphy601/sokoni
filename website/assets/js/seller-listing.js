@@ -11,6 +11,7 @@ const DRAFT_KEY = "sokoni-seller-draft";
 const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
+const SELLER_OFFERS_POLL_MS = 45000;
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -106,6 +107,9 @@ function clearSession() {
   phoneVerified = false;
   sellerProfile = null;
   sellerSocialUserIdPromise = null;
+  stopSellerOffersPolling();
+  currentSellerView = "dashboard";
+  setDashboardOfferBadge(0);
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
 }
 
@@ -307,6 +311,9 @@ let verificationToken = null;
 let phoneVerified = false;
 let resendCooldownTimer = null;
 let sellerSocialUserIdPromise = null;
+let sellerOffersPollTimer = null;
+let sellerOffersRequestInFlight = false;
+let currentSellerView = "dashboard";
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -1163,6 +1170,21 @@ function setOffersStatus(message, isError = false) {
   node.classList.toggle("text-brand-green", !isError && Boolean(message));
 }
 
+function setDashboardOfferBadge(pendingCount = 0) {
+  const badge = el("tab-dashboard-offers-badge");
+  if (!badge) return;
+  const count = Math.max(0, Number(pendingCount) || 0);
+  if (!count) {
+    badge.textContent = "";
+    badge.classList.add("hidden");
+    badge.removeAttribute("aria-label");
+    return;
+  }
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.classList.remove("hidden");
+  badge.setAttribute("aria-label", `${count} pending offer${count === 1 ? "" : "s"}`);
+}
+
 function offerStatusLabel(status) {
   if (status === "pending") return "Pending";
   if (status === "accepted") return "Accepted";
@@ -1198,6 +1220,16 @@ function offerBuyerLabel(offer) {
   if (offer?.buyer?.shopName) return offer.buyer.shopName;
   const buyerId = Number(offer?.buyerUserId || offer?.buyer?.id);
   return Number.isInteger(buyerId) && buyerId > 0 ? `Buyer #${buyerId}` : "Buyer";
+}
+
+function pendingOffersCount(offers = []) {
+  return (offers || []).filter((offer) => {
+    return (
+      String(offer?.status || "")
+        .trim()
+        .toLowerCase() === "pending"
+    );
+  }).length;
 }
 
 async function resolveSellerSocialUserId(force = false) {
@@ -1333,21 +1365,42 @@ function bindOfferActionButtons() {
   });
 }
 
-async function loadSellerOffers() {
+function stopSellerOffersPolling() {
+  if (sellerOffersPollTimer) {
+    window.clearInterval(sellerOffersPollTimer);
+    sellerOffersPollTimer = null;
+  }
+}
+
+function startSellerOffersPolling() {
+  stopSellerOffersPolling();
+  if (!sellerProfile) return;
+  sellerOffersPollTimer = window.setInterval(() => {
+    if (currentSellerView !== "dashboard") return;
+    void loadSellerOffers({ silent: true });
+  }, SELLER_OFFERS_POLL_MS);
+}
+
+async function loadSellerOffers({ silent = false } = {}) {
   const wrap = el("seller-offers");
   if (!wrap) return;
+  if (sellerOffersRequestInFlight && silent) return;
 
-  setOffersStatus("Loading offers...");
-  wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading buyer offers…</p>`;
-
-  const sellerUserId = await resolveSellerSocialUserId();
-  if (!sellerUserId) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Offers inbox appears after your shop handle links to your social profile.</p>`;
-    setOffersStatus("No linked social profile yet.");
-    return;
+  sellerOffersRequestInFlight = true;
+  if (!silent) {
+    setOffersStatus("Loading offers...");
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading buyer offers…</p>`;
   }
 
   try {
+    const sellerUserId = await resolveSellerSocialUserId();
+    if (!sellerUserId) {
+      setDashboardOfferBadge(0);
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Offers inbox appears after your shop handle links to your social profile.</p>`;
+      setOffersStatus("No linked social profile yet.");
+      return;
+    }
+
     const params = new URLSearchParams({
       userId: String(sellerUserId),
       role: "seller",
@@ -1357,22 +1410,34 @@ async function loadSellerOffers() {
     const res = await fetch(`${SOCIAL_API}/offers?${params}`);
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
-      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Could not load offers right now.</p>`;
-      setOffersStatus(parsed.data?.message || parsed.message || "Could not load offers.", true);
+      if (!silent) {
+        wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Could not load offers right now.</p>`;
+        setOffersStatus(parsed.data?.message || parsed.message || "Could not load offers.", true);
+      }
       return;
     }
 
     const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
+    const pending = pendingOffersCount(offers);
+    setDashboardOfferBadge(pending);
     renderSellerOffers(offers);
     bindOfferActionButtons();
-    setOffersStatus(
-      offers.length
-        ? `Showing ${offers.length.toLocaleString()} offer${offers.length === 1 ? "" : "s"}.`
-        : "No buyer offers yet."
-    );
+    if (offers.length) {
+      setOffersStatus(
+        pending > 0
+          ? `${pending.toLocaleString()} pending · ${offers.length.toLocaleString()} total offers.`
+          : `${offers.length.toLocaleString()} offer${offers.length === 1 ? "" : "s"} in inbox.`
+      );
+    } else {
+      setOffersStatus("No buyer offers yet.");
+    }
   } catch {
-    wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading offers.</p>`;
-    setOffersStatus("Network error while loading offers.", true);
+    if (!silent) {
+      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading offers.</p>`;
+      setOffersStatus("Network error while loading offers.", true);
+    }
+  } finally {
+    sellerOffersRequestInFlight = false;
   }
 }
 
@@ -1498,6 +1563,7 @@ async function requestWithdrawal() {
 }
 
 function showSellerView(view) {
+  currentSellerView = view;
   const dashboard = el("view-dashboard");
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
@@ -1522,8 +1588,12 @@ function showSellerView(view) {
     loadSellerOffers();
     loadEscrowLedger();
     loadMyListings();
+    startSellerOffersPolling();
   } else if (view === "withdraw") {
+    stopSellerOffersPolling();
     loadWithdrawPanel();
+  } else {
+    stopSellerOffersPolling();
   }
 }
 
@@ -1566,6 +1636,7 @@ async function onSignOut() {
   setOnboardStatus("");
   setStatus("");
   setOffersStatus("");
+  setDashboardOfferBadge(0);
   if (el("seller-offers")) el("seller-offers").innerHTML = "";
   if (phone) {
     try {
@@ -1593,7 +1664,7 @@ function init() {
   el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
-  el("load-offers-btn")?.addEventListener("click", loadSellerOffers);
+  el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));

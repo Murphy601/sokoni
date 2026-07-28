@@ -138,7 +138,10 @@
       </div>
 
       <div class="sell-view-tabs" role="tablist" aria-label="Seller views">
-        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">Dashboard</button>
+        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">
+          <span>Dashboard</span>
+          <span id="tab-dashboard-offers-badge" class="sell-tab-badge hidden" aria-live="polite"></span>
+        </button>
         <button type="button" id="tab-withdraw" class="sell-view-tab" role="tab" aria-selected="false">Withdraw</button>
         <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List new item</button>
       </div>
