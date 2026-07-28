@@ -12,6 +12,12 @@ function parseOfferId(value) {
   return n;
 }
 
+function parseOrderId(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
 const OFFER_STATUSES = new Set(["pending", "accepted", "declined", "expired"]);
 
 const FORBIDDEN_PATTERNS = [
@@ -31,6 +37,25 @@ async function userExists(userId) {
 async function productExists(productId) {
   const { rows } = await query(`SELECT 1 FROM products WHERE id = $1 LIMIT 1`, [productId]);
   return Boolean(rows[0]);
+}
+
+async function getOrderByReference(orderRef) {
+  const raw = String(orderRef || "").trim();
+  if (!raw) return null;
+
+  const numericId = parseOrderId(raw);
+  if (numericId) {
+    const byId = await query(`SELECT id, tracking_code, status, buyer_id, seller_id FROM orders WHERE id = $1 LIMIT 1`, [
+      numericId,
+    ]);
+    if (byId.rows[0]) return byId.rows[0];
+  }
+
+  const byTracking = await query(
+    `SELECT id, tracking_code, status, buyer_id, seller_id FROM orders WHERE tracking_code = $1 LIMIT 1`,
+    [raw.toUpperCase()]
+  );
+  return byTracking.rows[0] || null;
 }
 
 async function expirePendingOffers() {
@@ -561,4 +586,134 @@ export async function getDirectThread({ userAId, userBId, limit = 50, offset = 0
     .reverse();
 
   return { messages, count: messages.length, limit: safeLimit, offset: safeOffset };
+}
+
+function mapReviewRow(row) {
+  return {
+    id: Number(row.id),
+    orderId: Number(row.order_id),
+    orderTrackingCode: row.tracking_code || null,
+    sellerUserId: Number(row.seller_user_id),
+    buyerUserId: Number(row.buyer_user_id),
+    rating: Number(row.rating),
+    comment: row.comment || null,
+    createdAt: row.created_at,
+  };
+}
+
+export async function createOrderReview({ orderId, buyerUserId, sellerUserId, rating, comment = "" } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const buyerId = parseUserId(buyerUserId);
+  const sellerId = parseUserId(sellerUserId);
+  const score = Number(rating);
+  const text = String(comment || "").trim();
+
+  if (!orderId || !buyerId || !sellerId || !Number.isFinite(score)) {
+    return {
+      error: "invalid_review_payload",
+      message: "orderId, buyerUserId, sellerUserId, and rating are required.",
+    };
+  }
+  if (!Number.isInteger(score) || score < 1 || score > 5) {
+    return { error: "invalid_rating", message: "rating must be an integer from 1 to 5." };
+  }
+  if (buyerId === sellerId) {
+    return { error: "invalid_review_payload", message: "buyerUserId and sellerUserId cannot be the same." };
+  }
+  if (!(await userExists(buyerId))) {
+    return { error: "buyer_not_found", message: "Buyer user not found." };
+  }
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  const order = await getOrderByReference(orderId);
+  if (!order) {
+    return { error: "order_not_found", message: "Order not found." };
+  }
+
+  const status = String(order.status || "").toLowerCase();
+  if (!["delivered", "completed"].includes(status)) {
+    return {
+      error: "review_not_allowed",
+      message: "Reviews can only be left for delivered items.",
+    };
+  }
+
+  if (order.buyer_id != null && Number(order.buyer_id) !== buyerId) {
+    return {
+      error: "buyer_mismatch",
+      message: "This order does not belong to the buyer provided.",
+    };
+  }
+  if (order.seller_id != null && Number(order.seller_id) !== sellerId) {
+    return {
+      error: "seller_mismatch",
+      message: "This order does not belong to the seller provided.",
+    };
+  }
+
+  const existing = await query(`SELECT id FROM order_reviews WHERE order_id = $1 LIMIT 1`, [order.id]);
+  if (existing.rows[0]) {
+    return {
+      error: "review_exists",
+      message: "A review for this order already exists.",
+    };
+  }
+
+  const inserted = await query(
+    `INSERT INTO order_reviews (order_id, seller_user_id, buyer_user_id, rating, comment)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, order_id, seller_user_id, buyer_user_id, rating, comment, created_at`,
+    [order.id, sellerId, buyerId, score, text || null]
+  );
+
+  const review = {
+    ...mapReviewRow(inserted.rows[0]),
+    orderTrackingCode: order.tracking_code || null,
+  };
+  return { success: true, review };
+}
+
+export async function listSellerReviews({ sellerUserId, limit = 20, offset = 0 } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const sellerId = parseUserId(sellerUserId);
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+
+  if (!sellerId) return { error: "invalid_user", message: "Valid sellerUserId is required." };
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  const { rows } = await query(
+    `SELECT
+       r.id,
+       r.order_id,
+       r.seller_user_id,
+       r.buyer_user_id,
+       r.rating,
+       r.comment,
+       r.created_at,
+       o.tracking_code
+     FROM order_reviews r
+     LEFT JOIN orders o ON o.id = r.order_id
+     WHERE r.seller_user_id = $1
+     ORDER BY r.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [sellerId, safeLimit, safeOffset]
+  );
+
+  return {
+    reviews: rows.map(mapReviewRow),
+    count: rows.length,
+    limit: safeLimit,
+    offset: safeOffset,
+  };
 }

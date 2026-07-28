@@ -147,6 +147,32 @@ Blocked patterns include:
 - `direct till`
 - `send cash`
 
+### Order-locked reviews (DB social flow)
+
+Create:
+
+`POST /api/social/reviews/create`
+
+```json
+{
+  "orderId": "SK-1042",
+  "buyerUserId": 1,
+  "sellerUserId": 2,
+  "rating": 5,
+  "comment": "Fast delivery and exactly as described."
+}
+```
+
+Rules:
+
+- Order must exist in DB (`id` or `trackingCode` accepted)
+- Order status must be `delivered` or `completed`
+- One review per order
+
+List seller reviews:
+
+`GET /api/social/reviews/seller/:sellerUserId`
+
 ## Setup (VM or local)
 
 ```bash

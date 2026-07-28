@@ -1,7 +1,9 @@
 import { Router } from "express";
 import {
+  createOrderReview,
   createOffer,
   getDirectThread,
+  listSellerReviews,
   getUserSocialStats,
   listOffers,
   respondToOffer,
@@ -21,6 +23,7 @@ function socialErrorStatus(error) {
     error === "following_not_found" ||
     error === "product_not_found" ||
     error === "offer_not_found" ||
+    error === "order_not_found" ||
     error === "sender_not_found" ||
     error === "receiver_not_found"
   ) {
@@ -141,6 +144,42 @@ router.get("/chat/thread", async (req, res) => {
     const result = await getDirectThread({
       userAId: req.query.userAId,
       userBId: req.query.userBId,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/reviews/create — review only after delivered/completed order */
+router.post("/reviews/create", async (req, res) => {
+  try {
+    const result = await createOrderReview(req.body || {});
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/reviews/seller/:sellerUserId */
+router.get("/reviews/seller/:sellerUserId", async (req, res) => {
+  try {
+    const result = await listSellerReviews({
+      sellerUserId: req.params.sellerUserId,
       limit: req.query.limit,
       offset: req.query.offset,
     });
