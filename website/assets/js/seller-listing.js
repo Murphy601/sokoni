@@ -13,6 +13,7 @@ const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
 const SELLER_OFFERS_POLL_MS = 45000;
 const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "declined"]);
+const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -108,6 +109,7 @@ function clearSession() {
   phoneVerified = false;
   sellerProfile = null;
   sellerSocialUserIdPromise = null;
+  clearHandledAcceptedOffersStorage();
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
   acceptedQuickCursor = 0;
@@ -115,6 +117,7 @@ function clearSession() {
   currentSellerView = "dashboard";
   setDashboardOfferBadge(0);
   syncOfferFilterButtons();
+  updateHandledResetButton();
   updateQuickModeHint();
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
 }
@@ -323,6 +326,8 @@ let currentSellerView = "dashboard";
 let activeSellerOffersFilter = "pending";
 let sellerOffersCache = [];
 let acceptedQuickCursor = 0;
+let handledAcceptedOfferIds = new Set();
+let handledOffersStorageKey = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -724,6 +729,8 @@ function showSellerProfile(profile) {
     sellerProfile.socialUserId = knownUserId;
   }
   sellerSocialUserIdPromise = null;
+  loadHandledAcceptedOffers();
+  updateHandledResetButton();
   el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
   if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
   el("seller-profile-bar")?.classList.remove("hidden");
@@ -1223,7 +1230,88 @@ function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
   });
 }
 
-function acceptedOffersReadyForChat(offers = sellerOffersCache) {
+function handledOffersStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${HANDLED_ACCEPTED_OFFERS_KEY}:${sellerPhone}` : `${HANDLED_ACCEPTED_OFFERS_KEY}:default`;
+}
+
+function loadHandledAcceptedOffers() {
+  handledOffersStorageKey = handledOffersStorageKeyForCurrentSeller();
+  handledAcceptedOfferIds = new Set();
+  try {
+    const raw = sessionStorage.getItem(handledOffersStorageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((value) => {
+      const id = Number(value);
+      if (Number.isInteger(id) && id > 0) handledAcceptedOfferIds.add(id);
+    });
+  } catch {}
+}
+
+function saveHandledAcceptedOffers() {
+  if (!handledOffersStorageKey) {
+    handledOffersStorageKey = handledOffersStorageKeyForCurrentSeller();
+  }
+  if (!handledOffersStorageKey) return;
+  try {
+    if (!handledAcceptedOfferIds.size) {
+      sessionStorage.removeItem(handledOffersStorageKey);
+      return;
+    }
+    const ordered = Array.from(handledAcceptedOfferIds.values()).sort((a, b) => a - b);
+    sessionStorage.setItem(handledOffersStorageKey, JSON.stringify(ordered));
+  } catch {}
+}
+
+function clearHandledAcceptedOffersStorage() {
+  try {
+    if (handledOffersStorageKey) sessionStorage.removeItem(handledOffersStorageKey);
+  } catch {}
+  handledAcceptedOfferIds = new Set();
+  handledOffersStorageKey = null;
+}
+
+function updateHandledResetButton() {
+  const button = el("offers-reset-handled-btn");
+  if (!button) return;
+  const hasHandled = handledAcceptedOfferIds.size > 0;
+  button.classList.toggle("hidden", !hasHandled);
+  button.disabled = !hasHandled;
+}
+
+function isAcceptedOfferHandled(offerOrId) {
+  const id = Number(typeof offerOrId === "object" ? offerOrId?.id : offerOrId);
+  return Number.isInteger(id) && id > 0 ? handledAcceptedOfferIds.has(id) : false;
+}
+
+function setAcceptedOfferHandled(offerId, handled = true) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return false;
+  if (handled) handledAcceptedOfferIds.add(id);
+  else handledAcceptedOfferIds.delete(id);
+  saveHandledAcceptedOffers();
+  return true;
+}
+
+function reconcileHandledAcceptedOffers(offers = sellerOffersCache) {
+  const eligibleIds = new Set(
+    acceptedOffersEligibleForChat(offers)
+      .map((offer) => Number(offer?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+  let changed = false;
+  Array.from(handledAcceptedOfferIds.values()).forEach((id) => {
+    if (!eligibleIds.has(id)) {
+      handledAcceptedOfferIds.delete(id);
+      changed = true;
+    }
+  });
+  if (changed) saveHandledAcceptedOffers();
+}
+
+function acceptedOffersEligibleForChat(offers = sellerOffersCache) {
   const sellerUserId = currentSellerSocialUserId();
   if (!sellerUserId) return [];
   return (offers || []).filter((offer) => {
@@ -1231,25 +1319,44 @@ function acceptedOffersReadyForChat(offers = sellerOffersCache) {
       .trim()
       .toLowerCase();
     const buyerUserId = offerBuyerUserId(offer);
-    return status === "accepted" && Number.isInteger(buyerUserId) && buyerUserId > 0 && buyerUserId !== sellerUserId;
+    return (
+      status === "accepted" &&
+      Number.isInteger(buyerUserId) &&
+      buyerUserId > 0 &&
+      buyerUserId !== sellerUserId
+    );
   });
+}
+
+function acceptedOffersReadyForChat(offers = sellerOffersCache) {
+  return acceptedOffersEligibleForChat(offers).filter((offer) => !isAcceptedOfferHandled(offer));
 }
 
 function updateQuickModeHint() {
   const hint = el("seller-offers-quick-hint");
   const button = el("offers-quick-chat-btn");
   if (!hint || !button) return;
+  updateHandledResetButton();
 
+  const chatEligible = acceptedOffersEligibleForChat();
   const ready = acceptedOffersReadyForChat();
+  const acceptedTotal = filteredOffers(sellerOffersCache, "accepted").length;
+  const handledCount = Math.max(0, chatEligible.length - ready.length);
   if (!ready.length) {
-    hint.textContent = "No accepted offers ready for chat yet.";
+    hint.textContent = chatEligible.length
+      ? "All chat-ready accepted offers are marked handled for now. Reset handled to queue them again."
+      : acceptedTotal
+        ? "Accepted offers are in, but buyer chat links are not ready yet."
+        : "No accepted offers ready for chat yet.";
     button.disabled = true;
     return;
   }
 
   const index = acceptedQuickCursor % ready.length;
   const nextOffer = ready[index];
-  hint.textContent = `${offerCountLabel(ready.length, "accepted chat")} ready. Next: ${offerBuyerLabel(nextOffer)}.`;
+  hint.textContent = `${offerCountLabel(ready.length, "accepted chat")} ready${
+    handledCount ? ` (${offerCountLabel(handledCount, "handled offer")} hidden)` : ""
+  }. Next: ${offerBuyerLabel(nextOffer)}.`;
   button.disabled = false;
 }
 
@@ -1394,6 +1501,8 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         Number.isInteger(buyerUserId) &&
         buyerUserId > 0 &&
         sellerUserId !== buyerUserId;
+      const canManageQuickQueue = Number.isInteger(id) && id > 0 && status === "accepted" && canChat;
+      const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
       const actionBlock = canRespond
         ? `<div class="sell-offer-actions">
             <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
@@ -1411,8 +1520,19 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
               <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}">
                 Send reminder
               </button>
+              <button
+                type="button"
+                class="sell-offer-action sell-offer-action--handled offer-handled-btn"
+                data-offer-id="${id}"
+                data-handled="${handledInQuickQueue ? "1" : "0"}"
+              >
+                ${handledInQuickQueue ? "Mark active" : "Mark handled"}
+              </button>
             </div>`
           : "";
+      const handledNote = handledInQuickQueue
+        ? `<p class="text-xs text-brand-green mt-2">Handled in quick mode queue.</p>`
+        : "";
       return `
         <article class="sell-offer-card sell-order-card" data-offer-row="${Number.isInteger(id) ? id : ""}">
           <div class="sell-order-card-head">
@@ -1424,6 +1544,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
           <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
             formatOfferExpiry(offer?.expiresAt, status)
           )}</p>
+          ${handledNote}
           ${actionBlock}
         </article>`;
     })
@@ -1577,6 +1698,25 @@ async function sendAcceptedOfferReminder(button) {
   }
 }
 
+function toggleAcceptedOfferHandled(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const currentlyHandled = button.dataset.handled === "1" || isAcceptedOfferHandled(offerId);
+  if (!setAcceptedOfferHandled(offerId, !currentlyHandled)) return;
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  setOffersStatus(currentlyHandled ? "Offer moved back into quick queue." : "Offer marked handled in quick queue.");
+}
+
+function resetHandledAcceptedOffersQueue() {
+  if (!handledAcceptedOfferIds.size) return;
+  handledAcceptedOfferIds = new Set();
+  saveHandledAcceptedOffers();
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  setOffersStatus("Quick queue reset — all accepted chats are active again.");
+}
+
 function bindOfferActionButtons() {
   const wrap = el("seller-offers");
   if (!wrap) return;
@@ -1588,6 +1728,11 @@ function bindOfferActionButtons() {
   wrap.querySelectorAll(".offer-reminder-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       sendAcceptedOfferReminder(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-handled-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      toggleAcceptedOfferHandled(btn);
     });
   });
 }
@@ -1690,6 +1835,11 @@ async function loadSellerOffers({ silent = false } = {}) {
     const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
     const pending = pendingOffersCount(offers);
     sellerOffersCache = offers;
+    reconcileHandledAcceptedOffers(sellerOffersCache);
+    const readyChats = acceptedOffersReadyForChat(sellerOffersCache);
+    if (!readyChats.length || acceptedQuickCursor >= readyChats.length) {
+      acceptedQuickCursor = 0;
+    }
     setDashboardOfferBadge(pending);
     renderOfferCacheView();
   } catch {
@@ -1928,6 +2078,7 @@ function init() {
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
   el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
   el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
+  el("offers-reset-handled-btn")?.addEventListener("click", resetHandledAcceptedOffersQueue);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));
