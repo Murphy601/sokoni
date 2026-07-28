@@ -1503,6 +1503,11 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         sellerUserId !== buyerUserId;
       const canManageQuickQueue = Number.isInteger(id) && id > 0 && status === "accepted" && canChat;
       const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
+      const doneNextButton = canManageQuickQueue && !handledInQuickQueue
+        ? `<button type="button" class="sell-offer-action sell-offer-action--done-next offer-done-next-btn" data-offer-id="${id}">
+              Done + next chat
+            </button>`
+        : "";
       const actionBlock = canRespond
         ? `<div class="sell-offer-actions">
             <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
@@ -1520,6 +1525,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
               <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}">
                 Send reminder
               </button>
+              ${doneNextButton}
               <button
                 type="button"
                 class="sell-offer-action sell-offer-action--handled offer-handled-btn"
@@ -1717,6 +1723,37 @@ function resetHandledAcceptedOffersQueue() {
   setOffersStatus("Quick queue reset — all accepted chats are active again.");
 }
 
+function markDoneAndOpenNextAcceptedChat(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  if (isAcceptedOfferHandled(offerId)) {
+    setOffersStatus("This offer is already marked handled. Tap Mark active to return it to queue.");
+    return;
+  }
+  const offer = offerByIdFromCache(offerId);
+  if (!offer) {
+    setOffersStatus("Offer not found. Refresh and try again.", true);
+    return;
+  }
+
+  const readyBefore = acceptedOffersReadyForChat();
+  const currentIndex = readyBefore.findIndex((candidate) => Number(candidate?.id) === offerId);
+  if (!setAcceptedOfferHandled(offerId, true)) return;
+
+  const readyAfter = acceptedOffersReadyForChat();
+  if (!readyAfter.length) {
+    acceptedQuickCursor = 0;
+    renderOfferCacheView();
+    setOffersStatus(`Marked ${offerBuyerLabel(offer)} done. No more accepted chats in queue.`);
+    return;
+  }
+
+  const nextIndex = currentIndex < 0 ? 0 : currentIndex % readyAfter.length;
+  acceptedQuickCursor = nextIndex;
+  renderOfferCacheView();
+  openNextAcceptedOfferChat();
+}
+
 function bindOfferActionButtons() {
   const wrap = el("seller-offers");
   if (!wrap) return;
@@ -1733,6 +1770,11 @@ function bindOfferActionButtons() {
   wrap.querySelectorAll(".offer-handled-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       toggleAcceptedOfferHandled(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-done-next-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      markDoneAndOpenNextAcceptedChat(btn);
     });
   });
 }

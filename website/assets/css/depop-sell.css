@@ -586,6 +586,11 @@ html.dark .sell-offer-filter.is-active {
   border-color: rgba(37, 211, 102, 0.55);
 }
 
+.sell-offer-action--done-next {
+  background: rgba(37, 211, 102, 0.18);
+  border-color: rgba(37, 211, 102, 0.65);
+}
+
 .sell-offer-action--handled {
   background: rgba(27, 16, 53, 0.05);
 }
@@ -614,6 +619,12 @@ html.dark .sell-offer-action--chat {
 html.dark .sell-offer-action--remind {
   background: rgba(37, 211, 102, 0.22);
   border-color: rgba(37, 211, 102, 0.5);
+}
+
+html.dark .sell-offer-action--done-next {
+  background: rgba(37, 211, 102, 0.26);
+  border-color: rgba(37, 211, 102, 0.6);
+  color: #fff8f0;
 }
 
 html.dark .sell-offer-action--handled {
