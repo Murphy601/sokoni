@@ -16,6 +16,7 @@ const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "declined"])
 const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
 const HANDLED_HISTORY_LIMIT = 40;
 const OFFER_REMINDER_COOLDOWN_MS = 90000;
+const REMINDER_COOLDOWN_TICK_MS = 1000;
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -112,6 +113,7 @@ function clearSession() {
   sellerProfile = null;
   sellerSocialUserIdPromise = null;
   clearHandledAcceptedOffersStorage();
+  stopReminderCooldownTicker();
   reminderCooldownByOfferId = new Map();
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
@@ -333,6 +335,7 @@ let handledAcceptedOfferIds = new Set();
 let handledOffersStorageKey = null;
 let handledOfferHistory = [];
 let reminderCooldownByOfferId = new Map();
+let reminderCooldownTickTimer = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -734,6 +737,7 @@ function showSellerProfile(profile) {
     sellerProfile.socialUserId = knownUserId;
   }
   sellerSocialUserIdPromise = null;
+  stopReminderCooldownTicker();
   reminderCooldownByOfferId = new Map();
   loadHandledAcceptedOffers();
   updateHandledResetButton();
@@ -1382,6 +1386,75 @@ function reconcileReminderCooldowns(offers = sellerOffersCache) {
   });
 }
 
+function defaultReminderButtonLabel(button) {
+  if (button?.classList?.contains("offer-remind-next-btn")) return "Remind + next";
+  return "Send reminder";
+}
+
+function syncReminderCooldownButton(button, nowMs = Date.now()) {
+  if (!button || button.dataset.reminderBusy === "1") return;
+  const offerId = Number(button.dataset.offerId);
+  const cooldownMsLeft = reminderCooldownMsLeftForOffer(offerId, nowMs);
+  if (cooldownMsLeft > 0) {
+    button.textContent = `Wait ${formatReminderCooldown(cooldownMsLeft)}`;
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+    return;
+  }
+  button.textContent = defaultReminderButtonLabel(button);
+  button.disabled = false;
+  button.removeAttribute("aria-disabled");
+}
+
+function syncReminderCooldownButtonsUi(nowMs = Date.now()) {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+  wrap.querySelectorAll(".offer-reminder-btn, .offer-remind-next-btn").forEach((button) => {
+    syncReminderCooldownButton(button, nowMs);
+  });
+}
+
+function hasActiveReminderCooldowns(nowMs = Date.now()) {
+  let active = false;
+  Array.from(reminderCooldownByOfferId.entries()).forEach(([rawId, rawExpiresAt]) => {
+    const id = Number(rawId);
+    const expiresAt = Number(rawExpiresAt);
+    if (!Number.isInteger(id) || id < 1 || !Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+      reminderCooldownByOfferId.delete(id);
+      return;
+    }
+    active = true;
+  });
+  return active;
+}
+
+function stopReminderCooldownTicker() {
+  if (reminderCooldownTickTimer) {
+    window.clearInterval(reminderCooldownTickTimer);
+    reminderCooldownTickTimer = null;
+  }
+}
+
+function ensureReminderCooldownTicker() {
+  const shouldRun = currentSellerView === "dashboard" && hasActiveReminderCooldowns();
+  if (!shouldRun) {
+    stopReminderCooldownTicker();
+    syncReminderCooldownButtonsUi();
+    return;
+  }
+  syncReminderCooldownButtonsUi();
+  if (reminderCooldownTickTimer) return;
+  reminderCooldownTickTimer = window.setInterval(() => {
+    if (currentSellerView !== "dashboard") {
+      stopReminderCooldownTicker();
+      return;
+    }
+    const active = hasActiveReminderCooldowns();
+    syncReminderCooldownButtonsUi();
+    if (!active) stopReminderCooldownTicker();
+  }, REMINDER_COOLDOWN_TICK_MS);
+}
+
 function isAcceptedOfferHandled(offerOrId) {
   const id = Number(typeof offerOrId === "object" ? offerOrId?.id : offerOrId);
   return Number.isInteger(id) && id > 0 ? handledAcceptedOfferIds.has(id) : false;
@@ -1613,10 +1686,11 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
       const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
       const reminderCooldownMsLeft = canManageQuickQueue ? reminderCooldownMsLeftForOffer(id) : 0;
       const reminderCoolingDown = reminderCooldownMsLeft > 0;
+      const reminderDisabledAttr = reminderCoolingDown ? ` disabled aria-disabled="true"` : "";
       const reminderButtonLabel = reminderCoolingDown ? `Wait ${formatReminderCooldown(reminderCooldownMsLeft)}` : "Send reminder";
       const remindNextButtonLabel = reminderCoolingDown ? `Wait ${formatReminderCooldown(reminderCooldownMsLeft)}` : "Remind + next";
       const remindNextButton = canManageQuickQueue && !handledInQuickQueue
-        ? `<button type="button" class="sell-offer-action sell-offer-action--remind-next offer-remind-next-btn" data-offer-id="${id}">
+        ? `<button type="button" class="sell-offer-action sell-offer-action--remind-next offer-remind-next-btn" data-offer-id="${id}"${reminderDisabledAttr}>
               ${remindNextButtonLabel}
             </button>`
         : "";
@@ -1639,7 +1713,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
               <a href="${inboxLinkForOffer(offer, sellerUserId, buyerUserId)}" class="sell-offer-action sell-offer-action--chat">
                 Open chat
               </a>
-              <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}">
+              <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}"${reminderDisabledAttr}>
                 ${reminderButtonLabel}
               </button>
               ${remindNextButton}
@@ -1693,6 +1767,7 @@ function renderOfferCacheView() {
   renderSellerOffers(visible, emptyOfferMessage(total, activeSellerOffersFilter));
   bindOfferActionButtons();
   updateQuickModeHint();
+  ensureReminderCooldownTicker();
 
   if (!total) {
     setOffersStatus("No buyer offers yet.");
@@ -1819,16 +1894,19 @@ async function sendAcceptedOfferReminder(button) {
   }
 
   const previousLabel = button.textContent;
+  button.dataset.reminderBusy = "1";
   button.disabled = true;
   button.textContent = "Sending...";
   setOffersStatus("Sending reminder...");
   const reminder = await sendReminderForOffer(offer);
   if (!reminder.ok) {
+    delete button.dataset.reminderBusy;
     setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     button.disabled = false;
     button.textContent = previousLabel;
     return;
   }
+  delete button.dataset.reminderBusy;
   setReminderCooldownForOffer(offerId);
   renderOfferCacheView();
   setOffersStatus(`Reminder sent in inbox. Next reminder in ${formatReminderCooldown(OFFER_REMINDER_COOLDOWN_MS)}.`);
@@ -1948,16 +2026,19 @@ async function remindAndMoveToNextAcceptedChat(button) {
   }
 
   const previousLabel = button.textContent;
+  button.dataset.reminderBusy = "1";
   button.disabled = true;
   button.textContent = "Sending...";
   setOffersStatus("Sending reminder then moving to next chat...");
   const reminder = await sendReminderForOffer(offer);
   if (!reminder.ok) {
+    delete button.dataset.reminderBusy;
     button.disabled = false;
     button.textContent = previousLabel;
     setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     return;
   }
+  delete button.dataset.reminderBusy;
   setReminderCooldownForOffer(offerId);
 
   const moved = moveAcceptedOfferToNextChat(offerId, offer);
@@ -2018,6 +2099,7 @@ function bindOfferActionButtons() {
       markDoneAndOpenNextAcceptedChat(btn);
     });
   });
+  syncReminderCooldownButtonsUi();
 }
 
 function bindOfferFilterButtons() {
@@ -2101,6 +2183,7 @@ async function loadSellerOffers({ silent = false } = {}) {
       setDashboardOfferBadge(0);
       sellerOffersCache = [];
       reminderCooldownByOfferId = new Map();
+      stopReminderCooldownTicker();
       acceptedQuickCursor = 0;
       renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
       updateQuickModeHint();
@@ -2293,11 +2376,14 @@ function showSellerView(view) {
     loadEscrowLedger();
     loadMyListings();
     startSellerOffersPolling();
+    ensureReminderCooldownTicker();
   } else if (view === "withdraw") {
     stopSellerOffersPolling();
+    stopReminderCooldownTicker();
     loadWithdrawPanel();
   } else {
     stopSellerOffersPolling();
+    stopReminderCooldownTicker();
   }
 }
 
