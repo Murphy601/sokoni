@@ -44,6 +44,54 @@ Optional:
 - `sellerId` (falls back to default seller if omitted)
 - `description`, `category`, `subCategory`, `brand`
 
+## Social foundation endpoints (additive)
+
+### Product likes (toggle)
+
+`POST /api/products/like`
+
+Body:
+
+```json
+{
+  "userId": 1,
+  "productId": "prod_xxx"
+}
+```
+
+Response:
+
+```json
+{
+  "liked": true,
+  "likesCount": 12
+}
+```
+
+### Follow users (toggle)
+
+`POST /api/social/follow`
+
+Body:
+
+```json
+{
+  "followerUserId": 1,
+  "followingUserId": 2
+}
+```
+
+### Storefront social stats
+
+`GET /api/social/users/:userId/stats`
+
+Returns:
+
+- followers/following counts
+- active listings count
+- likes received
+- average rating + total reviews
+
 ## Setup (VM or local)
 
 ```bash

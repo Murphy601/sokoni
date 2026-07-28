@@ -13,6 +13,7 @@ import {
   getBrowseCountsFromDb,
   countProducts,
 } from "../db/repositories/products.js";
+import { toggleProductLike } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
 
@@ -116,6 +117,12 @@ function createProductErrorStatus(error) {
   return 400;
 }
 
+function socialErrorStatus(error) {
+  if (error === "database_not_configured") return 503;
+  if (error === "user_not_found" || error === "product_not_found") return 404;
+  return 400;
+}
+
 /**
  * POST /api/products/create
  * Mandatory metadata: size, condition, genderFit (+ title, price, cover image).
@@ -129,6 +136,27 @@ router.post("/create", async (req, res) => {
         .json({ error: result.error, message: result.message });
     }
     res.status(201).json({ success: true, product: toPublicProduct(result.product) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/products/like — toggle like by { userId, productId } */
+router.post("/like", async (req, res) => {
+  try {
+    const result = await toggleProductLike(req.body || {});
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json({
+      liked: result.liked,
+      likesCount: result.likesCount,
+      userId: result.userId,
+      productId: result.productId,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
