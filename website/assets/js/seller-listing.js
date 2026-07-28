@@ -832,6 +832,13 @@ function normalizePhoneInput(phone) {
   return d;
 }
 
+function isSellerSessionAuthError(payload) {
+  const code = String(payload?.error || "")
+    .trim()
+    .toLowerCase();
+  return code === "session_required" || code === "session_invalid" || code === "session_expired";
+}
+
 async function parseApiResponse(res) {
   const text = await res.text();
   try {
@@ -2294,6 +2301,10 @@ async function respondToSellerOffer(button) {
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
+      if (parsed.status === 401 && isSellerSessionAuthError(parsed.data)) {
+        handleSessionExpired(parsed.data);
+        return;
+      }
       setOffersStatus(parsed.data?.message || parsed.message || "Could not update offer right now.", true);
       row?.querySelectorAll(".offer-action-btn").forEach((node) => {
         node.disabled = false;
@@ -2347,6 +2358,7 @@ async function sendReminderForOffer(offer) {
         ok: false,
         message: parsed.data?.message || parsed.message || "Could not send reminder right now.",
         isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
       };
     }
     return { ok: true };
@@ -2377,6 +2389,10 @@ async function sendAcceptedOfferReminder(button) {
   setOffersStatus("Sending reminder...");
   const reminder = await sendReminderForOffer(offer);
   if (!reminder.ok) {
+    if (reminder.sessionExpired) {
+      handleSessionExpired({ message: reminder.message });
+      return;
+    }
     delete button.dataset.reminderBusy;
     setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     button.disabled = false;
@@ -2510,6 +2526,10 @@ async function remindAndMoveToNextAcceptedChat(button) {
   setOffersStatus("Sending reminder then moving to next chat...");
   const reminder = await sendReminderForOffer(offer);
   if (!reminder.ok) {
+    if (reminder.sessionExpired) {
+      handleSessionExpired({ message: reminder.message });
+      return;
+    }
     delete button.dataset.reminderBusy;
     button.disabled = false;
     button.textContent = previousLabel;
@@ -2685,6 +2705,10 @@ async function loadSellerOffers({ silent = false } = {}) {
     const res = await fetch(`${SOCIAL_API}/offers?${params}`);
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
+      if (parsed.status === 401 && isSellerSessionAuthError(parsed.data)) {
+        handleSessionExpired(parsed.data);
+        return;
+      }
       if (!silent) {
         wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Could not load offers right now.</p>`;
         setOffersStatus(parsed.data?.message || parsed.message || "Could not load offers.", true);
