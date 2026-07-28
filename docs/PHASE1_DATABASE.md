@@ -92,6 +92,61 @@ Returns:
 - likes received
 - average rating + total reviews
 
+### Offers (Depop-style negotiation)
+
+Create/update pending offer:
+
+`POST /api/social/offers/create`
+
+```json
+{
+  "productId": "prod_xxx",
+  "buyerUserId": 1,
+  "sellerUserId": 2,
+  "amountKsh": 1200
+}
+```
+
+Respond (seller):
+
+`POST /api/social/offers/:offerId/respond`
+
+```json
+{
+  "sellerUserId": 2,
+  "action": "accepted"
+}
+```
+
+List offers:
+
+`GET /api/social/offers?userId=1&role=buyer&status=pending`
+
+### In-app messaging (moderated)
+
+Send message:
+
+`POST /api/social/chat/send`
+
+```json
+{
+  "senderUserId": 1,
+  "receiverUserId": 2,
+  "content": "Hi, is this still available?"
+}
+```
+
+Thread:
+
+`GET /api/social/chat/thread?userAId=1&userBId=2`
+
+Blocked patterns include:
+
+- Kenyan phone numbers (`07...`, `01...`, `+254...`)
+- `pay outside`
+- `direct till`
+- `send cash`
+
 ## Setup (VM or local)
 
 ```bash
