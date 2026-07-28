@@ -1232,9 +1232,24 @@ function syncOfferFilterButtons() {
   const buttons = document.querySelectorAll("[data-offer-filter]");
   buttons.forEach((button) => {
     const filter = normalizeOfferFilter(button.dataset.offerFilter);
+    const label = String(button.dataset.filterLabel || "")
+      .trim()
+      .replace(/\s+/g, " ");
+    const safeLabel = label || offerFilterLabel(filter);
+    const count = filteredOffers(sellerOffersCache, filter).length;
+    const countLabel = count.toLocaleString();
+    const labelNode = button.querySelector(".sell-offer-filter-label");
+    const countNode = button.querySelector(".sell-offer-filter-count");
+    if (labelNode) labelNode.textContent = safeLabel;
+    if (countNode) {
+      countNode.textContent = countLabel;
+    } else {
+      button.textContent = `${safeLabel} (${countLabel})`;
+    }
     const active = filter === activeSellerOffersFilter;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", active ? "true" : "false");
+    button.setAttribute("aria-label", `${safeLabel} ${offerCountLabel(count, "offer")}`);
   });
 }
 
@@ -1973,6 +1988,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
 function renderOfferCacheView() {
   reconcileReminderCooldowns(sellerOffersCache);
   reconcileReminderLastSentAt(sellerOffersCache);
+  syncOfferFilterButtons();
   const total = sellerOffersCache.length;
   const pending = pendingOffersCount(sellerOffersCache);
   const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
@@ -2000,7 +2016,6 @@ function renderOfferCacheView() {
 
 function setActiveOfferFilter(filter) {
   activeSellerOffersFilter = normalizeOfferFilter(filter);
-  syncOfferFilterButtons();
   renderOfferCacheView();
 }
 

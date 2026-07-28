@@ -576,6 +576,10 @@ html.dark .sell-offer-undo-open-btn {
 }
 
 .sell-offer-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   min-height: 44px;
   border-radius: 9999px;
   border: 1px solid rgba(27, 16, 53, 0.16);
@@ -587,10 +591,33 @@ html.dark .sell-offer-undo-open-btn {
   cursor: pointer;
 }
 
+.sell-offer-filter-label {
+  line-height: 1;
+}
+
+.sell-offer-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  border-radius: 9999px;
+  background: rgba(27, 16, 53, 0.12);
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 0.3rem;
+}
+
 .sell-offer-filter.is-active {
   border-color: #25d366;
   background: rgba(37, 211, 102, 0.16);
   color: #1b1035;
+}
+
+.sell-offer-filter.is-active .sell-offer-filter-count {
+  background: rgba(37, 211, 102, 0.34);
 }
 
 html.dark .sell-offer-filter {
@@ -603,6 +630,10 @@ html.dark .sell-offer-filter.is-active {
   border-color: #25d366;
   background: rgba(37, 211, 102, 0.2);
   color: #fff8f0;
+}
+
+html.dark .sell-offer-filter-count {
+  background: rgba(255, 248, 240, 0.2);
 }
 
 .sell-offer-actions {
