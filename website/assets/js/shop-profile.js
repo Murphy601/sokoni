@@ -95,6 +95,18 @@ function buildOrderLink(product, shop) {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
 
+function inboxLinkForShop(shop) {
+  const shopUserId = Number(shop?.userId);
+  if (!Number.isInteger(state.viewerUserId) || !Number.isInteger(shopUserId)) return "inbox.html";
+  const params = new URLSearchParams({
+    viewer: String(state.viewerUserId),
+    with: String(shopUserId),
+  });
+  const handle = normalizeHandle(shop?.handle || "");
+  if (handle) params.set("handle", handle);
+  return `inbox.html?${params.toString()}`;
+}
+
 function renderShopHeader(payload) {
   const shop = payload.shop || {};
   const stats = payload.stats || {};
@@ -154,6 +166,7 @@ function renderShopHeader(payload) {
   if (waCta) waCta.href = waLinkForShop(shop);
 
   renderFollowButton(shop, stats);
+  renderMessageButton(shop);
 }
 
 function renderFollowButton(shop, stats) {
@@ -204,6 +217,27 @@ function renderFollowButton(shop, stats) {
       followBtn.disabled = false;
     }
   };
+}
+
+function renderMessageButton(shop) {
+  const btn = el("shop-message-btn");
+  if (!btn) return;
+
+  const shopUserId = Number(shop.userId);
+  const canMessage =
+    Number.isInteger(state.viewerUserId) &&
+    state.viewerUserId > 0 &&
+    Number.isInteger(shopUserId) &&
+    shopUserId > 0 &&
+    state.viewerUserId !== shopUserId;
+
+  if (!canMessage) {
+    btn.classList.add("hidden");
+    return;
+  }
+
+  btn.classList.remove("hidden");
+  btn.href = inboxLinkForShop(shop);
 }
 
 function productCard(product, shop) {
