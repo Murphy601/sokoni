@@ -115,6 +115,7 @@ function clearSession() {
   clearHandledAcceptedOffersStorage();
   stopReminderCooldownTicker();
   reminderCooldownByOfferId = new Map();
+  updateReminderCooldownHint({ count: 0, nextMs: 0 });
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
   acceptedQuickCursor = 0;
@@ -739,6 +740,7 @@ function showSellerProfile(profile) {
   sellerSocialUserIdPromise = null;
   stopReminderCooldownTicker();
   reminderCooldownByOfferId = new Map();
+  updateReminderCooldownHint({ count: 0, nextMs: 0 });
   loadHandledAcceptedOffers();
   updateHandledResetButton();
   updateUndoLastDoneButton();
@@ -1414,8 +1416,9 @@ function syncReminderCooldownButtonsUi(nowMs = Date.now()) {
   });
 }
 
-function hasActiveReminderCooldowns(nowMs = Date.now()) {
-  let active = false;
+function reminderCooldownStats(nowMs = Date.now()) {
+  let count = 0;
+  let nextMs = 0;
   Array.from(reminderCooldownByOfferId.entries()).forEach(([rawId, rawExpiresAt]) => {
     const id = Number(rawId);
     const expiresAt = Number(rawExpiresAt);
@@ -1423,9 +1426,25 @@ function hasActiveReminderCooldowns(nowMs = Date.now()) {
       reminderCooldownByOfferId.delete(id);
       return;
     }
-    active = true;
+    const msLeft = expiresAt - nowMs;
+    count += 1;
+    if (!nextMs || msLeft < nextMs) nextMs = msLeft;
   });
-  return active;
+  return { count, nextMs };
+}
+
+function updateReminderCooldownHint(stats = reminderCooldownStats()) {
+  const hint = el("seller-offers-cooldown-hint");
+  if (!hint) return;
+  const count = Number(stats?.count) || 0;
+  const nextMs = Number(stats?.nextMs) || 0;
+  if (!count || nextMs <= 0) {
+    hint.textContent = "";
+    hint.classList.add("hidden");
+    return;
+  }
+  hint.classList.remove("hidden");
+  hint.textContent = `${offerCountLabel(count, "reminder")} cooling down · next unlock in ${formatReminderCooldown(nextMs)}.`;
 }
 
 function stopReminderCooldownTicker() {
@@ -1436,22 +1455,25 @@ function stopReminderCooldownTicker() {
 }
 
 function ensureReminderCooldownTicker() {
-  const shouldRun = currentSellerView === "dashboard" && hasActiveReminderCooldowns();
+  const nowMs = Date.now();
+  const stats = reminderCooldownStats(nowMs);
+  const shouldRun = currentSellerView === "dashboard" && stats.count > 0;
+  syncReminderCooldownButtonsUi(nowMs);
+  updateReminderCooldownHint(stats);
   if (!shouldRun) {
     stopReminderCooldownTicker();
-    syncReminderCooldownButtonsUi();
     return;
   }
-  syncReminderCooldownButtonsUi();
   if (reminderCooldownTickTimer) return;
   reminderCooldownTickTimer = window.setInterval(() => {
     if (currentSellerView !== "dashboard") {
       stopReminderCooldownTicker();
       return;
     }
-    const active = hasActiveReminderCooldowns();
+    const tickStats = reminderCooldownStats(Date.now());
     syncReminderCooldownButtonsUi();
-    if (!active) stopReminderCooldownTicker();
+    updateReminderCooldownHint(tickStats);
+    if (!tickStats.count) stopReminderCooldownTicker();
   }, REMINDER_COOLDOWN_TICK_MS);
 }
 
@@ -2184,6 +2206,7 @@ async function loadSellerOffers({ silent = false } = {}) {
       sellerOffersCache = [];
       reminderCooldownByOfferId = new Map();
       stopReminderCooldownTicker();
+      updateReminderCooldownHint({ count: 0, nextMs: 0 });
       acceptedQuickCursor = 0;
       renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
       updateQuickModeHint();
