@@ -15,6 +15,7 @@ const SELLER_OFFERS_POLL_MS = 45000;
 const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "declined"]);
 const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
 const HANDLED_HISTORY_LIMIT = 40;
+const OFFER_REMINDER_COOLDOWN_MS = 90000;
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -111,6 +112,7 @@ function clearSession() {
   sellerProfile = null;
   sellerSocialUserIdPromise = null;
   clearHandledAcceptedOffersStorage();
+  reminderCooldownByOfferId = new Map();
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
   acceptedQuickCursor = 0;
@@ -330,6 +332,7 @@ let acceptedQuickCursor = 0;
 let handledAcceptedOfferIds = new Set();
 let handledOffersStorageKey = null;
 let handledOfferHistory = [];
+let reminderCooldownByOfferId = new Map();
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -731,6 +734,7 @@ function showSellerProfile(profile) {
     sellerProfile.socialUserId = knownUserId;
   }
   sellerSocialUserIdPromise = null;
+  reminderCooldownByOfferId = new Map();
   loadHandledAcceptedOffers();
   updateHandledResetButton();
   updateUndoLastDoneButton();
@@ -1333,6 +1337,51 @@ function updateUndoLastDoneButton() {
   });
 }
 
+function formatReminderCooldown(msLeft) {
+  const totalSeconds = Math.max(1, Math.ceil((Number(msLeft) || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (!minutes) return `${totalSeconds}s`;
+  if (!seconds) return `${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
+function reminderCooldownMsLeftForOffer(offerId, nowMs = Date.now()) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return 0;
+  const expiresAt = Number(reminderCooldownByOfferId.get(id) || 0);
+  if (!Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+    reminderCooldownByOfferId.delete(id);
+    return 0;
+  }
+  return expiresAt - nowMs;
+}
+
+function setReminderCooldownForOffer(offerId, durationMs = OFFER_REMINDER_COOLDOWN_MS) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return 0;
+  const cooldownMs = Math.max(1000, Number(durationMs) || OFFER_REMINDER_COOLDOWN_MS);
+  const expiresAt = Date.now() + cooldownMs;
+  reminderCooldownByOfferId.set(id, expiresAt);
+  return expiresAt;
+}
+
+function reconcileReminderCooldowns(offers = sellerOffersCache) {
+  const nowMs = Date.now();
+  const offerIds = new Set(
+    (offers || [])
+      .map((offer) => Number(offer?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+  Array.from(reminderCooldownByOfferId.entries()).forEach(([rawId, rawExpiresAt]) => {
+    const id = Number(rawId);
+    const expiresAt = Number(rawExpiresAt);
+    if (!offerIds.has(id) || !Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+      reminderCooldownByOfferId.delete(id);
+    }
+  });
+}
+
 function isAcceptedOfferHandled(offerOrId) {
   const id = Number(typeof offerOrId === "object" ? offerOrId?.id : offerOrId);
   return Number.isInteger(id) && id > 0 ? handledAcceptedOfferIds.has(id) : false;
@@ -1562,9 +1611,13 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         sellerUserId !== buyerUserId;
       const canManageQuickQueue = Number.isInteger(id) && id > 0 && status === "accepted" && canChat;
       const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
+      const reminderCooldownMsLeft = canManageQuickQueue ? reminderCooldownMsLeftForOffer(id) : 0;
+      const reminderCoolingDown = reminderCooldownMsLeft > 0;
+      const reminderButtonLabel = reminderCoolingDown ? `Wait ${formatReminderCooldown(reminderCooldownMsLeft)}` : "Send reminder";
+      const remindNextButtonLabel = reminderCoolingDown ? `Wait ${formatReminderCooldown(reminderCooldownMsLeft)}` : "Remind + next";
       const remindNextButton = canManageQuickQueue && !handledInQuickQueue
         ? `<button type="button" class="sell-offer-action sell-offer-action--remind-next offer-remind-next-btn" data-offer-id="${id}">
-              Remind + next
+              ${remindNextButtonLabel}
             </button>`
         : "";
       const doneNextButton = canManageQuickQueue && !handledInQuickQueue
@@ -1587,7 +1640,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
                 Open chat
               </a>
               <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}">
-                Send reminder
+                ${reminderButtonLabel}
               </button>
               ${remindNextButton}
               ${doneNextButton}
@@ -1633,6 +1686,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
 }
 
 function renderOfferCacheView() {
+  reconcileReminderCooldowns(sellerOffersCache);
   const total = sellerOffersCache.length;
   const pending = pendingOffersCount(sellerOffersCache);
   const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
@@ -1757,6 +1811,12 @@ async function sendAcceptedOfferReminder(button) {
     setOffersStatus("Offer not found. Refresh and try again.", true);
     return;
   }
+  const cooldownMsLeft = reminderCooldownMsLeftForOffer(offerId);
+  if (cooldownMsLeft > 0) {
+    renderOfferCacheView();
+    setOffersStatus(`Reminder already sent. Try again in ${formatReminderCooldown(cooldownMsLeft)}.`);
+    return;
+  }
 
   const previousLabel = button.textContent;
   button.disabled = true;
@@ -1769,12 +1829,9 @@ async function sendAcceptedOfferReminder(button) {
     button.textContent = previousLabel;
     return;
   }
-  button.textContent = "Reminder sent";
-  setOffersStatus("Reminder sent in inbox.");
-  window.setTimeout(() => {
-    button.disabled = false;
-    button.textContent = previousLabel;
-  }, 4000);
+  setReminderCooldownForOffer(offerId);
+  renderOfferCacheView();
+  setOffersStatus(`Reminder sent in inbox. Next reminder in ${formatReminderCooldown(OFFER_REMINDER_COOLDOWN_MS)}.`);
 }
 
 function toggleAcceptedOfferHandled(button) {
@@ -1883,6 +1940,12 @@ async function remindAndMoveToNextAcceptedChat(button) {
     setOffersStatus("Offer not found. Refresh and try again.", true);
     return;
   }
+  const cooldownMsLeft = reminderCooldownMsLeftForOffer(offerId);
+  if (cooldownMsLeft > 0) {
+    renderOfferCacheView();
+    setOffersStatus(`Reminder already sent. Try again in ${formatReminderCooldown(cooldownMsLeft)}.`);
+    return;
+  }
 
   const previousLabel = button.textContent;
   button.disabled = true;
@@ -1895,16 +1958,21 @@ async function remindAndMoveToNextAcceptedChat(button) {
     setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     return;
   }
+  setReminderCooldownForOffer(offerId);
 
   const moved = moveAcceptedOfferToNextChat(offerId, offer);
   if (!moved.ok) {
-    button.disabled = false;
-    button.textContent = previousLabel;
-    setOffersStatus(moved.message || "Could not update quick queue right now.", moved.isError !== false);
+    renderOfferCacheView();
+    setOffersStatus(
+      `Reminder sent in inbox, but quick queue did not move: ${String(moved.message || "try again in a moment.")}`,
+      moved.isError !== false
+    );
     return;
   }
   if (!moved.opened) {
-    setOffersStatus(`Reminder sent. Marked ${offerBuyerLabel(offer)} done. No more accepted chats in queue.`);
+    setOffersStatus(
+      `Reminder sent. Marked ${offerBuyerLabel(moved.offer || offer)} done. No more accepted chats in queue.`
+    );
   }
 }
 
@@ -2032,6 +2100,7 @@ async function loadSellerOffers({ silent = false } = {}) {
     if (!sellerUserId) {
       setDashboardOfferBadge(0);
       sellerOffersCache = [];
+      reminderCooldownByOfferId = new Map();
       acceptedQuickCursor = 0;
       renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
       updateQuickModeHint();
@@ -2058,6 +2127,7 @@ async function loadSellerOffers({ silent = false } = {}) {
     const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
     const pending = pendingOffersCount(offers);
     sellerOffersCache = offers;
+    reconcileReminderCooldowns(sellerOffersCache);
     reconcileHandledAcceptedOffers(sellerOffersCache);
     const readyChats = acceptedOffersReadyForChat(sellerOffersCache);
     if (!readyChats.length || acceptedQuickCursor >= readyChats.length) {
