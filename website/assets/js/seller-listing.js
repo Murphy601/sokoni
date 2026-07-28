@@ -12,7 +12,7 @@ const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
 const SELLER_OFFERS_POLL_MS = 45000;
-const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "declined"]);
+const SELLER_OFFER_FILTERS = new Set(["pending", "all", "accepted", "reminded", "declined"]);
 const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
 const HANDLED_HISTORY_LIMIT = 40;
 const OFFER_REMINDER_COOLDOWN_MS = 90000;
@@ -1241,6 +1241,15 @@ function syncOfferFilterButtons() {
 function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
   const normalized = normalizeOfferFilter(filter);
   if (normalized === "all") return offers;
+  if (normalized === "reminded") {
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && Boolean(reminderLastSentAtForOffer(id));
+    });
+  }
   return offers.filter((offer) => {
     return (
       String(offer?.status || "")
@@ -1724,6 +1733,7 @@ function updateQuickModeHint() {
 
 function offerFilterLabel(filter = activeSellerOffersFilter) {
   if (filter === "accepted") return "accepted offer";
+  if (filter === "reminded") return "reminded offer";
   if (filter === "declined") return "declined offer";
   if (filter === "pending") return "pending offer";
   return "offer";
@@ -1944,6 +1954,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
   }
   if (filter === "pending") return "No pending offers right now.";
   if (filter === "accepted") return "No accepted offers yet.";
+  if (filter === "reminded") return "No reminded offers yet.";
   if (filter === "declined") return "No declined offers yet.";
   return "No offers in this view right now.";
 }
