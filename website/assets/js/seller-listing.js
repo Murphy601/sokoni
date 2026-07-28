@@ -2012,6 +2012,25 @@ function currentSellerSocialUserId() {
   return Number.isInteger(sellerId) && sellerId > 0 ? sellerId : null;
 }
 
+function chatBlockedReasonForOffer(offer, sellerUserId = currentSellerSocialUserId(), buyerUserId = offerBuyerUserId(offer)) {
+  const status = String(offer?.status || "")
+    .trim()
+    .toLowerCase();
+  if (status !== "accepted") return "";
+  if (!Number.isInteger(sellerUserId) || sellerUserId < 1) {
+    return sellerProfile?.shopHandle
+      ? "Seller chat profile is still syncing. Tap Refresh and try again shortly."
+      : "Add your shop handle to link seller chat, then tap Refresh.";
+  }
+  if (!Number.isInteger(buyerUserId) || buyerUserId < 1) {
+    return "Buyer chat profile is still syncing. Tap Refresh in a moment.";
+  }
+  if (buyerUserId === sellerUserId) {
+    return "Chat is blocked because buyer and seller profile matched. Tap Refresh and try again.";
+  }
+  return "";
+}
+
 function inboxLinkForOffer(offer, sellerUserId, buyerUserId) {
   if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) {
     return "../inbox.html";
@@ -2084,6 +2103,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         Number.isInteger(buyerUserId) &&
         buyerUserId > 0 &&
         sellerUserId !== buyerUserId;
+      const chatBlockedReason = status === "accepted" && !canChat ? chatBlockedReasonForOffer(offer, sellerUserId, buyerUserId) : "";
       const canManageQuickQueue = Number.isInteger(id) && id > 0 && status === "accepted" && canChat;
       const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
       const reminderCooldownMsLeft = canManageQuickQueue ? reminderCooldownMsLeftForOffer(id) : 0;
@@ -2137,6 +2157,9 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
       const handledNote = handledInQuickQueue
         ? `<p class="text-xs text-brand-green mt-2">Handled in quick mode queue.</p>`
         : "";
+      const chatBlockedNote = chatBlockedReason
+        ? `<p class="text-xs text-amber-700 dark:text-amber-300 mt-2">${escapeHtml(chatBlockedReason)}</p>`
+        : "";
       return `
         <article class="sell-offer-card sell-order-card" data-offer-row="${Number.isInteger(id) ? id : ""}">
           <div class="sell-order-card-head">
@@ -2152,6 +2175,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
             formatOfferExpiry(offer?.expiresAt, status)
           )}</p>
           ${reminderSentNote ? `<p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(reminderSentNote)}</p>` : ""}
+          ${chatBlockedNote}
           ${handledNote}
           ${actionBlock}
         </article>`;
