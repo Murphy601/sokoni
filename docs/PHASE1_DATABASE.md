@@ -92,6 +92,22 @@ Returns:
 - likes received
 - average rating + total reviews
 
+### Shop storefront profile by handle
+
+`GET /api/social/shop/:handle`
+
+Returns:
+
+- `shop` (handle, shopName, bio, avatar, verification status)
+- `stats` (listings, followers, following, likes, rating summary)
+- `products` (active listings only)
+- `pagination`
+
+Notes:
+
+- Uses user handle when available, with fallback to seller slug.
+- Compatible with both new `seller_user_id` and legacy `seller_id` product ownership.
+
 ### Offers (Depop-style negotiation)
 
 Create/update pending offer:

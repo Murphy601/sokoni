@@ -3,6 +3,7 @@ import {
   createOrderReview,
   createOffer,
   getDirectThread,
+  getShopProfileByHandle,
   listSellerReviews,
   getUserSocialStats,
   listOffers,
@@ -24,6 +25,7 @@ function socialErrorStatus(error) {
     error === "product_not_found" ||
     error === "offer_not_found" ||
     error === "order_not_found" ||
+    error === "shop_not_found" ||
     error === "sender_not_found" ||
     error === "receiver_not_found"
   ) {
@@ -59,6 +61,26 @@ router.get("/users/:userId/stats", async (req, res) => {
       });
     }
     res.json({ stats: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/shop/:handle — storefront profile + active listings */
+router.get("/shop/:handle", async (req, res) => {
+  try {
+    const result = await getShopProfileByHandle({
+      handle: req.params.handle,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

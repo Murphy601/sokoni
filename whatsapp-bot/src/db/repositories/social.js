@@ -18,6 +18,13 @@ function parseOrderId(value) {
   return n;
 }
 
+function normalizeHandle(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+}
+
 const OFFER_STATUSES = new Set(["pending", "accepted", "declined", "expired"]);
 
 const FORBIDDEN_PATTERNS = [
@@ -202,8 +209,319 @@ export async function getUserSocialStats(userId) {
   };
 }
 
+export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const cleanHandle = normalizeHandle(handle);
+  if (!cleanHandle) {
+    return { error: "invalid_handle", message: "A valid shop handle is required." };
+  }
+
+  const userResult = await query(
+    `SELECT
+       id,
+       phone,
+       email,
+       handle,
+       display_name,
+       shop_name,
+       bio,
+       avatar_url,
+       location,
+       role,
+       is_seller_verified
+     FROM users
+     WHERE LOWER(handle) = $1
+     LIMIT 1`,
+    [cleanHandle]
+  );
+  const user = userResult.rows[0] || null;
+
+  if (user) {
+    const linkedSellerResult = await query(
+      `SELECT id, business_name, slug, city, bio, is_verified
+         FROM sellers
+        WHERE user_id = $1
+        LIMIT 1`,
+      [user.id]
+    );
+    const linkedSeller = linkedSellerResult.rows[0] || null;
+    const storefront = await listActiveStorefrontProducts({
+      sellerUserId: user.id,
+      sellerId: linkedSeller?.id || null,
+      limit,
+      offset,
+    });
+    const likesReceived = await getLikesReceivedForOwner({
+      sellerUserId: user.id,
+      sellerId: linkedSeller?.id || null,
+    });
+    const follows = await getFollowCounts(user.id);
+    const reviewSummary = await getReviewSummary(user.id);
+
+    return {
+      shop: {
+        userId: Number(user.id),
+        sellerId: linkedSeller?.id != null ? Number(linkedSeller.id) : null,
+        handle: user.handle || `@${cleanHandle}`,
+        shopName:
+          user.shop_name ||
+          linkedSeller?.business_name ||
+          user.display_name ||
+          `Shop ${user.id}`,
+        bio: user.bio || linkedSeller?.bio || null,
+        avatarUrl: user.avatar_url || null,
+        location: user.location || linkedSeller?.city || null,
+        isSellerVerified: Boolean(user.is_seller_verified || linkedSeller?.is_verified),
+        role: user.role || "seller",
+        source: linkedSeller ? "user_linked_seller" : "user",
+      },
+      stats: {
+        listingsCount: storefront.count,
+        followersCount: follows.followersCount,
+        followingCount: follows.followingCount,
+        likesReceivedCount: likesReceived,
+        avgRating: reviewSummary.avgRating,
+        totalReviews: reviewSummary.totalReviews,
+      },
+      products: storefront.products,
+      pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
+    };
+  }
+
+  const sellerResult = await query(
+    `SELECT
+       s.id,
+       s.user_id,
+       s.business_name,
+       s.slug,
+       s.city,
+       s.bio,
+       s.is_verified
+     FROM sellers s
+     WHERE LOWER(s.slug) = $1
+     LIMIT 1`,
+    [cleanHandle]
+  );
+  const seller = sellerResult.rows[0] || null;
+  if (!seller) {
+    return { error: "shop_not_found", message: "Shop handle not found." };
+  }
+
+  let sellerUser = null;
+  if (seller.user_id != null) {
+    const sellerUserResult = await query(
+      `SELECT
+         id,
+         handle,
+         display_name,
+         shop_name,
+         bio,
+         avatar_url,
+         location,
+         role,
+         is_seller_verified
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [seller.user_id]
+    );
+    sellerUser = sellerUserResult.rows[0] || null;
+  }
+
+  const storefront = await listActiveStorefrontProducts({
+    sellerUserId: sellerUser?.id || null,
+    sellerId: seller.id,
+    limit,
+    offset,
+  });
+  const likesReceived = await getLikesReceivedForOwner({
+    sellerUserId: sellerUser?.id || null,
+    sellerId: seller.id,
+  });
+  const follows = await getFollowCounts(sellerUser?.id || null);
+  const reviewSummary = await getReviewSummary(sellerUser?.id || null);
+
+  return {
+    shop: {
+      userId: sellerUser?.id != null ? Number(sellerUser.id) : null,
+      sellerId: Number(seller.id),
+      handle: sellerUser?.handle || `@${seller.slug}`,
+      shopName:
+        sellerUser?.shop_name ||
+        seller.business_name ||
+        sellerUser?.display_name ||
+        `Shop ${seller.id}`,
+      bio: sellerUser?.bio || seller.bio || null,
+      avatarUrl: sellerUser?.avatar_url || null,
+      location: sellerUser?.location || seller.city || null,
+      isSellerVerified: Boolean(sellerUser?.is_seller_verified || seller.is_verified),
+      role: sellerUser?.role || "seller",
+      source: sellerUser ? "seller_linked_user" : "seller",
+    },
+    stats: {
+      listingsCount: storefront.count,
+      followersCount: follows.followersCount,
+      followingCount: follows.followingCount,
+      likesReceivedCount: likesReceived,
+      avgRating: reviewSummary.avgRating,
+      totalReviews: reviewSummary.totalReviews,
+    },
+    products: storefront.products,
+    pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
+  };
+}
+
 function hasForbiddenMessage(content) {
   return FORBIDDEN_PATTERNS.some((pattern) => pattern.test(content));
+}
+
+function mapStorefrontProductRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || null,
+    priceKsh: row.price_kes != null ? Number(row.price_kes) : null,
+    priceKes: row.price_kes != null ? Number(row.price_kes) : null,
+    imageUrl: row.image_url || row.primary_image_url || null,
+    category: row.category,
+    subCategory: row.sub_category || null,
+    size: row.size_label || null,
+    condition: row.condition || null,
+    brand: row.brand || null,
+    genderFit: row.gender_fit || null,
+    isSecondhand: Boolean(row.is_secondhand),
+    likesCount: Number(row.likes_count || 0),
+    createdAt: row.created_at,
+  };
+}
+
+async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = null, limit = 24, offset = 0 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 24, 1), 100);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+
+  const ownerParams = [];
+  const ownerClauses = [];
+  if (sellerUserId != null) {
+    ownerParams.push(Number(sellerUserId));
+    ownerClauses.push(`p.seller_user_id = $${ownerParams.length}`);
+  }
+  if (sellerId != null) {
+    ownerParams.push(Number(sellerId));
+    ownerClauses.push(`p.seller_id = $${ownerParams.length}`);
+  }
+  if (!ownerClauses.length) {
+    return { products: [], count: 0, limit: safeLimit, offset: safeOffset };
+  }
+
+  const whereOwner = `(${ownerClauses.join(" OR ")})`;
+  const whereActive = `${whereOwner} AND p.in_stock = TRUE AND p.is_sold = FALSE`;
+
+  const listParams = [...ownerParams, safeLimit, safeOffset];
+  const listLimitParam = `$${ownerParams.length + 1}`;
+  const listOffsetParam = `$${ownerParams.length + 2}`;
+
+  const { rows } = await query(
+    `SELECT
+       p.id,
+       p.title,
+       p.description,
+       p.price_kes,
+       p.primary_image_url,
+       p.category,
+       p.sub_category,
+       p.size_label,
+       p.condition,
+       p.brand,
+       p.gender_fit,
+       p.is_secondhand,
+       p.created_at,
+       COALESCE(
+         (SELECT pi.url FROM product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC LIMIT 1),
+         p.primary_image_url
+       ) AS image_url,
+       COALESCE(pl.likes_count, 0)::int AS likes_count
+     FROM products p
+     LEFT JOIN (
+       SELECT product_id, COUNT(*)::int AS likes_count
+       FROM product_likes
+       GROUP BY product_id
+     ) pl ON pl.product_id = p.id
+     WHERE ${whereActive}
+     ORDER BY p.created_at DESC
+     LIMIT ${listLimitParam}
+     OFFSET ${listOffsetParam}`,
+    listParams
+  );
+
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS listings_count
+       FROM products p
+      WHERE ${whereActive}`,
+    ownerParams
+  );
+
+  return {
+    products: rows.map(mapStorefrontProductRow),
+    count: Number(countResult.rows[0]?.listings_count || 0),
+    limit: safeLimit,
+    offset: safeOffset,
+  };
+}
+
+async function getLikesReceivedForOwner({ sellerUserId = null, sellerId = null } = {}) {
+  const ownerParams = [];
+  const ownerClauses = [];
+  if (sellerUserId != null) {
+    ownerParams.push(Number(sellerUserId));
+    ownerClauses.push(`p.seller_user_id = $${ownerParams.length}`);
+  }
+  if (sellerId != null) {
+    ownerParams.push(Number(sellerId));
+    ownerClauses.push(`p.seller_id = $${ownerParams.length}`);
+  }
+  if (!ownerClauses.length) return 0;
+
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS likes_received_count
+       FROM product_likes pl
+       INNER JOIN products p ON p.id = pl.product_id
+      WHERE ${ownerClauses.map((c) => `(${c})`).join(" OR ")}`,
+    ownerParams
+  );
+  return Number(rows[0]?.likes_received_count || 0);
+}
+
+async function getFollowCounts(userId = null) {
+  if (!userId) return { followersCount: 0, followingCount: 0 };
+  const { rows } = await query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM follows WHERE following_user_id = $1) AS followers_count,
+       (SELECT COUNT(*)::int FROM follows WHERE follower_user_id = $1) AS following_count`,
+    [Number(userId)]
+  );
+  return {
+    followersCount: Number(rows[0]?.followers_count || 0),
+    followingCount: Number(rows[0]?.following_count || 0),
+  };
+}
+
+async function getReviewSummary(userId = null) {
+  if (!userId) return { avgRating: 0, totalReviews: 0 };
+  const { rows } = await query(
+    `SELECT
+       COALESCE(AVG(rating), 0)::numeric(10,2) AS avg_rating,
+       COUNT(*)::int AS total_reviews
+     FROM order_reviews
+     WHERE seller_user_id = $1`,
+    [Number(userId)]
+  );
+  return {
+    avgRating: Number(rows[0]?.avg_rating || 0),
+    totalReviews: Number(rows[0]?.total_reviews || 0),
+  };
 }
 
 function mapOfferRow(row) {
