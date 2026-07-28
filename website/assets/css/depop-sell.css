@@ -421,3 +421,56 @@ html.dark .sell-order-action {
 .sell-order-action--primary:hover {
   opacity: 0.92;
 }
+
+.sell-offer-card {
+  border-color: rgba(37, 211, 102, 0.25);
+}
+
+html.dark .sell-offer-card {
+  border-color: rgba(37, 211, 102, 0.3);
+}
+
+.sell-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.sell-offer-action {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.18);
+  background: #ffffff;
+  color: #1b1035;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 0 0.9rem;
+  cursor: pointer;
+}
+
+.sell-offer-action:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sell-offer-action--accept {
+  background: #25d366;
+  border-color: #25d366;
+}
+
+.sell-offer-action--decline {
+  background: transparent;
+}
+
+html.dark .sell-offer-action {
+  border-color: rgba(255, 248, 240, 0.26);
+  background: rgba(46, 27, 87, 0.55);
+  color: #fff8f0;
+}
+
+html.dark .sell-offer-action--accept {
+  background: #25d366;
+  color: #1b1035;
+  border-color: #25d366;
+}

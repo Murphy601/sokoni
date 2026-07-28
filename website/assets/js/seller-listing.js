@@ -4,6 +4,7 @@ const API_BASE =
     : "https://bot.sokonimall.com";
 const LISTINGS_API = `${API_BASE}/api/seller/listings`;
 const ONBOARD_API = `${API_BASE}/api/seller/onboard`;
+const SOCIAL_API = `${API_BASE}/api/social`;
 
 const PHONE_KEY = "sokoni-seller-phone";
 const DRAFT_KEY = "sokoni-seller-draft";
@@ -48,6 +49,15 @@ function el(id) {
 
 function formatKes(n) {
   return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function getPhone() {
@@ -95,6 +105,7 @@ function clearSession() {
   verificationToken = null;
   phoneVerified = false;
   sellerProfile = null;
+  sellerSocialUserIdPromise = null;
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
 }
 
@@ -295,6 +306,7 @@ let activeLedgerTab = "available";
 let verificationToken = null;
 let phoneVerified = false;
 let resendCooldownTimer = null;
+let sellerSocialUserIdPromise = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -690,7 +702,12 @@ async function loadMyListings() {
 }
 
 function showSellerProfile(profile) {
-  sellerProfile = profile;
+  sellerProfile = { ...(profile || {}) };
+  const knownUserId = Number(sellerProfile.userId || sellerProfile.socialUserId);
+  if (Number.isInteger(knownUserId) && knownUserId > 0) {
+    sellerProfile.socialUserId = knownUserId;
+  }
+  sellerSocialUserIdPromise = null;
   el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
   if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
   el("seller-profile-bar")?.classList.remove("hidden");
@@ -1130,6 +1147,235 @@ function renderSellerOrders(orders) {
     .join("");
 }
 
+function normalizeHandleForLookup(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+}
+
+function setOffersStatus(message, isError = false) {
+  const node = el("seller-offers-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+function offerStatusLabel(status) {
+  if (status === "pending") return "Pending";
+  if (status === "accepted") return "Accepted";
+  if (status === "declined") return "Declined";
+  if (status === "expired") return "Expired";
+  return "Offer";
+}
+
+function offerStatusBadgeClass(status) {
+  if (status === "pending") return "sell-order-badge--action";
+  if (status === "accepted") return "sell-order-badge--done";
+  return "sell-order-badge--transit";
+}
+
+function formatOfferExpiry(expiresAt, status) {
+  if (!expiresAt) {
+    return status === "pending" ? "Waiting for your decision." : "No expiry timestamp.";
+  }
+  const time = new Date(expiresAt);
+  if (Number.isNaN(time.getTime())) {
+    return status === "pending" ? "Waiting for your decision." : "No expiry timestamp.";
+  }
+  const formatted = new Intl.DateTimeFormat("en-KE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(time);
+  return status === "pending" ? `Valid until ${formatted}` : `Updated ${formatted}`;
+}
+
+function offerBuyerLabel(offer) {
+  const rawHandle = String(offer?.buyer?.handle || "").trim();
+  if (rawHandle) return rawHandle.startsWith("@") ? rawHandle : `@${rawHandle}`;
+  if (offer?.buyer?.shopName) return offer.buyer.shopName;
+  const buyerId = Number(offer?.buyerUserId || offer?.buyer?.id);
+  return Number.isInteger(buyerId) && buyerId > 0 ? `Buyer #${buyerId}` : "Buyer";
+}
+
+async function resolveSellerSocialUserId(force = false) {
+  if (!sellerProfile) return null;
+
+  const direct = Number(sellerProfile.userId || sellerProfile.socialUserId);
+  if (!force && Number.isInteger(direct) && direct > 0) {
+    return direct;
+  }
+
+  const handle = normalizeHandleForLookup(sellerProfile.shopHandle);
+  if (!handle) return null;
+  if (!force && sellerSocialUserIdPromise) return sellerSocialUserIdPromise;
+
+  sellerSocialUserIdPromise = (async () => {
+    try {
+      const res = await fetch(`${SOCIAL_API}/shop/${encodeURIComponent(handle)}?limit=1`);
+      const parsed = await parseApiResponse(res);
+      if (!parsed.ok) return null;
+      const userId = Number(parsed.data?.shop?.userId);
+      if (!Number.isInteger(userId) || userId < 1) return null;
+      sellerProfile.socialUserId = userId;
+      return userId;
+    } catch {
+      return null;
+    } finally {
+      sellerSocialUserIdPromise = null;
+    }
+  })();
+
+  return sellerSocialUserIdPromise;
+}
+
+function renderSellerOffers(offers = []) {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+
+  if (!offers.length) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No buyer offers yet. New offers will appear here.</p>`;
+    return;
+  }
+
+  wrap.innerHTML = offers
+    .map((offer) => {
+      const id = Number(offer?.id);
+      const status = String(offer?.status || "pending")
+        .trim()
+        .toLowerCase();
+      const productTitle = offer?.product?.title || offer?.productId || "Listing";
+      const amount = formatKes(offer?.amountKsh || 0);
+      const listed = Number(offer?.product?.priceKsh ?? offer?.product?.priceKes);
+      const listedLine = Number.isFinite(listed) && listed > 0 ? ` · Listed ${formatKes(listed)}` : "";
+      const canRespond = Number.isInteger(id) && id > 0 && status === "pending";
+      return `
+        <article class="sell-offer-card sell-order-card" data-offer-row="${Number.isInteger(id) ? id : ""}">
+          <div class="sell-order-card-head">
+            <p class="font-semibold">${escapeHtml(productTitle)}</p>
+            <span class="sell-order-badge ${offerStatusBadgeClass(status)}">${escapeHtml(offerStatusLabel(status))}</span>
+          </div>
+          <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(offerBuyerLabel(offer))}</p>
+          <p class="text-sm mt-2"><strong>Offered:</strong> ${escapeHtml(amount)}${escapeHtml(listedLine)}</p>
+          <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
+            formatOfferExpiry(offer?.expiresAt, status)
+          )}</p>
+          ${
+            canRespond
+              ? `<div class="sell-offer-actions">
+                  <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
+                    Accept
+                  </button>
+                  <button type="button" class="sell-offer-action sell-offer-action--decline offer-action-btn" data-offer-id="${id}" data-action="declined">
+                    Decline
+                  </button>
+                </div>`
+              : ""
+          }
+        </article>`;
+    })
+    .join("");
+}
+
+async function respondToSellerOffer(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  const action = String(button?.dataset?.action || "")
+    .trim()
+    .toLowerCase();
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  if (!["accepted", "declined"].includes(action)) return;
+
+  const sellerUserId = await resolveSellerSocialUserId();
+  if (!sellerUserId) {
+    setOffersStatus("Link your shop handle to your social profile before responding to offers.", true);
+    return;
+  }
+
+  const row = button.closest("[data-offer-row]");
+  row?.querySelectorAll(".offer-action-btn").forEach((node) => {
+    node.disabled = true;
+  });
+  setOffersStatus(action === "accepted" ? "Accepting offer..." : "Declining offer...");
+
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/${offerId}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sellerUserId, action }),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      setOffersStatus(parsed.data?.message || parsed.message || "Could not update offer right now.", true);
+      row?.querySelectorAll(".offer-action-btn").forEach((node) => {
+        node.disabled = false;
+      });
+      return;
+    }
+    setOffersStatus(action === "accepted" ? "Offer accepted." : "Offer declined.");
+    await loadSellerOffers();
+  } catch {
+    setOffersStatus("Network error while updating offer.", true);
+    row?.querySelectorAll(".offer-action-btn").forEach((node) => {
+      node.disabled = false;
+    });
+  }
+}
+
+function bindOfferActionButtons() {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+  wrap.querySelectorAll(".offer-action-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      respondToSellerOffer(btn);
+    });
+  });
+}
+
+async function loadSellerOffers() {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+
+  setOffersStatus("Loading offers...");
+  wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading buyer offers…</p>`;
+
+  const sellerUserId = await resolveSellerSocialUserId();
+  if (!sellerUserId) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Offers inbox appears after your shop handle links to your social profile.</p>`;
+    setOffersStatus("No linked social profile yet.");
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams({
+      userId: String(sellerUserId),
+      role: "seller",
+      status: "all",
+      limit: "30",
+    });
+    const res = await fetch(`${SOCIAL_API}/offers?${params}`);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Could not load offers right now.</p>`;
+      setOffersStatus(parsed.data?.message || parsed.message || "Could not load offers.", true);
+      return;
+    }
+
+    const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
+    renderSellerOffers(offers);
+    bindOfferActionButtons();
+    setOffersStatus(
+      offers.length
+        ? `Showing ${offers.length.toLocaleString()} offer${offers.length === 1 ? "" : "s"}.`
+        : "No buyer offers yet."
+    );
+  } catch {
+    wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading offers.</p>`;
+    setOffersStatus("Network error while loading offers.", true);
+  }
+}
+
 async function loadSellerOrders() {
   const phone = apiPhone();
   if (!phone) return;
@@ -1273,6 +1519,7 @@ function showSellerView(view) {
 
   if (view === "dashboard") {
     loadSellerOrders();
+    loadSellerOffers();
     loadEscrowLedger();
     loadMyListings();
   } else if (view === "withdraw") {
@@ -1318,6 +1565,8 @@ async function onSignOut() {
   showVerifyPanel();
   setOnboardStatus("");
   setStatus("");
+  setOffersStatus("");
+  if (el("seller-offers")) el("seller-offers").innerHTML = "";
   if (phone) {
     try {
       await fetch(`${ONBOARD_API}/sign-out`, {
@@ -1344,6 +1593,7 @@ function init() {
   el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
+  el("load-offers-btn")?.addEventListener("click", loadSellerOffers);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));
