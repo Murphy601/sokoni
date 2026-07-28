@@ -12,10 +12,12 @@ const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
 const SELLER_OFFERS_POLL_MS = 45000;
+const OFFER_EXPIRING_SOON_MS = 2 * 60 * 60 * 1000;
 const SELLER_OFFER_FILTERS = new Set([
   "pending",
   "all",
   "accepted",
+  "expiring-soon",
   "reminded",
   "cooling-down",
   "ready-reminder",
@@ -1312,6 +1314,10 @@ function syncOfferFilterButtons() {
 function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
   const normalized = normalizeOfferFilter(filter);
   if (normalized === "all") return offers;
+  if (normalized === "expiring-soon") {
+    const nowMs = Date.now();
+    return offers.filter((offer) => isAcceptedOfferExpiringSoon(offer, nowMs));
+  }
   if (normalized === "cooling-down") {
     return offers.filter((offer) => {
       const status = String(offer?.status || "")
@@ -1939,6 +1945,7 @@ function updateQuickModeHint() {
 
 function offerFilterLabel(filter = activeSellerOffersFilter) {
   if (filter === "accepted") return "accepted offer";
+  if (filter === "expiring-soon") return "expiring-soon offer";
   if (filter === "reminded") return "reminded offer";
   if (filter === "cooling-down") return "cooling-down offer";
   if (filter === "ready-reminder") return "ready-to-remind offer";
@@ -1982,6 +1989,23 @@ function formatOfferExpiry(expiresAt, status) {
     timeStyle: "short",
   }).format(time);
   return status === "pending" ? `Valid until ${formatted}` : `Updated ${formatted}`;
+}
+
+function offerExpiryMsLeft(offer, nowMs = Date.now()) {
+  const rawExpiry = offer?.expiresAt;
+  if (!rawExpiry) return 0;
+  const expiryMs = new Date(rawExpiry).getTime();
+  if (!Number.isFinite(expiryMs) || Number.isNaN(expiryMs)) return 0;
+  return Math.max(0, expiryMs - nowMs);
+}
+
+function isAcceptedOfferExpiringSoon(offer, nowMs = Date.now()) {
+  const status = String(offer?.status || "")
+    .trim()
+    .toLowerCase();
+  if (status !== "accepted") return false;
+  const msLeft = offerExpiryMsLeft(offer, nowMs);
+  return msLeft > 0 && msLeft <= OFFER_EXPIRING_SOON_MS;
 }
 
 function offerBuyerLabel(offer) {
@@ -2189,6 +2213,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
   }
   if (filter === "pending") return "No pending offers right now.";
   if (filter === "accepted") return "No accepted offers yet.";
+  if (filter === "expiring-soon") return "No accepted offers expiring in the next 2 hours.";
   if (filter === "reminded") return "No reminded offers yet.";
   if (filter === "cooling-down") return "No reminder cooldowns running right now.";
   if (filter === "ready-reminder") return "No accepted chats ready for a reminder yet.";
