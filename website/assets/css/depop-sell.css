@@ -458,6 +458,29 @@ html.dark .sell-offer-card {
   border-color: rgba(37, 211, 102, 0.3);
 }
 
+.sell-offer-quick-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid #25d366;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0 0.95rem;
+  cursor: pointer;
+}
+
+.sell-offer-quick-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+html.dark .sell-offer-quick-btn {
+  border-color: rgba(37, 211, 102, 0.85);
+  background: rgba(37, 211, 102, 0.24);
+  color: #fff8f0;
+}
+
 .sell-offer-filters {
   display: flex;
   flex-wrap: wrap;

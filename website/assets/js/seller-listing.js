@@ -110,10 +110,12 @@ function clearSession() {
   sellerSocialUserIdPromise = null;
   sellerOffersCache = [];
   activeSellerOffersFilter = "pending";
+  acceptedQuickCursor = 0;
   stopSellerOffersPolling();
   currentSellerView = "dashboard";
   setDashboardOfferBadge(0);
   syncOfferFilterButtons();
+  updateQuickModeHint();
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
 }
 
@@ -320,6 +322,7 @@ let sellerOffersRequestInFlight = false;
 let currentSellerView = "dashboard";
 let activeSellerOffersFilter = "pending";
 let sellerOffersCache = [];
+let acceptedQuickCursor = 0;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -1220,6 +1223,36 @@ function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
   });
 }
 
+function acceptedOffersReadyForChat(offers = sellerOffersCache) {
+  const sellerUserId = currentSellerSocialUserId();
+  if (!sellerUserId) return [];
+  return (offers || []).filter((offer) => {
+    const status = String(offer?.status || "")
+      .trim()
+      .toLowerCase();
+    const buyerUserId = offerBuyerUserId(offer);
+    return status === "accepted" && Number.isInteger(buyerUserId) && buyerUserId > 0 && buyerUserId !== sellerUserId;
+  });
+}
+
+function updateQuickModeHint() {
+  const hint = el("seller-offers-quick-hint");
+  const button = el("offers-quick-chat-btn");
+  if (!hint || !button) return;
+
+  const ready = acceptedOffersReadyForChat();
+  if (!ready.length) {
+    hint.textContent = "No accepted offers ready for chat yet.";
+    button.disabled = true;
+    return;
+  }
+
+  const index = acceptedQuickCursor % ready.length;
+  const nextOffer = ready[index];
+  hint.textContent = `${offerCountLabel(ready.length, "accepted chat")} ready. Next: ${offerBuyerLabel(nextOffer)}.`;
+  button.disabled = false;
+}
+
 function offerFilterLabel(filter = activeSellerOffersFilter) {
   if (filter === "accepted") return "accepted offer";
   if (filter === "declined") return "declined offer";
@@ -1413,6 +1446,7 @@ function renderOfferCacheView() {
   const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
   renderSellerOffers(visible, emptyOfferMessage(total, activeSellerOffersFilter));
   bindOfferActionButtons();
+  updateQuickModeHint();
 
   if (!total) {
     setOffersStatus("No buyer offers yet.");
@@ -1567,6 +1601,37 @@ function bindOfferFilterButtons() {
   syncOfferFilterButtons();
 }
 
+function openNextAcceptedOfferChat() {
+  const sellerUserId = currentSellerSocialUserId();
+  if (!sellerUserId) {
+    setOffersStatus("Link your shop handle to your social profile to start accepted-offer chats.", true);
+    return;
+  }
+
+  setActiveOfferFilter("accepted");
+  const ready = acceptedOffersReadyForChat();
+  if (!ready.length) {
+    acceptedQuickCursor = 0;
+    updateQuickModeHint();
+    setOffersStatus("No accepted offers ready for chat right now.");
+    return;
+  }
+
+  const index = acceptedQuickCursor % ready.length;
+  const offer = ready[index];
+  acceptedQuickCursor = (index + 1) % ready.length;
+  updateQuickModeHint();
+
+  const buyerUserId = offerBuyerUserId(offer);
+  const url = inboxLinkForOffer(offer, sellerUserId, buyerUserId);
+  setOffersStatus(`Opening chat with ${offerBuyerLabel(offer)}...`);
+
+  const popup = window.open(url, "_blank", "noopener");
+  if (!popup) {
+    window.location.href = url;
+  }
+}
+
 function stopSellerOffersPolling() {
   if (sellerOffersPollTimer) {
     window.clearInterval(sellerOffersPollTimer);
@@ -1599,7 +1664,9 @@ async function loadSellerOffers({ silent = false } = {}) {
     if (!sellerUserId) {
       setDashboardOfferBadge(0);
       sellerOffersCache = [];
+      acceptedQuickCursor = 0;
       renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
+      updateQuickModeHint();
       setOffersStatus("No linked social profile yet.");
       return;
     }
@@ -1860,6 +1927,7 @@ function init() {
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
   el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
+  el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));
