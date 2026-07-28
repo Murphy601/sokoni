@@ -8,6 +8,7 @@ import {
   getUserSocialStats,
   listOffers,
   respondToOffer,
+  sendOfferReminder,
   sendDirectMessage,
   toggleFollow,
 } from "../db/repositories/social.js";
@@ -17,6 +18,16 @@ const router = Router();
 
 function socialErrorStatus(error) {
   if (error === "database_not_configured") return 503;
+  if (error === "forbidden_offer_action" || error === "seller_session_mismatch") return 403;
+  if (error === "reminder_cooldown_active") return 429;
+  if (
+    error === "offer_not_pending" ||
+    error === "offer_not_accepted" ||
+    error === "offer_expired" ||
+    error === "review_exists"
+  ) {
+    return 409;
+  }
   if (
     error === "user_not_found" ||
     error === "buyer_not_found" ||
@@ -138,6 +149,50 @@ router.post("/offers/:offerId/respond", async (req, res) => {
       });
     }
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/offers/:offerId/remind — seller reminder with cooldown */
+router.post("/offers/:offerId/remind", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerUserId = Number(req.body?.sellerUserId);
+    if (
+      Number.isInteger(requestedSellerUserId) &&
+      requestedSellerUserId > 0 &&
+      requestedSellerUserId !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const result = await sendOfferReminder({
+      offerId: req.params.offerId,
+      sellerUserId: auth.sellerUserId,
+      cooldownSeconds: req.body?.cooldownSeconds,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+        cooldownMsRemaining: result.cooldownMsRemaining,
+        cooldownSecondsRemaining: result.cooldownSecondsRemaining,
+        lastReminderAt: result.lastReminderAt,
+        cooldownEndsAt: result.cooldownEndsAt,
+      });
+    }
+    res.status(201).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

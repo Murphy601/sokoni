@@ -109,6 +109,20 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS offer_reminders (
+  id              BIGSERIAL PRIMARY KEY,
+  offer_id        BIGINT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+  seller_user_id  INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  buyer_user_id   INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_id      BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_offer_reminders_offer_created
+  ON offer_reminders(offer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_offer_reminders_seller_created
+  ON offer_reminders(seller_user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS order_reviews (
   id              BIGSERIAL PRIMARY KEY,
   order_id        INT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,

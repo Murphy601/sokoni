@@ -1640,6 +1640,12 @@ function formatReminderCooldown(msLeft) {
   return `${minutes}m ${seconds}s`;
 }
 
+function parseApiTimestampMs(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  const ms = new Date(String(value || "")).getTime();
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
+}
+
 function reminderCooldownMsLeftForOffer(offerId, nowMs = Date.now()) {
   const id = Number(offerId);
   if (!Number.isInteger(id) || id < 1) return 0;
@@ -2327,41 +2333,39 @@ function offerByIdFromCache(offerId) {
   return sellerOffersCache.find((offer) => Number(offer?.id) === id) || null;
 }
 
-function reminderMessageForOffer(offer) {
-  const productTitle = offer?.product?.title || "your item";
-  const amount = formatKes(offer?.amountKsh || 0);
-  return `Hi! I accepted your offer of ${amount} for "${productTitle}". Please complete checkout on Sokoni within 24 hours so I can prepare shipping.`;
-}
-
 async function sendReminderForOffer(offer) {
   const sellerUserId = currentSellerSocialUserId();
-  const buyerUserId = offerBuyerUserId(offer);
-  if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) {
-    return { ok: false, message: "Could not resolve buyer chat profile for this offer.", isError: true };
+  const offerId = Number(offer?.id);
+  if (!sellerUserId || !Number.isInteger(offerId) || offerId < 1) {
+    return { ok: false, message: "Could not resolve this offer reminder action.", isError: true };
   }
   try {
-    const res = await fetch(`${SOCIAL_API}/chat/send`, {
+    const res = await fetch(`${SOCIAL_API}/offers/${offerId}/remind`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         jsonAuthBody({
           phone: apiPhone(),
-          senderUserId: sellerUserId,
-          receiverUserId: buyerUserId,
-          content: reminderMessageForOffer(offer),
+          sellerUserId,
         })
       ),
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
+      const cooldownActive = parsed.data?.error === "reminder_cooldown_active";
       return {
         ok: false,
         message: parsed.data?.message || parsed.message || "Could not send reminder right now.",
-        isError: true,
+        isError: !cooldownActive,
         sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+        cooldownActive,
+        cooldownMs: Number(parsed.data?.cooldownMsRemaining || 0),
+        sentAtMs: parseApiTimestampMs(parsed.data?.lastReminderAt),
       };
     }
-    return { ok: true };
+    const cooldownMs = Math.max(1000, Number(parsed.data?.reminder?.cooldownMs) || OFFER_REMINDER_COOLDOWN_MS);
+    const sentAtMs = parseApiTimestampMs(parsed.data?.reminder?.sentAt) || Date.now();
+    return { ok: true, cooldownMs, sentAtMs };
   } catch {
     return { ok: false, message: "Network error while sending reminder.", isError: true };
   }
@@ -2393,6 +2397,15 @@ async function sendAcceptedOfferReminder(button) {
       handleSessionExpired({ message: reminder.message });
       return;
     }
+    if (reminder.cooldownActive) {
+      if (Number(reminder.cooldownMs) > 0) {
+        setReminderCooldownForOffer(offerId, reminder.cooldownMs);
+      }
+      if (Number(reminder.sentAtMs) > 0) {
+        setReminderLastSentAtForOffer(offerId, reminder.sentAtMs);
+      }
+      renderOfferCacheView();
+    }
     delete button.dataset.reminderBusy;
     setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
     button.disabled = false;
@@ -2400,10 +2413,12 @@ async function sendAcceptedOfferReminder(button) {
     return;
   }
   delete button.dataset.reminderBusy;
-  setReminderCooldownForOffer(offerId);
-  setReminderLastSentAtForOffer(offerId);
+  setReminderCooldownForOffer(offerId, reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS);
+  setReminderLastSentAtForOffer(offerId, reminder.sentAtMs || Date.now());
   renderOfferCacheView();
-  setOffersStatus(`Reminder sent in inbox. Next reminder in ${formatReminderCooldown(OFFER_REMINDER_COOLDOWN_MS)}.`);
+  setOffersStatus(
+    `Reminder sent in inbox. Next reminder in ${formatReminderCooldown(reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS)}.`
+  );
 }
 
 function toggleAcceptedOfferHandled(button) {
@@ -2530,6 +2545,15 @@ async function remindAndMoveToNextAcceptedChat(button) {
       handleSessionExpired({ message: reminder.message });
       return;
     }
+    if (reminder.cooldownActive) {
+      if (Number(reminder.cooldownMs) > 0) {
+        setReminderCooldownForOffer(offerId, reminder.cooldownMs);
+      }
+      if (Number(reminder.sentAtMs) > 0) {
+        setReminderLastSentAtForOffer(offerId, reminder.sentAtMs);
+      }
+      renderOfferCacheView();
+    }
     delete button.dataset.reminderBusy;
     button.disabled = false;
     button.textContent = previousLabel;
@@ -2537,8 +2561,8 @@ async function remindAndMoveToNextAcceptedChat(button) {
     return;
   }
   delete button.dataset.reminderBusy;
-  setReminderCooldownForOffer(offerId);
-  setReminderLastSentAtForOffer(offerId);
+  setReminderCooldownForOffer(offerId, reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS);
+  setReminderLastSentAtForOffer(offerId, reminder.sentAtMs || Date.now());
 
   const moved = moveAcceptedOfferToNextChat(offerId, offer);
   if (!moved.ok) {

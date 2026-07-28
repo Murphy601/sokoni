@@ -42,9 +42,31 @@ const FORBIDDEN_PATTERNS = [
   /send cash/i,
 ];
 
+const DEFAULT_OFFER_REMINDER_COOLDOWN_SECONDS = 60;
+const MAX_OFFER_REMINDER_COOLDOWN_SECONDS = 600;
+
 async function userExists(userId) {
   const { rows } = await query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [userId]);
   return Boolean(rows[0]);
+}
+
+function parseCooldownSeconds(value, fallback = DEFAULT_OFFER_REMINDER_COOLDOWN_SECONDS) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const normalized = Math.floor(parsed);
+  return Math.min(Math.max(normalized, 5), MAX_OFFER_REMINDER_COOLDOWN_SECONDS);
+}
+
+function formatKesAmount(amount) {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return "KES 0";
+  return `KES ${value.toLocaleString("en-KE", { maximumFractionDigits: 0 })}`;
+}
+
+function offerReminderMessage(offer) {
+  const title = offer?.product_title || offer?.product_id || "your item";
+  const amount = formatKesAmount(offer?.amount_kes);
+  return `Hi! I accepted your offer of ${amount} for "${title}". Please complete checkout on Sokoni within 24 hours so I can prepare shipping.`;
 }
 
 async function productExists(productId) {
@@ -751,6 +773,122 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
   );
 
   return { success: true, offer: mapOfferRow(hydrated.rows[0]) };
+}
+
+export async function sendOfferReminder({ offerId, sellerUserId, cooldownSeconds } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const oid = parseOfferId(offerId);
+  const sellerId = parseUserId(sellerUserId);
+  const cooldownSec = parseCooldownSeconds(cooldownSeconds);
+  const cooldownMs = cooldownSec * 1000;
+  if (!oid || !sellerId) {
+    return {
+      error: "invalid_offer_action",
+      message: "offerId and sellerUserId are required.",
+    };
+  }
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  await expirePendingOffers();
+
+  const offerResult = await query(
+    `SELECT
+       o.*,
+       p.title AS product_title
+     FROM offers o
+     LEFT JOIN products p ON p.id = o.product_id
+     WHERE o.id = $1
+     LIMIT 1`,
+    [oid]
+  );
+  const offer = offerResult.rows[0];
+  if (!offer) {
+    return { error: "offer_not_found", message: "Offer not found." };
+  }
+  if (Number(offer.seller_user_id) !== sellerId) {
+    return { error: "forbidden_offer_action", message: "Only the seller can send reminders for this offer." };
+  }
+
+  const status = String(offer.status || "")
+    .trim()
+    .toLowerCase();
+  if (status !== "accepted") {
+    return {
+      error: "offer_not_accepted",
+      message: `Offer is ${status || "not accepted"} and cannot be reminded.`,
+    };
+  }
+  if (offer.expires_at && new Date(offer.expires_at).getTime() <= Date.now()) {
+    await query(`UPDATE offers SET status = 'expired', updated_at = NOW() WHERE id = $1`, [oid]);
+    return { error: "offer_expired", message: "Offer has expired." };
+  }
+
+  const buyerId = parseUserId(offer.buyer_user_id);
+  if (!buyerId || buyerId === sellerId) {
+    return {
+      error: "invalid_offer_action",
+      message: "Could not resolve buyer profile for this offer reminder.",
+    };
+  }
+
+  const reminderRow = await query(
+    `SELECT created_at
+       FROM offer_reminders
+      WHERE offer_id = $1
+        AND seller_user_id = $2
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [oid, sellerId]
+  );
+  const lastReminderAtRaw = reminderRow.rows[0]?.created_at || null;
+  const lastReminderMs = lastReminderAtRaw ? new Date(lastReminderAtRaw).getTime() : 0;
+  const nowMs = Date.now();
+  const cooldownMsRemaining = Math.max(0, lastReminderMs + cooldownMs - nowMs);
+  if (cooldownMsRemaining > 0) {
+    return {
+      error: "reminder_cooldown_active",
+      message: `Reminder already sent. Try again in ${Math.ceil(cooldownMsRemaining / 1000)}s.`,
+      cooldownMsRemaining,
+      cooldownSecondsRemaining: Math.ceil(cooldownMsRemaining / 1000),
+      lastReminderAt: new Date(lastReminderMs).toISOString(),
+      cooldownEndsAt: new Date(lastReminderMs + cooldownMs).toISOString(),
+    };
+  }
+
+  const messageResult = await sendDirectMessage({
+    senderUserId: sellerId,
+    receiverUserId: buyerId,
+    content: offerReminderMessage(offer),
+  });
+  if (messageResult.error) return messageResult;
+
+  const messageId = Number(messageResult.message?.id);
+  await query(
+    `INSERT INTO offer_reminders (offer_id, seller_user_id, buyer_user_id, message_id)
+     VALUES ($1, $2, $3, $4)`,
+    [oid, sellerId, buyerId, Number.isInteger(messageId) && messageId > 0 ? messageId : null]
+  );
+
+  const sentAtMs = Date.now();
+  return {
+    success: true,
+    reminder: {
+      offerId: oid,
+      sellerUserId: sellerId,
+      buyerUserId: buyerId,
+      sentAt: new Date(sentAtMs).toISOString(),
+      cooldownMs,
+      cooldownSeconds: cooldownSec,
+      cooldownEndsAt: new Date(sentAtMs + cooldownMs).toISOString(),
+      messageId: Number.isInteger(messageId) && messageId > 0 ? messageId : null,
+      message: messageResult.message,
+    },
+  };
 }
 
 export async function listOffers({ userId, role = "buyer", status, limit = 30, offset = 0 } = {}) {

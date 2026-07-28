@@ -146,6 +146,24 @@ Respond (seller):
 }
 ```
 
+Send reminder (seller, cooldown enforced server-side):
+
+`POST /api/social/offers/:offerId/remind`
+
+```json
+{
+  "sellerUserId": 2,
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "seller-session-token"
+}
+```
+
+Notes:
+
+- Only accepted offers can be reminded.
+- Seller session must match the offer seller profile.
+- Cooldown is enforced server-side (returns `429 reminder_cooldown_active` while active).
+
 List offers:
 
 `GET /api/social/offers?userId=1&role=buyer&status=pending`
