@@ -20,6 +20,7 @@ const SELLER_OFFER_FILTERS = new Set([
   "cooling-down",
   "ready-reminder",
   "not-reminded",
+  "handled",
   "declined",
 ]);
 const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
@@ -1352,6 +1353,15 @@ function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
       return status === "accepted" && Number.isInteger(id) && id > 0 && !reminderLastSentAtForOffer(id);
     });
   }
+  if (normalized === "handled") {
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && isAcceptedOfferHandled(id);
+    });
+  }
   return offers.filter((offer) => {
     return (
       String(offer?.status || "")
@@ -1849,6 +1859,7 @@ function offerFilterLabel(filter = activeSellerOffersFilter) {
   if (filter === "cooling-down") return "cooling-down offer";
   if (filter === "ready-reminder") return "ready-to-remind offer";
   if (filter === "not-reminded") return "not-reminded offer";
+  if (filter === "handled") return "handled offer";
   if (filter === "declined") return "declined offer";
   if (filter === "pending") return "pending offer";
   return "offer";
@@ -2073,6 +2084,7 @@ function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
   if (filter === "cooling-down") return "No reminder cooldowns running right now.";
   if (filter === "ready-reminder") return "No accepted chats ready for a reminder yet.";
   if (filter === "not-reminded") return "No accepted offers waiting for a first reminder.";
+  if (filter === "handled") return "No handled accepted offers in queue right now.";
   if (filter === "declined") return "No declined offers yet.";
   return "No offers in this view right now.";
 }
