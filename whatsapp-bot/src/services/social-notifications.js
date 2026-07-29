@@ -22,7 +22,16 @@ function displayName(row) {
 async function loadUser(userId) {
   if (!isDbEnabled() || !userId) return null;
   const { rows } = await query(
-    `SELECT id, phone, handle, shop_name, display_name, social_wa_notify
+    `SELECT
+       id,
+       phone,
+       handle,
+       shop_name,
+       display_name,
+       social_wa_notify,
+       social_wa_notify_follows,
+       social_wa_notify_likes,
+       social_wa_notify_offers
        FROM users
       WHERE id = $1
       LIMIT 1`,
@@ -31,9 +40,18 @@ async function loadUser(userId) {
   return rows[0] || null;
 }
 
-async function sendUserText(userId, text) {
+function eventAllowed(user, event) {
+  if (!user) return true;
+  if (user.social_wa_notify === false) return false;
+  if (event === "follow" && user.social_wa_notify_follows === false) return false;
+  if (event === "like" && user.social_wa_notify_likes === false) return false;
+  if (event === "offer" && user.social_wa_notify_offers === false) return false;
+  return true;
+}
+
+async function sendUserText(userId, text, { event = null } = {}) {
   const user = await loadUser(userId);
-  if (user && user.social_wa_notify === false) {
+  if (!eventAllowed(user, event)) {
     return { skipped: true, reason: "muted" };
   }
   const phone = String(user?.phone || "").replace(/\D/g, "");
@@ -56,7 +74,7 @@ export async function notifySellerNewFollower({ followerUserId, followingUserId 
       `👋 *New follower on Sokoni*\n\n` +
       `*${name}*${handle ? ` (@${handle})` : ""} started following your shop.\n\n` +
       `See activity: ${siteUrl("/suppliers/list.html")}`;
-    await sendUserText(followingUserId, msg);
+    await sendUserText(followingUserId, msg, { event: "follow" });
   } catch (err) {
     console.warn("[social-notify] follow ping failed:", err.message);
   }
@@ -83,7 +101,7 @@ export async function notifySellerProductLiked({ userId, productId } = {}) {
       `♥ *New like on Sokoni*\n\n` +
       `*${name}* liked *${title}*.\n\n` +
       `Shop activity: ${siteUrl("/suppliers/list.html")}`;
-    await sendUserText(product.seller_user_id, msg);
+    await sendUserText(product.seller_user_id, msg, { event: "like" });
   } catch (err) {
     console.warn("[social-notify] like ping failed:", err.message);
   }
@@ -118,7 +136,7 @@ export async function notifyBuyerOfferResponse({ offer } = {}) {
         `You can make a new offer or message the shop.\n` +
         `Activity: ${siteUrl("/activity.html")}`;
     }
-    await sendUserText(offer.buyerUserId, msg);
+    await sendUserText(offer.buyerUserId, msg, { event: "offer" });
   } catch (err) {
     console.warn("[social-notify] offer reply ping failed:", err.message);
   }

@@ -201,12 +201,20 @@ router.patch("/shop/profile", async (req, res) => {
       });
     }
 
-    // Optional notify pref on the same save.
+    // Optional notify prefs on the same save.
     let notifyPrefs = null;
-    if (req.body?.socialWaNotify !== undefined) {
+    if (
+      req.body?.socialWaNotify !== undefined ||
+      req.body?.socialWaNotifyFollows !== undefined ||
+      req.body?.socialWaNotifyLikes !== undefined ||
+      req.body?.socialWaNotifyOffers !== undefined
+    ) {
       notifyPrefs = await updateUserNotifyPrefs({
         userId: auth.sellerUserId,
         socialWaNotify: req.body.socialWaNotify,
+        socialWaNotifyFollows: req.body.socialWaNotifyFollows,
+        socialWaNotifyLikes: req.body.socialWaNotifyLikes,
+        socialWaNotifyOffers: req.body.socialWaNotifyOffers,
       });
     } else {
       notifyPrefs = await getUserNotifyPrefs({ userId: auth.sellerUserId });
@@ -219,11 +227,15 @@ router.patch("/shop/profile", async (req, res) => {
       city: result.shop?.location,
     });
 
+    const prefsOk = notifyPrefs && !notifyPrefs.error;
     res.json({
       success: true,
       shop: {
         ...result.shop,
-        socialWaNotify: notifyPrefs?.error ? result.shop?.socialWaNotify !== false : notifyPrefs?.socialWaNotify !== false,
+        socialWaNotify: prefsOk ? notifyPrefs.socialWaNotify : result.shop?.socialWaNotify !== false,
+        socialWaNotifyFollows: prefsOk ? notifyPrefs.socialWaNotifyFollows : true,
+        socialWaNotifyLikes: prefsOk ? notifyPrefs.socialWaNotifyLikes : true,
+        socialWaNotifyOffers: prefsOk ? notifyPrefs.socialWaNotifyOffers : true,
       },
       message: "Shop profile updated.",
     });
@@ -294,6 +306,9 @@ router.patch("/notify-prefs", async (req, res) => {
     const result = await updateUserNotifyPrefs({
       userId: auth.userId,
       socialWaNotify: req.body?.socialWaNotify,
+      socialWaNotifyFollows: req.body?.socialWaNotifyFollows,
+      socialWaNotifyLikes: req.body?.socialWaNotifyLikes,
+      socialWaNotifyOffers: req.body?.socialWaNotifyOffers,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({

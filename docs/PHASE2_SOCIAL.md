@@ -10,6 +10,7 @@ Slices so far:
 6. Buyer activity center (offer replies, follows, likes)
 7. Soft-fail WhatsApp pings for follow / like / offer reply
 8. Mute preference for WhatsApp social pings (`social_wa_notify`)
+9. Per-event mute (follows / likes / offers)
 
 ## What shipped
 
@@ -127,17 +128,23 @@ Failures are logged and never block the social API response. Dry-run WAHA still 
 `GET|PATCH /api/social/notify-prefs` (buyer or seller WhatsApp session)
 
 ```json
-{ "socialWaNotify": true }
+{
+  "socialWaNotify": true,
+  "socialWaNotifyFollows": true,
+  "socialWaNotifyLikes": true,
+  "socialWaNotifyOffers": true
+}
 ```
 
-- Column: `users.social_wa_notify` (default true)
-- Seller toggle on shop profile form; buyer toggle on `activity.html`
-- Muted users skip social WhatsApp pings (orders/OTP unchanged)
+- Columns (all default true): `social_wa_notify` (master), `social_wa_notify_follows`, `social_wa_notify_likes`, `social_wa_notify_offers`
+- Master off mutes all social WhatsApp pings; per-event flags mute only that type
+- Seller shop profile: master + follows + likes; buyer Activity: master + offers
+- Seller `PATCH /api/social/shop/profile` can also set the same fields
+- Orders / OTP unchanged
 
 ## Out of scope (next slices)
 
 - WAHA / WhatsApp linking (deferred; required for live delivery of social pings)
-- Per-event mute controls (likes vs follows vs offers)
 
 ## Quick checks
 

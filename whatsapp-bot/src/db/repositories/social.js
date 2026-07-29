@@ -510,8 +510,25 @@ export async function updateUserShopProfile({
 }
 
 /**
- * Read/update WhatsApp social ping preference for a user.
+ * Read/update WhatsApp social ping preferences for a user.
+ * Master switch: socialWaNotify
+ * Per-event: socialWaNotifyFollows / Likes / Offers
  */
+function parseNotifyFlag(value) {
+  if (value === undefined) return undefined;
+  return !(value === false || value === "false" || value === 0 || value === "0");
+}
+
+function mapNotifyPrefsRow(row) {
+  return {
+    userId: Number(row.id),
+    socialWaNotify: row.social_wa_notify !== false,
+    socialWaNotifyFollows: row.social_wa_notify_follows !== false,
+    socialWaNotifyLikes: row.social_wa_notify_likes !== false,
+    socialWaNotifyOffers: row.social_wa_notify_offers !== false,
+  };
+}
+
 export async function getUserNotifyPrefs({ userId } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
@@ -524,20 +541,31 @@ export async function getUserNotifyPrefs({ userId } = {}) {
     return { error: "user_not_found", message: "User not found." };
   }
   const { rows } = await query(
-    `SELECT id, social_wa_notify FROM users WHERE id = $1 LIMIT 1`,
+    `SELECT
+       id,
+       social_wa_notify,
+       social_wa_notify_follows,
+       social_wa_notify_likes,
+       social_wa_notify_offers
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
     [uid]
   );
   const row = rows[0];
   if (!row) {
     return { error: "user_not_found", message: "User not found." };
   }
-  return {
-    userId: uid,
-    socialWaNotify: row.social_wa_notify !== false,
-  };
+  return mapNotifyPrefsRow(row);
 }
 
-export async function updateUserNotifyPrefs({ userId, socialWaNotify } = {}) {
+export async function updateUserNotifyPrefs({
+  userId,
+  socialWaNotify,
+  socialWaNotifyFollows,
+  socialWaNotifyLikes,
+  socialWaNotifyOffers,
+} = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -548,23 +576,50 @@ export async function updateUserNotifyPrefs({ userId, socialWaNotify } = {}) {
   if (!(await userExists(uid))) {
     return { error: "user_not_found", message: "User not found." };
   }
-  if (socialWaNotify === undefined) {
-    return { error: "invalid_request", message: "socialWaNotify is required." };
+
+  const master = parseNotifyFlag(socialWaNotify);
+  const follows = parseNotifyFlag(socialWaNotifyFollows);
+  const likes = parseNotifyFlag(socialWaNotifyLikes);
+  const offers = parseNotifyFlag(socialWaNotifyOffers);
+
+  if (master === undefined && follows === undefined && likes === undefined && offers === undefined) {
+    return {
+      error: "invalid_request",
+      message: "Provide at least one notify preference field.",
+    };
   }
-  const enabled = !(socialWaNotify === false || socialWaNotify === "false" || socialWaNotify === 0 || socialWaNotify === "0");
+
+  const sets = [];
+  const params = [];
+  function pushSet(column, value) {
+    params.push(value);
+    sets.push(`${column} = $${params.length}`);
+  }
+  if (master !== undefined) pushSet("social_wa_notify", master);
+  if (follows !== undefined) pushSet("social_wa_notify_follows", follows);
+  if (likes !== undefined) pushSet("social_wa_notify_likes", likes);
+  if (offers !== undefined) pushSet("social_wa_notify_offers", offers);
+  params.push(uid);
+
   const { rows } = await query(
     `UPDATE users
-        SET social_wa_notify = $2
-      WHERE id = $1
-      RETURNING id, social_wa_notify`,
-    [uid, enabled]
+        SET ${sets.join(", ")}
+      WHERE id = $${params.length}
+      RETURNING
+        id,
+        social_wa_notify,
+        social_wa_notify_follows,
+        social_wa_notify_likes,
+        social_wa_notify_offers`,
+    params
   );
+
+  const prefs = mapNotifyPrefsRow(rows[0]);
   return {
-    userId: Number(rows[0].id),
-    socialWaNotify: rows[0].social_wa_notify !== false,
-    message: enabled
-      ? "WhatsApp social pings are on."
-      : "WhatsApp social pings are muted.",
+    ...prefs,
+    message: prefs.socialWaNotify
+      ? "WhatsApp social ping preferences saved."
+      : "All WhatsApp social pings are muted.",
   };
 }
 

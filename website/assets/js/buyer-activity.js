@@ -193,10 +193,16 @@ function setNotifyStatus(message, isError = false) {
   node.classList.toggle("text-brand-green", !isError && Boolean(message));
 }
 
+function applyNotifyPrefs(data = {}) {
+  const master = el("activity-wa-notify");
+  const offers = el("activity-wa-notify-offers");
+  if (master) master.checked = data.socialWaNotify !== false;
+  if (offers) offers.checked = data.socialWaNotifyOffers !== false;
+}
+
 async function loadNotifyPrefs() {
-  const box = el("activity-wa-notify");
   const session = window.SokoniBuyerAuth?.readSession?.();
-  if (!box || !session?.sessionToken) return;
+  if (!el("activity-wa-notify") || !session?.sessionToken) return;
   try {
     const params = new URLSearchParams();
     if (window.SokoniBuyerAuth?.appendAuthQuery) {
@@ -205,21 +211,26 @@ async function loadNotifyPrefs() {
     const res = await fetch(`${SOCIAL_API}/notify-prefs?${params.toString()}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return;
-    box.checked = data.socialWaNotify !== false;
+    applyNotifyPrefs(data);
   } catch {
     /* keep default */
   }
 }
 
 async function saveNotifyPrefs() {
-  const box = el("activity-wa-notify");
+  const master = el("activity-wa-notify");
+  const offers = el("activity-wa-notify-offers");
   const session = window.SokoniBuyerAuth?.readSession?.();
-  if (!box || !session?.sessionToken) return;
+  if (!master || !session?.sessionToken) return;
   setNotifyStatus("Saving…");
   try {
+    const fields = {
+      socialWaNotify: master.checked,
+      socialWaNotifyOffers: offers ? offers.checked : true,
+    };
     const payload = window.SokoniBuyerAuth?.authFields
-      ? window.SokoniBuyerAuth.authFields({ socialWaNotify: box.checked })
-      : { socialWaNotify: box.checked };
+      ? window.SokoniBuyerAuth.authFields(fields)
+      : fields;
     const res = await fetch(`${SOCIAL_API}/notify-prefs`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -230,7 +241,8 @@ async function saveNotifyPrefs() {
       setNotifyStatus(data?.message || "Could not save preference.", true);
       return;
     }
-    setNotifyStatus(data?.message || (box.checked ? "Pings on." : "Pings muted."));
+    applyNotifyPrefs(data);
+    setNotifyStatus(data?.message || "Preferences saved.");
   } catch {
     setNotifyStatus("Network error while saving preference.", true);
   }
@@ -245,6 +257,7 @@ function init() {
   });
   el("activity-refresh-btn")?.addEventListener("click", () => loadActivity());
   el("activity-wa-notify")?.addEventListener("change", () => saveNotifyPrefs());
+  el("activity-wa-notify-offers")?.addEventListener("change", () => saveNotifyPrefs());
   void loadActivity();
 }
 

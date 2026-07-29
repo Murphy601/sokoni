@@ -113,14 +113,19 @@
           Ask on WhatsApp
         </a>
       </div>
-      <label id="activity-notify-row" class="hidden mt-4 flex items-start gap-3 text-sm font-medium min-h-[44px]">
-        <input id="activity-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
-        <span>
-          WhatsApp pings when a seller replies to my offer
-          <span class="block text-xs font-normal text-brand-purple/60 dark:text-white/60">Mute anytime. In-app activity still updates here.</span>
-        </span>
-      </label>
-      <p id="activity-notify-status" class="text-xs text-brand-purple/60 dark:text-white/65 mt-2"></p>
+      <fieldset id="activity-notify-row" class="hidden mt-4 space-y-2">
+        <legend class="text-sm font-medium">WhatsApp alerts</legend>
+        <p class="text-xs text-brand-purple/60 dark:text-white/60">Offer accept/decline pings. Orders stay on. Sellers manage follow/like alerts on their shop profile.</p>
+        <label class="flex items-start gap-3 text-sm font-medium min-h-[44px]">
+          <input id="activity-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+          <span>All social WhatsApp pings</span>
+        </label>
+        <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
+          <input id="activity-wa-notify-offers" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+          <span>Offer accept / decline</span>
+        </label>
+        <p id="activity-notify-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
+      </fieldset>
     </section>
 
     <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-4">
