@@ -2,6 +2,17 @@
   "version": 1,
   "categories": [
     {
+      "id": "phones-tablets",
+      "label": "Phones & Tablets",
+      "emoji": "📱",
+      "subcategories": [
+        {
+          "id": "smartphones",
+          "label": "Smartphones"
+        }
+      ]
+    },
+    {
       "id": "supermarket",
       "label": "Supermarket",
       "emoji": "🛒",

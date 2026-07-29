@@ -50,7 +50,9 @@ fi
 echo "==> Git at: $(git log -1 --oneline)"
 
 if [ -f "$REPO/docker-compose.waha.yml" ]; then
-  if ! bash "$REPO/scripts/deploy-waha.sh"; then
+  if [ "${SKIP_WAHA_DEPLOY:-}" = "1" ]; then
+    echo "==> Skipping WAHA deploy (SKIP_WAHA_DEPLOY=1) — bot-only restart"
+  elif ! bash "$REPO/scripts/deploy-waha.sh"; then
     echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
     echo "      Run: bash scripts/deploy-waha.sh"
   fi

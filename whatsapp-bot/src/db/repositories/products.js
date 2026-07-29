@@ -1,6 +1,6 @@
 import { query, isDbEnabled } from "../pool.js";
 import { rowToCatalogProduct, jsonToDbProduct } from "../product-mapper.js";
-import { ensureDefaultSeller, getSellerById } from "./sellers.js";
+import { ensureDefaultSeller, getSellerById, getSellerBySlug } from "./sellers.js";
 
 const PRODUCT_SELECT = `
   SELECT p.*,
@@ -417,22 +417,23 @@ export function dbProductsAvailable() {
 
 const UPSERT_CATALOG_SQL = `
   INSERT INTO products (
-    id, seller_id, title, description, category, sub_category, browse_category, browse_sub_category,
+    id, seller_id, seller_user_id, title, description, category, sub_category, browse_category, browse_sub_category,
     brand, color, is_secondhand, condition, stock_quantity,
     price_kes, shipping_kes, price_usd, source_price_kes, original_price_kes, retail_per_ml_kes, volume_ml,
     rating, review_count, source, source_url, scope, fulfillment, payment, emoji, tags,
     in_stock, is_sold, tracking_code, primary_image_url, image_key, image_hash,
     upload_message_id, est_delivery_days, legacy_json, updated_at
   ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8,
-    $9, $10, $11, $12, $13,
-    $14, $15, $16, $17, $18, $19, $20,
-    $21, $22, $23, $24, $25, $26, $27, $28, $29::jsonb,
-    $30, $31, $32, $33, $34, $35,
-    $36, $37, $38::jsonb, NOW()
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    $10, $11, $12, $13, $14,
+    $15, $16, $17, $18, $19, $20, $21,
+    $22, $23, $24, $25, $26, $27, $28, $29, $30::jsonb,
+    $31, $32, $33, $34, $35, $36,
+    $37, $38, $39::jsonb, NOW()
   )
   ON CONFLICT (id) DO UPDATE SET
     seller_id = EXCLUDED.seller_id,
+    seller_user_id = COALESCE(EXCLUDED.seller_user_id, products.seller_user_id),
     title = EXCLUDED.title,
     description = EXCLUDED.description,
     category = EXCLUDED.category,
@@ -465,11 +466,48 @@ const UPSERT_CATALOG_SQL = `
  */
 export async function upsertCatalogProduct(catalogProduct) {
   if (!isDbEnabled()) return null;
-  const sellerId = await ensureDefaultSeller();
+
+  let sellerId = await ensureDefaultSeller();
+  let sellerUserId = null;
+  const handle = String(catalogProduct.shopHandle || catalogProduct.sellerHandle || "")
+    .replace(/^@+/, "")
+    .trim()
+    .toLowerCase();
+
+  if (handle && handle !== "sokoni-store") {
+    try {
+      const { ensureSellerSocialProfile } = await import("./users.js");
+      if (catalogProduct.sellerPhone) {
+        const ensured = await ensureSellerSocialProfile({
+          phone: catalogProduct.sellerPhone,
+          handle,
+          shopName: catalogProduct.source || handle,
+          location: catalogProduct.location || null,
+        });
+        if (!ensured.error) {
+          sellerId = ensured.seller?.id || sellerId;
+          sellerUserId = ensured.user?.id || null;
+        }
+      } else {
+        const existing = await getSellerBySlug(handle);
+        if (existing) {
+          sellerId = existing.id;
+          sellerUserId =
+            existing.user_id != null && Number.isInteger(Number(existing.user_id))
+              ? Number(existing.user_id)
+              : null;
+        }
+      }
+    } catch (err) {
+      console.warn("[products] seller resolve for upsert skipped:", err.message);
+    }
+  }
+
   const row = jsonToDbProduct(catalogProduct, sellerId);
   await query(UPSERT_CATALOG_SQL, [
     row.id,
     row.seller_id,
+    sellerUserId,
     row.title,
     row.description,
     row.category,

@@ -78,13 +78,58 @@
       "assets/images/products/hb-tlom7-001.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785165846682,
+    "publishedAt": 1785355374824,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785165846682,
+    "refreshedAt": 1785355374824,
     "isSold": true,
     "soldAt": 1785172670111,
     "soldOrderId": "SK-1011"
+  },
+  {
+    "id": "pt-tlom7-001",
+    "name": "OKING Feature Phone - Black",
+    "category": "phones-tablets",
+    "subcategory": "smartphones",
+    "browseCategory": "electronics",
+    "browseSubCategory": "phones",
+    "sellerNetKes": 500,
+    "sourcePriceKes": 500,
+    "priceKes": 743,
+    "platformFeeKes": 68,
+    "description": "Compact feature phone with a classic keypad design, perfect for basic calls and texting.",
+    "brand": "OKING",
+    "color": "black",
+    "size": "",
+    "era": "",
+    "condition": "fair_condition",
+    "isSecondhand": true,
+    "location": "Kenol",
+    "shippingKes": 175,
+    "freeShipping": false,
+    "estimatedWeightClass": "small",
+    "shippingNote": "Seller delivery",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv-thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "📱",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/pt-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/pt-tlom7-001.jpg"
+    ],
+    "videoUrl": null,
+    "publishedAt": 1785365788452,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]
