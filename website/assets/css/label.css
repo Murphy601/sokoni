@@ -1,0 +1,175 @@
+/* Phase 5.2 — printable prepaid drop-off label */
+
+.label-sheet {
+  background: #ffffff;
+  color: #1b1035;
+  border: 2px solid #1b1035;
+  border-radius: 1.25rem;
+  padding: 1.5rem 1.35rem;
+  box-shadow: 0 12px 40px rgba(27, 16, 53, 0.08);
+}
+
+.label-sheet-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid rgba(37, 211, 102, 0.45);
+}
+
+.label-brand {
+  margin: 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.label-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(27, 16, 53, 0.5);
+}
+
+.label-order-id {
+  margin: 0;
+  font-size: 2.35rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.label-product {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.label-location {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: rgba(27, 16, 53, 0.65);
+}
+
+.label-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(37, 211, 102, 0.08);
+  border: 1px dashed rgba(37, 211, 102, 0.45);
+}
+
+#label-qr {
+  width: 200px;
+  height: 200px;
+  background: #fff;
+}
+
+.label-qr-caption {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+  text-align: center;
+}
+
+.label-code-block {
+  text-align: center;
+  margin: 0.5rem 0 1rem;
+}
+
+.label-drop-code {
+  margin: 0.35rem 0 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.label-steps {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgba(27, 16, 53, 0.8);
+}
+
+.label-steps li + li {
+  margin-top: 0.25rem;
+}
+
+.label-status {
+  margin: 1rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(27, 16, 53, 0.55);
+}
+
+.label-unpaid {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.75rem;
+  background: rgba(254, 226, 226, 0.85);
+  color: #7f1d1d;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.label-sheet.is-unpaid {
+  border-color: rgba(185, 28, 28, 0.45);
+  opacity: 0.92;
+}
+
+.label-actions a:focus-visible,
+.label-actions button:focus-visible,
+#label-lookup button:focus-visible,
+#order-id:focus-visible {
+  outline: 2px solid #25d366;
+  outline-offset: 2px;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .label-screen-only {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #label-panel {
+    display: block !important;
+  }
+
+  .label-sheet {
+    box-shadow: none;
+    border-radius: 0;
+    border-width: 2px;
+    page-break-inside: avoid;
+  }
+
+  #label-qr {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

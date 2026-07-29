@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Drop-off label — Sokoni Mall</title>
+<meta name="description" content="Print your Sokoni prepaid drop-off label for hub scan — SK-#### tracking." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' } }, fontFamily: { sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], display: ['Fraunces', 'Georgia', 'serif'] } } } };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/label.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
+  <header class="label-screen-only border-b border-black/5 bg-brand-cream/90 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-lg mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="suppliers/list.html" class="text-sm font-medium hover:text-brand-green transition">← Seller dashboard</a>
+      <span class="text-xs font-semibold text-brand-green">Prepaid drop-off</span>
+    </div>
+  </header>
+
+  <main class="max-w-lg mx-auto px-5 py-8">
+    <div class="label-screen-only mb-6">
+      <h1 class="font-display text-3xl font-bold mb-2">Drop-off label</h1>
+      <p class="text-sm text-brand-purple/60">Print or show this at a Sokoni hub after the buyer pays. Hub staff scan the QR / SK code.</p>
+    </div>
+
+    <form id="label-lookup" class="label-screen-only flex flex-col sm:flex-row gap-3 mb-8">
+      <label for="order-id" class="sr-only">Order number</label>
+      <input id="order-id" type="text" placeholder="SK-1042" required autocomplete="off"
+        class="flex-1 min-h-[48px] rounded-2xl border border-black/10 bg-white px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-green" />
+      <button type="submit" class="min-h-[48px] px-6 rounded-full bg-brand-purple text-white font-bold">Load</button>
+    </form>
+
+    <div id="label-loading" class="label-screen-only hidden text-sm text-brand-purple/50">Loading label…</div>
+    <div id="label-error" class="label-screen-only hidden rounded-2xl border border-red-200 bg-red-50 text-red-900 px-5 py-4 text-sm" role="alert"></div>
+
+    <div id="label-panel" class="hidden" aria-live="polite">
+      <article id="label-sheet" class="label-sheet">
+        <header class="label-sheet-header">
+          <p class="label-brand">Sokoni Mall</p>
+          <p class="label-kicker">Prepaid drop-off</p>
+        </header>
+
+        <p class="label-order-id" id="label-order-id">SK-####</p>
+        <p class="label-product" id="label-product">—</p>
+        <p class="label-location" id="label-location"></p>
+
+        <div class="label-qr-wrap">
+          <canvas id="label-qr" width="200" height="200" aria-label="Drop-off QR code"></canvas>
+          <p class="label-qr-caption" id="label-qr-caption">SOKONI:SK-####</p>
+        </div>
+
+        <div class="label-code-block">
+          <p class="label-kicker">Hub scan code</p>
+          <p class="label-drop-code" id="label-drop-code">SK-####</p>
+        </div>
+
+        <ol class="label-steps">
+          <li>Pack the item securely.</li>
+          <li>Attach or show this label at a Sokoni hub.</li>
+          <li>Staff scan the QR — status moves to dropped off / in transit.</li>
+        </ol>
+
+        <p class="label-status" id="label-shipment">Shipment: —</p>
+        <p class="label-unpaid" id="label-unpaid" hidden>Payment not confirmed yet — do not drop off until the buyer pays.</p>
+      </article>
+
+      <div class="label-screen-only label-actions mt-6 flex flex-wrap gap-3">
+        <button type="button" id="label-print-btn" class="min-h-[48px] px-6 rounded-full bg-brand-green text-brand-purple font-bold">Print label</button>
+        <a id="label-track-link" href="track.html" class="min-h-[48px] inline-flex items-center px-6 rounded-full border border-brand-purple/20 font-semibold hover:border-brand-green transition">Track order</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script src="assets/js/label.js"></script>
+</body>
+</html>

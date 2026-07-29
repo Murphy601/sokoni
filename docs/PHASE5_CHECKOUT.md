@@ -10,10 +10,10 @@ When Safaricom **Daraja** is configured, payment confirms **automatically** via 
 |-------|--------|
 | Core prepaid + Daraja STK + escrow automation | **Done** (merged earlier) |
 | Web checkout page + bag totals | **Done** |
-| **5.1 Hardening** — STK/callback tests, web status/till UX, COD copy cleanup | This slice |
+| **5.1 Hardening** — STK/callback tests, web status/till UX, COD copy cleanup | **Done** |
 | Photoroom studio | Deferred until more sellers |
-| 5.2 B2C auto seller payout | Stub only — manual `#paid` / withdraw for now |
-| Printable drop-off label page | JSON label API only |
+| **5.2 Printable drop-off label** — `label.html` + QR, seller Print label links site page | This slice |
+| 5.3 B2C auto seller payout | Stub only — manual `#paid` / withdraw for now |
 | Postgres payment persistence | Schema exists; live path uses `orders.json` |
 
 ## Escrow cycle (Depop-style)
@@ -58,7 +58,8 @@ Register the callback URL in the [Safaricom Daraja portal](https://developer.saf
 |--------|------|-------------|
 | GET | `/api/checkout/meta` | Prepaid model, Daraja readiness, till fallback |
 | GET | `/api/checkout/SK-1042` | Checkout status for an order |
-| GET | `/api/checkout/SK-1042/label` | Prepaid drop-off label / QR payload |
+| GET | `/api/checkout/SK-1042/label` | Label JSON payload (product, QR, paid gate) |
+| … | `https://sokonimall.com/label.html?order=SK-1042` | **Printable** drop-off page (seller Print label) |
 | POST | `/api/checkout/SK-1042/stk` | Initiate Daraja STK push (or `manual_till` when unset) |
 | POST | `/api/payments/mpesa-callback` | Safaricom STK callback (auto-confirm) |
 | POST | `/api/payments/daraja/callback` | Alias for mpesa-callback |
@@ -89,6 +90,7 @@ Register the callback URL in the [Safaricom Daraja portal](https://developer.saf
 | WhatsApp flow | `whatsapp-bot/src/services/menu.js`, `webhookHandler.js` |
 | Admin | `whatsapp-bot/src/services/admin.js` |
 | Web checkout | `website/checkout.html`, `website/assets/js/checkout.js` |
+| Printable label | `website/label.html`, `website/assets/js/label.js`, `website/assets/css/label.css` |
 
 ## Smoke
 
@@ -102,6 +104,7 @@ Manual web:
 1. Open `/checkout.html?order=SK-####`
 2. Without `MPESA_*`: till block + readiness copy (no fake STK)
 3. With Daraja: Pay → STK → page polls until `paymentStatus === confirmed`
+4. After pay: seller dashboard **Print label** → `/label.html?order=SK-####` (QR + print)
 
 ## Deploy
 
@@ -114,5 +117,5 @@ Cloudflare Pages deploys `website/` automatically on push to `main`.
 ## Next
 
 - Ops: set live `MPESA_*` + register callback when ready for auto STK
-- Later: printable label page, B2C payout wiring, Postgres payment writes
-- Phase 6 logistics — see [PHASE6_LOGISTICS.md](./PHASE6_LOGISTICS.md)
+- Later: B2C payout wiring, Postgres payment writes
+- Phase 6 logistics — see [PHASE6_LOGISTICS.md](./PHASE6_LOGISTICS.md) (mostly done; live courier APIs later)

@@ -1,5 +1,11 @@
 import { Router } from "express";
-import { checkoutMeta, formatPrepaidCheckoutPrompt, initiateMpesaCheckout, checkoutUrlForOrder } from "../services/prepaid-checkout.js";
+import {
+  checkoutMeta,
+  formatPrepaidCheckoutPrompt,
+  initiateMpesaCheckout,
+  checkoutUrlForOrder,
+  labelPageUrlForOrder,
+} from "../services/prepaid-checkout.js";
 import { generateDropoffLabel } from "../services/escrow-automation.js";
 import { getOrder } from "../services/orders.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
@@ -16,14 +22,22 @@ router.get("/:orderId/label", (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) return res.status(404).json({ error: "order_not_found" });
   const label = generateDropoffLabel(order);
+  const paid = order.customerPaymentStatus === "confirmed";
   res.json({
     orderId: order.id,
+    productName: order.productName || null,
+    buyerLocation: order.location || null,
     dropOffCode: label.dropOffCode,
     trackingCode: label.trackingCode,
     qrPayload: label.qrPayload,
     shipmentStatus: order.shipmentStatus || label.shipmentStatus,
-    paid: order.customerPaymentStatus === "confirmed",
+    paid,
+    labelUrl: label.labelUrl,
+    trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`,
     instructions: label.instructions,
+    message: paid
+      ? "Print this label and drop the parcel at a Sokoni hub."
+      : "Payment not confirmed yet — label unlocks after M-Pesa payment.",
   });
 });
 
@@ -42,7 +56,7 @@ router.get("/:orderId", (req, res) => {
     escrowStatus: order.escrowStatus || "pending",
     shipmentStatus: order.shipmentStatus,
     dropOffCode: order.dropOffCode,
-    labelUrl: order.labelUrl,
+    labelUrl: order.customerPaymentStatus === "confirmed" ? labelPageUrlForOrder(order.id) : order.labelUrl || null,
     checkoutUrl: checkoutUrlForOrder(order.id),
     trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`,
     instructions: formatPrepaidCheckoutPrompt(order),

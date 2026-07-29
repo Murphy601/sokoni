@@ -10,6 +10,7 @@ import { getOrder } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { shipmentStatusLabel } from "./shipments.js";
 import { config } from "../config.js";
+import { labelPageUrlForOrder } from "./prepaid-checkout.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
 import { validateSellerSession } from "./seller-verification.js";
 
@@ -137,8 +138,7 @@ function loadAllOrders() {
 }
 
 function sellerLabelUrl(orderId) {
-  const base = config.botPublicUrl || "https://bot.sokonimall.com";
-  return `${base}/api/checkout/${encodeURIComponent(orderId)}/label`;
+  return labelPageUrlForOrder(orderId);
 }
 
 /** Seller dashboard — paid orders, labels, shipment status (Phases 5–6). */
