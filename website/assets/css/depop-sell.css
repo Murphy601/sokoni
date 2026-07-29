@@ -102,6 +102,73 @@ html.dark .sell-media-slot-optional {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+.sell-studio-badge {
+  position: absolute;
+  z-index: 2;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #1b1035;
+  background: #25d366;
+  pointer-events: none;
+}
+
+.sell-media-slot.has-studio {
+  border-color: rgba(37, 211, 102, 0.85);
+  border-style: solid;
+}
+
+.sell-studio-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(37, 211, 102, 0.28);
+  background: rgba(37, 211, 102, 0.08);
+}
+
+html.dark .sell-studio-controls {
+  border-color: rgba(37, 211, 102, 0.35);
+  background: rgba(37, 211, 102, 0.12);
+}
+
+.sell-studio-controls.hidden,
+.sell-studio-controls[hidden] {
+  display: none;
+}
+
+.sell-studio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.sell-studio-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sell-studio-toggle input {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: #25d366;
+}
+
+#studio-preview-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .sell-fee-table {
   width: 100%;
   border-collapse: collapse;

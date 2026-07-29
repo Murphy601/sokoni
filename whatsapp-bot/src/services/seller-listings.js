@@ -24,7 +24,7 @@ import {
   applyListingFieldsToProduct,
   VALID_CONDITIONS,
 } from "./listing-generator.js";
-import { processListingWithStudio } from "./listing-studio.js";
+import { isStudioConfigured, processListingWithStudio } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, summarizeModeration } from "./listing-moderation.js";
@@ -450,7 +450,7 @@ export async function getSellerListingMeta() {
     geminiVisionEnabled: geminiVisionAvailable(),
     dbEnabled: dbProductsAvailable(),
     instantPublish: true,
-    studioEnabled: Boolean(process.env.PHOTOROOM_API_KEY?.trim()),
+    studioEnabled: isStudioConfigured(),
     note: "Set up your shop (phone + M-Pesa), then list. Listings go live instantly; moderation runs after publish.",
   };
 }

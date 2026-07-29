@@ -7,6 +7,7 @@ import {
   listSellerListings,
   getSellerListingMeta,
 } from "../services/seller-listings.js";
+import { previewStudioClean } from "../services/listing-studio.js";
 import { sellerSessionFromReq } from "../services/seller-verification.js";
 
 const router = Router();
@@ -50,7 +51,7 @@ router.post("/generate", async (req, res) => {
   }
 });
 
-/** POST /api/seller/listings/studio — background removal only (preview) */
+/** POST /api/seller/listings/studio — background removal only (no AI draft) */
 router.post("/studio", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
   const sessionToken = sellerSessionFromReq(req);
@@ -59,15 +60,17 @@ router.post("/studio", async (req, res) => {
     return res.status(sessionAuthStatus(check)).json({ error: check.error, message: check.message });
   }
   if (!imageBase64) {
-    return res.status(400).json({ error: "missing_image" });
+    return res.status(400).json({ error: "missing_image", message: "Add a cover photo first." });
   }
   try {
     const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
-    const result = await generateSellerListingDraft(buffer, mimeType, "", { skipStudio: false });
+    const result = await previewStudioClean(buffer, mimeType);
     res.json({
       studioApplied: result.studioApplied,
       cleanImageBase64: result.cleanImageBase64,
-      draft: result.draft,
+      reason: result.reason,
+      message: result.message,
+      seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {
     res.status(422).json({ error: "studio_failed", message: err.message });
