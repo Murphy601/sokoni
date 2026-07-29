@@ -27,5 +27,31 @@
     "brand": "Delamere",
     "color": "white",
     "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack."
+  },
+  {
+    "id": "pt-tlom7-001",
+    "name": "OKING Feature Phone - Black",
+    "category": "phones-tablets",
+    "priceKes": 743,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "📱",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/pt-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/pt-tlom7-001.jpg"
+    ],
+    "subcategory": "smartphones",
+    "browseCategory": "electronics",
+    "browseSubCategory": "phones",
+    "condition": "fair_condition",
+    "isSecondhand": true,
+    "brand": "OKING",
+    "color": "black",
+    "description": "Compact feature phone with a classic keypad design, perfect for basic calls and texting."
   }
 ]
