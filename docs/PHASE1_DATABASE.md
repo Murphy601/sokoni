@@ -364,3 +364,14 @@ Run migration once after deploy. Seller listings (Phase 4) upsert to Postgres on
 Phase 2 loads the storefront from **`/api/products`** when the bot DB is live (see [`PHASE2_BROWSE.md`](PHASE2_BROWSE.md)).
 
 Legacy JSON path (`website/data/products.json`) remains as fallback. To unpause JSON export: set `"paused": false` in `website/data/catalog-paused.json` and rebuild.
+
+## Phase 1 closure docs
+
+- [`PHASE1_QA.md`](PHASE1_QA.md) — end-to-end + auth regression checklist
+- [`PHASE1_OPS.md`](PHASE1_OPS.md) — migrate / rollback / monitoring
+
+Automated auth regression:
+
+```bash
+cd whatsapp-bot && npm run test:social
+```
