@@ -676,7 +676,10 @@ async function onSaveDraft() {
 async function loadMeta() {
   try {
     const res = await fetch(`${LISTINGS_API}/meta`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      renderListingAiStatus(null);
+      return;
+    }
     meta = await res.json();
     populateBrowseSelects();
     populateSelect(el("draft-condition"), meta.conditions || Object.keys(CONDITION_LABELS), CONDITION_LABELS);
@@ -686,10 +689,35 @@ async function loadMeta() {
         `<option value="">—</option>` + meta.eras.map((e) => `<option value="${e}">${e}</option>`).join("");
     }
     populateWeightClassSelect(draft.estimatedWeightClass);
+    renderListingAiStatus(meta);
   } catch {
     populateBrowseSelects();
     populateWeightClassSelect();
+    renderListingAiStatus(null);
   }
+}
+
+function renderListingAiStatus(metaData) {
+  const node = el("listing-ai-status");
+  if (!node) return;
+  if (!metaData) {
+    node.textContent =
+      "Could not check AI status. You can still list manually — add a caption like “130 ksh women sandals” or fill the form yourself.";
+    return;
+  }
+  const visionOn = Boolean(metaData.visionModel || metaData.visionProvider);
+  const geminiOn = Boolean(metaData.geminiVisionEnabled);
+  const studioOn = Boolean(metaData.studioEnabled);
+  const parts = [];
+  if (visionOn) {
+    parts.push("AI can draft from your cover photo");
+    if (geminiOn) parts.push("Gemini fallback on");
+  } else {
+    parts.push("Photo AI offline — use a caption or fill details manually");
+  }
+  if (studioOn) parts.push("background cleanup available");
+  parts.push("price = what you receive; buyers pay shipping + fee (prepaid)");
+  node.textContent = parts.join(" · ") + ".";
 }
 
 async function loadMyListings() {

@@ -387,6 +387,9 @@
       <section id="panel-media" class="sell-panel is-active rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
         <h2 class="font-bold text-lg">Product photos (1 required)</h2>
         <p class="text-sm text-brand-purple/60 dark:text-white/60">Cover photo required. Up to 4 photos total. Optional short video.</p>
+        <p id="listing-ai-status" class="text-xs text-brand-purple/65 dark:text-white/65 rounded-2xl border border-brand-purple/10 dark:border-white/10 px-3 py-2">
+          Checking AI draft… Listing still works if AI skips — add a caption or fill details yourself.
+        </p>
         <div class="sell-media-grid">
           <div id="media-slot-0" class="sell-media-slot sell-media-slot-cover"><span class="sell-slot-label">📷 Cover *</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
           <div id="media-slot-1" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
@@ -396,6 +399,7 @@
         <label class="block text-sm font-medium">
           Caption hint for AI (optional)
           <input id="photo-caption" type="text" placeholder="e.g. 130 ksh women sandals burgundy" class="sell-form-input" />
+          <span class="sell-tag-hint">Price is what you receive. Buyers see shipping + platform fee on top. Prepaid escrow — no COD.</span>
         </label>
         <label class="block text-sm font-medium">
           Video (optional)
