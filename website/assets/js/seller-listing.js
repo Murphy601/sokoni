@@ -838,11 +838,22 @@ async function hydrateShopEditFormFromSocial() {
   }
 }
 
+function applySellerNotifyPrefs(data = {}) {
+  if (el("edit-shop-wa-notify")) {
+    el("edit-shop-wa-notify").checked = data.socialWaNotify !== false;
+  }
+  if (el("edit-shop-wa-notify-follows")) {
+    el("edit-shop-wa-notify-follows").checked = data.socialWaNotifyFollows !== false;
+  }
+  if (el("edit-shop-wa-notify-likes")) {
+    el("edit-shop-wa-notify-likes").checked = data.socialWaNotifyLikes !== false;
+  }
+}
+
 async function loadSellerNotifyPrefs() {
   const phone = apiPhone();
   const token = getSessionToken();
-  const box = el("edit-shop-wa-notify");
-  if (!box || !phone || !token) return;
+  if (!el("edit-shop-wa-notify") || !phone || !token) return;
   try {
     const params = new URLSearchParams({
       phone: normalizePhoneInput(phone),
@@ -851,7 +862,7 @@ async function loadSellerNotifyPrefs() {
     const res = await fetch(`${SOCIAL_API}/notify-prefs?${params.toString()}`);
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) return;
-    box.checked = parsed.data?.socialWaNotify !== false;
+    applySellerNotifyPrefs(parsed.data || {});
   } catch {
     /* leave default */
   }
@@ -872,6 +883,12 @@ async function saveShopProfile(event) {
     location: el("edit-shop-location")?.value || "",
     avatarUrl: el("edit-shop-avatar")?.value || "",
     socialWaNotify: el("edit-shop-wa-notify") ? el("edit-shop-wa-notify").checked : true,
+    socialWaNotifyFollows: el("edit-shop-wa-notify-follows")
+      ? el("edit-shop-wa-notify-follows").checked
+      : true,
+    socialWaNotifyLikes: el("edit-shop-wa-notify-likes")
+      ? el("edit-shop-wa-notify-likes").checked
+      : true,
   });
   const btn = el("edit-shop-save-btn");
   if (btn) btn.disabled = true;
@@ -905,9 +922,7 @@ async function saveShopProfile(event) {
     fillShopEditFormFromSeller(sellerProfile);
     if (el("edit-shop-bio")) el("edit-shop-bio").value = shop.bio || "";
     if (el("edit-shop-avatar")) el("edit-shop-avatar").value = shop.avatarUrl || "";
-    if (el("edit-shop-wa-notify") && shop.socialWaNotify != null) {
-      el("edit-shop-wa-notify").checked = shop.socialWaNotify !== false;
-    }
+    applySellerNotifyPrefs(shop);
     setEditShopStatus(parsed.data?.message || "Shop profile updated.");
   } catch {
     setEditShopStatus("Network error while saving shop profile.", true);

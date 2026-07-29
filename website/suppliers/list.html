@@ -164,13 +164,22 @@
             Avatar URL
             <input id="edit-shop-avatar" type="url" maxlength="1000" class="sell-form-input mt-1" placeholder="https://…" />
           </label>
-          <label class="md:col-span-2 flex items-start gap-3 text-sm font-medium min-h-[44px]">
-            <input id="edit-shop-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
-            <span>
-              WhatsApp pings for new followers and likes
-              <span class="block text-xs font-normal text-brand-purple/60 dark:text-white/60">Turn off if your chat gets noisy. Offers and orders still notify.</span>
-            </span>
-          </label>
+          <fieldset class="md:col-span-2 space-y-2">
+            <legend class="text-sm font-medium">WhatsApp social pings</legend>
+            <p class="text-xs text-brand-purple/60 dark:text-white/60">Master switch plus per-event. Orders stay on. Offer replies are under buyer Activity.</p>
+            <label class="flex items-start gap-3 text-sm font-medium min-h-[44px]">
+              <input id="edit-shop-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+              <span>All social WhatsApp pings</span>
+            </label>
+            <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
+              <input id="edit-shop-wa-notify-follows" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+              <span>New followers</span>
+            </label>
+            <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
+              <input id="edit-shop-wa-notify-likes" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+              <span>Listing likes</span>
+            </label>
+          </fieldset>
           <div class="md:col-span-2 flex flex-wrap items-center gap-3">
             <button type="submit" id="edit-shop-save-btn" class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
               Save shop profile
