@@ -197,6 +197,12 @@ Body (any subset):
 
 Returns `{ success, shop, message }`. Handle clashes return `409 handle_taken`.
 
+### Seller shop activity
+
+`GET /api/social/activity`
+
+Requires seller WhatsApp session. Returns recent follow + like events on the seller's storefront.
+
 ### Offers (Depop-style negotiation)
 
 Create/update pending offer:

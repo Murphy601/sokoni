@@ -9,6 +9,7 @@ import {
   listSellerReviews,
   getUserSocialStats,
   listOffers,
+  listSellerSocialActivity,
   listUserFollowConnections,
   resetSellerHandledOfferQueue,
   respondToOffer,
@@ -199,6 +200,45 @@ router.patch("/shop/profile", async (req, res) => {
       shop: result.shop,
       message: "Shop profile updated.",
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/activity — seller feed: new followers + likes on your items */
+router.get("/activity", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requested = Number(req.query.userId);
+    if (
+      Number.isInteger(requested) &&
+      requested > 0 &&
+      requested !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the activity profile in this request.",
+      });
+    }
+
+    const result = await listSellerSocialActivity({
+      sellerUserId: auth.sellerUserId,
+      limit: req.query.limit,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
