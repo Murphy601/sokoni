@@ -6,7 +6,7 @@ Homepage (`index.html`) uses a **Depop-style layout** with Sokoni design tokens 
 
 1. **Shell baseline** — prepaid trust banner, token-aligned chrome, shippable bottom nav
 2. **Buyer profile page** — `profile.html`, WhatsApp session, saved count, Profile tab
-3. _(next)_ Cross-page shell parity (shop, activity, inbox share header/nav)
+3. **Cross-page shell parity** — shared header + bottom nav on activity / inbox / shop / track / profile
 4. _(later)_ Hero media polish without cluttering first viewport
 
 ## Layout
@@ -17,8 +17,9 @@ Homepage (`index.html`) uses a **Depop-style layout** with Sokoni design tokens 
 | Category strip (Women, Men, Pre-Loved, Brand New…) | `index.html` + `assets/js/depop-nav.js` |
 | Compact hero carousel | `depop-shell.css` + `depop-hero-carousel.js` |
 | Photo grid first (`#deals`) | `index.html` |
-| Mobile bottom nav (Home, Explore, Sell, Inbox, Profile) | `depop-shell.css` + `index.html` / `profile.html` |
+| Mobile bottom nav (Home, Explore, Sell, Inbox, Profile) | `depop-shell.css` + `index.html` / `shell-chrome.js` |
 | Buyer profile | `profile.html` + `assets/js/buyer-profile.js` |
+| Shared subpage chrome | `assets/js/shell-chrome.js` (`#sokoni-shell-header`, `#sokoni-shell-nav`) |
 
 ## Copy model
 
@@ -49,6 +50,7 @@ Root font scaling: `depop-shell.css` uses `clamp()` on mobile for readable Andro
 - `SokoniCatalogNav.open()` — Explore bottom-nav item (falls back to `index.html#deals`)
 - `SokoniShopShell.openBag()` — bag from header
 - `SokoniBuyerAuth` — profile / activity / inbox WhatsApp session
+- `SokoniShellChrome` — mounts compact header + bottom nav on subpages
 - Search synced across `#depop-search`, `#depop-search-mobile`, legacy `#hero-search`
 
 ## Buyer profile (slice 2)
@@ -60,11 +62,30 @@ Root font scaling: `depop-shell.css` uses `clamp()` on mobile for readable Andro
 - Quick links: Activity, Inbox, Track, Sell
 - No new bot profile API (editable name/avatar later)
 
+## Shell parity (slice 3)
+
+Subpages mount shared chrome via placeholders:
+
+```html
+<body data-shell-page="activity" class="has-depop-shell …">
+  <div id="sokoni-shell-header"></div>
+  …page content…
+  <div id="sokoni-shell-nav"></div>
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/depop-nav.js"></script>
+</body>
+```
+
+Covered: `activity.html`, `inbox.html`, `shop.html`, `track.html`, `profile.html`.
+
+Activity / track / shop highlight **Profile** in the bottom nav (closest hub). Inbox highlights Inbox.
+
 ## Quick check
 
 1. Mobile: prepaid green banner visible under header
 2. Category chips still filter New arrivals
 3. Bottom nav: Explore opens catalog drawer; Inbox → `inbox.html`; Profile → `profile.html`
 4. Profile: verify WhatsApp → session card; sign out clears it
-5. Sell CTA uses green; no Depop red in shell chrome
-6. Product sheet + bag count still work
+5. Activity / Inbox / Shop / Track show the same prepaid banner + bottom nav
+6. Sell CTA uses green; no Depop red in shell chrome
+7. Product sheet + bag count still work
