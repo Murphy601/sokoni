@@ -27,7 +27,8 @@
 
   <main class="max-w-lg mx-auto px-5 py-10">
     <h1 class="font-display text-3xl font-bold mb-2">Pay your order</h1>
-    <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-8">Enter your <strong>SK-####</strong> order number from WhatsApp. You pay upfront — funds held in escrow until delivery.</p>
+    <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-2">Enter your <strong>SK-####</strong> order number from WhatsApp. You pay upfront — funds held in escrow until delivery.</p>
+    <p id="checkout-readiness" class="text-xs text-brand-purple/55 dark:text-white/55 mb-8">Checking M-Pesa options…</p>
 
     <form id="checkout-lookup" class="flex flex-col sm:flex-row gap-3 mb-8">
       <label for="order-id" class="sr-only">Order number</label>
@@ -57,6 +58,14 @@
           <input id="checkout-phone" type="tel" inputmode="tel" placeholder="07xx or 2547xx" class="sell-form-input" />
         </label>
         <button id="checkout-pay-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full">Pay with M-Pesa</button>
+      </div>
+
+      <div id="checkout-till-block" class="hidden rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 px-4 py-4 space-y-2 text-sm">
+        <p class="font-semibold">Pay Buy Goods till</p>
+        <p>Till: <strong id="checkout-till">—</strong></p>
+        <p>Name: <strong id="checkout-till-name">—</strong></p>
+        <p>Reference: <strong id="checkout-till-ref">SK-####</strong></p>
+        <p class="text-xs text-brand-purple/60 dark:text-white/60">After paying, reply <strong>paid</strong> on WhatsApp so we can verify and start dispatch.</p>
       </div>
 
       <p class="text-xs text-brand-purple/50 dark:text-white/50">🔒 Sokoni holds payment in escrow until your order is delivered. <a href="track.html" id="checkout-track-link" class="text-brand-green font-semibold hover:underline">Track order</a></p>

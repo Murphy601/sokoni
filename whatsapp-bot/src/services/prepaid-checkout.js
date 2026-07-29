@@ -86,7 +86,14 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
   }
 
   if (!isDarajaConfigured()) {
-    return { ok: true, method: "manual_till", stkAvailable: false };
+    return {
+      ok: true,
+      method: "manual_till",
+      stkAvailable: false,
+      till: config.store.mpesaTill,
+      tillName: config.store.mpesaTillName,
+      message: "Pay Buy Goods till with your order number as reference, then reply paid on WhatsApp.",
+    };
   }
 
   const payPhone = phone || order.phone || order.mpesaPhone;
@@ -134,6 +141,8 @@ export function checkoutMeta() {
     escrow: true,
     autoConfirm: isDarajaConfigured(),
     paymentMethods: isDarajaConfigured() ? ["mpesa_stk"] : ["manual_till"],
+    till: config.store.mpesaTill || null,
+    tillName: config.store.mpesaTillName || null,
     callbackUrl: config.mpesa.callbackUrl || null,
     note: isDarajaConfigured()
       ? "Daraja STK auto-confirms payment via webhook — no admin #payconfirm needed."

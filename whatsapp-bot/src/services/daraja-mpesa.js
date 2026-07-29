@@ -152,6 +152,8 @@ export function parseStkCallback(body) {
     mpesaReceiptNumber: pick("MpesaReceiptNumber") ? String(pick("MpesaReceiptNumber")) : null,
     transactionDate: pick("TransactionDate") ? String(pick("TransactionDate")) : null,
     phoneNumber: pick("PhoneNumber") ? formatMpesaPhone(String(pick("PhoneNumber"))) : null,
+    // Rarely present on STK callbacks; kept for opportunistic order resolve.
+    accountReference: pick("AccountReference") ? String(pick("AccountReference")) : null,
   };
 }
 
