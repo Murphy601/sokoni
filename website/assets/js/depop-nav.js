@@ -128,6 +128,10 @@
       setBottomNavActive(null);
       return;
     }
+    if (path.includes("profile")) {
+      setBottomNavActive("profile");
+      return;
+    }
     if (path.includes("inbox")) {
       setBottomNavActive("inbox");
       return;
@@ -159,6 +163,8 @@
           setBottomNavActive("explore");
           if (window.SokoniCatalogNav?.open) {
             window.SokoniCatalogNav.open();
+          } else if (!document.getElementById("deals")) {
+            window.location.href = "index.html#deals";
           } else {
             focusMobileSearch();
             scrollToDeals();
@@ -176,8 +182,8 @@
           setBottomNavActive("home");
           return;
         }
-        if (action === "activity" || action === "inbox" || action === "track" || action === "profile") {
-          setBottomNavActive(action === "profile" ? "activity" : action);
+        if (action === "profile" || action === "activity" || action === "inbox" || action === "track") {
+          setBottomNavActive(action);
           return;
         }
         if (action === "bag") {
