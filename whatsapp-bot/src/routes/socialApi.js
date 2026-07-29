@@ -12,6 +12,8 @@ import {
   listBuyerSocialActivity,
   listSellerSocialActivity,
   listUserFollowConnections,
+  getUserNotifyPrefs,
+  updateUserNotifyPrefs,
   resetSellerHandledOfferQueue,
   respondToOffer,
   sendOfferReminder,
@@ -199,6 +201,17 @@ router.patch("/shop/profile", async (req, res) => {
       });
     }
 
+    // Optional notify pref on the same save.
+    let notifyPrefs = null;
+    if (req.body?.socialWaNotify !== undefined) {
+      notifyPrefs = await updateUserNotifyPrefs({
+        userId: auth.sellerUserId,
+        socialWaNotify: req.body.socialWaNotify,
+      });
+    } else {
+      notifyPrefs = await getUserNotifyPrefs({ userId: auth.sellerUserId });
+    }
+
     // Keep JSON supplier handle/name in sync so seller session auth still resolves.
     updatePeerSellerProfile(auth.phone, {
       shopName: result.shop?.shopName,
@@ -208,9 +221,87 @@ router.patch("/shop/profile", async (req, res) => {
 
     res.json({
       success: true,
-      shop: result.shop,
+      shop: {
+        ...result.shop,
+        socialWaNotify: notifyPrefs?.error ? result.shop?.socialWaNotify !== false : notifyPrefs?.socialWaNotify !== false,
+      },
       message: "Shop profile updated.",
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Soft-resolve buyer or seller session for notify prefs.
+ * Prefer seller when seller context is present and valid; else buyer.
+ */
+async function resolveNotifyPrefsUser(req) {
+  if (hasSellerSessionContext(req, req.body || req.query || {})) {
+    const seller = await resolveAuthenticatedSellerSocialContext(req);
+    if (seller.ok) {
+      return { ok: true, userId: seller.sellerUserId, role: "seller" };
+    }
+    if (!isAmbiguousSessionAuthError(seller.error)) {
+      return seller;
+    }
+  }
+  if (hasBuyerSessionContext(req, req.body || req.query || {})) {
+    const buyer = await resolveAuthenticatedBuyerSocialContext(req);
+    if (buyer.error) return buyer;
+    return { ok: true, userId: buyer.buyerUserId, role: "buyer" };
+  }
+  return {
+    error: "session_required",
+    message: "Sign in with WhatsApp to manage notification preferences.",
+    status: 401,
+  };
+}
+
+/** GET /api/social/notify-prefs — buyer or seller WhatsApp social ping preference */
+router.get("/notify-prefs", async (req, res) => {
+  try {
+    const auth = await resolveNotifyPrefsUser(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+    const result = await getUserNotifyPrefs({ userId: auth.userId });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json({ ...result, role: auth.role });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /api/social/notify-prefs — mute/unmute WhatsApp social pings */
+router.patch("/notify-prefs", async (req, res) => {
+  try {
+    const auth = await resolveNotifyPrefsUser(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+    const result = await updateUserNotifyPrefs({
+      userId: auth.userId,
+      socialWaNotify: req.body?.socialWaNotify,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json({ ...result, role: auth.role });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

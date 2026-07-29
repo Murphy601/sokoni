@@ -22,7 +22,7 @@ function displayName(row) {
 async function loadUser(userId) {
   if (!isDbEnabled() || !userId) return null;
   const { rows } = await query(
-    `SELECT id, phone, handle, shop_name, display_name
+    `SELECT id, phone, handle, shop_name, display_name, social_wa_notify
        FROM users
       WHERE id = $1
       LIMIT 1`,
@@ -33,6 +33,9 @@ async function loadUser(userId) {
 
 async function sendUserText(userId, text) {
   const user = await loadUser(userId);
+  if (user && user.social_wa_notify === false) {
+    return { skipped: true, reason: "muted" };
+  }
   const phone = String(user?.phone || "").replace(/\D/g, "");
   if (!phone || phone.length < 9) {
     return { skipped: true, reason: "no_phone" };
