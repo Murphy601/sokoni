@@ -22,10 +22,11 @@ bash scripts/health-check.sh
 Image is hardcoded as `devlikeapro/waha:latest-2026.7.2` in `docker-compose.waha.yml`
 (avoid `${WAHA_IMAGE:-repo:tag}` — docker-compose v1 can break on the colon in the tag).
 
-On each start, the container fetches the live WhatsApp Web version from
-`web.whatsapp.com/sw.js` (via `scripts/fetch-wa-version.js`) and sets
-`WAHA_NOWEB_WA_VERSION`. Override with `export WAHA_NOWEB_WA_VERSION=2.3000.…`
-before deploy if needed.
+`deploy-waha.sh` fetches the live WhatsApp Web version from `web.whatsapp.com/sw.js`
+(`scripts/fetch-wa-version.js`) and passes it as `WAHA_NOWEB_WA_VERSION` into compose.
+Override with `export WAHA_NOWEB_WA_VERSION=2.3000.…` before deploy if needed.
+Do not use a custom container entrypoint for this on docker-compose v1 — it can
+leave the container “Up” with no HTTP API.
 
 Expect session `WORKING`. Public probe:
 

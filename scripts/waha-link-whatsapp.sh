@@ -35,7 +35,10 @@ session_status() {
 echo "==> WAHA at $WAHA_URL (session: $SESSION)"
 
 if ! curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions" >/dev/null 2>&1; then
-  echo "ERROR: WAHA is not running. Start it first:"
+  echo "ERROR: WAHA API not reachable at $WAHA_URL"
+  waha_print_status
+  waha_print_recent_logs 40
+  echo "Start / repair:"
   echo "  bash scripts/deploy-waha.sh"
   exit 1
 fi
