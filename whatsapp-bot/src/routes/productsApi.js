@@ -166,7 +166,7 @@ router.post("/create", async (req, res) => {
   }
 });
 
-/** POST /api/products/like — toggle like by { userId, productId } */
+/** POST /api/products/like — toggle or set like by { userId, productId, liked? } */
 router.post("/like", async (req, res) => {
   try {
     const gated = await applyBuyerIdentityAuth(req, req.body || {}, "userId");

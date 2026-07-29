@@ -1,9 +1,15 @@
 /**
  * Phase 5 — Saved bag with all-in prepaid totals.
+ * When a buyer WhatsApp session exists, bag hearts also sync social likes (best-effort).
  */
 (function () {
   const BAG_KEY = "sokoni-bag";
   const WHATSAPP_NUMBER = "254117422428";
+  const API_BASE =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      ? "http://localhost:3001"
+      : "https://bot.sokonimall.com";
+  const PRODUCT_API_BASE = `${API_BASE}/api/products`;
 
   /** @type {Set<string>} */
   let bagIds = new Set();
@@ -42,6 +48,31 @@
     return getProducts().find((p) => p.id === id) || null;
   }
 
+  async function syncSocialLike(productId, liked) {
+    const session = window.SokoniBuyerAuth?.readSession?.();
+    if (!session?.userId || !productId) return;
+    try {
+      const payload = window.SokoniBuyerAuth?.authFields
+        ? window.SokoniBuyerAuth.authFields({
+            userId: session.userId,
+            productId,
+            liked: Boolean(liked),
+          })
+        : {
+            userId: session.userId,
+            productId,
+            liked: Boolean(liked),
+          };
+      await fetch(`${PRODUCT_API_BASE}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Bag remains local; social sync is best-effort.
+    }
+  }
+
   function toggleBag(id) {
     if (!id) return false;
     const wasSaved = bagIds.has(id);
@@ -50,7 +81,16 @@
     saveBag();
     const saved = bagIds.has(id);
     window.SokoniFeed?.trackSave?.(id, saved);
+    void syncSocialLike(id, saved);
     return saved;
+  }
+
+  function removeFromBag(id) {
+    if (!id || !bagIds.has(id)) return false;
+    bagIds.delete(id);
+    saveBag();
+    void syncSocialLike(id, false);
+    return true;
   }
 
   function isInBag(id) {
@@ -203,8 +243,7 @@
     document.getElementById("bag-sheet-list")?.addEventListener("click", (e) => {
       const remove = e.target.closest("[data-remove-id]");
       if (remove) {
-        bagIds.delete(remove.dataset.removeId);
-        saveBag();
+        removeFromBag(remove.dataset.removeId);
         renderBagSheet();
         window.SokoniProductSheet?.syncSaveButton?.(remove.dataset.removeId);
         return;
