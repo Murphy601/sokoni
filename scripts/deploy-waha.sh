@@ -19,6 +19,24 @@ fi
 echo "==> Starting WAHA from $COMPOSE_FILE (repo: $SOKONI_REPO)"
 cd "$SOKONI_REPO"
 
+if [ "${WIPE_WAHA_SESSIONS:-}" = "1" ]; then
+  waha_wipe_sessions_volume
+fi
+
+# Resolve WhatsApp Web version on the host (required — empty env breaks compose/NOWEB).
+if [ -z "${WAHA_NOWEB_WA_VERSION:-}" ]; then
+  if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/fetch-wa-version.js" ]; then
+    WAHA_NOWEB_WA_VERSION="$(node "$SCRIPT_DIR/fetch-wa-version.js" 2>/dev/null || true)"
+  fi
+fi
+if [ -z "${WAHA_NOWEB_WA_VERSION:-}" ]; then
+  # Built-in floor from WAHA 2026.7.2 / current Baileys pin — better than empty.
+  WAHA_NOWEB_WA_VERSION="2.3000.1043857760"
+  echo "==> Could not fetch live WA version — using fallback $WAHA_NOWEB_WA_VERSION"
+fi
+export WAHA_NOWEB_WA_VERSION
+echo "==> WAHA_NOWEB_WA_VERSION=$WAHA_NOWEB_WA_VERSION"
+
 # Pull the pinned image explicitly (avoid compose ${image:tag} default interpolation bugs).
 if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
   echo "==> Pulling WAHA image ($WAHA_DEFAULT_IMAGE) — set SKIP_WAHA_PULL=1 to skip"
@@ -82,7 +100,33 @@ if [ "$life" != "0" ]; then
 fi
 
 echo "==> WAHA media config OK"
+echo "==> WAHA_NOWEB_WA_VERSION in container:"
+docker exec "$WAHA_CID" env | grep '^WAHA_NOWEB_WA_VERSION=' || echo "(missing)"
 waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml ps
+
+echo "==> Waiting for WAHA HTTP API..."
+api_ok=0
+for i in $(seq 1 60); do
+  if curl -sf -H "X-Api-Key: ${WAHA_KEY}" "${WAHA_URL}/api/sessions" >/dev/null 2>&1; then
+    echo "==> WAHA API ready (${i}s)"
+    api_ok=1
+    break
+  fi
+  # Surface crash-loops early
+  if [ $((i % 10)) -eq 0 ]; then
+    echo "  … still waiting (${i}s)"
+    waha_print_recent_logs 15
+  fi
+  sleep 1
+done
+
+if [ "$api_ok" -ne 1 ]; then
+  echo "ERROR: WAHA container is up but API never became ready at $WAHA_URL"
+  waha_print_status
+  waha_print_recent_logs 80
+  echo "Inspect: docker logs $WAHA_CID --tail 100"
+  exit 1
+fi
 
 if [ -f "$SCRIPT_DIR/configure-waha-session.sh" ]; then
   if ! bash "$SCRIPT_DIR/configure-waha-session.sh"; then

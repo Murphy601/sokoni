@@ -35,7 +35,10 @@ session_status() {
 echo "==> WAHA at $WAHA_URL (session: $SESSION)"
 
 if ! curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions" >/dev/null 2>&1; then
-  echo "ERROR: WAHA is not running. Start it first:"
+  echo "ERROR: WAHA API not reachable at $WAHA_URL"
+  waha_print_status
+  waha_print_recent_logs 40
+  echo "Start / repair:"
   echo "  bash scripts/deploy-waha.sh"
   exit 1
 fi
@@ -89,9 +92,16 @@ if [ "$STATUS" != "SCAN_QR_CODE" ]; then
   echo ""
   echo "ERROR: Pairing not ready (status=$STATUS)."
   echo "       WhatsApp never reached SCAN_QR_CODE — usually WA Connection Failure."
+  echo "       If logs show connected → attempting registration → Connection Failure,"
+  echo "       and appVersion tertiary ~1035920091, the NOWEB WhatsApp Web version is stale."
+  echo "       Fix (on VM):"
+  echo "         cd ~/sokoni && git pull --rebase origin main"
+  echo "         # On phone: Linked devices → unlink old Sokoni / desktop sessions"
+  echo "         WIPE_WAHA_SESSIONS=1 bash scripts/deploy-waha.sh"
+  echo "         bash scripts/waha-link-whatsapp.sh"
   echo "       Check logs:"
   echo "         source scripts/lib/waha-common.sh && waha_print_recent_logs 40"
-  echo "       Then retry after unlinking old devices on the phone:"
+  echo "       API-only reset (keeps volume keys — often not enough):"
   echo "         RESET_WAHA_SESSION=1 bash scripts/waha-link-whatsapp.sh"
   exit 1
 fi

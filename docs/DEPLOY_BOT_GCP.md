@@ -234,7 +234,17 @@ Full reset (forces re-link):
 RESET_WAHA_SESSION=1 bash scripts/waha-link-whatsapp.sh
 ```
 
-Image is pinned via `WAHA_IMAGE` / `docker-compose.waha.yml` (`latest-2026.6.2`). Scripts resolve the container by compose project `sokoni-waha`, not `ancestor=…:latest`.
+If logs loop `connected → attempting registration → Connection Failure` and never
+reach `SCAN_QR_CODE`, wipe the sessions volume (API reset is not enough) and
+redeploy the pinned `2026.7.2` image (fixes stale NOWEB WA web version):
+
+```bash
+# Phone: Linked devices → unlink old Sokoni / desktop sessions first
+WIPE_WAHA_SESSIONS=1 bash scripts/deploy-waha.sh
+bash scripts/waha-link-whatsapp.sh
+```
+
+Image is pinned via `WAHA_IMAGE` / `docker-compose.waha.yml` (`latest-2026.7.2`). Scripts resolve the container by compose project `sokoni-waha`, not `ancestor=…:latest`.
 
 Use the same `WAHA_API_KEY` in `whatsapp-bot/.env` and when starting compose (`export WAHA_API_KEY=…` before `deploy-waha.sh`).
 
