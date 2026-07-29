@@ -191,7 +191,7 @@
 
   function renderBody(product) {
     const src = resolveImage(product);
-    const saved = window.SokoniShopShell?.isInBag(product.id);
+    const saved = window.SokoniShopShell?.isHearted?.(product.id) ?? window.SokoniShopShell?.isInBag?.(product.id);
     const condition = product.conditionLabel || product.condition || "";
     const secondhand = product.isSecondhand ? "Pre-Loved" : "Brand New";
     const handle = sellerHandle(product);
@@ -353,7 +353,8 @@
     if (!currentProduct || currentProduct.id !== productId) return;
     const btn = document.getElementById("product-sheet-save");
     if (!btn) return;
-    const saved = window.SokoniShopShell?.isInBag(productId);
+    const saved =
+      window.SokoniShopShell?.isHearted?.(productId) ?? window.SokoniShopShell?.isInBag?.(productId);
     btn.classList.toggle("is-saved", saved);
     btn.textContent = saved ? "♥ Saved" : "♡ Save for later";
   }

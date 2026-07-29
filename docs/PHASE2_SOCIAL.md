@@ -51,11 +51,24 @@ Shop page (`website/assets/js/shop-profile.js`) uses this to show **Following** 
 
 Local bag (`sokoni-bag`) stays the guest save-for-later UX.
 
-When `SokoniBuyerAuth` has a session, `shop-shell.js` best-effort syncs bag toggles to `/api/products/like` with absolute `liked`. Heart visuals still follow bag state until a later feed-hydration slice.
+When `SokoniBuyerAuth` has a session:
+
+1. Bag toggles dual-write to `/api/products/like` with absolute `liked`
+2. On homepage load, `GET /api/products/likes?productIds=…` hydrates heart visuals from the server liked set
+3. Heart state is **bag ∪ server likes** (`SokoniShopShell.isHearted`)
+
+### Batch liked lookup
+
+`GET /api/products/likes?productIds=id1,id2`
+
+Optional auth: buyer session or `viewer` / `userId` query (soft mode).
+
+```json
+{ "userId": 12, "likedProductIds": ["prod_abc"] }
+```
 
 ## Out of scope (next slices)
 
-- Feed / homepage heart hydration from server liked set
 - Follower lists / activity feed
 - Seller storefront edit UI beyond listing wizard
 - WAHA / WhatsApp linking (deferred; not required for this slice)
