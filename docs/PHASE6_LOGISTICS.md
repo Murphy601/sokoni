@@ -43,6 +43,8 @@ Body: { "status": "in_transit", "hub": "Umoja", "courier": "fargo" }
 
 **Website:** [track.html](../website/track.html) — enter SK-####, visual shipment stepper, all-in price only (no item/shipping split).
 
+**Drop-off label:** [label.html](../website/label.html)?order=SK-#### — printable QR + hub code (linked from seller Print label after payment).
+
 **WhatsApp:** Customer types `SK-1042` or `track` — shipment timeline when order is paid.
 
 ## Courier adapters

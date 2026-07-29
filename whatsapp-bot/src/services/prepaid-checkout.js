@@ -33,6 +33,12 @@ export function checkoutUrlForOrder(orderId) {
   return `${base}/checkout.html?order=${encodeURIComponent(orderId || "")}`;
 }
 
+/** Printable prepaid drop-off label (seller hub scan). */
+export function labelPageUrlForOrder(orderId) {
+  const base = config.publicSiteUrl || "https://sokonimall.com";
+  return `${base}/label.html?order=${encodeURIComponent(orderId || "")}`;
+}
+
 export function formatPrepaidCheckoutPrompt(order) {
   const total = orderBuyerTotal(order);
   const item = Math.round(Number(order?.priceKes) || 0);

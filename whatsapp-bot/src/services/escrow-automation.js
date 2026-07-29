@@ -23,29 +23,26 @@ import { advanceShipmentStatus } from "./shipments.js";
 import { recordPurchaseFeedEvent } from "./feed-ranking.js";
 import { isDbEnabled } from "../db/pool.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
+import { labelPageUrlForOrder } from "./prepaid-checkout.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
 const REPO_PRODUCTS = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
 
-function dropoffLabelUrl(orderId) {
-  const base = config.botPublicUrl || "https://bot.sokonimall.com";
-  return `${base}/api/checkout/${orderId}/label`;
-}
-
 /** Generate prepaid drop-off QR / label metadata (Depop-style). */
 export function generateDropoffLabel(order) {
   const code = order.id;
+  const labelUrl = labelPageUrlForOrder(code);
   return {
     dropOffCode: code,
     trackingCode: code,
-    labelUrl: dropoffLabelUrl(code),
+    labelUrl,
     qrPayload: `SOKONI:${code}`,
     shipmentStatus: "label_ready",
     instructions:
       `Print or show this code at any Sokoni drop-off hub.\n` +
       `Tracking: *${code}*\n` +
-      `Label: ${dropoffLabelUrl(code)}`,
+      `Label: ${labelUrl}`,
   };
 }
 

@@ -6,6 +6,7 @@ import {
   checkoutMeta,
   prepaidPaymentLine,
   isDarajaConfigured,
+  labelPageUrlForOrder,
 } from "../src/services/prepaid-checkout.js";
 
 function assert(label, cond) {
@@ -86,9 +87,13 @@ function main() {
     assert("till method when unset", meta.paymentMethods.includes("manual_till"));
   }
 
+  const labelUrl = labelPageUrlForOrder("SK-1042");
+  assert("label page url", /label\.html\?order=SK-1042/.test(labelUrl));
+
   console.log("OK: Phase 5 daraja/checkout helpers");
   console.log("  darajaConfigured:", isDarajaConfigured());
   console.log("  parseStkCallback success + fail paths");
+  console.log("  label page:", labelUrl);
 }
 
 main();
