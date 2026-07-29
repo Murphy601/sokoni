@@ -3,9 +3,12 @@
 # Safe on docker-compose v1 (no --force-recreate — that triggers ContainerConfig KeyError).
 set -euo pipefail
 
-REPO="${SOKONI_REPO:-$HOME/sokoni}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
+
 # shellcheck source=lib/waha-common.sh
-source "$REPO/scripts/lib/waha-common.sh"
+source "$SCRIPT_DIR/lib/waha-common.sh"
 COMPOSE_FILE="$WAHA_COMPOSE_FILE"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -13,37 +16,44 @@ if [ ! -f "$COMPOSE_FILE" ]; then
   exit 1
 fi
 
-echo "==> Starting WAHA from $COMPOSE_FILE"
-cd "$REPO"
+echo "==> Starting WAHA from $COMPOSE_FILE (repo: $SOKONI_REPO)"
+cd "$SOKONI_REPO"
 
-# Pull the pinned compose image (not floating :latest).
+# Pull the pinned image explicitly (avoid compose ${image:tag} default interpolation bugs).
 if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
   echo "==> Pulling WAHA image ($WAHA_DEFAULT_IMAGE) — set SKIP_WAHA_PULL=1 to skip"
-  if ! waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml pull; then
-    echo "WARN: compose pull failed — trying docker pull $WAHA_DEFAULT_IMAGE"
-    docker pull "$WAHA_DEFAULT_IMAGE" || echo "WARN: docker pull failed — continuing with cached image"
-  fi
+  docker pull "$WAHA_DEFAULT_IMAGE" || echo "WARN: docker pull failed — continuing with cached image"
 fi
+
+# Show resolved compose config (catches empty/broken image early).
+echo "==> Resolved compose image:"
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml config 2>/dev/null \
+  | python3 -c "import sys,re
+t=sys.stdin.read()
+m=re.search(r'image:\\s*[\\\"\\']?([^\\\"\\'\\s]+)', t)
+print(m.group(1) if m else 'UNKNOWN')" \
+  || echo "(could not render compose config)"
 
 # docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
 # Do NOT use --remove-orphans — it kills sokoni_postgres (separate compose file, same project name).
 waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml down 2>/dev/null || true
 
-# Remove ghost containers left by failed --force-recreate runs.
-docker ps -aq --filter "name=waha" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+# Remove ghost containers left by failed --force-recreate runs (this project only).
+docker ps -aq --filter "name=${WAHA_COMPOSE_PROJECT}" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
 
 waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml up -d
 
-sleep 4
+sleep 5
 WAHA_CID="$(waha_container_id)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA container is not running."
-  waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml ps || true
-  docker ps -a | grep -i waha || true
+  waha_print_status
+  waha_print_recent_logs 60
   exit 1
 fi
 
 echo "==> WAHA container: $WAHA_CID"
+echo "==> Image: $(docker inspect -f '{{.Config.Image}}' "$WAHA_CID" 2>/dev/null || echo unknown)"
 echo "==> WAHA WhatsApp env:"
 docker exec "$WAHA_CID" env | grep -E '^WHATSAPP_' | sort || true
 
@@ -74,12 +84,15 @@ fi
 echo "==> WAHA media config OK"
 waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml ps
 
-if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
-  if ! bash "$REPO/scripts/configure-waha-session.sh"; then
+if [ -f "$SCRIPT_DIR/configure-waha-session.sh" ]; then
+  if ! bash "$SCRIPT_DIR/configure-waha-session.sh"; then
     echo ""
-    echo "ERROR: WAHA WhatsApp session is not WORKING — bot cannot send/receive messages."
-    echo "       Run: bash scripts/waha-link-whatsapp.sh"
-    echo "       Or:  RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
-    exit 1
+    echo "WARN: WAHA container is up, but WhatsApp session is not WORKING yet."
+    echo "      Link the phone (pairing code / QR):"
+    echo "        bash scripts/waha-link-whatsapp.sh"
+    echo "      Or reset:"
+    echo "        RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
+    # Container itself succeeded — linking is a separate step.
+    exit 0
   fi
 fi
