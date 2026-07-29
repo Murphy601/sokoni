@@ -203,6 +203,12 @@ Returns `{ success, shop, message }`. Handle clashes return `409 handle_taken`.
 
 Requires seller WhatsApp session. Returns recent follow + like events on the seller's storefront.
 
+### Buyer activity center
+
+`GET /api/social/buyer/activity`
+
+Requires buyer WhatsApp session. Returns offer replies, follows, and likes for that buyer.
+
 ### Offers (Depop-style negotiation)
 
 Create/update pending offer:

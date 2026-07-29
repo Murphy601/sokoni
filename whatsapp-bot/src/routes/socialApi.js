@@ -9,6 +9,7 @@ import {
   listSellerReviews,
   getUserSocialStats,
   listOffers,
+  listBuyerSocialActivity,
   listSellerSocialActivity,
   listUserFollowConnections,
   resetSellerHandledOfferQueue,
@@ -230,6 +231,45 @@ router.get("/activity", async (req, res) => {
 
     const result = await listSellerSocialActivity({
       sellerUserId: auth.sellerUserId,
+      limit: req.query.limit,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/buyer/activity — buyer feed: offer replies, follows, likes */
+router.get("/buyer/activity", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedBuyerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requested = Number(req.query.userId);
+    if (
+      Number.isInteger(requested) &&
+      requested > 0 &&
+      requested !== auth.buyerUserId
+    ) {
+      return res.status(403).json({
+        error: "buyer_session_mismatch",
+        message: "Buyer session does not match the activity profile in this request.",
+      });
+    }
+
+    const result = await listBuyerSocialActivity({
+      buyerUserId: auth.buyerUserId,
       limit: req.query.limit,
     });
     if (result.error) {

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Inbox — Sokoni Mall</title>
-<meta name="description" content="Send safe in-app messages between buyers and sellers on Sokoni. Keep deals and payment inside the platform." />
+<title>Your activity — Sokoni Mall</title>
+<meta name="description" content="See offer replies, shops you follow, and items you liked on Sokoni." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -44,25 +44,25 @@
 <body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen flex flex-col">
   <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-20">
     <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-3">
-      <a href="shop.html" class="text-sm font-medium hover:text-brand-green transition">← Back to shop</a>
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Home</a>
       <div class="flex items-center gap-3">
-        <a href="activity.html" class="text-xs font-semibold hover:text-brand-green">Activity</a>
-        <span class="text-xs font-semibold uppercase tracking-wide text-brand-purple/55 dark:text-white/65">In-app inbox</span>
+        <a href="inbox.html" class="text-xs font-semibold hover:text-brand-green">Inbox</a>
+        <span class="text-xs font-semibold uppercase tracking-wide text-brand-purple/55 dark:text-white/65">Activity</span>
       </div>
     </div>
   </header>
 
   <main class="max-w-3xl mx-auto w-full px-5 py-7 flex-1 flex flex-col gap-4">
     <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-5">
-      <h1 class="font-display text-2xl font-bold">Chat with <span id="chat-peer-label">seller</span></h1>
+      <h1 class="font-display text-2xl font-bold">Your activity</h1>
       <p class="text-sm text-brand-purple/65 dark:text-white/70 mt-2">
-        Keep messages and payment inside Sokoni for safety. Phone numbers and “pay outside” instructions are blocked automatically.
+        Offer replies from sellers, shops you follow, and items you liked — all in one place.
       </p>
-      <p id="inbox-status" class="text-sm mt-2 text-brand-purple/60 dark:text-white/65"></p>
+      <p id="activity-status" class="text-sm mt-2 text-brand-purple/60 dark:text-white/65"></p>
       <div id="buyer-auth-panel" class="mt-4 rounded-2xl border border-black/5 dark:border-white/10 p-4 space-y-3">
         <p class="text-sm font-semibold">Buyer WhatsApp sign-in</p>
         <p class="text-xs text-brand-purple/60 dark:text-white/65">
-          Verify to keep this chat tied to your WhatsApp number.
+          Verify once to load your offers, follows, and likes.
         </p>
         <div class="flex flex-col sm:flex-row gap-2">
           <label class="flex-1 text-xs font-medium">
@@ -98,29 +98,28 @@
         </div>
         <p id="buyer-auth-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
       </div>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          id="activity-refresh-btn"
+          class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
+          Refresh
+        </button>
+        <a
+          href="https://wa.me/254117422428?text=Hi%20Sokoni%2C%20I%20need%20help%20with%20my%20offers"
+          target="_blank"
+          rel="noopener"
+          class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold inline-flex items-center">
+          Ask on WhatsApp
+        </a>
+      </div>
     </section>
 
-    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-4 flex-1 flex flex-col min-h-[360px]">
-      <div id="chat-thread" class="flex-1 space-y-3 overflow-y-auto pr-1"></div>
-      <p id="chat-empty" class="text-sm text-brand-purple/60 dark:text-white/65 mt-2">
-        No messages yet — start with a quick question about item condition, size, or pickup.
+    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-4">
+      <div id="activity-list" class="space-y-2"></div>
+      <p id="activity-empty" class="hidden text-sm text-brand-purple/60 dark:text-white/65">
+        Nothing here yet. Like an item, follow a shop, or make an offer — updates show up here.
       </p>
-
-      <form id="chat-form" class="mt-4 flex gap-2 items-end">
-        <label class="sr-only" for="chat-input">Type message</label>
-        <textarea
-          id="chat-input"
-          rows="2"
-          maxlength="2000"
-          placeholder="Hi, is this item still available?"
-          class="flex-1 min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green resize-y"></textarea>
-        <button
-          id="chat-send-btn"
-          type="submit"
-          class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold shrink-0">
-          Send
-        </button>
-      </form>
     </section>
   </main>
 
@@ -129,6 +128,6 @@
   </footer>
 
   <script src="assets/js/buyer-auth.js"></script>
-  <script src="assets/js/inbox.js"></script>
+  <script src="assets/js/buyer-activity.js"></script>
 </body>
 </html>

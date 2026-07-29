@@ -585,6 +585,125 @@ export async function listSellerSocialActivity({ sellerUserId, limit = 30 } = {}
   };
 }
 
+/**
+ * Buyer activity center: offer responses, shops followed, items liked.
+ */
+export async function listBuyerSocialActivity({ buyerUserId, limit = 40 } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const uid = parseUserId(buyerUserId);
+  if (!uid) {
+    return { error: "invalid_user", message: "Valid buyerUserId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 40, 1), 100);
+
+  const { rows } = await query(
+    `SELECT * FROM (
+       SELECT
+         CASE
+           WHEN o.status = 'accepted' THEN 'offer_accepted'
+           WHEN o.status = 'declined' THEN 'offer_declined'
+           ELSE 'offer_expired'
+         END::text AS type,
+         COALESCE(o.updated_at, o.created_at) AS created_at,
+         o.seller_user_id AS peer_user_id,
+         seller.handle AS peer_handle,
+         seller.shop_name AS peer_shop_name,
+         seller.display_name AS peer_display_name,
+         o.product_id AS product_id,
+         p.title AS product_title,
+         o.id::text AS offer_id,
+         o.amount_kes AS amount_kes,
+         o.status AS offer_status
+       FROM offers o
+       LEFT JOIN products p ON p.id = o.product_id
+       LEFT JOIN users seller ON seller.id = o.seller_user_id
+       WHERE o.buyer_user_id = $1
+         AND o.status IN ('accepted', 'declined', 'expired')
+
+       UNION ALL
+
+       SELECT
+         'follow'::text AS type,
+         f.created_at AS created_at,
+         f.following_user_id AS peer_user_id,
+         shop.handle AS peer_handle,
+         shop.shop_name AS peer_shop_name,
+         shop.display_name AS peer_display_name,
+         NULL::varchar AS product_id,
+         NULL::varchar AS product_title,
+         NULL::text AS offer_id,
+         NULL::numeric AS amount_kes,
+         NULL::text AS offer_status
+       FROM follows f
+       INNER JOIN users shop ON shop.id = f.following_user_id
+       WHERE f.follower_user_id = $1
+
+       UNION ALL
+
+       SELECT
+         'like'::text AS type,
+         pl.created_at AS created_at,
+         p.seller_user_id AS peer_user_id,
+         seller.handle AS peer_handle,
+         seller.shop_name AS peer_shop_name,
+         seller.display_name AS peer_display_name,
+         pl.product_id AS product_id,
+         p.title AS product_title,
+         NULL::text AS offer_id,
+         NULL::numeric AS amount_kes,
+         NULL::text AS offer_status
+       FROM product_likes pl
+       INNER JOIN products p ON p.id = pl.product_id
+       LEFT JOIN users seller ON seller.id = p.seller_user_id
+       WHERE pl.user_id = $1
+     ) activity
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [uid, safeLimit]
+  );
+
+  return {
+    buyerUserId: uid,
+    events: rows.map((row) => {
+      const handle = formatHandle(row.peer_handle, "");
+      return {
+        type: row.type,
+        createdAt: row.created_at,
+        peer: row.peer_user_id
+          ? {
+              userId: Number(row.peer_user_id),
+              handle: handle || null,
+              shopName:
+                row.peer_shop_name ||
+                row.peer_display_name ||
+                (handle ? handle.slice(1) : `Shop ${row.peer_user_id}`),
+            }
+          : null,
+        product: row.product_id
+          ? {
+              id: row.product_id,
+              title: row.product_title || row.product_id,
+            }
+          : null,
+        offer: row.offer_id
+          ? {
+              id: Number(row.offer_id),
+              status: row.offer_status || null,
+              amountKsh: row.amount_kes != null ? Number(row.amount_kes) : null,
+            }
+          : null,
+      };
+    }),
+  };
+}
+
 export async function toggleFollow({ followerUserId, followingUserId } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
