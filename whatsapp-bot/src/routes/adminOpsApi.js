@@ -11,6 +11,7 @@ import {
   runDbSeed,
   updatePlatformFlags,
 } from "../services/catalog-ops.js";
+import { getWahaSessionStatus } from "../services/waha-session.js";
 
 const router = Router();
 
@@ -34,6 +35,16 @@ router.use(requireToken);
 
 router.get("/status", async (_req, res) => {
   res.json({ status: await getOpsStatus() });
+});
+
+/** GET /admin/ops/waha — WhatsApp session link status (no QR / pairing codes). */
+router.get("/waha", async (_req, res) => {
+  try {
+    const waha = await getWahaSessionStatus();
+    res.json({ ok: true, waha });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post("/catalog/pause", async (req, res) => {

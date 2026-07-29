@@ -11,6 +11,7 @@ Slices so far:
 7. Soft-fail WhatsApp pings for follow / like / offer reply
 8. Mute preference for WhatsApp social pings (`social_wa_notify`)
 9. Per-event mute (follows / likes / offers)
+10. WAHA linking ops (scripts + health/admin status)
 
 ## What shipped
 
@@ -142,9 +143,18 @@ Failures are logged and never block the social API response. Dry-run WAHA still 
 - Seller `PATCH /api/social/shop/profile` can also set the same fields
 - Orders / OTP unchanged
 
-## Out of scope (next slices)
+### WAHA linking ops
 
-- WAHA / WhatsApp linking (deferred; required for live delivery of social pings)
+Live social pings need the GCP WAHA session in `WORKING` state.
+
+- Canonical VM flow: `deploy-waha.sh` → `waha-link-whatsapp.sh` → `deploy-bot.sh` → `health-check.sh`
+- Scripts resolve the pinned WAHA image via compose project `sokoni-waha` (not `:latest` ancestor filter)
+- Public `/health`: `wahaLinked` + `wahaSessionStatus`
+- Admin: `GET /admin/ops/waha?token=…` (redacted linked id; no QR)
+
+## Out of scope (later)
+
+- Public QR / pairing UI (never — keep linking on the VM / SSH tunnel)
 
 ## Quick checks
 

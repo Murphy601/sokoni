@@ -3,6 +3,8 @@ node_modules/
 *.log
 .DS_Store
 whatsapp-bot/data/
+waha-qr.png
+waha-qr*.png
 
 # wrangler files
 .wrangler

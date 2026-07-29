@@ -88,7 +88,7 @@ if [ "$STATUS" != "SCAN_QR_CODE" ]; then
   echo "ERROR: Pairing not ready (status=$STATUS)."
   echo "       WhatsApp never reached SCAN_QR_CODE — usually WA Connection Failure."
   echo "       Check logs:"
-  echo "         docker logs \$(docker ps -qf ancestor=devlikeapro/waha:latest) --tail 40"
+  echo "         source scripts/lib/waha-common.sh && waha_print_recent_logs 40"
   echo "       Then retry after unlinking old devices on the phone:"
   echo "         RESET_WAHA_SESSION=1 bash scripts/waha-link-whatsapp.sh"
   exit 1

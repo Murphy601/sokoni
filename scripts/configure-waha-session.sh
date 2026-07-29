@@ -94,8 +94,16 @@ reset_session() {
 }
 
 print_waha_logs() {
+  # Prefer shared helper when available (pinned image / compose project).
+  local repo="${SOKONI_REPO:-$HOME/sokoni}"
+  if [ -f "$repo/scripts/lib/waha-common.sh" ]; then
+    # shellcheck source=lib/waha-common.sh
+    source "$repo/scripts/lib/waha-common.sh"
+    waha_print_recent_logs 30
+    return
+  fi
   local cid
-  cid="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1 || true)"
+  cid="$(docker ps --format '{{.ID}} {{.Image}}' 2>/dev/null | awk 'tolower($0) ~ /waha/ { print $1; exit }' || true)"
   if [ -n "$cid" ]; then
     echo "==> Recent WAHA logs:"
     docker logs "$cid" --tail 30 2>&1 | tail -30 || true

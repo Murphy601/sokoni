@@ -11,16 +11,26 @@
 - Requires secrets: `VM_HOST`, `VM_USER`, `VM_SSH_KEY` (see `DEPLOY_BOT_GCP.md`).
 - If secrets are empty, the workflow fails fast with setup errors.
 - Health: https://bot.sokonimall.com/health (expect HTTP 200 after a good deploy).
+- `/health` also reports `wahaConfigured`, `wahaReachable`, `wahaLinked`, `wahaSessionStatus`.
+
+## WhatsApp link (WAHA on VM)
+
+```bash
+cd ~/sokoni && git pull --rebase origin main
+bash scripts/deploy-waha.sh
+bash scripts/waha-link-whatsapp.sh   # if not WORKING yet
+bash scripts/deploy-bot.sh
+bash scripts/health-check.sh
+curl -s https://bot.sokonimall.com/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('wahaLinked'), d.get('wahaSessionStatus'))"
+```
+
+Do not expose WAHA `:3000` publicly. Pairing codes / `waha-qr.png` stay on the VM (or scp locally).
 
 ## Manual bot restart (GCP VM)
 
 ```bash
 cd ~/sokoni
 git pull --rebase origin main
-# Apply new schema columns (e.g. social_wa_notify_* per-event mutes)
-psql "$DATABASE_URL" -f whatsapp-bot/db/schema-phase10-social.sql
-bash scripts/deploy-bot.sh
+bash scripts/deploy-bot.sh   # runs db:migrate
 curl -s https://bot.sokonimall.com/health
 ```
-
-`deploy-bot.sh` may already run migrations — if so, the explicit `psql` step is optional.

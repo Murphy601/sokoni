@@ -2,7 +2,8 @@
 
 AI-powered WhatsApp store bot using **WAHA** (not Meta Cloud API). Numbered text menus + OpenRouter AI.
 
-See **[`../docs/GO_LIVE_WAHA.md`](../docs/GO_LIVE_WAHA.md)** for the full step-by-step go-live guide.
+Canonical GCP linking: **[`../docs/DEPLOY_BOT_GCP.md`](../docs/DEPLOY_BOT_GCP.md)** (Phase G).  
+Older free-host notes: **[`../docs/GO_LIVE_WAHA.md`](../docs/GO_LIVE_WAHA.md)**.
 
 ## Quick start (local dry-run)
 
@@ -20,14 +21,19 @@ free-text falls back to keyword search.
 
 ```bash
 # Terminal 1 — from repo root
-docker compose -f docker-compose.waha.yml up -d
-
-# Scan QR at http://localhost:3000/api/sessions/default/auth/qr
+bash scripts/deploy-waha.sh
+# Link phone (pairing code or local QR PNG) — do not expose :3000 publicly
+bash scripts/waha-link-whatsapp.sh
 
 # Terminal 2
 cd whatsapp-bot
 npm run dev
 ```
+
+Status:
+
+- Public: `GET /health` → `wahaLinked`, `wahaSessionStatus`
+- Admin: `GET /admin/ops/waha?token=…`
 
 Simulate an inbound message:
 
