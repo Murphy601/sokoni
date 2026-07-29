@@ -273,6 +273,27 @@ export async function refreshSellerListing({ phone, productId, sessionToken }) {
     return { error: "not_found", message: "Listing not found or not yours." };
   }
 
+  // Push DB catalog rows up feed ranking (homepage / API feed use updated_at + refreshedAt).
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    if (isDbEnabled()) {
+      await query(
+        `UPDATE products
+            SET updated_at = NOW(),
+                legacy_json = CASE
+                  WHEN legacy_json IS NULL THEN jsonb_build_object('refreshedAt', $2::bigint, 'publishedAt', $2::bigint)
+                  ELSE legacy_json
+                       || jsonb_build_object('refreshedAt', $2::bigint)
+                       || jsonb_build_object('publishedAt', $2::bigint)
+                END
+          WHERE id = $1`,
+        [productId, Number(updated.refreshedAt)]
+      );
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB bump skipped:", err.message);
+  }
+
   try {
     const { execSync } = await import("node:child_process");
     execSync("node scripts/build-site-catalog.mjs", {

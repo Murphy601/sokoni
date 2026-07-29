@@ -233,6 +233,9 @@
             : ""
         }
         <p class="product-sheet-rating">⭐ ${Number(product.rating) || 0} · ${Number(product.reviews) || 0} reviews</p>
+        <p class="product-sheet-escrow text-xs text-brand-purple/60 dark:text-white/60 mt-2">
+          Protected by Sokoni escrow — full refund if the item does not match photos/description. Final sale unless misdescribed.
+        </p>
       </div>
       <div class="product-sheet-actions">
         <a href="${orderLink(product)}" target="_blank" rel="noopener" class="product-sheet-order btn-whatsapp">

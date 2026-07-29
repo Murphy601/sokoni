@@ -444,7 +444,7 @@ export async function getSellerListingMeta() {
     shippingTiers: SHIPPING_TIERS,
     platformFeeRate: PLATFORM_FEE_RATE,
     minShippingKes: MIN_SHIPPING_KES,
-    eras: ["vintage", "80s", "90s", "y2k", "handmade"],
+    eras: ["vintage", "80s", "90s", "y2k", "streetwear", "clean-girl", "cyberpunk", "goth-punk", "90s-thrift", "minimalist", "handmade"],
     visionModel: config.catalog.visionModel,
     visionProvider: "openrouter",
     geminiVisionEnabled: geminiVisionAvailable(),
