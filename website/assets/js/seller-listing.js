@@ -773,9 +773,118 @@ function showSellerProfile(profile) {
   el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
   if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
   el("seller-profile-bar")?.classList.remove("hidden");
+  el("seller-shop-edit")?.classList.remove("hidden");
   el("listing-wizard")?.classList.remove("hidden");
   el("onboard-panel")?.classList.add("hidden");
+  fillShopEditFormFromSeller(profile);
+  void hydrateShopEditFormFromSocial();
   showSellerView("dashboard");
+}
+
+function setEditShopStatus(message, isError = false) {
+  const node = el("edit-shop-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+function fillShopEditFormFromSeller(profile = {}) {
+  const name = profile.businessName || profile.shopName || "";
+  const handle = String(profile.shopHandle || profile.handle || "").replace(/^@+/, "");
+  if (el("edit-shop-name") && !el("edit-shop-name").value) el("edit-shop-name").value = name;
+  else if (el("edit-shop-name")) el("edit-shop-name").value = name;
+  if (el("edit-shop-handle")) el("edit-shop-handle").value = handle;
+  if (el("edit-shop-location") && profile.city != null) el("edit-shop-location").value = profile.city || "";
+  const publicLink = el("seller-public-shop-link");
+  if (publicLink && handle) {
+    publicLink.href = `../shop.html?handle=${encodeURIComponent(handle)}`;
+    publicLink.classList.remove("hidden");
+  }
+}
+
+async function hydrateShopEditFormFromSocial() {
+  const handle = normalizeHandleForLookup(sellerProfile?.shopHandle || el("edit-shop-handle")?.value || "");
+  if (!handle) return;
+  try {
+    const res = await fetch(`${SOCIAL_API}/shop/${encodeURIComponent(handle)}?limit=1`);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) return;
+    const shop = parsed.data?.shop || {};
+    const userId = Number(shop.userId);
+    if (Number.isInteger(userId) && userId > 0) sellerProfile.socialUserId = userId;
+    if (el("edit-shop-name") && shop.shopName) el("edit-shop-name").value = shop.shopName;
+    if (el("edit-shop-handle") && shop.handle) {
+      el("edit-shop-handle").value = String(shop.handle).replace(/^@+/, "");
+    }
+    if (el("edit-shop-bio")) el("edit-shop-bio").value = shop.bio || "";
+    if (el("edit-shop-location")) el("edit-shop-location").value = shop.location || sellerProfile.city || "";
+    if (el("edit-shop-avatar")) el("edit-shop-avatar").value = shop.avatarUrl || "";
+    const publicLink = el("seller-public-shop-link");
+    const cleanHandle = normalizeHandleForLookup(shop.handle || handle);
+    if (publicLink && cleanHandle) {
+      publicLink.href = `../shop.html?handle=${encodeURIComponent(cleanHandle)}`;
+      publicLink.classList.remove("hidden");
+    }
+  } catch {
+    /* keep onboard defaults */
+  }
+}
+
+async function saveShopProfile(event) {
+  event?.preventDefault?.();
+  const phone = apiPhone();
+  if (!phone || !getSessionToken()) {
+    setEditShopStatus("Sign in again to edit your shop profile.", true);
+    return;
+  }
+  const payload = jsonAuthBody({
+    phone,
+    shopName: el("edit-shop-name")?.value || "",
+    handle: el("edit-shop-handle")?.value || "",
+    bio: el("edit-shop-bio")?.value || "",
+    location: el("edit-shop-location")?.value || "",
+    avatarUrl: el("edit-shop-avatar")?.value || "",
+  });
+  const btn = el("edit-shop-save-btn");
+  if (btn) btn.disabled = true;
+  setEditShopStatus("Saving…");
+  try {
+    const res = await fetch(`${SOCIAL_API}/shop/profile`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      setEditShopStatus(parsed.data?.message || "Could not save shop profile.", true);
+      return;
+    }
+    const shop = parsed.data?.shop || {};
+    sellerProfile = {
+      ...sellerProfile,
+      businessName: shop.shopName || sellerProfile.businessName,
+      shopName: shop.shopName || sellerProfile.shopName,
+      shopHandle: shop.handle || sellerProfile.shopHandle,
+      city: shop.location || sellerProfile.city,
+      socialUserId: shop.userId || sellerProfile.socialUserId,
+    };
+    el("seller-badge").textContent = sellerProfile.businessName || "Your shop";
+    if (sellerProfile.shopHandle) el("seller-handle").textContent = sellerProfile.shopHandle;
+    fillShopEditFormFromSeller(sellerProfile);
+    if (el("edit-shop-bio")) el("edit-shop-bio").value = shop.bio || "";
+    if (el("edit-shop-avatar")) el("edit-shop-avatar").value = shop.avatarUrl || "";
+    setEditShopStatus(parsed.data?.message || "Shop profile updated.");
+  } catch {
+    setEditShopStatus("Network error while saving shop profile.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function tryRestoreSession() {
@@ -3260,6 +3369,7 @@ function init() {
     if (ev.key === "Enter") onVerifyCode();
   });
   el("sign-out-btn")?.addEventListener("click", onSignOut);
+  el("seller-shop-edit-form")?.addEventListener("submit", saveShopProfile);
   el("seller-phone")?.addEventListener("change", () => {
     savePhone();
     clearSession();

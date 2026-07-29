@@ -302,6 +302,35 @@ export function createPeerSeller({ phone, shopName, shopHandle, mpesaNumber, nat
   return { supplier, existing: false };
 }
 
+/** Soft-update JSON peer seller identity fields used by seller session auth. */
+export function updatePeerSellerProfile(phone, { shopName, shopHandle, city } = {}) {
+  loadSuppliers();
+  const existing = findSupplierByPhone(phone);
+  if (!existing) {
+    return { error: "not_found", message: "Seller profile not found." };
+  }
+
+  if (shopName !== undefined) {
+    const name = String(shopName || "").trim();
+    if (name) {
+      existing.businessName = name;
+      existing.contactName = name;
+    }
+  }
+  if (shopHandle !== undefined) {
+    const handle = String(shopHandle || "")
+      .replace(/^@+/, "")
+      .trim();
+    existing.shopHandle = handle ? `@${handle}` : existing.shopHandle;
+  }
+  if (city !== undefined) {
+    existing.city = String(city || "").trim();
+  }
+
+  persistSuppliers();
+  return { supplier: existing };
+}
+
 export function rejectApplication(applicationId, reason = "") {
   loadApps();
   const app = appStore.applications[applicationId];

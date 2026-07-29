@@ -175,6 +175,28 @@ Notes:
 - Invalid buyer sessions are ignored for this public GET (viewer block omitted).
 - See [`PHASE2_SOCIAL.md`](PHASE2_SOCIAL.md) for storefront hydration details.
 
+### Seller storefront profile edit
+
+`PATCH /api/social/shop/profile`
+
+Requires seller WhatsApp session (`phone` + `sessionToken`).
+
+Body (any subset):
+
+```json
+{
+  "handle": "adiv_thrift",
+  "shopName": "Adiv Thrift",
+  "bio": "Pre-loved fits, ships Kenya-wide.",
+  "avatarUrl": "https://…",
+  "location": "Nairobi",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "seller-session-token"
+}
+```
+
+Returns `{ success, shop, message }`. Handle clashes return `409 handle_taken`.
+
 ### Offers (Depop-style negotiation)
 
 Create/update pending offer:

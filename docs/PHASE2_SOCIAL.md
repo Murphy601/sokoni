@@ -5,6 +5,7 @@ Slices so far:
 1. Shop storefront follow/like hydration + bag dual-write
 2. Homepage/feed heart hydration from server liked set
 3. Follower / following lists on shop profiles
+4. Seller storefront profile edit (name, handle, bio, location, avatar URL)
 
 ## What shipped
 
@@ -84,8 +85,17 @@ Shop page Followers / Following counters open an inline list with links to each 
 ## Out of scope (next slices)
 
 - Activity feed / notifications
-- Seller storefront edit UI beyond listing wizard
-- WAHA / WhatsApp linking (deferred; not required for this slice)
+- WAHA / WhatsApp linking (deferred; not required for storefront slices)
+
+### Seller storefront profile edit
+
+`PATCH /api/social/shop/profile` (seller session)
+
+Body fields (all optional): `handle` / `shopHandle`, `shopName` / `businessName`, `bio`, `avatarUrl`, `location` / `city`.
+
+Updates `users` storefront fields, soft-syncs linked `sellers` row + JSON supplier handle/name so session auth still resolves.
+
+Seller dashboard (`suppliers/list.html`) has a Shop profile form under the profile bar.
 
 ## Quick checks
 

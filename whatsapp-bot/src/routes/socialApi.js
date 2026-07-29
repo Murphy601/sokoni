@@ -16,8 +16,10 @@ import {
   setSellerHandledOfferQueueState,
   sendDirectMessage,
   toggleFollow,
+  updateUserShopProfile,
 } from "../db/repositories/social.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
+import { updatePeerSellerProfile } from "../services/suppliers.js";
 import {
   applyBuyerIdentityAuth,
   hasBuyerSessionContext,
@@ -73,6 +75,7 @@ function socialErrorStatus(error) {
   ) {
     return 404;
   }
+  if (error === "handle_taken") return 409;
   return 400;
 }
 
@@ -152,6 +155,50 @@ router.get("/users/:userId/following", async (req, res) => {
       });
     }
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /api/social/shop/profile — seller updates storefront identity fields */
+router.patch("/shop/profile", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const result = await updateUserShopProfile({
+      userId: auth.sellerUserId,
+      sellerId: auth.sellerId,
+      handle: req.body?.handle ?? req.body?.shopHandle,
+      shopName: req.body?.shopName ?? req.body?.businessName,
+      bio: req.body?.bio,
+      avatarUrl: req.body?.avatarUrl,
+      location: req.body?.location ?? req.body?.city,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+
+    // Keep JSON supplier handle/name in sync so seller session auth still resolves.
+    updatePeerSellerProfile(auth.phone, {
+      shopName: result.shop?.shopName,
+      shopHandle: result.shop?.handle,
+      city: result.shop?.location,
+    });
+
+    res.json({
+      success: true,
+      shop: result.shop,
+      message: "Shop profile updated.",
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
