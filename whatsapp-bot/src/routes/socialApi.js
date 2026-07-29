@@ -16,6 +16,18 @@ import { resolveAuthenticatedSellerSocialContext } from "../services/seller-soci
 
 const router = Router();
 
+function hasSellerSessionContext(req, payload = req.body || {}) {
+  return Boolean(
+    payload?.phone ||
+      payload?.sessionToken ||
+      payload?.verificationToken ||
+      req.query?.phone ||
+      req.query?.sessionToken ||
+      req.query?.verificationToken ||
+      req.headers["x-seller-session"]
+  );
+}
+
 function socialErrorStatus(error) {
   if (error === "database_not_configured") return 503;
   if (error === "forbidden_offer_action" || error === "seller_session_mismatch") return 403;
@@ -251,16 +263,9 @@ router.get("/offers", async (req, res) => {
 router.post("/chat/send", async (req, res) => {
   try {
     const payload = { ...(req.body || {}) };
-    const hasSellerSessionContext = Boolean(
-      payload.phone ||
-        payload.sessionToken ||
-        payload.verificationToken ||
-        req.query?.phone ||
-        req.query?.sessionToken ||
-        req.headers["x-seller-session"]
-    );
+    const hasSellerContext = hasSellerSessionContext(req, payload);
 
-    if (hasSellerSessionContext) {
+    if (hasSellerContext) {
       const auth = await resolveAuthenticatedSellerSocialContext(req);
       if (auth.error) {
         return res.status(auth.status || 403).json({
@@ -294,9 +299,36 @@ router.post("/chat/send", async (req, res) => {
 /** GET /api/social/chat/thread?userAId=1&userBId=2 */
 router.get("/chat/thread", async (req, res) => {
   try {
+    const hasSellerContext = hasSellerSessionContext(req, req.query || {});
+    let userAId = req.query.userAId;
+    let userBId = req.query.userBId;
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+
+      const requestedUserA = Number(req.query.userAId);
+      const requestedUserB = Number(req.query.userBId);
+      const matchesA = Number.isInteger(requestedUserA) && requestedUserA > 0 && requestedUserA === auth.sellerUserId;
+      const matchesB = Number.isInteger(requestedUserB) && requestedUserB > 0 && requestedUserB === auth.sellerUserId;
+      if (!matchesA && !matchesB) {
+        return res.status(403).json({
+          error: "seller_session_mismatch",
+          message: "Seller session does not match the chat thread participants in this request.",
+        });
+      }
+
+      userAId = matchesA ? auth.sellerUserId : userAId;
+      userBId = matchesB ? auth.sellerUserId : userBId;
+    }
+
     const result = await getDirectThread({
-      userAId: req.query.userAId,
-      userBId: req.query.userBId,
+      userAId,
+      userBId,
       limit: req.query.limit,
       offset: req.query.offset,
     });

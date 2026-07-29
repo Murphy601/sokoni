@@ -196,6 +196,11 @@ Thread:
 
 `GET /api/social/chat/thread?userAId=1&userBId=2`
 
+Seller thread auth note:
+
+- Seller dashboard thread reads should include `phone` + `sessionToken` query params.
+- When seller session context is present, one thread participant (`userAId` or `userBId`) must match the authenticated seller profile.
+
 Blocked patterns include:
 
 - Kenyan phone numbers (`07...`, `01...`, `+254...`)

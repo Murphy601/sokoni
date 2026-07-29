@@ -2075,6 +2075,7 @@ function inboxLinkForOffer(offer, sellerUserId, buyerUserId) {
   const params = new URLSearchParams({
     viewer: String(sellerUserId),
     with: String(buyerUserId),
+    sellerAuth: "1",
   });
   const buyerHandle = normalizeHandleForLookup(offer?.buyer?.handle || "");
   if (buyerHandle) params.set("handle", buyerHandle);

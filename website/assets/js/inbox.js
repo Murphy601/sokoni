@@ -4,12 +4,16 @@ const API_BASE =
     : "https://bot.sokonimall.com";
 
 const SOCIAL_API = `${API_BASE}/api/social`;
+const SELLER_PHONE_KEY = "sokoni-seller-phone";
+const SELLER_VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 
 const state = {
   viewerId: null,
   peerId: null,
   peerHandle: "",
   pollTimer: null,
+  sellerAuthRequired: false,
+  sellerSession: null,
 };
 
 function el(id) {
@@ -32,6 +36,51 @@ function parsePositiveInt(value) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) return null;
   return n;
+}
+
+function normalizePhoneInput(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9) d = `254${d}`;
+  return d;
+}
+
+function isSellerSessionAuthError(payload) {
+  const code = String(payload?.error || "")
+    .trim()
+    .toLowerCase();
+  return code === "session_required" || code === "session_invalid" || code === "session_expired";
+}
+
+function isSellerAuthQueryFlag(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "seller";
+}
+
+function readSellerSessionFromStorage() {
+  try {
+    const raw = sessionStorage.getItem(SELLER_VERIFY_TOKEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const token = String(parsed?.token || "").trim();
+    const expiresAt = Number(parsed?.expiresAt || 0);
+    if (!token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+    const phone = normalizePhoneInput(parsed?.phone || localStorage.getItem(SELLER_PHONE_KEY) || "");
+    if (!phone) return null;
+    return { phone, sessionToken: token };
+  } catch {
+    return null;
+  }
+}
+
+function disableChatComposer() {
+  el("chat-form")?.classList.add("opacity-60");
+  const input = el("chat-input");
+  const sendBtn = el("chat-send-btn");
+  if (input) input.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
 }
 
 function setStatus(msg, isError = false) {
@@ -99,12 +148,23 @@ function renderMessages(messages) {
 async function loadThread() {
   if (!state.viewerId || !state.peerId) return;
   try {
-    const url = `${SOCIAL_API}/chat/thread?userAId=${encodeURIComponent(state.viewerId)}&userBId=${encodeURIComponent(
-      state.peerId
-    )}&limit=80`;
+    const params = new URLSearchParams({
+      userAId: String(state.viewerId),
+      userBId: String(state.peerId),
+      limit: "80",
+    });
+    if (state.sellerAuthRequired && state.sellerSession?.phone && state.sellerSession?.sessionToken) {
+      params.set("phone", state.sellerSession.phone);
+      params.set("sessionToken", state.sellerSession.sessionToken);
+    }
+    const url = `${SOCIAL_API}/chat/thread?${params.toString()}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) {
+      if (res.status === 401 && isSellerSessionAuthError(data)) {
+        setStatus(data?.message || "Seller session imeexpire - rudi dashboard uverify tena.", true);
+        return;
+      }
       setStatus(data?.message || data?.error || "Could not load inbox thread.", true);
       return;
     }
@@ -121,17 +181,26 @@ async function sendMessage(text) {
   const btn = el("chat-send-btn");
   if (btn) btn.disabled = true;
   try {
+    const payload = {
+      senderUserId: state.viewerId,
+      receiverUserId: state.peerId,
+      content: body,
+    };
+    if (state.sellerAuthRequired && state.sellerSession?.phone && state.sellerSession?.sessionToken) {
+      payload.phone = state.sellerSession.phone;
+      payload.sessionToken = state.sellerSession.sessionToken;
+    }
     const res = await fetch(`${SOCIAL_API}/chat/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        senderUserId: state.viewerId,
-        receiverUserId: state.peerId,
-        content: body,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
+      if (res.status === 401 && isSellerSessionAuthError(data)) {
+        setStatus(data?.message || "Seller session imeexpire - rudi dashboard uverify tena.", true);
+        return;
+      }
       setStatus(data?.message || data?.error || "Message not sent.", true);
       return;
     }
@@ -149,6 +218,8 @@ function parseQuery() {
   state.viewerId = parsePositiveInt(params.get("viewer") || params.get("viewerUserId"));
   state.peerId = parsePositiveInt(params.get("with") || params.get("peer") || params.get("receiver"));
   state.peerHandle = normalizeHandle(params.get("handle") || "");
+  state.sellerAuthRequired = isSellerAuthQueryFlag(params.get("sellerAuth"));
+  state.sellerSession = state.sellerAuthRequired ? readSellerSessionFromStorage() : null;
 }
 
 function startPolling() {
@@ -162,11 +233,13 @@ function init() {
 
   if (!state.viewerId || !state.peerId || state.viewerId === state.peerId) {
     setStatus("Open this page from a shop profile with valid viewer and seller IDs.", true);
-    el("chat-form")?.classList.add("opacity-60");
-    const input = el("chat-input");
-    const sendBtn = el("chat-send-btn");
-    if (input) input.disabled = true;
-    if (sendBtn) sendBtn.disabled = true;
+    disableChatComposer();
+    return;
+  }
+
+  if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
+    setStatus("Seller session missing - rudi seller dashboard uverify WhatsApp tena.", true);
+    disableChatComposer();
     return;
   }
 
