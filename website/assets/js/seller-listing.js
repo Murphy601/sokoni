@@ -1889,6 +1889,158 @@ function setAcceptedOfferHandled(offerId, handled = true, { trackHistory = false
   return true;
 }
 
+function parseBooleanFlag(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+  return null;
+}
+
+function normalizedOfferIdList(values = []) {
+  const ids = [];
+  const seen = new Set();
+  (Array.isArray(values) ? values : [values]).forEach((value) => {
+    const id = Number(value);
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  });
+  return ids;
+}
+
+async function loadServerHandledOfferState(offerIds = [], sellerUserId = currentSellerSocialUserId()) {
+  if (!sellerUserId) {
+    return { ok: false, message: "Link your shop handle to your social profile first.", isError: false };
+  }
+  const ids = normalizedOfferIdList(offerIds);
+  const params = new URLSearchParams({
+    userId: String(sellerUserId),
+  });
+  if (ids.length) params.set("offerIds", ids.join(","));
+  const phone = apiPhone();
+  if (phone) params.set("phone", phone);
+  const sessionToken = getSessionToken();
+  if (sessionToken) params.set("sessionToken", sessionToken);
+
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/handled?${params.toString()}`);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not sync handled queue.",
+        isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+      };
+    }
+    const states = Array.isArray(parsed.data?.states) ? parsed.data.states : [];
+    const handledIds = new Set();
+    states.forEach((state) => {
+      const id = Number(state?.offerId);
+      const handled = parseBooleanFlag(state?.handled);
+      if (Number.isInteger(id) && id > 0 && handled) handledIds.add(id);
+    });
+    return { ok: true, handledIds };
+  } catch {
+    return { ok: false, message: "Network error while syncing handled queue.", isError: true };
+  }
+}
+
+async function syncHandledAcceptedOffersFromServer(offers = sellerOffersCache, sellerUserId = currentSellerSocialUserId()) {
+  const eligibleOfferIds = normalizedOfferIdList(
+    acceptedOffersEligibleForChat(offers).map((offer) => Number(offer?.id))
+  );
+  if (!eligibleOfferIds.length) {
+    handledAcceptedOfferIds = new Set();
+    handledOfferHistory = [];
+    saveHandledAcceptedOffers();
+    return { ok: true };
+  }
+
+  const remote = await loadServerHandledOfferState(eligibleOfferIds, sellerUserId);
+  if (!remote.ok) return remote;
+
+  const nextHandled = new Set();
+  eligibleOfferIds.forEach((id) => {
+    if (remote.handledIds.has(id)) nextHandled.add(id);
+  });
+  handledAcceptedOfferIds = nextHandled;
+  handledOfferHistory = handledOfferHistory.filter((id) => handledAcceptedOfferIds.has(id));
+  saveHandledAcceptedOffers();
+  return { ok: true };
+}
+
+async function setHandledOfferStateOnServer(offerId, handled = true) {
+  const id = Number(offerId);
+  const sellerUserId = currentSellerSocialUserId();
+  if (!Number.isInteger(id) || id < 1 || !sellerUserId) {
+    return { ok: false, message: "Could not resolve this handled-offer action.", isError: true };
+  }
+
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/${id}/handled`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+          handled: Boolean(handled),
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not update handled queue right now.",
+        isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+      };
+    }
+
+    const handledFromApi = parseBooleanFlag(parsed.data?.state?.handled);
+    return { ok: true, handled: handledFromApi == null ? Boolean(handled) : handledFromApi };
+  } catch {
+    return { ok: false, message: "Network error while updating handled queue.", isError: true };
+  }
+}
+
+async function resetHandledQueueOnServer() {
+  const sellerUserId = currentSellerSocialUserId();
+  if (!sellerUserId) {
+    return { ok: false, message: "Link your shop handle to your social profile first.", isError: false };
+  }
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/handled/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not reset handled queue right now.",
+        isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Network error while resetting handled queue.", isError: true };
+  }
+}
+
 function reconcileHandledAcceptedOffers(offers = sellerOffersCache) {
   const eligibleIds = new Set(
     acceptedOffersEligibleForChat(offers)
@@ -2422,39 +2574,89 @@ async function sendAcceptedOfferReminder(button) {
   );
 }
 
-function toggleAcceptedOfferHandled(button) {
+async function toggleAcceptedOfferHandled(button) {
   const offerId = Number(button?.dataset?.offerId);
   if (!Number.isInteger(offerId) || offerId < 1) return;
   const currentlyHandled = button.dataset.handled === "1" || isAcceptedOfferHandled(offerId);
   const nextHandledState = !currentlyHandled;
-  if (!setAcceptedOfferHandled(offerId, nextHandledState, { trackHistory: nextHandledState })) return;
+  button.disabled = true;
+  const remote = await setHandledOfferStateOnServer(offerId, nextHandledState);
+  if (remote.sessionExpired) {
+    handleSessionExpired({ message: remote.message });
+    return;
+  }
+  if (!remote.ok) {
+    button.disabled = false;
+    setOffersStatus(remote.message || "Could not update quick queue right now.", remote.isError !== false);
+    return;
+  }
+  if (!setAcceptedOfferHandled(offerId, remote.handled, { trackHistory: Boolean(remote.handled) })) {
+    button.disabled = false;
+    setOffersStatus("Could not update quick queue right now.", true);
+    return;
+  }
   acceptedQuickCursor = 0;
   renderOfferCacheView();
-  setOffersStatus(currentlyHandled ? "Offer moved back into quick queue." : "Offer marked handled in quick queue.");
+  setOffersStatus(remote.handled ? "Offer marked handled in quick queue." : "Offer moved back into quick queue.");
 }
 
-function resetHandledAcceptedOffersQueue() {
+async function resetHandledAcceptedOffersQueue() {
   if (!handledAcceptedOfferIds.size) return;
+  const remote = await resetHandledQueueOnServer();
+  if (remote.sessionExpired) {
+    handleSessionExpired({ message: remote.message });
+    return;
+  }
+  if (!remote.ok) {
+    setOffersStatus(remote.message || "Could not reset handled queue right now.", remote.isError !== false);
+    return;
+  }
   handledAcceptedOfferIds = new Set();
   handledOfferHistory = [];
   saveHandledAcceptedOffers();
   acceptedQuickCursor = 0;
   renderOfferCacheView();
-  setOffersStatus("Quick queue reset — all accepted chats are active again.");
+  setOffersStatus("Quick queue reset - all accepted chats are active again.");
 }
 
-function restoreLastHandledAcceptedOffer() {
-  const offerId = popUndoableHandledOfferId();
+async function restoreLastHandledAcceptedOffer() {
+  const offerId = latestUndoableHandledOfferId();
   if (!offerId) return { offerId: null, offer: null };
   const offer = offerByIdFromCache(offerId);
+  const remote = await setHandledOfferStateOnServer(offerId, false);
+  if (remote.sessionExpired) {
+    return {
+      offerId: null,
+      offer: null,
+      sessionExpired: true,
+      message: remote.message,
+      isError: remote.isError !== false,
+    };
+  }
+  if (!remote.ok) {
+    return {
+      offerId: null,
+      offer: null,
+      message: remote.message,
+      isError: remote.isError !== false,
+    };
+  }
   if (!setAcceptedOfferHandled(offerId, false)) return { offerId: null, offer: null };
   acceptedQuickCursor = 0;
   renderOfferCacheView();
   return { offerId, offer };
 }
 
-function undoLastHandledAcceptedOffer() {
-  const restored = restoreLastHandledAcceptedOffer();
+async function undoLastHandledAcceptedOffer() {
+  const restored = await restoreLastHandledAcceptedOffer();
+  if (restored.sessionExpired) {
+    handleSessionExpired({ message: restored.message });
+    return;
+  }
+  if (!restored.offerId && restored.message) {
+    setOffersStatus(restored.message, restored.isError !== false);
+    return;
+  }
   if (!restored.offerId) {
     renderOfferCacheView();
     setOffersStatus("Nothing to undo yet. Mark an accepted chat done first.");
@@ -2467,8 +2669,16 @@ function undoLastHandledAcceptedOffer() {
   );
 }
 
-function undoLastHandledAndReopenChat() {
-  const restored = restoreLastHandledAcceptedOffer();
+async function undoLastHandledAndReopenChat() {
+  const restored = await restoreLastHandledAcceptedOffer();
+  if (restored.sessionExpired) {
+    handleSessionExpired({ message: restored.message });
+    return;
+  }
+  if (!restored.offerId && restored.message) {
+    setOffersStatus(restored.message, restored.isError !== false);
+    return;
+  }
   if (!restored.offerId) {
     renderOfferCacheView();
     setOffersStatus("Nothing to reopen yet. Mark an accepted chat done first.");
@@ -2483,7 +2693,7 @@ function undoLastHandledAndReopenChat() {
   }
 }
 
-function moveAcceptedOfferToNextChat(offerId, offer) {
+async function moveAcceptedOfferToNextChat(offerId, offer) {
   const id = Number(offerId);
   if (!Number.isInteger(id) || id < 1) {
     return { ok: false, message: "Offer not found. Refresh and try again.", isError: true };
@@ -2498,6 +2708,22 @@ function moveAcceptedOfferToNextChat(offerId, offer) {
 
   const readyBefore = acceptedOffersReadyForChat();
   const currentIndex = readyBefore.findIndex((candidate) => Number(candidate?.id) === id);
+  const remote = await setHandledOfferStateOnServer(id, true);
+  if (remote.sessionExpired) {
+    return {
+      ok: false,
+      message: remote.message || "Session expired. Verify again and retry.",
+      isError: true,
+      sessionExpired: true,
+    };
+  }
+  if (!remote.ok) {
+    return {
+      ok: false,
+      message: remote.message || "Could not update quick queue right now.",
+      isError: remote.isError !== false,
+    };
+  }
   if (!setAcceptedOfferHandled(id, true, { trackHistory: true })) {
     return { ok: false, message: "Could not update quick queue right now.", isError: true };
   }
@@ -2565,7 +2791,11 @@ async function remindAndMoveToNextAcceptedChat(button) {
   setReminderCooldownForOffer(offerId, reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS);
   setReminderLastSentAtForOffer(offerId, reminder.sentAtMs || Date.now());
 
-  const moved = moveAcceptedOfferToNextChat(offerId, offer);
+  const moved = await moveAcceptedOfferToNextChat(offerId, offer);
+  if (moved.sessionExpired) {
+    handleSessionExpired({ message: moved.message });
+    return;
+  }
   if (!moved.ok) {
     renderOfferCacheView();
     setOffersStatus(
@@ -2581,11 +2811,15 @@ async function remindAndMoveToNextAcceptedChat(button) {
   }
 }
 
-function markDoneAndOpenNextAcceptedChat(button) {
+async function markDoneAndOpenNextAcceptedChat(button) {
   const offerId = Number(button?.dataset?.offerId);
   if (!Number.isInteger(offerId) || offerId < 1) return;
   const offer = offerByIdFromCache(offerId);
-  const moved = moveAcceptedOfferToNextChat(offerId, offer);
+  const moved = await moveAcceptedOfferToNextChat(offerId, offer);
+  if (moved.sessionExpired) {
+    handleSessionExpired({ message: moved.message });
+    return;
+  }
   if (!moved.ok) {
     setOffersStatus(moved.message || "Could not update quick queue right now.", moved.isError !== false);
     return;
@@ -2610,17 +2844,17 @@ function bindOfferActionButtons() {
   });
   wrap.querySelectorAll(".offer-remind-next-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      remindAndMoveToNextAcceptedChat(btn);
+      void remindAndMoveToNextAcceptedChat(btn);
     });
   });
   wrap.querySelectorAll(".offer-handled-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      toggleAcceptedOfferHandled(btn);
+      void toggleAcceptedOfferHandled(btn);
     });
   });
   wrap.querySelectorAll(".offer-done-next-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      markDoneAndOpenNextAcceptedChat(btn);
+      void markDoneAndOpenNextAcceptedChat(btn);
     });
   });
   syncReminderCooldownButtonsUi();
@@ -2744,6 +2978,16 @@ async function loadSellerOffers({ silent = false } = {}) {
     const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
     const pending = pendingOffersCount(offers);
     sellerOffersCache = offers;
+    const handledSync = await syncHandledAcceptedOffersFromServer(sellerOffersCache, sellerUserId);
+    if (!handledSync.ok) {
+      if (handledSync.sessionExpired) {
+        handleSessionExpired({ message: handledSync.message });
+        return;
+      }
+      if (!silent) {
+        setOffersStatus(handledSync.message || "Could not sync handled queue right now.", handledSync.isError !== false);
+      }
+    }
     reconcileReminderCooldowns(sellerOffersCache);
     reconcileReminderLastSentAt(sellerOffersCache);
     reconcileHandledAcceptedOffers(sellerOffersCache);
@@ -2992,9 +3236,15 @@ function init() {
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
   el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
   el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
-  el("offers-reset-handled-btn")?.addEventListener("click", resetHandledAcceptedOffersQueue);
-  el("offers-undo-handled-btn")?.addEventListener("click", undoLastHandledAcceptedOffer);
-  el("offers-undo-open-btn")?.addEventListener("click", undoLastHandledAndReopenChat);
+  el("offers-reset-handled-btn")?.addEventListener("click", () => {
+    void resetHandledAcceptedOffersQueue();
+  });
+  el("offers-undo-handled-btn")?.addEventListener("click", () => {
+    void undoLastHandledAcceptedOffer();
+  });
+  el("offers-undo-open-btn")?.addEventListener("click", () => {
+    void undoLastHandledAndReopenChat();
+  });
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));

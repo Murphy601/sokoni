@@ -164,6 +164,35 @@ Notes:
 - Seller session must match the offer seller profile.
 - Cooldown is enforced server-side (returns `429 reminder_cooldown_active` while active).
 
+Handled queue state (seller quick mode):
+
+Get handled states for selected offers:
+
+`GET /api/social/offers/handled?offerIds=120,121`
+
+Set one offer handled/unhandled:
+
+`POST /api/social/offers/:offerId/handled`
+
+```json
+{
+  "sellerUserId": 2,
+  "handled": true,
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "seller-session-token"
+}
+```
+
+Reset handled queue:
+
+`POST /api/social/offers/handled/reset`
+
+Notes:
+
+- Seller session auth is required for all handled-queue endpoints.
+- Handled queue actions are allowed only for offers owned by the authenticated seller profile.
+- Marking handled is restricted to accepted, non-expired offers.
+
 List offers:
 
 `GET /api/social/offers?userId=1&role=buyer&status=pending`

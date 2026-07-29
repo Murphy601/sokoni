@@ -123,6 +123,20 @@ CREATE INDEX IF NOT EXISTS idx_offer_reminders_offer_created
 CREATE INDEX IF NOT EXISTS idx_offer_reminders_seller_created
   ON offer_reminders(seller_user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS offer_handled_queue (
+  id              BIGSERIAL PRIMARY KEY,
+  offer_id        BIGINT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+  seller_user_id  INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  handled_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT offer_handled_queue_unique_offer_seller UNIQUE (offer_id, seller_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_offer_handled_queue_seller_handled
+  ON offer_handled_queue(seller_user_id, handled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_offer_handled_queue_offer
+  ON offer_handled_queue(offer_id);
+
 CREATE TABLE IF NOT EXISTS order_reviews (
   id              BIGSERIAL PRIMARY KEY,
   order_id        INT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,

@@ -4,11 +4,14 @@ import {
   createOffer,
   getDirectThread,
   getShopProfileByHandle,
+  listSellerHandledOfferQueue,
   listSellerReviews,
   getUserSocialStats,
   listOffers,
+  resetSellerHandledOfferQueue,
   respondToOffer,
   sendOfferReminder,
+  setSellerHandledOfferQueueState,
   sendDirectMessage,
   toggleFollow,
 } from "../db/repositories/social.js";
@@ -205,6 +208,123 @@ router.post("/offers/:offerId/remind", async (req, res) => {
       });
     }
     res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/offers/handled?offerIds=12,18 */
+router.get("/offers/handled", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerUserId = Number(req.query.userId);
+    if (
+      Number.isInteger(requestedSellerUserId) &&
+      requestedSellerUserId > 0 &&
+      requestedSellerUserId !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const result = await listSellerHandledOfferQueue({
+      sellerUserId: auth.sellerUserId,
+      offerIds: req.query.offerIds,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/offers/handled/reset — clear seller handled queue */
+router.post("/offers/handled/reset", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerUserId = Number(req.body?.sellerUserId);
+    if (
+      Number.isInteger(requestedSellerUserId) &&
+      requestedSellerUserId > 0 &&
+      requestedSellerUserId !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const result = await resetSellerHandledOfferQueue({
+      sellerUserId: auth.sellerUserId,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/offers/:offerId/handled — set seller handled queue state */
+router.post("/offers/:offerId/handled", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerUserId = Number(req.body?.sellerUserId);
+    if (
+      Number.isInteger(requestedSellerUserId) &&
+      requestedSellerUserId > 0 &&
+      requestedSellerUserId !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const result = await setSellerHandledOfferQueueState({
+      offerId: req.params.offerId,
+      sellerUserId: auth.sellerUserId,
+      handled: req.body?.handled,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

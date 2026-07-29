@@ -44,6 +44,7 @@ const FORBIDDEN_PATTERNS = [
 
 const DEFAULT_OFFER_REMINDER_COOLDOWN_SECONDS = 60;
 const MAX_OFFER_REMINDER_COOLDOWN_SECONDS = 600;
+const MAX_HANDLED_QUEUE_OFFER_IDS = 200;
 
 async function userExists(userId) {
   const { rows } = await query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [userId]);
@@ -55,6 +56,34 @@ function parseCooldownSeconds(value, fallback = DEFAULT_OFFER_REMINDER_COOLDOWN_
   if (!Number.isFinite(parsed)) return fallback;
   const normalized = Math.floor(parsed);
   return Math.min(Math.max(normalized, 5), MAX_OFFER_REMINDER_COOLDOWN_SECONDS);
+}
+
+function parseOfferIdList(value, maxItems = MAX_HANDLED_QUEUE_OFFER_IDS) {
+  const chunks = Array.isArray(value) ? value : [value];
+  const ids = [];
+  const seen = new Set();
+  chunks.forEach((chunk) => {
+    String(chunk || "")
+      .split(",")
+      .forEach((raw) => {
+        const id = parseOfferId(raw);
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        ids.push(id);
+      });
+  });
+  return ids.slice(0, maxItems);
+}
+
+function parseHandledFlag(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+  return null;
 }
 
 function formatKesAmount(amount) {
@@ -582,6 +611,16 @@ function mapOfferRow(row) {
   };
 }
 
+function mapHandledQueueRow(row) {
+  return {
+    offerId: Number(row.offer_id),
+    sellerUserId: Number(row.seller_user_id),
+    handled: true,
+    handledAt: row.handled_at || null,
+    updatedAt: row.updated_at || row.handled_at || null,
+  };
+}
+
 export async function createOffer({
   productId,
   buyerUserId,
@@ -888,6 +927,166 @@ export async function sendOfferReminder({ offerId, sellerUserId, cooldownSeconds
       messageId: Number.isInteger(messageId) && messageId > 0 ? messageId : null,
       message: messageResult.message,
     },
+  };
+}
+
+export async function listSellerHandledOfferQueue({ sellerUserId, offerIds } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const sellerId = parseUserId(sellerUserId);
+  if (!sellerId) {
+    return { error: "invalid_user", message: "Valid sellerUserId is required." };
+  }
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  const requestedOfferIds = parseOfferIdList(offerIds);
+  const params = [sellerId];
+  let whereSql = `seller_user_id = $1`;
+  if (requestedOfferIds.length) {
+    params.push(requestedOfferIds);
+    whereSql += ` AND offer_id = ANY($2::bigint[])`;
+  }
+
+  const { rows } = await query(
+    `SELECT offer_id, seller_user_id, handled_at, updated_at
+       FROM offer_handled_queue
+      WHERE ${whereSql}
+      ORDER BY handled_at DESC`,
+    params
+  );
+  const byOfferId = new Map();
+  rows.forEach((row) => {
+    byOfferId.set(Number(row.offer_id), row);
+  });
+
+  const states = requestedOfferIds.length
+    ? requestedOfferIds.map((id) => {
+        const row = byOfferId.get(id);
+        if (!row) {
+          return {
+            offerId: id,
+            sellerUserId: sellerId,
+            handled: false,
+            handledAt: null,
+            updatedAt: null,
+          };
+        }
+        return mapHandledQueueRow(row);
+      })
+    : rows.map(mapHandledQueueRow);
+
+  return {
+    sellerUserId: sellerId,
+    states,
+    count: states.length,
+    handledCount: rows.length,
+  };
+}
+
+export async function setSellerHandledOfferQueueState({ offerId, sellerUserId, handled } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const oid = parseOfferId(offerId);
+  const sellerId = parseUserId(sellerUserId);
+  const handledFlag = parseHandledFlag(handled);
+  if (!oid || !sellerId || handledFlag == null) {
+    return {
+      error: "invalid_offer_action",
+      message: "offerId, sellerUserId, and handled (true/false) are required.",
+    };
+  }
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  await expirePendingOffers();
+
+  const current = await query(
+    `SELECT id, status, expires_at, buyer_user_id, seller_user_id
+       FROM offers
+      WHERE id = $1
+      LIMIT 1`,
+    [oid]
+  );
+  const offer = current.rows[0];
+  if (!offer) {
+    return { error: "offer_not_found", message: "Offer not found." };
+  }
+  if (Number(offer.seller_user_id) !== sellerId) {
+    return { error: "forbidden_offer_action", message: "Only the seller can update this quick queue state." };
+  }
+
+  if (handledFlag) {
+    const status = String(offer.status || "")
+      .trim()
+      .toLowerCase();
+    if (status !== "accepted") {
+      return {
+        error: "offer_not_accepted",
+        message: `Offer is ${status || "not accepted"} and cannot be added to handled queue.`,
+      };
+    }
+    if (offer.expires_at && new Date(offer.expires_at).getTime() <= Date.now()) {
+      await query(`UPDATE offers SET status = 'expired', updated_at = NOW() WHERE id = $1`, [oid]);
+      await query(`DELETE FROM offer_handled_queue WHERE offer_id = $1 AND seller_user_id = $2`, [oid, sellerId]);
+      return { error: "offer_expired", message: "Offer has expired." };
+    }
+    const buyerId = parseUserId(offer.buyer_user_id);
+    if (!buyerId || buyerId === sellerId) {
+      return {
+        error: "invalid_offer_action",
+        message: "Could not resolve buyer profile for this handled-offer action.",
+      };
+    }
+
+    const upserted = await query(
+      `INSERT INTO offer_handled_queue (offer_id, seller_user_id, handled_at, updated_at)
+       VALUES ($1, $2, NOW(), NOW())
+       ON CONFLICT (offer_id, seller_user_id)
+       DO UPDATE SET handled_at = EXCLUDED.handled_at, updated_at = NOW()
+       RETURNING offer_id, seller_user_id, handled_at, updated_at`,
+      [oid, sellerId]
+    );
+    return { success: true, state: mapHandledQueueRow(upserted.rows[0]) };
+  }
+
+  await query(`DELETE FROM offer_handled_queue WHERE offer_id = $1 AND seller_user_id = $2`, [oid, sellerId]);
+  return {
+    success: true,
+    state: {
+      offerId: oid,
+      sellerUserId: sellerId,
+      handled: false,
+      handledAt: null,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export async function resetSellerHandledOfferQueue({ sellerUserId } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const sellerId = parseUserId(sellerUserId);
+  if (!sellerId) {
+    return { error: "invalid_user", message: "Valid sellerUserId is required." };
+  }
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  const cleared = await query(`DELETE FROM offer_handled_queue WHERE seller_user_id = $1`, [sellerId]);
+  return {
+    success: true,
+    sellerUserId: sellerId,
+    clearedCount: Number(cleared.rowCount || 0),
   };
 }
 
