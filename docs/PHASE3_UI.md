@@ -9,6 +9,7 @@ Homepage (`index.html`) uses a **Depop-style matte dark shell**: black chrome, s
 3. **Cross-page shell parity** — shared header + bottom nav on activity / inbox / shop / track / profile
 4. **Hero polish** — brand-first hero; curated chips below New arrivals
 5. **Depop dark fix** — remove neon top banner, matte black + `#FF2300` CTAs, auto-play hero carousel (no lockup graphic)
+6. **Ecosystem strips** — +3 hero slides (circular / offers / pickup), brands bar, live shops row, 4-step how-it-works
 
 Phase 3 UI slices above are **complete**. Later product work is Phase 4+.
 
@@ -18,9 +19,11 @@ Phase 3 UI slices above are **complete**. Later product work is Phase 4+.
 |---------|------|
 | Sticky header (no green trust strip) | `assets/css/depop-shell.css`, `index.html`, `shell-chrome.js` |
 | Category strip (Women, Men, Pre-Loved, Brand New…) | `index.html` + `assets/js/depop-nav.js` |
-| Hero carousel (buyers / sellers / escrow) | `depop-shell.css` + `depop-hero-carousel.js` |
+| Hero carousel (6 slides) | `depop-shell.css` + `depop-hero-carousel.js` |
+| Brands bar + sellers row | `depop-ecosystem.js` |
 | Photo grid first (`#deals`) | `index.html` |
 | Curated collections | after `#deals` (not in first viewport) |
+| How Sokoni works (4 steps) | `#how-it-works` |
 | Mobile bottom nav (Home, Explore, Sell, Inbox, Profile) | `depop-shell.css` + `index.html` / `shell-chrome.js` |
 | Buyer profile | `profile.html` + `assets/js/buyer-profile.js` |
 | Shared subpage chrome | `assets/js/shell-chrome.js` |
