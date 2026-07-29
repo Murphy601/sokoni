@@ -545,12 +545,28 @@ function renderMessageButton(shop) {
   btn.href = inboxLinkForShop(shop);
 }
 
+function resolveShopProductImage(product) {
+  if (window.SokoniApp?.resolveProductImage) return window.SokoniApp.resolveProductImage(product);
+  const botOrigin =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      ? "http://localhost:3001"
+      : "https://bot.sokonimall.com";
+  const raw = product?.imageUrl;
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+  if (product?.id) return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+  return raw || null;
+}
+
 function productCard(product, shop) {
   const title = escapeHtml(product.title || "Item");
-  const image = product.imageUrl
-    ? `<img src="${escapeHtml(product.imageUrl)}" alt="${title}" class="product-image w-full h-full object-cover" loading="lazy" decoding="async" />`
+  const src = resolveShopProductImage(product);
+  const image = src
+    ? `<img src="${escapeHtml(src)}" alt="${title}" class="product-image w-full h-full object-cover" loading="lazy" decoding="async" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-xs text-brand-purple/45\\'>Photo soon</div>'" />`
     : `<div class="w-full h-full flex items-center justify-center text-xs text-brand-purple/45 dark:text-white/55">Photo soon</div>`;
-  const condition = product.condition ? escapeHtml(product.condition.replace(/_/g, " ")) : "—";
+  const condition = escapeHtml(
+    product.conditionLabel ||
+      (product.condition ? String(product.condition).replace(/_/g, " ") : "—")
+  );
   const size = product.size ? escapeHtml(product.size) : "—";
   const likes = Number(product.likesCount || 0);
   const liked = Boolean(product.liked) || state.likedProductIds.has(String(product.id));

@@ -61,7 +61,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && SITE_ORIGINS.has(origin.replace(/\/$/, ""))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Seller-Session, X-Buyer-Session");
   }
   if (req.method === "OPTIONS") return res.sendStatus(204);
@@ -136,16 +136,17 @@ app.get("/health", async (_req, res) => {
   });
 });
 
-/** Product photos for WhatsApp — served from VM disk (no Cloudflare wait). */
-app.use(
-  "/catalog-images",
-  express.static(CATALOG_IMAGES_DIR, {
-    maxAge: "1d",
-    setHeaders(res) {
-      res.setHeader("Cache-Control", "public, max-age=86400");
-    },
-  })
-);
+/** Product photos — served from VM disk (no Cloudflare wait). */
+const catalogImageStatic = express.static(CATALOG_IMAGES_DIR, {
+  maxAge: "1d",
+  setHeaders(res) {
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  },
+});
+app.use("/catalog-images", catalogImageStatic);
+/** Alias so relative assets/images/products/* URLs also hit the VM when proxied. */
+app.use("/assets/images/products", catalogImageStatic);
 
 /** Public reviews for website + WhatsApp-collected feedback. */
 app.get("/api/reviews", (_req, res) => {

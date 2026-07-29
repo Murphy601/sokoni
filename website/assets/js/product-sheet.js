@@ -27,8 +27,17 @@
   }
 
   function resolveImage(product) {
-    if (product?.imageUrl) return product.imageUrl;
-    if (product?.id) return `assets/images/products/${product.id}.jpg`;
+    if (window.SokoniApp?.resolveProductImage) {
+      return window.SokoniApp.resolveProductImage(product);
+    }
+    const botOrigin =
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? "http://localhost:3001"
+        : "https://bot.sokonimall.com";
+    const raw = product?.imageUrl;
+    if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+    if (product?.id) return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+    if (raw) return String(raw);
     return null;
   }
 

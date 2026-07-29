@@ -546,8 +546,17 @@ function runSearch(query) {
 // ---------- Render helpers ----------
 
 function resolveProductImage(product) {
-  if (product?.imageUrl) return product.imageUrl;
-  if (product?.id) return `assets/images/products/${product.id}.jpg`;
+  const botOrigin =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      ? "http://localhost:3001"
+      : "https://bot.sokonimall.com";
+  const raw = product?.imageUrl || (Array.isArray(product?.images) ? product.images[0] : null);
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+  if (product?.id) return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+  if (raw) {
+    const file = String(raw).replace(/^\/?assets\/images\/products\//i, "").replace(/^\/?catalog-images\//i, "");
+    if (file) return `${botOrigin}/catalog-images/${encodeURIComponent(file.split("/").pop())}`;
+  }
   return null;
 }
 
@@ -611,10 +620,18 @@ function sellerShopLink(product) {
 
 function conditionBadgeHtml(product) {
   if (product.isSecondhand) {
-    const cond = product.condition || "Pre-Loved";
+    const cond =
+      product.conditionLabel ||
+      String(product.condition || "Pre-Loved")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
     return `<span class="depop-card-condition depop-card-condition--thrift">♻️ ${escapeHtml(cond)}</span>`;
   }
-  return `<span class="depop-card-condition depop-card-condition--new">✨ Brand New</span>`;
+  const newLabel =
+    product.conditionLabel && /brand new/i.test(String(product.conditionLabel))
+      ? product.conditionLabel
+      : "Brand New";
+  return `<span class="depop-card-condition depop-card-condition--new">✨ ${escapeHtml(newLabel)}</span>`;
 }
 
 function renderDepopCard(product) {
@@ -622,7 +639,7 @@ function renderDepopCard(product) {
   const id = escapeHtml(product.id || "");
   const src = resolveProductImage(product);
   const imageInner = src
-    ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" />`
+    ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'depop-card-placeholder',textContent:'Photo soon'}))" />`
     : `<span class="depop-card-placeholder">Photo soon</span>`;
   const handle = sellerHandle(product);
   const shopLink = sellerShopLink(product);
@@ -1278,6 +1295,7 @@ window.SokoniApp = {
   buyerPriceKes,
   formatShippingLine,
   formatBuyerTotal,
+  resolveProductImage,
   runSearch,
   setCatalogFilter,
   renderDepopCard,

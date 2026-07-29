@@ -15,6 +15,7 @@ import {
 } from "../db/repositories/products.js";
 import { toggleProductLike, listLikedProductIds } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
+import { resolveStorefrontImageUrl } from "../lib/catalog-images.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
@@ -68,8 +69,14 @@ function toPublicProduct(p) {
     emoji: p.emoji,
     tags: p.tags,
     inStock: p.inStock,
-    imageUrl: p.imageUrl,
-    images: p.images,
+    imageUrl: resolveStorefrontImageUrl(p) || p.imageUrl,
+    images: Array.isArray(p.images)
+      ? p.images.map((img, idx) => {
+          if (idx === 0) return resolveStorefrontImageUrl(p) || img;
+          if (/^https?:\/\//i.test(String(img || ""))) return img;
+          return resolveStorefrontImageUrl({ id: p.id, imageUrl: img }) || img;
+        })
+      : p.images,
     estDeliveryDays: p.estDeliveryDays,
     volumeMl: p.volumeMl,
   };

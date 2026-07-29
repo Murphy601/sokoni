@@ -3,6 +3,8 @@ import {
   computeOfferFeeBreakdown,
   serializeOfferBreakdown,
 } from "../../services/shipping-tiers.js";
+import { resolveStorefrontImageUrl } from "../../lib/catalog-images.js";
+import { CONDITION_LABELS } from "../product-mapper.js";
 
 /** Shared product columns for offer hydration (includes shipping for escrow math). */
 const OFFER_PRODUCT_SELECT = `
@@ -895,8 +897,10 @@ export async function listBuyerSocialActivity({ buyerUserId, limit = 40 } = {}) 
 
   const safeLimit = Math.min(Math.max(Number(limit) || 40, 1), 100);
 
-  const { rows } = await query(
-    `SELECT * FROM (
+  let rows;
+  try {
+    const result = await query(
+      `SELECT * FROM (
        SELECT
          CASE
            WHEN o.status = 'accepted' THEN 'offer_accepted'
@@ -912,7 +916,7 @@ export async function listBuyerSocialActivity({ buyerUserId, limit = 40 } = {}) 
          p.title AS product_title,
          o.id::text AS offer_id,
          o.amount_kes AS amount_kes,
-         o.status AS offer_status
+         o.status::text AS offer_status
        FROM offers o
        LEFT JOIN products p ON p.id = o.product_id
        LEFT JOIN users seller ON seller.id = o.seller_user_id
@@ -958,8 +962,16 @@ export async function listBuyerSocialActivity({ buyerUserId, limit = 40 } = {}) 
      ) activity
      ORDER BY created_at DESC
      LIMIT $2`,
-    [uid, safeLimit]
-  );
+      [uid, safeLimit]
+    );
+    rows = result.rows;
+  } catch (err) {
+    console.error("[social] listBuyerSocialActivity failed:", err.message);
+    return {
+      error: "buyer_activity_failed",
+      message: "Could not load activity right now. Please try again.",
+    };
+  }
 
   return {
     buyerUserId: uid,
@@ -1331,17 +1343,23 @@ function hasForbiddenMessage(content) {
 }
 
 function mapStorefrontProductRow(row) {
+  const condition = row.condition || null;
+  const imageUrl = resolveStorefrontImageUrl({
+    id: row.id,
+    imageUrl: row.image_url || row.primary_image_url || null,
+  });
   return {
     id: row.id,
     title: row.title,
     description: row.description || null,
     priceKsh: row.price_kes != null ? Number(row.price_kes) : null,
     priceKes: row.price_kes != null ? Number(row.price_kes) : null,
-    imageUrl: row.image_url || row.primary_image_url || null,
+    imageUrl,
     category: row.category,
     subCategory: row.sub_category || null,
     size: row.size_label || null,
-    condition: row.condition || null,
+    condition,
+    conditionLabel: CONDITION_LABELS[condition] || (condition ? String(condition).replace(/_/g, " ") : null),
     brand: row.brand || null,
     genderFit: row.gender_fit || null,
     isSecondhand: Boolean(row.is_secondhand),
