@@ -37,6 +37,36 @@ fi
 export WAHA_NOWEB_WA_VERSION
 echo "==> WAHA_NOWEB_WA_VERSION=$WAHA_NOWEB_WA_VERSION"
 
+# Avoid bouncing a healthy linked session on every bot deploy (regressed WA before).
+# Force recreate with: FORCE_WAHA_RECREATE=1 bash scripts/deploy-waha.sh
+if [ "${FORCE_WAHA_RECREATE:-}" != "1" ] && [ "${WIPE_WAHA_SESSIONS:-}" != "1" ]; then
+  EXISTING_CID="$(waha_container_id)"
+  if [ -n "$EXISTING_CID" ]; then
+    EXISTING_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$EXISTING_CID" 2>/dev/null || true)"
+    EXISTING_VER="$(docker exec "$EXISTING_CID" printenv WAHA_NOWEB_WA_VERSION 2>/dev/null || true)"
+    EXISTING_STATUS="$(
+      curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$WAHA_SESSION" 2>/dev/null \
+        | python3 -c 'import sys,json
+try:
+  print(json.load(sys.stdin).get("status") or "")
+except Exception:
+  print("")' 2>/dev/null || true
+    )"
+    if [[ "$EXISTING_IMAGE" == *2026.7.2* ]] \
+      && [ "$EXISTING_STATUS" = "WORKING" ] \
+      && [ -n "$EXISTING_VER" ]; then
+      echo "==> WAHA already healthy on $EXISTING_IMAGE (status=WORKING, WAHA_NOWEB_WA_VERSION=$EXISTING_VER)"
+      echo "    Skipping container recreate — set FORCE_WAHA_RECREATE=1 to force."
+      echo "==> Re-applying session webhook/store config only..."
+      if [ -f "$SCRIPT_DIR/configure-waha-session.sh" ]; then
+        bash "$SCRIPT_DIR/configure-waha-session.sh" || true
+      fi
+      exit 0
+    fi
+    echo "==> Recreating WAHA (image=$EXISTING_IMAGE status=${EXISTING_STATUS:-unknown} ver=${EXISTING_VER:-unset})"
+  fi
+fi
+
 # Pull the pinned image explicitly (avoid compose ${image:tag} default interpolation bugs).
 if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
   echo "==> Pulling WAHA image ($WAHA_DEFAULT_IMAGE) — set SKIP_WAHA_PULL=1 to skip"
