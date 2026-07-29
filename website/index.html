@@ -116,19 +116,8 @@
     <a href="#" id="search-hint-link" class="hidden"></a>
   </div>
 
-  <!-- Dynamic hero carousel -->
-  <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Featured"></section>
-
-  <!-- Curated collections -->
-  <section class="depop-collections catalog-main max-w-7xl mx-auto px-4 md:px-5">
-    <h2 class="depop-collections-heading">Curated collections</h2>
-    <div id="depop-collections-row" class="depop-collections-row">
-      <button type="button" class="depop-collection-card" data-depop-filter='{"category":"trending","scroll":true}'>🔥 Trending Fits</button>
-      <button type="button" class="depop-collection-card" data-depop-filter='{"priceTier":"under-2500","scroll":true}'>🏷️ Under 2,500 KSh</button>
-      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"secondhand","scroll":true}'>♻️ Pre-Loved Gems</button>
-      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"new","scroll":true}'>✨ Brand New Drops</button>
-    </div>
-  </section>
+  <!-- Brand hero (single composition) -->
+  <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Sokoni"></section>
 
   <!-- Phase 8 — Personalized feed rails -->
   <div id="feed-rails" class="catalog-main max-w-7xl mx-auto px-4 md:px-5 space-y-10 py-6 hidden"></div>
@@ -164,6 +153,17 @@
         <p class="text-sm max-w-md mx-auto">Viral picks from sellers will show here.</p>
       </div>
       <div class="depop-product-grid" id="local-deals-grid"></div>
+    </div>
+  </section>
+
+  <!-- Curated collections (below first viewport) -->
+  <section class="depop-collections catalog-main max-w-7xl mx-auto px-4 md:px-5">
+    <h2 class="depop-collections-heading">Curated collections</h2>
+    <div id="depop-collections-row" class="depop-collections-row">
+      <button type="button" class="depop-collection-card" data-depop-filter='{"category":"trending","scroll":true}'>Trending fits</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"priceTier":"under-2500","scroll":true}'>Under 2,500 KSh</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"secondhand","scroll":true}'>Pre-loved gems</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"new","scroll":true}'>Brand new drops</button>
     </div>
   </section>
 
