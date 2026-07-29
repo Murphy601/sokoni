@@ -4,6 +4,7 @@ import {
   createOffer,
   getDirectThread,
   getShopProfileByHandle,
+  listSellerHandledOfferQueueEvents,
   listSellerHandledOfferQueue,
   listSellerReviews,
   getUserSocialStats,
@@ -252,6 +253,48 @@ router.get("/offers/handled", async (req, res) => {
   }
 });
 
+/** GET /api/social/offers/handled/events?offerId=12&action=handled */
+router.get("/offers/handled/events", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerUserId = Number(req.query.userId);
+    if (
+      Number.isInteger(requestedSellerUserId) &&
+      requestedSellerUserId > 0 &&
+      requestedSellerUserId !== auth.sellerUserId
+    ) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const result = await listSellerHandledOfferQueueEvents({
+      sellerUserId: auth.sellerUserId,
+      offerId: req.query.offerId,
+      action: req.query.action,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** POST /api/social/offers/handled/reset — clear seller handled queue */
 router.post("/offers/handled/reset", async (req, res) => {
   try {
@@ -277,6 +320,7 @@ router.post("/offers/handled/reset", async (req, res) => {
 
     const result = await resetSellerHandledOfferQueue({
       sellerUserId: auth.sellerUserId,
+      source: req.body?.source,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
@@ -317,6 +361,7 @@ router.post("/offers/:offerId/handled", async (req, res) => {
       offerId: req.params.offerId,
       sellerUserId: auth.sellerUserId,
       handled: req.body?.handled,
+      source: req.body?.source,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({

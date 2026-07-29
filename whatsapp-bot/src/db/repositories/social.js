@@ -45,6 +45,9 @@ const FORBIDDEN_PATTERNS = [
 const DEFAULT_OFFER_REMINDER_COOLDOWN_SECONDS = 60;
 const MAX_OFFER_REMINDER_COOLDOWN_SECONDS = 600;
 const MAX_HANDLED_QUEUE_OFFER_IDS = 200;
+const HANDLED_QUEUE_EVENT_ACTIONS = new Set(["handled", "unhandled", "reset"]);
+const DEFAULT_HANDLED_QUEUE_EVENTS_LIMIT = 50;
+const MAX_HANDLED_QUEUE_EVENTS_LIMIT = 200;
 
 async function userExists(userId) {
   const { rows } = await query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [userId]);
@@ -84,6 +87,27 @@ function parseHandledFlag(value) {
   if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
   if (normalized === "false" || normalized === "0" || normalized === "no") return false;
   return null;
+}
+
+function normalizeHandledQueueEventSource(value, fallback = "seller_dashboard") {
+  const source = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .slice(0, 64);
+  return source || fallback;
+}
+
+function parseListLimit(value, fallback = DEFAULT_HANDLED_QUEUE_EVENTS_LIMIT, max = MAX_HANDLED_QUEUE_EVENTS_LIMIT) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(Math.floor(parsed), 1), max);
+}
+
+function parseListOffset(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(Math.floor(parsed), 0);
 }
 
 function formatKesAmount(amount) {
@@ -621,6 +645,17 @@ function mapHandledQueueRow(row) {
   };
 }
 
+function mapHandledQueueEventRow(row) {
+  return {
+    id: Number(row.id),
+    offerId: Number(row.offer_id),
+    sellerUserId: Number(row.seller_user_id),
+    action: String(row.action || "").trim().toLowerCase(),
+    source: row.source || "seller_dashboard",
+    createdAt: row.created_at || null,
+  };
+}
+
 export async function createOffer({
   productId,
   buyerUserId,
@@ -987,7 +1022,7 @@ export async function listSellerHandledOfferQueue({ sellerUserId, offerIds } = {
   };
 }
 
-export async function setSellerHandledOfferQueueState({ offerId, sellerUserId, handled } = {}) {
+export async function setSellerHandledOfferQueueState({ offerId, sellerUserId, handled, source } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -995,6 +1030,7 @@ export async function setSellerHandledOfferQueueState({ offerId, sellerUserId, h
   const oid = parseOfferId(offerId);
   const sellerId = parseUserId(sellerUserId);
   const handledFlag = parseHandledFlag(handled);
+  const eventSource = normalizeHandledQueueEventSource(source);
   if (!oid || !sellerId || handledFlag == null) {
     return {
       error: "invalid_offer_action",
@@ -1053,10 +1089,25 @@ export async function setSellerHandledOfferQueueState({ offerId, sellerUserId, h
        RETURNING offer_id, seller_user_id, handled_at, updated_at`,
       [oid, sellerId]
     );
+    await query(
+      `INSERT INTO offer_handled_queue_events (offer_id, seller_user_id, action, source)
+       VALUES ($1, $2, 'handled', $3)`,
+      [oid, sellerId, eventSource]
+    );
     return { success: true, state: mapHandledQueueRow(upserted.rows[0]) };
   }
 
-  await query(`DELETE FROM offer_handled_queue WHERE offer_id = $1 AND seller_user_id = $2`, [oid, sellerId]);
+  const removed = await query(`DELETE FROM offer_handled_queue WHERE offer_id = $1 AND seller_user_id = $2 RETURNING offer_id`, [
+    oid,
+    sellerId,
+  ]);
+  if (removed.rows[0]) {
+    await query(
+      `INSERT INTO offer_handled_queue_events (offer_id, seller_user_id, action, source)
+       VALUES ($1, $2, 'unhandled', $3)`,
+      [oid, sellerId, eventSource]
+    );
+  }
   return {
     success: true,
     state: {
@@ -1069,7 +1120,49 @@ export async function setSellerHandledOfferQueueState({ offerId, sellerUserId, h
   };
 }
 
-export async function resetSellerHandledOfferQueue({ sellerUserId } = {}) {
+export async function resetSellerHandledOfferQueue({ sellerUserId, source } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const sellerId = parseUserId(sellerUserId);
+  const eventSource = normalizeHandledQueueEventSource(source);
+  if (!sellerId) {
+    return { error: "invalid_user", message: "Valid sellerUserId is required." };
+  }
+  if (!(await userExists(sellerId))) {
+    return { error: "seller_not_found", message: "Seller user not found." };
+  }
+
+  const cleared = await query(
+    `WITH removed AS (
+       DELETE FROM offer_handled_queue
+        WHERE seller_user_id = $1
+      RETURNING offer_id, seller_user_id
+     ),
+     logged AS (
+       INSERT INTO offer_handled_queue_events (offer_id, seller_user_id, action, source)
+       SELECT offer_id, seller_user_id, 'reset', $2
+         FROM removed
+       RETURNING id
+     )
+     SELECT COUNT(*)::int AS cleared_count FROM removed`,
+    [sellerId, eventSource]
+  );
+  return {
+    success: true,
+    sellerUserId: sellerId,
+    clearedCount: Number(cleared.rows[0]?.cleared_count || 0),
+  };
+}
+
+export async function listSellerHandledOfferQueueEvents({
+  sellerUserId,
+  offerId,
+  action,
+  limit = DEFAULT_HANDLED_QUEUE_EVENTS_LIMIT,
+  offset = 0,
+} = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -1082,11 +1175,56 @@ export async function resetSellerHandledOfferQueue({ sellerUserId } = {}) {
     return { error: "seller_not_found", message: "Seller user not found." };
   }
 
-  const cleared = await query(`DELETE FROM offer_handled_queue WHERE seller_user_id = $1`, [sellerId]);
+  const requestedOfferId = offerId == null || offerId === "" ? null : parseOfferId(offerId);
+  if (offerId != null && offerId !== "" && !requestedOfferId) {
+    return { error: "invalid_offer", message: "Valid offerId is required when provided." };
+  }
+
+  const normalizedAction = action == null ? null : String(action).trim().toLowerCase();
+  if (normalizedAction && !HANDLED_QUEUE_EVENT_ACTIONS.has(normalizedAction)) {
+    return {
+      error: "invalid_event_action",
+      message: "action must be one of handled, unhandled, or reset.",
+    };
+  }
+
+  const safeLimit = parseListLimit(limit);
+  const safeOffset = parseListOffset(offset);
+  const params = [sellerId];
+  const whereClauses = [`seller_user_id = $1`];
+  if (requestedOfferId) {
+    params.push(requestedOfferId);
+    whereClauses.push(`offer_id = $${params.length}`);
+  }
+  if (normalizedAction) {
+    params.push(normalizedAction);
+    whereClauses.push(`action = $${params.length}`);
+  }
+  params.push(safeLimit);
+  const limitParam = `$${params.length}`;
+  params.push(safeOffset);
+  const offsetParam = `$${params.length}`;
+
+  const { rows } = await query(
+    `SELECT id, offer_id, seller_user_id, action, source, created_at
+       FROM offer_handled_queue_events
+      WHERE ${whereClauses.join(" AND ")}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${limitParam}
+      OFFSET ${offsetParam}`,
+    params
+  );
+
   return {
-    success: true,
     sellerUserId: sellerId,
-    clearedCount: Number(cleared.rowCount || 0),
+    events: rows.map(mapHandledQueueEventRow),
+    count: rows.length,
+    limit: safeLimit,
+    offset: safeOffset,
+    filters: {
+      offerId: requestedOfferId,
+      action: normalizedAction,
+    },
   };
 }
 

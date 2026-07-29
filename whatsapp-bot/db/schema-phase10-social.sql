@@ -137,6 +137,20 @@ CREATE INDEX IF NOT EXISTS idx_offer_handled_queue_seller_handled
 CREATE INDEX IF NOT EXISTS idx_offer_handled_queue_offer
   ON offer_handled_queue(offer_id);
 
+CREATE TABLE IF NOT EXISTS offer_handled_queue_events (
+  id              BIGSERIAL PRIMARY KEY,
+  offer_id        BIGINT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+  seller_user_id  INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action          VARCHAR(24) NOT NULL CHECK (action IN ('handled', 'unhandled', 'reset')),
+  source          VARCHAR(64) NOT NULL DEFAULT 'seller_dashboard',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_offer_handled_events_seller_created
+  ON offer_handled_queue_events(seller_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_offer_handled_events_offer_created
+  ON offer_handled_queue_events(offer_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS order_reviews (
   id              BIGSERIAL PRIMARY KEY,
   order_id        INT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,

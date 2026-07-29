@@ -187,11 +187,16 @@ Reset handled queue:
 
 `POST /api/social/offers/handled/reset`
 
+Read handled queue audit events:
+
+`GET /api/social/offers/handled/events?offerId=120&action=handled&limit=50&offset=0`
+
 Notes:
 
 - Seller session auth is required for all handled-queue endpoints.
 - Handled queue actions are allowed only for offers owned by the authenticated seller profile.
 - Marking handled is restricted to accepted, non-expired offers.
+- Handled queue transitions are recorded server-side (`handled`, `unhandled`, `reset`) for operational tracing.
 
 List offers:
 
