@@ -38,9 +38,11 @@ curl -s https://bot.sokonimall.com/health
 ```
 
 Useful env flags:
-- `SKIP_WAHA_DEPLOY=1` — restart bot only; leave the WAHA container alone (keeps WhatsApp session).
+- Bot deploy **skips WAHA by default** (avoids breaking a linked session). Use `FORCE_WAHA_DEPLOY=1` to recreate WAHA from `deploy-bot.sh`.
+- `SKIP_WAHA_DEPLOY=0` — also runs WAHA deploy (same as force for most cases).
 - `SKIP_CATALOG_PUBLISH=1` — do not try to commit/push local `products.json` (use when the VM branch has diverged).
 - `SOKONI_DEPLOY_REF=main` — ref to force-checkout (default `main`).
+- Prefer `bash scripts/deploy-waha.sh` when WhatsApp itself needs fixing (pins `2026.7.2` + live WA version).
 
 Website (`sokonimall.com`) deploys via **Cloudflare Workers Builds** on `main` — no VM secrets needed.
 
@@ -242,7 +244,9 @@ Full reset (forces re-link):
 RESET_WAHA_SESSION=1 bash scripts/waha-link-whatsapp.sh
 ```
 
-Image is pinned via `WAHA_IMAGE` / `docker-compose.waha.yml` (`latest-2026.6.2`). Scripts resolve the container by compose project `sokoni-waha`, not `ancestor=…:latest`.
+Image is pinned via `WAHA_IMAGE` / `docker-compose.waha.yml` (`latest-2026.7.2`).  
+`2026.6.2` ships a stale WhatsApp Web client (`2.3000.1035920091`) that loops `STARTING → Connection Failure` (WAHA #2191).  
+Scripts resolve the container by compose project `sokoni-waha`, not `ancestor=…:latest`.
 
 Use the same `WAHA_API_KEY` in `whatsapp-bot/.env` and when starting compose (`export WAHA_API_KEY=…` before `deploy-waha.sh`).
 

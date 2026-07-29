@@ -45,8 +45,17 @@ if [ "$STASHED" = "1" ]; then
   echo "    VM-only files (tiktok-featured, product bak) stay out of the running tree."
 fi
 
-if [ "${SKIP_WAHA_DEPLOY:-}" = "1" ]; then
-  echo "==> SKIP_WAHA_DEPLOY=1 — leaving WAHA container as-is"
+# Default: do NOT recreate WAHA on bot deploys (bouncing 2026.6.2 broke WhatsApp).
+# Refresh WAHA explicitly with: FORCE_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
+# Or: bash scripts/deploy-waha.sh
+if [ "${FORCE_WAHA_DEPLOY:-}" = "1" ]; then
+  echo "==> FORCE_WAHA_DEPLOY=1 — running WAHA deploy"
+  if ! bash "$REPO/scripts/deploy-waha.sh"; then
+    echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
+    echo "      Run: bash scripts/deploy-waha.sh"
+  fi
+elif [ "${SKIP_WAHA_DEPLOY:-1}" != "0" ]; then
+  echo "==> Leaving WAHA as-is (default). Set FORCE_WAHA_DEPLOY=1 to recreate."
 elif [ -f "$REPO/docker-compose.waha.yml" ]; then
   if ! bash "$REPO/scripts/deploy-waha.sh"; then
     echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
