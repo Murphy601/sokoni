@@ -61,6 +61,11 @@ let meta = { conditions: Object.keys(CONDITION_LABELS), maxPhotos: 4, browseTaxo
 let draft = {};
 let photoFiles = [null, null, null, null];
 let photoPreviews = [null, null, null, null];
+/** Cleaned cover data URL from Photoroom (cover slot only). */
+let coverCleanBase64 = null;
+/** Prefer cleaned cover for preview + publish when available. */
+let preferCleanCover = true;
+let studioUiEnabled = false;
 let videoFile = null;
 let videoPreview = null;
 let sellerInfo = null;
@@ -371,6 +376,13 @@ function bindMediaSlots() {
       photoFiles[i] = file;
       if (photoPreviews[i]) URL.revokeObjectURL(photoPreviews[i]);
       photoPreviews[i] = URL.createObjectURL(file);
+      if (i === 0) {
+        coverCleanBase64 = null;
+        preferCleanCover = true;
+        const prefer = el("studio-prefer-clean");
+        if (prefer) prefer.checked = true;
+        updateCoverStudioUi();
+      }
       const slot = el(`media-slot-${i}`);
       let img = slot?.querySelector("img.preview");
       if (!img && slot) {
@@ -381,6 +393,7 @@ function bindMediaSlots() {
       }
       if (img) img.src = photoPreviews[i];
       slot?.classList.add("has-media");
+      slot?.classList.remove("has-studio");
       if (i === 0 && sellerProfile) maybeAutoGenerate();
     });
   }
@@ -395,6 +408,123 @@ function bindMediaSlots() {
     wrap?.classList.remove("hidden");
     el("video-preview").src = videoPreview;
   });
+
+  el("studio-preview-btn")?.addEventListener("click", () => previewStudioClean());
+  el("studio-prefer-clean")?.addEventListener("change", (ev) => {
+    preferCleanCover = Boolean(ev.target.checked);
+    refreshCoverPreview();
+  });
+}
+
+function updateCoverStudioUi() {
+  const controls = el("studio-controls");
+  const badge = el("media-slot-0")?.querySelector(".sell-studio-badge");
+  const status = el("studio-status");
+  const previewBtn = el("studio-preview-btn");
+  if (controls) {
+    const show = studioUiEnabled;
+    controls.hidden = !show;
+    controls.classList.toggle("hidden", !show);
+  }
+  if (previewBtn) previewBtn.disabled = !photoFiles[0];
+  const showingClean = Boolean(coverCleanBase64 && preferCleanCover);
+  el("media-slot-0")?.classList.toggle("has-studio", showingClean);
+  if (badge) badge.hidden = !showingClean;
+  if (status && !coverCleanBase64 && studioUiEnabled) {
+    status.textContent = photoFiles[0]
+      ? "Preview cleans the cover only — AI draft still runs separately when you upload."
+      : "Add a cover photo to try background cleanup.";
+  }
+}
+
+function refreshCoverPreview() {
+  const slot = el("media-slot-0");
+  if (!slot || !photoFiles[0]) return;
+  let img = slot.querySelector("img.preview");
+  if (!img) {
+    img = document.createElement("img");
+    img.className = "preview";
+    img.alt = "";
+    slot.insertBefore(img, slot.firstChild);
+  }
+  const src =
+    coverCleanBase64 && preferCleanCover
+      ? coverCleanBase64
+      : photoPreviews[0];
+  if (src) img.src = src;
+  slot.classList.add("has-media");
+  updateCoverStudioUi();
+  const status = el("studio-status");
+  if (status && coverCleanBase64) {
+    status.textContent = preferCleanCover
+      ? "Using cleaned cover for preview and when you post."
+      : "Using your original cover — cleaned version kept if you switch back.";
+  }
+}
+
+function applyCoverStudioResult(cleanImageBase64, message) {
+  if (!cleanImageBase64) return;
+  coverCleanBase64 = cleanImageBase64;
+  preferCleanCover = true;
+  const prefer = el("studio-prefer-clean");
+  if (prefer) prefer.checked = true;
+  refreshCoverPreview();
+  const status = el("studio-status");
+  if (status) status.textContent = message || "Background cleaned.";
+}
+
+async function previewStudioClean() {
+  if (!photoFiles[0]) {
+    setStatus("Add a cover photo first.", true);
+    return;
+  }
+  if (!sellerProfile) {
+    setStatus("Finish seller setup first, then try background cleanup.", true);
+    return;
+  }
+  const phone = apiPhone();
+  if (!phone) return;
+
+  const btn = el("studio-preview-btn");
+  if (btn) btn.disabled = true;
+  setStatus("Cleaning cover background…");
+  const status = el("studio-status");
+  if (status) status.textContent = "Working…";
+
+  try {
+    const compressed = await compressImageFile(photoFiles[0]);
+    const imageBase64 = await readFileAsDataUrl(compressed);
+    const res = await fetch(`${LISTINGS_API}/studio`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, imageBase64, mimeType: compressed.type || "image/jpeg" })),
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      const msg = parsed.data?.message || parsed.message || "Background cleanup failed.";
+      setStatus(msg, true);
+      if (status) status.textContent = msg;
+      return;
+    }
+    const data = parsed.data;
+    if (data.studioApplied && data.cleanImageBase64) {
+      applyCoverStudioResult(data.cleanImageBase64, data.message);
+      setStatus(data.message || "Background cleaned — review before posting.");
+    } else {
+      const msg = data.message || "Could not clean background — keep your original photo.";
+      setStatus(msg, true);
+      if (status) status.textContent = msg;
+    }
+  } catch {
+    setStatus("Could not reach Sokoni — check your connection and try again.", true);
+    checkApiHealth();
+  } finally {
+    if (btn) btn.disabled = !photoFiles[0];
+  }
 }
 
 async function maybeAutoGenerate() {
@@ -410,6 +540,7 @@ async function maybeAutoGenerate() {
   try {
     const compressed = await compressImageFile(photoFiles[0]);
     const imageBase64 = await readFileAsDataUrl(compressed);
+    const skipStudio = !studioUiEnabled || !preferCleanCover;
     const res = await fetch(`${LISTINGS_API}/generate`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
@@ -419,6 +550,7 @@ async function maybeAutoGenerate() {
           imageBase64,
           mimeType: compressed.type || "image/jpeg",
           caption: el("photo-caption")?.value.trim() || "",
+          skipStudio,
         })
       ),
     });
@@ -440,20 +572,14 @@ async function maybeAutoGenerate() {
     draft = { ...draft, ...data.draft };
     sellerInfo = data.seller;
     if (data.studioApplied && data.cleanImageBase64) {
-      photoPreviews[0] = data.cleanImageBase64;
-      const slot = el("media-slot-0");
-      let img = slot?.querySelector("img.preview");
-      if (slot && !img) {
-        img = document.createElement("img");
-        img.className = "preview";
-        img.alt = "";
-        slot.insertBefore(img, slot.firstChild);
-      }
-      if (img) img.src = data.cleanImageBase64;
-      slot?.classList.add("has-media", "has-studio");
+      applyCoverStudioResult(
+        data.cleanImageBase64,
+        "AI cleaned background + filled draft — review each step."
+      );
       setStatus("AI cleaned background + filled draft — review each step.");
     } else {
       setStatus(data.message || "AI filled a draft — review each step before posting.");
+      updateCoverStudioUi();
     }
     fillFormFromDraft();
     if (sellerInfo?.businessName) showSellerProfile(sellerInfo);
@@ -557,11 +683,15 @@ function fillReview() {
 
 async function collectImagesBase64() {
   const images = [];
-  for (const file of photoFiles) {
-    if (file) {
-      const compressed = await compressImageFile(file);
-      images.push(await readFileAsDataUrl(compressed));
+  for (let i = 0; i < photoFiles.length; i += 1) {
+    const file = photoFiles[i];
+    if (!file) continue;
+    if (i === 0 && preferCleanCover && coverCleanBase64) {
+      images.push(coverCleanBase64);
+      continue;
     }
+    const compressed = await compressImageFile(file);
+    images.push(await readFileAsDataUrl(compressed));
   }
   return images;
 }
@@ -702,13 +832,15 @@ function renderListingAiStatus(metaData) {
   const node = el("listing-ai-status");
   if (!node) return;
   if (!metaData) {
+    studioUiEnabled = false;
     node.textContent =
       "Could not check AI status. You can still list manually — add a caption like “130 ksh women sandals” or fill the form yourself.";
+    updateCoverStudioUi();
     return;
   }
   const visionOn = Boolean(metaData.visionModel || metaData.visionProvider);
   const geminiOn = Boolean(metaData.geminiVisionEnabled);
-  const studioOn = Boolean(metaData.studioEnabled);
+  studioUiEnabled = Boolean(metaData.studioEnabled);
   const parts = [];
   if (visionOn) {
     parts.push("AI can draft from your cover photo");
@@ -716,9 +848,10 @@ function renderListingAiStatus(metaData) {
   } else {
     parts.push("Photo AI offline — use a caption or fill details manually");
   }
-  if (studioOn) parts.push("background cleanup available");
+  if (studioUiEnabled) parts.push("background cleanup available — preview below");
   parts.push("price = what you receive; buyers pay shipping + fee (prepaid)");
   node.textContent = parts.join(" · ") + ".";
+  updateCoverStudioUi();
 }
 
 async function loadMyListings() {

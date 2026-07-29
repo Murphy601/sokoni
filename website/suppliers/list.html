@@ -391,10 +391,21 @@
           Checking AI draft… Listing still works if AI skips — add a caption or fill details yourself.
         </p>
         <div class="sell-media-grid">
-          <div id="media-slot-0" class="sell-media-slot sell-media-slot-cover"><span class="sell-slot-label">📷 Cover *</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
+          <div id="media-slot-0" class="sell-media-slot sell-media-slot-cover"><span class="sell-slot-label">📷 Cover *</span><span class="sell-studio-badge" hidden>Cleaned</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
           <div id="media-slot-1" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
           <div id="media-slot-2" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-2" /></div>
           <div id="media-slot-3" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-3" /></div>
+        </div>
+        <div id="studio-controls" class="sell-studio-controls hidden" hidden>
+          <p class="text-sm text-brand-purple/70 dark:text-white/70">Messy bedroom shot? Clean the cover background before you post.</p>
+          <div class="sell-studio-actions">
+            <button type="button" id="studio-preview-btn" class="sell-btn-ghost">Preview clean background</button>
+            <label class="sell-studio-toggle">
+              <input type="checkbox" id="studio-prefer-clean" checked />
+              Use cleaned cover when posting
+            </label>
+          </div>
+          <p id="studio-status" class="sell-tag-hint"></p>
         </div>
         <label class="block text-sm font-medium">
           Caption hint for AI (optional)

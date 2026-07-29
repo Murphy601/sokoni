@@ -10,6 +10,7 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
 1. **Listing readiness polish** — seller-net test fix, AI fallback copy, flagged moderation endpoint help, env notes
 2. **Moderation visibility** — seller hidden reasons, admin review queue page, moderation helper tests
+3. **Photo studio polish** — `/studio` preview (background only), seller toggle, publish cleaned cover
 
 ## Seller workflow
 
@@ -20,7 +21,7 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
 | Step | What the seller does |
 |------|----------------------|
-| Media | Up to 4 photos + optional video. First photo = cover. AI auto-fills from cover photo when configured. |
+| Media | Up to 4 photos + optional video. First photo = cover. AI auto-fills from cover photo when configured. Optional **Preview clean background** (Photoroom) with toggle to post cleaned vs original. |
 | Details | Title, description, up to 5 style hashtags, up to 2 brand tags |
 | Attributes | Browse category/subcategory, condition, size, colour, era |
 | Pricing | **Seller-net** price (what you receive) → buyer total = net + shipping + platform fee. Dispatch city. |
@@ -36,6 +37,7 @@ Pricing is **seller-net first**: the number sellers enter is what they receive. 
 | `whatsapp-bot/src/services/seller-listings.js` | Instant publish, drafts, catalog sync |
 | `whatsapp-bot/src/services/listing-moderation.js` | Post-publish scan, hide/restore |
 | `whatsapp-bot/src/routes/sellerListingsApi.js` | Seller REST API |
+| `whatsapp-bot/src/services/listing-studio.js` | Optional Photoroom background cleanup + preview helper |
 | `website/suppliers/list.html` | Depop-style 5-step wizard |
 | `website/assets/js/seller-listing.js` | Wizard client |
 | `website/assets/css/depop-sell.css` | Wizard styles |
@@ -46,7 +48,13 @@ Auth = approved supplier `phone` + session. No admin token.
 
 ```
 POST /api/seller/listings/generate
-  { phone, imageBase64, mimeType?, caption? }
+  { phone, imageBase64, mimeType?, caption?, skipStudio? }
+  → { draft, studioApplied, cleanImageBase64?, product… }
+
+POST /api/seller/listings/studio
+  { phone, imageBase64, mimeType? }
+  → { studioApplied, cleanImageBase64?, reason?, message }
+  (background removal only — does not run AI draft)
 
 POST /api/seller/listings/publish
   { phone, draft, images[], videoBase64?, draftId? }
@@ -60,7 +68,9 @@ GET /api/seller/listings/meta
   → visionModel, visionProvider, geminiVisionEnabled, studioEnabled, shippingTiers, …
 ```
 
-AI keys are **optional** for listing: caption/manual fill still works. Photo vision needs `OPENAI_API_KEY` (and optionally `GEMINI_API_KEY` / `PHOTOROOM_API_KEY`).
+AI keys are **optional** for listing: caption/manual fill still works. Photo vision needs `OPENAI_API_KEY` (and optionally `GEMINI_API_KEY`). Background cleanup needs `PHOTOROOM_API_KEY` (`studioEnabled` on meta).
+
+When studio is enabled, sellers can **Preview clean background** on the cover, toggle **Use cleaned cover when posting**, and the publish payload uses the cleaned image when the toggle is on.
 
 ## Admin moderation API
 
@@ -96,6 +106,7 @@ Failed scans → listing hidden (`inStock: false`), seller + admin notified on W
 cd whatsapp-bot
 npm run test:listing
 npm run test:listing-moderation
+npm run test:listing-studio
 node scripts/test-seller-fees.mjs
 curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.tool
 ```
@@ -103,6 +114,7 @@ curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.to
 Manual:
 1. Seller dashboard → My listings shows reason + hint when status is `hidden`
 2. Open `/admin-seller-listings.html?token=…` → restore / keep removed
+3. With `PHOTOROOM_API_KEY` set: cover upload → Preview clean background → toggle original vs cleaned → post uses the choice
 
 ## Next: Phase 5.1
 
