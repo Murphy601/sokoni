@@ -70,18 +70,43 @@
           <p id="shop-listings-count" class="font-bold text-lg">0</p>
           <p class="text-xs text-brand-purple/55 dark:text-white/65">Listings</p>
         </div>
-        <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
+        <button
+          type="button"
+          id="shop-followers-btn"
+          class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center min-h-[44px] hover:border-brand-green focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
+          aria-controls="shop-social-list"
+          aria-expanded="false">
           <p id="shop-followers-count" class="font-bold text-lg">0</p>
           <p class="text-xs text-brand-purple/55 dark:text-white/65">Followers</p>
-        </div>
-        <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
+        </button>
+        <button
+          type="button"
+          id="shop-following-btn"
+          class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center min-h-[44px] hover:border-brand-green focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
+          aria-controls="shop-social-list"
+          aria-expanded="false">
           <p id="shop-following-count" class="font-bold text-lg">0</p>
           <p class="text-xs text-brand-purple/55 dark:text-white/65">Following</p>
-        </div>
+        </button>
         <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
           <p id="shop-likes-count" class="font-bold text-lg">0</p>
           <p class="text-xs text-brand-purple/55 dark:text-white/65">Likes</p>
         </div>
+      </div>
+
+      <div id="shop-social-list" class="hidden mt-4 rounded-2xl border border-black/5 dark:border-white/10 p-4" hidden>
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h2 id="shop-social-list-title" class="text-sm font-semibold">Followers</h2>
+          <button
+            type="button"
+            id="shop-social-list-close"
+            class="min-h-[44px] min-w-[44px] px-3 rounded-full border border-brand-purple/15 dark:border-white/15 text-sm font-semibold"
+            aria-label="Close follow list">
+            Close
+          </button>
+        </div>
+        <div id="shop-social-list-body" class="space-y-2"></div>
+        <p id="shop-social-list-empty" class="hidden text-sm text-brand-purple/60 dark:text-white/65">No one here yet.</p>
       </div>
 
       <div class="flex flex-wrap gap-3 mt-5">

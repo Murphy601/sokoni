@@ -250,6 +250,86 @@ export async function listLikedProductIds({ userId, productIds } = {}) {
   };
 }
 
+function mapFollowUserRow(row) {
+  const handle = formatHandle(row.handle, "");
+  return {
+    userId: Number(row.id),
+    handle: handle || null,
+    shopName: row.shop_name || row.display_name || (handle ? handle.slice(1) : `User ${row.id}`),
+    displayName: row.display_name || null,
+    avatarUrl: row.avatar_url || null,
+    isSellerVerified: Boolean(row.is_seller_verified),
+    followedAt: row.created_at || null,
+  };
+}
+
+/**
+ * List follow graph for a user.
+ * direction: "followers" (people who follow userId) | "following" (people userId follows)
+ */
+export async function listUserFollowConnections({
+  userId,
+  direction = "followers",
+  limit = 24,
+  offset = 0,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const uid = parseUserId(userId);
+  if (!uid) {
+    return { error: "invalid_user", message: "Valid userId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+
+  const normalized = String(direction || "followers")
+    .trim()
+    .toLowerCase();
+  if (normalized !== "followers" && normalized !== "following") {
+    return { error: "invalid_direction", message: "direction must be followers or following." };
+  }
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 24, 1), 100);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+
+  const joinClause =
+    normalized === "followers"
+      ? `FROM follows f
+         INNER JOIN users u ON u.id = f.follower_user_id
+        WHERE f.following_user_id = $1`
+      : `FROM follows f
+         INNER JOIN users u ON u.id = f.following_user_id
+        WHERE f.follower_user_id = $1`;
+
+  const countResult = await query(`SELECT COUNT(*)::int AS total ${joinClause}`, [uid]);
+  const total = Number(countResult.rows[0]?.total || 0);
+
+  const { rows } = await query(
+    `SELECT
+       u.id,
+       u.handle,
+       u.display_name,
+       u.shop_name,
+       u.avatar_url,
+       u.is_seller_verified,
+       f.created_at
+     ${joinClause}
+     ORDER BY f.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [uid, safeLimit, safeOffset]
+  );
+
+  return {
+    userId: uid,
+    direction: normalized,
+    users: rows.map(mapFollowUserRow),
+    pagination: { limit: safeLimit, offset: safeOffset, total },
+  };
+}
+
 export async function toggleFollow({ followerUserId, followingUserId } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
