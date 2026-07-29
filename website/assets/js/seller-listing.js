@@ -778,6 +778,7 @@ function showSellerProfile(profile) {
   el("onboard-panel")?.classList.add("hidden");
   fillShopEditFormFromSeller(profile);
   void hydrateShopEditFormFromSocial();
+  void loadSellerActivity();
   showSellerView("dashboard");
 }
 
@@ -884,6 +885,78 @@ async function saveShopProfile(event) {
     setEditShopStatus("Network error while saving shop profile.", true);
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+function formatActivityTime(value) {
+  if (!value) return "";
+  try {
+    return new Intl.DateTimeFormat("en-KE", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return "";
+  }
+}
+
+function activityEventRow(event) {
+  const actorName = escapeHtml(event?.actor?.shopName || "Someone");
+  const handle = normalizeHandleForLookup(event?.actor?.handle || "");
+  const handleLabel = handle ? `@${escapeHtml(handle)}` : "";
+  const when = escapeHtml(formatActivityTime(event?.createdAt));
+  let text = "";
+  if (event?.type === "follow") {
+    text = `<strong>${actorName}</strong> ${handleLabel} followed your shop`;
+  } else if (event?.type === "like") {
+    const title = escapeHtml(event?.product?.title || "your item");
+    text = `<strong>${actorName}</strong> ${handleLabel} liked <em>${title}</em>`;
+  } else {
+    text = `<strong>${actorName}</strong> interacted with your shop`;
+  }
+  return `
+    <article class="rounded-2xl border border-black/5 dark:border-white/10 px-4 py-3">
+      <p class="text-sm">${text}</p>
+      <p class="text-[11px] text-brand-purple/55 dark:text-white/60 mt-1">${when}</p>
+    </article>`;
+}
+
+async function loadSellerActivity() {
+  const wrap = el("seller-activity");
+  if (!wrap) return;
+  const phone = apiPhone();
+  if (!phone || !getSessionToken()) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Sign in to see shop activity.</p>`;
+    return;
+  }
+
+  wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading activity…</p>`;
+  try {
+    const params = new URLSearchParams({
+      phone: normalizePhoneInput(phone),
+      sessionToken: getSessionToken(),
+      limit: "30",
+    });
+    const res = await fetch(`${SOCIAL_API}/activity?${params.toString()}`);
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">${escapeHtml(
+        parsed.data?.message || "Activity unavailable right now."
+      )}</p>`;
+      return;
+    }
+    const events = Array.isArray(parsed.data?.events) ? parsed.data.events : [];
+    if (!events.length) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No follows or likes yet. Share your shop handle to get started.</p>`;
+      return;
+    }
+    wrap.innerHTML = events.map((event) => activityEventRow(event)).join("");
+  } catch {
+    wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading activity.</p>`;
   }
 }
 
@@ -3343,6 +3416,7 @@ function init() {
   el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
+  el("load-activity-btn")?.addEventListener("click", loadSellerActivity);
   el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
   el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
   el("offers-reset-handled-btn")?.addEventListener("click", () => {

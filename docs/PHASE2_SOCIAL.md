@@ -6,6 +6,7 @@ Slices so far:
 2. Homepage/feed heart hydration from server liked set
 3. Follower / following lists on shop profiles
 4. Seller storefront profile edit (name, handle, bio, location, avatar URL)
+5. Seller shop activity feed (followers + likes)
 
 ## What shipped
 
@@ -82,11 +83,6 @@ Returns `{ userId, direction, users[], pagination }`.
 
 Shop page Followers / Following counters open an inline list with links to each handle.
 
-## Out of scope (next slices)
-
-- Activity feed / notifications
-- WAHA / WhatsApp linking (deferred; not required for storefront slices)
-
 ### Seller storefront profile edit
 
 `PATCH /api/social/shop/profile` (seller session)
@@ -96,6 +92,20 @@ Body fields (all optional): `handle` / `shopHandle`, `shopName` / `businessName`
 Updates `users` storefront fields, soft-syncs linked `sellers` row + JSON supplier handle/name so session auth still resolves.
 
 Seller dashboard (`suppliers/list.html`) has a Shop profile form under the profile bar.
+
+### Seller shop activity
+
+`GET /api/social/activity` (seller session)
+
+Returns recent `{ type: "follow"|"like", actor, product?, createdAt }` events for the signed-in seller.
+
+Dashboard shows a Shop activity panel with refresh.
+
+## Out of scope (next slices)
+
+- Buyer-facing activity / notifications center
+- Push / WhatsApp notification delivery for social events
+- WAHA / WhatsApp linking (deferred; not required for storefront slices)
 
 ## Quick checks
 
@@ -114,3 +124,4 @@ Manual:
 3. Toggle follow + like → refresh → state persists
 4. With session, homepage ♡ still saves to bag and dual-writes social like
 5. Tap Followers / Following on a shop → list loads with handle links
+6. Seller dashboard → Shop activity shows new follows/likes

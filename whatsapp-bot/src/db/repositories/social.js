@@ -505,6 +505,86 @@ export async function updateUserShopProfile({
   };
 }
 
+/**
+ * Recent social activity for a seller storefront: new followers + likes on their products.
+ */
+export async function listSellerSocialActivity({ sellerUserId, limit = 30 } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const uid = parseUserId(sellerUserId);
+  if (!uid) {
+    return { error: "invalid_user", message: "Valid sellerUserId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+
+  const { rows } = await query(
+    `SELECT * FROM (
+       SELECT
+         'follow'::text AS type,
+         f.created_at AS created_at,
+         f.follower_user_id AS actor_user_id,
+         actor.handle AS actor_handle,
+         actor.shop_name AS actor_shop_name,
+         actor.display_name AS actor_display_name,
+         NULL::varchar AS product_id,
+         NULL::varchar AS product_title
+       FROM follows f
+       INNER JOIN users actor ON actor.id = f.follower_user_id
+       WHERE f.following_user_id = $1
+
+       UNION ALL
+
+       SELECT
+         'like'::text AS type,
+         pl.created_at AS created_at,
+         pl.user_id AS actor_user_id,
+         actor.handle AS actor_handle,
+         actor.shop_name AS actor_shop_name,
+         actor.display_name AS actor_display_name,
+         p.id AS product_id,
+         p.title AS product_title
+       FROM product_likes pl
+       INNER JOIN products p ON p.id = pl.product_id
+       INNER JOIN users actor ON actor.id = pl.user_id
+       WHERE p.seller_user_id = $1
+     ) activity
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [uid, safeLimit]
+  );
+
+  return {
+    sellerUserId: uid,
+    events: rows.map((row) => {
+      const handle = formatHandle(row.actor_handle, "");
+      return {
+        type: row.type,
+        createdAt: row.created_at,
+        actor: {
+          userId: Number(row.actor_user_id),
+          handle: handle || null,
+          shopName:
+            row.actor_shop_name ||
+            row.actor_display_name ||
+            (handle ? handle.slice(1) : `User ${row.actor_user_id}`),
+        },
+        product: row.product_id
+          ? {
+              id: row.product_id,
+              title: row.product_title || row.product_id,
+            }
+          : null,
+      };
+    }),
+  };
+}
+
 export async function toggleFollow({ followerUserId, followingUserId } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
