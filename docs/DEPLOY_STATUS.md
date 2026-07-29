@@ -17,6 +17,10 @@
 ```bash
 cd ~/sokoni
 git pull --rebase origin main
+# Apply new schema columns (e.g. social_wa_notify_* per-event mutes)
+psql "$DATABASE_URL" -f whatsapp-bot/db/schema-phase10-social.sql
 bash scripts/deploy-bot.sh
 curl -s https://bot.sokonimall.com/health
 ```
+
+`deploy-bot.sh` may already run migrations — if so, the explicit `psql` step is optional.
