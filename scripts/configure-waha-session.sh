@@ -163,38 +163,48 @@ wait_waha
 
 if [ "${RESET_WAHA_SESSION:-}" = "1" ]; then
   reset_session
+  echo "==> Starting freshly created session..."
+  start_session
+  sleep 2
+  echo "==> Reset complete (status=$(session_status)). Pairing required — do not wait for WORKING."
+  echo "==> Final session:"
+  curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | head -c 500
+  echo ""
+  exit 0
+fi
+
+STATUS="$(session_status)"
+STORE="$(session_store_enabled)"
+
+if [ -z "$STATUS" ]; then
+  create_session
+  echo "==> Starting new session..."
+  start_session
 else
+  echo "==> Session '$SESSION': status=$STATUS noweb.store.enabled=${STORE:-false}"
+  apply_session_config
   STATUS="$(session_status)"
   STORE="$(session_store_enabled)"
+  echo "==> After config apply: status=$STATUS noweb.store.enabled=${STORE:-false}"
 
-  if [ -z "$STATUS" ]; then
-    create_session
-  else
-    echo "==> Session '$SESSION': status=$STATUS noweb.store.enabled=${STORE:-false}"
-    apply_session_config
-    STATUS="$(session_status)"
-    STORE="$(session_store_enabled)"
-    echo "==> After config apply: status=$STATUS noweb.store.enabled=${STORE:-false}"
-
-    case "$STATUS" in
-      WORKING)
-        echo "==> Session WORKING"
-        ;;
-      FAILED)
-        recover_failed_session || true
-        ;;
-      STOPPED)
-        echo "==> Starting session..."
-        start_session
-        ;;
-      SCAN_QR_CODE)
-        echo "==> WhatsApp needs pairing — run: bash scripts/waha-link-whatsapp.sh"
-        ;;
-      STARTING)
-        echo "==> Session starting..."
-        ;;
-    esac
-  fi
+  case "$STATUS" in
+    WORKING)
+      echo "==> Session WORKING"
+      ;;
+    FAILED)
+      recover_failed_session || true
+      ;;
+    STOPPED)
+      echo "==> Starting session..."
+      start_session
+      ;;
+    SCAN_QR_CODE)
+      echo "==> WhatsApp needs pairing — run: bash scripts/waha-link-whatsapp.sh"
+      ;;
+    STARTING)
+      echo "==> Session starting..."
+      ;;
+  esac
 fi
 
 WAHA_SESSION_OK=0
