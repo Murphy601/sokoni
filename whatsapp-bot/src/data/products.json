@@ -86,5 +86,47 @@
     "isSold": true,
     "soldAt": 1785172670111,
     "soldOrderId": "SK-1011"
+  },
+  {
+    "id": "fa-tlom7-001",
+    "name": "Product listing",
+    "category": "fashion",
+    "subcategory": "product-listing",
+    "browseCategory": "women",
+    "browseSubCategory": "tops",
+    "sellerNetKes": 500,
+    "sourcePriceKes": 500,
+    "priceKes": 743,
+    "platformFeeKes": 68,
+    "description": "Product listing. 100% prepaid across Kenya.",
+    "color": "",
+    "size": "",
+    "era": "",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "location": "Kenol",
+    "shippingKes": 175,
+    "freeShipping": false,
+    "estimatedWeightClass": "small",
+    "shippingNote": "Seller delivery",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/fa-tlom7-001.jpg"
+    ],
+    "videoUrl": null,
+    "publishedAt": 1785368914233,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]

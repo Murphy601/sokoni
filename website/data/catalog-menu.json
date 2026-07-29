@@ -2,6 +2,12 @@
   "version": 1,
   "categories": [
     {
+      "id": "fashion",
+      "label": "Fashion",
+      "emoji": "👗",
+      "subcategories": []
+    },
+    {
       "id": "supermarket",
       "label": "Supermarket",
       "emoji": "🛒",

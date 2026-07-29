@@ -27,5 +27,29 @@
     "brand": "Delamere",
     "color": "white",
     "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack."
+  },
+  {
+    "id": "fa-tlom7-001",
+    "name": "Product listing",
+    "category": "fashion",
+    "priceKes": 743,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/fa-tlom7-001.jpg"
+    ],
+    "subcategory": "product-listing",
+    "browseCategory": "women",
+    "browseSubCategory": "tops",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "description": "Product listing. 100% prepaid across Kenya."
   }
 ]
