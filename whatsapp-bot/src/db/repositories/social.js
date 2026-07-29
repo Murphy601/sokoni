@@ -156,7 +156,12 @@ async function expirePendingOffers() {
   );
 }
 
-export async function toggleProductLike({ userId, productId } = {}) {
+/**
+ * Toggle or set product like.
+ * - omit `liked` → toggle
+ * - `liked: true|false` → set absolute state (idempotent; used by bag sync)
+ */
+export async function toggleProductLike({ userId, productId, liked: likedTarget } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -179,12 +184,26 @@ export async function toggleProductLike({ userId, productId } = {}) {
     [uid, pid]
   );
 
+  const wantLiked =
+    likedTarget === true || likedTarget === false || likedTarget === "true" || likedTarget === "false"
+      ? likedTarget === true || likedTarget === "true"
+      : null;
+
   let liked = false;
-  if (existing.rows[0]) {
-    await query(`DELETE FROM product_likes WHERE id = $1`, [existing.rows[0].id]);
-  } else {
-    await query(`INSERT INTO product_likes (user_id, product_id) VALUES ($1, $2)`, [uid, pid]);
+  if (wantLiked === null) {
+    if (existing.rows[0]) {
+      await query(`DELETE FROM product_likes WHERE id = $1`, [existing.rows[0].id]);
+    } else {
+      await query(`INSERT INTO product_likes (user_id, product_id) VALUES ($1, $2)`, [uid, pid]);
+      liked = true;
+    }
+  } else if (wantLiked) {
+    if (!existing.rows[0]) {
+      await query(`INSERT INTO product_likes (user_id, product_id) VALUES ($1, $2)`, [uid, pid]);
+    }
     liked = true;
+  } else if (existing.rows[0]) {
+    await query(`DELETE FROM product_likes WHERE id = $1`, [existing.rows[0].id]);
   }
 
   const countResult = await query(
@@ -290,7 +309,69 @@ export async function getUserSocialStats(userId) {
   };
 }
 
-export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } = {}) {
+async function getViewerShopState({ viewerUserId, shopUserId, productIds = [] } = {}) {
+  const uid = parseUserId(viewerUserId);
+  if (!uid) return null;
+  if (!(await userExists(uid))) return null;
+
+  const targetId = parseUserId(shopUserId);
+  let isFollowing = false;
+  if (targetId && targetId !== uid) {
+    const existing = await query(
+      `SELECT id FROM follows WHERE follower_user_id = $1 AND following_user_id = $2 LIMIT 1`,
+      [uid, targetId]
+    );
+    isFollowing = Boolean(existing.rows[0]);
+  }
+
+  const ids = (Array.isArray(productIds) ? productIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  let likedProductIds = [];
+  if (ids.length) {
+    const { rows } = await query(
+      `SELECT product_id
+         FROM product_likes
+        WHERE user_id = $1
+          AND product_id = ANY($2::text[])`,
+      [uid, ids]
+    );
+    likedProductIds = rows.map((row) => String(row.product_id));
+  }
+
+  return {
+    userId: uid,
+    isFollowing,
+    likedProductIds,
+  };
+}
+
+async function attachViewerToShopProfile(profile, viewerUserId) {
+  if (!profile || profile.error) return profile;
+  const viewer = await getViewerShopState({
+    viewerUserId,
+    shopUserId: profile?.shop?.userId,
+    productIds: (profile.products || []).map((item) => item.id),
+  });
+  if (!viewer) return profile;
+
+  const likedSet = new Set(viewer.likedProductIds);
+  return {
+    ...profile,
+    viewer,
+    products: (profile.products || []).map((item) => ({
+      ...item,
+      liked: likedSet.has(String(item.id)),
+    })),
+  };
+}
+
+export async function getShopProfileByHandle({
+  handle,
+  limit = 24,
+  offset = 0,
+  viewerUserId = null,
+} = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -342,34 +423,37 @@ export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } 
     const follows = await getFollowCounts(user.id);
     const reviewSummary = await getReviewSummary(user.id);
 
-    return {
-      shop: {
-        userId: Number(user.id),
-        sellerId: linkedSeller?.id != null ? Number(linkedSeller.id) : null,
-        handle: formatHandle(user.handle, cleanHandle),
-        shopName:
-          user.shop_name ||
-          linkedSeller?.business_name ||
-          user.display_name ||
-          `Shop ${user.id}`,
-        bio: user.bio || linkedSeller?.bio || null,
-        avatarUrl: user.avatar_url || null,
-        location: user.location || linkedSeller?.city || null,
-        isSellerVerified: Boolean(user.is_seller_verified || linkedSeller?.is_verified),
-        role: user.role || "seller",
-        source: linkedSeller ? "user_linked_seller" : "user",
+    return attachViewerToShopProfile(
+      {
+        shop: {
+          userId: Number(user.id),
+          sellerId: linkedSeller?.id != null ? Number(linkedSeller.id) : null,
+          handle: formatHandle(user.handle, cleanHandle),
+          shopName:
+            user.shop_name ||
+            linkedSeller?.business_name ||
+            user.display_name ||
+            `Shop ${user.id}`,
+          bio: user.bio || linkedSeller?.bio || null,
+          avatarUrl: user.avatar_url || null,
+          location: user.location || linkedSeller?.city || null,
+          isSellerVerified: Boolean(user.is_seller_verified || linkedSeller?.is_verified),
+          role: user.role || "seller",
+          source: linkedSeller ? "user_linked_seller" : "user",
+        },
+        stats: {
+          listingsCount: storefront.count,
+          followersCount: follows.followersCount,
+          followingCount: follows.followingCount,
+          likesReceivedCount: likesReceived,
+          avgRating: reviewSummary.avgRating,
+          totalReviews: reviewSummary.totalReviews,
+        },
+        products: storefront.products,
+        pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
       },
-      stats: {
-        listingsCount: storefront.count,
-        followersCount: follows.followersCount,
-        followingCount: follows.followingCount,
-        likesReceivedCount: likesReceived,
-        avgRating: reviewSummary.avgRating,
-        totalReviews: reviewSummary.totalReviews,
-      },
-      products: storefront.products,
-      pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
-    };
+      viewerUserId
+    );
   }
 
   const sellerResult = await query(
@@ -425,34 +509,37 @@ export async function getShopProfileByHandle({ handle, limit = 24, offset = 0 } 
   const follows = await getFollowCounts(sellerUser?.id || null);
   const reviewSummary = await getReviewSummary(sellerUser?.id || null);
 
-  return {
-    shop: {
-      userId: sellerUser?.id != null ? Number(sellerUser.id) : null,
-      sellerId: Number(seller.id),
-      handle: formatHandle(sellerUser?.handle, seller.slug),
-      shopName:
-        sellerUser?.shop_name ||
-        seller.business_name ||
-        sellerUser?.display_name ||
-        `Shop ${seller.id}`,
-      bio: sellerUser?.bio || seller.bio || null,
-      avatarUrl: sellerUser?.avatar_url || null,
-      location: sellerUser?.location || seller.city || null,
-      isSellerVerified: Boolean(sellerUser?.is_seller_verified || seller.is_verified),
-      role: sellerUser?.role || "seller",
-      source: sellerUser ? "seller_linked_user" : "seller",
+  return attachViewerToShopProfile(
+    {
+      shop: {
+        userId: sellerUser?.id != null ? Number(sellerUser.id) : null,
+        sellerId: Number(seller.id),
+        handle: formatHandle(sellerUser?.handle, seller.slug),
+        shopName:
+          sellerUser?.shop_name ||
+          seller.business_name ||
+          sellerUser?.display_name ||
+          `Shop ${seller.id}`,
+        bio: sellerUser?.bio || seller.bio || null,
+        avatarUrl: sellerUser?.avatar_url || null,
+        location: sellerUser?.location || seller.city || null,
+        isSellerVerified: Boolean(sellerUser?.is_seller_verified || seller.is_verified),
+        role: sellerUser?.role || "seller",
+        source: sellerUser ? "seller_linked_user" : "seller",
+      },
+      stats: {
+        listingsCount: storefront.count,
+        followersCount: follows.followersCount,
+        followingCount: follows.followingCount,
+        likesReceivedCount: likesReceived,
+        avgRating: reviewSummary.avgRating,
+        totalReviews: reviewSummary.totalReviews,
+      },
+      products: storefront.products,
+      pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
     },
-    stats: {
-      listingsCount: storefront.count,
-      followersCount: follows.followersCount,
-      followingCount: follows.followingCount,
-      likesReceivedCount: likesReceived,
-      avgRating: reviewSummary.avgRating,
-      totalReviews: reviewSummary.totalReviews,
-    },
-    products: storefront.products,
-    pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
-  };
+    viewerUserId
+  );
 }
 
 function hasForbiddenMessage(content) {

@@ -114,13 +114,37 @@ router.get("/users/:userId/stats", async (req, res) => {
   }
 });
 
+function parseOptionalViewerUserId(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Soft-resolve viewer for public shop reads.
+ * Prefer buyer session when present; fall back to ?viewer= / ?viewerUserId=.
+ * Invalid sessions do not fail the public GET — viewer state is simply omitted.
+ */
+async function resolveOptionalShopViewerUserId(req) {
+  if (hasBuyerSessionContext(req, req.query || {})) {
+    const auth = await resolveAuthenticatedBuyerSocialContext(req);
+    if (auth.ok) return auth.buyerUserId;
+  }
+  return (
+    parseOptionalViewerUserId(req.query?.viewer) ||
+    parseOptionalViewerUserId(req.query?.viewerUserId) ||
+    null
+  );
+}
+
 /** GET /api/social/shop/:handle — storefront profile + active listings */
 router.get("/shop/:handle", async (req, res) => {
   try {
+    const viewerUserId = await resolveOptionalShopViewerUserId(req);
     const result = await getShopProfileByHandle({
       handle: req.params.handle,
       limit: req.query.limit,
       offset: req.query.offset,
+      viewerUserId,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({

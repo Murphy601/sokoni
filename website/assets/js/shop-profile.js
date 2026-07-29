@@ -11,6 +11,7 @@ const state = {
   activeHandle: "",
   viewerUserId: null,
   following: false,
+  likedProductIds: new Set(),
   currentShop: null,
   reviewsRequestToken: 0,
 };
@@ -100,6 +101,38 @@ function buyerAuthBody(extra = {}) {
     return window.SokoniBuyerAuth.authFields(extra);
   }
   return { ...extra };
+}
+
+function shopFetchQuery(extra = {}) {
+  const params = new URLSearchParams();
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value == null || value === "") return;
+    params.set(key, String(value));
+  });
+  if (window.SokoniBuyerAuth?.appendAuthQuery) {
+    window.SokoniBuyerAuth.appendAuthQuery(params);
+  }
+  const viewerId = resolveViewerUserId();
+  if (viewerId && !params.has("viewer") && !params.has("viewerUserId")) {
+    params.set("viewer", String(viewerId));
+  }
+  return params;
+}
+
+function applyViewerState(payload = {}) {
+  const viewer = payload?.viewer || null;
+  if (viewer?.userId) {
+    state.viewerUserId = Number(viewer.userId) || state.viewerUserId;
+  } else {
+    state.viewerUserId = resolveViewerUserId();
+  }
+  state.following = Boolean(viewer?.isFollowing);
+  state.likedProductIds = new Set(
+    Array.isArray(viewer?.likedProductIds) ? viewer.likedProductIds.map(String) : []
+  );
+  (Array.isArray(payload?.products) ? payload.products : []).forEach((product) => {
+    if (product?.liked && product?.id) state.likedProductIds.add(String(product.id));
+  });
 }
 
 function readHandleFromUrl() {
@@ -319,8 +352,7 @@ function renderFollowButton(shop, stats) {
   }
 
   followBtn.classList.remove("hidden");
-  state.following = false;
-  followBtn.textContent = "Follow shop";
+  followBtn.textContent = state.following ? "Following" : "Follow shop";
   followBtn.disabled = false;
   followBtn.onclick = async () => {
     followBtn.disabled = true;
@@ -386,6 +418,7 @@ function productCard(product, shop) {
   const condition = product.condition ? escapeHtml(product.condition.replace(/_/g, " ")) : "—";
   const size = product.size ? escapeHtml(product.size) : "—";
   const likes = Number(product.likesCount || 0);
+  const liked = Boolean(product.liked) || state.likedProductIds.has(String(product.id));
 
   return `
     <article class="product-card bg-white dark:bg-brand-purpleLight/45 rounded-2xl border border-black/5 dark:border-white/10 p-4 flex flex-col">
@@ -401,8 +434,9 @@ function productCard(product, shop) {
           type="button"
           data-like-product="${escapeHtml(product.id)}"
           class="min-h-[44px] px-3 rounded-full border border-brand-purple/20 dark:border-white/20 text-xs font-semibold"
-          aria-label="Like ${title}">
-          ♡ Like · <span data-like-count="${escapeHtml(product.id)}">${likes.toLocaleString()}</span>
+          aria-label="${liked ? "Unlike" : "Like"} ${title}"
+          aria-pressed="${liked ? "true" : "false"}">
+          ${liked ? "♥ Liked · " : "♡ Like · "}<span data-like-count="${escapeHtml(product.id)}">${likes.toLocaleString()}</span>
         </button>
         <a
           href="${buildOrderLink(product, shop)}"
@@ -413,6 +447,27 @@ function productCard(product, shop) {
         </a>
       </div>
     </article>`;
+}
+
+function setLikeButtonState(btn, liked, likesCount) {
+  if (!btn) return;
+  const counter = btn.querySelector("[data-like-count]");
+  const label = liked ? "♥ Liked · " : "♡ Like · ";
+  let textNode = null;
+  for (const node of btn.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      textNode = node;
+      break;
+    }
+  }
+  if (textNode) textNode.textContent = label;
+  else btn.insertBefore(document.createTextNode(label), btn.firstChild);
+  if (counter && likesCount != null) {
+    counter.textContent = Number(likesCount || 0).toLocaleString();
+  }
+  btn.setAttribute("aria-pressed", liked ? "true" : "false");
+  const productId = btn.getAttribute("data-like-product") || "item";
+  btn.setAttribute("aria-label", `${liked ? "Unlike" : "Like"} ${productId}`);
 }
 
 function bindLikeButtons() {
@@ -446,9 +501,10 @@ function bindLikeButtons() {
           statusMessage(data?.message || data?.error || "Could not update like.", true);
           return;
         }
-        btn.firstChild.textContent = data.liked ? "♥ Liked · " : "♡ Like · ";
-        const counter = document.querySelector(`[data-like-count="${CSS.escape(productId)}"]`);
-        if (counter) counter.textContent = Number(data.likesCount || 0).toLocaleString();
+        const liked = Boolean(data.liked);
+        if (liked) state.likedProductIds.add(String(productId));
+        else state.likedProductIds.delete(String(productId));
+        setLikeButtonState(btn, liked, data.likesCount);
       } catch {
         statusMessage("Network error while liking product.", true);
       } finally {
@@ -497,7 +553,8 @@ async function loadShop(handle) {
   resetReviewsUi();
 
   try {
-    const res = await fetch(`${SHOP_API_BASE}/shop/${encodeURIComponent(clean)}?limit=24`);
+    const query = shopFetchQuery({ limit: 24 });
+    const res = await fetch(`${SHOP_API_BASE}/shop/${encodeURIComponent(clean)}?${query.toString()}`);
     const data = await res.json();
     if (!res.ok) {
       statusMessage(data?.message || "Could not load that shop handle.", true);
@@ -505,6 +562,7 @@ async function loadShop(handle) {
     }
 
     statusMessage("");
+    applyViewerState(data);
     renderShopHeader(data);
     renderProducts(data);
   } catch {
@@ -514,6 +572,10 @@ async function loadShop(handle) {
 
 function refreshViewerAndShopActions() {
   state.viewerUserId = resolveViewerUserId();
+  if (state.activeHandle) {
+    void loadShop(state.activeHandle);
+    return;
+  }
   if (state.currentShop) {
     renderFollowButton(state.currentShop, state.currentShop.stats || {});
     renderMessageButton(state.currentShop);

@@ -75,7 +75,7 @@ Buyer identity contract for social writes:
 
 Clients should send `phone` + `sessionToken` in JSON body (or query for GETs). `X-Buyer-Session` is also accepted.
 
-### Product likes (toggle)
+### Product likes (toggle or set)
 
 `POST /api/products/like`
 
@@ -85,10 +85,14 @@ Body:
 {
   "userId": 1,
   "productId": "prod_xxx",
+  "liked": true,
   "phone": "2547XXXXXXXX",
   "sessionToken": "buyer-session-token"
 }
 ```
+
+- Omit `liked` → toggle
+- `liked: true|false` → set absolute state (idempotent)
 
 Response:
 
@@ -129,17 +133,22 @@ Returns:
 
 `GET /api/social/shop/:handle`
 
+Optional query: `viewer` / `viewerUserId`, or buyer session (`phone` + `sessionToken`).
+
 Returns:
 
 - `shop` (handle, shopName, bio, avatar, verification status)
 - `stats` (listings, followers, following, likes, rating summary)
-- `products` (active listings only)
+- `products` (active listings only; includes `liked` when viewer is known)
 - `pagination`
+- `viewer` (optional): `{ userId, isFollowing, likedProductIds }`
 
 Notes:
 
 - Uses user handle when available, with fallback to seller slug.
 - Compatible with both new `seller_user_id` and legacy `seller_id` product ownership.
+- Invalid buyer sessions are ignored for this public GET (viewer block omitted).
+- See [`PHASE2_SOCIAL.md`](PHASE2_SOCIAL.md) for storefront hydration details.
 
 ### Offers (Depop-style negotiation)
 
