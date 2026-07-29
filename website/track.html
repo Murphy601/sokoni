@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Track Order — Sokoni Mall</title>
 <meta name="description" content="Track your Sokoni Mall order with SK-#### — live shipment status across Kenya." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
@@ -13,20 +13,19 @@
 <script>
   (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/depop-shell.css" />
 <link rel="stylesheet" href="assets/css/track.css" />
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
-  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-20">
-    <div class="max-w-2xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
-      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Back to Sokoni</a>
-      <a href="faq.html" class="text-sm text-brand-purple/60 dark:text-white/60 hover:text-brand-green">FAQ</a>
-    </div>
-  </header>
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col" data-shell-page="track">
+  <div id="sokoni-shell-header"></div>
 
-  <main class="max-w-2xl mx-auto px-5 py-10">
-    <h1 class="font-display text-3xl font-bold mb-2">Track your order</h1>
+  <main class="depop-main-content max-w-2xl mx-auto w-full px-5 py-10 flex-1">
+    <h1 class="font-display text-3xl font-bold mb-2 text-brand-purple dark:text-white">Track your order</h1>
     <p class="text-brand-purple/60 dark:text-white/60 mb-8">Enter your <strong>SK-####</strong> order number for live shipment status.</p>
 
     <form id="track-form" class="flex flex-col sm:flex-row gap-3 mb-10">
@@ -51,20 +50,24 @@
     <div id="track-loading" class="hidden text-sm text-brand-purple/50">Loading tracking…</div>
 
     <div class="mt-12 rounded-2xl bg-[#ECE5DD] p-5">
-      <p class="text-sm font-semibold mb-3">Prefer WhatsApp?</p>
+      <p class="text-sm font-semibold mb-3 text-brand-purple">Prefer WhatsApp?</p>
       <p class="text-sm text-brand-purple/70 mb-4">Type your order number or <em>track</em> in chat for the same live timeline.</p>
       <a href="https://wa.me/254117422428?text=track" target="_blank" rel="noopener"
-         class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-5 py-3 rounded-full text-sm">
+         class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-5 py-3 rounded-full text-sm min-h-[44px]">
         Open WhatsApp
       </a>
     </div>
   </main>
 
-  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-sm text-brand-purple/50 dark:text-white/50 mt-12">
+  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-sm text-brand-purple/50 dark:text-white/50">
     <p><a href="index.html" class="hover:text-brand-green">Home</a> · <a href="terms.html" class="hover:text-brand-green">Terms</a></p>
     <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise</p>
   </footer>
 
+  <div id="sokoni-shell-nav"></div>
+
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/depop-nav.js"></script>
   <script src="assets/js/track.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
