@@ -8,6 +8,7 @@ Slices so far:
 4. Seller storefront profile edit (name, handle, bio, location, avatar URL)
 5. Seller shop activity feed (followers + likes)
 6. Buyer activity center (offer replies, follows, likes)
+7. Soft-fail WhatsApp pings for follow / like / offer reply
 
 ## What shipped
 
@@ -110,10 +111,20 @@ Returns recent offer replies (`offer_accepted` / `offer_declined` / `offer_expir
 
 UI: `website/activity.html` — linked from shop, inbox, and mobile bottom nav.
 
+### WhatsApp social pings (soft-fail)
+
+When WAHA is linked, Sokoni texts:
+
+- Seller on new follower
+- Seller on new product like (not re-likes / unlikes)
+- Buyer when an offer is accepted or declined
+
+Failures are logged and never block the social API response. Dry-run WAHA still no-ops safely.
+
 ## Out of scope (next slices)
 
-- Push / WhatsApp notification delivery for social events
-- WAHA / WhatsApp linking (deferred; not required for storefront slices)
+- WAHA / WhatsApp linking (deferred; required for live delivery of social pings)
+- Richer notification preferences / mute controls
 
 ## Quick checks
 
@@ -134,3 +145,4 @@ Manual:
 5. Tap Followers / Following on a shop → list loads with handle links
 6. Seller dashboard → Shop activity shows new follows/likes
 7. Buyer `activity.html` → verify WhatsApp → see offer replies / follows / likes
+8. With WAHA linked: follow/like/offer reply send soft-fail WhatsApp pings

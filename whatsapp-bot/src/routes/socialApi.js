@@ -23,6 +23,10 @@ import {
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { updatePeerSellerProfile } from "../services/suppliers.js";
 import {
+  notifyBuyerOfferResponse,
+  notifySellerNewFollower,
+} from "../services/social-notifications.js";
+import {
   applyBuyerIdentityAuth,
   hasBuyerSessionContext,
   resolveAuthenticatedBuyerSocialContext,
@@ -96,6 +100,12 @@ router.post("/follow", async (req, res) => {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
         message: result.message,
+      });
+    }
+    if (result.created) {
+      void notifySellerNewFollower({
+        followerUserId: result.followerUserId,
+        followingUserId: result.followingUserId,
       });
     }
     res.json(result);
@@ -384,6 +394,9 @@ router.post("/offers/:offerId/respond", async (req, res) => {
         error: result.error,
         message: result.message,
       });
+    }
+    if (result.offer) {
+      void notifyBuyerOfferResponse({ offer: result.offer });
     }
     res.json(result);
   } catch (err) {
