@@ -1,10 +1,12 @@
 name: Bot Deploy
 
 # Pull latest main on the GCP VM and restart the Sokoni bot after merges.
-# Required repo secrets:
+# Required repo secrets (Settings → Secrets and variables → Actions):
 #   VM_HOST          — e.g. 104.197.128.235
 #   VM_USER          — e.g. daviemuiruri3888
 #   VM_SSH_KEY       — private key with access to the VM
+#
+# Website (sokonimall.com) deploys separately via Cloudflare Workers Builds on main.
 
 on:
   push:
@@ -31,6 +33,36 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       !contains(github.event.head_commit.message, '[skip deploy]')
     steps:
+      - name: Check deploy secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${VM_HOST}" ]; then
+            echo "::error title=Missing VM_HOST::Set Actions secret VM_HOST to the GCP VM public IP (bot.sokonimall.com)."
+            missing=1
+          fi
+          if [ -z "${VM_USER}" ]; then
+            echo "::error title=Missing VM_USER::Set Actions secret VM_USER (SSH username on the GCP VM)."
+            missing=1
+          fi
+          if [ -z "${VM_SSH_KEY}" ]; then
+            echo "::error title=Missing VM_SSH_KEY::Set Actions secret VM_SSH_KEY to the private key that can SSH into the VM."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Bot Deploy cannot SSH until secrets are set."
+            echo "Docs: docs/DEPLOY_BOT_GCP.md (GitHub Actions secrets section)."
+            echo "Manual fallback on the VM:"
+            echo "  cd ~/sokoni && git pull origin main && bash scripts/deploy-bot.sh"
+            exit 1
+          fi
+          echo "Deploy secrets present (host=${VM_HOST}, user=${VM_USER})."
+
       - name: Deploy to GCP VM
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -46,3 +78,19 @@ jobs:
             git checkout main
             git pull --rebase origin main
             bash scripts/deploy-bot.sh
+
+      - name: Smoke-check bot health
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/sokoni-health.json -w "%{http_code}" https://bot.sokonimall.com/health || true)
+            echo "try $i → HTTP $code"
+            if [ "$code" = "200" ]; then
+              head -c 400 /tmp/sokoni-health.json || true
+              echo
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::Bot health check did not return 200 yet — check pm2/nginx on the VM."
+          exit 0
