@@ -115,8 +115,32 @@
     <a href="#" id="search-hint-link" class="hidden"></a>
   </div>
 
-  <!-- Brand hero (single composition) -->
+  <!-- Brand hero carousel -->
   <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Sokoni"></section>
+
+  <!-- Popular brands / styles -->
+  <section class="depop-brands-bar" aria-label="Popular brands and styles">
+    <p class="depop-brands-kicker">Popular brands &amp; styles on Sokoni</p>
+    <div id="depop-brands-row" class="depop-brands-row"></div>
+  </section>
+
+  <!-- Sellers discovered from live catalog -->
+  <section class="depop-top-shops" aria-label="Sellers to follow">
+    <div class="depop-top-shops-inner">
+      <div class="depop-top-shops-head">
+        <div>
+          <h2>Sellers to follow</h2>
+          <p>Shops with live listings right now — open a profile and follow when you’re signed in.</p>
+        </div>
+        <a href="suppliers/list.html" class="depop-top-shops-link">Start selling →</a>
+      </div>
+      <div id="depop-top-shops-grid" class="depop-top-shops-grid" hidden></div>
+      <div id="depop-top-shops-empty" class="depop-top-shops-empty">
+        Fresh shops appear here as sellers go live.
+        <a href="suppliers/list.html"> List your first item</a>
+      </div>
+    </div>
+  </section>
 
   <!-- Phase 8 — Personalized feed rails -->
   <div id="feed-rails" class="catalog-main max-w-7xl mx-auto px-4 md:px-5 space-y-10 py-6 hidden"></div>
@@ -288,24 +312,29 @@
   </section>
 
   <!-- HOW IT WORKS (marketplace) -->
-  <section id="how-it-works" class="depop-edu-section depop-edu-section--light reveal-on-scroll">
+  <section id="how-it-works" class="depop-how-strip reveal-on-scroll">
     <div class="depop-edu-inner px-4 md:px-5">
-      <h2 class="depop-edu-title">How Sokoni Mall works</h2>
+      <h2 class="depop-edu-title">How Sokoni works</h2>
       <div class="depop-edu-grid">
         <div class="depop-edu-card">
           <span class="depop-edu-step-num">1</span>
-          <h3>Snap &amp; AI auto-list</h3>
-          <p>Upload 1–4 photos. Gemini AI fills titles, tags, backgrounds, and price suggestions automatically.</p>
+          <h3>Snap &amp; list</h3>
+          <p>Upload photos from your phone. Add title, price, and condition — post live in minutes.</p>
         </div>
         <div class="depop-edu-card">
           <span class="depop-edu-step-num">2</span>
-          <h3>Buyer pays upfront</h3>
-          <p>Payment held safely in escrow via M-Pesa or card — 100% buyer protection until delivery is confirmed.</p>
+          <h3>Buy &amp; escrow</h3>
+          <p>Pay with M-Pesa. Funds stay in Sokoni escrow until delivery is confirmed.</p>
         </div>
         <div class="depop-edu-card">
           <span class="depop-edu-step-num">3</span>
-          <h3>Drop off &amp; track</h3>
-          <p>Drop your package at the nearest hub using your instant SK-#### QR code. Seller paid on confirmed delivery.</p>
+          <h3>Drop off</h3>
+          <p>Seller prints the SK label and drops the parcel at a Sokoni hub or pickup partner.</p>
+        </div>
+        <div class="depop-edu-card">
+          <span class="depop-edu-step-num">4</span>
+          <h3>Get paid</h3>
+          <p>Buyer receives the order — then seller payout is released to their wallet / M-Pesa.</p>
         </div>
       </div>
     </div>
@@ -536,6 +565,7 @@
   <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/browse.js"></script>
   <script src="assets/js/depop-hero-carousel.js"></script>
+  <script src="assets/js/depop-ecosystem.js"></script>
   <script src="assets/js/depop-nav.js"></script>
   <script src="assets/js/shop-shell.js"></script>
   <script src="assets/js/product-sheet.js"></script>

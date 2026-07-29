@@ -337,6 +337,24 @@ body.has-depop-shell .depop-marketing-extra {
     linear-gradient(90deg, #09090b 0%, #000000 100%);
 }
 
+.depop-hero-bleed--circular {
+  background:
+    radial-gradient(ellipse 70% 70% at 88% 40%, rgba(16, 185, 129, 0.14), transparent 55%),
+    linear-gradient(90deg, #09090b 0%, #000000 100%);
+}
+
+.depop-hero-bleed--offers {
+  background:
+    radial-gradient(ellipse 55% 65% at 82% 30%, rgba(255, 35, 0, 0.12), transparent 50%),
+    linear-gradient(90deg, #18181b 0%, #000000 100%);
+}
+
+.depop-hero-bleed--pickup {
+  background:
+    radial-gradient(ellipse 60% 70% at 85% 45%, rgba(52, 211, 153, 0.1), transparent 55%),
+    linear-gradient(90deg, #09090b 0%, #000000 100%);
+}
+
 .depop-hero-carousel-inner,
 .depop-hero-brand-inner {
   position: relative;
@@ -518,6 +536,250 @@ body.has-depop-shell .depop-marketing-extra {
 .depop-hero-slide,
 .depop-hero-eyebrow {
   display: none;
+}
+
+/* ── Below-hero ecosystem strips ── */
+.depop-brands-bar {
+  border-top: 1px solid #18181b;
+  border-bottom: 1px solid #18181b;
+  background: rgba(9, 9, 11, 0.85);
+  padding: 1rem 1rem 1.15rem;
+}
+
+.depop-brands-kicker {
+  margin: 0 0 0.75rem;
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.depop-brands-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.depop-brand-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.35rem 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #d4d4d8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.depop-brand-chip:hover,
+.depop-brand-chip:focus-visible {
+  border-color: #52525b;
+  color: #ffffff;
+  background: #27272a;
+  outline: none;
+}
+
+.depop-brand-chip:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 35, 0, 0.35);
+}
+
+.depop-top-shops {
+  background: #000000;
+  color: #ffffff;
+  border-bottom: 1px solid #18181b;
+  padding: 2rem 1rem;
+}
+
+.depop-top-shops-inner {
+  max-width: 80rem;
+  margin: 0 auto;
+}
+
+.depop-top-shops-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.depop-top-shops-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.depop-top-shops-head p {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+}
+
+.depop-top-shops-link {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ff2300;
+  text-decoration: none;
+}
+
+.depop-top-shops-link:hover {
+  text-decoration: underline;
+}
+
+.depop-top-shops-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .depop-top-shops-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.depop-shop-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px solid #27272a;
+  background: #09090b;
+}
+
+.depop-shop-avatar {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 9999px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.depop-shop-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.depop-shop-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.depop-shop-meta h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depop-shop-meta p {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depop-shop-meta span {
+  display: inline-block;
+  margin-top: 0.2rem;
+  font-size: 0.6875rem;
+  color: #71717a;
+}
+
+.depop-shop-cta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.depop-shop-cta:hover {
+  background: #e4e4e7;
+}
+
+.depop-top-shops-empty {
+  border: 1px dashed #27272a;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  text-align: center;
+  color: #a1a1aa;
+  font-size: 0.875rem;
+}
+
+.depop-top-shops-empty a {
+  color: #ff2300;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.depop-how-strip {
+  background: #000000;
+  border-bottom: 1px solid #18181b;
+  padding: 2.25rem 1rem;
+}
+
+.depop-how-strip .depop-edu-title {
+  color: #ffffff;
+  font-family: var(--font-body, "DM Sans", Inter, ui-sans-serif, system-ui, sans-serif);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.depop-how-strip .depop-edu-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .depop-how-strip .depop-edu-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.depop-how-strip .depop-edu-card {
+  border-color: #27272a;
+  background: #09090b;
+  color: #ffffff;
+}
+
+.depop-how-strip .depop-edu-card p {
+  color: #a1a1aa;
+  opacity: 1;
+}
+
+.depop-how-strip .depop-edu-step-num {
+  background: #ff2300;
+  color: #ffffff;
 }
 
 /* ── Curated collections ── */

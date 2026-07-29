@@ -43,6 +43,46 @@
       secondaryCtaLink: "track.html",
       bleedClass: "depop-hero-bleed--escrow",
     },
+    {
+      id: "circular",
+      tag: "Circular fashion",
+      badge: "Pre-loved first",
+      headline: "Keep clothes in the loop.",
+      subtext:
+        "Buy and resell pre-loved gems. Less waste, more unique fits — from thrifters and creators across Kenya.",
+      primaryCtaText: "Explore pre-loved",
+      primaryCtaLink: "#deals",
+      primaryFilter: { itemType: "secondhand", scroll: true },
+      secondaryCtaText: "Start selling thrift",
+      secondaryCtaLink: "suppliers/list.html",
+      bleedClass: "depop-hero-bleed--circular",
+    },
+    {
+      id: "offers",
+      tag: "In-app offers",
+      badge: "Chat the seller",
+      headline: "Like it? Make an offer.",
+      subtext:
+        "Send a custom offer on a listing, or message the seller in-app after they accept — no paying outside Sokoni.",
+      primaryCtaText: "Browse & offer",
+      primaryCtaLink: "#deals",
+      secondaryCtaText: "How Sokoni works",
+      secondaryCtaLink: "#how-it-works",
+      bleedClass: "depop-hero-bleed--offers",
+    },
+    {
+      id: "pickup",
+      tag: "Drop-off & pickup",
+      badge: "Countrywide hubs",
+      headline: "Shipping that fits Kenya.",
+      subtext:
+        "Sellers drop parcels at Sokoni hubs or pickup partners. Buyers track every step with SK-####.",
+      primaryCtaText: "Pickup points",
+      primaryCtaLink: "pickup-points.html",
+      secondaryCtaText: "Become a station",
+      secondaryCtaLink: "pickup-points/apply.html",
+      bleedClass: "depop-hero-bleed--pickup",
+    },
   ];
 
   const INTERVAL_MS = 6000;
@@ -114,10 +154,20 @@
       if (primaryEl) {
         primaryEl.textContent = slide.primaryCtaText;
         primaryEl.setAttribute("href", slide.primaryCtaLink);
+        if (slide.primaryFilter) {
+          primaryEl.setAttribute("data-depop-filter", JSON.stringify(slide.primaryFilter));
+        } else {
+          primaryEl.removeAttribute("data-depop-filter");
+        }
       }
       if (secondaryEl) {
         secondaryEl.textContent = slide.secondaryCtaText;
         secondaryEl.setAttribute("href", slide.secondaryCtaLink);
+        if (slide.secondaryFilter) {
+          secondaryEl.setAttribute("data-depop-filter", JSON.stringify(slide.secondaryFilter));
+        } else {
+          secondaryEl.removeAttribute("data-depop-filter");
+        }
       }
       dotsWrap.querySelectorAll(".depop-hero-dot").forEach((dot, di) => {
         const active = di === i;
@@ -142,6 +192,25 @@
       const btn = ev.target.closest("[data-slide-index]");
       if (!btn) return;
       go(Number(btn.getAttribute("data-slide-index")) || 0);
+    });
+
+    root.addEventListener("click", (ev) => {
+      const filterEl = ev.target.closest("[data-depop-filter]");
+      if (!filterEl || !root.contains(filterEl)) return;
+      const raw = filterEl.getAttribute("data-depop-filter");
+      if (!raw) return;
+      ev.preventDefault();
+      let spec = { scroll: true };
+      try {
+        spec = { ...JSON.parse(raw), scroll: true };
+      } catch {
+        /* ignore */
+      }
+      if (window.SokoniApp?.setCatalogFilter) {
+        window.SokoniApp.setCatalogFilter(spec);
+      } else {
+        document.getElementById("deals")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     });
 
     root.addEventListener("mouseenter", () => {
