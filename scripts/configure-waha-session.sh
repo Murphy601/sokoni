@@ -3,10 +3,13 @@
 # WAHA Core does NOT persist session config across container restarts — re-apply every deploy.
 set -euo pipefail
 
-WAHA_URL="${WAHA_API_URL:-http://127.0.0.1:3000}"
-WAHA_KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
+# shellcheck source=lib/waha-common.sh
+source "$SCRIPT_DIR/lib/waha-common.sh"
 WEBHOOK_URL="${BOT_WEBHOOK_URL:-http://host.docker.internal:3001/webhook}"
-SESSION="${WAHA_SESSION:-default}"
+SESSION="${WAHA_SESSION}"
 
 json_field() {
   local json="$1" field="$2"
@@ -94,20 +97,7 @@ reset_session() {
 }
 
 print_waha_logs() {
-  # Prefer shared helper when available (pinned image / compose project).
-  local repo="${SOKONI_REPO:-$HOME/sokoni}"
-  if [ -f "$repo/scripts/lib/waha-common.sh" ]; then
-    # shellcheck source=lib/waha-common.sh
-    source "$repo/scripts/lib/waha-common.sh"
-    waha_print_recent_logs 30
-    return
-  fi
-  local cid
-  cid="$(docker ps --format '{{.ID}} {{.Image}}' 2>/dev/null | awk 'tolower($0) ~ /waha/ { print $1; exit }' || true)"
-  if [ -n "$cid" ]; then
-    echo "==> Recent WAHA logs:"
-    docker logs "$cid" --tail 30 2>&1 | tail -30 || true
-  fi
+  waha_print_recent_logs 30
 }
 
 recover_failed_session() {
