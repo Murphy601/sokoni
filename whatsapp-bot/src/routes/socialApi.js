@@ -407,7 +407,10 @@ router.get("/buyer/activity", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: "buyer_activity_failed",
+      message: err.message || "Could not load activity right now.",
+    });
   }
 });
 

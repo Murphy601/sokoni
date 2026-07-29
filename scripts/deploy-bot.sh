@@ -29,10 +29,19 @@ fi
 echo "==> Syncing to origin/${DEPLOY_REF} (always deploy from this ref, not a leftover feature branch)..."
 git fetch origin "$DEPLOY_REF"
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  echo "==> Stashing dirty VM files so checkout can proceed..."
-  git stash push -u -m "deploy-bot-$(date +%s)" || true
+  echo "==> Stashing dirty tracked files so checkout can proceed..."
+  # Do NOT use `git stash -u` — that removes untracked listing photos under
+  # website/assets/images/products/ and breaks /catalog-images until re-upload.
+  git stash push -m "deploy-bot-$(date +%s)" || true
   STASHED=1
 fi
+# Keep noisy untracked bak files from blocking nothing; leave product images alone.
+mkdir -p /tmp/sokoni-vm-scratch
+shopt -s nullglob
+for bak in whatsapp-bot/src/data/products.json.bak-*; do
+  mv "$bak" /tmp/sokoni-vm-scratch/ 2>/dev/null || true
+done
+shopt -u nullglob
 # Force local main (or override) onto the remote tip — avoids "pull --rebase" staying on a feature branch.
 if ! git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"; then
   echo "ERROR: could not checkout origin/${DEPLOY_REF}"

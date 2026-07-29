@@ -335,6 +335,12 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
   const productId = nextProductId(master, enriched.category, check.supplier.id);
   const media = await saveMediaFiles(productId, images, videoBase64);
+  if (!media.imageUrl || !(media.images || []).length) {
+    return {
+      error: "image_save_failed",
+      message: "Could not save product photo on the server. Try a smaller JPEG and post again.",
+    };
+  }
   const product = await buildProduct(check.supplier, enriched, media, productId);
 
   master.push(product);

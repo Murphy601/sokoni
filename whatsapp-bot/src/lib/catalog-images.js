@@ -13,10 +13,50 @@ export function catalogImageFileForProduct(product) {
   return existsSync(filePath) ? filePath : null;
 }
 
-/** HTTPS URL on the bot server — available immediately after WhatsApp catalog upload. */
+/** Filename for a product photo on disk /catalog-images. */
+export function catalogImageFilename(productOrId, ext = "jpg") {
+  const id =
+    typeof productOrId === "string" || typeof productOrId === "number"
+      ? String(productOrId)
+      : productOrId?.id;
+  if (!id) return null;
+  return `${id}.${ext}`;
+}
+
+/** HTTPS URL on the bot server — available immediately after listing upload (no Cloudflare wait). */
 export function catalogImageBotUrl(product) {
   if (!product?.id || !config.botPublicUrl) return null;
+  const fileOnDisk = catalogImageFileForProduct(product);
+  if (!fileOnDisk) return null;
   return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+}
+
+/**
+ * Prefer bot /catalog-images when the file exists on the VM.
+ * Fall back to absolute site URL / already-absolute imageUrl.
+ * Relative `assets/images/products/…` paths break on Cloudflare until git push.
+ */
+export function resolveStorefrontImageUrl(product) {
+  if (!product) return null;
+  const bot = catalogImageBotUrl(product);
+  if (bot) return bot;
+
+  const raw = product.imageUrl || (Array.isArray(product.images) ? product.images[0] : null);
+  if (!raw) {
+    // Last resort: point at bot path even if file probe missed (e.g. race right after write).
+    if (product.id && config.botPublicUrl) {
+      return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+    }
+    return null;
+  }
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^(assets\/images\/products\/|catalog-images\/)/i.test(String(raw).replace(/^\//, ""))) {
+    const base = String(raw).replace(/^\//, "").replace(/^assets\/images\/products\//i, "");
+    if (config.botPublicUrl) {
+      return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(base.split("/").pop())}`;
+    }
+  }
+  return `${config.publicSiteUrl}/${String(raw).replace(/^\//, "")}`;
 }
 
 /** HTTPS URL on the public website (Cloudflare Pages). */
