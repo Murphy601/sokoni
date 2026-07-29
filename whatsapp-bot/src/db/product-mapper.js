@@ -50,6 +50,11 @@ export function rowToCatalogProduct(row, imageUrls = []) {
       ? String(row.seller_handle || row.seller_slug).replace(/^@+/, "")
       : undefined,
     businessName: row.seller_shop_name || row.seller_business_name || undefined,
+    sellerUserId: (() => {
+      const raw = row.seller_user_id ?? row.seller_user_join_id ?? row.seller_table_user_id;
+      const n = Number(raw);
+      return Number.isInteger(n) && n > 0 ? n : undefined;
+    })(),
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),
@@ -94,7 +99,6 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     estDeliveryDays: row.est_delivery_days || undefined,
 
     sellerId: row.seller_id != null ? Number(row.seller_id) : undefined,
-    sellerUserId: row.seller_user_id != null ? Number(row.seller_user_id) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

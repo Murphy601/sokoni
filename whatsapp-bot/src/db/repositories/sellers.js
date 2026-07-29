@@ -11,16 +11,46 @@ function normalizeSlug(value) {
 }
 
 export async function ensureDefaultSeller() {
-  const { rows } = await query(`SELECT id FROM sellers WHERE slug = 'sokoni-store' LIMIT 1`);
-  if (rows[0]) return rows[0].id;
+  const { rows } = await query(`SELECT id, user_id FROM sellers WHERE slug = 'sokoni-store' LIMIT 1`);
+  let sellerId = rows[0]?.id || null;
+  let userId = rows[0]?.user_id != null ? Number(rows[0].user_id) : null;
 
-  const { rows: inserted } = await query(
-    `INSERT INTO sellers (business_name, slug, city, is_verified, is_active)
-     VALUES ($1, $2, $3, TRUE, TRUE)
-     RETURNING id`,
-    ["Sokoni Store", "sokoni-store", "Kenya"]
-  );
-  return inserted[0].id;
+  if (!sellerId) {
+    const { rows: inserted } = await query(
+      `INSERT INTO sellers (business_name, slug, city, is_verified, is_active)
+       VALUES ($1, $2, $3, TRUE, TRUE)
+       RETURNING id, user_id`,
+      ["Sokoni Store", "sokoni-store", "Kenya"]
+    );
+    sellerId = inserted[0].id;
+    userId = inserted[0].user_id != null ? Number(inserted[0].user_id) : null;
+  }
+
+  // Platform storefront needs a users row so Make an offer / inbox can target it.
+  if (!userId) {
+    const existingUser = await query(
+      `SELECT id FROM users
+        WHERE LOWER(handle) = 'sokoni-store' OR LOWER(handle) = '@sokoni-store'
+        LIMIT 1`
+    );
+    if (existingUser.rows[0]) {
+      userId = Number(existingUser.rows[0].id);
+    } else {
+      const created = await query(
+        `INSERT INTO users (display_name, role, handle, shop_name, location, is_seller_verified)
+         VALUES ($1, 'seller', $2, $1, $3, TRUE)
+         RETURNING id`,
+        ["Sokoni Store", "sokoni-store", "Kenya"]
+      );
+      userId = Number(created.rows[0].id);
+    }
+    await query(`UPDATE sellers SET user_id = $2, updated_at = NOW() WHERE id = $1`, [
+      sellerId,
+      userId,
+    ]);
+  }
+
+  return sellerId;
 }
 
 export async function getSellerBySlug(slug) {

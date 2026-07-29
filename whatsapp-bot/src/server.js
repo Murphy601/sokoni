@@ -224,6 +224,14 @@ app.listen(config.port, "0.0.0.0", () => {
   startTiktokScheduler();
   startPayoutScheduler();
   startFeedScheduler();
+  // Ensure platform storefront has a social user id (Make an offer / inbox).
+  if (isDbEnabled()) {
+    import("./db/repositories/sellers.js")
+      .then(({ ensureDefaultSeller }) => ensureDefaultSeller())
+      .then(() => import("./services/catalog.js"))
+      .then(({ invalidateProductCache }) => invalidateProductCache())
+      .catch((err) => console.warn("[sellers] default storefront ensure:", err.message));
+  }
 });
 
 /** Refresh trending / price-tier feed slices hourly. */

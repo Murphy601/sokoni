@@ -6,6 +6,8 @@ const PRODUCT_SELECT = `
   SELECT p.*,
     s.business_name AS seller_business_name,
     s.slug AS seller_slug,
+    s.user_id AS seller_table_user_id,
+    su.id AS seller_user_join_id,
     su.handle AS seller_handle,
     su.shop_name AS seller_shop_name,
     COALESCE(
