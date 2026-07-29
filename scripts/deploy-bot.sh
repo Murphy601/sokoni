@@ -10,46 +10,53 @@ echo "==> Deploying Sokoni bot from $REPO"
 
 cd "$REPO"
 
-# Push local WhatsApp catalog changes BEFORE pulling code (never wipe unpushed products).
-if git status --porcelain whatsapp-bot/src/data/products.json website/data/products.json website/assets/images/products/ 2>/dev/null | grep -q .; then
+DEPLOY_REF="${SOKONI_DEPLOY_REF:-main}"
+STASHED=0
+
+# Optional: publish local WhatsApp catalog before switching branches.
+# Set SKIP_CATALOG_PUBLISH=1 when the VM is on a diverged feature branch / push would fail.
+if [ "${SKIP_CATALOG_PUBLISH:-}" = "1" ]; then
+  echo "==> SKIP_CATALOG_PUBLISH=1 — leaving local catalog files alone for now"
+elif git status --porcelain whatsapp-bot/src/data/products.json website/data/products.json website/assets/images/products/ 2>/dev/null | grep -q .; then
   echo "==> Local catalog changes found — publishing to GitHub first..."
   node scripts/build-site-catalog.mjs
   if ! node scripts/commit-catalog.mjs; then
-    echo "ERROR: Catalog publish failed. Fix git auth, then run: node scripts/publish-catalog-now.mjs"
-    exit 1
+    echo "WARN: Catalog publish failed — continuing deploy (live catalog is Postgres when dbConnected)."
+    echo "      Later: node scripts/publish-catalog-now.mjs"
   fi
 fi
 
-echo "==> Syncing with origin/main..."
-git fetch origin main
-STASHED=0
+echo "==> Syncing to origin/${DEPLOY_REF} (always deploy from this ref, not a leftover feature branch)..."
+git fetch origin "$DEPLOY_REF"
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  echo "==> Stashing dirty files so git pull can proceed..."
+  echo "==> Stashing dirty VM files so checkout can proceed..."
   git stash push -u -m "deploy-bot-$(date +%s)" || true
   STASHED=1
 fi
-if ! git pull --rebase origin main; then
-  echo "WARN: git pull --rebase failed — continuing deploy at $(git rev-parse --short HEAD)"
+# Force local main (or override) onto the remote tip — avoids "pull --rebase" staying on a feature branch.
+if ! git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"; then
+  echo "ERROR: could not checkout origin/${DEPLOY_REF}"
+  exit 1
 fi
-if [ "$STASHED" = "1" ]; then
-  if ! git stash pop; then
-    echo "WARN: stash pop had conflicts — auto-resolving known VM-only files..."
-    if git diff --name-only --diff-filter=U 2>/dev/null | grep -q '^website/data/tiktok-featured\.json$'; then
-      git checkout --ours website/data/tiktok-featured.json
-      git add website/data/tiktok-featured.json
-      echo "==> Resolved tiktok-featured.json (kept origin/main version)"
-    fi
-    # Drop stash if working tree is clean enough to continue
-    if [ -z "$(git diff --name-only --diff-filter=U 2>/dev/null)" ]; then
-      git stash drop || true
-    else
-      echo "WARN: unresolved conflicts remain — fix manually; bot restart continues"
-    fi
-  fi
-fi
-echo "==> Git at: $(git log -1 --oneline)"
+echo "==> Git at: $(git log -1 --oneline) (branch $(git branch --show-current))"
 
-if [ -f "$REPO/docker-compose.waha.yml" ]; then
+if [ "$STASHED" = "1" ]; then
+  echo "==> Keeping deploy stash (not auto-popped onto main) — restore later with: git stash list"
+  echo "    VM-only files (tiktok-featured, product bak) stay out of the running tree."
+fi
+
+# Default: do NOT recreate WAHA on bot deploys (bouncing 2026.6.2 broke WhatsApp).
+# Refresh WAHA explicitly with: FORCE_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
+# Or: bash scripts/deploy-waha.sh
+if [ "${FORCE_WAHA_DEPLOY:-}" = "1" ]; then
+  echo "==> FORCE_WAHA_DEPLOY=1 — running WAHA deploy"
+  if ! bash "$REPO/scripts/deploy-waha.sh"; then
+    echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
+    echo "      Run: bash scripts/deploy-waha.sh"
+  fi
+elif [ "${SKIP_WAHA_DEPLOY:-1}" != "0" ]; then
+  echo "==> Leaving WAHA as-is (default). Set FORCE_WAHA_DEPLOY=1 to recreate."
+elif [ -f "$REPO/docker-compose.waha.yml" ]; then
   if ! bash "$REPO/scripts/deploy-waha.sh"; then
     echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
     echo "      Run: bash scripts/deploy-waha.sh"

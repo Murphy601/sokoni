@@ -12,15 +12,16 @@ Ops guide for linking Sokoni’s business WhatsApp to self-hosted WAHA (NOWEB).
 ## Canonical VM flow
 
 ```bash
-cd ~/sokoni && git pull --rebase origin main
-bash scripts/deploy-waha.sh          # pinned image + NOWEB store + webhook
-bash scripts/waha-link-whatsapp.sh   # pairing code (preferred) or PNG QR
-bash scripts/deploy-bot.sh
+cd ~/sokoni && git fetch origin main && git checkout -B main origin/main
+bash scripts/deploy-waha.sh          # pinned 2026.7.2 + live WA version + NOWEB store
+bash scripts/waha-link-whatsapp.sh   # pairing code (preferred) or PNG QR — only if not WORKING
+SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh   # bot only; does not bounce WAHA by default
 bash scripts/health-check.sh
 ```
 
-Image is hardcoded as `devlikeapro/waha:latest-2026.6.2` in `docker-compose.waha.yml`
-(avoid `${WAHA_IMAGE:-repo:tag}` — docker-compose v1 can break on the colon in the tag).
+Image is hardcoded as `devlikeapro/waha:latest-2026.7.2` in `docker-compose.waha.yml`
+(avoid `${WAHA_IMAGE:-repo:tag}` — docker-compose v1 can break on the colon in the tag).  
+Do **not** use `2026.6.2` — it loops `Connection Failure` with stale client `2.3000.1035920091`.
 
 Expect session `WORKING`. Public probe:
 
