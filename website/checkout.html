@@ -27,12 +27,55 @@
 
   <main class="max-w-lg mx-auto px-5 py-10">
     <h1 class="font-display text-3xl font-bold mb-2">Pay your order</h1>
-    <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-2">Enter your <strong>SK-####</strong> order number from WhatsApp. You pay upfront — funds held in escrow until delivery.</p>
+    <p class="text-sm text-brand-purple/60 dark:text-white/60 mb-2">Pay on Sokoni — funds held in escrow until delivery. Accepted offers check out at the <strong>agreed price</strong>.</p>
     <p id="checkout-readiness" class="text-xs text-brand-purple/55 dark:text-white/55 mb-8">Checking M-Pesa options…</p>
+
+    <div id="offer-checkout-panel" class="hidden rounded-3xl border border-brand-green/30 bg-brand-green/5 p-6 space-y-4 mb-8">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-1">Accepted offer</p>
+        <p id="offer-checkout-product" class="text-lg font-bold"></p>
+        <p id="offer-checkout-amount" class="text-2xl font-bold text-brand-green mt-1"></p>
+        <p id="offer-checkout-list" class="text-xs text-brand-purple/50 line-through mt-1"></p>
+      </div>
+      <div id="buyer-auth-panel" class="rounded-2xl border border-black/5 dark:border-white/10 p-4 space-y-3">
+        <p class="text-sm font-semibold">Verify WhatsApp to pay</p>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <label class="flex-1 text-xs font-medium">
+            WhatsApp number
+            <input id="buyer-auth-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purpleLight px-3 text-sm" />
+          </label>
+          <label class="sm:w-36 text-xs font-medium">
+            Code
+            <input id="buyer-auth-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purpleLight px-3 text-sm" />
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="buyer-auth-send-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">Send code</button>
+          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Verify</button>
+        </div>
+        <p id="buyer-auth-status" class="text-xs text-brand-purple/60"></p>
+      </div>
+      <form id="offer-checkout-form" class="space-y-3">
+        <label class="block text-sm font-medium">
+          Full name
+          <input id="offer-name" type="text" required autocomplete="name" class="sell-form-input" placeholder="Jane Wanjiru" />
+        </label>
+        <label class="block text-sm font-medium">
+          Delivery location
+          <input id="offer-location" type="text" required autocomplete="street-address" class="sell-form-input" placeholder="Umoja 1 near the market" />
+        </label>
+        <label class="block text-sm font-medium">
+          M-Pesa / rider phone
+          <input id="offer-phone" type="tel" required inputmode="tel" autocomplete="tel" class="sell-form-input" placeholder="07xx or 2547xx" />
+        </label>
+        <button type="submit" id="offer-place-btn" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full">Continue to M-Pesa</button>
+      </form>
+      <p id="offer-checkout-status" class="text-sm text-brand-purple/60"></p>
+    </div>
 
     <form id="checkout-lookup" class="flex flex-col sm:flex-row gap-3 mb-8">
       <label for="order-id" class="sr-only">Order number</label>
-      <input id="order-id" type="text" placeholder="SK-1042" required autocomplete="off"
+      <input id="order-id" type="text" placeholder="SK-1042" autocomplete="off"
         class="flex-1 min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purpleLight px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-green" />
       <button type="submit" class="min-h-[48px] px-6 rounded-full bg-brand-purple text-white dark:bg-brand-green dark:text-brand-purple font-bold">Load</button>
     </form>
@@ -75,6 +118,7 @@
     <div id="checkout-loading" class="hidden text-sm text-brand-purple/50">Loading…</div>
   </main>
 
+  <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/checkout.js"></script>
 </body>
 </html>

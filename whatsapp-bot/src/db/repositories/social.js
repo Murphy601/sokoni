@@ -38,9 +38,17 @@ const FORBIDDEN_PATTERNS = [
   /07\d{8}/,
   /01\d{8}/,
   /\+254\d{9}/,
+  /\b254\d{9}\b/,
   /pay outside/i,
   /direct till/i,
   /send cash/i,
+  /\b(?:wa\.me|whatsapp\.com|t\.me|telegram)\b/i,
+  /\b(?:instagram\.com|facebook\.com|fb\.com|tiktok\.com)\b/i,
+  /\b(?:call|text|dm)\s*(?:me|us)\b/i,
+  /https?:\/\//i,
+  /www\.\w+/i,
+  /\btill\s*[#:]?\s*\d{5,}/i,
+  /buy\s*goods/i,
 ];
 
 const DEFAULT_OFFER_REMINDER_COOLDOWN_SECONDS = 60;
@@ -120,7 +128,7 @@ function formatKesAmount(amount) {
 function offerReminderMessage(offer) {
   const title = offer?.product_title || offer?.product_id || "your item";
   const amount = formatKesAmount(offer?.amount_kes);
-  return `Hi! I accepted your offer of ${amount} for "${title}". Please complete checkout on Sokoni within 24 hours so I can prepare shipping.`;
+  return `Hi! I accepted your offer of ${amount} for "${title}". Please complete checkout on Sokoni (Activity or checkout page) within 24 hours so I can prepare shipping.`;
 }
 
 async function productExists(productId) {
@@ -262,6 +270,55 @@ export async function getAcceptedOfferForCheckout({ offerId, buyerUserId } = {})
       agreedBuyerTotalKes: breakdown.agreedBuyerTotalKes,
     },
   };
+}
+
+/**
+ * Offers shared between two users (inbox thread context).
+ */
+export async function listThreadOffers({ userAId, userBId, limit = 20 } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const a = parseUserId(userAId);
+  const b = parseUserId(userBId);
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
+  if (!a || !b) {
+    return { error: "invalid_thread_users", message: "userAId and userBId are required." };
+  }
+  if (a === b) {
+    return { error: "invalid_thread_users", message: "Thread users must be different." };
+  }
+  if (!(await userExists(a)) || !(await userExists(b))) {
+    return { error: "user_not_found", message: "One or both users not found." };
+  }
+
+  await expirePendingOffers();
+
+  const { rows } = await query(
+    `SELECT
+       o.*,
+       p.title AS product_title,
+       p.price_kes AS product_price_kes,
+       p.primary_image_url AS product_image_url,
+       buyer.handle AS buyer_handle,
+       buyer.shop_name AS buyer_shop_name,
+       seller.handle AS seller_handle,
+       seller.shop_name AS seller_shop_name
+     FROM offers o
+     LEFT JOIN products p ON p.id = o.product_id
+     LEFT JOIN users buyer ON buyer.id = o.buyer_user_id
+     LEFT JOIN users seller ON seller.id = o.seller_user_id
+     WHERE (
+       (o.buyer_user_id = $1 AND o.seller_user_id = $2)
+       OR (o.buyer_user_id = $2 AND o.seller_user_id = $1)
+     )
+     ORDER BY COALESCE(o.updated_at, o.created_at) DESC, o.id DESC
+     LIMIT $3`,
+    [a, b, safeLimit]
+  );
+
+  return { offers: rows.map(mapOfferRow), count: rows.length, limit: safeLimit };
 }
 
 /**

@@ -22,8 +22,9 @@ Use two phones (buyer + seller) and one live listing with `seller_user_id` linke
 | 2 | Buyer: open shop/`product` sheet, verify WhatsApp (or soft `?viewer=` for demos) | Follow / like / offer actions work |
 | 3 | Buyer: send offer below list price | Offer appears in seller inbox as pending |
 | 4 | Seller: decline one offer | Buyer cannot chat on declined offer |
-| 5 | Buyer: send new offer → seller accepts | Chat unlocks; accepted card shows; WA ping includes `pay_offer_<id>` |
-| 5b | Buyer: reply `pay_offer_<id>` (or Activity → Pay on WhatsApp) | Pending order uses **agreed** total; STK amount matches offer, not list price |
+| 5 | Buyer: send new offer → seller accepts | Chat unlocks; accepted card shows; WA ping links to **on-site checkout** |
+| 5b | Buyer: Activity / inbox → **Pay on Sokoni** (`checkout.html?offerId=`) | Place order at agreed total → STK; WhatsApp `pay_offer_<id>` remains backup only |
+| 5c | Buyer + seller: bargain only in `inbox.html` | Phone / till / wa.me / links blocked; offer cards accept/decline/pay on-site |
 | 6 | Buyer + seller: exchange in-app messages | Phone numbers / “pay outside” blocked |
 | 7 | Seller: send reminder once, then again immediately | First OK; second `429 reminder_cooldown_active` |
 | 8 | Seller: mark offer handled, reload, unhandle, reset queue | State survives reload; audit events listable |

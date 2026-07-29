@@ -247,7 +247,26 @@ Checkout preview (buyer — fee breakdown at agreed price):
 
 `GET /api/social/offers/:offerId/checkout?buyerUserId=1&phone=2547…&sessionToken=…`
 
-Returns `{ ok, offer, productId, listedBuyerTotalKes, breakdown }` where `breakdown.totalKes` equals the accepted offer amount. WhatsApp checkout: buyer replies `pay_offer_<id>` (STK uses the offer snapshot, not list price).
+Place prepaid order from accepted offer (on-site):
+
+`POST /api/social/offers/:offerId/place-order`
+
+```json
+{
+  "buyerUserId": 1,
+  "name": "Jane Wanjiru",
+  "location": "Umoja 1 near the market",
+  "deliveryPhone": "0712345678",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
+}
+```
+
+Returns `{ orderId, breakdown }` — then pay via `checkout.html?order=SK-…` / STK. WhatsApp `pay_offer_<id>` remains a backup path only.
+
+Thread offers (inbox):
+
+`GET /api/social/chat/offers?userAId=1&userBId=2`
 
 Send reminder (seller, cooldown enforced server-side):
 

@@ -10,6 +10,7 @@ import {
   listSellerReviews,
   getUserSocialStats,
   listOffers,
+  listThreadOffers,
   listBuyerSocialActivity,
   listSellerSocialActivity,
   listUserFollowConnections,
@@ -27,8 +28,11 @@ import { resolveAuthenticatedSellerSocialContext } from "../services/seller-soci
 import { updatePeerSellerProfile } from "../services/suppliers.js";
 import {
   notifyBuyerOfferResponse,
+  notifyNewDirectMessage,
   notifySellerNewFollower,
+  notifySellerNewOffer,
 } from "../services/social-notifications.js";
+import { placeOrderFromAcceptedOffer } from "../services/offer-web-checkout.js";
 import {
   applyBuyerIdentityAuth,
   hasBuyerSessionContext,
@@ -69,6 +73,7 @@ function socialErrorStatus(error) {
     error === "product_unavailable" ||
     error === "offer_above_list" ||
     error === "offer_too_low_for_shipping" ||
+    error === "invalid_delivery_details" ||
     error === "review_exists"
   ) {
     return 409;
@@ -466,6 +471,9 @@ router.post("/offers/create", async (req, res) => {
         message: result.message,
       });
     }
+    if (result.offer) {
+      void notifySellerNewOffer({ offer: result.offer });
+    }
     res.status(201).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -501,6 +509,44 @@ router.get("/offers/:offerId/checkout", async (req, res) => {
       });
     }
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/social/offers/:offerId/place-order
+ * Create prepaid order from an accepted offer (on-site checkout).
+ */
+router.post("/offers/:offerId/place-order", async (req, res) => {
+  try {
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "buyerUserId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await placeOrderFromAcceptedOffer({
+      offerId: req.params.offerId,
+      buyerUserId: gated.payload?.buyerUserId,
+      name: gated.payload?.name ?? req.body?.name,
+      location: gated.payload?.location ?? req.body?.location,
+      phone: gated.payload?.deliveryPhone ?? req.body?.deliveryPhone ?? req.body?.phone,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.status(201).json({
+      ok: true,
+      orderId: result.orderId,
+      breakdown: result.breakdown,
+      productName: result.productName,
+      offer: result.offer,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -832,6 +878,77 @@ function isAmbiguousSessionAuthError(error) {
   );
 }
 
+/** GET /api/social/chat/offers?userAId=1&userBId=2 — offers for an inbox thread */
+router.get("/chat/offers", async (req, res) => {
+  try {
+    const hasSellerContext = hasSellerSessionContext(req, req.query || {});
+    let userAId = req.query.userAId;
+    let userBId = req.query.userBId;
+    let usedSellerIdentity = false;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) {
+        const requestedUserA = Number(req.query.userAId);
+        const requestedUserB = Number(req.query.userBId);
+        const matchesA = Number.isInteger(requestedUserA) && requestedUserA > 0 && requestedUserA === auth.sellerUserId;
+        const matchesB = Number.isInteger(requestedUserB) && requestedUserB > 0 && requestedUserB === auth.sellerUserId;
+        if (!matchesA && !matchesB) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the chat participants in this request.",
+          });
+        }
+        userAId = matchesA ? auth.sellerUserId : userAId;
+        userBId = matchesB ? auth.sellerUserId : userBId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+    }
+
+    if (!usedSellerIdentity && hasBuyerSessionContext(req, req.query || {})) {
+      const auth = await resolveAuthenticatedBuyerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+      const requestedUserA = Number(req.query.userAId);
+      const requestedUserB = Number(req.query.userBId);
+      const matchesA = Number.isInteger(requestedUserA) && requestedUserA > 0 && requestedUserA === auth.buyerUserId;
+      const matchesB = Number.isInteger(requestedUserB) && requestedUserB > 0 && requestedUserB === auth.buyerUserId;
+      if (!matchesA && !matchesB) {
+        return res.status(403).json({
+          error: "buyer_session_mismatch",
+          message: "Buyer session does not match the chat participants in this request.",
+        });
+      }
+      userAId = matchesA ? auth.buyerUserId : userAId;
+      userBId = matchesB ? auth.buyerUserId : userBId;
+    }
+
+    const result = await listThreadOffers({
+      userAId,
+      userBId,
+      limit: req.query.limit,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** POST /api/social/chat/send — moderated in-app DM */
 router.post("/chat/send", async (req, res) => {
   try {
@@ -878,6 +995,9 @@ router.post("/chat/send", async (req, res) => {
         error: result.error,
         message: result.message,
       });
+    }
+    if (result.message) {
+      void notifyNewDirectMessage({ message: result.message });
     }
     res.status(201).json(result);
   } catch (err) {

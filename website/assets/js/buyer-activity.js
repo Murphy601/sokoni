@@ -4,16 +4,15 @@ const API_BASE =
     : "https://bot.sokonimall.com";
 
 const SOCIAL_API = `${API_BASE}/api/social`;
-const WHATSAPP_NUMBER = "254117422428";
 
 function el(id) {
   return document.getElementById(id);
 }
 
-function payOfferWhatsAppHref(offerId) {
+function offerCheckoutHref(offerId) {
   const id = Number(offerId);
   if (!Number.isInteger(id) || id < 1) return "";
-  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`pay_offer_${id}`)}`;
+  return `checkout.html?offerId=${id}`;
 }
 
 function escapeHtml(value) {
@@ -115,12 +114,12 @@ function eventCard(event) {
 
   const actions = [];
   if (type === "offer_accepted") {
-    const payHref = payOfferWhatsAppHref(event?.offer?.id);
+    const payHref = offerCheckoutHref(event?.offer?.id);
     if (payHref) {
       const amountLabel = formatKes(event?.offer?.amountKsh);
       actions.push(
-        `<a href="${payHref}" target="_blank" rel="noopener" class="text-xs font-bold text-brand-green underline hover:opacity-90">${
-          amountLabel ? `Pay ${escapeHtml(amountLabel)} on WhatsApp` : "Pay agreed price on WhatsApp"
+        `<a href="${payHref}" class="text-xs font-bold text-brand-green underline hover:opacity-90">${
+          amountLabel ? `Pay ${escapeHtml(amountLabel)} on Sokoni` : "Pay agreed price on Sokoni"
         }</a>`
       );
     }
