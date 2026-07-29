@@ -113,13 +113,13 @@ export function getAllContacts() {
 }
 
 
-export function createOrder({ customerKey, chatId, product, details }) {
+export function createOrder({ customerKey, chatId, product, details, offerId = null, totalsOverride = null }) {
   load();
   store.seq += 1;
   const id = `SK-${store.seq}`;
   const now = Date.now();
   const sourcePriceKes = product.sourcePriceKes != null ? Number(product.sourcePriceKes) : null;
-  const totals = computeProductTotals(product);
+  const totals = totalsOverride || computeProductTotals(product);
   const priceKes = totals.itemKes;
   const shippingKes = totals.shippingKes;
   const totalKes = totals.totalKes;
@@ -129,6 +129,7 @@ export function createOrder({ customerKey, chatId, product, details }) {
     sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
 
   const prepaid = isPrepaidOnly();
+  const offerKey = offerId != null && String(offerId).trim() !== "" ? String(offerId).trim() : null;
 
   const order = {
     id,
@@ -143,6 +144,8 @@ export function createOrder({ customerKey, chatId, product, details }) {
     sellerNetKes,
     sourcePriceKes,
     marginKes,
+    offerId: offerKey,
+    offerAmountKes: offerKey ? totalKes : null,
     supplierId: product.supplierId || null,
     supplierSku: product.supplierSku || null,
     customerName: details.name,

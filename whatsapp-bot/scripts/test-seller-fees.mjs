@@ -4,6 +4,7 @@ import {
   applyAiShippingSuggestion,
   computeFeeBreakdown,
   computeFeeBreakdownLegacy,
+  computeOfferFeeBreakdown,
   computeProductTotals,
   orderBuyerTotal,
   formatProductListPrice,
@@ -76,6 +77,24 @@ assert("DB sellerId buyer total 523", computeProductTotals(dbSellerOnly).totalKe
 const legacyYogurt = { sourcePriceKes: 276, priceKes: 300, supplierId: "seller-adiv", name: "Yogurt" };
 assert("legacy item price not treated as all-in", resolveSellerNetKes(legacyYogurt) == null);
 assert("legacy yogurt total 475", computeProductTotals(legacyYogurt).totalKes === 475);
+
+// Accepted offer: amount_kes = agreed buyer all-in (same as list price_kes)
+const offer2000 = computeOfferFeeBreakdown(2000, 150);
+assert("offer 2000 buyer total locked", offer2000.buyerTotalKes === 2000 && !offer2000.error);
+assert("offer 2000 fee ~10%", Math.abs(offer2000.platformFeeKes / offer2000.subtotalKes - 0.1) < 0.02);
+assert("offer 2000 seller net = subtotal - ship", offer2000.sellerNetKes === offer2000.subtotalKes - 150);
+
+const offer1500 = computeOfferFeeBreakdown(1500, 150);
+assert("offer 1500 buyer total locked", offer1500.buyerTotalKes === 1500 && !offer1500.error);
+assert("offer 1500 seller net lower than 2000", offer1500.sellerNetKes < offer2000.sellerNetKes);
+assert("offer 1500 platform fee lower", offer1500.platformFeeKes < offer2000.platformFeeKes);
+
+const offerTooLow = computeOfferFeeBreakdown(100, 150);
+assert("offer too low for shipping errors", offerTooLow.error === "offer_too_low_for_shipping");
+
+const offerFreeShip = computeOfferFeeBreakdown(1100, 0, { freeShipping: true });
+assert("offer free shipping buyer 1100", offerFreeShip.buyerTotalKes === 1100 && offerFreeShip.shippingKes === 0);
+assert("offer free shipping net 1000", offerFreeShip.sellerNetKes === 1000);
 
 console.log(`\n${failed ? failed + " failed" : "All seller fee tests passed"}`);
 process.exit(failed ? 1 : 0);

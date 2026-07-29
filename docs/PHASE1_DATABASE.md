@@ -226,6 +226,8 @@ Create/update pending offer:
 }
 ```
 
+`amountKsh` / `amount_kes` is the **agreed buyer all-in total** (same semantics as listing `price_kes`), not seller-net alone.
+
 Respond (seller):
 
 `POST /api/social/offers/:offerId/respond`
@@ -238,6 +240,33 @@ Respond (seller):
   "sessionToken": "seller-session-token"
 }
 ```
+
+On accept, `expires_at` is set to **now + 24 hours**. Buyer checkout must use this accepted offer before expiry.
+
+Checkout preview (buyer — fee breakdown at agreed price):
+
+`GET /api/social/offers/:offerId/checkout?buyerUserId=1&phone=2547…&sessionToken=…`
+
+Place prepaid order from accepted offer (on-site):
+
+`POST /api/social/offers/:offerId/place-order`
+
+```json
+{
+  "buyerUserId": 1,
+  "name": "Jane Wanjiru",
+  "location": "Umoja 1 near the market",
+  "deliveryPhone": "0712345678",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
+}
+```
+
+Returns `{ orderId, breakdown }` — then pay via `checkout.html?order=SK-…` / STK. WhatsApp `pay_offer_<id>` remains a backup path only.
+
+Thread offers (inbox):
+
+`GET /api/social/chat/offers?userAId=1&userBId=2`
 
 Send reminder (seller, cooldown enforced server-side):
 

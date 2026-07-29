@@ -9,6 +9,12 @@ function el(id) {
   return document.getElementById(id);
 }
 
+function offerCheckoutHref(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return "";
+  return `checkout.html?offerId=${id}`;
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -107,6 +113,17 @@ function eventCard(event) {
   }
 
   const actions = [];
+  if (type === "offer_accepted") {
+    const payHref = offerCheckoutHref(event?.offer?.id);
+    if (payHref) {
+      const amountLabel = formatKes(event?.offer?.amountKsh);
+      actions.push(
+        `<a href="${payHref}" class="text-xs font-bold text-brand-green underline hover:opacity-90">${
+          amountLabel ? `Pay ${escapeHtml(amountLabel)} on Sokoni` : "Pay agreed price on Sokoni"
+        }</a>`
+      );
+    }
+  }
   if (shopLink) {
     actions.push(`<a href="${shopLink}" class="text-xs font-semibold underline hover:text-brand-green">View shop</a>`);
   }

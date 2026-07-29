@@ -43,7 +43,23 @@
     );
   }
 
+  function askInboxLink(product) {
+    const sellerUserId = resolveSellerUserId(product);
+    const viewerId = resolveViewerUserId();
+    if (!sellerUserId) return "";
+    const params = new URLSearchParams({
+      with: String(sellerUserId),
+    });
+    if (viewerId) params.set("viewer", String(viewerId));
+    if (product?.id) params.set("product", String(product.id));
+    const handle = normalizeHandleValue(sellerHandle(product));
+    if (handle) params.set("handle", handle);
+    return `inbox.html?${params.toString()}`;
+  }
+
   function askLink(product) {
+    const inbox = askInboxLink(product);
+    if (inbox) return inbox;
     return waLink(`Hi Sokoni, tell me more about "${product.name}" (${formatPrice(product)}).`);
   }
 
@@ -231,7 +247,9 @@
             ? `<a href="${shopLink}" class="product-sheet-ask">🏪 View ${escapeHtml(handle)} shop</a>`
             : ""
         }
-        <a href="${askLink(product)}" target="_blank" rel="noopener" class="product-sheet-ask">💬 Ask on WhatsApp</a>
+        <a href="${askLink(product)}" ${askInboxLink(product) ? "" : 'target="_blank" rel="noopener"'} class="product-sheet-ask">${
+          askInboxLink(product) ? "💬 Message seller on Sokoni" : "💬 Ask on WhatsApp"
+        }</a>
       </div>`;
   }
 

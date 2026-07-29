@@ -145,6 +145,51 @@ export function computeFeeBreakdown(sellerNetKes, shippingKes, { freeShipping = 
   };
 }
 
+/**
+ * Reverse fee math for an accepted offer.
+ * `agreedBuyerTotalKes` is the negotiated all-in amount the buyer pays (offer.amount_kes).
+ * Shipping is taken from the listing; seller net + platform fee are derived so totals stay consistent.
+ */
+export function computeOfferFeeBreakdown(agreedBuyerTotalKes, shippingKes, { freeShipping = false } = {}) {
+  const agreed = Math.round(Number(agreedBuyerTotalKes) || 0);
+  if (!Number.isFinite(agreed) || agreed < 1) {
+    return { error: "invalid_offer_amount", message: "Agreed offer amount must be a positive KES total." };
+  }
+
+  const shipRaw = Math.round(Number(shippingKes) || 0);
+  const shipping = freeShipping || shipRaw === 0 ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw);
+  const subtotalKes = Math.round(agreed / (1 + PLATFORM_FEE_RATE));
+  const platformFeeKes = agreed - subtotalKes;
+  const sellerNetKes = subtotalKes - shipping;
+
+  if (sellerNetKes < 1) {
+    return {
+      error: "offer_too_low_for_shipping",
+      message: "Agreed price is too low to cover shipping and platform fee.",
+      agreedBuyerTotalKes: agreed,
+      shippingKes: shipping,
+    };
+  }
+
+  // Re-run forward math so rounding matches computeFeeBreakdown.
+  const forward = computeFeeBreakdown(sellerNetKes, shipping, { freeShipping: shipping === 0 });
+  const buyerTotalKes = agreed;
+  const feeAdjust = buyerTotalKes - forward.buyerTotalKes;
+
+  return {
+    sellerNetKes: forward.sellerNetKes,
+    itemKes: forward.itemKes,
+    shippingKes: forward.shippingKes,
+    subtotalKes: forward.subtotalKes,
+    platformFeeKes: forward.platformFeeKes + feeAdjust,
+    platformFeeRate: PLATFORM_FEE_RATE,
+    buyerTotalKes,
+    freeShipping: forward.freeShipping,
+    agreedBuyerTotalKes: agreed,
+    fromOffer: true,
+  };
+}
+
 /** Legacy catalog items where priceKes was buyer item portion (fee deducted, not added on top). */
 export function computeFeeBreakdownLegacy(itemKes, shippingKes, { freeShipping = false } = {}) {
   const item = Math.max(0, Math.round(Number(itemKes) || 0));

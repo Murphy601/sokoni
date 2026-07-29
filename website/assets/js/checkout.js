@@ -4,6 +4,7 @@
       ? "http://localhost:3001"
       : "https://bot.sokonimall.com";
   const CHECKOUT_API = `${API_BASE}/api/checkout`;
+  const SOCIAL_API = `${API_BASE}/api/social`;
   const POLL_MS = 3000;
   const POLL_MAX = 20;
 
@@ -22,9 +23,117 @@
   let checkoutMetaCache = null;
   let pollTimer = null;
   let pollCount = 0;
+  let activeOfferId = null;
 
   function formatKes(n) {
     return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
+  }
+
+  function setOfferStatus(msg, isError = false) {
+    const node = document.getElementById("offer-checkout-status");
+    if (!node) return;
+    node.textContent = msg || "";
+    node.classList.toggle("text-red-600", isError);
+  }
+
+  async function loadOfferPreview(offerId) {
+    const panel = document.getElementById("offer-checkout-panel");
+    if (!panel) return;
+    panel.classList.remove("hidden");
+    activeOfferId = offerId;
+    setOfferStatus("Loading agreed price…");
+
+    const session = window.SokoniBuyerAuth?.readSession?.();
+    const params = new URLSearchParams({ offerId: String(offerId) });
+    if (session?.userId) params.set("buyerUserId", String(session.userId));
+    if (window.SokoniBuyerAuth?.appendAuthQuery) {
+      window.SokoniBuyerAuth.appendAuthQuery(params);
+    }
+
+    try {
+      const res = await fetch(`${SOCIAL_API}/offers/${encodeURIComponent(offerId)}/checkout?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOfferStatus(data.message || data.error || "This offer cannot be checked out.", true);
+        return;
+      }
+      document.getElementById("offer-checkout-product").textContent =
+        data.offer?.product?.title || data.productId || "Accepted offer";
+      document.getElementById("offer-checkout-amount").textContent = formatKes(
+        data.breakdown?.totalKes ?? data.offer?.amountKsh
+      );
+      const listNode = document.getElementById("offer-checkout-list");
+      if (listNode) {
+        if (data.listedBuyerTotalKes != null) {
+          listNode.textContent = `Listed ${formatKes(data.listedBuyerTotalKes)}`;
+          listNode.classList.remove("hidden");
+        } else {
+          listNode.textContent = "";
+        }
+      }
+      setOfferStatus("Enter delivery details, then continue to M-Pesa at the agreed price.");
+      const phoneInput = document.getElementById("offer-phone");
+      if (phoneInput && session?.phone && !phoneInput.value) {
+        phoneInput.value = session.phone;
+      }
+    } catch {
+      setOfferStatus("Could not load offer checkout right now.", true);
+    }
+  }
+
+  async function placeOfferOrder(ev) {
+    ev.preventDefault();
+    if (!activeOfferId) return;
+    const session = window.SokoniBuyerAuth?.readSession?.();
+    if (!session?.userId) {
+      setOfferStatus("Verify your WhatsApp above before paying.", true);
+      return;
+    }
+
+    const name = document.getElementById("offer-name")?.value.trim();
+    const location = document.getElementById("offer-location")?.value.trim();
+    const phone = document.getElementById("offer-phone")?.value.trim();
+    const btn = document.getElementById("offer-place-btn");
+    if (btn) btn.disabled = true;
+    setOfferStatus("Creating prepaid order…");
+
+    try {
+      let payload = {
+        buyerUserId: session.userId,
+        name,
+        location,
+        deliveryPhone: phone,
+      };
+      if (window.SokoniBuyerAuth?.authFields) {
+        payload = window.SokoniBuyerAuth.authFields(payload);
+      }
+      const res = await fetch(`${SOCIAL_API}/offers/${encodeURIComponent(activeOfferId)}/place-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOfferStatus(data.message || data.error || "Could not place order from this offer.", true);
+        return;
+      }
+
+      document.getElementById("offer-checkout-panel")?.classList.add("hidden");
+      if (input) input.value = data.orderId;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("offerId");
+      url.searchParams.set("order", data.orderId);
+      window.history.replaceState({}, "", url);
+      setOfferStatus("");
+      hideError();
+      await loadOrder(data.orderId);
+      const checkoutPhone = document.getElementById("checkout-phone");
+      if (checkoutPhone && phone) checkoutPhone.value = phone;
+    } catch {
+      setOfferStatus("Network error while placing offer order.", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function normalizeOrderId(raw) {
@@ -238,10 +347,21 @@
   });
 
   payBtn?.addEventListener("click", payOrder);
+  document.getElementById("offer-checkout-form")?.addEventListener("submit", placeOfferOrder);
 
   loadMeta().then(() => {
     const params = new URLSearchParams(window.location.search);
+    const offerId = params.get("offerId");
     const preset = params.get("order");
+    if (offerId) {
+      window.SokoniBuyerAuth?.bindPanel?.({
+        onVerified: () => {
+          loadOfferPreview(offerId);
+        },
+      });
+      loadOfferPreview(offerId);
+      return;
+    }
     if (preset) {
       input.value = normalizeOrderId(preset);
       loadOrder(input.value);
