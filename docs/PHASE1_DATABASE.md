@@ -260,7 +260,8 @@ Seller send auth note:
 Buyer send auth note:
 
 - Buyer messages should include buyer `phone` + `sessionToken` when available (required in hard mode).
-- When buyer session context is present (and seller session is not), `senderUserId` is enforced from the verified buyer profile.
+- Chat routes try seller session first when `phone` + `sessionToken` are present; if the token is not a valid seller session, they fall through to buyer auth (same field names).
+- When buyer identity is used, `senderUserId` is enforced from the verified buyer profile.
 
 Thread:
 

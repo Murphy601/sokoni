@@ -26,15 +26,16 @@ import {
 const router = Router();
 
 function hasSellerSessionContext(req, payload = req.body || {}) {
-  return Boolean(
-    payload?.phone ||
-      payload?.sessionToken ||
-      payload?.verificationToken ||
-      req.query?.phone ||
-      req.query?.sessionToken ||
-      req.query?.verificationToken ||
-      req.headers["x-seller-session"]
-  );
+  const phone = payload?.phone || req.query?.phone;
+  const sessionToken =
+    payload?.sessionToken ||
+    payload?.verificationToken ||
+    req.query?.sessionToken ||
+    req.query?.verificationToken ||
+    req.headers["x-seller-session"];
+  // Require phone + token so buyer sessions (same field names) are not misrouted
+  // through seller auth on chat/offers endpoints.
+  return Boolean(phone && sessionToken);
 }
 
 function socialErrorStatus(error) {
@@ -470,29 +471,45 @@ router.get("/offers", async (req, res) => {
   }
 });
 
+function isAmbiguousSessionAuthError(error) {
+  return (
+    error === "session_required" ||
+    error === "session_invalid" ||
+    error === "session_expired" ||
+    error === "invalid_phone"
+  );
+}
+
 /** POST /api/social/chat/send — moderated in-app DM */
 router.post("/chat/send", async (req, res) => {
   try {
     let payload = { ...(req.body || {}) };
     const hasSellerContext = hasSellerSessionContext(req, payload);
+    let usedSellerIdentity = false;
 
     if (hasSellerContext) {
       const auth = await resolveAuthenticatedSellerSocialContext(req);
-      if (auth.error) {
+      if (auth.ok) {
+        const requestedSenderId = Number(payload.senderUserId);
+        if (Number.isInteger(requestedSenderId) && requestedSenderId > 0 && requestedSenderId !== auth.sellerUserId) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the sender profile in this request.",
+          });
+        }
+        payload.senderUserId = auth.sellerUserId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        // Valid-looking seller session that failed profile linkage — do not fall through.
         return res.status(auth.status || 403).json({
           error: auth.error,
           message: auth.message,
         });
       }
-      const requestedSenderId = Number(payload.senderUserId);
-      if (Number.isInteger(requestedSenderId) && requestedSenderId > 0 && requestedSenderId !== auth.sellerUserId) {
-        return res.status(403).json({
-          error: "seller_session_mismatch",
-          message: "Seller session does not match the sender profile in this request.",
-        });
-      }
-      payload.senderUserId = auth.sellerUserId;
-    } else {
+      // session_invalid/expired: may be a buyer OTP session using the same field names.
+    }
+
+    if (!usedSellerIdentity) {
       const gated = await applyBuyerIdentityAuth(req, payload, "senderUserId");
       if (gated.error) {
         return res.status(gated.status || socialErrorStatus(gated.error)).json({
@@ -522,29 +539,34 @@ router.get("/chat/thread", async (req, res) => {
     const hasSellerContext = hasSellerSessionContext(req, req.query || {});
     let userAId = req.query.userAId;
     let userBId = req.query.userBId;
+    let usedSellerIdentity = false;
+
     if (hasSellerContext) {
       const auth = await resolveAuthenticatedSellerSocialContext(req);
-      if (auth.error) {
+      if (auth.ok) {
+        const requestedUserA = Number(req.query.userAId);
+        const requestedUserB = Number(req.query.userBId);
+        const matchesA = Number.isInteger(requestedUserA) && requestedUserA > 0 && requestedUserA === auth.sellerUserId;
+        const matchesB = Number.isInteger(requestedUserB) && requestedUserB > 0 && requestedUserB === auth.sellerUserId;
+        if (!matchesA && !matchesB) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the chat thread participants in this request.",
+          });
+        }
+
+        userAId = matchesA ? auth.sellerUserId : userAId;
+        userBId = matchesB ? auth.sellerUserId : userBId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
         return res.status(auth.status || 403).json({
           error: auth.error,
           message: auth.message,
         });
       }
+    }
 
-      const requestedUserA = Number(req.query.userAId);
-      const requestedUserB = Number(req.query.userBId);
-      const matchesA = Number.isInteger(requestedUserA) && requestedUserA > 0 && requestedUserA === auth.sellerUserId;
-      const matchesB = Number.isInteger(requestedUserB) && requestedUserB > 0 && requestedUserB === auth.sellerUserId;
-      if (!matchesA && !matchesB) {
-        return res.status(403).json({
-          error: "seller_session_mismatch",
-          message: "Seller session does not match the chat thread participants in this request.",
-        });
-      }
-
-      userAId = matchesA ? auth.sellerUserId : userAId;
-      userBId = matchesB ? auth.sellerUserId : userBId;
-    } else if (hasBuyerSessionContext(req, req.query || {})) {
+    if (!usedSellerIdentity && hasBuyerSessionContext(req, req.query || {})) {
       const auth = await resolveAuthenticatedBuyerSocialContext(req);
       if (auth.error) {
         return res.status(auth.status || 403).json({
