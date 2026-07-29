@@ -51,10 +51,16 @@ Reply with `1`, `2`, etc. for menu choices (not buttons).
 | --- | --- |
 | `WAHA_API_URL` | WAHA base URL (e.g. `http://localhost:3000`) |
 | `WAHA_SESSION` | Session name (default: `default`) |
-| `OPENAI_API_KEY` | OpenRouter API key |
+| `OPENAI_API_KEY` | OpenRouter API key (chat + catalog vision) |
 | `OPENAI_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `OPENAI_MODEL` | Chat model (default: `google/gemma-4-31b-it:free`) |
 | `OPENAI_MODEL_FALLBACKS` | Comma-separated backup models if primary fails |
+| `CATALOG_VISION_MODEL` | Vision model for seller photo → draft (Phase 4) |
+| `CATALOG_VISION_FALLBACKS` | Optional vision model fallbacks |
+| `GEMINI_API_KEY` | Optional Google Gemini vision fallback for listings |
+| `GEMINI_VISION_MODEL` | Gemini vision model (default: `gemini-2.5-flash`) |
+| `PHOTOROOM_API_KEY` | Optional background cleanup for listing photos |
+| `CATALOG_AUTO_PUSH` | `true` to git-push catalog rebuild after publish |
 
 ### AI model choice (English / Kiswahili / Sheng)
 
@@ -70,7 +76,7 @@ The bot uses OpenRouter. Default is **free** (`:free` suffix = no credits per me
 Set on the VM in `whatsapp-bot/.env`, then `bash scripts/deploy-bot.sh`. Menus, orders, catalog, and admin flows are unchanged.
 
 | `PUBLIC_SITE_URL` | HTTPS site for product images |
-| `BUSINESS_WHATSAPP_NUMBER` | Your number — receives COD order alerts |
+| `BUSINESS_WHATSAPP_NUMBER` | Your number — receives order alerts |
 
 ## Catalog
 

@@ -6,6 +6,10 @@ Post-publish **automated moderation** scans listings after go-live and can hide 
 
 Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
+## Slices
+
+1. **Listing readiness polish** — seller-net test fix, AI fallback copy, flagged moderation endpoint help, env notes
+
 ## Seller workflow
 
 ```
@@ -15,11 +19,13 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
 | Step | What the seller does |
 |------|----------------------|
-| Media | Up to 4 photos + optional video. First photo = cover. AI auto-fills from cover photo. |
+| Media | Up to 4 photos + optional video. First photo = cover. AI auto-fills from cover photo when configured. |
 | Details | Title, description, up to 5 style hashtags, up to 2 brand tags |
 | Attributes | Browse category/subcategory, condition, size, colour, era |
-| Pricing | Supply price → retail shown. Dispatch city. |
+| Pricing | **Seller-net** price (what you receive) → buyer total = net + shipping + platform fee. Dispatch city. |
 | Post | **Instant publish** to shop + WhatsApp catalog. Optional **Save draft**. |
+
+Pricing is **seller-net first**: the number sellers enter is what they receive. Buyers see shipping + platform fee on top. Listings are **prepaid escrow** (not COD).
 
 ## Files
 
@@ -35,7 +41,7 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
 ## Seller API
 
-Auth = approved supplier `phone`. No admin token.
+Auth = approved supplier `phone` + session. No admin token.
 
 ```
 POST /api/seller/listings/generate
@@ -50,7 +56,10 @@ POST /api/seller/listings/draft
 
 GET /api/seller/listings?phone=254...
 GET /api/seller/listings/meta
+  → visionModel, visionProvider, geminiVisionEnabled, studioEnabled, shippingTiers, …
 ```
+
+AI keys are **optional** for listing: caption/manual fill still works. Photo vision needs `OPENAI_API_KEY` (and optionally `GEMINI_API_KEY` / `PHOTOROOM_API_KEY`).
 
 ## Admin moderation API
 
@@ -76,13 +85,16 @@ Failed scans → listing hidden (`inStock: false`), seller + admin notified on W
 4. Optional git auto-push (`CATALOG_AUTO_PUSH=true`)
 5. Async moderation scan
 
-## Verify
+## Readiness smoke
 
 ```bash
 cd whatsapp-bot
-node scripts/test-listing-generator.mjs
-curl https://bot.sokonimall.com/api/seller/listings/meta
+npm run test:listing
+node scripts/test-seller-fees.mjs
+curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.tool
 ```
+
+Manual: open `suppliers/list.html` → media step shows AI status from `/meta` → post a test item as an approved seller.
 
 ## Next: Phase 5.1
 

@@ -42,11 +42,23 @@ async function main() {
     },
     "500 ksh"
   );
-  if (finalized.priceKes <= 500) throw new Error("finalizeListingDraft retail too low");
+  // Seller-net model: priceKes mirrors what the seller receives; buyer total is applied later.
+  if (finalized.sellerNetKes !== 500 || finalized.priceKes !== 500) {
+    throw new Error(
+      `finalizeListingDraft seller-net mismatch: ${JSON.stringify({
+        sellerNetKes: finalized.sellerNetKes,
+        priceKes: finalized.priceKes,
+      })}`
+    );
+  }
+  if (!finalized.browseCategory) {
+    throw new Error(`finalizeListingDraft missing browseCategory: ${JSON.stringify(finalized)}`);
+  }
 
   console.log("OK: Phase 4 listing-generator helpers");
   console.log("  browse:", browse.browse, browse.sub);
-  console.log("  manual retail:", manual.priceKes);
+  console.log("  manual seller-net:", manual.sellerNetKes ?? manual.priceKes);
+  console.log("  finalized seller-net:", finalized.sellerNetKes);
 }
 
 main().catch((err) => {
