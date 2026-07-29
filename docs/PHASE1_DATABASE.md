@@ -103,6 +103,23 @@ Response:
 }
 ```
 
+### Liked product subset (feed hydration)
+
+`GET /api/products/likes?productIds=prod_a,prod_b`
+
+Optional: buyer session or `viewer` / `userId` query.
+
+Response:
+
+```json
+{
+  "userId": 1,
+  "likedProductIds": ["prod_a"]
+}
+```
+
+Unauthed soft mode returns `{ "likedProductIds": [], "userId": null }`.
+
 ### Follow users (toggle)
 
 `POST /api/social/follow`

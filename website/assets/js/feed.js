@@ -100,12 +100,26 @@
       if (!html) return;
       container.innerHTML = html;
       container.classList.remove("hidden");
+      window.SokoniShopShell?.syncHeartButtons?.();
 
       container.querySelectorAll(".feed-rail-grid").forEach((grid) => {
         grid.addEventListener("click", (e) => {
+          const heart = e.target.closest(".depop-card-heart[data-save-id]");
+          if (heart) {
+            e.preventDefault();
+            e.stopPropagation();
+            const pid = heart.dataset.saveId;
+            const saved = window.SokoniShopShell?.toggleBag?.(pid);
+            heart.classList.toggle("is-saved", Boolean(saved));
+            heart.textContent = saved ? "♥" : "♡";
+            heart.setAttribute("aria-label", saved ? "Remove from saved" : "Save item");
+            return;
+          }
           const card = e.target.closest(".depop-card[data-product-id]");
           if (!card) return;
           track("click", { productId: card.dataset.productId });
+          const product = window.SokoniApp?.getStoreProducts?.()?.find((p) => p.id === card.dataset.productId);
+          if (product) window.SokoniProductSheet?.open(product);
         });
       });
     } catch (err) {

@@ -13,6 +13,8 @@
 
   /** @type {Set<string>} */
   let bagIds = new Set();
+  /** @type {Set<string>} server-hydrated likes for signed-in buyers */
+  let likedIds = new Set();
 
   function loadBag() {
     try {
@@ -48,6 +50,45 @@
     return getProducts().find((p) => p.id === id) || null;
   }
 
+  function isInBag(id) {
+    return bagIds.has(id);
+  }
+
+  function isHearted(id) {
+    if (!id) return false;
+    const key = String(id);
+    return bagIds.has(key) || likedIds.has(key);
+  }
+
+  function applyHeartButton(btn, hearted) {
+    if (!btn) return;
+    btn.classList.toggle("is-saved", hearted);
+    btn.textContent = hearted ? "♥" : "♡";
+    btn.setAttribute("aria-label", hearted ? "Remove from saved" : "Save item");
+  }
+
+  function syncHeartButtons(productId = null) {
+    const selector = productId
+      ? `.depop-card-heart[data-save-id="${CSS.escape(String(productId))}"]`
+      : ".depop-card-heart[data-save-id]";
+    document.querySelectorAll(selector).forEach((btn) => {
+      const id = btn.getAttribute("data-save-id");
+      applyHeartButton(btn, isHearted(id));
+    });
+    if (productId) {
+      window.SokoniProductSheet?.syncSaveButton?.(productId);
+    }
+  }
+
+  function hydrateLikedIds(ids) {
+    likedIds = new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    );
+    syncHeartButtons();
+  }
+
   async function syncSocialLike(productId, liked) {
     const session = window.SokoniBuyerAuth?.readSession?.();
     if (!session?.userId || !productId) return;
@@ -73,28 +114,68 @@
     }
   }
 
-  function toggleBag(id) {
-    if (!id) return false;
-    const wasSaved = bagIds.has(id);
-    if (wasSaved) bagIds.delete(id);
-    else bagIds.add(id);
-    saveBag();
-    const saved = bagIds.has(id);
-    window.SokoniFeed?.trackSave?.(id, saved);
-    void syncSocialLike(id, saved);
-    return saved;
+  async function hydrateLikesFromServer(productIds = []) {
+    const session = window.SokoniBuyerAuth?.readSession?.();
+    if (!session?.userId) {
+      likedIds = new Set();
+      syncHeartButtons();
+      return [];
+    }
+
+    const ids = [...new Set((productIds || []).map((id) => String(id || "").trim()).filter(Boolean))].slice(
+      0,
+      200
+    );
+    if (!ids.length) return [];
+
+    try {
+      const params = new URLSearchParams({ productIds: ids.join(",") });
+      if (window.SokoniBuyerAuth?.appendAuthQuery) {
+        window.SokoniBuyerAuth.appendAuthQuery(params);
+      }
+      const res = await fetch(`${PRODUCT_API_BASE}/likes?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return [];
+      const liked = Array.isArray(data?.likedProductIds) ? data.likedProductIds : [];
+      hydrateLikedIds(liked);
+      return liked;
+    } catch {
+      return [];
+    }
   }
 
-  function removeFromBag(id) {
-    if (!id || !bagIds.has(id)) return false;
-    bagIds.delete(id);
+  function toggleBag(id) {
+    if (!id) return false;
+    const key = String(id);
+    const wasHearted = isHearted(key);
+    if (wasHearted) {
+      bagIds.delete(key);
+      likedIds.delete(key);
+      saveBag();
+      window.SokoniFeed?.trackSave?.(key, false);
+      void syncSocialLike(key, false);
+      syncHeartButtons(key);
+      return false;
+    }
+    bagIds.add(key);
+    likedIds.add(key);
     saveBag();
-    void syncSocialLike(id, false);
+    window.SokoniFeed?.trackSave?.(key, true);
+    void syncSocialLike(key, true);
+    syncHeartButtons(key);
     return true;
   }
 
-  function isInBag(id) {
-    return bagIds.has(id);
+  function removeFromBag(id) {
+    if (!id) return false;
+    const key = String(id);
+    if (!bagIds.has(key) && !likedIds.has(key)) return false;
+    bagIds.delete(key);
+    likedIds.delete(key);
+    saveBag();
+    void syncSocialLike(key, false);
+    syncHeartButtons(key);
+    return true;
   }
 
   function bagProducts() {
@@ -269,6 +350,10 @@
     init,
     toggleBag,
     isInBag,
+    isHearted,
+    hydrateLikedIds,
+    hydrateLikesFromServer,
+    syncHeartButtons,
     openBag: openBagSheet,
     refreshBag: renderBagSheet,
     syncSearchInputs,

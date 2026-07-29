@@ -215,6 +215,41 @@ export async function toggleProductLike({ userId, productId, liked: likedTarget 
   return { liked, likesCount, userId: uid, productId: pid };
 }
 
+export async function listLikedProductIds({ userId, productIds } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const uid = parseUserId(userId);
+  if (!uid) {
+    return { error: "invalid_request", message: "userId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+
+  const ids = (Array.isArray(productIds) ? productIds : String(productIds || "").split(","))
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  const uniqueIds = [...new Set(ids)].slice(0, 200);
+  if (!uniqueIds.length) {
+    return { userId: uid, likedProductIds: [] };
+  }
+
+  const { rows } = await query(
+    `SELECT product_id
+       FROM product_likes
+      WHERE user_id = $1
+        AND product_id = ANY($2::text[])`,
+    [uid, uniqueIds]
+  );
+
+  return {
+    userId: uid,
+    likedProductIds: rows.map((row) => String(row.product_id)),
+  };
+}
+
 export async function toggleFollow({ followerUserId, followingUserId } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };

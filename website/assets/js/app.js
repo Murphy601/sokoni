@@ -583,7 +583,7 @@ function renderDepopCard(product) {
     : `<span class="depop-card-placeholder">Photo soon</span>`;
   const handle = sellerHandle(product);
   const shopLink = sellerShopLink(product);
-  const saved = window.SokoniShopShell?.isInBag?.(product.id);
+  const saved = window.SokoniShopShell?.isHearted?.(product.id) ?? window.SokoniShopShell?.isInBag?.(product.id);
 
   return `
     <article class="depop-card" data-product-id="${id}" tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
@@ -812,9 +812,8 @@ function bindStoreGridClicks() {
       e.preventDefault();
       e.stopPropagation();
       const pid = heart.dataset.saveId;
-      window.SokoniShopShell?.toggleBag?.(pid);
-      const saved = window.SokoniShopShell?.isInBag?.(pid);
-      heart.classList.toggle("is-saved", saved);
+      const saved = window.SokoniShopShell?.toggleBag?.(pid);
+      heart.classList.toggle("is-saved", Boolean(saved));
       heart.textContent = saved ? "♥" : "♡";
       heart.setAttribute("aria-label", saved ? "Remove from saved" : "Save item");
       return;
@@ -1154,6 +1153,10 @@ async function renderProducts() {
     openPendingProductSheet();
     revealCatalogSections();
 
+    if (window.SokoniShopShell?.hydrateLikesFromServer) {
+      await window.SokoniShopShell.hydrateLikesFromServer(storeProducts.map((p) => p.id));
+    }
+
     if (window.SokoniCatalogNav) {
       await window.SokoniCatalogNav.init({
         products: storeProducts,
@@ -1169,6 +1172,7 @@ async function renderProducts() {
     }
 
     if (window.SokoniFeed?.refresh) window.SokoniFeed.refresh();
+    window.SokoniShopShell?.syncHeartButtons?.();
   } catch (err) {
     console.error("Failed to load product catalog:", err);
     const grid = document.getElementById("local-deals-grid");

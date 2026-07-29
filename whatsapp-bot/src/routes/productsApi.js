@@ -13,7 +13,7 @@ import {
   getBrowseCountsFromDb,
   countProducts,
 } from "../db/repositories/products.js";
-import { toggleProductLike } from "../db/repositories/social.js";
+import { toggleProductLike, listLikedProductIds } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
@@ -189,6 +189,45 @@ router.post("/like", async (req, res) => {
       userId: result.userId,
       productId: result.productId,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/products/likes?productIds=a,b,c — viewer liked subset for feed hydration */
+router.get("/likes", async (req, res) => {
+  try {
+    const gated = await applyBuyerIdentityAuth(
+      req,
+      {
+        ...(req.query || {}),
+        userId: req.query?.userId || req.query?.viewer || req.query?.viewerUserId,
+      },
+      "userId"
+    );
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+
+    const userId = gated.payload?.userId;
+    if (gated.softUnauthed && !userId) {
+      return res.json({ likedProductIds: [], userId: null });
+    }
+
+    const result = await listLikedProductIds({
+      userId,
+      productIds: req.query?.productIds,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
