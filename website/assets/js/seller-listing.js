@@ -2676,6 +2676,17 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
       const amount = formatKes(offer?.amountKsh || 0);
       const listed = Number(offer?.product?.priceKsh ?? offer?.product?.priceKes);
       const listedLine = Number.isFinite(listed) && listed > 0 ? ` · Listed ${formatKes(listed)}` : "";
+      const breakdown = offer?.breakdown;
+      const escrowLine =
+        breakdown?.sellerNetKes != null
+          ? `<p class="text-xs text-brand-purple/65 dark:text-white/65 mt-1">Buyer pays ${escapeHtml(formatKes(breakdown.totalKes))} into escrow → you receive <strong>${escapeHtml(formatKes(breakdown.sellerNetKes))}</strong> after delivery (${
+              breakdown.freeShipping || !breakdown.shippingKes
+                ? "shipping free"
+                : `shipping ${escapeHtml(formatKes(breakdown.shippingKes))}`
+            }, Sokoni fee ${escapeHtml(formatKes(breakdown.platformFeeKes))})</p>`
+          : offer?.breakdownError?.message
+            ? `<p class="text-xs text-amber-700 dark:text-amber-300 mt-1">${escapeHtml(offer.breakdownError.message)}</p>`
+            : `<p class="text-xs text-brand-purple/55 dark:text-white/55 mt-1">Offer is buyer all-in (shipping + Sokoni fee come out before your payout).</p>`;
       const canRespond = Number.isInteger(id) && id > 0 && status === "pending";
       const sellerUserId = currentSellerSocialUserId();
       const buyerUserId = offerBuyerUserId(offer);
@@ -2752,7 +2763,8 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
             </div>
           </div>
           <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(offerBuyerLabel(offer))}</p>
-          <p class="text-sm mt-2"><strong>Offered:</strong> ${escapeHtml(amount)}${escapeHtml(listedLine)}</p>
+          <p class="text-sm mt-2"><strong>Buyer total offered:</strong> ${escapeHtml(amount)}${escapeHtml(listedLine)}</p>
+          ${escrowLine}
           <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
             formatOfferExpiry(offer?.expiresAt, status)
           )}</p>
@@ -2832,6 +2844,23 @@ async function respondToSellerOffer(button) {
     return;
   }
 
+  if (action === "accepted") {
+    const offer = sellerOffersCache.find((o) => Number(o?.id) === offerId);
+    const b = offer?.breakdown;
+    if (b?.sellerNetKes != null) {
+      const ok = window.confirm(
+        `Buyer pays ${formatKes(b.totalKes)} into escrow.\n` +
+          `You receive ${formatKes(b.sellerNetKes)} after delivery` +
+          ` (shipping ${b.freeShipping || !b.shippingKes ? "free" : formatKes(b.shippingKes)},` +
+          ` Sokoni fee ${formatKes(b.platformFeeKes)}).\n\nAccept this offer?`
+      );
+      if (!ok) return;
+    } else if (offer?.breakdownError?.message) {
+      setOffersStatus(offer.breakdownError.message, true);
+      return;
+    }
+  }
+
   const row = button.closest("[data-offer-row]");
   row?.querySelectorAll(".offer-action-btn").forEach((node) => {
     node.disabled = true;
@@ -2862,7 +2891,14 @@ async function respondToSellerOffer(button) {
       });
       return;
     }
-    setOffersStatus(action === "accepted" ? "Offer accepted." : "Offer declined.");
+    const net = parsed.data?.breakdown?.sellerNetKes ?? parsed.data?.offer?.breakdown?.sellerNetKes;
+    setOffersStatus(
+      action === "accepted"
+        ? net != null
+          ? `Offer accepted — you receive ${formatKes(net)} after delivery.`
+          : "Offer accepted."
+        : "Offer declined."
+    );
     await loadSellerOffers();
   } catch {
     setOffersStatus("Network error while updating offer.", true);

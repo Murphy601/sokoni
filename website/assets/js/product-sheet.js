@@ -148,11 +148,68 @@
     return Math.round(amount);
   }
 
+  function resolveShippingKes(product) {
+    if (product?.freeShipping === true) return 0;
+    const ship = Math.round(Number(product?.shippingKes ?? product?.shippingKsh ?? 0) || 0);
+    return ship > 0 ? Math.max(150, ship) : 0;
+  }
+
+  /** Mirror bot computeOfferFeeBreakdown — offer amount is buyer all-in into escrow. */
+  function computeOfferEscrowBreakdown(buyerTotalKes, shippingKes) {
+    const agreed = Math.round(Number(buyerTotalKes) || 0);
+    const shipping = Math.round(Number(shippingKes) || 0) > 0 ? Math.max(150, Math.round(Number(shippingKes))) : 0;
+    if (!Number.isFinite(agreed) || agreed < 1) {
+      return { error: "invalid_offer_amount", message: "Enter a valid offer amount in KES." };
+    }
+    const minSellerNet = 1;
+    const minSubtotal = minSellerNet + shipping;
+    const minBuyerTotalKes = minSubtotal + Math.round(minSubtotal * 0.1);
+    const subtotalKes = Math.round(agreed / 1.1);
+    const sellerNetKes = subtotalKes - shipping;
+    if (sellerNetKes < 1) {
+      return {
+        error: "offer_too_low_for_shipping",
+        message:
+          shipping > 0
+            ? `Offer must be at least KES ${minBuyerTotalKes.toLocaleString()} to cover shipping (KES ${shipping.toLocaleString()}) and Sokoni's 10% fee.`
+            : `Offer must be at least KES ${minBuyerTotalKes.toLocaleString()} after Sokoni's 10% fee.`,
+        minBuyerTotalKes,
+        shippingKes: shipping,
+      };
+    }
+    const platformFeeKes = agreed - subtotalKes;
+    return {
+      itemKes: sellerNetKes,
+      sellerNetKes,
+      shippingKes: shipping,
+      platformFeeKes,
+      totalKes: agreed,
+      freeShipping: shipping === 0,
+      minBuyerTotalKes,
+    };
+  }
+
+  function formatOfferBreakdownLine(breakdown) {
+    if (!breakdown || breakdown.error) return "";
+    const ship =
+      breakdown.freeShipping || !breakdown.shippingKes
+        ? "shipping free"
+        : `shipping KES ${Number(breakdown.shippingKes).toLocaleString()}`;
+    return `You pay KES ${Number(breakdown.totalKes).toLocaleString()} into escrow · seller gets KES ${Number(breakdown.sellerNetKes).toLocaleString()} (${ship} + Sokoni fee KES ${Number(breakdown.platformFeeKes).toLocaleString()})`;
+  }
+
+  function minOfferKes(product) {
+    const shipping = resolveShippingKes(product);
+    const subtotal = 1 + shipping;
+    return subtotal + Math.round(subtotal * 0.1);
+  }
+
   function defaultOfferKes(product) {
     const listed = resolveListedPriceKes(product);
     if (!listed) return null;
+    const floor = minOfferKes(product);
     const discounted = Math.round((listed * 0.9) / 50) * 50;
-    return Math.max(1, Math.min(listed, discounted));
+    return Math.max(floor, Math.min(listed, discounted || listed));
   }
 
   function offerAuthBlock() {
@@ -179,17 +236,20 @@
     if (!sellerId || !listedPrice) return "";
     if (viewerUserId && viewerUserId === sellerId) return "";
     const suggested = defaultOfferKes(product);
+    const shipping = resolveShippingKes(product);
+    const preview = suggested ? computeOfferEscrowBreakdown(suggested, shipping) : null;
+    const minAttr = preview && !preview.error ? preview.minBuyerTotalKes : 1;
     return `
       <button type="button" id="product-sheet-offer-toggle" class="product-sheet-save">💸 Make an offer</button>
       <form id="product-sheet-offer-form" class="product-sheet-offer-form" hidden>
         ${offerAuthBlock()}
-        <label for="product-sheet-offer-amount" class="product-sheet-offer-label">Offer amount (KES)</label>
+        <label for="product-sheet-offer-amount" class="product-sheet-offer-label">Your total to pay (KES) — includes shipping + Sokoni fee</label>
         <div class="product-sheet-offer-row">
           <input
             id="product-sheet-offer-amount"
             type="number"
             inputmode="numeric"
-            min="1"
+            min="${minAttr}"
             max="${listedPrice}"
             step="1"
             value="${suggested || ""}"
@@ -200,6 +260,9 @@
             Send
           </button>
         </div>
+        <p id="product-sheet-offer-breakdown" class="product-sheet-offer-breakdown">${
+          preview && !preview.error ? escapeHtml(formatOfferBreakdownLine(preview)) : ""
+        }</p>
       </form>
       <p id="product-sheet-offer-status" class="product-sheet-offer-status"></p>
     `;
@@ -290,6 +353,12 @@
       amountInput.focus();
       return;
     }
+    const localBreakdown = computeOfferEscrowBreakdown(amount, resolveShippingKes(product));
+    if (localBreakdown.error) {
+      setOfferStatus(localBreakdown.message, "error");
+      amountInput.focus();
+      return;
+    }
 
     submitBtn.disabled = true;
     setOfferStatus("Sending offer...");
@@ -321,7 +390,13 @@
         setOfferStatus(data?.message || data?.error || "Could not send offer right now.", "error");
         return;
       }
-      setOfferStatus("Offer sent. Seller has up to 24 hours to respond.", "success");
+      const sent = data.breakdown || data.offer?.breakdown || localBreakdown;
+      setOfferStatus(
+        sent?.sellerNetKes != null
+          ? `Offer sent — you pay KES ${Number(sent.totalKes).toLocaleString()}, seller receives KES ${Number(sent.sellerNetKes).toLocaleString()} after delivery.`
+          : "Offer sent. Seller has up to 24 hours to respond.",
+        "success"
+      );
     } catch {
       setOfferStatus("Network error while sending offer. Please try again.", "error");
     } finally {
@@ -365,9 +440,22 @@
       await submitOffer(product);
     });
 
-    amountInput.addEventListener("input", () => {
+    const breakdownNode = document.getElementById("product-sheet-offer-breakdown");
+    const refreshBreakdown = () => {
       setOfferStatus("");
-    });
+      if (!breakdownNode) return;
+      const amount = Number(amountInput.value);
+      const preview = computeOfferEscrowBreakdown(amount, resolveShippingKes(product));
+      if (preview.error) {
+        breakdownNode.textContent = preview.message || "";
+        breakdownNode.classList.add("is-error");
+        return;
+      }
+      breakdownNode.classList.remove("is-error");
+      breakdownNode.textContent = formatOfferBreakdownLine(preview);
+    };
+    amountInput.addEventListener("input", refreshBreakdown);
+    refreshBreakdown();
   }
 
   function syncSaveButton(productId) {

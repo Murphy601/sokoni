@@ -121,6 +121,26 @@ export async function notifySellerProductLiked({ userId, productId } = {}) {
   }
 }
 
+function formatKesNotify(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return "";
+  return `KES ${n.toLocaleString("en-KE", { maximumFractionDigits: 0 })}`;
+}
+
+function offerEscrowLines(offer) {
+  const b = offer?.breakdown;
+  if (!b || b.sellerNetKes == null || b.totalKes == null) return "";
+  const ship =
+    b.freeShipping || !b.shippingKes
+      ? "shipping free / seller-covered"
+      : `shipping ${formatKesNotify(b.shippingKes)}`;
+  return (
+    `Buyer pays *${formatKesNotify(b.totalKes)}* into escrow.\n` +
+    `You receive *${formatKesNotify(b.sellerNetKes)}* after delivery` +
+    ` (${ship}, Sokoni fee ${formatKesNotify(b.platformFeeKes)}).\n\n`
+  );
+}
+
 export async function notifySellerNewOffer({ offer } = {}) {
   try {
     if (!offer?.sellerUserId || !offer?.buyerUserId) return;
@@ -128,7 +148,7 @@ export async function notifySellerNewOffer({ offer } = {}) {
     const buyerLabel = displayName(buyer);
     const title = offer.product?.title || offer.productId || "your item";
     const amount =
-      offer.amountKsh != null ? `KES ${Number(offer.amountKsh).toLocaleString()}` : "";
+      offer.amountKsh != null ? `${formatKesNotify(offer.amountKsh)} (buyer total)` : "";
     const inbox = siteUrl(
       inboxPath({
         viewerUserId: offer.sellerUserId,
@@ -137,9 +157,11 @@ export async function notifySellerNewOffer({ offer } = {}) {
         sellerAuth: true,
       })
     );
+    const escrow = offerEscrowLines(offer);
     const msg =
       `💸 *New offer on Sokoni*\n\n` +
       `*${buyerLabel}* offered${amount ? ` *${amount}*` : ""} on *${title}*.\n\n` +
+      escrow +
       `Accept or decline on-site: ${siteUrl("/suppliers/list.html")}\n` +
       `Or open chat: ${inbox}`;
     await sendUserText(offer.sellerUserId, msg, { event: "offer" });
@@ -174,11 +196,17 @@ export async function notifyBuyerOfferResponse({ offer } = {}) {
         offer.id != null
           ? `/checkout.html?offerId=${encodeURIComponent(String(offer.id))}`
           : "/activity.html";
+      const b = offer.breakdown;
+      const payLine =
+        b?.totalKes != null
+          ? `Pay *${formatKesNotify(b.totalKes)}* on-site (item + shipping + Sokoni fee). Funds stay in escrow until delivery.\n`
+          : `Pay the agreed buyer total on-site. Funds stay in escrow until delivery.\n`;
       msg =
         `✅ *Offer accepted — Sokoni*\n\n` +
         `*${sellerLabel}* accepted your offer` +
         `${amount ? ` of *${amount}*` : ""} on *${title}*.\n\n` +
-        `Pay the agreed price on-site (valid 24 hours):\n${siteUrl(checkoutPath)}\n\n` +
+        payLine +
+        `(Valid 24 hours)\n${siteUrl(checkoutPath)}\n\n` +
         `Message the shop: ${siteUrl(chatPath)}\n` +
         `Activity: ${siteUrl("/activity.html")}`;
     } else {
