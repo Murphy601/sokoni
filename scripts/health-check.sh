@@ -21,7 +21,9 @@ curl -sf --max-time 8 "http://127.0.0.1:3001/health" && echo "" || echo "WARN: f
 
 echo ""
 echo "3) WAHA container"
-WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1 || true)"
+# shellcheck source=lib/waha-common.sh
+source "$REPO/scripts/lib/waha-common.sh"
+WAHA_CID="$(waha_container_id)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA not running — run: bash scripts/deploy-waha.sh"
 else
@@ -32,7 +34,7 @@ fi
 echo ""
 echo "4) WAHA session"
 if [ -n "${WAHA_CID:-}" ]; then
-  SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "http://127.0.0.1:3000/api/sessions/default" 2>/dev/null || echo "")"
+  SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$WAHA_SESSION" 2>/dev/null || echo "")"
   if [ -z "$SESSION_JSON" ]; then
     echo "ERROR: cannot read WAHA session — run: bash scripts/configure-waha-session.sh"
   else
@@ -44,7 +46,7 @@ try:
   hooks = cfg.get('webhooks') or []
   store = (cfg.get('noweb') or {}).get('store') or {}
   print('status:', d.get('status'))
-  print('engine:', (d.get('engine') or {}).get('engine'))
+  print('engine:', (d.get('engine') or {}).get('engine') if isinstance(d.get('engine'), dict) else d.get('engine'))
   print('noweb.store.enabled:', store.get('enabled'))
   if hooks:
     print('webhook:', hooks[0].get('url'))
@@ -65,10 +67,24 @@ except Exception as e:
 fi
 
 echo ""
-echo "5) WAHA catalog API (for #import-catalog)"
+echo "5) Bot /health WAHA flags (local)"
+curl -sf --max-time 8 "http://127.0.0.1:3001/health" 2>/dev/null | python3 -c "
+import sys, json
+try:
+  d = json.load(sys.stdin)
+  print('wahaConfigured:', d.get('wahaConfigured'))
+  print('wahaReachable:', d.get('wahaReachable'))
+  print('wahaLinked:', d.get('wahaLinked'))
+  print('wahaSessionStatus:', d.get('wahaSessionStatus'))
+except Exception as e:
+  print('WARN: could not parse /health', e)
+" || echo "WARN: bot /health not available"
+
+echo ""
+echo "6) WAHA catalog API (for #import-catalog)"
 if [ -n "${WAHA_CID:-}" ]; then
   HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -H "X-Api-Key: $WAHA_KEY" \
-    "http://127.0.0.1:3000/api/default/get-business-profiles-products?phone=254723813039@c.us" 2>/dev/null || echo "000")"
+    "$WAHA_URL/api/$WAHA_SESSION/get-business-profiles-products?phone=254723813039@c.us" 2>/dev/null || echo "000")"
   WAHA_VER="$(docker exec "$WAHA_CID" node -e "try{console.log(require('/app/package.json').version)}catch{console.log('unknown')}" 2>/dev/null || echo "unknown")"
   echo "WAHA version: $WAHA_VER"
   if [ "$HTTP_CODE" = "404" ]; then
@@ -83,9 +99,9 @@ else
 fi
 
 echo ""
-echo "6) Public bot URL"
+echo "7) Public bot URL"
 curl -sf "https://bot.sokonimall.com/health" && echo "" || echo "WARN: public health check failed"
 
 echo ""
 echo "Done. If any ERROR above, fix before testing WhatsApp."
-echo "Quick fix: cd ~/sokoni && git pull && bash scripts/deploy-waha.sh && bash scripts/deploy-bot.sh"
+echo "Quick fix: cd ~/sokoni && git pull && bash scripts/deploy-waha.sh && bash scripts/waha-link-whatsapp.sh && bash scripts/deploy-bot.sh"

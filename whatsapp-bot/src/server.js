@@ -100,6 +100,19 @@ app.get("/health", async (_req, res) => {
   } catch (err) {
     ops = { phase: 9, catalog: { paused: false }, opsError: err.message };
   }
+  let wahaHealth = {
+    wahaConfigured: Boolean(config.waha.apiUrl),
+    wahaReachable: false,
+    wahaLinked: false,
+    wahaSessionStatus: null,
+  };
+  try {
+    const { getWahaHealthSummary } = await import("./services/waha-session.js");
+    wahaHealth = await withTimeout(getWahaHealthSummary(), 3500, wahaHealth);
+  } catch {
+    /* keep defaults */
+  }
+
   res.json({
     status: "ok",
     build: BUILD_ID,
@@ -111,7 +124,10 @@ app.get("/health", async (_req, res) => {
     feedPhase: feed.phase,
     opsPhase: ops.phase,
     catalogPaused: ops.catalog.paused,
-    wahaConfigured: Boolean(config.waha.apiUrl),
+    wahaConfigured: wahaHealth.wahaConfigured,
+    wahaReachable: wahaHealth.wahaReachable,
+    wahaLinked: wahaHealth.wahaLinked,
+    wahaSessionStatus: wahaHealth.wahaSessionStatus,
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
     dbError: db.ok ? null : db.reason,

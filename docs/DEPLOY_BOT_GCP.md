@@ -195,50 +195,48 @@ Test from your PC: `https://bot.sokonimall.com/health` → `{"status":"ok"}`
 
 ## Phase G — Connect WhatsApp (WAHA)
 
-```bash
-curl -X POST http://localhost:3000/api/sessions \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: sokoni-local-dev-key" \
-  -d '{
-    "name": "default",
-    "config": {
-      "noweb": { "store": { "enabled": true, "fullSync": false } },
-      "webhooks": [{ "url": "http://host.docker.internal:3001/webhook", "events": ["message.any"] }]
-    }
-  }'
-```
+Keep WAHA on **localhost:3000 only** (SSH tunnel / VM shell). Do **not** open port 3000 on the public internet, and never publish QR images or pairing codes on `bot.sokonimall.com`.
 
-Or run the helper after WAHA is up:
+Canonical flow on the GCP VM:
 
 ```bash
-bash scripts/configure-waha-session.sh
+cd ~/sokoni && git pull --rebase origin main
+
+# 1) Start pinned WAHA image + apply NOWEB store + webhook
+bash scripts/deploy-waha.sh
+
+# 2) If status is SCAN_QR_CODE (or after RESET), pair the phone
+bash scripts/waha-link-whatsapp.sh
+# Prefer pairing code (WhatsApp → Linked devices → Link with phone number)
+# Optional PNG is written to ~/sokoni/waha-qr.png — scp locally; do not commit
+
+# 3) Restart bot + verify
+bash scripts/deploy-bot.sh
+bash scripts/health-check.sh
 ```
 
-Get the QR. NOWEB prints it in logs — easiest:
+Expect `status: WORKING` from health-check. Public check (no secrets):
 
 ```bash
-docker logs $(docker ps -qf "ancestor=devlikeapro/waha:latest") 2>&1 | tail -40
+curl -s https://bot.sokonimall.com/health | python3 -m json.tool
+# wahaConfigured / wahaReachable / wahaLinked / wahaSessionStatus
 ```
 
-Scan the QR with the phone that owns **+254117422428** (Settings → Linked devices).
-
-Set the webhook (WAHA → bot, same machine) — usually done by `configure-waha-session.sh`:
+Token-protected detail (redacted phone):
 
 ```bash
-curl -X PUT http://localhost:3000/api/sessions/default \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: sokoni-local-dev-key" \
-  -d '{"config":{"webhooks":[{"url":"http://host.docker.internal:3001/webhook","events":["message.any"]}]}}'
+curl -s "https://bot.sokonimall.com/admin/ops/waha?token=$ADMIN_SETUP_TOKEN" | python3 -m json.tool
 ```
 
-**VM deploy (use `docker-compose`, not `docker compose` on this host):**
+Full reset (forces re-link):
 
 ```bash
-cd ~/sokoni && git pull origin main
-bash scripts/deploy-waha.sh    # starts WAHA + configures session/webhook
-bash scripts/deploy-bot.sh     # restarts pm2 even if WAHA step warns
-bash scripts/health-check.sh   # session must show WORKING
+RESET_WAHA_SESSION=1 bash scripts/waha-link-whatsapp.sh
 ```
+
+Image is pinned via `WAHA_IMAGE` / `docker-compose.waha.yml` (`latest-2026.6.2`). Scripts resolve the container by compose project `sokoni-waha`, not `ancestor=…:latest`.
+
+Use the same `WAHA_API_KEY` in `whatsapp-bot/.env` and when starting compose (`export WAHA_API_KEY=…` before `deploy-waha.sh`).
 
 Test: from another phone, send `menu` to +254117422428.
 

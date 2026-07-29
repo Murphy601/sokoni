@@ -4,22 +4,9 @@
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
-COMPOSE_FILE="$REPO/docker-compose.waha.yml"
-
-# GCP VM may have docker-compose (v1) instead of "docker compose" (v2 plugin).
-docker_compose() {
-  if docker compose version >/dev/null 2>&1; then
-    docker compose "$@"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose "$@"
-  else
-    echo "ERROR: Docker Compose not found."
-    echo "Install one of:"
-    echo "  sudo apt install docker-compose-plugin   # docker compose"
-    echo "  sudo apt install docker-compose            # docker-compose"
-    exit 1
-  fi
-}
+# shellcheck source=lib/waha-common.sh
+source "$REPO/scripts/lib/waha-common.sh"
+COMPOSE_FILE="$WAHA_COMPOSE_FILE"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "ERROR: Missing $COMPOSE_FILE — run: cd ~/sokoni && git pull origin main"
@@ -29,26 +16,29 @@ fi
 echo "==> Starting WAHA from $COMPOSE_FILE"
 cd "$REPO"
 
-# Pull latest image so catalog API endpoints are available (sessions/volumes are preserved).
+# Pull the pinned compose image (not floating :latest).
 if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
-  echo "==> Pulling latest devlikeapro/waha:latest (set SKIP_WAHA_PULL=1 to skip)"
-  docker pull devlikeapro/waha:latest || echo "WARN: docker pull failed — continuing with cached image"
+  echo "==> Pulling WAHA image ($WAHA_DEFAULT_IMAGE) — set SKIP_WAHA_PULL=1 to skip"
+  if ! waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml pull; then
+    echo "WARN: compose pull failed — trying docker pull $WAHA_DEFAULT_IMAGE"
+    docker pull "$WAHA_DEFAULT_IMAGE" || echo "WARN: docker pull failed — continuing with cached image"
+  fi
 fi
 
 # docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
 # Do NOT use --remove-orphans — it kills sokoni_postgres (separate compose file, same project name).
-docker_compose -p sokoni-waha -f docker-compose.waha.yml down 2>/dev/null || true
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml down 2>/dev/null || true
 
 # Remove ghost containers left by failed --force-recreate runs.
 docker ps -aq --filter "name=waha" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
 
-docker_compose -p sokoni-waha -f docker-compose.waha.yml up -d
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml up -d
 
 sleep 4
-WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1)"
+WAHA_CID="$(waha_container_id)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA container is not running."
-  docker_compose -p sokoni-waha -f docker-compose.waha.yml ps || true
+  waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml ps || true
   docker ps -a | grep -i waha || true
   exit 1
 fi
@@ -82,7 +72,7 @@ if [ "$life" != "0" ]; then
 fi
 
 echo "==> WAHA media config OK"
-docker_compose -p sokoni-waha -f docker-compose.waha.yml ps
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml ps
 
 if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
   if ! bash "$REPO/scripts/configure-waha-session.sh"; then
