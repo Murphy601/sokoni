@@ -20,6 +20,7 @@
     "test:buyer-auth": "node scripts/test-buyer-social-auth.mjs",
     "test:social-routing": "node scripts/test-social-auth-routing.mjs",
     "test:seller-social-profile": "node scripts/test-seller-social-profile.mjs",
+    "test:agent-router": "node scripts/test-agent-tool-router.mjs",
     "test:social": "npm run test:buyer-auth && npm run test:social-routing && npm run test:seller-social-profile"
   },
   "keywords": [

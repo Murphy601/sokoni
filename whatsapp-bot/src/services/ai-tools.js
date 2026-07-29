@@ -5,7 +5,7 @@ import { searchProducts, getProductById } from "./catalog.js";
 import { getOrder, getOrdersForCustomer } from "./orders.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
 import { checkoutMeta } from "./prepaid-checkout.js";
-import { normalizeShopperQuery } from "./shopper-language.js";
+import { normalizeShopperQuery, isShopperFillerOnly } from "./shopper-language.js";
 
 export const TOOL_NAMES = [
   "search_products",
@@ -34,6 +34,23 @@ function wantsNew(text) {
   return /\b(brand new|new with tags|bnwt|new)\b/i.test(String(text || ""));
 }
 
+function isTrackOnlyQuery(text, lower) {
+  if (/^SK-\d+$/i.test(text)) return true;
+  return (
+    /\b(track|tracking|status|wapi order|order yangu)\b/i.test(lower) &&
+    !/\b(buy|want|need|find|search|show|looking|nataka)\b/i.test(lower)
+  );
+}
+
+function isPaymentOnlyQuery(lower) {
+  return (
+    /\b(prepaid|escrow|mpesa|pay|payment|stk|till)\b/i.test(lower) &&
+    !/\b(buy|want|need|find|search|show|looking|nataka|yoghurt|yogurt|dress|shoes|phone|simu)\b/i.test(
+      lower
+    )
+  );
+}
+
 /** Intent router — runs tools before LLM (works on free models without function-calling). */
 export async function runToolRouter(userMessage, { phone = "", customerKey = "" } = {}) {
   const text = String(userMessage || "").trim();
@@ -53,18 +70,22 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
     results.push(await executeTool("store_info", {}, { phone }));
   }
 
-  const productIdMatch = text.match(/\b(prod_[a-z0-9_-]+)\b/i);
+  const productIdMatch = text.match(/\b(prod_[a-z0-9_-]+|[a-z]{2}-[a-z0-9]+-\d+)\b/i);
   if (productIdMatch) {
     results.push(await executeTool("get_product", { productId: productIdMatch[1] }, { phone }));
   }
 
-  const shopping =
-    results.length === 0 &&
-    /\b(nataka|nipee|want|need|buy|looking|show|recommend|suggest|search|find|simu|phone|dress|shoes|perfume|tv|laptop|nguo|fashion|bei|price|under|chini|outfit|sandals|bag|watch|deal)\b/i.test(
-      lower
-    );
+  const alreadySearched = results.some((r) => r.tool === "search_products");
+  const skipSearch =
+    alreadySearched ||
+    isTrackOnlyQuery(text, lower) ||
+    isPaymentOnlyQuery(lower) ||
+    isShopperFillerOnly(text) ||
+    text.length < 2;
 
-  if (shopping && !/^SK-\d+$/i.test(text)) {
+  // Default to catalog search for product queries — including brand/item names
+  // like "delmonte yoghurt" that never matched the old fashion/electronics keyword list.
+  if (!skipSearch) {
     results.push(
       await executeTool(
         "search_products",
