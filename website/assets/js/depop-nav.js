@@ -128,12 +128,20 @@
       setBottomNavActive(null);
       return;
     }
+    if (path.includes("inbox")) {
+      setBottomNavActive("inbox");
+      return;
+    }
+    if (path.includes("activity")) {
+      setBottomNavActive("activity");
+      return;
+    }
     if (path.includes("track")) {
       setBottomNavActive("track");
       return;
     }
     if (hash === "#deals") {
-      setBottomNavActive("search");
+      setBottomNavActive("explore");
       return;
     }
     setBottomNavActive("home");
@@ -146,6 +154,17 @@
     document.querySelectorAll(".depop-bottom-nav__item[data-depop-nav]").forEach((link) => {
       link.addEventListener("click", (e) => {
         const action = link.getAttribute("data-depop-nav");
+        if (action === "explore") {
+          e.preventDefault();
+          setBottomNavActive("explore");
+          if (window.SokoniCatalogNav?.open) {
+            window.SokoniCatalogNav.open();
+          } else {
+            focusMobileSearch();
+            scrollToDeals();
+          }
+          return;
+        }
         if (action === "search") {
           e.preventDefault();
           setBottomNavActive("search");
@@ -157,13 +176,9 @@
           setBottomNavActive("home");
           return;
         }
-        if (action === "profile" || action === "track") {
-          setBottomNavActive("track");
+        if (action === "activity" || action === "inbox" || action === "track" || action === "profile") {
+          setBottomNavActive(action === "profile" ? "activity" : action);
           return;
-        }
-        if (action === "explore") {
-          e.preventDefault();
-          window.SokoniCatalogNav?.open?.();
         }
         if (action === "bag") {
           e.preventDefault();
