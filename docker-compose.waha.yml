@@ -6,17 +6,22 @@
 # Dashboard (localhost / SSH tunnel only): http://localhost:3000/dashboard
 #
 # Keep port 3000 off the public internet. Never publish QR / pairing codes.
+#
+# Optional overrides (export before deploy, or put in a .env next to this file):
+#   WAHA_API_KEY, WAHA_DASHBOARD_USERNAME, WAHA_DASHBOARD_PASSWORD
+# Do NOT put the image tag inside ${VAR:-repo:tag} — docker-compose v1 breaks on the colon.
 
 services:
   waha:
     # Pin version — :latest (2026.7.x) has been failing NOWEB registration
     # with Connection Failure before SCAN_QR_CODE on this VM.
-    image: ${WAHA_IMAGE:-devlikeapro/waha:latest-2026.6.2}
+    image: devlikeapro/waha:latest-2026.6.2
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       WAHA_RUN_XVFB: "False"
+      # Defaults have no ":" so old docker-compose interpolation stays safe.
       WAHA_API_KEY: ${WAHA_API_KEY:-sokoni-local-dev-key}
       WAHA_API_KEY_PLAIN: ${WAHA_API_KEY:-sokoni-local-dev-key}
       WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}

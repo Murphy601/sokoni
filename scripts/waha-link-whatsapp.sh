@@ -3,11 +3,13 @@
 # Run on the VM: bash scripts/waha-link-whatsapp.sh
 set -euo pipefail
 
-WAHA_URL="${WAHA_API_URL:-http://127.0.0.1:3000}"
-WAHA_KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
-SESSION="${WAHA_SESSION:-default}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
+# shellcheck source=lib/waha-common.sh
+source "$SCRIPT_DIR/lib/waha-common.sh"
+SESSION="${WAHA_SESSION}"
 PHONE="${SOKONI_WA_PHONE:-254117422428}"
-REPO="${SOKONI_REPO:-$HOME/sokoni}"
 QR_OUT="${WAHA_QR_FILE:-$REPO/waha-qr.png}"
 
 json_field() {

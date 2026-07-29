@@ -2,8 +2,11 @@
 # Quick Sokoni bot + WAHA health check (run on VM).
 set -euo pipefail
 
-REPO="${SOKONI_REPO:-$HOME/sokoni}"
-WAHA_KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
+# shellcheck source=lib/waha-common.sh
+source "$SCRIPT_DIR/lib/waha-common.sh"
 echo "=== Sokoni health check ==="
 
 echo ""
@@ -21,13 +24,14 @@ curl -sf --max-time 8 "http://127.0.0.1:3001/health" && echo "" || echo "WARN: f
 
 echo ""
 echo "3) WAHA container"
-# shellcheck source=lib/waha-common.sh
-source "$REPO/scripts/lib/waha-common.sh"
 WAHA_CID="$(waha_container_id)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA not running — run: bash scripts/deploy-waha.sh"
+  waha_print_status
+  waha_print_recent_logs 40
 else
   echo "OK: $WAHA_CID"
+  echo "Image: $(docker inspect -f '{{.Config.Image}}' "$WAHA_CID" 2>/dev/null || echo unknown)"
   docker exec "$WAHA_CID" env | grep -E '^WHATSAPP_' | sort || true
 fi
 

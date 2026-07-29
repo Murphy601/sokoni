@@ -19,6 +19,9 @@ bash scripts/deploy-bot.sh
 bash scripts/health-check.sh
 ```
 
+Image is hardcoded as `devlikeapro/waha:latest-2026.6.2` in `docker-compose.waha.yml`
+(avoid `${WAHA_IMAGE:-repo:tag}` — docker-compose v1 can break on the colon in the tag).
+
 Expect session `WORKING`. Public probe:
 
 ```bash
