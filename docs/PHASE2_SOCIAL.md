@@ -7,6 +7,7 @@ Slices so far:
 3. Follower / following lists on shop profiles
 4. Seller storefront profile edit (name, handle, bio, location, avatar URL)
 5. Seller shop activity feed (followers + likes)
+6. Buyer activity center (offer replies, follows, likes)
 
 ## What shipped
 
@@ -101,9 +102,16 @@ Returns recent `{ type: "follow"|"like", actor, product?, createdAt }` events fo
 
 Dashboard shows a Shop activity panel with refresh.
 
+### Buyer activity center
+
+`GET /api/social/buyer/activity` (buyer WhatsApp session required)
+
+Returns recent offer replies (`offer_accepted` / `offer_declined` / `offer_expired`), shops followed, and items liked.
+
+UI: `website/activity.html` — linked from shop, inbox, and mobile bottom nav.
+
 ## Out of scope (next slices)
 
-- Buyer-facing activity / notifications center
 - Push / WhatsApp notification delivery for social events
 - WAHA / WhatsApp linking (deferred; not required for storefront slices)
 
@@ -125,3 +133,4 @@ Manual:
 4. With session, homepage ♡ still saves to bag and dual-writes social like
 5. Tap Followers / Following on a shop → list loads with handle links
 6. Seller dashboard → Shop activity shows new follows/likes
+7. Buyer `activity.html` → verify WhatsApp → see offer replies / follows / likes
