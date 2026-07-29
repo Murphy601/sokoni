@@ -15,6 +15,7 @@
     "test:listing": "node scripts/test-listing-generator.mjs",
     "test:listing-moderation": "node scripts/test-listing-moderation.mjs",
     "test:listing-studio": "node scripts/test-listing-studio.mjs",
+    "test:daraja-checkout": "node scripts/test-daraja-checkout.mjs",
     "test:gemini": "node scripts/test-gemini-vision.mjs",
     "test:buyer-auth": "node scripts/test-buyer-social-auth.mjs",
     "test:social-routing": "node scripts/test-social-auth-routing.mjs",

@@ -229,7 +229,7 @@
         .map(
           (p, i) =>
             `<div class="hero-site-product${frame.highlightIndex === i ? " is-highlight" : ""}"><img src="${esc(p.imageUrl)}" alt="" />` +
-            `<div><strong>${esc(p.name?.slice(0, 22) || "Product")}</strong><br/>${formatKes(p.priceKes)} · COD</div></div>`
+            `<div><strong>${esc(p.name?.slice(0, 22) || "Product")}</strong><br/>${formatKes(p.priceKes)} · prepaid</div></div>`
         )
         .join("");
       stage.innerHTML = `${bar}<p class="mb-2 font-bold">📱 Smartphones</p>${rows}`;
@@ -241,7 +241,7 @@
       stage.innerHTML =
         `${bar}<p class="mb-2">🔍 <strong>${esc(q)}</strong></p>` +
         `<div class="hero-site-list-item is-highlight">${esc(featured?.name || ctx.productName)} — ${ctx.price}</div>` +
-        `<div class="hero-site-list-item">…more pay-on-delivery matches</div>`;
+        `<div class="hero-site-list-item">…more prepaid matches</div>`;
       return;
     }
 
@@ -286,7 +286,7 @@
     if (frame.panel === "supplier-info") {
       stage.innerHTML =
         `${bar}<p class="font-bold mb-1">🏪 Sell on Sokoni</p>` +
-        `<p>Zero listing fees · WhatsApp orders · pay on delivery</p>` +
+        `<p>Zero listing fees · WhatsApp orders · prepaid escrow</p>` +
         `<p class="mt-2 rounded-lg bg-brand-green/15 px-2 py-1 font-bold">Apply on site → prefilled on WhatsApp</p>`;
       return;
     }
@@ -424,10 +424,10 @@
     if (!stage) return;
     const p = featured;
     stage.innerHTML = `
-      <div class="wa-bubble wa-bubble-in">👋 Karibu! Type <strong>menu</strong> to browse — pay on delivery.</div>
+      <div class="wa-bubble wa-bubble-in">👋 Karibu! Type <strong>menu</strong> to browse — pay upfront, escrow until delivery.</div>
       <div class="wa-bubble wa-bubble-out">menu</div>
       <div class="wa-bubble wa-bubble-in">1. 🛍️ Browse Categories<br/>2. 🧾 Track My Order<br/>3. 🙋 Talk to a Human</div>
-      ${p ? `<div class="wa-bubble wa-bubble-product">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" />` : ""}<p class="font-semibold">${esc(p.name)}</p><p>${formatKes(p.priceKes)} · COD</p></div>` : ""}`;
+      ${p ? `<div class="wa-bubble wa-bubble-product">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" />` : ""}<p class="font-semibold">${esc(p.name)}</p><p>${formatKes(p.priceKes)} · prepaid</p></div>` : ""}`;
   }
 
   async function init() {
