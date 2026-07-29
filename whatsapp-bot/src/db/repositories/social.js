@@ -428,7 +428,7 @@ export async function updateUserShopProfile({
     `UPDATE users
         SET ${sets.join(", ")}
       WHERE id = $${params.length}
-      RETURNING id, handle, shop_name, bio, avatar_url, location, display_name, is_seller_verified`,
+      RETURNING id, handle, shop_name, bio, avatar_url, location, display_name, is_seller_verified, social_wa_notify`,
     params
   );
   const row = rows[0];
@@ -504,7 +504,67 @@ export async function updateUserShopProfile({
       avatarUrl: row.avatar_url || null,
       location: row.location || null,
       isSellerVerified: Boolean(row.is_seller_verified),
+      socialWaNotify: row.social_wa_notify !== false,
     },
+  };
+}
+
+/**
+ * Read/update WhatsApp social ping preference for a user.
+ */
+export async function getUserNotifyPrefs({ userId } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const uid = parseUserId(userId);
+  if (!uid) {
+    return { error: "invalid_user", message: "Valid userId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+  const { rows } = await query(
+    `SELECT id, social_wa_notify FROM users WHERE id = $1 LIMIT 1`,
+    [uid]
+  );
+  const row = rows[0];
+  if (!row) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+  return {
+    userId: uid,
+    socialWaNotify: row.social_wa_notify !== false,
+  };
+}
+
+export async function updateUserNotifyPrefs({ userId, socialWaNotify } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const uid = parseUserId(userId);
+  if (!uid) {
+    return { error: "invalid_user", message: "Valid userId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+  if (socialWaNotify === undefined) {
+    return { error: "invalid_request", message: "socialWaNotify is required." };
+  }
+  const enabled = !(socialWaNotify === false || socialWaNotify === "false" || socialWaNotify === 0 || socialWaNotify === "0");
+  const { rows } = await query(
+    `UPDATE users
+        SET social_wa_notify = $2
+      WHERE id = $1
+      RETURNING id, social_wa_notify`,
+    [uid, enabled]
+  );
+  return {
+    userId: Number(rows[0].id),
+    socialWaNotify: rows[0].social_wa_notify !== false,
+    message: enabled
+      ? "WhatsApp social pings are on."
+      : "WhatsApp social pings are muted.",
   };
 }
 

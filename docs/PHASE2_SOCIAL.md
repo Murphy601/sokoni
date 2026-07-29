@@ -9,6 +9,7 @@ Slices so far:
 5. Seller shop activity feed (followers + likes)
 6. Buyer activity center (offer replies, follows, likes)
 7. Soft-fail WhatsApp pings for follow / like / offer reply
+8. Mute preference for WhatsApp social pings (`social_wa_notify`)
 
 ## What shipped
 
@@ -121,10 +122,22 @@ When WAHA is linked, Sokoni texts:
 
 Failures are logged and never block the social API response. Dry-run WAHA still no-ops safely.
 
+### Notification preferences
+
+`GET|PATCH /api/social/notify-prefs` (buyer or seller WhatsApp session)
+
+```json
+{ "socialWaNotify": true }
+```
+
+- Column: `users.social_wa_notify` (default true)
+- Seller toggle on shop profile form; buyer toggle on `activity.html`
+- Muted users skip social WhatsApp pings (orders/OTP unchanged)
+
 ## Out of scope (next slices)
 
 - WAHA / WhatsApp linking (deferred; required for live delivery of social pings)
-- Richer notification preferences / mute controls
+- Per-event mute controls (likes vs follows vs offers)
 
 ## Quick checks
 

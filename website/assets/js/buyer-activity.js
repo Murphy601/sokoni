@@ -140,8 +140,12 @@ async function loadActivity() {
     empty.textContent = "Verify WhatsApp above to see your activity.";
     empty.classList.remove("hidden");
     setStatus("Sign in to load offers, follows, and likes.");
+    el("activity-notify-row")?.classList.add("hidden");
     return;
   }
+
+  el("activity-notify-row")?.classList.remove("hidden");
+  void loadNotifyPrefs();
 
   setStatus("Loading activity…");
   list.innerHTML = "";
@@ -180,6 +184,58 @@ async function loadActivity() {
   }
 }
 
+function setNotifyStatus(message, isError = false) {
+  const node = el("activity-notify-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+async function loadNotifyPrefs() {
+  const box = el("activity-wa-notify");
+  const session = window.SokoniBuyerAuth?.readSession?.();
+  if (!box || !session?.sessionToken) return;
+  try {
+    const params = new URLSearchParams();
+    if (window.SokoniBuyerAuth?.appendAuthQuery) {
+      window.SokoniBuyerAuth.appendAuthQuery(params);
+    }
+    const res = await fetch(`${SOCIAL_API}/notify-prefs?${params.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return;
+    box.checked = data.socialWaNotify !== false;
+  } catch {
+    /* keep default */
+  }
+}
+
+async function saveNotifyPrefs() {
+  const box = el("activity-wa-notify");
+  const session = window.SokoniBuyerAuth?.readSession?.();
+  if (!box || !session?.sessionToken) return;
+  setNotifyStatus("Saving…");
+  try {
+    const payload = window.SokoniBuyerAuth?.authFields
+      ? window.SokoniBuyerAuth.authFields({ socialWaNotify: box.checked })
+      : { socialWaNotify: box.checked };
+    const res = await fetch(`${SOCIAL_API}/notify-prefs`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setNotifyStatus(data?.message || "Could not save preference.", true);
+      return;
+    }
+    setNotifyStatus(data?.message || (box.checked ? "Pings on." : "Pings muted."));
+  } catch {
+    setNotifyStatus("Network error while saving preference.", true);
+  }
+}
+
 function init() {
   window.SokoniBuyerAuth?.bindPanel?.({
     onVerified: () => {
@@ -188,6 +244,7 @@ function init() {
     },
   });
   el("activity-refresh-btn")?.addEventListener("click", () => loadActivity());
+  el("activity-wa-notify")?.addEventListener("change", () => saveNotifyPrefs());
   void loadActivity();
 }
 
