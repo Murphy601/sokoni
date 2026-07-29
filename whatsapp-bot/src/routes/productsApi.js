@@ -18,6 +18,7 @@ import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
+import { notifySellerProductLiked } from "../services/social-notifications.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -181,6 +182,12 @@ router.post("/like", async (req, res) => {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
         message: result.message,
+      });
+    }
+    if (result.newlyLiked) {
+      void notifySellerProductLiked({
+        userId: result.userId,
+        productId: result.productId,
       });
     }
     res.json({

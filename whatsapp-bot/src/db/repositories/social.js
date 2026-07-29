@@ -190,16 +190,19 @@ export async function toggleProductLike({ userId, productId, liked: likedTarget 
       : null;
 
   let liked = false;
+  let newlyLiked = false;
   if (wantLiked === null) {
     if (existing.rows[0]) {
       await query(`DELETE FROM product_likes WHERE id = $1`, [existing.rows[0].id]);
     } else {
       await query(`INSERT INTO product_likes (user_id, product_id) VALUES ($1, $2)`, [uid, pid]);
       liked = true;
+      newlyLiked = true;
     }
   } else if (wantLiked) {
     if (!existing.rows[0]) {
       await query(`INSERT INTO product_likes (user_id, product_id) VALUES ($1, $2)`, [uid, pid]);
+      newlyLiked = true;
     }
     liked = true;
   } else if (existing.rows[0]) {
@@ -212,7 +215,7 @@ export async function toggleProductLike({ userId, productId, liked: likedTarget 
   );
   const likesCount = Number(countResult.rows[0]?.likes_count || 0);
 
-  return { liked, likesCount, userId: uid, productId: pid };
+  return { liked, newlyLiked, likesCount, userId: uid, productId: pid };
 }
 
 export async function listLikedProductIds({ userId, productIds } = {}) {
@@ -731,6 +734,7 @@ export async function toggleFollow({ followerUserId, followingUserId } = {}) {
   );
 
   let following = false;
+  let created = false;
   if (existing.rows[0]) {
     await query(`DELETE FROM follows WHERE id = $1`, [existing.rows[0].id]);
   } else {
@@ -739,6 +743,7 @@ export async function toggleFollow({ followerUserId, followingUserId } = {}) {
       [followerId, targetId]
     );
     following = true;
+    created = true;
   }
 
   const stats = await query(
@@ -750,6 +755,7 @@ export async function toggleFollow({ followerUserId, followingUserId } = {}) {
 
   return {
     following,
+    created,
     followerUserId: followerId,
     followingUserId: targetId,
     targetStats: {
