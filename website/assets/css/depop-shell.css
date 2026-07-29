@@ -1,12 +1,21 @@
-/* Depop-style marketplace shell — prepaid, photo-first, mobile-native scale */
+/* Depop-style marketplace shell — Sokoni tokens, prepaid, photo-first, mobile-native */
 
 :root {
-  --depop-red: #ff2300;
-  --depop-black: #000000;
-  --depop-dark-bg: #121212;
-  --depop-card-dark: #1e1e1e;
-  --depop-border-dark: #2c2c2c;
-  --depop-gray-text: #8e8e93;
+  /* Layout tokens mapped to Sokoni design system (DESIGN.md) */
+  --depop-action: var(--color-primary, #25d366);
+  --depop-ink: var(--color-on-surface, #1b1035);
+  --depop-muted: var(--color-muted, #5c5470);
+  --depop-surface: var(--color-surface, #fff8f0);
+  --depop-elevated: var(--color-surface-elevated, #ffffff);
+  --depop-accent: var(--color-accent-soft, #2e1b57);
+  --depop-border: rgba(27, 16, 53, 0.12);
+  /* Legacy aliases used across shell / product CSS */
+  --depop-red: var(--depop-action);
+  --depop-black: var(--depop-surface);
+  --depop-dark-bg: var(--depop-surface);
+  --depop-card-dark: var(--depop-elevated);
+  --depop-border-dark: var(--depop-border);
+  --depop-gray-text: var(--depop-muted);
 }
 
 html {
@@ -22,9 +31,10 @@ html {
 }
 
 body.has-depop-shell {
-  background: var(--depop-black);
-  color: #f4f4f5;
+  background: var(--depop-surface);
+  color: var(--depop-ink);
   padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  font-family: var(--font-body, "DM Sans", ui-sans-serif, system-ui, sans-serif);
 }
 
 @media (min-width: 768px) {
@@ -47,13 +57,22 @@ body.has-depop-shell .depop-marketing-extra {
   position: sticky;
   top: 0;
   z-index: 80;
-  background: #000;
-  color: #fff;
-  border-bottom: 1px solid #27272a;
+  background: var(--depop-elevated);
+  color: var(--depop-ink);
+  border-bottom: 1px solid var(--depop-border);
+  box-shadow: 0 1px 0 rgba(27, 16, 53, 0.04);
 }
 
 .depop-top-banner {
-  display: none;
+  display: block;
+  text-align: center;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  color: var(--color-on-primary, #1b1035);
+  background: var(--depop-action);
 }
 
 .depop-main-bar {
@@ -70,7 +89,7 @@ body.has-depop-shell .depop-marketing-extra {
   font-size: 1rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #fff;
+  color: var(--depop-ink);
   text-decoration: none;
   flex-shrink: 0;
   text-transform: uppercase;
@@ -78,7 +97,7 @@ body.has-depop-shell .depop-marketing-extra {
 
 .depop-logo span {
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.7;
   font-size: 0.75em;
   margin-left: 0.15em;
 }
@@ -102,22 +121,23 @@ body.has-depop-shell .depop-marketing-extra {
 
 .depop-search-wrap input {
   width: 100%;
-  background: #18181b;
-  border: 1px solid #3f3f46;
-  color: #fff;
-  border-radius: 9999px;
+  background: var(--depop-surface);
+  border: 1px solid var(--depop-border);
+  color: var(--depop-ink);
+  border-radius: var(--radius-pill, 9999px);
   padding: 0.5rem 1rem 0.5rem 2.25rem;
   font-size: 0.875rem;
   outline: none;
+  font-family: inherit;
 }
 
 .depop-search-wrap input:focus {
-  border-color: var(--depop-red);
-  box-shadow: 0 0 0 2px rgba(255, 35, 0, 0.35);
+  border-color: var(--depop-action);
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.35);
 }
 
 .depop-search-wrap input::placeholder {
-  color: #71717a;
+  color: var(--depop-muted);
 }
 
 .depop-search-icon {
@@ -138,12 +158,12 @@ body.has-depop-shell .depop-marketing-extra {
 }
 
 .depop-btn-sell {
-  background: #fff;
-  color: #000;
+  background: var(--depop-action);
+  color: var(--color-on-primary, #1b1035);
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.375rem 0.875rem;
-  border-radius: 9999px;
+  border-radius: var(--radius-pill, 9999px);
   text-decoration: none;
   white-space: nowrap;
   align-items: center;
@@ -159,20 +179,32 @@ body.has-depop-shell .depop-marketing-extra {
 .depop-icon-btn {
   width: 2.75rem;
   height: 2.75rem;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--depop-ink);
   font-size: 1.125rem;
   cursor: pointer;
   position: relative;
-  border-radius: 9999px;
+  border-radius: var(--radius-pill, 9999px);
 }
 
 .depop-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(27, 16, 53, 0.06);
+}
+
+.depop-icon-btn:focus-visible,
+.depop-btn-sell:focus-visible,
+.depop-cat-strip button:focus-visible,
+.depop-collection-card:focus-visible,
+.depop-bottom-nav__item:focus-visible,
+.depop-hero-dot:focus-visible {
+  outline: 2px solid var(--depop-action);
+  outline-offset: 2px;
 }
 
 .depop-bag-count {
@@ -183,8 +215,8 @@ body.has-depop-shell .depop-marketing-extra {
   height: 1rem;
   padding: 0 0.25rem;
   border-radius: 9999px;
-  background: var(--depop-red);
-  color: #fff;
+  background: var(--depop-action);
+  color: var(--color-on-primary, #1b1035);
   font-size: 0.625rem;
   font-weight: 800;
   display: flex;
@@ -202,10 +234,10 @@ body.has-depop-shell .depop-marketing-extra {
   overflow-x: auto;
   scrollbar-width: none;
   padding: 0.5rem 1rem 0.625rem;
-  border-top: 1px solid #27272a;
+  border-top: 1px solid var(--depop-border);
   font-size: 0.75rem;
   font-weight: 600;
-  color: #a1a1aa;
+  color: var(--depop-muted);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -222,21 +254,22 @@ body.has-depop-shell .depop-marketing-extra {
   border: none;
   cursor: pointer;
   font: inherit;
-  padding: 0;
+  padding: 0.25rem 0;
+  min-height: 44px;
 }
 
 .depop-cat-strip a:hover,
 .depop-cat-strip button:hover,
 .depop-cat-strip .is-active {
-  color: #fff;
+  color: var(--depop-ink);
 }
 
 .depop-cat-strip .tag-new {
-  color: var(--depop-red);
+  color: var(--depop-accent);
 }
 
 .depop-cat-strip .tag-thrift {
-  color: #f472b6;
+  color: var(--depop-accent);
 }
 
 /* Mobile search row (toggle) */
@@ -257,7 +290,7 @@ body.has-depop-shell .depop-marketing-extra {
 
 /* ── Hero carousel ── */
 .depop-hero-carousel {
-  background: var(--depop-black);
+  background: var(--depop-surface);
   padding: 0.75rem 1rem 0;
 }
 
@@ -268,7 +301,7 @@ body.has-depop-shell .depop-marketing-extra {
 }
 
 .depop-hero-slide-wrap {
-  border-radius: 1rem;
+  border-radius: var(--radius-lg, 1rem);
   overflow: hidden;
   transition: opacity 0.45s ease;
 }
@@ -284,19 +317,19 @@ body.has-depop-shell .depop-marketing-extra {
 
 .depop-hero-slide {
   padding: 1.25rem 1.25rem 2.5rem;
-  color: #fff;
+  color: var(--color-on-secondary, #fff8f0);
 }
 
 .depop-hero-slide--fees {
-  background: linear-gradient(135deg, #121212 0%, #2c2c2c 55%, #121212 100%);
+  background: linear-gradient(135deg, #2e1b57 0%, #1b1035 55%, #2e1b57 100%);
 }
 
 .depop-hero-slide--ai {
-  background: linear-gradient(135deg, #1a1a1a 0%, #3d1510 50%, #121212 100%);
+  background: linear-gradient(135deg, #1b1035 0%, #075e54 50%, #1b1035 100%);
 }
 
 .depop-hero-slide--prepaid {
-  background: linear-gradient(135deg, #121212 0%, #1f1f1f 55%, #2a0a00 100%);
+  background: linear-gradient(135deg, #1b1035 0%, #2e1b57 55%, #0f3d2e 100%);
 }
 
 .depop-hero-dots {
@@ -309,41 +342,49 @@ body.has-depop-shell .depop-marketing-extra {
 .depop-hero-dot {
   width: 0.5rem;
   height: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 9999px;
   border: none;
-  background: rgba(255, 255, 255, 0.35);
+  background: transparent;
   cursor: pointer;
   padding: 0;
+  position: relative;
   transition: width 0.2s ease, background 0.2s ease;
 }
 
-.depop-hero-dot.is-active {
+.depop-hero-dot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  background: rgba(27, 16, 53, 0.25);
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.depop-hero-dot.is-active::after {
   width: 1.5rem;
-  background: var(--depop-red);
+  background: var(--depop-action);
 }
 
 /* ── Curated collections ── */
 .depop-collections {
-  background: var(--depop-dark-bg);
+  background: var(--depop-surface);
   padding: 1rem 1rem 0.5rem;
 }
 
-html.dark .depop-collections {
-  background: var(--depop-dark-bg);
-}
-
 .depop-collections-heading {
-  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-body, "DM Sans", ui-sans-serif, system-ui, sans-serif);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--depop-gray-text);
+  color: var(--depop-muted);
   margin: 0 0 0.75rem;
-}
-
-html.dark .depop-collections-heading {
-  color: var(--depop-gray-text);
 }
 
 .depop-collections-row {
@@ -362,26 +403,23 @@ html.dark .depop-collections-heading {
 .depop-collection-card {
   flex-shrink: 0;
   min-width: 9rem;
+  min-height: 44px;
   padding: 1rem 1.125rem;
-  border-radius: 0.875rem;
-  border: 1px solid var(--depop-border-dark);
-  background: var(--depop-card-dark);
+  border-radius: var(--radius-md, 0.75rem);
+  border: 1px solid var(--depop-border);
+  background: var(--depop-elevated);
   font-size: 0.875rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--depop-ink);
   cursor: pointer;
   text-align: left;
-}
-
-html.dark .depop-collection-card {
-  background: var(--depop-card-dark);
-  border-color: var(--depop-border-dark);
-  color: #fff;
+  font-family: inherit;
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(27, 16, 53, 0.06));
 }
 
 .depop-collection-card.is-active {
-  border-color: var(--depop-red);
-  box-shadow: 0 0 0 2px rgba(255, 35, 0, 0.25);
+  border-color: var(--depop-action);
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.25);
 }
 
 /* ── Educational sections ── */
@@ -390,18 +428,13 @@ html.dark .depop-collection-card {
 }
 
 .depop-edu-section--dark {
-  background: var(--depop-black);
-  color: #fff;
+  background: var(--depop-accent);
+  color: var(--color-on-secondary, #fff8f0);
 }
 
 .depop-edu-section--light {
-  background: var(--depop-dark-bg);
-  color: #fff;
-}
-
-html.dark .depop-edu-section--light {
-  background: var(--depop-dark-bg);
-  color: #fff;
+  background: var(--depop-surface);
+  color: var(--depop-ink);
 }
 
 .depop-edu-inner {
@@ -410,12 +443,12 @@ html.dark .depop-edu-section--light {
 }
 
 .depop-edu-title {
-  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display, Fraunces, Georgia, serif);
   font-size: clamp(1.25rem, 3.5vw, 1.5rem);
   font-weight: 700;
   letter-spacing: -0.02em;
   text-align: center;
-  color: #fff;
+  color: inherit;
   margin: 0 0 1.25rem;
 }
 
@@ -432,24 +465,19 @@ html.dark .depop-edu-section--light {
 }
 
 .depop-edu-card {
-  border-radius: 1rem;
+  border-radius: var(--radius-lg, 1rem);
   padding: 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 248, 240, 0.15);
+  background: rgba(255, 248, 240, 0.08);
 }
 
 .depop-edu-section--light .depop-edu-card {
-  border-color: var(--depop-border-dark);
-  background: var(--depop-card-dark);
-}
-
-html.dark .depop-edu-section--light .depop-edu-card {
-  background: var(--depop-card-dark);
-  border-color: var(--depop-border-dark);
+  border-color: var(--depop-border);
+  background: var(--depop-elevated);
 }
 
 .depop-edu-card h3 {
-  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-body, "DM Sans", ui-sans-serif, system-ui, sans-serif);
   font-size: 0.9375rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
@@ -459,7 +487,7 @@ html.dark .depop-edu-section--light .depop-edu-card {
   font-size: 0.8125rem;
   line-height: 1.5;
   margin: 0;
-  opacity: 0.75;
+  opacity: 0.85;
 }
 
 .depop-edu-step-num {
@@ -468,9 +496,9 @@ html.dark .depop-edu-section--light .depop-edu-card {
   justify-content: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 0.5rem;
-  background: var(--depop-red);
-  color: #fff;
+  border-radius: var(--radius-sm, 0.5rem);
+  background: var(--depop-action);
+  color: var(--color-on-primary, #1b1035);
   font-weight: 800;
   font-size: 0.875rem;
   margin-bottom: 0.75rem;
@@ -478,7 +506,7 @@ html.dark .depop-edu-section--light .depop-edu-card {
 
 /* ── Hero banner (legacy fallback) ── */
 .depop-hero-banner {
-  background: linear-gradient(135deg, var(--depop-black) 0%, var(--depop-dark-bg) 55%, #2a0a00 100%);
+  background: linear-gradient(135deg, #1b1035 0%, #2e1b57 55%, #0f3d2e 100%);
   padding: 1.25rem 1rem 1.5rem;
 }
 
@@ -491,9 +519,9 @@ html.dark .depop-edu-section--light .depop-edu-card {
 .depop-hero-inner {
   max-width: 80rem;
   margin: 0 auto;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-lg, 1rem);
+  border: 1px solid rgba(255, 248, 240, 0.12);
+  background: rgba(0, 0, 0, 0.2);
   padding: 1.25rem 1.25rem 1.5rem;
 }
 
@@ -513,7 +541,7 @@ html.dark .depop-edu-section--light .depop-edu-card {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--depop-red);
+  color: var(--depop-action);
   margin-bottom: 0.5rem;
 }
 
@@ -523,12 +551,12 @@ html.dark .depop-edu-section--light .depop-edu-card {
   font-weight: 800;
   line-height: 1.15;
   margin-bottom: 0.5rem;
-  color: #fff;
+  color: var(--color-on-secondary, #fff8f0);
 }
 
 .depop-hero-sub {
   font-size: 0.875rem;
-  color: #d4d4d8;
+  color: rgba(255, 248, 240, 0.85);
   line-height: 1.5;
   max-width: 32rem;
   margin-bottom: 1rem;
@@ -547,49 +575,54 @@ html.dark .depop-edu-section--light .depop-edu-card {
   font-size: 0.875rem;
   font-weight: 700;
   padding: 0.625rem 1.25rem;
-  border-radius: 9999px;
+  border-radius: var(--radius-pill, 9999px);
   text-decoration: none;
+  min-height: 44px;
 }
 
 .depop-hero-cta--primary {
-  background: var(--depop-red);
-  color: #fff;
+  background: var(--depop-action);
+  color: var(--color-on-primary, #1b1035);
 }
 
 .depop-hero-cta--ghost {
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff;
+  border: 1px solid rgba(255, 248, 240, 0.35);
+  color: var(--color-on-secondary, #fff8f0);
 }
 
-/* ── Main content area on dark shell ── */
+/* ── Main content area ── */
 .depop-main-content {
-  background: var(--depop-dark-bg);
-  color: #fff;
+  background: var(--depop-surface);
+  color: var(--depop-ink);
   min-height: 50vh;
 }
 
-html.dark .depop-main-content {
-  background: var(--depop-dark-bg);
-  color: #fff;
-}
-
 .depop-section-heading {
-  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display, Fraunces, Georgia, serif);
   font-size: clamp(1.125rem, 3vw, 1.375rem);
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--depop-ink);
 }
 
-/* ── Bottom nav (mobile) — Depop native bar ── */
+body.has-depop-shell #deals.bg-depop-darkBg,
+body.has-depop-shell .bg-depop-darkBg {
+  background: var(--depop-surface) !important;
+}
+
+body.has-depop-shell #deals .text-zinc-400 {
+  color: var(--depop-muted) !important;
+}
+
+/* ── Bottom nav (mobile) ── */
 .depop-bottom-nav {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 75;
-  background: #000;
-  border-top: 1px solid #18181b;
+  background: var(--depop-elevated);
+  border-top: 1px solid var(--depop-border);
   padding: 0.5rem 0.375rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
 }
 
@@ -608,31 +641,37 @@ html.dark .depop-main-content {
   justify-content: center;
   gap: 0.25rem;
   min-width: 3.25rem;
-  padding: 0.125rem 0.25rem;
+  min-height: 44px;
+  padding: 0.25rem 0.25rem;
   text-decoration: none;
-  color: #71717a;
+  color: var(--depop-muted);
   font-weight: 500;
   transition: color 0.15s ease, opacity 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .depop-bottom-nav__item:hover {
-  color: #d4d4d8;
+  color: var(--depop-ink);
 }
 
 .depop-bottom-nav__item.is-active {
-  color: #fff;
-  font-weight: 600;
-}
-
-.depop-bottom-nav__item--sell {
-  color: var(--depop-red);
+  color: var(--depop-ink);
   font-weight: 700;
 }
 
-.depop-bottom-nav__item--sell:hover {
-  opacity: 0.9;
-  color: var(--depop-red);
+.depop-bottom-nav__item--sell {
+  color: var(--color-on-primary, #1b1035);
+  font-weight: 700;
+  background: var(--depop-action);
+  border-radius: var(--radius-pill, 9999px);
+  padding: 0.35rem 0.65rem;
+  min-width: 3.5rem;
+}
+
+.depop-bottom-nav__item--sell:hover,
+.depop-bottom-nav__item--sell.is-active {
+  opacity: 0.95;
+  color: var(--color-on-primary, #1b1035);
 }
 
 .depop-bottom-nav__icon {
@@ -654,7 +693,7 @@ html.dark .depop-main-content {
   gap: 0.125rem;
   font-size: 0.625rem;
   font-weight: 600;
-  color: #a1a1aa;
+  color: var(--depop-muted);
   text-decoration: none;
   min-width: 3rem;
   padding: 0.25rem;
@@ -662,7 +701,7 @@ html.dark .depop-main-content {
 
 .depop-bottom-nav a.is-active,
 .depop-bottom-nav a.depop-nav-sell {
-  color: var(--depop-red);
+  color: var(--depop-action);
 }
 
 .depop-bottom-nav span:first-child {
@@ -678,7 +717,9 @@ html.dark .depop-main-content {
 
 @media (prefers-reduced-motion: reduce) {
   .depop-hero-cta,
-  .depop-icon-btn {
+  .depop-icon-btn,
+  .depop-hero-slide-wrap.is-animating {
     transition: none;
+    animation: none;
   }
 }

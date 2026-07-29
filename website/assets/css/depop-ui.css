@@ -155,7 +155,7 @@ html.dark .shop-mobile-sell {
 }
 
 .depop-card:focus-visible {
-  outline: 2px solid #ff2300;
+  outline: 2px solid var(--color-primary, #25d366);
   outline-offset: 2px;
 }
 
@@ -486,7 +486,7 @@ html.dark .product-sheet-desc {
 }
 
 .product-sheet-save.is-saved {
-  border-color: #ff2300;
+  border-color: var(--color-primary, #25d366);
   color: #0b5f2d;
   background: rgba(37, 211, 102, 0.12);
 }
