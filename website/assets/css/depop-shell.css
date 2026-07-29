@@ -202,7 +202,7 @@ body.has-depop-shell .depop-marketing-extra {
 .depop-cat-strip button:focus-visible,
 .depop-collection-card:focus-visible,
 .depop-bottom-nav__item:focus-visible,
-.depop-hero-dot:focus-visible {
+.depop-hero-cta:focus-visible {
   outline: 2px solid var(--depop-action);
   outline-offset: 2px;
 }
@@ -826,7 +826,12 @@ body.has-depop-shell #deals .text-zinc-400 {
 @media (prefers-reduced-motion: reduce) {
   .depop-hero-cta,
   .depop-icon-btn,
-  .depop-hero-slide-wrap.is-animating {
+  .depop-hero-bleed,
+  .depop-hero-brand-mark,
+  .depop-hero-title,
+  .depop-hero-sub,
+  .depop-hero-actions,
+  .depop-hero-brand-visual {
     transition: none;
     animation: none;
   }
