@@ -163,12 +163,16 @@ wait_waha
 
 if [ "${RESET_WAHA_SESSION:-}" = "1" ]; then
   reset_session
+  echo "==> Starting freshly created session..."
+  start_session
 else
   STATUS="$(session_status)"
   STORE="$(session_store_enabled)"
 
   if [ -z "$STATUS" ]; then
     create_session
+    echo "==> Starting new session..."
+    start_session
   else
     echo "==> Session '$SESSION': status=$STATUS noweb.store.enabled=${STORE:-false}"
     apply_session_config
