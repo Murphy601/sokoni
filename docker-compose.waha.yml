@@ -9,13 +9,14 @@
 #
 # Optional overrides (export before deploy, or put in a .env next to this file):
 #   WAHA_API_KEY, WAHA_DASHBOARD_USERNAME, WAHA_DASHBOARD_PASSWORD
+#   WAHA_NOWEB_WA_VERSION (e.g. 2.3000.1044074428) — skips live fetch when set
 # Do NOT put the image tag inside ${VAR:-repo:tag} — docker-compose v1 breaks on the colon.
 
 services:
   waha:
-    # Pin version — :latest (2026.7.x) has been failing NOWEB registration
-    # with Connection Failure before SCAN_QR_CODE on this VM.
-    image: devlikeapro/waha:latest-2026.6.2
+    # 2026.7.2 fixes stale NOWEB WhatsApp Web version (STARTING → Connection Failure).
+    # See https://github.com/devlikeapro/waha/issues/2191
+    image: devlikeapro/waha:latest-2026.7.2
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -34,12 +35,33 @@ services:
       # Keep files until manually cleared — default 180s deletes files during large album uploads
       WHATSAPP_FILES_LIFETIME: "0"
       WHATSAPP_FILES_FOLDER: /app/.media
+      # Optional host override. Entrypoint otherwise fetches live version from web.whatsapp.com.
+      WAHA_NOWEB_WA_VERSION: ${WAHA_NOWEB_WA_VERSION:-}
     extra_hosts:
       # Lets WAHA reach the bot on the host (pm2 :3001) from inside the container.
       - "host.docker.internal:host-gateway"
     volumes:
+      - ./scripts/fetch-wa-version.js:/fetch-wa-version.js:ro
       - waha_sessions:/app/.sessions
       - waha_media:/app/.media
+    # Resolve WhatsApp Web version at each container start (2026.7.2+).
+    # $$ escapes compose interpolation so the shell sees ${...}.
+    entrypoint:
+      - /usr/bin/tini
+      - --
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$WAHA_NOWEB_WA_VERSION" ]; then
+          WAHA_NOWEB_WA_VERSION="$$(node /fetch-wa-version.js)" || true
+          export WAHA_NOWEB_WA_VERSION
+        fi
+        if [ -n "$$WAHA_NOWEB_WA_VERSION" ]; then
+          echo "WAHA_NOWEB_WA_VERSION=$$WAHA_NOWEB_WA_VERSION"
+        else
+          echo "WAHA_NOWEB_WA_VERSION unset — using image built-in"
+        fi
+        exec /entrypoint.sh
 
 volumes:
   waha_sessions:

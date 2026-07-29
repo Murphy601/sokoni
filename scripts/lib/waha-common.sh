@@ -11,7 +11,7 @@ WAHA_COMPOSE_PROJECT="${WAHA_COMPOSE_PROJECT:-sokoni-waha}"
 WAHA_URL="${WAHA_API_URL:-http://127.0.0.1:3000}"
 WAHA_KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
 WAHA_SESSION="${WAHA_SESSION:-default}"
-WAHA_DEFAULT_IMAGE="${WAHA_IMAGE:-devlikeapro/waha:latest-2026.6.2}"
+WAHA_DEFAULT_IMAGE="${WAHA_IMAGE:-devlikeapro/waha:latest-2026.7.2}"
 
 waha_docker_compose() {
   if docker compose version >/dev/null 2>&1; then
@@ -75,4 +75,30 @@ waha_print_status() {
   fi
   echo "==> docker ps -a (waha):"
   docker ps -a --format 'table {{.ID}}\t{{.Status}}\t{{.Image}}\t{{.Names}}' 2>/dev/null | awk 'NR==1 || tolower($0) ~ /waha/' || true
+}
+
+# Docker volume name for persisted NOWEB auth (compose project + volume key).
+waha_sessions_volume() {
+  printf '%s_waha_sessions' "$WAHA_COMPOSE_PROJECT"
+}
+
+# Stop WAHA and delete the sessions volume so pairing starts with fresh identity keys.
+# Media volume is kept. Requires re-link (QR / pairing code).
+waha_wipe_sessions_volume() {
+  local vol
+  vol="$(waha_sessions_volume)"
+  echo "==> Stopping WAHA and wiping session volume: $vol"
+  if [ -f "$WAHA_COMPOSE_FILE" ]; then
+    (
+      cd "$(dirname "$WAHA_COMPOSE_FILE")"
+      waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f "$(basename "$WAHA_COMPOSE_FILE")" down 2>/dev/null || true
+    )
+  fi
+  docker volume rm "$vol" 2>/dev/null || true
+  # Older / alternate names from prior compose projects
+  docker volume ls -q 2>/dev/null | awk 'tolower($0) ~ /waha.*sessions/ { print }' | while read -r extra; do
+    echo "==> Removing leftover volume: $extra"
+    docker volume rm "$extra" 2>/dev/null || true
+  done
+  echo "==> Session volume wiped — re-link required after deploy-waha.sh"
 }
