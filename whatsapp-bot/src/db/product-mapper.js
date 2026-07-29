@@ -74,6 +74,9 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     payment: row.payment || "prepaid",
     emoji: row.emoji || undefined,
     tags: Array.isArray(row.tags) ? row.tags : [],
+    era: legacy.era || undefined,
+    refreshedAt: legacy.refreshedAt != null ? Number(legacy.refreshedAt) : undefined,
+    publishedAt: legacy.publishedAt != null ? Number(legacy.publishedAt) : undefined,
 
     inStock: row.in_stock !== false && !row.is_sold,
     isSold: Boolean(row.is_sold),

@@ -284,6 +284,14 @@ function renderShopHeader(payload) {
   const verified = el("shop-verified");
   if (verified) verified.classList.toggle("hidden", !shop.isSellerVerified);
 
+  const avg = Number(stats.avgRating || 0);
+  const totalReviews = Number(stats.totalReviews || 0);
+  const topSeller = el("shop-top-seller");
+  if (topSeller) {
+    const qualifies = avg >= 4.8 && totalReviews >= 20;
+    topSeller.classList.toggle("hidden", !qualifies);
+  }
+
   const bio = el("shop-bio");
   if (bio) {
     if (shop.bio) {
@@ -304,8 +312,6 @@ function renderShopHeader(payload) {
     }
   }
 
-  const avg = Number(stats.avgRating || 0);
-  const totalReviews = Number(stats.totalReviews || 0);
   el("shop-rating").textContent =
     totalReviews > 0 ? `★ ${avg.toFixed(1)} (${totalReviews.toLocaleString()} reviews)` : "New seller";
 
@@ -313,6 +319,11 @@ function renderShopHeader(payload) {
   el("shop-followers-count").textContent = String(Number(stats.followersCount || 0));
   el("shop-following-count").textContent = String(Number(stats.followingCount || 0));
   el("shop-likes-count").textContent = String(Number(stats.likesReceivedCount || 0));
+  const reviewsMetric = el("shop-reviews-metric");
+  if (reviewsMetric) {
+    reviewsMetric.textContent =
+      totalReviews > 0 ? `★ ${avg.toFixed(1)} · ${totalReviews.toLocaleString()}` : "No reviews yet";
+  }
   bindSocialListButtons(shop);
   closeSocialList();
 

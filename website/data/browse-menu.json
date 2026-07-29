@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "itemTypes": [
     {
       "id": "all",
@@ -54,6 +54,82 @@
     {
       "id": "10s",
       "label": "'10s"
+    }
+  ],
+  "aesthetics": [
+    {
+      "id": "y2k",
+      "label": "Y2K",
+      "match": [
+        "y2k",
+        "00s",
+        "2000s"
+      ]
+    },
+    {
+      "id": "streetwear",
+      "label": "Streetwear",
+      "match": [
+        "streetwear",
+        "street",
+        "hype"
+      ]
+    },
+    {
+      "id": "vintage",
+      "label": "Vintage",
+      "match": [
+        "vintage",
+        "retro",
+        "archive"
+      ]
+    },
+    {
+      "id": "clean-girl",
+      "label": "Clean Girl",
+      "match": [
+        "clean girl",
+        "clean-girl",
+        "minimal chic"
+      ]
+    },
+    {
+      "id": "cyberpunk",
+      "label": "Cyberpunk",
+      "match": [
+        "cyberpunk",
+        "cyber",
+        "futuristic"
+      ]
+    },
+    {
+      "id": "goth-punk",
+      "label": "Goth / Punk",
+      "match": [
+        "goth",
+        "punk",
+        "emo",
+        "alt"
+      ]
+    },
+    {
+      "id": "90s-thrift",
+      "label": "90s Thrift",
+      "match": [
+        "90s",
+        "90's",
+        "nineties",
+        "thrift"
+      ]
+    },
+    {
+      "id": "minimalist",
+      "label": "Minimalist",
+      "match": [
+        "minimalist",
+        "minimal",
+        "plain"
+      ]
     }
   ],
   "themes": [

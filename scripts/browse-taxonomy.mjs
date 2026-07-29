@@ -23,6 +23,18 @@ export const DECADES = [
   { id: "10s", label: "'10s" },
 ];
 
+/** Depop-style aesthetic / vibe chips (search + feed filters). */
+export const AESTHETIC_VIBES = [
+  { id: "y2k", label: "Y2K", match: ["y2k", "00s", "2000s"] },
+  { id: "streetwear", label: "Streetwear", match: ["streetwear", "street", "hype"] },
+  { id: "vintage", label: "Vintage", match: ["vintage", "retro", "archive"] },
+  { id: "clean-girl", label: "Clean Girl", match: ["clean girl", "clean-girl", "minimal chic"] },
+  { id: "cyberpunk", label: "Cyberpunk", match: ["cyberpunk", "cyber", "futuristic"] },
+  { id: "goth-punk", label: "Goth / Punk", match: ["goth", "punk", "emo", "alt"] },
+  { id: "90s-thrift", label: "90s Thrift", match: ["90s", "90's", "nineties", "thrift"] },
+  { id: "minimalist", label: "Minimalist", match: ["minimalist", "minimal", "plain"] },
+];
+
 export const CURATED_THEMES = [
   { id: "festival", label: "Festival" },
   { id: "graduation", label: "Graduation" },
@@ -185,10 +197,11 @@ export function mapLegacyToBrowse(category, subcategory) {
 
 export function buildBrowseMenuPayload() {
   return {
-    version: 2,
+    version: 3,
     itemTypes: ITEM_TYPE_FILTERS,
     priceTiers: PRICE_TIERS,
     decades: DECADES,
+    aesthetics: AESTHETIC_VIBES,
     themes: CURATED_THEMES,
     categories: BROWSE_TAXONOMY,
     legacyMap: LEGACY_BROWSE_MAP,

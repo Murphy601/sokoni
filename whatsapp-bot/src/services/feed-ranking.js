@@ -27,6 +27,21 @@ function decay(at, now = Date.now()) {
   return Math.exp(-ageH / 72);
 }
 
+/** Boost recently bumped / refreshed listings toward the top of feeds. */
+function recencyBoost(product, now = Date.now()) {
+  const ts = Number(
+    product?.refreshedAt ||
+      product?.publishedAt ||
+      (product?.updatedAt ? Date.parse(product.updatedAt) : 0) ||
+      (product?.createdAt ? Date.parse(product.createdAt) : 0) ||
+      0
+  );
+  if (!Number.isFinite(ts) || ts <= 0) return 0;
+  const ageH = Math.max(0, (now - ts) / 3_600_000);
+  // Strong for ~48h after bump, fades over ~5 days
+  return Math.max(0, 10 * Math.exp(-ageH / 36));
+}
+
 function scoreProduct(productId, events, now = Date.now()) {
   let score = 0;
   for (const e of events) {
@@ -51,6 +66,9 @@ function toPublicProduct(p) {
     imageUrl: p.imageUrl,
     inStock: p.inStock !== false,
     tags: (p.tags || []).slice(0, 5),
+    era: p.era || undefined,
+    refreshedAt: p.refreshedAt || undefined,
+    updatedAt: p.updatedAt || undefined,
   };
 }
 
@@ -67,6 +85,7 @@ function rankProducts(products, events, { limit = 12, filter = null, boost = nul
       let s = scoreProduct(p.id, events, now);
       s += (Number(p.rating) || 0) * 0.4;
       s += Math.min(Number(p.reviews) || 0, 500) * 0.002;
+      s += recencyBoost(p, now);
       if (boost) s += boost(p);
       return { product: p, score: s };
     })

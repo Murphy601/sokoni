@@ -123,6 +123,7 @@ let activeSubcategory = null;
 let activeProductId = null;
 let activeItemType = "all";
 let activePriceTier = null;
+let activeAesthetic = null;
 let searchQuery = "";
 let showKes = true;
 const STORE_INITIAL_LIMIT = 48;
@@ -322,6 +323,37 @@ function matchesSearch(product, tokens, maxPriceKes) {
   return scoreProduct(product, meaningful) > 0;
 }
 
+function aestheticMatchTerms(aestheticId) {
+  const menu = window.SokoniBrowse?.getMenu?.();
+  const vibes = menu?.aesthetics || [];
+  const vibe = vibes.find((v) => v.id === aestheticId);
+  if (!vibe) return [String(aestheticId || "").toLowerCase()].filter(Boolean);
+  const terms = [vibe.id, vibe.label, ...(vibe.match || [])]
+    .map((t) => String(t || "").toLowerCase().trim())
+    .filter(Boolean);
+  return [...new Set(terms)];
+}
+
+function productMatchesAesthetic(product, aestheticId) {
+  if (!aestheticId) return true;
+  const terms = aestheticMatchTerms(aestheticId);
+  if (!terms.length) return true;
+  const hay = [
+    product?.era,
+    product?.name,
+    product?.title,
+    product?.description,
+    product?.category,
+    product?.browseCategory,
+    product?.browseSubCategory,
+    ...(Array.isArray(product?.tags) ? product.tags : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return terms.some((term) => hay.includes(term));
+}
+
 function filteredStoreProducts() {
   const tokens = tokenize(searchQuery);
   const maxPriceKes = parseMaxPriceKes(searchQuery);
@@ -336,6 +368,9 @@ function filteredStoreProducts() {
     if (tierMax != null) {
       items = items.filter((p) => p.priceKes == null || p.priceKes <= tierMax);
     }
+  }
+  if (activeAesthetic) {
+    items = items.filter((p) => productMatchesAesthetic(p, activeAesthetic));
   }
   if (activeCategory === "viral") {
     items = items.filter((p) => p.viral || VIRAL_IDS.has(p.id));
@@ -369,7 +404,8 @@ function visibleStoreProducts() {
     activeSubcategory ||
     activeProductId ||
     activeItemType !== "all" ||
-    activePriceTier;
+    activePriceTier ||
+    activeAesthetic;
   const limit = filtered ? STORE_SEARCH_LIMIT : storeDisplayLimit;
   return { all, visible: all.slice(0, limit) };
 }
@@ -380,6 +416,7 @@ function setCatalogFilter({
   productId = null,
   itemType = activeItemType,
   priceTier = activePriceTier,
+  aesthetic = activeAesthetic,
   scroll = false,
 } = {}) {
   searchQuery = "";
@@ -388,6 +425,7 @@ function setCatalogFilter({
   activeProductId = productId || null;
   activeItemType = itemType || "all";
   activePriceTier = priceTier || null;
+  activeAesthetic = aesthetic || null;
   storeDisplayLimit = STORE_SEARCH_LIMIT;
 
   const input = document.getElementById("hero-search");
@@ -443,6 +481,11 @@ function updateDealsFilterLabel() {
     const menu = window.SokoniBrowse?.getMenu?.();
     const tier = menu?.priceTiers?.find((t) => t.id === activePriceTier);
     if (tier) parts.push(tier.label);
+  }
+  if (activeAesthetic) {
+    const menu = window.SokoniBrowse?.getMenu?.();
+    const vibe = menu?.aesthetics?.find((v) => v.id === activeAesthetic);
+    if (vibe) parts.push(`#${vibe.label}`);
   }
   if (parts.length) {
     el.textContent = `Showing: ${parts.join(" · ")}`;
@@ -699,6 +742,7 @@ function renderBrowseFilters() {
   const bar = document.getElementById("browse-filter-bar");
   const itemWrap = document.getElementById("item-type-chips");
   const priceWrap = document.getElementById("price-tier-chips");
+  const vibeWrap = document.getElementById("vibe-filter-chips");
   if (!bar || !itemWrap || !priceWrap) return;
 
   const menu = window.SokoniBrowse?.getMenu?.();
@@ -708,6 +752,7 @@ function renderBrowseFilters() {
     { id: "secondhand", label: "Pre-Loved / Thrift" },
   ];
   const priceTiers = menu?.priceTiers || [];
+  const aesthetics = menu?.aesthetics || [];
 
   const filterChip = (id, label, active, dataAttr, dataVal) => `
     <button type="button" class="browse-chip ${active ? "is-active" : ""}" ${dataAttr}="${dataVal}">${label}</button>`;
@@ -723,6 +768,20 @@ function renderBrowseFilters() {
       )
     )
     .join("");
+
+  if (vibeWrap) {
+    vibeWrap.innerHTML = aesthetics
+      .map((v) =>
+        filterChip(
+          v.id,
+          `#${v.label}`,
+          activeAesthetic === v.id,
+          "data-aesthetic",
+          v.id
+        )
+      )
+      .join("");
+  }
 
   priceWrap.innerHTML = priceTiers
     .map((t) =>
@@ -741,6 +800,17 @@ function renderBrowseFilters() {
   itemWrap.querySelectorAll("[data-item-type]").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeItemType = btn.dataset.itemType || "all";
+      storeDisplayLimit = STORE_SEARCH_LIMIT;
+      renderBrowseFilters();
+      renderStoreGrid();
+      syncCatalogNavUi();
+    });
+  });
+
+  vibeWrap?.querySelectorAll("[data-aesthetic]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const vibe = btn.dataset.aesthetic;
+      activeAesthetic = activeAesthetic === vibe ? null : vibe;
       storeDisplayLimit = STORE_SEARCH_LIMIT;
       renderBrowseFilters();
       renderStoreGrid();

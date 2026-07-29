@@ -1,18 +1,24 @@
 # Phase 2 — Depop-Style Browse Taxonomy
 
-Category drawer, price tiers, and item-type filters for the Sokoni storefront — powered by PostgreSQL + `/api/products`.
+Category drawer, price tiers, item-type filters, and **aesthetic / vibe chips** for the Sokoni storefront — powered by PostgreSQL + `/api/products`.
 
 ## What was added
 
 | Path | Purpose |
 |------|---------|
-| `scripts/browse-taxonomy.mjs` | Women/Men/Kids/Brands/Sports/Trending/Sale/Electronics/Home + price tiers + legacy map |
+| `scripts/browse-taxonomy.mjs` | Women/Men/Kids/Brands/Sports/Trending/Sale/Electronics/Home + price tiers + aesthetics + legacy map |
 | `scripts/build-browse-menu.mjs` | Generates `website/data/browse-menu.json` |
 | `whatsapp-bot/db/schema-phase2-browse.sql` | `browse_category`, `browse_sub_category` columns |
 | `whatsapp-bot/scripts/backfill-browse-categories.mjs` | Maps legacy categories → browse paths in DB |
 | `website/assets/js/browse.js` | Client helpers (resolve path, enrich products, labels) |
 | `website/assets/js/catalog-nav.js` | Depop-style left drawer using browse taxonomy |
-| `website/assets/js/app.js` | Loads catalog from `/api/products`, browse + price filters |
+| `website/assets/js/app.js` | Loads catalog from `/api/products`, browse + price + vibe filters |
+
+## Aesthetic / vibe chips
+
+Homepage filter bar includes `#Y2K`, `#Streetwear`, `#Vintage`, `#Clean Girl`, `#Cyberpunk`, `#Goth / Punk`, `#90s Thrift`, `#Minimalist`.
+
+Matching uses listing `tags`, `era`, title, and description (sellers already enter tags/era on list).
 
 ## Browse categories
 
