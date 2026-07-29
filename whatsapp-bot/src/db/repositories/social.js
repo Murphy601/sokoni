@@ -330,6 +330,181 @@ export async function listUserFollowConnections({
   };
 }
 
+function cleanOptionalText(value, { max = 500, allowEmpty = true } = {}) {
+  if (value === undefined) return undefined;
+  if (value == null) return null;
+  const text = String(value).trim();
+  if (!text) return allowEmpty ? null : undefined;
+  return text.slice(0, max);
+}
+
+/**
+ * Update storefront identity fields on users (+ soft sync sellers row when present).
+ * Only provided fields are changed (undefined = leave unchanged).
+ */
+export async function updateUserShopProfile({
+  userId,
+  sellerId = null,
+  handle,
+  shopName,
+  bio,
+  avatarUrl,
+  location,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const uid = parseUserId(userId);
+  if (!uid) {
+    return { error: "invalid_user", message: "Valid userId is required." };
+  }
+  if (!(await userExists(uid))) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+
+  const nextHandle =
+    handle === undefined ? undefined : normalizeHandle(handle);
+  if (handle !== undefined && !nextHandle) {
+    return { error: "invalid_handle", message: "Enter a valid shop handle." };
+  }
+  if (nextHandle && !/^[a-z0-9._-]{2,40}$/.test(nextHandle)) {
+    return {
+      error: "invalid_handle",
+      message: "Handle must be 2–40 characters: letters, numbers, . _ -",
+    };
+  }
+
+  if (nextHandle) {
+    const clash = await query(
+      `SELECT id FROM users
+        WHERE id <> $1
+          AND (LOWER(handle) = $2 OR LOWER(handle) = $3)
+        LIMIT 1`,
+      [uid, nextHandle, `@${nextHandle}`]
+    );
+    if (clash.rows[0]) {
+      return { error: "handle_taken", message: "That shop handle is already taken." };
+    }
+  }
+
+  const nextShopName = cleanOptionalText(shopName, { max: 255 });
+  const nextBio = cleanOptionalText(bio, { max: 1000 });
+  const nextAvatar = cleanOptionalText(avatarUrl, { max: 1000 });
+  const nextLocation = cleanOptionalText(location, { max: 120 });
+
+  if (
+    nextHandle === undefined &&
+    nextShopName === undefined &&
+    nextBio === undefined &&
+    nextAvatar === undefined &&
+    nextLocation === undefined
+  ) {
+    return { error: "invalid_request", message: "Provide at least one profile field to update." };
+  }
+
+  if (nextAvatar && !/^https?:\/\//i.test(nextAvatar)) {
+    return { error: "invalid_avatar_url", message: "Avatar must be an http(s) URL." };
+  }
+
+  const sets = [];
+  const params = [];
+  function pushSet(column, value) {
+    params.push(value);
+    sets.push(`${column} = $${params.length}`);
+  }
+
+  if (nextHandle !== undefined) pushSet("handle", nextHandle);
+  if (nextShopName !== undefined) pushSet("shop_name", nextShopName);
+  if (nextBio !== undefined) pushSet("bio", nextBio);
+  if (nextAvatar !== undefined) pushSet("avatar_url", nextAvatar);
+  if (nextLocation !== undefined) pushSet("location", nextLocation);
+  params.push(uid);
+
+  const { rows } = await query(
+    `UPDATE users
+        SET ${sets.join(", ")}
+      WHERE id = $${params.length}
+      RETURNING id, handle, shop_name, bio, avatar_url, location, display_name, is_seller_verified`,
+    params
+  );
+  const row = rows[0];
+  if (!row) {
+    return { error: "user_not_found", message: "User not found." };
+  }
+
+  const linkedSellerId = parseUserId(sellerId);
+  try {
+    if (linkedSellerId) {
+      const sellerSets = [];
+      const sellerParams = [];
+      if (nextShopName !== undefined) {
+        sellerParams.push(nextShopName);
+        sellerSets.push(`business_name = COALESCE($${sellerParams.length}, business_name)`);
+      }
+      if (nextBio !== undefined) {
+        sellerParams.push(nextBio);
+        sellerSets.push(`bio = $${sellerParams.length}`);
+      }
+      if (nextLocation !== undefined) {
+        sellerParams.push(nextLocation);
+        sellerSets.push(`city = $${sellerParams.length}`);
+      }
+      if (nextHandle !== undefined) {
+        sellerParams.push(nextHandle);
+        sellerSets.push(`slug = COALESCE($${sellerParams.length}, slug)`);
+      }
+      if (sellerSets.length) {
+        sellerParams.push(linkedSellerId);
+        await query(
+          `UPDATE sellers SET ${sellerSets.join(", ")} WHERE id = $${sellerParams.length}`,
+          sellerParams
+        );
+      }
+    } else {
+      const sellerSets = [];
+      const sellerParams = [];
+      if (nextShopName !== undefined) {
+        sellerParams.push(nextShopName);
+        sellerSets.push(`business_name = COALESCE($${sellerParams.length}, business_name)`);
+      }
+      if (nextBio !== undefined) {
+        sellerParams.push(nextBio);
+        sellerSets.push(`bio = $${sellerParams.length}`);
+      }
+      if (nextLocation !== undefined) {
+        sellerParams.push(nextLocation);
+        sellerSets.push(`city = $${sellerParams.length}`);
+      }
+      if (nextHandle !== undefined) {
+        sellerParams.push(nextHandle);
+        sellerSets.push(`slug = COALESCE($${sellerParams.length}, slug)`);
+      }
+      if (sellerSets.length) {
+        sellerParams.push(uid);
+        await query(
+          `UPDATE sellers SET ${sellerSets.join(", ")} WHERE user_id = $${sellerParams.length}`,
+          sellerParams
+        );
+      }
+    }
+  } catch {
+    // Soft sync — users update already succeeded.
+  }
+
+  return {
+    shop: {
+      userId: Number(row.id),
+      handle: formatHandle(row.handle, nextHandle || ""),
+      shopName: row.shop_name || row.display_name || `Shop ${row.id}`,
+      bio: row.bio || null,
+      avatarUrl: row.avatar_url || null,
+      location: row.location || null,
+      isSellerVerified: Boolean(row.is_seller_verified),
+    },
+  };
+}
+
 export async function toggleFollow({ followerUserId, followingUserId } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
