@@ -77,6 +77,31 @@ function parseViewerUserId() {
   return num;
 }
 
+function resolveViewerUserId() {
+  const sessionUserId = window.SokoniBuyerAuth?.readSession?.()?.userId;
+  if (Number.isInteger(sessionUserId) && sessionUserId > 0) return sessionUserId;
+  return parseViewerUserId();
+}
+
+function isBuyerSessionAuthError(payload) {
+  const code = String(payload?.error || "")
+    .trim()
+    .toLowerCase();
+  return (
+    code === "session_required" ||
+    code === "session_invalid" ||
+    code === "session_expired" ||
+    code === "buyer_session_mismatch"
+  );
+}
+
+function buyerAuthBody(extra = {}) {
+  if (window.SokoniBuyerAuth?.authFields) {
+    return window.SokoniBuyerAuth.authFields(extra);
+  }
+  return { ...extra };
+}
+
 function readHandleFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const queryHandle = params.get("handle");
@@ -216,7 +241,7 @@ async function loadShopReviews(shop, stats = {}) {
 function renderShopHeader(payload) {
   const shop = payload.shop || {};
   const stats = payload.stats || {};
-  state.currentShop = shop;
+  state.currentShop = { ...shop, stats };
 
   el("shop-name").textContent = shop.shopName || "Shop";
   el("shop-handle").textContent = shop.handle || "";
@@ -303,13 +328,19 @@ function renderFollowButton(shop, stats) {
       const res = await fetch(`${SHOP_API_BASE}/follow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          followerUserId: state.viewerUserId,
-          followingUserId: shopUserId,
-        }),
+        body: JSON.stringify(
+          buyerAuthBody({
+            followerUserId: state.viewerUserId,
+            followingUserId: shopUserId,
+          })
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
+        if (isBuyerSessionAuthError(data)) {
+          statusMessage(data?.message || "Verify your WhatsApp below to follow this shop.", true);
+          return;
+        }
         statusMessage(data?.message || data?.error || "Could not follow shop right now.", true);
         return;
       }
@@ -391,7 +422,7 @@ function bindLikeButtons() {
       const productId = btn.getAttribute("data-like-product");
       if (!productId) return;
       if (!state.viewerUserId) {
-        statusMessage("Set ?viewer=USER_ID in URL to test likes.", true);
+        statusMessage("Verify your WhatsApp below to like items.", true);
         return;
       }
       btn.disabled = true;
@@ -399,13 +430,19 @@ function bindLikeButtons() {
         const res = await fetch(`${PRODUCT_API_BASE}/like`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: state.viewerUserId,
-            productId,
-          }),
+          body: JSON.stringify(
+            buyerAuthBody({
+              userId: state.viewerUserId,
+              productId,
+            })
+          ),
         });
         const data = await res.json();
         if (!res.ok) {
+          if (isBuyerSessionAuthError(data)) {
+            statusMessage(data?.message || "Verify your WhatsApp below to like items.", true);
+            return;
+          }
           statusMessage(data?.message || data?.error || "Could not update like.", true);
           return;
         }
@@ -475,10 +512,25 @@ async function loadShop(handle) {
   }
 }
 
+function refreshViewerAndShopActions() {
+  state.viewerUserId = resolveViewerUserId();
+  if (state.currentShop) {
+    renderFollowButton(state.currentShop, state.currentShop.stats || {});
+    renderMessageButton(state.currentShop);
+  }
+}
+
 function init() {
-  state.viewerUserId = parseViewerUserId();
+  state.viewerUserId = resolveViewerUserId();
   const input = el("shop-handle-input");
   const form = el("shop-handle-form");
+
+  window.SokoniBuyerAuth?.bindPanel?.({
+    onVerified: () => {
+      refreshViewerAndShopActions();
+      statusMessage("WhatsApp verified — you can follow and like now.");
+    },
+  });
 
   if (form) {
     form.addEventListener("submit", (ev) => {

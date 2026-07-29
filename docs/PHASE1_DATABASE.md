@@ -56,6 +56,25 @@ Notes:
 
 ## Social foundation endpoints (additive)
 
+### Buyer WhatsApp auth (soft/hard)
+
+Env: `BUYER_AUTH_MODE=soft|hard|off` (default `soft`).
+
+Auth endpoints:
+
+- `POST /api/buyer/auth/send-code` `{ "phone": "2547XXXXXXXX" }`
+- `POST /api/buyer/auth/verify-code` `{ "phone": "2547XXXXXXXX", "code": "123456" }` → `sessionToken` + `userId`
+- `GET /api/buyer/auth/session?phone=...&sessionToken=...`
+- `POST /api/buyer/auth/sign-out` `{ "phone": "2547XXXXXXXX" }`
+
+Buyer identity contract for social writes:
+
+- Soft (default): if `phone` + `sessionToken` are present, server validates the session and overwrites the identity field (`userId` / `followerUserId` / `buyerUserId` / `senderUserId`) from the verified buyer profile. Legacy client-supplied IDs still work when session is omitted.
+- Hard: session required on social write actions; missing/invalid session returns `401`.
+- Off: skip buyer session checks.
+
+Clients should send `phone` + `sessionToken` in JSON body (or query for GETs). `X-Buyer-Session` is also accepted.
+
 ### Product likes (toggle)
 
 `POST /api/products/like`
@@ -65,7 +84,9 @@ Body:
 ```json
 {
   "userId": 1,
-  "productId": "prod_xxx"
+  "productId": "prod_xxx",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
 }
 ```
 
@@ -87,7 +108,9 @@ Body:
 ```json
 {
   "followerUserId": 1,
-  "followingUserId": 2
+  "followingUserId": 2,
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
 }
 ```
 
@@ -129,7 +152,9 @@ Create/update pending offer:
   "productId": "prod_xxx",
   "buyerUserId": 1,
   "sellerUserId": 2,
-  "amountKsh": 1200
+  "amountKsh": 1200,
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
 }
 ```
 
@@ -207,6 +232,10 @@ Seller role auth note:
 - `GET /api/social/offers` with `role=seller` now requires `phone` + `sessionToken`.
 - `userId` must match the authenticated seller social profile (or is enforced from session).
 
+Buyer role auth note:
+
+- When buyer `phone` + `sessionToken` are present, `userId` must match the authenticated buyer profile (or is enforced from session).
+
 ### In-app messaging (moderated)
 
 Send message:
@@ -217,7 +246,9 @@ Send message:
 {
   "senderUserId": 1,
   "receiverUserId": 2,
-  "content": "Hi, is this still available?"
+  "content": "Hi, is this still available?",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
 }
 ```
 
@@ -225,6 +256,11 @@ Seller send auth note:
 
 - Seller-triggered messages should include `phone` + `sessionToken`.
 - When seller session context is present, `senderUserId` must match the authenticated seller profile.
+
+Buyer send auth note:
+
+- Buyer messages should include buyer `phone` + `sessionToken` when available (required in hard mode).
+- When buyer session context is present (and seller session is not), `senderUserId` is enforced from the verified buyer profile.
 
 Thread:
 
@@ -234,6 +270,11 @@ Seller thread auth note:
 
 - Seller dashboard thread reads should include `phone` + `sessionToken` query params.
 - When seller session context is present, one thread participant (`userAId` or `userBId`) must match the authenticated seller profile.
+
+Buyer thread auth note:
+
+- Buyer thread reads may include buyer `phone` + `sessionToken` query params.
+- When buyer session context is present (and seller session is not), one thread participant must match the authenticated buyer profile.
 
 Blocked patterns include:
 
@@ -254,7 +295,9 @@ Create:
   "buyerUserId": 1,
   "sellerUserId": 2,
   "rating": 5,
-  "comment": "Fast delivery and exactly as described."
+  "comment": "Fast delivery and exactly as described.",
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "buyer-session-token"
 }
 ```
 
@@ -263,6 +306,7 @@ Rules:
 - Order must exist in DB (`id` or `trackingCode` accepted)
 - Order status must be `delivered` or `completed`
 - One review per order
+- Buyer session soft/hard gate applies (`buyerUserId` enforced from verified session when present)
 
 List seller reviews:
 

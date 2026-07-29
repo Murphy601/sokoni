@@ -17,6 +17,7 @@ import { toggleProductLike } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
+import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -124,6 +125,8 @@ function createProductErrorStatus(error) {
 
 function socialErrorStatus(error) {
   if (error === "database_not_configured") return 503;
+  if (error === "session_required" || error === "session_invalid" || error === "session_expired") return 401;
+  if (error === "buyer_session_mismatch") return 403;
   if (error === "user_not_found" || error === "product_not_found") return 404;
   return 400;
 }
@@ -166,7 +169,14 @@ router.post("/create", async (req, res) => {
 /** POST /api/products/like — toggle like by { userId, productId } */
 router.post("/like", async (req, res) => {
   try {
-    const result = await toggleProductLike(req.body || {});
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "userId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await toggleProductLike(gated.payload || {});
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,

@@ -109,6 +109,45 @@
       <p class="text-xs text-brand-purple/60 dark:text-white/65 mt-3">
         Sokoni is countrywide. Prepaid orders are confirmed via M-Pesa Till 4775847, with home delivery and pickup partners across Kenya.
       </p>
+      <div id="buyer-auth-panel" class="mt-4 rounded-2xl border border-black/5 dark:border-white/10 p-4 space-y-3">
+        <p class="text-sm font-semibold">Buyer WhatsApp sign-in</p>
+        <p class="text-xs text-brand-purple/60 dark:text-white/65">
+          Verify once to like, follow, make offers, and chat safely. Code comes on WhatsApp.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <label class="flex-1 text-xs font-medium">
+            WhatsApp number
+            <input
+              id="buyer-auth-phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="07XXXXXXXX"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+            />
+          </label>
+          <label class="sm:w-36 text-xs font-medium">
+            Code
+            <input
+              id="buyer-auth-code"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="6 digits"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+            />
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="buyer-auth-send-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
+            Send code
+          </button>
+          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+            Verify
+          </button>
+        </div>
+        <p id="buyer-auth-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
+      </div>
     </section>
 
     <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6">
@@ -161,6 +200,7 @@
   </footer>
 
   <script src="assets/js/component-handler.js"></script>
+  <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/shop-profile.js"></script>
 </body>
 </html>

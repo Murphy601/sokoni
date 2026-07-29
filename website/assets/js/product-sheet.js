@@ -96,9 +96,27 @@
     return n;
   }
 
+  function resolveViewerUserId() {
+    const sessionUserId = window.SokoniBuyerAuth?.readSession?.()?.userId;
+    if (Number.isInteger(sessionUserId) && sessionUserId > 0) return sessionUserId;
+    return parseViewerUserId();
+  }
+
   function viewerQueryValue() {
-    const viewerId = parseViewerUserId();
+    const viewerId = resolveViewerUserId();
     return viewerId ? String(viewerId) : "";
+  }
+
+  function isBuyerSessionAuthError(payload) {
+    const code = String(payload?.error || "")
+      .trim()
+      .toLowerCase();
+    return (
+      code === "session_required" ||
+      code === "session_invalid" ||
+      code === "session_expired" ||
+      code === "buyer_session_mismatch"
+    );
   }
 
   function resolveSellerUserId(product) {
@@ -121,14 +139,34 @@
     return Math.max(1, Math.min(listed, discounted));
   }
 
+  function offerAuthBlock() {
+    if (viewerUserId) return "";
+    return `
+      <div id="buyer-auth-panel" class="product-sheet-offer-auth">
+        <p class="product-sheet-offer-label">Verify WhatsApp to send this offer</p>
+        <label for="buyer-auth-phone" class="product-sheet-offer-label">WhatsApp number</label>
+        <input id="buyer-auth-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX" class="product-sheet-offer-input" />
+        <label for="buyer-auth-code" class="product-sheet-offer-label">6-digit code</label>
+        <div class="product-sheet-offer-row">
+          <input id="buyer-auth-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456" class="product-sheet-offer-input" />
+          <button type="button" id="buyer-auth-send-btn" class="product-sheet-offer-submit">Send code</button>
+        </div>
+        <button type="button" id="buyer-auth-verify-btn" class="product-sheet-save">Verify & continue</button>
+        <p id="buyer-auth-status" class="product-sheet-offer-status"></p>
+      </div>
+    `;
+  }
+
   function offerActionBlock(product) {
     const sellerId = resolveSellerUserId(product);
     const listedPrice = resolveListedPriceKes(product);
-    if (!viewerUserId || !sellerId || !listedPrice || viewerUserId === sellerId) return "";
+    if (!sellerId || !listedPrice) return "";
+    if (viewerUserId && viewerUserId === sellerId) return "";
     const suggested = defaultOfferKes(product);
     return `
       <button type="button" id="product-sheet-offer-toggle" class="product-sheet-save">💸 Make an offer</button>
       <form id="product-sheet-offer-form" class="product-sheet-offer-form" hidden>
+        ${offerAuthBlock()}
         <label for="product-sheet-offer-amount" class="product-sheet-offer-label">Offer amount (KES)</label>
         <div class="product-sheet-offer-row">
           <input
@@ -208,11 +246,17 @@
 
   async function submitOffer(product) {
     const sellerUserId = resolveSellerUserId(product);
+    viewerUserId = resolveViewerUserId();
     const buyerUserId = viewerUserId;
     const amountInput = document.getElementById("product-sheet-offer-amount");
     const submitBtn = document.getElementById("product-sheet-offer-submit");
     const listedPrice = resolveListedPriceKes(product);
-    if (!amountInput || !submitBtn || !buyerUserId || !sellerUserId || !listedPrice) return;
+    if (!amountInput || !submitBtn || !sellerUserId || !listedPrice) return;
+    if (!buyerUserId) {
+      setOfferStatus("Verify your WhatsApp above to send an offer.", "error");
+      document.getElementById("buyer-auth-phone")?.focus();
+      return;
+    }
 
     const amount = Number(amountInput.value);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -229,18 +273,30 @@
     submitBtn.disabled = true;
     setOfferStatus("Sending offer...");
     try {
+      const payload = window.SokoniBuyerAuth?.authFields
+        ? window.SokoniBuyerAuth.authFields({
+            productId: product.id,
+            buyerUserId,
+            sellerUserId,
+            amountKsh: Math.round(amount),
+          })
+        : {
+            productId: product.id,
+            buyerUserId,
+            sellerUserId,
+            amountKsh: Math.round(amount),
+          };
       const res = await fetch(`${SOCIAL_API_BASE}/offers/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: product.id,
-          buyerUserId,
-          sellerUserId,
-          amountKsh: Math.round(amount),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (isBuyerSessionAuthError(data)) {
+          setOfferStatus(data?.message || "Verify your WhatsApp below to send an offer.", "error");
+          return;
+        }
         setOfferStatus(data?.message || data?.error || "Could not send offer right now.", "error");
         return;
       }
@@ -258,11 +314,28 @@
     const amountInput = document.getElementById("product-sheet-offer-amount");
     if (!toggle || !form || !amountInput) return;
 
+    if (!viewerUserId && window.SokoniBuyerAuth?.bindPanel) {
+      window.SokoniBuyerAuth.bindPanel({
+        onVerified: () => {
+          viewerUserId = resolveViewerUserId();
+          const body = document.getElementById("product-sheet-body");
+          if (body && currentProduct) {
+            body.innerHTML = renderBody(currentProduct);
+            setupOfferUi(currentProduct);
+            const nextForm = document.getElementById("product-sheet-offer-form");
+            if (nextForm) nextForm.hidden = false;
+            setOfferStatus("WhatsApp verified — send your offer.", "success");
+          }
+        },
+      });
+    }
+
     toggle.addEventListener("click", () => {
       form.hidden = !form.hidden;
       if (!form.hidden) {
-        amountInput.focus();
-        amountInput.select();
+        const focusNode = viewerUserId ? amountInput : document.getElementById("buyer-auth-phone");
+        focusNode?.focus();
+        if (viewerUserId) amountInput.select();
       }
     });
 
@@ -287,6 +360,7 @@
 
   function open(product) {
     if (!product) return;
+    viewerUserId = resolveViewerUserId();
     currentProduct = product;
     window.SokoniFeed?.trackView?.(product.id);
     const body = document.getElementById("product-sheet-body");
@@ -307,7 +381,7 @@
   }
 
   function init() {
-    viewerUserId = parseViewerUserId();
+    viewerUserId = resolveViewerUserId();
     document.getElementById("product-sheet-close")?.addEventListener("click", close);
     document.querySelector("#product-sheet .sheet-backdrop")?.addEventListener("click", close);
     document.getElementById("product-sheet-body")?.addEventListener("click", (e) => {

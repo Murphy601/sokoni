@@ -17,6 +17,11 @@ import {
   toggleFollow,
 } from "../db/repositories/social.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
+import {
+  applyBuyerIdentityAuth,
+  hasBuyerSessionContext,
+  resolveAuthenticatedBuyerSocialContext,
+} from "../services/buyer-social-auth.js";
 
 const router = Router();
 
@@ -34,7 +39,14 @@ function hasSellerSessionContext(req, payload = req.body || {}) {
 
 function socialErrorStatus(error) {
   if (error === "database_not_configured") return 503;
-  if (error === "forbidden_offer_action" || error === "seller_session_mismatch") return 403;
+  if (
+    error === "forbidden_offer_action" ||
+    error === "seller_session_mismatch" ||
+    error === "buyer_session_mismatch"
+  ) {
+    return 403;
+  }
+  if (error === "session_required" || error === "session_invalid" || error === "session_expired") return 401;
   if (error === "reminder_cooldown_active") return 429;
   if (
     error === "offer_not_pending" ||
@@ -65,7 +77,14 @@ function socialErrorStatus(error) {
 /** POST /api/social/follow — toggle follow relation */
 router.post("/follow", async (req, res) => {
   try {
-    const result = await toggleFollow(req.body || {});
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "followerUserId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await toggleFollow(gated.payload || {});
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
@@ -117,7 +136,14 @@ router.get("/shop/:handle", async (req, res) => {
 /** POST /api/social/offers/create — buyer makes/updates pending offer */
 router.post("/offers/create", async (req, res) => {
   try {
-    const result = await createOffer(req.body || {});
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "buyerUserId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await createOffer(gated.payload || {});
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
@@ -403,6 +429,26 @@ router.get("/offers", async (req, res) => {
         });
       }
       userId = auth.sellerUserId;
+    } else if (hasBuyerSessionContext(req, req.query || {})) {
+      const auth = await resolveAuthenticatedBuyerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+      const requestedBuyerUserId = Number(req.query.userId);
+      if (
+        Number.isInteger(requestedBuyerUserId) &&
+        requestedBuyerUserId > 0 &&
+        requestedBuyerUserId !== auth.buyerUserId
+      ) {
+        return res.status(403).json({
+          error: "buyer_session_mismatch",
+          message: "Buyer session does not match the buyer profile in this request.",
+        });
+      }
+      userId = auth.buyerUserId;
     }
 
     const result = await listOffers({
@@ -427,7 +473,7 @@ router.get("/offers", async (req, res) => {
 /** POST /api/social/chat/send — moderated in-app DM */
 router.post("/chat/send", async (req, res) => {
   try {
-    const payload = { ...(req.body || {}) };
+    let payload = { ...(req.body || {}) };
     const hasSellerContext = hasSellerSessionContext(req, payload);
 
     if (hasSellerContext) {
@@ -446,6 +492,15 @@ router.post("/chat/send", async (req, res) => {
         });
       }
       payload.senderUserId = auth.sellerUserId;
+    } else {
+      const gated = await applyBuyerIdentityAuth(req, payload, "senderUserId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      payload = gated.payload || payload;
     }
 
     const result = await sendDirectMessage(payload);
@@ -489,6 +544,26 @@ router.get("/chat/thread", async (req, res) => {
 
       userAId = matchesA ? auth.sellerUserId : userAId;
       userBId = matchesB ? auth.sellerUserId : userBId;
+    } else if (hasBuyerSessionContext(req, req.query || {})) {
+      const auth = await resolveAuthenticatedBuyerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || 403).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+      const requestedUserA = Number(req.query.userAId);
+      const requestedUserB = Number(req.query.userBId);
+      const matchesA = Number.isInteger(requestedUserA) && requestedUserA > 0 && requestedUserA === auth.buyerUserId;
+      const matchesB = Number.isInteger(requestedUserB) && requestedUserB > 0 && requestedUserB === auth.buyerUserId;
+      if (!matchesA && !matchesB) {
+        return res.status(403).json({
+          error: "buyer_session_mismatch",
+          message: "Buyer session does not match the chat thread participants in this request.",
+        });
+      }
+      userAId = matchesA ? auth.buyerUserId : userAId;
+      userBId = matchesB ? auth.buyerUserId : userBId;
     }
 
     const result = await getDirectThread({
@@ -512,7 +587,14 @@ router.get("/chat/thread", async (req, res) => {
 /** POST /api/social/reviews/create — review only after delivered/completed order */
 router.post("/reviews/create", async (req, res) => {
   try {
-    const result = await createOrderReview(req.body || {});
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "buyerUserId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await createOrderReview(gated.payload || {});
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,

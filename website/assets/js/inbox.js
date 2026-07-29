@@ -145,6 +145,33 @@ function renderMessages(messages) {
   wrap.scrollTop = wrap.scrollHeight;
 }
 
+function isBuyerSessionAuthError(payload) {
+  const code = String(payload?.error || "")
+    .trim()
+    .toLowerCase();
+  return (
+    code === "session_required" ||
+    code === "session_invalid" ||
+    code === "session_expired" ||
+    code === "buyer_session_mismatch"
+  );
+}
+
+function resolveViewerId() {
+  if (state.sellerAuthRequired) {
+    return parsePositiveInt(
+      new URLSearchParams(window.location.search).get("viewer") ||
+        new URLSearchParams(window.location.search).get("viewerUserId")
+    );
+  }
+  const sessionUserId = window.SokoniBuyerAuth?.readSession?.()?.userId;
+  if (Number.isInteger(sessionUserId) && sessionUserId > 0) return sessionUserId;
+  return parsePositiveInt(
+    new URLSearchParams(window.location.search).get("viewer") ||
+      new URLSearchParams(window.location.search).get("viewerUserId")
+  );
+}
+
 async function loadThread() {
   if (!state.viewerId || !state.peerId) return;
   try {
@@ -156,6 +183,8 @@ async function loadThread() {
     if (state.sellerAuthRequired && state.sellerSession?.phone && state.sellerSession?.sessionToken) {
       params.set("phone", state.sellerSession.phone);
       params.set("sessionToken", state.sellerSession.sessionToken);
+    } else if (window.SokoniBuyerAuth?.appendAuthQuery) {
+      window.SokoniBuyerAuth.appendAuthQuery(params);
     }
     const url = `${SOCIAL_API}/chat/thread?${params.toString()}`;
     const res = await fetch(url);
@@ -163,6 +192,10 @@ async function loadThread() {
     if (!res.ok) {
       if (res.status === 401 && isSellerSessionAuthError(data)) {
         setStatus(data?.message || "Seller session imeexpire - rudi dashboard uverify tena.", true);
+        return;
+      }
+      if (isBuyerSessionAuthError(data)) {
+        setStatus(data?.message || "Verify your WhatsApp above to open this chat.", true);
         return;
       }
       setStatus(data?.message || data?.error || "Could not load inbox thread.", true);
@@ -181,7 +214,7 @@ async function sendMessage(text) {
   const btn = el("chat-send-btn");
   if (btn) btn.disabled = true;
   try {
-    const payload = {
+    let payload = {
       senderUserId: state.viewerId,
       receiverUserId: state.peerId,
       content: body,
@@ -189,6 +222,8 @@ async function sendMessage(text) {
     if (state.sellerAuthRequired && state.sellerSession?.phone && state.sellerSession?.sessionToken) {
       payload.phone = state.sellerSession.phone;
       payload.sessionToken = state.sellerSession.sessionToken;
+    } else if (window.SokoniBuyerAuth?.authFields) {
+      payload = window.SokoniBuyerAuth.authFields(payload);
     }
     const res = await fetch(`${SOCIAL_API}/chat/send`, {
       method: "POST",
@@ -199,6 +234,10 @@ async function sendMessage(text) {
     if (!res.ok) {
       if (res.status === 401 && isSellerSessionAuthError(data)) {
         setStatus(data?.message || "Seller session imeexpire - rudi dashboard uverify tena.", true);
+        return;
+      }
+      if (isBuyerSessionAuthError(data)) {
+        setStatus(data?.message || "Verify your WhatsApp above to send messages.", true);
         return;
       }
       setStatus(data?.message || data?.error || "Message not sent.", true);
@@ -215,11 +254,11 @@ async function sendMessage(text) {
 
 function parseQuery() {
   const params = new URLSearchParams(window.location.search);
-  state.viewerId = parsePositiveInt(params.get("viewer") || params.get("viewerUserId"));
   state.peerId = parsePositiveInt(params.get("with") || params.get("peer") || params.get("receiver"));
   state.peerHandle = normalizeHandle(params.get("handle") || "");
   state.sellerAuthRequired = isSellerAuthQueryFlag(params.get("sellerAuth"));
   state.sellerSession = state.sellerAuthRequired ? readSellerSessionFromStorage() : null;
+  state.viewerId = resolveViewerId();
 }
 
 function startPolling() {
@@ -227,12 +266,37 @@ function startPolling() {
   state.pollTimer = setInterval(loadThread, 7000);
 }
 
+function hideBuyerAuthPanel() {
+  el("buyer-auth-panel")?.classList.add("hidden");
+}
+
 function init() {
   parseQuery();
   setPeerLabel();
 
+  if (state.sellerAuthRequired) {
+    hideBuyerAuthPanel();
+  } else {
+    window.SokoniBuyerAuth?.bindPanel?.({
+      onVerified: () => {
+        state.viewerId = resolveViewerId();
+        setPeerLabel();
+        if (state.viewerId && state.peerId && state.viewerId !== state.peerId) {
+          setStatus("WhatsApp verified — you can chat now.");
+          loadThread();
+          startPolling();
+        }
+      },
+    });
+  }
+
   if (!state.viewerId || !state.peerId || state.viewerId === state.peerId) {
-    setStatus("Open this page from a shop profile with valid viewer and seller IDs.", true);
+    setStatus(
+      state.sellerAuthRequired
+        ? "Open this page from a shop profile with valid viewer and seller IDs."
+        : "Verify your WhatsApp above, or open this page from a shop with a valid seller ID.",
+      true
+    );
     disableChatComposer();
     return;
   }
