@@ -742,3 +742,22 @@ html.dark .sell-offer-action--handled[data-handled="1"] {
   background: rgba(37, 211, 102, 0.24);
   border-color: rgba(37, 211, 102, 0.56);
 }
+
+/* Moderation visibility on My listings */
+.sell-listing-card--hidden {
+  border-color: rgba(185, 28, 28, 0.28);
+  background: rgba(254, 226, 226, 0.35);
+}
+
+html.dark .sell-listing-card--hidden {
+  border-color: rgba(252, 165, 165, 0.35);
+  background: rgba(127, 29, 29, 0.25);
+}
+
+.sell-moderation-reason {
+  line-height: 1.4;
+}
+
+.sell-moderation-hint {
+  line-height: 1.45;
+}

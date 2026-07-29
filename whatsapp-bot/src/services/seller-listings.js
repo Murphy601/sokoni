@@ -27,7 +27,7 @@ import {
 import { processListingWithStudio } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
-import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing } from "./listing-moderation.js";
+import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, summarizeModeration } from "./listing-moderation.js";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -401,22 +401,26 @@ export async function listSellerListings(phone, sessionToken) {
     const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
     live = master
       .filter((p) => p.supplierId === check.supplier.id)
-      .map((p) => ({
-        id: p.id,
-        productId: p.id,
-        status: p.moderation?.status === "hidden" || p.inStock === false ? "hidden" : "live",
-        draft: {
-          name: p.name,
-          sourcePriceKes: p.sourcePriceKes,
-          sellerNetKes: p.sellerNetKes ?? p.sourcePriceKes,
-          priceKes: p.priceKes,
-          buyerTotalKes: p.priceKes,
-        },
-        imageUrl: p.imageUrl,
-        images: p.images,
-        moderation: p.moderation,
-        createdAt: p.publishedAt || null,
-      }))
+      .map((p) => {
+        const moderationSummary = summarizeModeration(p.moderation || {}, { inStock: p.inStock });
+        return {
+          id: p.id,
+          productId: p.id,
+          status: moderationSummary.status === "hidden" ? "hidden" : "live",
+          draft: {
+            name: p.name,
+            sourcePriceKes: p.sourcePriceKes,
+            sellerNetKes: p.sellerNetKes ?? p.sourcePriceKes,
+            priceKes: p.priceKes,
+            buyerTotalKes: p.priceKes,
+          },
+          imageUrl: p.imageUrl,
+          images: p.images,
+          moderation: p.moderation,
+          moderationSummary,
+          createdAt: p.publishedAt || null,
+        };
+      })
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch {}
 

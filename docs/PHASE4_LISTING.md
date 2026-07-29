@@ -9,6 +9,7 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 ## Slices
 
 1. **Listing readiness polish** — seller-net test fix, AI fallback copy, flagged moderation endpoint help, env notes
+2. **Moderation visibility** — seller hidden reasons, admin review queue page, moderation helper tests
 
 ## Seller workflow
 
@@ -69,6 +70,10 @@ POST /admin/suppliers/seller-listings/:productId/takedown?token=...
 POST /admin/suppliers/seller-listings/:productId/restore?token=...
 ```
 
+Website queue (token-gated): `https://sokonimall.com/admin-seller-listings.html?token=...`
+
+Seller “My listings” shows human-readable reasons (e.g. Off-platform contact) and review guidance when a listing is hidden. Share links are withheld for hidden items.
+
 ## Moderation rules (automated)
 
 - Off-platform contact: phone numbers, URLs, WhatsApp/Telegram/social links
@@ -90,11 +95,14 @@ Failed scans → listing hidden (`inStock: false`), seller + admin notified on W
 ```bash
 cd whatsapp-bot
 npm run test:listing
+npm run test:listing-moderation
 node scripts/test-seller-fees.mjs
 curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.tool
 ```
 
-Manual: open `suppliers/list.html` → media step shows AI status from `/meta` → post a test item as an approved seller.
+Manual:
+1. Seller dashboard → My listings shows reason + hint when status is `hidden`
+2. Open `/admin-seller-listings.html?token=…` → restore / keep removed
 
 ## Next: Phase 5.1
 

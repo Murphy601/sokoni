@@ -616,9 +616,10 @@ async function onPublish() {
     el("success-box")?.classList.remove("hidden");
     el("success-ref").textContent = data.productId || "";
     el("success-status").textContent =
-      data.status === "hidden_pending_review"
-        ? "Posted but hidden pending review — we'll WhatsApp you."
-        : "Your listing is live on Sokoni now.";
+      data.message ||
+      (data.status === "hidden_pending_review"
+        ? "Posted but hidden pending review — check My listings for the reason, or wait for WhatsApp."
+        : "Your listing is live on Sokoni now.");
     el("wizard-root")?.classList.add("hidden");
     localStorage.removeItem(DRAFT_KEY);
     await loadMyListings();
@@ -745,6 +746,7 @@ async function loadMyListings() {
     wrap.innerHTML = items
       .map((item) => {
         const status = item.status || "draft";
+        const summary = item.moderationSummary || {};
         const badge =
           status === "live"
             ? "bg-brand-green/20 text-brand-purple dark:text-brand-green"
@@ -756,13 +758,17 @@ async function loadMyListings() {
         const pid = item.productId || item.id;
         const price = item.draft?.buyerTotalKes ?? item.draft?.priceKes ?? item.draft?.sourcePriceKes;
         const shareUrl = `https://sokonimall.com/?q=${encodeURIComponent(pid)}`;
+        const reason = summary.reason || (Array.isArray(summary.labels) ? summary.labels.join(" · ") : "");
+        const hint = summary.sellerHint || "";
         return `
-          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start" data-product-id="${pid}">
+          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${pid}">
             ${img ? `<img src="../${img}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : ""}
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate">${title}</p>
               <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${pid}${price ? ` · ${formatKes(price)}` : ""}</p>
               <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${status}</span>
+              ${status === "hidden" && reason ? `<p class="sell-moderation-reason mt-2 text-xs font-medium text-red-700 dark:text-red-300">${reason}</p>` : ""}
+              ${status === "hidden" && hint ? `<p class="sell-moderation-hint mt-1 text-xs text-brand-purple/65 dark:text-white/65">${hint}</p>` : ""}
               ${status === "live" ? `
               <div class="flex flex-wrap gap-2 mt-3">
                 <button type="button" class="text-xs font-semibold text-brand-green hover:underline refresh-listing-btn" data-id="${pid}">↻ Refresh listing</button>

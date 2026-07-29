@@ -401,7 +401,8 @@ function adminHelpText() {
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
     `🆔 *#SK-1042 <message>* — message one customer\n` +
-    `🏪 Seller listings — GET /admin/suppliers/seller-listings/flagged?token=...\n` +
+    `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
+    `   · GET /admin/suppliers/seller-listings/flagged?token=...\n` +
     `   · POST …/seller-listings/:productId/takedown?token=…\n` +
     `   · POST …/seller-listings/:productId/restore?token=…\n\n` +
     `🛠️ *Platform ops (Phase 9)*\n` +
