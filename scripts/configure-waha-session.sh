@@ -37,13 +37,15 @@ session_store_enabled() {
 
 wait_waha() {
   local i
-  for i in $(seq 1 30); do
+  for i in $(seq 1 60); do
     if curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
   done
   echo "ERROR: WAHA API not ready at $WAHA_URL"
+  waha_print_status
+  waha_print_recent_logs 60
   exit 1
 }
 

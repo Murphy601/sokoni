@@ -61,7 +61,40 @@ export async function onboardSellerAsync(payload) {
   const session = await validateSellerSession(phone, token);
   if (session.error) return session;
 
-  return onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId });
+  const result = onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId });
+  if (result.error) return result;
+
+  // Provision Postgres users + sellers so activity / public shop / PATCH profile work.
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    if (isDbEnabled()) {
+      const { ensureSellerSocialProfile } = await import("../db/repositories/users.js");
+      const ensured = await ensureSellerSocialProfile({
+        phone: result.seller?.phone || session.phone,
+        handle: result.seller?.shopHandle || shopHandle || shopName,
+        shopName: result.seller?.businessName || shopName,
+        location: result.seller?.city || null,
+        mpesaNumber: result.seller?.mpesaNumber || mpesaNumber,
+        isVerified: true,
+      });
+      if (!ensured.error && ensured.user?.handle) {
+        result.seller = {
+          ...result.seller,
+          shopHandle: ensured.user.handle.startsWith("@")
+            ? ensured.user.handle
+            : `@${ensured.user.handle}`,
+          socialUserId: ensured.user.id,
+          dbSellerId: ensured.seller?.id || null,
+        };
+      } else if (ensured.error) {
+        console.warn("[seller-onboard] social profile ensure failed:", ensured.error, ensured.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] social profile ensure skipped:", err.message);
+  }
+
+  return result;
 }
 
 export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId }) {

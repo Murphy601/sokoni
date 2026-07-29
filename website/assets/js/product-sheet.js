@@ -45,14 +45,13 @@
 
   function askInboxLink(product) {
     const sellerUserId = resolveSellerUserId(product);
+    const handle = normalizeHandleValue(sellerHandle(product));
+    if (!sellerUserId && !handle) return "";
     const viewerId = resolveViewerUserId();
-    if (!sellerUserId) return "";
-    const params = new URLSearchParams({
-      with: String(sellerUserId),
-    });
+    const params = new URLSearchParams();
+    if (sellerUserId) params.set("with", String(sellerUserId));
     if (viewerId) params.set("viewer", String(viewerId));
     if (product?.id) params.set("product", String(product.id));
-    const handle = normalizeHandleValue(sellerHandle(product));
     if (handle) params.set("handle", handle);
     return `inbox.html?${params.toString()}`;
   }
@@ -175,9 +174,12 @@
 
   function offerActionBlock(product) {
     const sellerId = resolveSellerUserId(product);
+    const handle = normalizeHandleValue(sellerHandle(product));
     const listedPrice = resolveListedPriceKes(product);
-    if (!sellerId || !listedPrice) return "";
-    if (viewerUserId && viewerUserId === sellerId) return "";
+    // Show offer UI when we have a price and either a social seller id or a shop handle
+    // (handle is resolved to sellerUserId before submit).
+    if (!listedPrice || (!sellerId && !handle)) return "";
+    if (viewerUserId && sellerId && viewerUserId === sellerId) return "";
     const suggested = defaultOfferKes(product);
     return `
       <button type="button" id="product-sheet-offer-toggle" class="product-sheet-save">💸 Make an offer</button>
@@ -203,6 +205,27 @@
       </form>
       <p id="product-sheet-offer-status" class="product-sheet-offer-status"></p>
     `;
+  }
+
+  async function ensureSellerUserId(product) {
+    const existing = resolveSellerUserId(product);
+    if (existing) return existing;
+    const handle = normalizeHandleValue(sellerHandle(product));
+    if (!handle) return null;
+    try {
+      const res = await fetch(`${SOCIAL_API_BASE}/shop/${encodeURIComponent(handle)}?limit=1`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return null;
+      const userId = Number(data?.shop?.userId);
+      if (!Number.isInteger(userId) || userId < 1) return null;
+      product.sellerUserId = userId;
+      if (currentProduct && currentProduct.id === product.id) {
+        currentProduct.sellerUserId = userId;
+      }
+      return userId;
+    } catch {
+      return null;
+    }
   }
 
   function renderBody(product) {
@@ -266,13 +289,12 @@
   }
 
   async function submitOffer(product) {
-    const sellerUserId = resolveSellerUserId(product);
     viewerUserId = resolveViewerUserId();
     const buyerUserId = viewerUserId;
     const amountInput = document.getElementById("product-sheet-offer-amount");
     const submitBtn = document.getElementById("product-sheet-offer-submit");
     const listedPrice = resolveListedPriceKes(product);
-    if (!amountInput || !submitBtn || !sellerUserId || !listedPrice) return;
+    if (!amountInput || !submitBtn || !listedPrice) return;
     if (!buyerUserId) {
       setOfferStatus("Verify your WhatsApp above to send an offer.", "error");
       document.getElementById("buyer-auth-phone")?.focus();
@@ -294,6 +316,11 @@
     submitBtn.disabled = true;
     setOfferStatus("Sending offer...");
     try {
+      const sellerUserId = await ensureSellerUserId(product);
+      if (!sellerUserId) {
+        setOfferStatus("This shop is not ready for offers yet — try Ask on WhatsApp.", "error");
+        return;
+      }
       const payload = window.SokoniBuyerAuth?.authFields
         ? window.SokoniBuyerAuth.authFields({
             productId: product.id,
@@ -380,7 +407,7 @@
     btn.textContent = saved ? "♥ Saved" : "♡ Save for later";
   }
 
-  function open(product) {
+  async function open(product) {
     if (!product) return;
     viewerUserId = resolveViewerUserId();
     currentProduct = product;
@@ -393,6 +420,17 @@
     sheet.classList.add("is-open");
     sheet.removeAttribute("hidden");
     document.body.classList.add("sheet-open");
+    // Resolve seller social id in background so Ask/Offer can target inbox.
+    void ensureSellerUserId(product).then((sellerUserId) => {
+      if (!sellerUserId || !currentProduct || currentProduct.id !== product.id) return;
+      const ask = document.querySelector("#product-sheet-body .product-sheet-ask[href*='whatsapp']");
+      if (ask && askInboxLink(currentProduct)) {
+        ask.setAttribute("href", askInboxLink(currentProduct));
+        ask.removeAttribute("target");
+        ask.removeAttribute("rel");
+        ask.textContent = "💬 Message seller on Sokoni";
+      }
+    });
   }
 
   function close() {
