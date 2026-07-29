@@ -74,9 +74,8 @@
       .join("");
     mount.outerHTML = `
   <header class="depop-shell-header" aria-label="Sokoni Mall">
-    <p class="depop-top-banner">100% prepaid escrow · SK tracking · delivery &amp; pickup countrywide</p>
     <div class="depop-main-bar">
-      <a href="index.html" class="depop-logo">SOKONI<span> MALL</span></a>
+      <a href="index.html" class="depop-logo">SOKONI<span class="depop-logo-dot">.</span><span class="depop-logo-mall"> MALL</span></a>
       <div class="depop-header-actions ml-auto">${links}</div>
     </div>
   </header>`;

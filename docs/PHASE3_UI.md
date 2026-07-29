@@ -1,13 +1,14 @@
 # Phase 3 — Depop storefront shell
 
-Homepage (`index.html`) uses a **Depop-style layout** with Sokoni design tokens (cream / purple / WhatsApp green actions).
+Homepage (`index.html`) uses a **Depop-style matte dark shell**: black chrome, scarlet CTAs, emerald only for escrow/trust chips.
 
 ## Slices
 
-1. **Shell baseline** — prepaid trust banner, token-aligned chrome, shippable bottom nav
+1. **Shell baseline** — token-aligned chrome, shippable bottom nav
 2. **Buyer profile page** — `profile.html`, WhatsApp session, saved count, Profile tab
 3. **Cross-page shell parity** — shared header + bottom nav on activity / inbox / shop / track / profile
-4. **Hero polish** — single brand-first full-bleed hero; curated chips moved below New arrivals
+4. **Hero polish** — brand-first hero; curated chips below New arrivals
+5. **Depop dark fix** — remove neon top banner, matte black + `#FF2300` CTAs, auto-play hero carousel (no lockup graphic)
 
 Phase 3 UI slices above are **complete**. Later product work is Phase 4+.
 
@@ -15,9 +16,9 @@ Phase 3 UI slices above are **complete**. Later product work is Phase 4+.
 
 | Element | File |
 |---------|------|
-| Sticky header + prepaid banner | `assets/css/depop-shell.css`, `index.html` |
+| Sticky header (no green trust strip) | `assets/css/depop-shell.css`, `index.html`, `shell-chrome.js` |
 | Category strip (Women, Men, Pre-Loved, Brand New…) | `index.html` + `assets/js/depop-nav.js` |
-| Brand hero (Sokoni + one headline + CTAs) | `depop-shell.css` + `depop-hero-carousel.js` |
+| Hero carousel (buyers / sellers / escrow) | `depop-shell.css` + `depop-hero-carousel.js` |
 | Photo grid first (`#deals`) | `index.html` |
 | Curated collections | after `#deals` (not in first viewport) |
 | Mobile bottom nav (Home, Explore, Sell, Inbox, Profile) | `depop-shell.css` + `index.html` / `shell-chrome.js` |
@@ -31,13 +32,14 @@ Phase 3 UI slices above are **complete**. Later product work is Phase 4+.
 - Product cards show **PREPAID** badge (not COD)
 - Legacy marketing blocks (features, how-it-works, WhatsApp float) hidden via `.depop-marketing-extra`
 
-## Visual system
+## Visual system (storefront shell)
 
-Follow `website/DESIGN.md` / design tokens — Depop is **layout density** inspiration only:
-
-- Surface cream, ink purple, green for actions / focus / Sell
-- Display: Fraunces · Body: DM Sans
+- Surface matte black `#000` / elevated `#09090b`
+- Primary CTA scarlet `#FF2300` (Sell, hero primary)
+- Emerald only for escrow / Pre-Loved trust accents
+- Logo: heavy sans `SOKONI.` (not serif lockup / bucket graphic)
 - Touch targets ≥ 44px; focus-visible rings on shell controls
+- Theme toggle kept; shell chrome stays Depop-dark
 
 ## Hero rules (slice 4)
 
