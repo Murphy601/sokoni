@@ -155,7 +155,7 @@ html.dark .shop-mobile-sell {
 }
 
 .depop-card:focus-visible {
-  outline: 2px solid #ff2300;
+  outline: 2px solid var(--color-primary, #25d366);
   outline-offset: 2px;
 }
 
