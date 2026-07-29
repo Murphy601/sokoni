@@ -14,6 +14,8 @@ const state = {
   likedProductIds: new Set(),
   currentShop: null,
   reviewsRequestToken: 0,
+  socialListRequestToken: 0,
+  socialListDirection: null,
 };
 
 function el(id) {
@@ -311,6 +313,8 @@ function renderShopHeader(payload) {
   el("shop-followers-count").textContent = String(Number(stats.followersCount || 0));
   el("shop-following-count").textContent = String(Number(stats.followingCount || 0));
   el("shop-likes-count").textContent = String(Number(stats.likesReceivedCount || 0));
+  bindSocialListButtons(shop);
+  closeSocialList();
 
   const avatarWrap = el("shop-avatar");
   if (avatarWrap) {
@@ -332,6 +336,126 @@ function renderShopHeader(payload) {
   renderFollowButton(shop, stats);
   renderMessageButton(shop);
   void loadShopReviews(shop, stats);
+}
+
+function socialListUserRow(user) {
+  const handle = normalizeHandle(user?.handle || "");
+  const name = escapeHtml(user?.shopName || user?.displayName || handle || `User ${user?.userId || ""}`);
+  const handleLabel = handle ? `@${escapeHtml(handle)}` : "No handle yet";
+  const href = handle
+    ? `shop.html?handle=${encodeURIComponent(handle)}${
+        state.viewerUserId ? `&viewer=${encodeURIComponent(String(state.viewerUserId))}` : ""
+      }`
+    : "";
+  const verified = user?.isSellerVerified
+    ? `<span class="text-[10px] font-semibold text-brand-green">Verified</span>`
+    : "";
+  const inner = `
+    <div class="min-w-0">
+      <p class="text-sm font-semibold truncate">${name}</p>
+      <p class="text-xs text-brand-purple/55 dark:text-white/65 truncate">${handleLabel}</p>
+    </div>
+    ${verified}`;
+  if (!href) {
+    return `<div class="flex items-center justify-between gap-3 py-2 border-b border-black/5 dark:border-white/10 last:border-0">${inner}</div>`;
+  }
+  return `<a href="${href}" class="flex items-center justify-between gap-3 py-2 border-b border-black/5 dark:border-white/10 last:border-0 hover:text-brand-green focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green rounded-lg">${inner}</a>`;
+}
+
+function setSocialListExpanded(direction, expanded) {
+  const panel = el("shop-social-list");
+  const followersBtn = el("shop-followers-btn");
+  const followingBtn = el("shop-following-btn");
+  if (followersBtn) followersBtn.setAttribute("aria-expanded", direction === "followers" && expanded ? "true" : "false");
+  if (followingBtn) followingBtn.setAttribute("aria-expanded", direction === "following" && expanded ? "true" : "false");
+  if (!panel) return;
+  if (expanded) {
+    panel.classList.remove("hidden");
+    panel.removeAttribute("hidden");
+  } else {
+    panel.classList.add("hidden");
+    panel.setAttribute("hidden", "");
+  }
+}
+
+function closeSocialList() {
+  state.socialListDirection = null;
+  state.socialListRequestToken += 1;
+  setSocialListExpanded(null, false);
+  const body = el("shop-social-list-body");
+  const empty = el("shop-social-list-empty");
+  if (body) body.innerHTML = "";
+  if (empty) empty.classList.add("hidden");
+}
+
+async function openSocialList(direction) {
+  const shopUserId = Number(state.currentShop?.userId);
+  const panelTitle = el("shop-social-list-title");
+  const body = el("shop-social-list-body");
+  const empty = el("shop-social-list-empty");
+  if (!panelTitle || !body || !empty) return;
+
+  if (state.socialListDirection === direction) {
+    closeSocialList();
+    return;
+  }
+
+  if (!Number.isInteger(shopUserId) || shopUserId < 1) {
+    statusMessage("This shop profile is not linked to a user account yet.", true);
+    return;
+  }
+
+  state.socialListDirection = direction;
+  const token = state.socialListRequestToken + 1;
+  state.socialListRequestToken = token;
+  setSocialListExpanded(direction, true);
+  panelTitle.textContent = direction === "following" ? "Following" : "Followers";
+  body.innerHTML = `<p class="text-sm text-brand-purple/60 dark:text-white/65">Loading…</p>`;
+  empty.classList.add("hidden");
+
+  try {
+    const res = await fetch(
+      `${SHOP_API_BASE}/users/${shopUserId}/${direction === "following" ? "following" : "followers"}?limit=40`
+    );
+    const data = await res.json().catch(() => ({}));
+    if (token !== state.socialListRequestToken) return;
+    if (!res.ok) {
+      body.innerHTML = "";
+      empty.textContent = data?.message || "Could not load this list right now.";
+      empty.classList.remove("hidden");
+      return;
+    }
+    const users = Array.isArray(data?.users) ? data.users : [];
+    if (!users.length) {
+      body.innerHTML = "";
+      empty.textContent =
+        direction === "following" ? "Not following anyone yet." : "No followers yet.";
+      empty.classList.remove("hidden");
+      return;
+    }
+    empty.classList.add("hidden");
+    body.innerHTML = users.map((user) => socialListUserRow(user)).join("");
+  } catch {
+    if (token !== state.socialListRequestToken) return;
+    body.innerHTML = "";
+    empty.textContent = "Could not load this list right now.";
+    empty.classList.remove("hidden");
+  }
+}
+
+function bindSocialListButtons(shop) {
+  const shopUserId = Number(shop?.userId);
+  const canOpen = Number.isInteger(shopUserId) && shopUserId > 0;
+  const followersBtn = el("shop-followers-btn");
+  const followingBtn = el("shop-following-btn");
+  if (followersBtn) {
+    followersBtn.disabled = !canOpen;
+    followersBtn.onclick = canOpen ? () => openSocialList("followers") : null;
+  }
+  if (followingBtn) {
+    followingBtn.disabled = !canOpen;
+    followingBtn.onclick = canOpen ? () => openSocialList("following") : null;
+  }
 }
 
 function renderFollowButton(shop, stats) {
@@ -551,6 +675,7 @@ async function loadShop(handle) {
   el("shop-products-grid").innerHTML = "";
   el("shop-products-empty")?.classList.add("hidden");
   resetReviewsUi();
+  closeSocialList();
 
   try {
     const query = shopFetchQuery({ limit: 24 });
@@ -593,6 +718,8 @@ function init() {
       statusMessage("WhatsApp verified — you can follow and like now.");
     },
   });
+
+  el("shop-social-list-close")?.addEventListener("click", () => closeSocialList());
 
   if (form) {
     form.addEventListener("submit", (ev) => {

@@ -9,6 +9,7 @@ import {
   listSellerReviews,
   getUserSocialStats,
   listOffers,
+  listUserFollowConnections,
   resetSellerHandledOfferQueue,
   respondToOffer,
   sendOfferReminder,
@@ -109,6 +110,48 @@ router.get("/users/:userId/stats", async (req, res) => {
       });
     }
     res.json({ stats: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/users/:userId/followers — people who follow this user */
+router.get("/users/:userId/followers", async (req, res) => {
+  try {
+    const result = await listUserFollowConnections({
+      userId: req.params.userId,
+      direction: "followers",
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/users/:userId/following — people this user follows */
+router.get("/users/:userId/following", async (req, res) => {
+  try {
+    const result = await listUserFollowConnections({
+      userId: req.params.userId,
+      direction: "following",
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

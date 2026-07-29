@@ -1,6 +1,10 @@
-# Phase 2 — Social Engine & Seller Storefronts (slice 1)
+# Phase 2 — Social Engine & Seller Storefronts
 
-First slice after Phase 1 buyer OTP: **hydrate follow + like state on shop storefronts**, and dual-write homepage/bag hearts to social likes when a buyer session exists.
+Slices so far:
+
+1. Shop storefront follow/like hydration + bag dual-write
+2. Homepage/feed heart hydration from server liked set
+3. Follower / following lists on shop profiles
 
 ## What shipped
 
@@ -67,9 +71,19 @@ Optional auth: buyer session or `viewer` / `userId` query (soft mode).
 { "userId": 12, "likedProductIds": ["prod_abc"] }
 ```
 
+### Follower / following lists
+
+`GET /api/social/users/:userId/followers`
+
+`GET /api/social/users/:userId/following`
+
+Returns `{ userId, direction, users[], pagination }`.
+
+Shop page Followers / Following counters open an inline list with links to each handle.
+
 ## Out of scope (next slices)
 
-- Follower lists / activity feed
+- Activity feed / notifications
 - Seller storefront edit UI beyond listing wizard
 - WAHA / WhatsApp linking (deferred; not required for this slice)
 
@@ -89,3 +103,4 @@ Manual:
 2. Verify WhatsApp → shop reloads with `viewer` → Follow / Liked state matches DB
 3. Toggle follow + like → refresh → state persists
 4. With session, homepage ♡ still saves to bag and dual-writes social like
+5. Tap Followers / Following on a shop → list loads with handle links

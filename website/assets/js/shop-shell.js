@@ -20,7 +20,7 @@
     try {
       const raw = localStorage.getItem(BAG_KEY);
       const arr = raw ? JSON.parse(raw) : [];
-      bagIds = new Set(Array.isArray(arr) ? arr : []);
+      bagIds = new Set((Array.isArray(arr) ? arr : []).map((id) => String(id)));
     } catch {
       bagIds = new Set();
     }

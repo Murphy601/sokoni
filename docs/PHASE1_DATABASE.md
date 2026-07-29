@@ -135,6 +135,14 @@ Body:
 }
 ```
 
+### Follow graph lists
+
+`GET /api/social/users/:userId/followers`
+
+`GET /api/social/users/:userId/following`
+
+Returns `{ userId, direction, users: [{ userId, handle, shopName, … }], pagination }`.
+
 ### Storefront social stats
 
 `GET /api/social/users/:userId/stats`
