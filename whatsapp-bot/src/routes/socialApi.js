@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createOrderReview,
   createOffer,
+  getAcceptedOfferForCheckout,
   getDirectThread,
   getShopProfileByHandle,
   listSellerHandledOfferQueueEvents,
@@ -53,6 +54,7 @@ function socialErrorStatus(error) {
   if (error === "database_not_configured") return 503;
   if (
     error === "forbidden_offer_action" ||
+    error === "forbidden_offer_checkout" ||
     error === "seller_session_mismatch" ||
     error === "buyer_session_mismatch"
   ) {
@@ -64,6 +66,9 @@ function socialErrorStatus(error) {
     error === "offer_not_pending" ||
     error === "offer_not_accepted" ||
     error === "offer_expired" ||
+    error === "product_unavailable" ||
+    error === "offer_above_list" ||
+    error === "offer_too_low_for_shipping" ||
     error === "review_exists"
   ) {
     return 409;
@@ -462,6 +467,40 @@ router.post("/offers/create", async (req, res) => {
       });
     }
     res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/social/offers/:offerId/checkout
+ * Buyer-only preview of agreed-price fee breakdown for an accepted offer.
+ * amount_kes is negotiated buyer all-in (same semantics as listing price_kes).
+ */
+router.get("/offers/:offerId/checkout", async (req, res) => {
+  try {
+    const gated = await applyBuyerIdentityAuth(
+      req,
+      { ...(req.query || {}), buyerUserId: req.query?.buyerUserId },
+      "buyerUserId"
+    );
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await getAcceptedOfferForCheckout({
+      offerId: req.params.offerId,
+      buyerUserId: gated.payload?.buyerUserId,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

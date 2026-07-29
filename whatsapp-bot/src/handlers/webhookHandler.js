@@ -7,6 +7,7 @@ import {
   changeOrder,
   handleCart,
   startCodOrder,
+  startPrepaidOrderFromOffer,
   sendHumanHandoff,
   tryNumberedMenuReply,
 } from "../services/menu.js";
@@ -393,6 +394,12 @@ export async function handleIncomingMessage(
 
   if (/^change(\s+order)?$/i.test(normalized) || normalized === "change order") {
     return changeOrder(customerKey);
+  }
+
+  // Accepted structured offer → prepaid checkout at agreed buyer total
+  const payOfferMatch = text.match(/^pay[_\s-]?offer[_\s-]?(\d+)$/i);
+  if (payOfferMatch) {
+    return startPrepaidOrderFromOffer(customerKey, payOfferMatch[1]);
   }
 
   if (await handleCatalogPagination(customerKey, text)) return;

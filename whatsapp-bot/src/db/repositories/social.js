@@ -1,4 +1,5 @@
 import { isDbEnabled, query } from "../pool.js";
+import { computeOfferFeeBreakdown } from "../../services/shipping-tiers.js";
 
 function parseUserId(value) {
   const n = Number(value);
@@ -154,6 +155,113 @@ async function expirePendingOffers() {
        AND expires_at IS NOT NULL
        AND expires_at <= NOW()`
   );
+  await query(
+    `UPDATE offers
+      SET status = 'expired', updated_at = NOW()
+     WHERE status = 'accepted'
+       AND expires_at IS NOT NULL
+       AND expires_at <= NOW()`
+  );
+}
+
+/**
+ * Resolve an accepted (non-expired) offer for prepaid checkout at the agreed buyer total.
+ * amount_kes is treated as negotiated buyer all-in (same as listing price_kes).
+ */
+export async function getAcceptedOfferForCheckout({ offerId, buyerUserId } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const oid = parseOfferId(offerId);
+  const buyerId = parseUserId(buyerUserId);
+  if (!oid || !buyerId) {
+    return {
+      error: "invalid_offer_checkout",
+      message: "offerId and buyerUserId are required.",
+    };
+  }
+
+  await expirePendingOffers();
+
+  const { rows } = await query(
+    `SELECT
+       o.*,
+       p.title AS product_title,
+       p.price_kes AS product_price_kes,
+       p.shipping_kes AS product_shipping_kes,
+       p.primary_image_url AS product_image_url,
+       p.in_stock AS product_in_stock,
+       p.is_sold AS product_is_sold,
+       buyer.handle AS buyer_handle,
+       buyer.shop_name AS buyer_shop_name,
+       seller.handle AS seller_handle,
+       seller.shop_name AS seller_shop_name
+     FROM offers o
+     LEFT JOIN products p ON p.id = o.product_id
+     LEFT JOIN users buyer ON buyer.id = o.buyer_user_id
+     LEFT JOIN users seller ON seller.id = o.seller_user_id
+     WHERE o.id = $1
+     LIMIT 1`,
+    [oid]
+  );
+  const row = rows[0];
+  if (!row) {
+    return { error: "offer_not_found", message: "Offer not found." };
+  }
+  if (Number(row.buyer_user_id) !== buyerId) {
+    return { error: "forbidden_offer_checkout", message: "Only the buyer who made this offer can check out." };
+  }
+  if (row.status !== "accepted") {
+    return {
+      error: "offer_not_accepted",
+      message: row.status === "expired" ? "This offer has expired." : `Offer is ${row.status}.`,
+    };
+  }
+  if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+    await query(`UPDATE offers SET status = 'expired', updated_at = NOW() WHERE id = $1`, [oid]);
+    return { error: "offer_expired", message: "This accepted offer has expired. Make a new offer." };
+  }
+  if (row.product_is_sold === true || row.product_in_stock === false) {
+    return { error: "product_unavailable", message: "This item is no longer available." };
+  }
+
+  const listedTotal =
+    row.product_price_kes != null ? Math.round(Number(row.product_price_kes)) : null;
+  const agreed = Math.round(Number(row.amount_kes) || 0);
+  if (listedTotal != null && agreed > listedTotal) {
+    return {
+      error: "offer_above_list",
+      message: "Agreed offer cannot exceed the listed buyer price.",
+    };
+  }
+
+  const shippingKes = Math.round(Number(row.product_shipping_kes) || 0);
+  const freeShipping = shippingKes === 0;
+  const breakdown = computeOfferFeeBreakdown(agreed, shippingKes, { freeShipping });
+  if (breakdown.error) {
+    return {
+      error: breakdown.error,
+      message: breakdown.message,
+    };
+  }
+
+  return {
+    ok: true,
+    offer: mapOfferRow(row),
+    productId: row.product_id,
+    listedBuyerTotalKes: listedTotal,
+    breakdown: {
+      itemKes: breakdown.itemKes,
+      shippingKes: breakdown.shippingKes,
+      totalKes: breakdown.buyerTotalKes,
+      platformFeeKes: breakdown.platformFeeKes,
+      sellerNetKes: breakdown.sellerNetKes,
+      freeShipping: breakdown.freeShipping,
+      fromOffer: true,
+      agreedBuyerTotalKes: breakdown.agreedBuyerTotalKes,
+    },
+  };
 }
 
 /**

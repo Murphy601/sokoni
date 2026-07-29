@@ -226,6 +226,8 @@ Create/update pending offer:
 }
 ```
 
+`amountKsh` / `amount_kes` is the **agreed buyer all-in total** (same semantics as listing `price_kes`), not seller-net alone.
+
 Respond (seller):
 
 `POST /api/social/offers/:offerId/respond`
@@ -238,6 +240,14 @@ Respond (seller):
   "sessionToken": "seller-session-token"
 }
 ```
+
+On accept, `expires_at` is set to **now + 24 hours**. Buyer checkout must use this accepted offer before expiry.
+
+Checkout preview (buyer — fee breakdown at agreed price):
+
+`GET /api/social/offers/:offerId/checkout?buyerUserId=1&phone=2547…&sessionToken=…`
+
+Returns `{ ok, offer, productId, listedBuyerTotalKes, breakdown }` where `breakdown.totalKes` equals the accepted offer amount. WhatsApp checkout: buyer replies `pay_offer_<id>` (STK uses the offer snapshot, not list price).
 
 Send reminder (seller, cooldown enforced server-side):
 

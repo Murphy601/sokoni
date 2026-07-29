@@ -123,12 +123,13 @@ export async function notifyBuyerOfferResponse({ offer } = {}) {
 
     let msg = "";
     if (status === "accepted") {
+      const payCmd = offer.id != null ? `pay_offer_${offer.id}` : "pay_offer";
       msg =
         `✅ *Offer accepted — Sokoni*\n\n` +
         `*${sellerLabel}* accepted your offer` +
         `${amount ? ` of *${amount}*` : ""} on *${title}*.\n\n` +
-        `Complete checkout within 24 hours.\n` +
-        `Activity: ${siteUrl("/activity.html")}`;
+        `Reply *${payCmd}* on WhatsApp to checkout at the agreed price (valid 24 hours).\n` +
+        `Or open Activity: ${siteUrl("/activity.html")}`;
     } else {
       msg =
         `ℹ️ *Offer update — Sokoni*\n\n` +

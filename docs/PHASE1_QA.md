@@ -22,7 +22,8 @@ Use two phones (buyer + seller) and one live listing with `seller_user_id` linke
 | 2 | Buyer: open shop/`product` sheet, verify WhatsApp (or soft `?viewer=` for demos) | Follow / like / offer actions work |
 | 3 | Buyer: send offer below list price | Offer appears in seller inbox as pending |
 | 4 | Seller: decline one offer | Buyer cannot chat on declined offer |
-| 5 | Buyer: send new offer → seller accepts | Chat unlocks; accepted card shows |
+| 5 | Buyer: send new offer → seller accepts | Chat unlocks; accepted card shows; WA ping includes `pay_offer_<id>` |
+| 5b | Buyer: reply `pay_offer_<id>` (or Activity → Pay on WhatsApp) | Pending order uses **agreed** total; STK amount matches offer, not list price |
 | 6 | Buyer + seller: exchange in-app messages | Phone numbers / “pay outside” blocked |
 | 7 | Seller: send reminder once, then again immediately | First OK; second `429 reminder_cooldown_active` |
 | 8 | Seller: mark offer handled, reload, unhandle, reset queue | State survives reload; audit events listable |

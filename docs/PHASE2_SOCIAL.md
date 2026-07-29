@@ -7,11 +7,12 @@ Slices so far:
 3. Follower / following lists on shop profiles
 4. Seller storefront profile edit (name, handle, bio, location, avatar URL)
 5. Seller shop activity feed (followers + likes)
-6. Buyer activity center (offer replies, follows, likes)
-7. Soft-fail WhatsApp pings for follow / like / offer reply
+6. Buyer activity center (offer replies, follows, likes) — accepted offers link to WhatsApp `pay_offer_<id>`
+7. Soft-fail WhatsApp pings for follow / like / offer reply (accept includes checkout command)
 8. Mute preference for WhatsApp social pings (`social_wa_notify`)
 9. Per-event mute (follows / likes / offers)
 10. WAHA linking ops (scripts + health/admin status)
+11. Structured offer → prepaid escrow: accepted `amount_kes` is buyer all-in; fee engine recalculates seller net + 10% without parsing chat text
 
 ## What shipped
 

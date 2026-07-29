@@ -733,22 +733,84 @@ export async function startCodOrder(to, productId) {
   return startPrepaidOrder(to, productId);
 }
 
-export async function startPrepaidOrder(to, productId) {
+function phoneDigitsFromChat(to) {
+  const metaPhone = getCustomerMeta(to)?.phone;
+  const raw = String(metaPhone || to || "").replace(/\D/g, "");
+  if (raw.startsWith("0") && raw.length >= 10) return `254${raw.slice(1)}`;
+  if (raw.length === 9) return `254${raw}`;
+  return raw;
+}
+
+/** Start prepaid checkout from an accepted structured offer (agreed buyer total). */
+export async function startPrepaidOrderFromOffer(to, offerId) {
+  try {
+    const { findOrCreateBuyerUserByPhone } = await import("../db/repositories/users.js");
+    const { getAcceptedOfferForCheckout } = await import("../db/repositories/social.js");
+    const phone = phoneDigitsFromChat(to);
+    const userResult = await findOrCreateBuyerUserByPhone(phone);
+    if (userResult.error || !userResult.user?.id) {
+      return sendText(
+        to,
+        "I couldn't match your WhatsApp to a Sokoni buyer profile. Open the site, verify WhatsApp, then reply *pay_offer_" +
+          String(offerId) +
+          "* again."
+      );
+    }
+    const checkout = await getAcceptedOfferForCheckout({
+      offerId,
+      buyerUserId: userResult.user.id,
+    });
+    if (checkout.error) {
+      return sendText(to, checkout.message || "That offer can't be checked out right now.");
+    }
+    return startPrepaidOrder(to, checkout.productId, {
+      offerId: checkout.offer.id,
+      totalsOverride: checkout.breakdown,
+    });
+  } catch (err) {
+    console.error("[offer-checkout] start failed:", err.message);
+    return sendText(to, "Couldn't start offer checkout right now. Try again in a moment.");
+  }
+}
+
+export async function startPrepaidOrder(to, productId, { offerId = null, totalsOverride = null } = {}) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
-  const totals = computeProductTotals(product);
+
+  let totals = totalsOverride;
+  let activeOfferId = offerId;
+
+  if (activeOfferId && !totals) {
+    return startPrepaidOrderFromOffer(to, activeOfferId);
+  }
+
+  if (!totals) {
+    totals = computeProductTotals(product);
+  }
+
   setPendingOrder(to, {
     productId: product.id,
     name: product.name,
     priceKes: totals.itemKes,
     shippingKes: totals.shippingKes,
     totalKes: totals.totalKes,
+    platformFeeKes: totals.platformFeeKes,
+    sellerNetKes: totals.sellerNetKes,
+    offerId: activeOfferId || null,
+    fromOffer: Boolean(activeOfferId),
   });
+
+  const offerNote = activeOfferId
+    ? `\n🤝 *Accepted offer* — paying agreed total *KES ${Number(totals.totalKes).toLocaleString()}* (not list price).\n`
+    : "";
+
   return sendText(
     to,
     `Great choice! 🛍️\n` +
       `*${product.name}*\n` +
-      `${formatBuyerTotalLine(totals)} (100% prepaid · escrow)\n\n` +
+      `${formatBuyerTotalLine(totals)} (100% prepaid · escrow)` +
+      offerNote +
+      `\n` +
       `To place your order, reply in *one message* with:\n` +
       `1️⃣ Your full name\n` +
       `2️⃣ Delivery location (estate/town + a landmark)\n` +
@@ -864,11 +926,23 @@ export async function confirmPrepaidOrder(to, parsed) {
 
   let order = null;
   try {
+    const totalsOverride =
+      pending.offerId && pending.totalKes != null
+        ? {
+            itemKes: pending.priceKes,
+            shippingKes: pending.shippingKes,
+            totalKes: pending.totalKes,
+            platformFeeKes: pending.platformFeeKes,
+            sellerNetKes: pending.sellerNetKes,
+          }
+        : null;
     order = createOrder({
       customerKey: to,
       chatId: meta.chatId || to,
       product: productForOrder,
       details,
+      offerId: pending.offerId || null,
+      totalsOverride,
     });
   } catch (err) {
     console.error("[order] createOrder failed (continuing):", err.message);
@@ -961,6 +1035,13 @@ export async function handleMenuAction(from, id) {
   if (id === "shop_all") return sendCategoryList(from);
   if (await isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
   if (await isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
+  if (id.startsWith("order_") && id.includes("_offer_")) {
+    const match = id.match(/^order_(.+)_offer_(\d+)$/i);
+    if (match) return startPrepaidOrder(from, match[1], { offerId: match[2] });
+  }
+  if (id.startsWith("pay_offer_")) {
+    return startPrepaidOrderFromOffer(from, id.replace(/^pay_offer_/i, ""));
+  }
   if (id.startsWith("order_")) return startPrepaidOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);
