@@ -216,6 +216,16 @@ function offerStatusClass(status) {
   return "bg-brand-purple/5 text-brand-purple dark:bg-white/10 dark:text-white";
 }
 
+function offerEscrowSummary(offer) {
+  const b = offer?.breakdown;
+  if (!b || b.totalKes == null || b.sellerNetKes == null) return "";
+  const ship =
+    b.freeShipping || !b.shippingKes
+      ? "shipping free"
+      : `shipping ${formatKes(b.shippingKes)}`;
+  return `<p class="text-[11px] text-brand-purple/65 dark:text-white/65 mt-1">Buyer pays ${escapeHtml(formatKes(b.totalKes))} into escrow · seller gets ${escapeHtml(formatKes(b.sellerNetKes))} (${escapeHtml(ship)} + fee ${escapeHtml(formatKes(b.platformFeeKes))})</p>`;
+}
+
 function offerCard(offer) {
   const id = Number(offer?.id);
   const status = String(offer?.status || "pending").toLowerCase();
@@ -224,6 +234,7 @@ function offerCard(offer) {
   const listed = formatKes(offer?.product?.priceKsh);
   const isSeller = Number(offer?.sellerUserId) === state.viewerId;
   const isBuyer = Number(offer?.buyerUserId) === state.viewerId;
+  const payTotal = formatKes(offer?.breakdown?.totalKes ?? offer?.amountKsh);
 
   let actions = "";
   if (isSeller && status === "pending" && Number.isInteger(id)) {
@@ -233,20 +244,21 @@ function offerCard(offer) {
     </div>`;
   } else if (isBuyer && status === "accepted" && Number.isInteger(id)) {
     actions = `<div class="mt-3">
-      <a href="checkout.html?offerId=${id}" class="inline-flex min-h-[40px] items-center px-4 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Pay ${escapeHtml(amount)} on Sokoni</a>
+      <a href="checkout.html?offerId=${id}" class="inline-flex min-h-[40px] items-center px-4 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Pay ${escapeHtml(payTotal)} on Sokoni</a>
     </div>`;
   }
 
   return `<article class="rounded-2xl border border-black/5 dark:border-white/10 bg-brand-cream/60 dark:bg-brand-purple/40 px-4 py-3">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <p class="text-[10px] uppercase tracking-wide text-brand-purple/50 dark:text-white/50 font-semibold">Bargain offer</p>
+        <p class="text-[10px] uppercase tracking-wide text-brand-purple/50 dark:text-white/50 font-semibold">Bargain offer · buyer total</p>
         <p class="text-sm font-semibold mt-0.5">${title}</p>
       </div>
       <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded ${offerStatusClass(status)}">${escapeHtml(status)}</span>
     </div>
     <p class="text-xl font-bold mt-2">${escapeHtml(amount)}</p>
     ${listed ? `<p class="text-[11px] text-brand-purple/50 dark:text-white/50 line-through">Was ${escapeHtml(listed)}</p>` : ""}
+    ${offerEscrowSummary(offer)}
     ${actions}
   </article>`;
 }
@@ -375,6 +387,19 @@ async function respondToOffer(offerId, action) {
     setStatus("Open this chat from the seller dashboard to accept offers.", true);
     return;
   }
+  if (action === "accepted") {
+    const offer = state.offers.find((o) => Number(o?.id) === id);
+    const b = offer?.breakdown;
+    if (b?.sellerNetKes != null) {
+      const ok = window.confirm(
+        `Buyer pays ${formatKes(b.totalKes)} into escrow.\n` +
+          `You receive ${formatKes(b.sellerNetKes)} after delivery` +
+          ` (shipping ${b.freeShipping || !b.shippingKes ? "free" : formatKes(b.shippingKes)},` +
+          ` Sokoni fee ${formatKes(b.platformFeeKes)}).\n\nAccept this offer?`
+      );
+      if (!ok) return;
+    }
+  }
   try {
     const res = await fetch(`${SOCIAL_API}/offers/${id}/respond`, {
       method: "POST",
@@ -391,7 +416,14 @@ async function respondToOffer(offerId, action) {
       setStatus(data?.message || data?.error || "Could not update offer.", true);
       return;
     }
-    setStatus(action === "accepted" ? "Offer accepted — buyer can pay on-site." : "Offer declined.");
+    const net = data.breakdown?.sellerNetKes ?? data.offer?.breakdown?.sellerNetKes;
+    setStatus(
+      action === "accepted"
+        ? net != null
+          ? `Offer accepted — you receive ${formatKes(net)} after delivery (buyer pays into escrow).`
+          : "Offer accepted — buyer can pay on-site into escrow."
+        : "Offer declined."
+    );
     await loadOffers();
   } catch {
     setStatus("Could not update offer right now.", true);
@@ -427,7 +459,13 @@ async function sendInboxOffer() {
       if (statusNode) statusNode.textContent = data?.message || data?.error || "Could not send offer.";
       return;
     }
-    if (statusNode) statusNode.textContent = "Offer sent — waiting for the seller.";
+    const b = data.breakdown || data.offer?.breakdown;
+    if (statusNode) {
+      statusNode.textContent =
+        b?.sellerNetKes != null
+          ? `Offer sent — you pay ${formatKes(b.totalKes)}, seller gets ${formatKes(b.sellerNetKes)} after delivery.`
+          : "Offer sent — waiting for the seller.";
+    }
     const amountInput = el("inbox-offer-amount");
     if (amountInput) amountInput.value = "";
     el("inbox-offer-composer")?.classList.add("hidden");

@@ -71,7 +71,27 @@
           listNode.textContent = "";
         }
       }
-      setOfferStatus("Enter delivery details, then continue to M-Pesa at the agreed price.");
+      const breakdownNode = document.getElementById("offer-checkout-breakdown");
+      if (breakdownNode) {
+        const b = data.breakdown || {};
+        const rows = [];
+        if (b.itemKes != null || b.sellerNetKes != null) {
+          rows.push(`<li>Item (seller receives) · ${formatKes(b.itemKes ?? b.sellerNetKes)}</li>`);
+        }
+        if (b.shippingKes != null) {
+          rows.push(
+            `<li>Shipping · ${b.freeShipping || !b.shippingKes ? "Free" : formatKes(b.shippingKes)}</li>`
+          );
+        }
+        if (b.platformFeeKes != null) {
+          rows.push(`<li>Sokoni fee (10%) · ${formatKes(b.platformFeeKes)}</li>`);
+        }
+        if (b.totalKes != null) {
+          rows.push(`<li><strong>You pay into escrow · ${formatKes(b.totalKes)}</strong></li>`);
+        }
+        breakdownNode.innerHTML = rows.join("");
+      }
+      setOfferStatus("Enter delivery details, then pay the full amount on M-Pesa. Funds stay in escrow until delivery.");
       const phoneInput = document.getElementById("offer-phone");
       if (phoneInput && session?.phone && !phoneInput.value) {
         phoneInput.value = session.phone;

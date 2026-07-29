@@ -1,5 +1,15 @@
 import { isDbEnabled, query } from "../pool.js";
-import { computeOfferFeeBreakdown } from "../../services/shipping-tiers.js";
+import {
+  computeOfferFeeBreakdown,
+  serializeOfferBreakdown,
+} from "../../services/shipping-tiers.js";
+
+/** Shared product columns for offer hydration (includes shipping for escrow math). */
+const OFFER_PRODUCT_SELECT = `
+       p.title AS product_title,
+       p.price_kes AS product_price_kes,
+       p.shipping_kes AS product_shipping_kes,
+       p.primary_image_url AS product_image_url`;
 
 function parseUserId(value) {
   const n = Number(value);
@@ -128,7 +138,25 @@ function formatKesAmount(amount) {
 function offerReminderMessage(offer) {
   const title = offer?.product_title || offer?.product_id || "your item";
   const amount = formatKesAmount(offer?.amount_kes);
-  return `Hi! I accepted your offer of ${amount} for "${title}". Please complete checkout on Sokoni (Activity or checkout page) within 24 hours so I can prepare shipping.`;
+  return `Hi! I accepted your offer of ${amount} (buyer total incl. shipping + Sokoni fee) for "${title}". Please complete checkout on Sokoni within 24 hours — funds go to escrow until delivery.`;
+}
+
+function resolveOfferBreakdown(amountKes, shippingKes) {
+  const agreed = Math.round(Number(amountKes) || 0);
+  const ship = Math.round(Number(shippingKes) || 0);
+  const freeShipping = ship === 0;
+  return computeOfferFeeBreakdown(agreed, ship, { freeShipping });
+}
+
+function offerBreakdownError(breakdown) {
+  if (!breakdown?.error) return null;
+  return {
+    error: breakdown.error,
+    message: breakdown.message,
+    minBuyerTotalKes: breakdown.minBuyerTotalKes ?? null,
+    shippingKes: breakdown.shippingKes ?? null,
+    agreedBuyerTotalKes: breakdown.agreedBuyerTotalKes ?? null,
+  };
 }
 
 async function productExists(productId) {
@@ -195,10 +223,7 @@ export async function getAcceptedOfferForCheckout({ offerId, buyerUserId } = {})
   const { rows } = await query(
     `SELECT
        o.*,
-       p.title AS product_title,
-       p.price_kes AS product_price_kes,
-       p.shipping_kes AS product_shipping_kes,
-       p.primary_image_url AS product_image_url,
+       ${OFFER_PRODUCT_SELECT},
        p.in_stock AS product_in_stock,
        p.is_sold AS product_is_sold,
        buyer.handle AS buyer_handle,
@@ -245,30 +270,16 @@ export async function getAcceptedOfferForCheckout({ offerId, buyerUserId } = {})
   }
 
   const shippingKes = Math.round(Number(row.product_shipping_kes) || 0);
-  const freeShipping = shippingKes === 0;
-  const breakdown = computeOfferFeeBreakdown(agreed, shippingKes, { freeShipping });
-  if (breakdown.error) {
-    return {
-      error: breakdown.error,
-      message: breakdown.message,
-    };
-  }
+  const breakdown = resolveOfferBreakdown(agreed, shippingKes);
+  const breakdownErr = offerBreakdownError(breakdown);
+  if (breakdownErr) return breakdownErr;
 
   return {
     ok: true,
     offer: mapOfferRow(row),
     productId: row.product_id,
     listedBuyerTotalKes: listedTotal,
-    breakdown: {
-      itemKes: breakdown.itemKes,
-      shippingKes: breakdown.shippingKes,
-      totalKes: breakdown.buyerTotalKes,
-      platformFeeKes: breakdown.platformFeeKes,
-      sellerNetKes: breakdown.sellerNetKes,
-      freeShipping: breakdown.freeShipping,
-      fromOffer: true,
-      agreedBuyerTotalKes: breakdown.agreedBuyerTotalKes,
-    },
+    breakdown: serializeOfferBreakdown(breakdown),
   };
 }
 
@@ -298,9 +309,7 @@ export async function listThreadOffers({ userAId, userBId, limit = 20 } = {}) {
   const { rows } = await query(
     `SELECT
        o.*,
-       p.title AS product_title,
-       p.price_kes AS product_price_kes,
-       p.primary_image_url AS product_image_url,
+       ${OFFER_PRODUCT_SELECT},
        buyer.handle AS buyer_handle,
        buyer.shop_name AS buyer_shop_name,
        seller.handle AS seller_handle,
@@ -1468,20 +1477,32 @@ async function getReviewSummary(userId = null) {
 }
 
 function mapOfferRow(row) {
+  const shippingKes =
+    row.product_shipping_kes != null ? Math.round(Number(row.product_shipping_kes) || 0) : null;
+  const rawBreakdown =
+    shippingKes != null ? resolveOfferBreakdown(row.amount_kes, shippingKes) : null;
+  const breakdown = serializeOfferBreakdown(rawBreakdown);
+  const breakdownError = offerBreakdownError(rawBreakdown);
+
   return {
     id: Number(row.id),
     productId: row.product_id,
     buyerUserId: Number(row.buyer_user_id),
     sellerUserId: Number(row.seller_user_id),
+    /** Negotiated buyer all-in (same semantics as listing price_kes). */
     amountKsh: Number(row.amount_kes),
     status: row.status,
     expiresAt: row.expires_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    /** Escrow split at current listing shipping: buyer pays total → seller net + shipping + fee. */
+    breakdown,
+    breakdownError,
     product: {
       id: row.product_id,
       title: row.product_title || null,
       priceKsh: row.product_price_kes != null ? Number(row.product_price_kes) : null,
+      shippingKsh: shippingKes,
       imageUrl: row.product_image_url || null,
     },
     buyer: {
@@ -1552,7 +1573,7 @@ export async function createOffer({
   }
 
   const productRow = await query(
-    `SELECT id, seller_user_id, price_kes, in_stock, is_sold FROM products WHERE id = $1 LIMIT 1`,
+    `SELECT id, seller_user_id, price_kes, shipping_kes, in_stock, is_sold FROM products WHERE id = $1 LIMIT 1`,
     [product]
   );
   const productData = productRow.rows[0];
@@ -1577,6 +1598,12 @@ export async function createOffer({
       message: "Offer amount cannot exceed listed product price.",
     };
   }
+
+  // amountKsh is buyer all-in (escrow total). Must cover listing shipping + 10% fee.
+  const shippingKes = Math.round(Number(productData.shipping_kes) || 0);
+  const feeBreakdown = resolveOfferBreakdown(amount, shippingKes);
+  const feeErr = offerBreakdownError(feeBreakdown);
+  if (feeErr) return feeErr;
 
   await expirePendingOffers();
 
@@ -1616,9 +1643,7 @@ export async function createOffer({
   const hydrated = await query(
     `SELECT
        o.*,
-       p.title AS product_title,
-       p.price_kes AS product_price_kes,
-       p.primary_image_url AS product_image_url,
+       ${OFFER_PRODUCT_SELECT},
        buyer.handle AS buyer_handle,
        buyer.shop_name AS buyer_shop_name,
        seller.handle AS seller_handle,
@@ -1632,7 +1657,12 @@ export async function createOffer({
     [offerId]
   );
 
-  return { success: true, offer: mapOfferRow(hydrated.rows[0]) };
+  const mapped = mapOfferRow(hydrated.rows[0]);
+  return {
+    success: true,
+    offer: mapped,
+    breakdown: mapped.breakdown,
+  };
 }
 
 export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
@@ -1676,6 +1706,38 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
     return { error: "offer_expired", message: "Offer has expired." };
   }
 
+  // Block accepting offers that cannot fund escrow (shipping + fee + seller net ≥ 1).
+  if (normalizedAction === "accepted") {
+    const productRow = await query(
+      `SELECT price_kes, shipping_kes, in_stock, is_sold FROM products WHERE id = $1 LIMIT 1`,
+      [offer.product_id]
+    );
+    const productData = productRow.rows[0];
+    if (!productData || productData.in_stock === false || productData.is_sold === true) {
+      return {
+        error: "product_unavailable",
+        message: "This product is no longer available for offers.",
+      };
+    }
+    if (productData.price_kes != null && Number(offer.amount_kes) > Number(productData.price_kes)) {
+      return {
+        error: "offer_above_list",
+        message: "Agreed offer cannot exceed the listed buyer price.",
+      };
+    }
+    const shippingKes = Math.round(Number(productData.shipping_kes) || 0);
+    const feeBreakdown = resolveOfferBreakdown(offer.amount_kes, shippingKes);
+    const feeErr = offerBreakdownError(feeBreakdown);
+    if (feeErr) {
+      return {
+        ...feeErr,
+        message:
+          feeErr.message ||
+          "This offer is too low to cover shipping and Sokoni's fee. Ask the buyer for a higher amount.",
+      };
+    }
+  }
+
   const expiresSql =
     normalizedAction === "accepted"
       ? `NOW() + INTERVAL '24 hours'`
@@ -1692,9 +1754,7 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
   const hydrated = await query(
     `SELECT
        o.*,
-       p.title AS product_title,
-       p.price_kes AS product_price_kes,
-       p.primary_image_url AS product_image_url,
+       ${OFFER_PRODUCT_SELECT},
        buyer.handle AS buyer_handle,
        buyer.shop_name AS buyer_shop_name,
        seller.handle AS seller_handle,
@@ -1708,7 +1768,12 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
     [oid]
   );
 
-  return { success: true, offer: mapOfferRow(hydrated.rows[0]) };
+  const mapped = mapOfferRow(hydrated.rows[0]);
+  return {
+    success: true,
+    offer: mapped,
+    breakdown: mapped.breakdown,
+  };
 }
 
 export async function sendOfferReminder({ offerId, sellerUserId, cooldownSeconds } = {}) {
@@ -2134,9 +2199,7 @@ export async function listOffers({ userId, role = "buyer", status, limit = 30, o
   const { rows } = await query(
     `SELECT
        o.*,
-       p.title AS product_title,
-       p.price_kes AS product_price_kes,
-       p.primary_image_url AS product_image_url,
+       ${OFFER_PRODUCT_SELECT},
        buyer.handle AS buyer_handle,
        buyer.shop_name AS buyer_shop_name,
        seller.handle AS seller_handle,

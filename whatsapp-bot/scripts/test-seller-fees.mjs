@@ -6,6 +6,7 @@ import {
   computeFeeBreakdownLegacy,
   computeOfferFeeBreakdown,
   computeProductTotals,
+  minBuyerTotalForOffer,
   orderBuyerTotal,
   formatProductListPrice,
   inferWeightClass,
@@ -91,6 +92,22 @@ assert("offer 1500 platform fee lower", offer1500.platformFeeKes < offer2000.pla
 
 const offerTooLow = computeOfferFeeBreakdown(100, 150);
 assert("offer too low for shipping errors", offerTooLow.error === "offer_too_low_for_shipping");
+assert("offer too low includes min total", offerTooLow.minBuyerTotalKes === minBuyerTotalForOffer(150));
+assert("offer too low message mentions shipping", /shipping/i.test(offerTooLow.message || ""));
+
+// Classic bug: buyer offers "300" thinking item price, but amount is buyer all-in.
+const offer300 = computeOfferFeeBreakdown(300, 150);
+assert("offer 300 still covers ship+fee", !offer300.error && offer300.buyerTotalKes === 300);
+assert("offer 300 seller net is NOT 300", offer300.sellerNetKes < 300 && offer300.sellerNetKes === 123);
+assert(
+  "offer 300 escrow split sums to buyer total",
+  offer300.sellerNetKes + offer300.shippingKes + offer300.platformFeeKes === 300
+);
+
+const minShip150 = minBuyerTotalForOffer(150);
+assert("min offer with ship 150 is 166", minShip150 === 166);
+const atMin = computeOfferFeeBreakdown(minShip150, 150);
+assert("min offer valid", !atMin.error && atMin.sellerNetKes === 1);
 
 const offerFreeShip = computeOfferFeeBreakdown(1100, 0, { freeShipping: true });
 assert("offer free shipping buyer 1100", offerFreeShip.buyerTotalKes === 1100 && offerFreeShip.shippingKes === 0);

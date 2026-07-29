@@ -145,6 +145,30 @@ export function computeFeeBreakdown(sellerNetKes, shippingKes, { freeShipping = 
   };
 }
 
+/** Lowest buyer all-in that still leaves the seller at least KES 1 after shipping + 10% fee. */
+export function minBuyerTotalForOffer(shippingKes, { freeShipping = false } = {}) {
+  return computeFeeBreakdown(1, shippingKes, { freeShipping }).buyerTotalKes;
+}
+
+/**
+ * Public escrow split for an offer / checkout payload.
+ * Buyer pays `totalKes` into escrow; on delivery seller receives `sellerNetKes`,
+ * shipping is reserved for delivery, and Sokoni keeps `platformFeeKes`.
+ */
+export function serializeOfferBreakdown(breakdown) {
+  if (!breakdown || breakdown.error) return null;
+  return {
+    itemKes: breakdown.itemKes,
+    shippingKes: breakdown.shippingKes,
+    platformFeeKes: breakdown.platformFeeKes,
+    sellerNetKes: breakdown.sellerNetKes,
+    totalKes: breakdown.buyerTotalKes,
+    freeShipping: Boolean(breakdown.freeShipping),
+    fromOffer: true,
+    agreedBuyerTotalKes: breakdown.agreedBuyerTotalKes ?? breakdown.buyerTotalKes,
+  };
+}
+
 /**
  * Reverse fee math for an accepted offer.
  * `agreedBuyerTotalKes` is the negotiated all-in amount the buyer pays (offer.amount_kes).
@@ -158,16 +182,20 @@ export function computeOfferFeeBreakdown(agreedBuyerTotalKes, shippingKes, { fre
 
   const shipRaw = Math.round(Number(shippingKes) || 0);
   const shipping = freeShipping || shipRaw === 0 ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw);
+  const minBuyerTotalKes = minBuyerTotalForOffer(shipping, { freeShipping: shipping === 0 });
   const subtotalKes = Math.round(agreed / (1 + PLATFORM_FEE_RATE));
-  const platformFeeKes = agreed - subtotalKes;
   const sellerNetKes = subtotalKes - shipping;
 
   if (sellerNetKes < 1) {
     return {
       error: "offer_too_low_for_shipping",
-      message: "Agreed price is too low to cover shipping and platform fee.",
+      message:
+        shipping > 0
+          ? `Offer must be at least KES ${minBuyerTotalKes.toLocaleString("en-KE")} to cover shipping (KES ${shipping.toLocaleString("en-KE")}) and Sokoni's 10% fee.`
+          : `Offer must be at least KES ${minBuyerTotalKes.toLocaleString("en-KE")} after Sokoni's 10% fee.`,
       agreedBuyerTotalKes: agreed,
       shippingKes: shipping,
+      minBuyerTotalKes,
     };
   }
 
@@ -186,6 +214,7 @@ export function computeOfferFeeBreakdown(agreedBuyerTotalKes, shippingKes, { fre
     buyerTotalKes,
     freeShipping: forward.freeShipping,
     agreedBuyerTotalKes: agreed,
+    minBuyerTotalKes,
     fromOffer: true,
   };
 }

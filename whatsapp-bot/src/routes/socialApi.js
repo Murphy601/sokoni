@@ -72,6 +72,7 @@ function socialErrorStatus(error) {
     error === "offer_expired" ||
     error === "product_unavailable" ||
     error === "offer_above_list" ||
+    error === "offer_above_price" ||
     error === "offer_too_low_for_shipping" ||
     error === "invalid_delivery_details" ||
     error === "review_exists"
@@ -469,6 +470,9 @@ router.post("/offers/create", async (req, res) => {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
         message: result.message,
+        minBuyerTotalKes: result.minBuyerTotalKes,
+        shippingKes: result.shippingKes,
+        breakdown: result.breakdown,
       });
     }
     if (result.offer) {
@@ -584,6 +588,9 @@ router.post("/offers/:offerId/respond", async (req, res) => {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
         message: result.message,
+        minBuyerTotalKes: result.minBuyerTotalKes,
+        shippingKes: result.shippingKes,
+        breakdown: result.breakdown,
       });
     }
     if (result.offer) {
