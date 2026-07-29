@@ -7,7 +7,9 @@
 
 services:
   waha:
-    image: devlikeapro/waha:latest
+    # Pin version — :latest (2026.7.x) has been failing NOWEB registration
+    # with Connection Failure before SCAN_QR_CODE on this VM.
+    image: devlikeapro/waha:latest-2026.6.2
     restart: unless-stopped
     ports:
       - "3000:3000"
