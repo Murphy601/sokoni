@@ -325,6 +325,10 @@ html.dark .sell-view-tabs {
 }
 
 .sell-view-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   flex: 1;
   min-height: 44px;
   border: none;
@@ -346,6 +350,30 @@ html.dark .sell-view-tab {
   color: #1b1035;
 }
 
+.sell-tab-badge {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 1;
+  background: rgba(27, 16, 53, 0.14);
+  color: #1b1035;
+}
+
+.sell-tab-badge.hidden {
+  display: none;
+}
+
+html.dark .sell-tab-badge {
+  background: rgba(255, 248, 240, 0.2);
+  color: #fff8f0;
+}
+
 .sell-order-card {
   border: 1px solid rgba(27, 16, 53, 0.08);
   border-radius: 1rem;
@@ -363,6 +391,13 @@ html.dark .sell-order-card {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.sell-offer-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
 }
 
 .sell-order-badge {
@@ -388,6 +423,18 @@ html.dark .sell-order-card {
 .sell-order-badge--done {
   background: rgba(27, 16, 53, 0.08);
   color: rgba(27, 16, 53, 0.6);
+}
+
+.sell-order-badge--reminded {
+  background: rgba(37, 211, 102, 0.14);
+  color: rgba(27, 16, 53, 0.75);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+html.dark .sell-order-badge--reminded {
+  background: rgba(37, 211, 102, 0.24);
+  color: #fff8f0;
 }
 
 .sell-order-actions {
@@ -420,4 +467,278 @@ html.dark .sell-order-action {
 
 .sell-order-action--primary:hover {
   opacity: 0.92;
+}
+
+.sell-offer-card {
+  border-color: rgba(37, 211, 102, 0.25);
+}
+
+html.dark .sell-offer-card {
+  border-color: rgba(37, 211, 102, 0.3);
+}
+
+.sell-offer-quick-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid #25d366;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0 0.95rem;
+  cursor: pointer;
+}
+
+.sell-offer-quick-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+html.dark .sell-offer-quick-btn {
+  border-color: rgba(37, 211, 102, 0.85);
+  background: rgba(37, 211, 102, 0.24);
+  color: #fff8f0;
+}
+
+.sell-offer-reset-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  color: rgba(27, 16, 53, 0.76);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 0.85rem;
+  cursor: pointer;
+}
+
+.sell-offer-reset-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+html.dark .sell-offer-reset-btn {
+  border-color: rgba(255, 248, 240, 0.2);
+  background: rgba(46, 27, 87, 0.48);
+  color: rgba(255, 248, 240, 0.82);
+}
+
+.sell-offer-undo-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid rgba(37, 211, 102, 0.58);
+  background: rgba(37, 211, 102, 0.14);
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0 0.85rem;
+  cursor: pointer;
+}
+
+.sell-offer-undo-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+html.dark .sell-offer-undo-btn {
+  border-color: rgba(37, 211, 102, 0.62);
+  background: rgba(37, 211, 102, 0.24);
+  color: #fff8f0;
+}
+
+.sell-offer-undo-open-btn {
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid #25d366;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0 0.85rem;
+  cursor: pointer;
+}
+
+.sell-offer-undo-open-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+html.dark .sell-offer-undo-open-btn {
+  border-color: rgba(37, 211, 102, 0.85);
+  background: rgba(37, 211, 102, 0.28);
+  color: #fff8f0;
+}
+
+.sell-offer-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sell-offer-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.16);
+  background: rgba(255, 255, 255, 0.7);
+  color: rgba(27, 16, 53, 0.72);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 0 0.95rem;
+  cursor: pointer;
+}
+
+.sell-offer-filter-label {
+  line-height: 1;
+}
+
+.sell-offer-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  border-radius: 9999px;
+  background: rgba(27, 16, 53, 0.12);
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 0.3rem;
+}
+
+.sell-offer-filter.is-active {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.16);
+  color: #1b1035;
+}
+
+.sell-offer-filter.is-active .sell-offer-filter-count {
+  background: rgba(37, 211, 102, 0.34);
+}
+
+html.dark .sell-offer-filter {
+  border-color: rgba(255, 248, 240, 0.2);
+  background: rgba(46, 27, 87, 0.5);
+  color: rgba(255, 248, 240, 0.76);
+}
+
+html.dark .sell-offer-filter.is-active {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.2);
+  color: #fff8f0;
+}
+
+html.dark .sell-offer-filter-count {
+  background: rgba(255, 248, 240, 0.2);
+}
+
+.sell-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.sell-offer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.18);
+  background: #ffffff;
+  color: #1b1035;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 0 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.sell-offer-action:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sell-offer-action--accept {
+  background: #25d366;
+  border-color: #25d366;
+}
+
+.sell-offer-action--decline {
+  background: transparent;
+}
+
+.sell-offer-action--chat {
+  background: transparent;
+}
+
+.sell-offer-action--remind {
+  background: rgba(37, 211, 102, 0.14);
+  border-color: rgba(37, 211, 102, 0.55);
+}
+
+.sell-offer-action--remind-next {
+  background: #25d366;
+  border-color: #25d366;
+}
+
+.sell-offer-action--done-next {
+  background: rgba(37, 211, 102, 0.18);
+  border-color: rgba(37, 211, 102, 0.65);
+}
+
+.sell-offer-action--handled {
+  background: rgba(27, 16, 53, 0.05);
+}
+
+.sell-offer-action--handled[data-handled="1"] {
+  background: rgba(37, 211, 102, 0.14);
+  border-color: rgba(37, 211, 102, 0.55);
+}
+
+html.dark .sell-offer-action {
+  border-color: rgba(255, 248, 240, 0.26);
+  background: rgba(46, 27, 87, 0.55);
+  color: #fff8f0;
+}
+
+html.dark .sell-offer-action--accept {
+  background: #25d366;
+  color: #1b1035;
+  border-color: #25d366;
+}
+
+html.dark .sell-offer-action--chat {
+  background: transparent;
+}
+
+html.dark .sell-offer-action--remind {
+  background: rgba(37, 211, 102, 0.22);
+  border-color: rgba(37, 211, 102, 0.5);
+}
+
+html.dark .sell-offer-action--remind-next {
+  background: #25d366;
+  color: #1b1035;
+  border-color: #25d366;
+}
+
+html.dark .sell-offer-action--done-next {
+  background: rgba(37, 211, 102, 0.26);
+  border-color: rgba(37, 211, 102, 0.6);
+  color: #fff8f0;
+}
+
+html.dark .sell-offer-action--handled {
+  background: rgba(255, 248, 240, 0.08);
+}
+
+html.dark .sell-offer-action--handled[data-handled="1"] {
+  background: rgba(37, 211, 102, 0.24);
+  border-color: rgba(37, 211, 102, 0.56);
 }

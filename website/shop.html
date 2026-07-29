@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shop Profile — Sokoni Mall</title>
+<meta name="description" content="Open a Sokoni seller profile by handle, see active listings, and order on WhatsApp across Kenya." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            green: "#25D366",
+            purple: "#1B1035",
+            purpleLight: "#2E1B57",
+            cream: "#FFF8F0",
+          },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("sokoni-theme");
+      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.classList.add("dark");
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen flex flex-col">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="index.html" class="text-sm font-medium hover:text-brand-green transition">← Shop home</a>
+      <span class="text-xs font-semibold uppercase tracking-wide text-brand-purple/55 dark:text-white/65">Seller profile</span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto w-full px-5 py-8 space-y-7 flex-1">
+    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6 md:p-8">
+      <div class="flex flex-col sm:flex-row gap-5 sm:items-center">
+        <div id="shop-avatar" class="w-20 h-20 rounded-full bg-brand-cream dark:bg-brand-purple/30 border border-black/10 dark:border-white/15 flex items-center justify-center shrink-0"></div>
+        <div class="min-w-0 flex-1">
+          <h1 id="shop-name" class="font-display text-3xl font-bold leading-tight">Shop profile</h1>
+          <p id="shop-handle" class="text-sm text-brand-purple/60 dark:text-white/65 mt-1"></p>
+          <div class="flex flex-wrap items-center gap-2 mt-2">
+            <span id="shop-verified" class="hidden text-[11px] font-semibold px-2 py-1 rounded-full bg-brand-green/20 text-brand-purple dark:text-brand-green">Verified seller</span>
+            <span id="shop-rating" class="text-xs text-brand-purple/60 dark:text-white/65">New seller</span>
+          </div>
+          <p id="shop-bio" class="hidden text-sm text-brand-purple/75 dark:text-white/75 mt-3"></p>
+          <p id="shop-location" class="hidden text-xs text-brand-purple/60 dark:text-white/60 mt-1"></p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+        <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
+          <p id="shop-listings-count" class="font-bold text-lg">0</p>
+          <p class="text-xs text-brand-purple/55 dark:text-white/65">Listings</p>
+        </div>
+        <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
+          <p id="shop-followers-count" class="font-bold text-lg">0</p>
+          <p class="text-xs text-brand-purple/55 dark:text-white/65">Followers</p>
+        </div>
+        <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
+          <p id="shop-following-count" class="font-bold text-lg">0</p>
+          <p class="text-xs text-brand-purple/55 dark:text-white/65">Following</p>
+        </div>
+        <div class="rounded-2xl border border-black/5 dark:border-white/10 p-3 text-center">
+          <p id="shop-likes-count" class="font-bold text-lg">0</p>
+          <p class="text-xs text-brand-purple/55 dark:text-white/65">Likes</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3 mt-5">
+        <a
+          id="shop-wa-cta"
+          href="https://wa.me/254117422428"
+          target="_blank"
+          rel="noopener"
+          class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold inline-flex items-center justify-center">
+          Start on WhatsApp
+        </a>
+        <button
+          id="shop-follow-btn"
+          type="button"
+          class="hidden min-h-[44px] px-5 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
+          Follow shop
+        </button>
+        <a
+          id="shop-message-btn"
+          href="inbox.html"
+          class="hidden min-h-[44px] px-5 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold inline-flex items-center justify-center hover:border-brand-green">
+          Message seller
+        </a>
+      </div>
+      <p class="text-xs text-brand-purple/60 dark:text-white/65 mt-3">
+        Sokoni is countrywide. Prepaid orders are confirmed via M-Pesa Till 4775847, with home delivery and pickup partners across Kenya.
+      </p>
+      <div id="buyer-auth-panel" class="mt-4 rounded-2xl border border-black/5 dark:border-white/10 p-4 space-y-3">
+        <p class="text-sm font-semibold">Buyer WhatsApp sign-in</p>
+        <p class="text-xs text-brand-purple/60 dark:text-white/65">
+          Verify once to like, follow, make offers, and chat safely. Code comes on WhatsApp.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <label class="flex-1 text-xs font-medium">
+            WhatsApp number
+            <input
+              id="buyer-auth-phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="07XXXXXXXX"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+            />
+          </label>
+          <label class="sm:w-36 text-xs font-medium">
+            Code
+            <input
+              id="buyer-auth-code"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="6 digits"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+            />
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="buyer-auth-send-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
+            Send code
+          </button>
+          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+            Verify
+          </button>
+        </div>
+        <p id="buyer-auth-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
+      </div>
+    </section>
+
+    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6">
+      <form id="shop-handle-form" class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+        <label class="flex-1 text-sm font-medium">
+          Shop handle
+          <input
+            id="shop-handle-input"
+            type="text"
+            placeholder="@nairobi_thrifts"
+            autocomplete="off"
+            class="mt-2 w-full min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-green"
+          />
+        </label>
+        <button
+          type="submit"
+          class="min-h-[48px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          Load shop
+        </button>
+      </form>
+      <p id="shop-status" class="text-sm mt-3 text-brand-purple/60 dark:text-white/65"></p>
+    </section>
+
+    <section>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="font-display text-2xl font-bold">Active listings</h2>
+        <p id="shop-products-count" class="text-xs text-brand-purple/60 dark:text-white/65">0 live items</p>
+      </div>
+      <div id="shop-products-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      <p id="shop-products-empty" class="hidden text-sm text-brand-purple/60 dark:text-white/65 mt-2">
+        No active listings yet. Check back soon, or message this seller on WhatsApp.
+      </p>
+    </section>
+
+    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="font-display text-2xl font-bold">Recent reviews</h2>
+        <p id="shop-reviews-count" class="text-xs text-brand-purple/60 dark:text-white/65">No ratings yet</p>
+      </div>
+      <div id="shop-reviews-list" class="space-y-3"></div>
+      <p id="shop-reviews-empty" class="hidden text-sm text-brand-purple/60 dark:text-white/65">
+        No reviews yet. Buyers can rate this shop after delivered orders.
+      </p>
+    </section>
+  </main>
+
+  <footer class="border-t border-black/5 dark:border-white/10 py-6 text-center text-xs text-brand-purple/50 dark:text-white/55">
+    <a class="text-brand-green font-semibold" href="https://wa.me/254117422428" target="_blank" rel="noopener">Order on WhatsApp</a>
+    · <a href="track.html" class="hover:text-brand-green">Track order</a>
+  </footer>
+
+  <script src="assets/js/component-handler.js"></script>
+  <script src="assets/js/buyer-auth.js"></script>
+  <script src="assets/js/shop-profile.js"></script>
+</body>
+</html>

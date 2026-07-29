@@ -523,14 +523,47 @@ function productImageBlock(product) {
   return `<div class="product-image-wrap mb-4 mt-4 rounded-xl overflow-hidden bg-brand-cream aspect-square flex items-center justify-center p-4 text-xs text-brand-purple/40">Photo coming soon</div>`;
 }
 
+function normalizeHandleValue(value) {
+  const clean = String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  return clean.replace(/[^a-z0-9._-]+/g, "").slice(0, 40);
+}
+
 function sellerHandle(product) {
-  const name = product.source || product.businessName || "";
+  const direct = normalizeHandleValue(
+    product?.sellerHandle ||
+      product?.shopHandle ||
+      product?.seller?.handle ||
+      product?.handle
+  );
+  if (direct) return `@${direct}`;
+
+  const name = product.businessName || product.source || "";
   if (!name) return "";
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "")
     .slice(0, 18);
   return slug ? `@${slug}` : "";
+}
+
+function viewerQueryValue() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("viewer") || params.get("viewerUserId");
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return "";
+  return String(n);
+}
+
+function sellerShopLink(product) {
+  const handle = normalizeHandleValue(sellerHandle(product));
+  if (!handle) return "";
+  const params = new URLSearchParams({ handle });
+  const viewer = viewerQueryValue();
+  if (viewer) params.set("viewer", viewer);
+  return `shop.html?${params.toString()}`;
 }
 
 function conditionBadgeHtml(product) {
@@ -549,6 +582,7 @@ function renderDepopCard(product) {
     ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" />`
     : `<span class="depop-card-placeholder">Photo soon</span>`;
   const handle = sellerHandle(product);
+  const shopLink = sellerShopLink(product);
   const saved = window.SokoniShopShell?.isInBag?.(product.id);
 
   return `
@@ -562,7 +596,15 @@ function renderDepopCard(product) {
       <div class="depop-card-body">
         <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
         <p class="depop-card-title">${name}</p>
-        ${handle ? `<p class="depop-card-seller">${escapeHtml(handle)}</p>` : ""}
+        ${
+          handle
+            ? `<p class="depop-card-seller">${
+                shopLink
+                  ? `<a href="${shopLink}" data-shop-link="1" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
+                  : escapeHtml(handle)
+              }</p>`
+            : ""
+        }
       </div>
     </article>`;
 }
@@ -571,6 +613,8 @@ function renderStoreCard(product) {
   const name = escapeHtml(product.name || "Product");
   const rating = Number(product.rating) || 0;
   const reviews = Number(product.reviews) || 0;
+  const handle = sellerHandle(product);
+  const shopLink = sellerShopLink(product);
   return `
     <div class="product-card relative bg-white rounded-2xl border border-black/5 shadow-sm p-5 flex flex-col">
       <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">🔒 Prepaid</span>
@@ -604,6 +648,14 @@ function renderStoreCard(product) {
            class="text-center text-xs text-brand-purple/60 underline hover:text-brand-purple">
           💬 Ask about it on WhatsApp
         </a>
+        ${
+          handle && shopLink
+            ? `<a href="${shopLink}" data-shop-link="1"
+               class="text-center text-xs text-brand-purple/60 underline hover:text-brand-green">
+              🏪 View ${escapeHtml(handle)} shop
+            </a>`
+            : ""
+        }
       </div>
     </div>
   `;
@@ -767,6 +819,7 @@ function bindStoreGridClicks() {
       heart.setAttribute("aria-label", saved ? "Remove from saved" : "Save item");
       return;
     }
+    if (e.target.closest("[data-shop-link]")) return;
     const card = e.target.closest(".depop-card[data-product-id]");
     if (!card) return;
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
@@ -775,7 +828,7 @@ function bindStoreGridClicks() {
   grid.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     const card = e.target.closest(".depop-card[data-product-id]");
-    if (!card || e.target.closest(".depop-card-heart")) return;
+    if (!card || e.target.closest(".depop-card-heart") || e.target.closest("[data-shop-link]")) return;
     e.preventDefault();
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
     if (p) window.SokoniProductSheet?.open(p);

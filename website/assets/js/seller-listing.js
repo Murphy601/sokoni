@@ -4,12 +4,35 @@ const API_BASE =
     : "https://bot.sokonimall.com";
 const LISTINGS_API = `${API_BASE}/api/seller/listings`;
 const ONBOARD_API = `${API_BASE}/api/seller/onboard`;
+const SOCIAL_API = `${API_BASE}/api/social`;
 
 const PHONE_KEY = "sokoni-seller-phone";
 const DRAFT_KEY = "sokoni-seller-draft";
 const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 150;
+const SELLER_OFFERS_POLL_MS = 45000;
+const OFFER_EXPIRING_SOON_MS = 2 * 60 * 60 * 1000;
+const SELLER_OFFER_FILTERS = new Set([
+  "pending",
+  "all",
+  "accepted",
+  "expiring-soon",
+  "reminded",
+  "cooling-down",
+  "ready-reminder",
+  "chat-blocked",
+  "not-reminded",
+  "handled",
+  "declined",
+]);
+const HANDLED_ACCEPTED_OFFERS_KEY = "sokoni-seller-handled-accepted-offers";
+const HANDLED_HISTORY_LIMIT = 40;
+const OFFER_REMINDER_COOLDOWN_MS = 90000;
+const REMINDER_COOLDOWN_TICK_MS = 1000;
+const OFFER_REMINDER_COOLDOWN_KEY = "sokoni-seller-offer-reminder-cooldowns";
+const OFFER_REMINDER_SENT_AT_KEY = "sokoni-seller-offer-reminder-sent-at";
+const OFFER_FILTER_PREFERENCE_KEY = "sokoni-seller-offer-filter";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand new with tags",
@@ -48,6 +71,15 @@ function el(id) {
 
 function formatKes(n) {
   return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function getPhone() {
@@ -95,6 +127,22 @@ function clearSession() {
   verificationToken = null;
   phoneVerified = false;
   sellerProfile = null;
+  sellerSocialUserIdPromise = null;
+  clearActiveOfferFilterPreference();
+  clearHandledAcceptedOffersStorage();
+  stopReminderCooldownTicker();
+  clearReminderCooldownsStorage();
+  clearReminderLastSentAtStorage();
+  updateReminderCooldownHint({ count: 0, nextMs: 0 });
+  updateAcceptedTriageHint([]);
+  sellerOffersCache = [];
+  acceptedQuickCursor = 0;
+  stopSellerOffersPolling();
+  currentSellerView = "dashboard";
+  setDashboardOfferBadge(0);
+  syncOfferFilterButtons();
+  updateHandledResetButton();
+  updateQuickModeHint();
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
 }
 
@@ -295,6 +343,22 @@ let activeLedgerTab = "available";
 let verificationToken = null;
 let phoneVerified = false;
 let resendCooldownTimer = null;
+let sellerSocialUserIdPromise = null;
+let sellerOffersPollTimer = null;
+let sellerOffersRequestInFlight = false;
+let currentSellerView = "dashboard";
+let activeSellerOffersFilter = "pending";
+let sellerOffersCache = [];
+let acceptedQuickCursor = 0;
+let handledAcceptedOfferIds = new Set();
+let handledOffersStorageKey = null;
+let handledOfferHistory = [];
+let reminderCooldownByOfferId = new Map();
+let reminderCooldownTickTimer = null;
+let reminderCooldownStorageKey = null;
+let reminderLastSentAtByOfferId = new Map();
+let reminderLastSentStorageKey = null;
+let offerFilterStorageKey = null;
 
 function bindMediaSlots() {
   for (let i = 0; i < 4; i += 1) {
@@ -690,7 +754,22 @@ async function loadMyListings() {
 }
 
 function showSellerProfile(profile) {
-  sellerProfile = profile;
+  sellerProfile = { ...(profile || {}) };
+  const knownUserId = Number(sellerProfile.userId || sellerProfile.socialUserId);
+  if (Number.isInteger(knownUserId) && knownUserId > 0) {
+    sellerProfile.socialUserId = knownUserId;
+  }
+  loadActiveOfferFilterPreference();
+  syncOfferFilterButtons();
+  sellerSocialUserIdPromise = null;
+  stopReminderCooldownTicker();
+  loadReminderCooldowns();
+  loadReminderLastSentAt();
+  updateReminderCooldownHint(reminderCooldownStats());
+  updateAcceptedTriageHint(sellerOffersCache);
+  loadHandledAcceptedOffers();
+  updateHandledResetButton();
+  updateUndoLastDoneButton();
   el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
   if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
   el("seller-profile-bar")?.classList.remove("hidden");
@@ -751,6 +830,13 @@ function normalizePhoneInput(phone) {
   if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
   if (d.length === 9) d = `254${d}`;
   return d;
+}
+
+function isSellerSessionAuthError(payload) {
+  const code = String(payload?.error || "")
+    .trim()
+    .toLowerCase();
+  return code === "session_required" || code === "session_invalid" || code === "session_expired";
 }
 
 async function parseApiResponse(res) {
@@ -1130,6 +1216,1797 @@ function renderSellerOrders(orders) {
     .join("");
 }
 
+function normalizeHandleForLookup(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+}
+
+function setOffersStatus(message, isError = false) {
+  const node = el("seller-offers-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+function setDashboardOfferBadge(pendingCount = 0) {
+  const badge = el("tab-dashboard-offers-badge");
+  if (!badge) return;
+  const count = Math.max(0, Number(pendingCount) || 0);
+  if (!count) {
+    badge.textContent = "";
+    badge.classList.add("hidden");
+    badge.removeAttribute("aria-label");
+    return;
+  }
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.classList.remove("hidden");
+  badge.setAttribute("aria-label", `${count} pending offer${count === 1 ? "" : "s"}`);
+}
+
+function normalizeOfferFilter(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return SELLER_OFFER_FILTERS.has(normalized) ? normalized : "pending";
+}
+
+function offerFilterStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${OFFER_FILTER_PREFERENCE_KEY}:${sellerPhone}` : `${OFFER_FILTER_PREFERENCE_KEY}:default`;
+}
+
+function loadActiveOfferFilterPreference() {
+  offerFilterStorageKey = offerFilterStorageKeyForCurrentSeller();
+  activeSellerOffersFilter = "pending";
+  try {
+    const saved = sessionStorage.getItem(offerFilterStorageKey);
+    if (!saved) return;
+    activeSellerOffersFilter = normalizeOfferFilter(saved);
+  } catch {}
+}
+
+function saveActiveOfferFilterPreference() {
+  if (!offerFilterStorageKey) {
+    offerFilterStorageKey = offerFilterStorageKeyForCurrentSeller();
+  }
+  if (!offerFilterStorageKey) return;
+  const normalized = normalizeOfferFilter(activeSellerOffersFilter);
+  try {
+    if (normalized === "pending") {
+      sessionStorage.removeItem(offerFilterStorageKey);
+      return;
+    }
+    sessionStorage.setItem(offerFilterStorageKey, normalized);
+  } catch {}
+}
+
+function clearActiveOfferFilterPreference() {
+  const key = offerFilterStorageKey || offerFilterStorageKeyForCurrentSeller();
+  try {
+    if (key) sessionStorage.removeItem(key);
+  } catch {}
+  offerFilterStorageKey = null;
+  activeSellerOffersFilter = "pending";
+}
+
+function syncOfferFilterButtons() {
+  const buttons = document.querySelectorAll("[data-offer-filter]");
+  buttons.forEach((button) => {
+    const filter = normalizeOfferFilter(button.dataset.offerFilter);
+    const label = String(button.dataset.filterLabel || "")
+      .trim()
+      .replace(/\s+/g, " ");
+    const safeLabel = label || offerFilterLabel(filter);
+    const count = filteredOffers(sellerOffersCache, filter).length;
+    const countLabel = count.toLocaleString();
+    const labelNode = button.querySelector(".sell-offer-filter-label");
+    const countNode = button.querySelector(".sell-offer-filter-count");
+    if (labelNode) labelNode.textContent = safeLabel;
+    if (countNode) {
+      countNode.textContent = countLabel;
+    } else {
+      button.textContent = `${safeLabel} (${countLabel})`;
+    }
+    const active = filter === activeSellerOffersFilter;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+    button.setAttribute("aria-label", `${safeLabel} ${offerCountLabel(count, "offer")}`);
+  });
+}
+
+function filteredOffers(offers = [], filter = activeSellerOffersFilter) {
+  const normalized = normalizeOfferFilter(filter);
+  if (normalized === "all") return offers;
+  if (normalized === "expiring-soon") {
+    const nowMs = Date.now();
+    return offers.filter((offer) => isAcceptedOfferExpiringSoon(offer, nowMs));
+  }
+  if (normalized === "cooling-down") {
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && reminderCooldownMsLeftForOffer(id) > 0;
+    });
+  }
+  if (normalized === "ready-reminder") {
+    const sellerUserId = currentSellerSocialUserId();
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      const buyerUserId = offerBuyerUserId(offer);
+      const canChat =
+        Number.isInteger(sellerUserId) &&
+        sellerUserId > 0 &&
+        Number.isInteger(buyerUserId) &&
+        buyerUserId > 0 &&
+        sellerUserId !== buyerUserId;
+      return status === "accepted" && Number.isInteger(id) && id > 0 && canChat && reminderCooldownMsLeftForOffer(id) <= 0;
+    });
+  }
+  if (normalized === "chat-blocked") {
+    const chatReadyIds = new Set(
+      acceptedOffersEligibleForChat(offers)
+        .map((offer) => Number(offer?.id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && !chatReadyIds.has(id);
+    });
+  }
+  if (normalized === "reminded") {
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && Boolean(reminderLastSentAtForOffer(id));
+    });
+  }
+  if (normalized === "not-reminded") {
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && !reminderLastSentAtForOffer(id);
+    });
+  }
+  if (normalized === "handled") {
+    return offers.filter((offer) => {
+      const status = String(offer?.status || "")
+        .trim()
+        .toLowerCase();
+      const id = Number(offer?.id);
+      return status === "accepted" && Number.isInteger(id) && id > 0 && isAcceptedOfferHandled(id);
+    });
+  }
+  return offers.filter((offer) => {
+    return (
+      String(offer?.status || "")
+        .trim()
+        .toLowerCase() === normalized
+    );
+  });
+}
+
+function handledOffersStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${HANDLED_ACCEPTED_OFFERS_KEY}:${sellerPhone}` : `${HANDLED_ACCEPTED_OFFERS_KEY}:default`;
+}
+
+function loadHandledAcceptedOffers() {
+  handledOffersStorageKey = handledOffersStorageKeyForCurrentSeller();
+  handledAcceptedOfferIds = new Set();
+  handledOfferHistory = [];
+  try {
+    const raw = sessionStorage.getItem(handledOffersStorageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((value) => {
+      const id = Number(value);
+      if (Number.isInteger(id) && id > 0) handledAcceptedOfferIds.add(id);
+    });
+  } catch {}
+}
+
+function saveHandledAcceptedOffers() {
+  if (!handledOffersStorageKey) {
+    handledOffersStorageKey = handledOffersStorageKeyForCurrentSeller();
+  }
+  if (!handledOffersStorageKey) return;
+  try {
+    if (!handledAcceptedOfferIds.size) {
+      sessionStorage.removeItem(handledOffersStorageKey);
+      return;
+    }
+    const ordered = Array.from(handledAcceptedOfferIds.values()).sort((a, b) => a - b);
+    sessionStorage.setItem(handledOffersStorageKey, JSON.stringify(ordered));
+  } catch {}
+}
+
+function clearHandledAcceptedOffersStorage() {
+  try {
+    if (handledOffersStorageKey) sessionStorage.removeItem(handledOffersStorageKey);
+  } catch {}
+  handledAcceptedOfferIds = new Set();
+  handledOfferHistory = [];
+  handledOffersStorageKey = null;
+}
+
+function reminderCooldownStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${OFFER_REMINDER_COOLDOWN_KEY}:${sellerPhone}` : `${OFFER_REMINDER_COOLDOWN_KEY}:default`;
+}
+
+function loadReminderCooldowns() {
+  reminderCooldownStorageKey = reminderCooldownStorageKeyForCurrentSeller();
+  reminderCooldownByOfferId = new Map();
+  const nowMs = Date.now();
+  try {
+    const raw = sessionStorage.getItem(reminderCooldownStorageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((entry) => {
+      if (!Array.isArray(entry) || entry.length < 2) return;
+      const offerId = Number(entry[0]);
+      const expiresAt = Number(entry[1]);
+      if (!Number.isInteger(offerId) || offerId < 1) return;
+      if (!Number.isFinite(expiresAt) || expiresAt <= nowMs) return;
+      reminderCooldownByOfferId.set(offerId, expiresAt);
+    });
+  } catch {}
+}
+
+function saveReminderCooldowns() {
+  if (!reminderCooldownStorageKey) {
+    reminderCooldownStorageKey = reminderCooldownStorageKeyForCurrentSeller();
+  }
+  if (!reminderCooldownStorageKey) return;
+  try {
+    const nowMs = Date.now();
+    const entries = Array.from(reminderCooldownByOfferId.entries())
+      .map(([offerId, expiresAt]) => [Number(offerId), Number(expiresAt)])
+      .filter(([offerId, expiresAt]) => Number.isInteger(offerId) && offerId > 0 && Number.isFinite(expiresAt) && expiresAt > nowMs)
+      .sort((a, b) => a[0] - b[0]);
+    if (!entries.length) {
+      sessionStorage.removeItem(reminderCooldownStorageKey);
+      return;
+    }
+    sessionStorage.setItem(reminderCooldownStorageKey, JSON.stringify(entries));
+  } catch {}
+}
+
+function clearReminderCooldownsStorage() {
+  try {
+    if (reminderCooldownStorageKey) sessionStorage.removeItem(reminderCooldownStorageKey);
+  } catch {}
+  reminderCooldownByOfferId = new Map();
+  reminderCooldownStorageKey = null;
+}
+
+function reminderLastSentStorageKeyForCurrentSeller() {
+  const sellerPhone = normalizePhoneInput(sellerProfile?.phone || apiPhone() || "");
+  return sellerPhone ? `${OFFER_REMINDER_SENT_AT_KEY}:${sellerPhone}` : `${OFFER_REMINDER_SENT_AT_KEY}:default`;
+}
+
+function loadReminderLastSentAt() {
+  reminderLastSentStorageKey = reminderLastSentStorageKeyForCurrentSeller();
+  reminderLastSentAtByOfferId = new Map();
+  try {
+    const raw = sessionStorage.getItem(reminderLastSentStorageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((entry) => {
+      if (!Array.isArray(entry) || entry.length < 2) return;
+      const offerId = Number(entry[0]);
+      const sentAt = Number(entry[1]);
+      if (!Number.isInteger(offerId) || offerId < 1) return;
+      if (!Number.isFinite(sentAt) || sentAt < 1) return;
+      reminderLastSentAtByOfferId.set(offerId, sentAt);
+    });
+  } catch {}
+}
+
+function saveReminderLastSentAt() {
+  if (!reminderLastSentStorageKey) {
+    reminderLastSentStorageKey = reminderLastSentStorageKeyForCurrentSeller();
+  }
+  if (!reminderLastSentStorageKey) return;
+  try {
+    const entries = Array.from(reminderLastSentAtByOfferId.entries())
+      .map(([offerId, sentAt]) => [Number(offerId), Number(sentAt)])
+      .filter(([offerId, sentAt]) => Number.isInteger(offerId) && offerId > 0 && Number.isFinite(sentAt) && sentAt > 0)
+      .sort((a, b) => a[0] - b[0]);
+    if (!entries.length) {
+      sessionStorage.removeItem(reminderLastSentStorageKey);
+      return;
+    }
+    sessionStorage.setItem(reminderLastSentStorageKey, JSON.stringify(entries));
+  } catch {}
+}
+
+function clearReminderLastSentAtStorage() {
+  try {
+    if (reminderLastSentStorageKey) sessionStorage.removeItem(reminderLastSentStorageKey);
+  } catch {}
+  reminderLastSentAtByOfferId = new Map();
+  reminderLastSentStorageKey = null;
+}
+
+function updateHandledResetButton() {
+  const button = el("offers-reset-handled-btn");
+  if (!button) return;
+  const hasHandled = handledAcceptedOfferIds.size > 0;
+  button.classList.toggle("hidden", !hasHandled);
+  button.disabled = !hasHandled;
+}
+
+function rememberHandledOfferHistory(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return;
+  handledOfferHistory = handledOfferHistory.filter((entry) => entry !== id);
+  handledOfferHistory.push(id);
+  if (handledOfferHistory.length > HANDLED_HISTORY_LIMIT) {
+    handledOfferHistory = handledOfferHistory.slice(-HANDLED_HISTORY_LIMIT);
+  }
+}
+
+function removeHandledOfferFromHistory(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return;
+  handledOfferHistory = handledOfferHistory.filter((entry) => entry !== id);
+}
+
+function popUndoableHandledOfferId() {
+  while (handledOfferHistory.length) {
+    const id = Number(handledOfferHistory.pop());
+    if (Number.isInteger(id) && id > 0 && handledAcceptedOfferIds.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
+function latestUndoableHandledOfferId() {
+  for (let index = handledOfferHistory.length - 1; index >= 0; index -= 1) {
+    const id = Number(handledOfferHistory[index]);
+    if (Number.isInteger(id) && id > 0 && handledAcceptedOfferIds.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
+function updateUndoLastDoneButton() {
+  const undoButton = el("offers-undo-handled-btn");
+  const reopenButton = el("offers-undo-open-btn");
+  const hasUndoable = Number.isInteger(latestUndoableHandledOfferId());
+  [undoButton, reopenButton].forEach((button) => {
+    if (!button) return;
+    button.classList.toggle("hidden", !hasUndoable);
+    button.disabled = !hasUndoable;
+  });
+}
+
+function reminderLastSentAtForOffer(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return null;
+  const sentAt = Number(reminderLastSentAtByOfferId.get(id) || 0);
+  return Number.isFinite(sentAt) && sentAt > 0 ? sentAt : null;
+}
+
+function setReminderLastSentAtForOffer(offerId, sentAtMs = Date.now()) {
+  const id = Number(offerId);
+  const sentAt = Number(sentAtMs);
+  if (!Number.isInteger(id) || id < 1 || !Number.isFinite(sentAt) || sentAt < 1) return false;
+  reminderLastSentAtByOfferId.set(id, sentAt);
+  saveReminderLastSentAt();
+  return true;
+}
+
+function formatReminderLastSentLabel(offerId) {
+  const sentAt = reminderLastSentAtForOffer(offerId);
+  if (!sentAt) return "";
+  const date = new Date(sentAt);
+  if (Number.isNaN(date.getTime())) return "";
+  const formatted = new Intl.DateTimeFormat("en-KE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+  return `Last reminder sent ${formatted}.`;
+}
+
+function formatReminderCooldown(msLeft) {
+  const totalSeconds = Math.max(1, Math.ceil((Number(msLeft) || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (!minutes) return `${totalSeconds}s`;
+  if (!seconds) return `${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
+function parseApiTimestampMs(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  const ms = new Date(String(value || "")).getTime();
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
+}
+
+function reminderCooldownMsLeftForOffer(offerId, nowMs = Date.now()) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return 0;
+  const expiresAt = Number(reminderCooldownByOfferId.get(id) || 0);
+  if (!Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+    reminderCooldownByOfferId.delete(id);
+    return 0;
+  }
+  return expiresAt - nowMs;
+}
+
+function setReminderCooldownForOffer(offerId, durationMs = OFFER_REMINDER_COOLDOWN_MS) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return 0;
+  const cooldownMs = Math.max(1000, Number(durationMs) || OFFER_REMINDER_COOLDOWN_MS);
+  const expiresAt = Date.now() + cooldownMs;
+  reminderCooldownByOfferId.set(id, expiresAt);
+  saveReminderCooldowns();
+  return expiresAt;
+}
+
+function reconcileReminderCooldowns(offers = sellerOffersCache) {
+  const nowMs = Date.now();
+  const offerIds = new Set(
+    (offers || [])
+      .map((offer) => Number(offer?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+  let changed = false;
+  Array.from(reminderCooldownByOfferId.entries()).forEach(([rawId, rawExpiresAt]) => {
+    const id = Number(rawId);
+    const expiresAt = Number(rawExpiresAt);
+    if (!offerIds.has(id) || !Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+      reminderCooldownByOfferId.delete(id);
+      changed = true;
+    }
+  });
+  if (changed) saveReminderCooldowns();
+}
+
+function reconcileReminderLastSentAt(offers = sellerOffersCache) {
+  const offerIds = new Set(
+    (offers || [])
+      .map((offer) => Number(offer?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+  let changed = false;
+  Array.from(reminderLastSentAtByOfferId.entries()).forEach(([rawId, rawSentAt]) => {
+    const id = Number(rawId);
+    const sentAt = Number(rawSentAt);
+    if (!offerIds.has(id) || !Number.isFinite(sentAt) || sentAt < 1) {
+      reminderLastSentAtByOfferId.delete(id);
+      changed = true;
+    }
+  });
+  if (changed) saveReminderLastSentAt();
+}
+
+function defaultReminderButtonLabel(button) {
+  if (button?.classList?.contains("offer-remind-next-btn")) return "Remind + next";
+  return "Send reminder";
+}
+
+function syncReminderCooldownButton(button, nowMs = Date.now()) {
+  if (!button || button.dataset.reminderBusy === "1") return;
+  const offerId = Number(button.dataset.offerId);
+  const cooldownMsLeft = reminderCooldownMsLeftForOffer(offerId, nowMs);
+  if (cooldownMsLeft > 0) {
+    button.textContent = `Wait ${formatReminderCooldown(cooldownMsLeft)}`;
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+    return;
+  }
+  button.textContent = defaultReminderButtonLabel(button);
+  button.disabled = false;
+  button.removeAttribute("aria-disabled");
+}
+
+function syncReminderCooldownButtonsUi(nowMs = Date.now()) {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+  wrap.querySelectorAll(".offer-reminder-btn, .offer-remind-next-btn").forEach((button) => {
+    syncReminderCooldownButton(button, nowMs);
+  });
+}
+
+function reminderCooldownStats(nowMs = Date.now()) {
+  let count = 0;
+  let nextMs = 0;
+  Array.from(reminderCooldownByOfferId.entries()).forEach(([rawId, rawExpiresAt]) => {
+    const id = Number(rawId);
+    const expiresAt = Number(rawExpiresAt);
+    if (!Number.isInteger(id) || id < 1 || !Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+      reminderCooldownByOfferId.delete(id);
+      return;
+    }
+    const msLeft = expiresAt - nowMs;
+    count += 1;
+    if (!nextMs || msLeft < nextMs) nextMs = msLeft;
+  });
+  return { count, nextMs };
+}
+
+function updateReminderCooldownHint(stats = reminderCooldownStats()) {
+  const hint = el("seller-offers-cooldown-hint");
+  if (!hint) return;
+  const count = Number(stats?.count) || 0;
+  const nextMs = Number(stats?.nextMs) || 0;
+  if (!count || nextMs <= 0) {
+    hint.textContent = "";
+    hint.classList.add("hidden");
+    return;
+  }
+  hint.classList.remove("hidden");
+  hint.textContent = `${offerCountLabel(count, "reminder")} cooling down · next unlock in ${formatReminderCooldown(nextMs)}.`;
+}
+
+function acceptedTriageStats(offers = sellerOffersCache) {
+  const sellerUserId = currentSellerSocialUserId();
+  let accepted = 0;
+  let ready = 0;
+  let cooling = 0;
+  let blocked = 0;
+  let handled = 0;
+
+  (offers || []).forEach((offer) => {
+    const status = String(offer?.status || "")
+      .trim()
+      .toLowerCase();
+    if (status !== "accepted") return;
+
+    accepted += 1;
+    const id = Number(offer?.id);
+    const buyerUserId = offerBuyerUserId(offer);
+    const canChat =
+      Number.isInteger(id) &&
+      id > 0 &&
+      Number.isInteger(sellerUserId) &&
+      sellerUserId > 0 &&
+      Number.isInteger(buyerUserId) &&
+      buyerUserId > 0 &&
+      sellerUserId !== buyerUserId;
+
+    if (!canChat) {
+      blocked += 1;
+      return;
+    }
+
+    if (isAcceptedOfferHandled(id)) {
+      handled += 1;
+      return;
+    }
+
+    const cooldownMs = reminderCooldownMsLeftForOffer(id);
+    if (cooldownMs > 0) {
+      cooling += 1;
+      return;
+    }
+
+    ready += 1;
+  });
+
+  return { accepted, ready, cooling, blocked, handled };
+}
+
+function updateAcceptedTriageHint(offers = sellerOffersCache) {
+  const hint = el("seller-offers-accepted-summary");
+  if (!hint) return;
+  const stats = acceptedTriageStats(offers);
+  if (!stats.accepted) {
+    hint.textContent = "";
+    hint.classList.add("hidden");
+    return;
+  }
+
+  hint.classList.remove("hidden");
+  hint.textContent = `Accepted triage · ${offerCountLabel(stats.ready, "ready chat")} · ${offerCountLabel(
+    stats.cooling,
+    "cooling reminder"
+  )} · ${offerCountLabel(stats.blocked, "chat blocked")} · ${offerCountLabel(stats.handled, "handled queue")}.`;
+}
+
+function offerFilterUsesReminderCooldown(filter = activeSellerOffersFilter) {
+  const normalized = normalizeOfferFilter(filter);
+  return normalized === "cooling-down" || normalized === "ready-reminder";
+}
+
+function stopReminderCooldownTicker() {
+  if (reminderCooldownTickTimer) {
+    window.clearInterval(reminderCooldownTickTimer);
+    reminderCooldownTickTimer = null;
+  }
+}
+
+function ensureReminderCooldownTicker() {
+  const nowMs = Date.now();
+  const stats = reminderCooldownStats(nowMs);
+  const shouldRun = currentSellerView === "dashboard" && stats.count > 0;
+  syncReminderCooldownButtonsUi(nowMs);
+  updateReminderCooldownHint(stats);
+  updateAcceptedTriageHint(sellerOffersCache);
+  if (!shouldRun) {
+    stopReminderCooldownTicker();
+    return;
+  }
+  if (reminderCooldownTickTimer) return;
+  reminderCooldownTickTimer = window.setInterval(() => {
+    if (currentSellerView !== "dashboard") {
+      stopReminderCooldownTicker();
+      return;
+    }
+    const tickStats = reminderCooldownStats(Date.now());
+    syncReminderCooldownButtonsUi();
+    updateReminderCooldownHint(tickStats);
+    updateAcceptedTriageHint(sellerOffersCache);
+    if (offerFilterUsesReminderCooldown(activeSellerOffersFilter)) {
+      renderOfferCacheView();
+      return;
+    }
+    syncOfferFilterButtons();
+    if (!tickStats.count) stopReminderCooldownTicker();
+  }, REMINDER_COOLDOWN_TICK_MS);
+}
+
+function isAcceptedOfferHandled(offerOrId) {
+  const id = Number(typeof offerOrId === "object" ? offerOrId?.id : offerOrId);
+  return Number.isInteger(id) && id > 0 ? handledAcceptedOfferIds.has(id) : false;
+}
+
+function setAcceptedOfferHandled(offerId, handled = true, { trackHistory = false } = {}) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return false;
+  if (handled) {
+    handledAcceptedOfferIds.add(id);
+    if (trackHistory) rememberHandledOfferHistory(id);
+  } else {
+    handledAcceptedOfferIds.delete(id);
+    removeHandledOfferFromHistory(id);
+  }
+  saveHandledAcceptedOffers();
+  return true;
+}
+
+function parseBooleanFlag(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+  return null;
+}
+
+function normalizedOfferIdList(values = []) {
+  const ids = [];
+  const seen = new Set();
+  (Array.isArray(values) ? values : [values]).forEach((value) => {
+    const id = Number(value);
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  });
+  return ids;
+}
+
+async function loadServerHandledOfferState(offerIds = [], sellerUserId = currentSellerSocialUserId()) {
+  if (!sellerUserId) {
+    return { ok: false, message: "Link your shop handle to your social profile first.", isError: false };
+  }
+  const ids = normalizedOfferIdList(offerIds);
+  const params = new URLSearchParams({
+    userId: String(sellerUserId),
+  });
+  if (ids.length) params.set("offerIds", ids.join(","));
+  const phone = apiPhone();
+  if (phone) params.set("phone", phone);
+  const sessionToken = getSessionToken();
+  if (sessionToken) params.set("sessionToken", sessionToken);
+
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/handled?${params.toString()}`);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not sync handled queue.",
+        isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+      };
+    }
+    const states = Array.isArray(parsed.data?.states) ? parsed.data.states : [];
+    const handledIds = new Set();
+    states.forEach((state) => {
+      const id = Number(state?.offerId);
+      const handled = parseBooleanFlag(state?.handled);
+      if (Number.isInteger(id) && id > 0 && handled) handledIds.add(id);
+    });
+    return { ok: true, handledIds };
+  } catch {
+    return { ok: false, message: "Network error while syncing handled queue.", isError: true };
+  }
+}
+
+async function syncHandledAcceptedOffersFromServer(offers = sellerOffersCache, sellerUserId = currentSellerSocialUserId()) {
+  const eligibleOfferIds = normalizedOfferIdList(
+    acceptedOffersEligibleForChat(offers).map((offer) => Number(offer?.id))
+  );
+  if (!eligibleOfferIds.length) {
+    handledAcceptedOfferIds = new Set();
+    handledOfferHistory = [];
+    saveHandledAcceptedOffers();
+    return { ok: true };
+  }
+
+  const remote = await loadServerHandledOfferState(eligibleOfferIds, sellerUserId);
+  if (!remote.ok) return remote;
+
+  const nextHandled = new Set();
+  eligibleOfferIds.forEach((id) => {
+    if (remote.handledIds.has(id)) nextHandled.add(id);
+  });
+  handledAcceptedOfferIds = nextHandled;
+  handledOfferHistory = handledOfferHistory.filter((id) => handledAcceptedOfferIds.has(id));
+  saveHandledAcceptedOffers();
+  return { ok: true };
+}
+
+async function setHandledOfferStateOnServer(offerId, handled = true) {
+  const id = Number(offerId);
+  const sellerUserId = currentSellerSocialUserId();
+  if (!Number.isInteger(id) || id < 1 || !sellerUserId) {
+    return { ok: false, message: "Could not resolve this handled-offer action.", isError: true };
+  }
+
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/${id}/handled`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+          handled: Boolean(handled),
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not update handled queue right now.",
+        isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+      };
+    }
+
+    const handledFromApi = parseBooleanFlag(parsed.data?.state?.handled);
+    return { ok: true, handled: handledFromApi == null ? Boolean(handled) : handledFromApi };
+  } catch {
+    return { ok: false, message: "Network error while updating handled queue.", isError: true };
+  }
+}
+
+async function resetHandledQueueOnServer() {
+  const sellerUserId = currentSellerSocialUserId();
+  if (!sellerUserId) {
+    return { ok: false, message: "Link your shop handle to your social profile first.", isError: false };
+  }
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/handled/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not reset handled queue right now.",
+        isError: true,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Network error while resetting handled queue.", isError: true };
+  }
+}
+
+function reconcileHandledAcceptedOffers(offers = sellerOffersCache) {
+  const eligibleIds = new Set(
+    acceptedOffersEligibleForChat(offers)
+      .map((offer) => Number(offer?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+  let changed = false;
+  Array.from(handledAcceptedOfferIds.values()).forEach((id) => {
+    if (!eligibleIds.has(id)) {
+      handledAcceptedOfferIds.delete(id);
+      removeHandledOfferFromHistory(id);
+      changed = true;
+    }
+  });
+  if (changed) saveHandledAcceptedOffers();
+}
+
+function acceptedOffersEligibleForChat(offers = sellerOffersCache) {
+  const sellerUserId = currentSellerSocialUserId();
+  if (!sellerUserId) return [];
+  return (offers || []).filter((offer) => {
+    const status = String(offer?.status || "")
+      .trim()
+      .toLowerCase();
+    const buyerUserId = offerBuyerUserId(offer);
+    return (
+      status === "accepted" &&
+      Number.isInteger(buyerUserId) &&
+      buyerUserId > 0 &&
+      buyerUserId !== sellerUserId
+    );
+  });
+}
+
+function acceptedOffersReadyForChat(offers = sellerOffersCache) {
+  return acceptedOffersEligibleForChat(offers).filter((offer) => !isAcceptedOfferHandled(offer));
+}
+
+function updateQuickModeHint() {
+  const hint = el("seller-offers-quick-hint");
+  const button = el("offers-quick-chat-btn");
+  if (!hint || !button) return;
+  updateHandledResetButton();
+  updateUndoLastDoneButton();
+
+  const chatEligible = acceptedOffersEligibleForChat();
+  const ready = acceptedOffersReadyForChat();
+  const acceptedTotal = filteredOffers(sellerOffersCache, "accepted").length;
+  const handledCount = Math.max(0, chatEligible.length - ready.length);
+  if (!ready.length) {
+    hint.textContent = chatEligible.length
+      ? "All chat-ready accepted offers are marked handled for now. Reset handled to queue them again."
+      : acceptedTotal
+        ? "Accepted offers are in, but buyer chat links are not ready yet."
+        : "No accepted offers ready for chat yet.";
+    button.disabled = true;
+    return;
+  }
+
+  const index = acceptedQuickCursor % ready.length;
+  const nextOffer = ready[index];
+  hint.textContent = `${offerCountLabel(ready.length, "accepted chat")} ready${
+    handledCount ? ` (${offerCountLabel(handledCount, "handled offer")} hidden)` : ""
+  }. Next: ${offerBuyerLabel(nextOffer)}.`;
+  button.disabled = false;
+}
+
+function offerFilterLabel(filter = activeSellerOffersFilter) {
+  if (filter === "accepted") return "accepted offer";
+  if (filter === "expiring-soon") return "expiring-soon offer";
+  if (filter === "reminded") return "reminded offer";
+  if (filter === "cooling-down") return "cooling-down offer";
+  if (filter === "ready-reminder") return "ready-to-remind offer";
+  if (filter === "chat-blocked") return "chat-blocked offer";
+  if (filter === "not-reminded") return "not-reminded offer";
+  if (filter === "handled") return "handled offer";
+  if (filter === "declined") return "declined offer";
+  if (filter === "pending") return "pending offer";
+  return "offer";
+}
+
+function offerCountLabel(count, noun) {
+  const safe = Math.max(0, Number(count) || 0);
+  return `${safe.toLocaleString()} ${noun}${safe === 1 ? "" : "s"}`;
+}
+
+function offerStatusLabel(status) {
+  if (status === "pending") return "Pending";
+  if (status === "accepted") return "Accepted";
+  if (status === "declined") return "Declined";
+  if (status === "expired") return "Expired";
+  return "Offer";
+}
+
+function offerStatusBadgeClass(status) {
+  if (status === "pending") return "sell-order-badge--action";
+  if (status === "accepted") return "sell-order-badge--done";
+  return "sell-order-badge--transit";
+}
+
+function formatOfferExpiry(expiresAt, status) {
+  if (!expiresAt) {
+    return status === "pending" ? "Waiting for your decision." : "No expiry timestamp.";
+  }
+  const time = new Date(expiresAt);
+  if (Number.isNaN(time.getTime())) {
+    return status === "pending" ? "Waiting for your decision." : "No expiry timestamp.";
+  }
+  const formatted = new Intl.DateTimeFormat("en-KE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(time);
+  return status === "pending" ? `Valid until ${formatted}` : `Updated ${formatted}`;
+}
+
+function offerExpiryMsLeft(offer, nowMs = Date.now()) {
+  const rawExpiry = offer?.expiresAt;
+  if (!rawExpiry) return 0;
+  const expiryMs = new Date(rawExpiry).getTime();
+  if (!Number.isFinite(expiryMs) || Number.isNaN(expiryMs)) return 0;
+  return Math.max(0, expiryMs - nowMs);
+}
+
+function isAcceptedOfferExpiringSoon(offer, nowMs = Date.now()) {
+  const status = String(offer?.status || "")
+    .trim()
+    .toLowerCase();
+  if (status !== "accepted") return false;
+  const msLeft = offerExpiryMsLeft(offer, nowMs);
+  return msLeft > 0 && msLeft <= OFFER_EXPIRING_SOON_MS;
+}
+
+function offerBuyerLabel(offer) {
+  const rawHandle = String(offer?.buyer?.handle || "").trim();
+  if (rawHandle) return rawHandle.startsWith("@") ? rawHandle : `@${rawHandle}`;
+  if (offer?.buyer?.shopName) return offer.buyer.shopName;
+  const buyerId = Number(offer?.buyerUserId || offer?.buyer?.id);
+  return Number.isInteger(buyerId) && buyerId > 0 ? `Buyer #${buyerId}` : "Buyer";
+}
+
+function pendingOffersCount(offers = []) {
+  return (offers || []).filter((offer) => {
+    return (
+      String(offer?.status || "")
+        .trim()
+        .toLowerCase() === "pending"
+    );
+  }).length;
+}
+
+function offerBuyerUserId(offer) {
+  const buyerId = Number(offer?.buyerUserId ?? offer?.buyer?.id);
+  return Number.isInteger(buyerId) && buyerId > 0 ? buyerId : null;
+}
+
+function currentSellerSocialUserId() {
+  const sellerId = Number(sellerProfile?.socialUserId ?? sellerProfile?.userId);
+  return Number.isInteger(sellerId) && sellerId > 0 ? sellerId : null;
+}
+
+function chatBlockedReasonForOffer(offer, sellerUserId = currentSellerSocialUserId(), buyerUserId = offerBuyerUserId(offer)) {
+  const status = String(offer?.status || "")
+    .trim()
+    .toLowerCase();
+  if (status !== "accepted") return "";
+  if (!Number.isInteger(sellerUserId) || sellerUserId < 1) {
+    return sellerProfile?.shopHandle
+      ? "Seller chat profile is still syncing. Tap Refresh and try again shortly."
+      : "Add your shop handle to link seller chat, then tap Refresh.";
+  }
+  if (!Number.isInteger(buyerUserId) || buyerUserId < 1) {
+    return "Buyer chat profile is still syncing. Tap Refresh in a moment.";
+  }
+  if (buyerUserId === sellerUserId) {
+    return "Chat is blocked because buyer and seller profile matched. Tap Refresh and try again.";
+  }
+  return "";
+}
+
+function inboxLinkForOffer(offer, sellerUserId, buyerUserId) {
+  if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) {
+    return "../inbox.html";
+  }
+  const params = new URLSearchParams({
+    viewer: String(sellerUserId),
+    with: String(buyerUserId),
+    sellerAuth: "1",
+  });
+  const buyerHandle = normalizeHandleForLookup(offer?.buyer?.handle || "");
+  if (buyerHandle) params.set("handle", buyerHandle);
+  return `../inbox.html?${params.toString()}`;
+}
+
+async function resolveSellerSocialUserId(force = false) {
+  if (!sellerProfile) return null;
+
+  const direct = Number(sellerProfile.userId || sellerProfile.socialUserId);
+  if (!force && Number.isInteger(direct) && direct > 0) {
+    return direct;
+  }
+
+  const handle = normalizeHandleForLookup(sellerProfile.shopHandle);
+  if (!handle) return null;
+  if (!force && sellerSocialUserIdPromise) return sellerSocialUserIdPromise;
+
+  sellerSocialUserIdPromise = (async () => {
+    try {
+      const res = await fetch(`${SOCIAL_API}/shop/${encodeURIComponent(handle)}?limit=1`);
+      const parsed = await parseApiResponse(res);
+      if (!parsed.ok) return null;
+      const userId = Number(parsed.data?.shop?.userId);
+      if (!Number.isInteger(userId) || userId < 1) return null;
+      sellerProfile.socialUserId = userId;
+      return userId;
+    } catch {
+      return null;
+    } finally {
+      sellerSocialUserIdPromise = null;
+    }
+  })();
+
+  return sellerSocialUserIdPromise;
+}
+
+function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. New offers will appear here.") {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+
+  if (!offers.length) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">${escapeHtml(emptyMessage)}</p>`;
+    return;
+  }
+
+  wrap.innerHTML = offers
+    .map((offer) => {
+      const id = Number(offer?.id);
+      const status = String(offer?.status || "pending")
+        .trim()
+        .toLowerCase();
+      const productTitle = offer?.product?.title || offer?.productId || "Listing";
+      const amount = formatKes(offer?.amountKsh || 0);
+      const listed = Number(offer?.product?.priceKsh ?? offer?.product?.priceKes);
+      const listedLine = Number.isFinite(listed) && listed > 0 ? ` · Listed ${formatKes(listed)}` : "";
+      const canRespond = Number.isInteger(id) && id > 0 && status === "pending";
+      const sellerUserId = currentSellerSocialUserId();
+      const buyerUserId = offerBuyerUserId(offer);
+      const canChat =
+        Number.isInteger(sellerUserId) &&
+        sellerUserId > 0 &&
+        Number.isInteger(buyerUserId) &&
+        buyerUserId > 0 &&
+        sellerUserId !== buyerUserId;
+      const chatBlockedReason = status === "accepted" && !canChat ? chatBlockedReasonForOffer(offer, sellerUserId, buyerUserId) : "";
+      const canManageQuickQueue = Number.isInteger(id) && id > 0 && status === "accepted" && canChat;
+      const handledInQuickQueue = canManageQuickQueue && isAcceptedOfferHandled(id);
+      const reminderCooldownMsLeft = canManageQuickQueue ? reminderCooldownMsLeftForOffer(id) : 0;
+      const reminderCoolingDown = reminderCooldownMsLeft > 0;
+      const reminderDisabledAttr = reminderCoolingDown ? ` disabled aria-disabled="true"` : "";
+      const reminderButtonLabel = reminderCoolingDown ? `Wait ${formatReminderCooldown(reminderCooldownMsLeft)}` : "Send reminder";
+      const remindNextButtonLabel = reminderCoolingDown ? `Wait ${formatReminderCooldown(reminderCooldownMsLeft)}` : "Remind + next";
+      const remindNextButton = canManageQuickQueue && !handledInQuickQueue
+        ? `<button type="button" class="sell-offer-action sell-offer-action--remind-next offer-remind-next-btn" data-offer-id="${id}"${reminderDisabledAttr}>
+              ${remindNextButtonLabel}
+            </button>`
+        : "";
+      const doneNextButton = canManageQuickQueue && !handledInQuickQueue
+        ? `<button type="button" class="sell-offer-action sell-offer-action--done-next offer-done-next-btn" data-offer-id="${id}">
+              Done + next chat
+            </button>`
+        : "";
+      const actionBlock = canRespond
+        ? `<div class="sell-offer-actions">
+            <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
+              Accept
+            </button>
+            <button type="button" class="sell-offer-action sell-offer-action--decline offer-action-btn" data-offer-id="${id}" data-action="declined">
+              Decline
+            </button>
+          </div>`
+        : status === "accepted" && canChat
+          ? `<div class="sell-offer-actions">
+              <a href="${inboxLinkForOffer(offer, sellerUserId, buyerUserId)}" class="sell-offer-action sell-offer-action--chat">
+                Open chat
+              </a>
+              <button type="button" class="sell-offer-action sell-offer-action--remind offer-reminder-btn" data-offer-id="${id}"${reminderDisabledAttr}>
+                ${reminderButtonLabel}
+              </button>
+              ${remindNextButton}
+              ${doneNextButton}
+              <button
+                type="button"
+                class="sell-offer-action sell-offer-action--handled offer-handled-btn"
+                data-offer-id="${id}"
+                data-handled="${handledInQuickQueue ? "1" : "0"}"
+              >
+                ${handledInQuickQueue ? "Mark active" : "Mark handled"}
+              </button>
+            </div>`
+          : "";
+      const reminderSentNote = status === "accepted" ? formatReminderLastSentLabel(id) : "";
+      const remindedBadge = reminderSentNote
+        ? `<span class="sell-order-badge sell-order-badge--reminded">Reminded</span>`
+        : "";
+      const handledNote = handledInQuickQueue
+        ? `<p class="text-xs text-brand-green mt-2">Handled in quick mode queue.</p>`
+        : "";
+      const chatBlockedNote = chatBlockedReason
+        ? `<p class="text-xs text-amber-700 dark:text-amber-300 mt-2">${escapeHtml(chatBlockedReason)}</p>`
+        : "";
+      return `
+        <article class="sell-offer-card sell-order-card" data-offer-row="${Number.isInteger(id) ? id : ""}">
+          <div class="sell-order-card-head">
+            <p class="font-semibold">${escapeHtml(productTitle)}</p>
+            <div class="sell-offer-card-badges">
+              <span class="sell-order-badge ${offerStatusBadgeClass(status)}">${escapeHtml(offerStatusLabel(status))}</span>
+              ${remindedBadge}
+            </div>
+          </div>
+          <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(offerBuyerLabel(offer))}</p>
+          <p class="text-sm mt-2"><strong>Offered:</strong> ${escapeHtml(amount)}${escapeHtml(listedLine)}</p>
+          <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
+            formatOfferExpiry(offer?.expiresAt, status)
+          )}</p>
+          ${reminderSentNote ? `<p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(reminderSentNote)}</p>` : ""}
+          ${chatBlockedNote}
+          ${handledNote}
+          ${actionBlock}
+        </article>`;
+    })
+    .join("");
+}
+
+function emptyOfferMessage(totalOffers, filter = activeSellerOffersFilter) {
+  if (!totalOffers) {
+    return "No buyer offers yet. New offers will appear here.";
+  }
+  if (filter === "pending") return "No pending offers right now.";
+  if (filter === "accepted") return "No accepted offers yet.";
+  if (filter === "expiring-soon") return "No accepted offers expiring in the next 2 hours.";
+  if (filter === "reminded") return "No reminded offers yet.";
+  if (filter === "cooling-down") return "No reminder cooldowns running right now.";
+  if (filter === "ready-reminder") return "No accepted chats ready for a reminder yet.";
+  if (filter === "chat-blocked") return "No accepted offers are blocked from chat right now.";
+  if (filter === "not-reminded") return "No accepted offers waiting for a first reminder.";
+  if (filter === "handled") return "No handled accepted offers in queue right now.";
+  if (filter === "declined") return "No declined offers yet.";
+  return "No offers in this view right now.";
+}
+
+function renderOfferCacheView() {
+  reconcileReminderCooldowns(sellerOffersCache);
+  reconcileReminderLastSentAt(sellerOffersCache);
+  syncOfferFilterButtons();
+  updateAcceptedTriageHint(sellerOffersCache);
+  const total = sellerOffersCache.length;
+  const pending = pendingOffersCount(sellerOffersCache);
+  const visible = filteredOffers(sellerOffersCache, activeSellerOffersFilter);
+  renderSellerOffers(visible, emptyOfferMessage(total, activeSellerOffersFilter));
+  bindOfferActionButtons();
+  updateQuickModeHint();
+  ensureReminderCooldownTicker();
+
+  if (!total) {
+    setOffersStatus("No buyer offers yet.");
+    return;
+  }
+  if (activeSellerOffersFilter === "all") {
+    setOffersStatus(`${offerCountLabel(total, "offer")} in inbox · ${offerCountLabel(pending, "pending offer")}.`);
+    return;
+  }
+  const label = offerFilterLabel(activeSellerOffersFilter);
+  setOffersStatus(
+    `${offerCountLabel(visible.length, label)} · ${offerCountLabel(pending, "pending offer")} · ${offerCountLabel(
+      total,
+      "total offer"
+    )}.`
+  );
+}
+
+function setActiveOfferFilter(filter) {
+  activeSellerOffersFilter = normalizeOfferFilter(filter);
+  saveActiveOfferFilterPreference();
+  renderOfferCacheView();
+}
+
+async function respondToSellerOffer(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  const action = String(button?.dataset?.action || "")
+    .trim()
+    .toLowerCase();
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  if (!["accepted", "declined"].includes(action)) return;
+
+  const sellerUserId = await resolveSellerSocialUserId();
+  if (!sellerUserId) {
+    setOffersStatus("Link your shop handle to your social profile before responding to offers.", true);
+    return;
+  }
+
+  const row = button.closest("[data-offer-row]");
+  row?.querySelectorAll(".offer-action-btn").forEach((node) => {
+    node.disabled = true;
+  });
+  setOffersStatus(action === "accepted" ? "Accepting offer..." : "Declining offer...");
+
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/${offerId}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+          action,
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      if (parsed.status === 401 && isSellerSessionAuthError(parsed.data)) {
+        handleSessionExpired(parsed.data);
+        return;
+      }
+      setOffersStatus(parsed.data?.message || parsed.message || "Could not update offer right now.", true);
+      row?.querySelectorAll(".offer-action-btn").forEach((node) => {
+        node.disabled = false;
+      });
+      return;
+    }
+    setOffersStatus(action === "accepted" ? "Offer accepted." : "Offer declined.");
+    await loadSellerOffers();
+  } catch {
+    setOffersStatus("Network error while updating offer.", true);
+    row?.querySelectorAll(".offer-action-btn").forEach((node) => {
+      node.disabled = false;
+    });
+  }
+}
+
+function offerByIdFromCache(offerId) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) return null;
+  return sellerOffersCache.find((offer) => Number(offer?.id) === id) || null;
+}
+
+async function sendReminderForOffer(offer) {
+  const sellerUserId = currentSellerSocialUserId();
+  const offerId = Number(offer?.id);
+  if (!sellerUserId || !Number.isInteger(offerId) || offerId < 1) {
+    return { ok: false, message: "Could not resolve this offer reminder action.", isError: true };
+  }
+  try {
+    const res = await fetch(`${SOCIAL_API}/offers/${offerId}/remind`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: apiPhone(),
+          sellerUserId,
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      const cooldownActive = parsed.data?.error === "reminder_cooldown_active";
+      return {
+        ok: false,
+        message: parsed.data?.message || parsed.message || "Could not send reminder right now.",
+        isError: !cooldownActive,
+        sessionExpired: parsed.status === 401 && isSellerSessionAuthError(parsed.data),
+        cooldownActive,
+        cooldownMs: Number(parsed.data?.cooldownMsRemaining || 0),
+        sentAtMs: parseApiTimestampMs(parsed.data?.lastReminderAt),
+      };
+    }
+    const cooldownMs = Math.max(1000, Number(parsed.data?.reminder?.cooldownMs) || OFFER_REMINDER_COOLDOWN_MS);
+    const sentAtMs = parseApiTimestampMs(parsed.data?.reminder?.sentAt) || Date.now();
+    return { ok: true, cooldownMs, sentAtMs };
+  } catch {
+    return { ok: false, message: "Network error while sending reminder.", isError: true };
+  }
+}
+
+async function sendAcceptedOfferReminder(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const offer = offerByIdFromCache(offerId);
+  if (!offer) {
+    setOffersStatus("Offer not found. Refresh and try again.", true);
+    return;
+  }
+  const cooldownMsLeft = reminderCooldownMsLeftForOffer(offerId);
+  if (cooldownMsLeft > 0) {
+    renderOfferCacheView();
+    setOffersStatus(`Reminder already sent. Try again in ${formatReminderCooldown(cooldownMsLeft)}.`);
+    return;
+  }
+
+  const previousLabel = button.textContent;
+  button.dataset.reminderBusy = "1";
+  button.disabled = true;
+  button.textContent = "Sending...";
+  setOffersStatus("Sending reminder...");
+  const reminder = await sendReminderForOffer(offer);
+  if (!reminder.ok) {
+    if (reminder.sessionExpired) {
+      handleSessionExpired({ message: reminder.message });
+      return;
+    }
+    if (reminder.cooldownActive) {
+      if (Number(reminder.cooldownMs) > 0) {
+        setReminderCooldownForOffer(offerId, reminder.cooldownMs);
+      }
+      if (Number(reminder.sentAtMs) > 0) {
+        setReminderLastSentAtForOffer(offerId, reminder.sentAtMs);
+      }
+      renderOfferCacheView();
+    }
+    delete button.dataset.reminderBusy;
+    setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
+    button.disabled = false;
+    button.textContent = previousLabel;
+    return;
+  }
+  delete button.dataset.reminderBusy;
+  setReminderCooldownForOffer(offerId, reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS);
+  setReminderLastSentAtForOffer(offerId, reminder.sentAtMs || Date.now());
+  renderOfferCacheView();
+  setOffersStatus(
+    `Reminder sent in inbox. Next reminder in ${formatReminderCooldown(reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS)}.`
+  );
+}
+
+async function toggleAcceptedOfferHandled(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const currentlyHandled = button.dataset.handled === "1" || isAcceptedOfferHandled(offerId);
+  const nextHandledState = !currentlyHandled;
+  button.disabled = true;
+  const remote = await setHandledOfferStateOnServer(offerId, nextHandledState);
+  if (remote.sessionExpired) {
+    handleSessionExpired({ message: remote.message });
+    return;
+  }
+  if (!remote.ok) {
+    button.disabled = false;
+    setOffersStatus(remote.message || "Could not update quick queue right now.", remote.isError !== false);
+    return;
+  }
+  if (!setAcceptedOfferHandled(offerId, remote.handled, { trackHistory: Boolean(remote.handled) })) {
+    button.disabled = false;
+    setOffersStatus("Could not update quick queue right now.", true);
+    return;
+  }
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  setOffersStatus(remote.handled ? "Offer marked handled in quick queue." : "Offer moved back into quick queue.");
+}
+
+async function resetHandledAcceptedOffersQueue() {
+  if (!handledAcceptedOfferIds.size) return;
+  const remote = await resetHandledQueueOnServer();
+  if (remote.sessionExpired) {
+    handleSessionExpired({ message: remote.message });
+    return;
+  }
+  if (!remote.ok) {
+    setOffersStatus(remote.message || "Could not reset handled queue right now.", remote.isError !== false);
+    return;
+  }
+  handledAcceptedOfferIds = new Set();
+  handledOfferHistory = [];
+  saveHandledAcceptedOffers();
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  setOffersStatus("Quick queue reset - all accepted chats are active again.");
+}
+
+async function restoreLastHandledAcceptedOffer() {
+  const offerId = latestUndoableHandledOfferId();
+  if (!offerId) return { offerId: null, offer: null };
+  const offer = offerByIdFromCache(offerId);
+  const remote = await setHandledOfferStateOnServer(offerId, false);
+  if (remote.sessionExpired) {
+    return {
+      offerId: null,
+      offer: null,
+      sessionExpired: true,
+      message: remote.message,
+      isError: remote.isError !== false,
+    };
+  }
+  if (!remote.ok) {
+    return {
+      offerId: null,
+      offer: null,
+      message: remote.message,
+      isError: remote.isError !== false,
+    };
+  }
+  if (!setAcceptedOfferHandled(offerId, false)) return { offerId: null, offer: null };
+  acceptedQuickCursor = 0;
+  renderOfferCacheView();
+  return { offerId, offer };
+}
+
+async function undoLastHandledAcceptedOffer() {
+  const restored = await restoreLastHandledAcceptedOffer();
+  if (restored.sessionExpired) {
+    handleSessionExpired({ message: restored.message });
+    return;
+  }
+  if (!restored.offerId && restored.message) {
+    setOffersStatus(restored.message, restored.isError !== false);
+    return;
+  }
+  if (!restored.offerId) {
+    renderOfferCacheView();
+    setOffersStatus("Nothing to undo yet. Mark an accepted chat done first.");
+    return;
+  }
+  setOffersStatus(
+    restored.offer
+      ? `${offerBuyerLabel(restored.offer)} moved back to active quick queue.`
+      : "Last handled chat moved back to active quick queue."
+  );
+}
+
+async function undoLastHandledAndReopenChat() {
+  const restored = await restoreLastHandledAcceptedOffer();
+  if (restored.sessionExpired) {
+    handleSessionExpired({ message: restored.message });
+    return;
+  }
+  if (!restored.offerId && restored.message) {
+    setOffersStatus(restored.message, restored.isError !== false);
+    return;
+  }
+  if (!restored.offerId) {
+    renderOfferCacheView();
+    setOffersStatus("Nothing to reopen yet. Mark an accepted chat done first.");
+    return;
+  }
+  if (!restored.offer) {
+    setOffersStatus("Last handled chat restored to queue. Refresh offers to reopen it.", true);
+    return;
+  }
+  if (!openOfferChatFromOffer(restored.offer, "Restored and opening chat with")) {
+    setOffersStatus(`${offerBuyerLabel(restored.offer)} moved back to active quick queue. Chat link is not ready yet.`, true);
+  }
+}
+
+async function moveAcceptedOfferToNextChat(offerId, offer) {
+  const id = Number(offerId);
+  if (!Number.isInteger(id) || id < 1) {
+    return { ok: false, message: "Offer not found. Refresh and try again.", isError: true };
+  }
+  const cachedOffer = offer || offerByIdFromCache(id);
+  if (!cachedOffer) {
+    return { ok: false, message: "Offer not found. Refresh and try again.", isError: true };
+  }
+  if (isAcceptedOfferHandled(id)) {
+    return { ok: false, message: "This offer is already marked handled. Tap Mark active to return it to queue." };
+  }
+
+  const readyBefore = acceptedOffersReadyForChat();
+  const currentIndex = readyBefore.findIndex((candidate) => Number(candidate?.id) === id);
+  const remote = await setHandledOfferStateOnServer(id, true);
+  if (remote.sessionExpired) {
+    return {
+      ok: false,
+      message: remote.message || "Session expired. Verify again and retry.",
+      isError: true,
+      sessionExpired: true,
+    };
+  }
+  if (!remote.ok) {
+    return {
+      ok: false,
+      message: remote.message || "Could not update quick queue right now.",
+      isError: remote.isError !== false,
+    };
+  }
+  if (!setAcceptedOfferHandled(id, true, { trackHistory: true })) {
+    return { ok: false, message: "Could not update quick queue right now.", isError: true };
+  }
+
+  const readyAfter = acceptedOffersReadyForChat();
+  if (!readyAfter.length) {
+    acceptedQuickCursor = 0;
+    renderOfferCacheView();
+    return { ok: true, opened: false, offer: cachedOffer };
+  }
+
+  const nextIndex = currentIndex < 0 ? 0 : currentIndex % readyAfter.length;
+  acceptedQuickCursor = nextIndex;
+  renderOfferCacheView();
+  openNextAcceptedOfferChat();
+  return { ok: true, opened: true, offer: cachedOffer };
+}
+
+async function remindAndMoveToNextAcceptedChat(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  if (isAcceptedOfferHandled(offerId)) {
+    setOffersStatus("This offer is already marked handled. Tap Mark active to return it to queue.");
+    return;
+  }
+  const offer = offerByIdFromCache(offerId);
+  if (!offer) {
+    setOffersStatus("Offer not found. Refresh and try again.", true);
+    return;
+  }
+  const cooldownMsLeft = reminderCooldownMsLeftForOffer(offerId);
+  if (cooldownMsLeft > 0) {
+    renderOfferCacheView();
+    setOffersStatus(`Reminder already sent. Try again in ${formatReminderCooldown(cooldownMsLeft)}.`);
+    return;
+  }
+
+  const previousLabel = button.textContent;
+  button.dataset.reminderBusy = "1";
+  button.disabled = true;
+  button.textContent = "Sending...";
+  setOffersStatus("Sending reminder then moving to next chat...");
+  const reminder = await sendReminderForOffer(offer);
+  if (!reminder.ok) {
+    if (reminder.sessionExpired) {
+      handleSessionExpired({ message: reminder.message });
+      return;
+    }
+    if (reminder.cooldownActive) {
+      if (Number(reminder.cooldownMs) > 0) {
+        setReminderCooldownForOffer(offerId, reminder.cooldownMs);
+      }
+      if (Number(reminder.sentAtMs) > 0) {
+        setReminderLastSentAtForOffer(offerId, reminder.sentAtMs);
+      }
+      renderOfferCacheView();
+    }
+    delete button.dataset.reminderBusy;
+    button.disabled = false;
+    button.textContent = previousLabel;
+    setOffersStatus(reminder.message || "Could not send reminder right now.", reminder.isError !== false);
+    return;
+  }
+  delete button.dataset.reminderBusy;
+  setReminderCooldownForOffer(offerId, reminder.cooldownMs || OFFER_REMINDER_COOLDOWN_MS);
+  setReminderLastSentAtForOffer(offerId, reminder.sentAtMs || Date.now());
+
+  const moved = await moveAcceptedOfferToNextChat(offerId, offer);
+  if (moved.sessionExpired) {
+    handleSessionExpired({ message: moved.message });
+    return;
+  }
+  if (!moved.ok) {
+    renderOfferCacheView();
+    setOffersStatus(
+      `Reminder sent in inbox, but quick queue did not move: ${String(moved.message || "try again in a moment.")}`,
+      moved.isError !== false
+    );
+    return;
+  }
+  if (!moved.opened) {
+    setOffersStatus(
+      `Reminder sent. Marked ${offerBuyerLabel(moved.offer || offer)} done. No more accepted chats in queue.`
+    );
+  }
+}
+
+async function markDoneAndOpenNextAcceptedChat(button) {
+  const offerId = Number(button?.dataset?.offerId);
+  if (!Number.isInteger(offerId) || offerId < 1) return;
+  const offer = offerByIdFromCache(offerId);
+  const moved = await moveAcceptedOfferToNextChat(offerId, offer);
+  if (moved.sessionExpired) {
+    handleSessionExpired({ message: moved.message });
+    return;
+  }
+  if (!moved.ok) {
+    setOffersStatus(moved.message || "Could not update quick queue right now.", moved.isError !== false);
+    return;
+  }
+  if (!moved.opened) {
+    setOffersStatus(`Marked ${offerBuyerLabel(moved.offer || offer)} done. No more accepted chats in queue.`);
+  }
+}
+
+function bindOfferActionButtons() {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+  wrap.querySelectorAll(".offer-action-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      respondToSellerOffer(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-reminder-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sendAcceptedOfferReminder(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-remind-next-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      void remindAndMoveToNextAcceptedChat(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-handled-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      void toggleAcceptedOfferHandled(btn);
+    });
+  });
+  wrap.querySelectorAll(".offer-done-next-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      void markDoneAndOpenNextAcceptedChat(btn);
+    });
+  });
+  syncReminderCooldownButtonsUi();
+}
+
+function bindOfferFilterButtons() {
+  document.querySelectorAll("[data-offer-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setActiveOfferFilter(button.dataset.offerFilter);
+    });
+  });
+  syncOfferFilterButtons();
+}
+
+function openOfferChatFromOffer(offer, statusPrefix = "Opening chat with") {
+  const sellerUserId = currentSellerSocialUserId();
+  const buyerUserId = offerBuyerUserId(offer);
+  if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) return false;
+  const url = inboxLinkForOffer(offer, sellerUserId, buyerUserId);
+  setOffersStatus(`${statusPrefix} ${offerBuyerLabel(offer)}...`);
+  const popup = window.open(url, "_blank", "noopener");
+  if (!popup) {
+    window.location.href = url;
+  }
+  return true;
+}
+
+function openNextAcceptedOfferChat() {
+  const sellerUserId = currentSellerSocialUserId();
+  if (!sellerUserId) {
+    setOffersStatus("Link your shop handle to your social profile to start accepted-offer chats.", true);
+    return;
+  }
+
+  setActiveOfferFilter("accepted");
+  const ready = acceptedOffersReadyForChat();
+  if (!ready.length) {
+    acceptedQuickCursor = 0;
+    updateQuickModeHint();
+    setOffersStatus("No accepted offers ready for chat right now.");
+    return;
+  }
+
+  const index = acceptedQuickCursor % ready.length;
+  const offer = ready[index];
+  acceptedQuickCursor = (index + 1) % ready.length;
+  updateQuickModeHint();
+
+  if (!openOfferChatFromOffer(offer)) {
+    setOffersStatus("Could not resolve buyer chat profile for this offer.", true);
+  }
+}
+
+function stopSellerOffersPolling() {
+  if (sellerOffersPollTimer) {
+    window.clearInterval(sellerOffersPollTimer);
+    sellerOffersPollTimer = null;
+  }
+}
+
+function startSellerOffersPolling() {
+  stopSellerOffersPolling();
+  if (!sellerProfile) return;
+  sellerOffersPollTimer = window.setInterval(() => {
+    if (currentSellerView !== "dashboard") return;
+    void loadSellerOffers({ silent: true });
+  }, SELLER_OFFERS_POLL_MS);
+}
+
+async function loadSellerOffers({ silent = false } = {}) {
+  const wrap = el("seller-offers");
+  if (!wrap) return;
+  if (sellerOffersRequestInFlight && silent) return;
+
+  sellerOffersRequestInFlight = true;
+  if (!silent) {
+    setOffersStatus("Loading offers...");
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading buyer offers…</p>`;
+  }
+
+  try {
+    const sellerUserId = await resolveSellerSocialUserId();
+    if (!sellerUserId) {
+      setDashboardOfferBadge(0);
+      sellerOffersCache = [];
+      stopReminderCooldownTicker();
+      clearReminderCooldownsStorage();
+      clearReminderLastSentAtStorage();
+      updateReminderCooldownHint({ count: 0, nextMs: 0 });
+      acceptedQuickCursor = 0;
+      renderSellerOffers([], "Offers inbox appears after your shop handle links to your social profile.");
+      updateQuickModeHint();
+      setOffersStatus("No linked social profile yet.");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      userId: String(sellerUserId),
+      role: "seller",
+      status: "all",
+      limit: "30",
+    });
+    const phone = apiPhone();
+    if (phone) params.set("phone", phone);
+    const sessionToken = getSessionToken();
+    if (sessionToken) params.set("sessionToken", sessionToken);
+    const res = await fetch(`${SOCIAL_API}/offers?${params}`);
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) {
+      if (parsed.status === 401 && isSellerSessionAuthError(parsed.data)) {
+        handleSessionExpired(parsed.data);
+        return;
+      }
+      if (!silent) {
+        wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Could not load offers right now.</p>`;
+        setOffersStatus(parsed.data?.message || parsed.message || "Could not load offers.", true);
+      }
+      return;
+    }
+
+    const offers = Array.isArray(parsed.data?.offers) ? parsed.data.offers : [];
+    const pending = pendingOffersCount(offers);
+    sellerOffersCache = offers;
+    const handledSync = await syncHandledAcceptedOffersFromServer(sellerOffersCache, sellerUserId);
+    if (!handledSync.ok) {
+      if (handledSync.sessionExpired) {
+        handleSessionExpired({ message: handledSync.message });
+        return;
+      }
+      if (!silent) {
+        setOffersStatus(handledSync.message || "Could not sync handled queue right now.", handledSync.isError !== false);
+      }
+    }
+    reconcileReminderCooldowns(sellerOffersCache);
+    reconcileReminderLastSentAt(sellerOffersCache);
+    reconcileHandledAcceptedOffers(sellerOffersCache);
+    const readyChats = acceptedOffersReadyForChat(sellerOffersCache);
+    if (!readyChats.length || acceptedQuickCursor >= readyChats.length) {
+      acceptedQuickCursor = 0;
+    }
+    setDashboardOfferBadge(pending);
+    renderOfferCacheView();
+  } catch {
+    if (!silent) {
+      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading offers.</p>`;
+      setOffersStatus("Network error while loading offers.", true);
+    }
+  } finally {
+    sellerOffersRequestInFlight = false;
+  }
+}
+
 async function loadSellerOrders() {
   const phone = apiPhone();
   if (!phone) return;
@@ -1252,6 +3129,7 @@ async function requestWithdrawal() {
 }
 
 function showSellerView(view) {
+  currentSellerView = view;
   const dashboard = el("view-dashboard");
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
@@ -1273,10 +3151,18 @@ function showSellerView(view) {
 
   if (view === "dashboard") {
     loadSellerOrders();
+    loadSellerOffers();
     loadEscrowLedger();
     loadMyListings();
+    startSellerOffersPolling();
+    ensureReminderCooldownTicker();
   } else if (view === "withdraw") {
+    stopSellerOffersPolling();
+    stopReminderCooldownTicker();
     loadWithdrawPanel();
+  } else {
+    stopSellerOffersPolling();
+    stopReminderCooldownTicker();
   }
 }
 
@@ -1318,6 +3204,9 @@ async function onSignOut() {
   showVerifyPanel();
   setOnboardStatus("");
   setStatus("");
+  setOffersStatus("");
+  setDashboardOfferBadge(0);
+  if (el("seller-offers")) el("seller-offers").innerHTML = "";
   if (phone) {
     try {
       await fetch(`${ONBOARD_API}/sign-out`, {
@@ -1336,6 +3225,7 @@ function init() {
 
   bindMediaSlots();
   bindLedgerTabs();
+  bindOfferFilterButtons();
   updateStepUi();
 
   el("tab-dashboard")?.addEventListener("click", () => showSellerView("dashboard"));
@@ -1344,6 +3234,17 @@ function init() {
   el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
+  el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
+  el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
+  el("offers-reset-handled-btn")?.addEventListener("click", () => {
+    void resetHandledAcceptedOffersQueue();
+  });
+  el("offers-undo-handled-btn")?.addEventListener("click", () => {
+    void undoLastHandledAcceptedOffer();
+  });
+  el("offers-undo-open-btn")?.addEventListener("click", () => {
+    void undoLastHandledAndReopenChat();
+  });
 
   el("btn-next")?.addEventListener("click", () => goStep(1));
   el("btn-back")?.addEventListener("click", () => goStep(-1));

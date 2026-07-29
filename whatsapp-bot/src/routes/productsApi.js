@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isDbEnabled, pingDb } from "../db/pool.js";
 import { isCatalogPubliclyDisabled } from "../services/catalog-guard.js";
 import {
+  createProductListing,
   getProductById,
   searchProductsDb,
   countSearchProductsDb,
@@ -12,8 +13,11 @@ import {
   getBrowseCountsFromDb,
   countProducts,
 } from "../db/repositories/products.js";
+import { toggleProductLike } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
+import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
+import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,6 +44,8 @@ function toPublicProduct(p) {
     browseSubCategory: p.browseSubCategory,
     brand: p.brand,
     color: p.color,
+    size: p.size,
+    genderFit: p.genderFit,
     description: p.description,
     isSecondhand: p.isSecondhand,
     condition: p.condition,
@@ -51,6 +57,10 @@ function toPublicProduct(p) {
     rating: p.rating,
     reviews: p.reviews,
     source: p.scope === "international" ? p.source : "Sokoni",
+    businessName: p.businessName,
+    sellerHandle: p.sellerHandle,
+    shopHandle: p.shopHandle,
+    sellerUserId: p.sellerUserId,
     scope: p.scope,
     fulfillment: p.fulfillment,
     payment: p.payment,
@@ -106,6 +116,83 @@ function buildListFilters(req) {
     inStockOnly: req.query.includeHidden !== "true",
   };
 }
+
+function createProductErrorStatus(error) {
+  if (error === "database_not_configured") return 503;
+  if (error === "seller_not_found") return 404;
+  return 400;
+}
+
+function socialErrorStatus(error) {
+  if (error === "database_not_configured") return 503;
+  if (error === "session_required" || error === "session_invalid" || error === "session_expired") return 401;
+  if (error === "buyer_session_mismatch") return 403;
+  if (error === "user_not_found" || error === "product_not_found") return 404;
+  return 400;
+}
+
+/**
+ * POST /api/products/create
+ * Mandatory metadata: size, condition, genderFit (+ title, price, cover image).
+ */
+router.post("/create", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req, { requireSellerRecord: true });
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const requestedSellerId = Number(req.body?.sellerId);
+    if (Number.isInteger(requestedSellerId) && requestedSellerId > 0 && requestedSellerId !== auth.sellerId) {
+      return res.status(403).json({
+        error: "seller_session_mismatch",
+        message: "Seller session does not match the seller profile in this request.",
+      });
+    }
+
+    const payload = { ...(req.body || {}), sellerId: auth.sellerId };
+    const result = await createProductListing(payload);
+    if (result.error) {
+      return res
+        .status(createProductErrorStatus(result.error))
+        .json({ error: result.error, message: result.message });
+    }
+    res.status(201).json({ success: true, product: toPublicProduct(result.product) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/products/like — toggle like by { userId, productId } */
+router.post("/like", async (req, res) => {
+  try {
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "userId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const result = await toggleProductLike(gated.payload || {});
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json({
+      liked: result.liked,
+      likesCount: result.likesCount,
+      userId: result.userId,
+      productId: result.productId,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get("/meta", async (_req, res) => {
   const disabled = await isCatalogPubliclyDisabled();

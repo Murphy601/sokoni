@@ -128,6 +128,15 @@ export const config = {
     url: process.env.DATABASE_URL || "",
     poolMax: Number(process.env.DATABASE_POOL_MAX) || 10,
   },
+  /**
+   * Buyer social auth mode:
+   * - soft (default): if phone+sessionToken present, enforce identity; else allow legacy client IDs
+   * - hard: require buyer WhatsApp session on social write actions
+   * - off: disable buyer session checks
+   */
+  buyerAuth: {
+    mode: (process.env.BUYER_AUTH_MODE || "soft").trim().toLowerCase(),
+  },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

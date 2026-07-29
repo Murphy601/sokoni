@@ -41,6 +41,11 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     browseSubCategory: row.browse_sub_category || undefined,
     brand: row.brand || undefined,
     color: row.color || undefined,
+    size: row.size_label || undefined,
+    genderFit: row.gender_fit || undefined,
+    sellerHandle: row.seller_handle || undefined,
+    shopHandle: row.seller_slug || undefined,
+    businessName: row.seller_business_name || undefined,
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),
@@ -82,6 +87,7 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     estDeliveryDays: row.est_delivery_days || undefined,
 
     sellerId: row.seller_id != null ? Number(row.seller_id) : undefined,
+    sellerUserId: row.seller_user_id != null ? Number(row.seller_user_id) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -105,6 +111,11 @@ export function jsonToDbProduct(json, sellerId = null) {
     browse_sub_category: json.browseSubCategory || null,
     brand: json.brand || null,
     color: json.color || null,
+    size_label: json.size || json.sizeLabel || null,
+    gender_fit:
+      typeof json.genderFit === "string"
+        ? String(json.genderFit).trim().toLowerCase() || null
+        : null,
     is_secondhand: Boolean(json.isSecondhand),
     condition: json.condition || "brand_new_without_tags",
     stock_quantity: stockQty,

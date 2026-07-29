@@ -17,6 +17,8 @@ import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
 import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
+import socialApiRouter from "./routes/socialApi.js";
+import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
 import ordersApiRouter from "./routes/ordersApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
 import paymentsApiRouter from "./routes/paymentsApi.js";
@@ -60,7 +62,7 @@ app.use((req, res, next) => {
   if (origin && SITE_ORIGINS.has(origin.replace(/\/$/, ""))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Seller-Session");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Seller-Session, X-Buyer-Session");
   }
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -154,6 +156,8 @@ app.use("/api/suppliers", suppliersApiRouter);
 app.use("/api/products", productsApiRouter);
 app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/api/seller/onboard", sellerOnboardApiRouter);
+app.use("/api/social", socialApiRouter);
+app.use("/api/buyer/auth", buyerAuthApiRouter);
 app.use("/api/orders", ordersApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/payments", paymentsApiRouter);

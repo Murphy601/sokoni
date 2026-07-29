@@ -138,7 +138,10 @@
       </div>
 
       <div class="sell-view-tabs" role="tablist" aria-label="Seller views">
-        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">Dashboard</button>
+        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">
+          <span>Dashboard</span>
+          <span id="tab-dashboard-offers-badge" class="sell-tab-badge hidden" aria-live="polite"></span>
+        </button>
         <button type="button" id="tab-withdraw" class="sell-view-tab" role="tab" aria-selected="false">Withdraw</button>
         <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List new item</button>
       </div>
@@ -153,6 +156,85 @@
             <button id="load-orders-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
           </div>
           <div id="seller-orders" class="space-y-3"></div>
+        </section>
+
+        <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg">Offers inbox</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">Buyers can negotiate. Accept to lock checkout for 24 hours.</p>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <button id="offers-quick-chat-btn" type="button" class="sell-offer-quick-btn" disabled>
+                Open next accepted chat
+              </button>
+              <button id="offers-reset-handled-btn" type="button" class="sell-offer-reset-btn hidden" disabled>
+                Reset handled
+              </button>
+              <button id="offers-undo-handled-btn" type="button" class="sell-offer-undo-btn hidden" disabled>
+                Undo last done
+              </button>
+              <button id="offers-undo-open-btn" type="button" class="sell-offer-undo-open-btn hidden" disabled>
+                Undo + reopen
+              </button>
+              <button id="load-offers-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">
+                Refresh
+              </button>
+            </div>
+          </div>
+          <p id="seller-offers-status" class="text-sm text-brand-purple/60 dark:text-white/60"></p>
+          <p id="seller-offers-cooldown-hint" class="hidden text-xs text-brand-purple/55 dark:text-white/60"></p>
+          <p id="seller-offers-accepted-summary" class="hidden text-xs text-brand-purple/55 dark:text-white/60"></p>
+          <div id="seller-offers-filters" class="sell-offer-filters" role="tablist" aria-label="Offer status filters">
+            <button type="button" class="sell-offer-filter is-active" data-offer-filter="pending" data-filter-label="Pending" role="tab" aria-selected="true">
+              <span class="sell-offer-filter-label">Pending</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="all" data-filter-label="All" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">All</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="accepted" data-filter-label="Accepted" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Accepted</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="expiring-soon" data-filter-label="Expiring soon" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Expiring soon</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="reminded" data-filter-label="Reminded" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Reminded</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="cooling-down" data-filter-label="Cooling down" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Cooling down</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="ready-reminder" data-filter-label="Ready to remind" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Ready to remind</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="chat-blocked" data-filter-label="Chat blocked" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Chat blocked</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="not-reminded" data-filter-label="Not reminded" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Not reminded</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="handled" data-filter-label="Handled queue" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Handled queue</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+            <button type="button" class="sell-offer-filter" data-offer-filter="declined" data-filter-label="Declined" role="tab" aria-selected="false">
+              <span class="sell-offer-filter-label">Declined</span>
+              <span class="sell-offer-filter-count" aria-hidden="true">0</span>
+            </button>
+          </div>
+          <p id="seller-offers-quick-hint" class="text-xs text-brand-purple/55 dark:text-white/60">
+            No accepted offers ready for chat yet.
+          </p>
+          <div id="seller-offers" class="space-y-3"></div>
         </section>
 
         <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">

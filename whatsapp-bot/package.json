@@ -13,7 +13,10 @@
     "db:backfill-browse": "node scripts/backfill-browse-categories.mjs",
     "catalog:clear": "node scripts/clear-all-catalog.mjs",
     "test:listing": "node scripts/test-listing-generator.mjs",
-    "test:gemini": "node scripts/test-gemini-vision.mjs"
+    "test:gemini": "node scripts/test-gemini-vision.mjs",
+    "test:buyer-auth": "node scripts/test-buyer-social-auth.mjs",
+    "test:social-routing": "node scripts/test-social-auth-routing.mjs",
+    "test:social": "npm run test:buyer-auth && npm run test:social-routing"
   },
   "keywords": [
     "whatsapp",
