@@ -10,6 +10,34 @@ The e2-micro has only **1 GB RAM**, so we:
 
 ---
 
+## GitHub Actions auto-deploy (required secrets)
+
+Workflow: `.github/workflows/bot-deploy.yml` runs on every `main` push that touches `whatsapp-bot/**`.
+
+In **GitHub → Settings → Secrets and variables → Actions**, set:
+
+| Secret | Example | Notes |
+|--------|---------|--------|
+| `VM_HOST` | `104.197.128.235` | Public IP of `sokoni-bot` (same as `bot.sokonimall.com` A record) |
+| `VM_USER` | `daviemuiruri3888` | Linux user that owns `~/sokoni` |
+| `VM_SSH_KEY` | `-----BEGIN … PRIVATE KEY-----` | Full private key; matching public key in `~/.ssh/authorized_keys` on the VM |
+
+Without these, Bot Deploy fails immediately with `missing server host` / empty key.
+
+**Manual deploy (if Actions secrets are not set yet):**
+
+```bash
+# On the GCP VM (browser SSH is fine)
+cd ~/sokoni
+git fetch origin main && git checkout main && git pull --rebase origin main
+bash scripts/deploy-bot.sh
+curl -s https://bot.sokonimall.com/health
+```
+
+Website (`sokonimall.com`) deploys via **Cloudflare Workers Builds** on `main` — no VM secrets needed.
+
+---
+
 ## Phase A — Create the GCP VM
 
 1. Go to https://console.cloud.google.com → create or select a **project**.
