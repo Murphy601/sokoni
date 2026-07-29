@@ -19,6 +19,25 @@ fi
 echo "==> Starting WAHA from $COMPOSE_FILE (repo: $SOKONI_REPO)"
 cd "$SOKONI_REPO"
 
+if [ "${WIPE_WAHA_SESSIONS:-}" = "1" ]; then
+  waha_wipe_sessions_volume
+fi
+
+# Show live WhatsApp Web version (helps diagnose NOWEB Connection Failure / stale client).
+if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/fetch-wa-version.js" ]; then
+  LIVE_WA_VER="$(node "$SCRIPT_DIR/fetch-wa-version.js" 2>/dev/null || true)"
+  if [ -n "${LIVE_WA_VER:-}" ]; then
+    echo "==> Live WhatsApp Web version: $LIVE_WA_VER"
+    # Prefer host-fetched version when caller did not override.
+    export WAHA_NOWEB_WA_VERSION="${WAHA_NOWEB_WA_VERSION:-$LIVE_WA_VER}"
+  else
+    echo "==> Could not fetch live WhatsApp Web version (container will retry / use built-in)"
+  fi
+fi
+if [ -n "${WAHA_NOWEB_WA_VERSION:-}" ]; then
+  echo "==> WAHA_NOWEB_WA_VERSION=$WAHA_NOWEB_WA_VERSION"
+fi
+
 # Pull the pinned image explicitly (avoid compose ${image:tag} default interpolation bugs).
 if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
   echo "==> Pulling WAHA image ($WAHA_DEFAULT_IMAGE) — set SKIP_WAHA_PULL=1 to skip"
