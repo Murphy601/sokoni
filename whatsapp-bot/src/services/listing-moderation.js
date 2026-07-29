@@ -30,6 +30,51 @@ const PROHIBITED = [
   /\b(?:stolen|hot\s+goods)\b/i,
 ];
 
+const FLAG_LABELS = {
+  missing_title: "Missing title",
+  invalid_price: "Invalid price",
+  missing_image: "Missing image",
+  off_platform_contact: "Off-platform contact",
+  prohibited_item: "Prohibited item",
+  admin_takedown: "Removed by Sokoni",
+};
+
+export function labelForFlag(flag) {
+  const key = String(flag || "").trim();
+  return FLAG_LABELS[key] || key.replace(/_/g, " ");
+}
+
+export function summarizeModeration(moderation = {}, { inStock } = {}) {
+  const flags = Array.isArray(moderation?.flags) ? moderation.flags.filter(Boolean) : [];
+  const status =
+    moderation?.status === "hidden" || (inStock === false && flags.length)
+      ? "hidden"
+      : moderation?.status === "live"
+        ? "live"
+        : moderation?.status || (inStock === false ? "hidden" : "live");
+  const labels = flags.map(labelForFlag);
+  const reason =
+    String(moderation?.reason || "").trim() ||
+    (labels.length ? labels.join(" · ") : status === "hidden" ? "Pending Sokoni review" : "");
+  const sellerHint =
+    status === "hidden"
+      ? flags.includes("admin_takedown")
+        ? "Sokoni removed this listing. Message support on WhatsApp if you need details."
+        : "Sokoni is reviewing this listing. Remove off-platform contacts or policy issues, then re-list or wait for restore."
+      : "";
+
+  return {
+    status,
+    flags,
+    labels,
+    reason,
+    sellerHint,
+    hiddenAt: moderation?.hiddenAt || null,
+    scannedAt: moderation?.scannedAt || null,
+    restoredAt: moderation?.restoredAt || null,
+  };
+}
+
 /** @param {Record<string, unknown>} product */
 export function scanListingLocally(product) {
   const flags = [];
@@ -149,10 +194,14 @@ export async function runPostPublishModeration(product, { sellerPhone = "" } = {
 
   if (sellerPhone) {
     try {
+      const summary = summarizeModeration(
+        { status: "hidden", flags: result.flags, reason: result.flags.join(", ") },
+        { inStock: false }
+      );
       await sendText(
         `${String(sellerPhone).replace(/\D/g, "")}@c.us`,
         `⚠️ *Listing hidden pending review*\n*${product.name}*\n🆔 \`${product.id}\`\n` +
-          `Reason: ${result.flags.join(", ")}\n\n` +
+          `Reason: ${summary.reason}\n\n` +
           `_Sokoni will review shortly. Fix off-platform links or policy issues and re-list if needed._`
       );
     } catch {}
@@ -160,9 +209,14 @@ export async function runPostPublishModeration(product, { sellerPhone = "" } = {
 
   if (config.admin.primary) {
     try {
+      const summary = summarizeModeration(
+        { status: "hidden", flags: result.flags, reason: result.flags.join(", ") },
+        { inStock: false }
+      );
       await sendText(
         `${config.admin.primary.replace(/\D/g, "")}@c.us`,
-        `🚩 *Listing flagged* \`${product.id}\`\n*${product.name}*\nFlags: ${result.flags.join(", ")}\n` +
+        `🚩 *Listing flagged* \`${product.id}\`\n*${product.name}*\nFlags: ${summary.reason}\n` +
+          `Review: https://sokonimall.com/admin-seller-listings.html\n` +
           `Restore: POST /admin/suppliers/seller-listings/${product.id}/restore?token=...`
       );
     } catch {}
@@ -173,9 +227,14 @@ export async function runPostPublishModeration(product, { sellerPhone = "" } = {
 
 export async function listFlaggedListings() {
   const master = await loadMaster();
-  return master.filter(
-    (p) =>
-      p.moderation?.status === "hidden" ||
-      (p.inStock === false && p.moderation?.flags?.length)
-  );
+  return master
+    .filter(
+      (p) =>
+        p.moderation?.status === "hidden" ||
+        (p.inStock === false && p.moderation?.flags?.length)
+    )
+    .map((p) => ({
+      ...p,
+      moderationSummary: summarizeModeration(p.moderation || {}, { inStock: p.inStock }),
+    }));
 }
