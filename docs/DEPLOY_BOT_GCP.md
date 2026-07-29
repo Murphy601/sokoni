@@ -29,10 +29,18 @@ Without these, Bot Deploy fails immediately with `missing server host` / empty k
 ```bash
 # On the GCP VM (browser SSH is fine)
 cd ~/sokoni
-git fetch origin main && git checkout main && git pull --rebase origin main
-bash scripts/deploy-bot.sh
+# Always deploy from origin/main (do not stay on a leftover feature branch)
+git fetch origin main
+git stash push -u -m "vm-pre-deploy-$(date +%s)" || true
+git checkout -B main origin/main
+SKIP_WAHA_DEPLOY=1 SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh
 curl -s https://bot.sokonimall.com/health
 ```
+
+Useful env flags:
+- `SKIP_WAHA_DEPLOY=1` — restart bot only; leave the WAHA container alone (keeps WhatsApp session).
+- `SKIP_CATALOG_PUBLISH=1` — do not try to commit/push local `products.json` (use when the VM branch has diverged).
+- `SOKONI_DEPLOY_REF=main` — ref to force-checkout (default `main`).
 
 Website (`sokonimall.com`) deploys via **Cloudflare Workers Builds** on `main` — no VM secrets needed.
 
