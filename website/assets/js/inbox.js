@@ -106,7 +106,7 @@ function setStatus(msg, isError = false) {
   node.textContent = msg || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(msg));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
 }
 
 function setPeerLabel() {
@@ -126,11 +126,11 @@ function messageBubble(msg) {
 
   return `
     <div class="flex flex-col ${wrapper} gap-1">
-      <p class="text-[11px] text-brand-purple/50 dark:text-white/55">${who}</p>
+      <p class="text-[11px] text-zinc-500">${who}</p>
       <div class="max-w-[85%] px-3 py-2 text-sm leading-relaxed ${bubble}">
         ${escapeHtml(msg.content)}
       </div>
-      <p class="text-[10px] text-brand-purple/45 dark:text-white/45 font-mono">${formatTime(msg.createdAt)}</p>
+      <p class="text-[10px] text-zinc-600 font-mono">${formatTime(msg.createdAt)}</p>
     </div>`;
 }
 
@@ -210,10 +210,10 @@ function resolveViewerId() {
 }
 
 function offerStatusClass(status) {
-  if (status === "accepted") return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  if (status === "declined") return "bg-red-500/10 text-red-700 dark:text-red-300";
-  if (status === "expired") return "bg-black/5 text-brand-purple/55 dark:bg-white/10 dark:text-white/55";
-  return "bg-brand-purple/5 text-brand-purple dark:bg-white/10 dark:text-white";
+  if (status === "accepted") return "bg-emerald-500/10 text-emerald-400";
+  if (status === "declined") return "bg-[#FF2300]/10 text-[#FF2300]";
+  if (status === "expired") return "bg-zinc-800 text-zinc-400";
+  return "bg-zinc-900 text-zinc-200";
 }
 
 function offerEscrowSummary(offer) {
@@ -223,7 +223,7 @@ function offerEscrowSummary(offer) {
     b.freeShipping || !b.shippingKes
       ? "shipping free"
       : `shipping ${formatKes(b.shippingKes)}`;
-  return `<p class="text-[11px] text-brand-purple/65 dark:text-white/65 mt-1">Buyer pays ${escapeHtml(formatKes(b.totalKes))} into escrow · seller gets ${escapeHtml(formatKes(b.sellerNetKes))} (${escapeHtml(ship)} + fee ${escapeHtml(formatKes(b.platformFeeKes))})</p>`;
+  return `<p class="text-[11px] text-zinc-400 mt-1">Buyer pays ${escapeHtml(formatKes(b.totalKes))} into escrow · seller gets ${escapeHtml(formatKes(b.sellerNetKes))} (${escapeHtml(ship)} + fee ${escapeHtml(formatKes(b.platformFeeKes))})</p>`;
 }
 
 function offerCard(offer) {
@@ -251,13 +251,13 @@ function offerCard(offer) {
   return `<article class="inbox-bargain-card">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <p class="text-[10px] uppercase tracking-wide text-brand-purple/50 dark:text-white/50 font-semibold">Bargain offer · buyer total</p>
-        <p class="text-sm font-semibold mt-0.5">${title}</p>
+        <p class="text-[10px] uppercase tracking-wide text-zinc-500 font-semibold">Bargain offer · buyer total</p>
+        <p class="text-sm font-semibold mt-0.5 text-white">${title}</p>
       </div>
       <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded ${offerStatusClass(status)}">${escapeHtml(status)}</span>
     </div>
-    <p class="text-xl font-black font-mono mt-2">${escapeHtml(amount)}</p>
-    ${listed ? `<p class="text-[11px] text-brand-purple/50 dark:text-white/50 line-through">Was ${escapeHtml(listed)}</p>` : ""}
+    <p class="text-xl font-black font-mono mt-2 text-white">${escapeHtml(amount)}</p>
+    ${listed ? `<p class="text-[11px] text-zinc-500 line-through">Was ${escapeHtml(listed)}</p>` : ""}
     ${offerEscrowSummary(offer)}
     ${actions}
   </article>`;

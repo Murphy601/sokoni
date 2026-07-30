@@ -1,0 +1,377 @@
+/**
+ * Depop Selling Hub / Inbox / Disputes surfaces
+ * Canvas #000 · surfaces #09090B · borders #18181B · accent #FF2300 · success #10B981
+ */
+
+:root {
+  --depop-bg: #000000;
+  --depop-surface: #09090b;
+  --depop-border: #18181b;
+  --depop-border-hover: #27272a;
+  --depop-accent: #ff2300;
+  --depop-accent-hover: #d91e00;
+  --depop-success: #10b981;
+  --depop-text: #ffffff;
+  --depop-muted: #a1a1aa;
+  --depop-faint: #71717a;
+}
+
+/* Page shells that should always feel like Depop dark */
+body.depop-surface-page,
+.depop-surface {
+  background: var(--depop-bg) !important;
+  color: var(--depop-text);
+}
+
+.depop-surface a:not(.depop-btn-accent):not(.depop-btn-white) {
+  color: var(--depop-muted);
+}
+
+.depop-surface a:not(.depop-btn-accent):not(.depop-btn-white):hover {
+  color: var(--depop-text);
+}
+
+.depop-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--depop-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.depop-card {
+  background: var(--depop-surface);
+  border: 1px solid var(--depop-border);
+  border-radius: 1rem;
+}
+
+.depop-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  border-radius: 9999px;
+  background: var(--depop-accent);
+  color: #fff !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: none;
+  transition: background 0.15s ease;
+}
+
+.depop-btn-accent:hover,
+.depop-btn-accent:focus-visible {
+  background: var(--depop-accent-hover);
+  outline: none;
+}
+
+.depop-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  background: var(--depop-surface);
+  color: #e4e4e7 !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid #27272a;
+}
+
+.depop-btn-ghost:hover {
+  background: #18181b;
+  color: #fff !important;
+}
+
+.depop-btn-white {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  background: #fff;
+  color: #000 !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.depop-btn-white:hover {
+  background: #e4e4e7;
+}
+
+.depop-pill-success {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.depop-pill-accent {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  background: rgba(255, 35, 0, 0.12);
+  color: var(--depop-accent);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.depop-pill-amber {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* —— Seller Hub —— */
+.seller-hub.depop-hub {
+  color: var(--depop-text);
+}
+
+.seller-hub-carousel {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+}
+
+.seller-hub-carousel > * {
+  scroll-snap-align: start;
+}
+
+.seller-hub-card {
+  min-width: 11.5rem;
+  max-width: 14rem;
+  flex-shrink: 0;
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: var(--depop-surface);
+  padding: 1rem;
+  color: var(--depop-text);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.seller-hub-card:hover,
+.seller-hub-card:focus-visible {
+  border-color: #3f3f46;
+  outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .seller-hub-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.seller-hub-card--draft {
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.seller-hub-card--guide {
+  min-width: 15rem;
+}
+
+.seller-hub-stat {
+  min-height: 6.5rem;
+  background: var(--depop-surface) !important;
+  border: 1px solid var(--depop-border) !important;
+  color: var(--depop-text);
+}
+
+.seller-hub-stat p {
+  color: inherit;
+}
+
+.seller-hub-stat .depop-stat-label {
+  color: var(--depop-faint);
+}
+
+.seller-hub-stat .depop-stat-meta {
+  color: var(--depop-muted);
+}
+
+.seller-hub-stat--accent .depop-stat-value {
+  color: var(--depop-accent);
+}
+
+.seller-hub-stat--success {
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.seller-hub-stat--success .depop-stat-value {
+  color: var(--depop-success);
+}
+
+.seller-hub-thumb {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  object-fit: cover;
+  background: #18181b;
+  flex-shrink: 0;
+  border: 1px solid #27272a;
+}
+
+.seller-hub-growth {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.seller-hub-level-done {
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.depop-hub-progress {
+  background: #18181b;
+}
+
+.depop-hub-progress > div {
+  background: var(--depop-accent);
+}
+
+/* —— Inbox messenger —— */
+.inbox-hub-label {
+  color: var(--depop-accent);
+}
+
+.inbox-recent-card {
+  border-color: var(--depop-border);
+  background: var(--depop-surface);
+}
+
+.inbox-recent-card:hover,
+.inbox-recent-card:focus-visible {
+  border-color: #3f3f46;
+}
+
+.inbox-recent-thumb,
+.inbox-recent-thumb--empty {
+  background: #18181b;
+  color: var(--depop-muted);
+}
+
+.inbox-recent-name {
+  color: var(--depop-text);
+}
+
+.inbox-recent-price {
+  color: var(--depop-muted);
+}
+
+.inbox-messenger {
+  background: var(--depop-surface);
+  border-color: var(--depop-border);
+}
+
+.inbox-messenger-head {
+  background: #000;
+  border-bottom-color: var(--depop-border);
+}
+
+.inbox-thread {
+  background: #000;
+}
+
+.inbox-bubble-mine {
+  background: var(--depop-accent);
+  color: #fff;
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-bubble-theirs {
+  background: #18181b;
+  color: #e4e4e7;
+  border: 1px solid #27272a;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+}
+
+.inbox-bargain-card {
+  background: #000;
+  border: 1px solid var(--depop-border);
+  color: var(--depop-text);
+}
+
+.inbox-bargain-cta {
+  background: var(--depop-accent);
+  color: #fff;
+}
+
+.inbox-bargain-cta:hover {
+  background: var(--depop-accent-hover);
+}
+
+.inbox-bargain-ghost {
+  background: #18181b;
+  border-color: #27272a;
+  color: var(--depop-muted);
+}
+
+.inbox-bargain-ghost:hover {
+  color: #fff;
+}
+
+/* —— Disputes —— */
+.dispute-hub-label {
+  color: var(--depop-accent);
+}
+
+.dispute-card {
+  background: var(--depop-surface);
+  border-color: var(--depop-border);
+  color: var(--depop-text);
+}
+
+.dispute-badge--review {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.dispute-badge--resolved {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.dispute-badge--action {
+  background: rgba(255, 35, 0, 0.1);
+  color: var(--depop-accent);
+  border: 1px solid rgba(255, 35, 0, 0.2);
+}
+
+.dispute-guide-card {
+  background: var(--depop-surface);
+  border-color: var(--depop-border);
+  color: var(--depop-text);
+}
+
+.dispute-guide-carousel {
+  scrollbar-color: #27272a transparent;
+}

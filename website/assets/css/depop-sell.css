@@ -1033,11 +1033,12 @@ html.dark .bulk-studio-remove:hover {
   color: #f87171;
 }
 
-/* Selling Hub overview — Depop layout zones, Sokoni tokens */
+/* Selling Hub overview — Depop layout + matte black / scarlet */
 .seller-hub-carousel {
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
 }
 
 .seller-hub-carousel > * {
@@ -1049,20 +1050,16 @@ html.dark .bulk-studio-remove:hover {
   max-width: 14rem;
   flex-shrink: 0;
   border-radius: 1rem;
-  border: 1px solid rgba(27, 16, 53, 0.1);
-  background: #fff;
+  border: 1px solid #18181b;
+  background: #09090b;
   padding: 1rem;
+  color: #fff;
   transition: border-color 0.15s ease, transform 0.15s ease;
-}
-
-html.dark .seller-hub-card {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(46, 27, 87, 0.45);
 }
 
 .seller-hub-card:hover,
 .seller-hub-card:focus-visible {
-  border-color: rgba(37, 211, 102, 0.55);
+  border-color: #3f3f46;
   outline: none;
 }
 
@@ -1092,12 +1089,9 @@ html.dark .seller-hub-card {
   height: 3rem;
   border-radius: 0.75rem;
   object-fit: cover;
-  background: rgba(27, 16, 53, 0.06);
+  background: #18181b;
+  border: 1px solid #27272a;
   flex-shrink: 0;
-}
-
-html.dark .seller-hub-thumb {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .seller-hub-growth {
@@ -1105,23 +1099,15 @@ html.dark .seller-hub-thumb {
   align-items: center;
   padding: 0.15rem 0.5rem;
   border-radius: 9999px;
-  background: rgba(37, 211, 102, 0.12);
-  color: #128c3a;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
   font-size: 0.625rem;
   font-weight: 700;
 }
 
-html.dark .seller-hub-growth {
-  color: #25d366;
-}
-
 .seller-hub-level-done {
-  border-color: rgba(37, 211, 102, 0.45) !important;
-  background: rgba(37, 211, 102, 0.08);
-  color: #1b1035;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  color: #fff !important;
   font-weight: 600;
-}
-
-html.dark .seller-hub-level-done {
-  color: #fff;
 }
