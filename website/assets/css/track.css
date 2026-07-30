@@ -1,28 +1,21 @@
-/* Phase 6 — SK-#### tracking stepper */
+/* Phase 6 — SK-#### tracking stepper — Depop matte black / scarlet */
 
 .track-panel {
-  --track-line: rgba(27, 16, 53, 0.12);
-  --track-dot-pending: rgba(27, 16, 53, 0.2);
-  --track-dot-active: #25d366;
-  --track-dot-done: #25d366;
-}
-
-html.dark .track-panel {
-  --track-line: rgba(255, 248, 240, 0.15);
-  --track-dot-pending: rgba(255, 248, 240, 0.25);
+  --track-line: #27272a;
+  --track-dot-pending: #3f3f46;
+  --track-dot-active: #ff2300;
+  --track-dot-done: #10b981;
+  color: #fff;
 }
 
 .track-kicker {
   font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(27, 16, 53, 0.45);
+  color: #ff2300;
   margin: 0 0 0.35rem;
-}
-
-html.dark .track-kicker {
-  color: rgba(255, 248, 240, 0.45);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .track-order-id {
@@ -30,17 +23,19 @@ html.dark .track-kicker {
   font-weight: 800;
   margin: 0;
   line-height: 1.2;
+  color: #fff;
 }
 
 .track-product {
   font-weight: 600;
   margin: 0.5rem 0 0;
+  color: #e4e4e7;
 }
 
 .track-price {
   font-size: 1.125rem;
   font-weight: 800;
-  color: #25d366;
+  color: #ff2300;
   margin: 0.35rem 0 0;
 }
 
@@ -48,22 +43,17 @@ html.dark .track-kicker {
 .track-rider,
 .track-updated {
   font-size: 0.875rem;
-  color: rgba(27, 16, 53, 0.6);
+  color: #a1a1aa;
   margin: 0.35rem 0 0;
-}
-
-html.dark .track-meta,
-html.dark .track-rider,
-html.dark .track-updated {
-  color: rgba(255, 248, 240, 0.6);
 }
 
 .track-courier {
   font-size: 0.875rem;
   padding: 0.75rem 1rem;
   border-radius: 1rem;
-  background: rgba(37, 211, 102, 0.08);
-  border: 1px solid rgba(37, 211, 102, 0.2);
+  background: rgba(255, 35, 0, 0.08);
+  border: 1px solid rgba(255, 35, 0, 0.22);
+  color: #e4e4e7;
 }
 
 .track-courier p {
@@ -108,19 +98,15 @@ html.dark .track-updated {
   border-radius: 9999px;
   margin-top: 0.15rem;
   border: 2px solid var(--track-dot-pending);
-  background: #fff8f0;
+  background: #000;
   position: relative;
   z-index: 1;
-}
-
-html.dark .track-step-dot {
-  background: #2e1b57;
 }
 
 .track-step--active .track-step-dot {
   border-color: var(--track-dot-active);
   background: var(--track-dot-active);
-  box-shadow: 0 0 0 4px rgba(37, 211, 102, 0.2);
+  box-shadow: 0 0 0 4px rgba(255, 35, 0, 0.2);
 }
 
 .track-step--done .track-step-dot {
@@ -137,7 +123,7 @@ html.dark .track-step-dot {
   justify-content: center;
   font-size: 0.65rem;
   font-weight: 800;
-  color: #1b1035;
+  color: #fff;
   line-height: 1;
 }
 
@@ -146,27 +132,20 @@ html.dark .track-step-dot {
   font-weight: 600;
   margin: 0;
   line-height: 1.35;
+  color: #e4e4e7;
 }
 
 .track-step--active .track-step-label {
-  color: #1b1035;
-}
-
-html.dark .track-step--active .track-step-label {
-  color: #fff8f0;
+  color: #fff;
 }
 
 .track-step--pending .track-step-label {
-  color: rgba(27, 16, 53, 0.45);
-}
-
-html.dark .track-step--pending .track-step-label {
-  color: rgba(255, 248, 240, 0.45);
+  color: #71717a;
 }
 
 .track-step-hint {
   font-size: 0.75rem;
-  color: #25d366;
+  color: #ff2300;
   font-weight: 600;
   margin: 0.15rem 0 0;
 }
@@ -180,11 +159,7 @@ html.dark .track-step--pending .track-step-label {
 .track-history summary {
   cursor: pointer;
   font-weight: 600;
-  color: rgba(27, 16, 53, 0.7);
-}
-
-html.dark .track-history summary {
-  color: rgba(255, 248, 240, 0.7);
+  color: #a1a1aa;
 }
 
 .track-history ul {
@@ -195,14 +170,10 @@ html.dark .track-history summary {
 
 .track-history li {
   padding: 0.35rem 0;
-  color: rgba(27, 16, 53, 0.6);
+  color: #a1a1aa;
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
-}
-
-html.dark .track-history li {
-  color: rgba(255, 248, 240, 0.6);
 }
 
 .track-history time {
@@ -218,26 +189,26 @@ html.dark .track-history li {
   min-height: 44px;
   padding: 0 1.25rem;
   border-radius: 9999px;
-  background: #25d366;
-  color: #1b1035;
+  background: #ff2300;
+  color: #fff;
   font-weight: 700;
   font-size: 0.875rem;
   text-decoration: none;
-  transition: transform 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .track-pay-btn:hover {
-  transform: scale(1.02);
+  background: #d91e00;
 }
 
 .track-pay-btn--ghost {
-  background: transparent;
-  border: 1px solid rgba(27, 16, 53, 0.15);
-  color: inherit;
+  background: #18181b;
+  border: 1px solid #27272a;
+  color: #e4e4e7;
 }
 
-html.dark .track-pay-btn--ghost {
-  border-color: rgba(255, 248, 240, 0.2);
+.track-pay-btn--ghost:hover {
+  color: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {

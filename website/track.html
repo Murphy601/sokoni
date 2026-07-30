@@ -11,7 +11,7 @@
   tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' } }, fontFamily: { sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], display: ['Fraunces', 'Georgia', 'serif'] } } } };
 </script>
 <script>
-  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+  (function () { document.documentElement.classList.add('dark'); })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,13 +20,15 @@
 <link rel="stylesheet" href="assets/css/styles.css" />
 <link rel="stylesheet" href="assets/css/depop-shell.css" />
 <link rel="stylesheet" href="assets/css/track.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
 </head>
-<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col" data-shell-page="track">
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="track">
   <div id="sokoni-shell-header"></div>
 
   <main class="depop-main-content max-w-2xl mx-auto w-full px-5 py-10 flex-1">
-    <h1 class="font-display text-3xl font-bold mb-2 text-brand-purple dark:text-white">Track your order</h1>
-    <p class="text-brand-purple/60 dark:text-white/60 mb-8">Enter your <strong>SK-####</strong> order number for live shipment status.</p>
+    <p class="depop-label mb-2">Tracking</p>
+    <h1 class="text-3xl font-black tracking-tight text-white mb-2">Track your order</h1>
+    <p class="text-zinc-400 mb-8">Enter your <strong class="text-zinc-200">SK-####</strong> order number for live shipment status.</p>
 
     <form id="track-form" class="flex flex-col sm:flex-row gap-3 mb-10">
       <label for="order-id" class="sr-only">Order number</label>
@@ -37,31 +39,31 @@
         inputmode="text"
         autocomplete="off"
         placeholder="SK-1042"
-        class="flex-1 min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purpleLight px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-green"
+        class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-base text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
         required
       />
-      <button type="submit" class="min-h-[48px] px-6 rounded-full bg-brand-green text-brand-purple font-bold hover:scale-[1.02] transition">
+      <button type="submit" class="depop-btn-accent min-h-[48px] px-6">
         Track
       </button>
     </form>
 
-    <div id="track-status" class="hidden rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight p-6 shadow-sm" aria-live="polite"></div>
-    <div id="track-dispute" class="hidden mt-6 rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6 space-y-4"></div>
-    <div id="track-error" class="hidden rounded-2xl border border-red-200 bg-red-50 text-red-900 px-5 py-4 text-sm" role="alert"></div>
-    <div id="track-loading" class="hidden text-sm text-brand-purple/50">Loading tracking…</div>
+    <div id="track-status" class="hidden depop-card p-6" aria-live="polite"></div>
+    <div id="track-dispute" class="hidden mt-6 depop-card p-6 space-y-4"></div>
+    <div id="track-error" class="hidden rounded-2xl border border-red-500/30 bg-red-500/10 text-red-300 px-5 py-4 text-sm" role="alert"></div>
+    <div id="track-loading" class="hidden text-sm text-zinc-500">Loading tracking…</div>
 
-    <div class="mt-12 rounded-2xl bg-[#ECE5DD] p-5">
-      <p class="text-sm font-semibold mb-3 text-brand-purple">Prefer WhatsApp?</p>
-      <p class="text-sm text-brand-purple/70 mb-4">Type your order number or <em>track</em> in chat for the same live timeline.</p>
+    <div class="mt-12 depop-card p-5">
+      <p class="text-sm font-semibold mb-3 text-white">Prefer WhatsApp?</p>
+      <p class="text-sm text-zinc-400 mb-4">Type your order number or <em>track</em> in chat for the same live timeline.</p>
       <a href="https://wa.me/254117422428?text=track" target="_blank" rel="noopener"
-         class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-5 py-3 rounded-full text-sm min-h-[44px]">
+         class="depop-btn-accent inline-flex">
         Open WhatsApp
       </a>
     </div>
   </main>
 
-  <footer class="border-t border-black/5 dark:border-white/10 py-8 text-center text-sm text-brand-purple/50 dark:text-white/50">
-    <p><a href="index.html" class="hover:text-brand-green">Home</a> · <a href="terms.html" class="hover:text-brand-green">Terms</a></p>
+  <footer class="border-t border-zinc-900 py-8 text-center text-sm text-zinc-500">
+    <p><a href="index.html" class="hover:text-white">Home</a> · <a href="terms.html" class="hover:text-white">Terms</a></p>
     <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise</p>
   </footer>
 

@@ -84,35 +84,35 @@
 
     disputeEl.classList.remove("hidden");
     disputeEl.innerHTML = `
-      <h2 class="font-display text-xl font-bold">Something wrong?</h2>
-      <p class="text-sm text-brand-purple/65 dark:text-white/70">
+      <h2 class="text-xl font-black text-white">Something wrong?</h2>
+      <p class="text-sm text-zinc-400">
         Open a dispute if the item never arrived, arrived damaged, or doesn’t match the listing.
         Escrow stays held while Sokoni reviews tracking + your note.
       </p>
-      <div id="buyer-auth-panel" class="rounded-2xl border border-black/5 dark:border-white/10 p-4 space-y-3">
-        <p class="text-sm font-semibold">Verify WhatsApp to open a dispute</p>
+      <div id="buyer-auth-panel" class="depop-card !bg-black p-4 space-y-3">
+        <p class="text-sm font-semibold text-white">Verify WhatsApp to open a dispute</p>
         <div class="flex flex-col sm:flex-row gap-2">
-          <label class="flex-1 text-xs font-medium">
+          <label class="flex-1 text-xs font-medium text-zinc-300">
             WhatsApp number
             <input id="buyer-auth-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
-              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm" />
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]" />
           </label>
-          <label class="sm:w-36 text-xs font-medium">
+          <label class="sm:w-36 text-xs font-medium text-zinc-300">
             Code
             <input id="buyer-auth-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits"
-              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm" />
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]" />
           </label>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button id="buyer-auth-send-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">Send code</button>
-          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Verify</button>
+          <button id="buyer-auth-send-btn" type="button" class="depop-btn-ghost">Send code</button>
+          <button id="buyer-auth-verify-btn" type="button" class="depop-btn-accent">Verify</button>
         </div>
-        <p id="buyer-auth-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
+        <p id="buyer-auth-status" class="text-xs text-zinc-400"></p>
       </div>
       <form id="dispute-form" class="space-y-3">
-        <label class="block text-sm font-medium">
+        <label class="block text-sm font-medium text-zinc-300">
           Reason
-          <select id="dispute-reason" class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 text-sm">
+          <select id="dispute-reason" class="mt-1 w-full min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-sm text-white">
             <option value="not_received">Not delivered</option>
             <option value="damaged">Arrived damaged</option>
             <option value="not_as_described">Not as described</option>
@@ -120,15 +120,15 @@
             <option value="other">Other</option>
           </select>
         </label>
-        <label class="block text-sm font-medium">
+        <label class="block text-sm font-medium text-zinc-300">
           What happened
           <textarea id="dispute-statement" rows="3" maxlength="2000" placeholder="Short facts help — photos/tracking are attached for admin."
-            class="mt-1 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 py-3 text-sm"></textarea>
+            class="mt-1 w-full rounded-2xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white placeholder:text-zinc-600"></textarea>
         </label>
-        <button type="submit" id="dispute-submit" class="min-h-[48px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+        <button type="submit" id="dispute-submit" class="depop-btn-accent">
           Open dispute
         </button>
-        <p id="dispute-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+        <p id="dispute-status" class="text-sm text-zinc-400"></p>
       </form>`;
 
     window.SokoniBuyerAuth?.bindPanel?.({});
@@ -170,7 +170,7 @@
         }
         if (status) {
           status.textContent = `Dispute #${data.dispute?.id || ""} open — escrow held while Sokoni reviews.`;
-          status.classList.add("text-brand-green");
+          status.classList.add("text-emerald-400");
         }
       } catch {
         if (status) status.textContent = "Network error. Try again or WhatsApp Sokoni.";
