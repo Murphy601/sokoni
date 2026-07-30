@@ -8,24 +8,38 @@
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#FF2300', purple: '#000000', purpleLight: '#121212', cream: '#121212' } }, fontFamily: { sans: ['Inter', '"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } };
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
 </script>
 <script>
-  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+  (function () { document.documentElement.classList.add("dark"); })();
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
 </head>
-<body class="bg-black text-zinc-300 font-sans antialiased">
-  <header class="border-b border-zinc-800 bg-black/90 backdrop-blur sticky top-0 z-40">
-    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
-      <a href="index.html" class="text-sm font-medium text-zinc-400 hover:text-white transition">← Back to Sokoni</a>
-      <a href="about.html" class="text-sm text-zinc-500 hover:text-white transition">About Us</a>
-    </div>
-  </header>
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="faq">
+  <div id="sokoni-shell-header"></div>
 
-  <main class="max-w-3xl mx-auto px-5 py-12 legal-prose">
-    <h1 class="text-3xl font-bold text-white tracking-tight mb-2">Frequently Asked Questions</h1>
+  <main class="depop-main-content max-w-3xl mx-auto w-full px-5 py-10 flex-1 legal-prose">
+    <p class="depop-label mb-2">Help</p>
+
+    <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">Frequently Asked Questions</h1>
     <p class="text-sm text-zinc-500 mb-10">Sokoni Mall · sokonimall.com</p>
 
     <h2>What is Sokoni Mall?</h2>
@@ -65,12 +79,24 @@
       <li>Human help: WhatsApp → <em>Talk to a Human</em> (7:30 AM–9 PM EAT)</li>
       <li>AI help: <a href="ask.html">sokonimall.com/ask</a> or chat on WhatsApp</li>
     </ul>
+  
   </main>
 
-  <footer class="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500">
-    <p><a href="index.html" class="hover:text-white transition-colors">Home</a> · <a href="about.html" class="hover:text-white transition-colors">About</a> · <a href="terms.html" class="hover:text-white transition-colors">Terms</a> · <a href="privacy.html" class="hover:text-white transition-colors">Privacy</a></p>
+  <footer class="border-t border-zinc-900 py-8 text-center text-xs text-zinc-500">
+    <p>
+      <a href="index.html" class="hover:text-white transition-colors">Home</a>
+      · <a href="about.html" class="hover:text-white transition-colors">About</a>
+      · <a href="index.html#how-it-works" class="hover:text-white transition-colors">How it works</a>
+      · <a href="faq.html" class="hover:text-white transition-colors">FAQ</a>
+      · <a href="terms.html" class="hover:text-white transition-colors">Terms</a>
+      · <a href="privacy.html" class="hover:text-white transition-colors">Privacy</a>
+    </p>
     <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace.</p>
   </footer>
-  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+
+  <div id="sokoni-shell-nav"></div>
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/depop-nav.js"></script>
+  <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
 </body>
 </html>

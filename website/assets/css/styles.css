@@ -54,24 +54,33 @@ html.dark #search-wa-cta {
   transform: scale(1.03);
 }
 
-/* Legal pages (terms, privacy) */
+/* Legal pages (about, FAQ, terms, privacy) — Depop matte black / scarlet */
 .legal-prose h2 {
   font-size: 1.125rem;
-  font-weight: 700;
+  font-weight: 800;
   margin-top: 2rem;
   margin-bottom: 0.75rem;
+  color: #ffffff;
+  letter-spacing: -0.02em;
 }
 
 .legal-prose p,
 .legal-prose li {
   font-size: 0.9375rem;
   line-height: 1.7;
-  color: rgba(27, 16, 53, 0.85);
+  color: #a1a1aa;
 }
 
 html.dark .legal-prose p,
-html.dark .legal-prose li {
-  color: rgba(255, 255, 255, 0.78);
+html.dark .legal-prose li,
+.depop-surface-page .legal-prose p,
+.depop-surface-page .legal-prose li {
+  color: #a1a1aa;
+}
+
+.legal-prose strong {
+  color: #e4e4e7;
+  font-weight: 700;
 }
 
 .legal-prose ul {
@@ -81,13 +90,14 @@ html.dark .legal-prose li {
 }
 
 .legal-prose a {
-  color: #25D366;
+  color: #ff2300;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .legal-prose a:hover {
-  opacity: 0.9;
+  color: #ff6b55;
+  opacity: 1;
 }
 
 /* ============================================================
