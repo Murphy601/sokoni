@@ -723,6 +723,7 @@ function populateBrowseSelects(browseCat, browseSub) {
 }
 
 function collectDraft() {
+  syncMediaPriceFields();
   const tagsRaw = el("draft-tags")?.value || "";
   const tags = tagsRaw
     .split(/[\s,#]+/)
@@ -730,6 +731,7 @@ function collectDraft() {
     .filter(Boolean)
     .slice(0, meta.maxTags || 5);
 
+  const net = Math.round(Number(el("draft-price")?.value || el("media-price")?.value || 0));
   return {
     ...draft,
     name: el("draft-name").value.trim(),
@@ -737,9 +739,9 @@ function collectDraft() {
     tags,
     brand: el("draft-brand").value.trim(),
     secondaryBrand: el("draft-brand2").value.trim(),
-    sellerNetKes: Math.round(Number(el("draft-price").value) || 0),
-    priceKes: Math.round(Number(el("draft-price").value) || 0),
-    sourcePriceKes: Math.round(Number(el("draft-price").value) || 0),
+    sellerNetKes: net,
+    priceKes: net,
+    sourcePriceKes: net,
     estimatedWeightClass: el("draft-weight-class")?.value || draft.estimatedWeightClass || "small",
     freeShipping: isFreeShipping(),
     shippingKes: isFreeShipping()
