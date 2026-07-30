@@ -182,6 +182,9 @@ function clearSession() {
   updateHandledResetButton();
   updateQuickModeHint();
   sessionStorage.removeItem(VERIFY_TOKEN_KEY);
+  try {
+    localStorage.removeItem(VERIFY_TOKEN_KEY);
+  } catch {}
 }
 
 function handleSessionExpired(data) {
@@ -2306,15 +2309,37 @@ function setOnboardStatus(msg, isError = false) {
 
 function loadSessionFromStorage() {
   try {
-    const raw = sessionStorage.getItem(VERIFY_TOKEN_KEY);
+    const raw =
+      sessionStorage.getItem(VERIFY_TOKEN_KEY) || localStorage.getItem(VERIFY_TOKEN_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
-    if (parsed.phone === normalizePhoneInput(getPhone()) && parsed.token && parsed.expiresAt > Date.now()) {
+    const phone = normalizePhoneInput(getPhone() || parsed.phone || "");
+    if (
+      parsed.token &&
+      Number(parsed.expiresAt) > Date.now() &&
+      (!phone || parsed.phone === phone || !parsed.phone)
+    ) {
       verificationToken = parsed.token;
       phoneVerified = true;
+      if (parsed.phone && !localStorage.getItem(PHONE_KEY)) {
+        localStorage.setItem(PHONE_KEY, parsed.phone);
+      }
+      // Rehydrate both stores so a new inbox tab can read the session.
+      const payload = JSON.stringify({
+        phone: parsed.phone || phone,
+        token: parsed.token,
+        expiresAt: parsed.expiresAt,
+      });
+      sessionStorage.setItem(VERIFY_TOKEN_KEY, payload);
+      try {
+        localStorage.setItem(VERIFY_TOKEN_KEY, payload);
+      } catch {}
       return true;
     }
     sessionStorage.removeItem(VERIFY_TOKEN_KEY);
+    try {
+      localStorage.removeItem(VERIFY_TOKEN_KEY);
+    } catch {}
   } catch {}
   return false;
 }
@@ -2322,14 +2347,15 @@ function loadSessionFromStorage() {
 function saveVerificationToken(token, expiresInSec = 1800) {
   verificationToken = token;
   phoneVerified = true;
-  sessionStorage.setItem(
-    VERIFY_TOKEN_KEY,
-    JSON.stringify({
-      phone: normalizePhoneInput(getPhone()),
-      token,
-      expiresAt: Date.now() + expiresInSec * 1000,
-    })
-  );
+  const payload = JSON.stringify({
+    phone: normalizePhoneInput(getPhone()),
+    token,
+    expiresAt: Date.now() + expiresInSec * 1000,
+  });
+  sessionStorage.setItem(VERIFY_TOKEN_KEY, payload);
+  try {
+    localStorage.setItem(VERIFY_TOKEN_KEY, payload);
+  } catch {}
 }
 
 function showSignupStep() {
@@ -4087,6 +4113,13 @@ function inboxLinkForOffer(offer, sellerUserId, buyerUserId) {
   });
   const buyerHandle = normalizeHandleForLookup(offer?.buyer?.handle || "");
   if (buyerHandle) params.set("handle", buyerHandle);
+  // Pass session into the inbox URL so a new tab (empty sessionStorage) can still auth.
+  const phone = apiPhone();
+  const sessionToken = getSessionToken();
+  if (phone && sessionToken) {
+    params.set("phone", phone);
+    params.set("sessionToken", sessionToken);
+  }
   return `../inbox.html?${params.toString()}`;
 }
 
@@ -4810,9 +4843,12 @@ function openOfferChatFromOffer(offer, statusPrefix = "Opening chat with") {
   if (!sellerUserId || !buyerUserId || sellerUserId === buyerUserId) return false;
   const url = inboxLinkForOffer(offer, sellerUserId, buyerUserId);
   setOffersStatus(`${statusPrefix} ${offerBuyerLabel(offer)}...`);
-  const popup = window.open(url, "_blank", "noopener");
-  if (!popup) {
+  // Prefer same-tab so sessionStorage still works; fall back to new tab with token in URL.
+  try {
     window.location.href = url;
+  } catch {
+    const popup = window.open(url, "_blank", "noopener");
+    if (!popup) window.location.href = url;
   }
   return true;
 }
