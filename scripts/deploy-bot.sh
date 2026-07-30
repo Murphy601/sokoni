@@ -102,9 +102,10 @@ if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
   FREE_MODEL="openrouter/free"
   FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free"
-  # Seller photos only — WhatsApp chat stays on FREE_MODEL above
-  PHOTO_VISION_MODEL="krea/krea-2-medium-turbo"
-  PHOTO_VISION_FALLBACKS="google/gemma-4-26b-a4b-it:free"
+  # Seller photos only — WhatsApp chat stays on FREE_MODEL above.
+  # Primary = multimodal vision; two OpenRouter fallbacks keep krea (image-gen — skipped for photo→JSON).
+  PHOTO_VISION_MODEL="google/gemini-2.5-flash"
+  PHOTO_VISION_FALLBACKS="google/gemini-2.0-flash-001,krea/krea-2-medium-turbo"
   DEPRECATED_MODELS='nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|gemini-2\.0-flash-exp|deepseek-r1|gemini-2\.5-pro|gemini-2\.5-flash|gemini-2\.5-flash-lite|gemma-4-31b-it:free|qwen/qwen3-next-80b|llama-3\.3-70b-instruct:free|llama-3\.2-3b-instruct:free|qwen/qwen3-coder:free'
   if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE "$DEPRECATED_MODELS"; then
     echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
@@ -116,23 +117,26 @@ if [ -f "$ENV_FILE" ]; then
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
   CURRENT_VISION="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE 'openrouter/free|gemini-2\.0-flash-exp|gemini-2\.5-flash|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
+  # Migrate away from image-gen / free-chat models as the photo primary (krea stays in FALLBACKS).
+  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE '^(krea/|openrouter/free$)|gemini-2\.0-flash-exp|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_MODEL" "$PHOTO_VISION_MODEL"
-    echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (seller photos only; chat stays ${FREE_MODEL})"
+    echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (was: ${CURRENT_VISION:-unset}; seller photos only; chat stays ${FREE_MODEL})"
   fi
   CURRENT_VISION_FB="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|nvidia/nemotron'; then
+  if [ -z "$CURRENT_VISION_FB" ] || ! echo "$CURRENT_VISION_FB" | grep -q 'krea/krea-2-medium-turbo' || echo "$CURRENT_VISION_FB" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|nvidia/nemotron'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_FALLBACKS" "$PHOTO_VISION_FALLBACKS"
     echo "==> Set CATALOG_VISION_FALLBACKS → ${PHOTO_VISION_FALLBACKS}"
   fi
   echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
+  echo "==> Vision: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
+  echo "==> Vision fallbacks: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
   if [ -n "${SOKONI_GEMINI_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$SOKONI_GEMINI_API_KEY"
     echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY"
   elif grep -qE '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=.' "$ENV_FILE" 2>/dev/null; then
     echo "==> Gemini vision: GEMINI_API_KEY present"
   else
-    echo "WARN: GEMINI_API_KEY not set — seller photo AI uses OpenRouter fallback only"
+    echo "WARN: GEMINI_API_KEY not set — add it on the VM or set Actions secret GEMINI_API_KEY (passed as SOKONI_GEMINI_API_KEY)"
   fi
 else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"

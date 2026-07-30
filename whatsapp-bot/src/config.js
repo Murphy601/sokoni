@@ -39,10 +39,11 @@ export const config = {
   },
   /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
   catalog: {
-    // Must be a multimodal chat/vision model — never an image-generation model (e.g. krea).
+    // Primary must be multimodal vision/chat. Keep krea as a configured OpenRouter fallback
+    // (image-gen — listing-generator skips it for photo→JSON and continues to the next).
     visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.5-flash",
     visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS ||
-      "google/gemini-2.0-flash-001,google/gemma-4-26b-a4b-it:free")
+      "google/gemini-2.0-flash-001,krea/krea-2-medium-turbo")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
