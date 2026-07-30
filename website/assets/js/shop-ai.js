@@ -16,8 +16,8 @@
     const b = document.createElement("div");
     b.className =
       role === "user"
-        ? "max-w-[85%] rounded-2xl rounded-tr-sm bg-brand-green text-brand-purple px-4 py-3 text-sm"
-        : "max-w-[85%] rounded-2xl rounded-tl-sm bg-white dark:bg-brand-purple border border-black/5 dark:border-white/10 px-4 py-3 text-sm whitespace-pre-wrap";
+        ? "ask-bubble ask-bubble--user"
+        : "ask-bubble ask-bubble--bot";
     b.textContent = text;
     wrap.appendChild(b);
     log.appendChild(wrap);
@@ -32,15 +32,14 @@
     box.className = "max-w-[95%] space-y-2";
     products.slice(0, 3).forEach((p) => {
       const card = document.createElement("div");
-      card.className =
-        "rounded-xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purple px-3 py-2 text-sm flex items-center justify-between gap-3";
+      card.className = "ask-product-card";
       const waText = encodeURIComponent(`Hi Sokoni, I want ${p.name} (${p.id})`);
-      card.innerHTML = `<div><strong>${p.name}</strong><br><span class="text-brand-purple/60">KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}</span></div>`;
+      card.innerHTML = `<div><strong class="text-white">${p.name}</strong><br><span class="text-zinc-400">KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}</span></div>`;
       const a = document.createElement("a");
       a.href = `https://wa.me/${WHATSAPP}?text=${waText}`;
       a.target = "_blank";
       a.rel = "noopener";
-      a.className = "shrink-0 text-xs font-bold bg-brand-green text-brand-purple px-3 py-2 rounded-full";
+      a.className = "ask-product-order";
       a.textContent = "Order";
       card.appendChild(a);
       box.appendChild(card);

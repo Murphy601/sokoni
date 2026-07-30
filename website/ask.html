@@ -11,7 +11,7 @@
   tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' } }, fontFamily: { sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], display: ['Fraunces', 'Georgia', 'serif'] } } } };
 </script>
 <script>
-  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+  (function () { document.documentElement.classList.add('dark'); })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,36 +19,37 @@
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
 <link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
 </head>
-<body class="bg-brand-cream dark:bg-brand-purple text-brand-purple dark:text-white font-sans antialiased min-h-screen flex flex-col pb-24 md:pb-8" data-shell-page="ask">
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white pb-24 md:pb-8" data-shell-page="ask">
   <div id="sokoni-shell-header"></div>
 
-  <main class="flex-1 max-w-2xl mx-auto w-full px-5 py-8 flex flex-col">
-    <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-purple/45 dark:text-white/45 mb-2">Sokoni Plug</p>
-    <h1 class="font-display text-3xl font-bold mb-2 text-brand-purple dark:text-white">Ask Sokoni</h1>
-    <p class="text-brand-purple/60 dark:text-white/60 text-sm mb-6">
-      Discover items from the live catalog, check prepaid/escrow info, or track <strong>SK-####</strong> orders. Checkout stays on WhatsApp.
+  <main class="depop-main-content flex-1 max-w-2xl mx-auto w-full px-5 py-8 flex flex-col">
+    <p class="depop-label mb-2">Sokoni Plug</p>
+    <h1 class="text-3xl font-black tracking-tight text-white mb-2">Ask Sokoni</h1>
+    <p class="text-zinc-400 text-sm mb-6">
+      Discover items from the live catalog, check prepaid/escrow info, or track <strong class="text-zinc-200">SK-####</strong> orders. Checkout stays on WhatsApp.
     </p>
 
-    <div id="chat-log" class="flex-1 space-y-4 mb-6 min-h-[240px] overflow-y-auto rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4"></div>
+    <div id="chat-log" class="ask-chat-log flex-1 space-y-4 mb-6 min-h-[240px] overflow-y-auto p-4"></div>
 
-    <form id="ask-form" class="flex gap-2 sticky bottom-20 md:bottom-0 pb-4 bg-brand-cream dark:bg-brand-purple pt-2">
+    <form id="ask-form" class="ask-chat-form flex gap-2 sticky bottom-20 md:bottom-0 pb-4 pt-2">
       <label for="ask-input" class="sr-only">Ask Sokoni</label>
       <input
         id="ask-input"
         type="text"
         autocomplete="off"
         placeholder="Party outfit under KES 3,000… or SK-1042"
-        class="flex-1 min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purpleLight px-4 text-base text-brand-purple dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-green"
+        class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-base text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
       />
-      <button type="submit" class="min-h-[48px] px-5 rounded-full bg-brand-green text-brand-purple font-bold shrink-0">Ask</button>
+      <button type="submit" class="depop-btn-accent shrink-0 min-h-[48px] px-5">Ask</button>
     </form>
   </main>
 
-  <footer class="border-t border-black/5 dark:border-white/10 py-6 text-center text-xs text-brand-purple/50 dark:text-white/55">
-    <a href="https://wa.me/254117422428" class="text-brand-green font-semibold">Order on WhatsApp</a>
-    · <a href="track.html" class="hover:text-brand-green">Track order</a>
-    · <a href="profile.html" class="hover:text-brand-green">Profile</a>
+  <footer class="border-t border-zinc-900 py-6 text-center text-xs text-zinc-500">
+    <a href="https://wa.me/254117422428" class="text-[#FF2300] font-semibold">Order on WhatsApp</a>
+    · <a href="track.html" class="hover:text-white">Track order</a>
+    · <a href="profile.html" class="hover:text-white">Profile</a>
   </footer>
 
   <div id="sokoni-shell-nav"></div>

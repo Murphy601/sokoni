@@ -855,3 +855,84 @@ body.sell-depop-page .sell-activity-pill--like {
   color: #34d399;
   border-color: rgba(16, 185, 129, 0.25);
 }
+
+/* Profile quick links */
+.depop-surface-page .profile-quick-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e4e4e7 !important;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.depop-surface-page .profile-quick-link:hover {
+  border-color: #3f3f46;
+  color: #fff !important;
+}
+
+/* Ask Sokoni AI chat */
+.depop-surface-page .ask-chat-log {
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: var(--depop-surface);
+}
+
+.depop-surface-page .ask-chat-form {
+  background: var(--depop-bg);
+}
+
+.depop-surface-page .ask-bubble {
+  max-width: 85%;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.depop-surface-page .ask-bubble--user {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+  background: var(--depop-accent);
+  color: #fff;
+}
+
+.depop-surface-page .ask-bubble--bot {
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  background: #18181b;
+  color: #e4e4e7;
+  border: 1px solid #27272a;
+  white-space: pre-wrap;
+}
+
+.depop-surface-page .ask-product-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #fff;
+}
+
+.depop-surface-page .ask-product-order {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 0.75rem;
+  border-radius: 9999px;
+  background: var(--depop-accent);
+  color: #fff !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
