@@ -992,12 +992,129 @@ function renderListingAiStatus(metaData) {
   updateCoverStudioUi();
 }
 
+function setBulkCsvStatus(message, isError = false) {
+  const node = el("bulk-csv-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+async function downloadBulkCsvTemplate(ev) {
+  ev?.preventDefault?.();
+  const phone = apiPhone();
+  try {
+    const res = await fetch(`${LISTINGS_API}/bulk/template`, { headers: sellerAuthHeaders() });
+    if (!res.ok) {
+      setBulkCsvStatus("Could not download template.", true);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sokoni-bulk-listings-template.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setBulkCsvStatus("Template downloaded — fill rows, then Upload CSV or paste.");
+  } catch {
+    setBulkCsvStatus("Network error downloading template.", true);
+  }
+  void phone;
+}
+
+async function importBulkCsvText(csvText) {
+  const phone = apiPhone();
+  if (!phone) {
+    setBulkCsvStatus("Enter your WhatsApp number first.", true);
+    return;
+  }
+  if (!sellerProfile) {
+    setBulkCsvStatus("Finish seller setup before bulk upload.", true);
+    return;
+  }
+  const text = String(csvText || "").trim();
+  if (!text) {
+    setBulkCsvStatus("Paste CSV or choose a .csv file.", true);
+    return;
+  }
+
+  const btn = el("bulk-csv-import-btn");
+  if (btn) btn.disabled = true;
+  setBulkCsvStatus("Importing drafts…");
+  try {
+    const res = await fetch(`${LISTINGS_API}/bulk/drafts`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, csvText: text })),
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      const errLines = Array.isArray(parsed.data?.errors)
+        ? parsed.data.errors
+            .slice(0, 5)
+            .map((e) => (e.row ? `Row ${e.row}: ${e.message}` : e.message))
+            .join(" · ")
+        : "";
+      setBulkCsvStatus(
+        [parsed.data?.message || parsed.data?.error || "Import failed.", errLines].filter(Boolean).join(" "),
+        true
+      );
+      return;
+    }
+    const count = Number(parsed.data?.count) || 0;
+    const errCount = Array.isArray(parsed.data?.errors) ? parsed.data.errors.length : 0;
+    setBulkCsvStatus(
+      count
+        ? `${count} draft${count === 1 ? "" : "s"} imported${errCount ? ` (${errCount} row warning${errCount === 1 ? "" : "s"})` : ""}. Add photos via Continue editing, then Post.`
+        : parsed.data?.message || "No drafts imported."
+    );
+    if (el("bulk-csv-paste")) el("bulk-csv-paste").value = "";
+    if (el("bulk-csv-file")) el("bulk-csv-file").value = "";
+    await loadMyListings();
+    showSellerView("dashboard");
+  } catch {
+    setBulkCsvStatus("Network error during import.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function bindBulkCsvUi() {
+  el("bulk-csv-template-btn")?.addEventListener("click", (ev) => {
+    void downloadBulkCsvTemplate(ev);
+  });
+  el("bulk-csv-import-btn")?.addEventListener("click", () => {
+    void importBulkCsvText(el("bulk-csv-paste")?.value || "");
+  });
+  el("bulk-csv-file")?.addEventListener("change", async (ev) => {
+    const file = ev.target?.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      if (el("bulk-csv-paste")) el("bulk-csv-paste").value = text;
+      setBulkCsvStatus(`Loaded ${file.name} — tap Import drafts.`);
+    } catch {
+      setBulkCsvStatus("Could not read that file.", true);
+    }
+  });
+}
+
 async function loadMyListings() {
   const phone = apiPhone();
   const wrap = el("my-listings");
   if (!phone || !wrap) return;
 
   wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading…</p>`;
+  const hint = el("bulk-drafts-hint");
+  if (hint) hint.classList.add("hidden");
   try {
     const res = await fetch(listingsQuery(phone), { headers: sellerAuthHeaders() });
     const data = await res.json();
@@ -1011,10 +1128,17 @@ async function loadMyListings() {
     }
     const items = [...(data.drafts || []), ...(data.listings || [])];
     if (!items.length) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet — add your first item above.</p>`;
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet — add your first item above, or import a CSV.</p>`;
       return;
     }
     const draftById = new Map();
+    const draftsNeedingPhotos = (data.drafts || []).filter(
+      (d) => !(d.imageUrl || (Array.isArray(d.images) && d.images.length))
+    );
+    if (hint && draftsNeedingPhotos.length) {
+      hint.textContent = `${draftsNeedingPhotos.length} draft${draftsNeedingPhotos.length === 1 ? "" : "s"} need photos — Continue editing → add pics → Post.`;
+      hint.classList.remove("hidden");
+    }
     wrap.innerHTML = items
       .map((item) => {
         const status = item.status || "draft";
@@ -1032,20 +1156,22 @@ async function loadMyListings() {
         const price = item.draft?.buyerTotalKes ?? item.draft?.priceKes ?? item.draft?.sourcePriceKes ?? item.draft?.sellerNetKes;
         const shareUrl = `https://sokonimall.com/?q=${encodeURIComponent(pid)}`;
         const reason = summary.reason || (Array.isArray(summary.labels) ? summary.labels.join(" · ") : "");
-        const hint = summary.sellerHint || "";
+        const sellerHint = summary.sellerHint || "";
+        const needsPhoto = status === "draft" && !img;
         if (status === "draft") draftById.set(String(pid), item);
         return `
           <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${escapeHtml(pid)}" data-status="${escapeHtml(status)}">
-            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : ""}
+            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : `<div class="w-16 h-16 rounded-xl bg-brand-purple/5 dark:bg-white/10 shrink-0 flex items-center justify-center text-[10px] text-center px-1 text-brand-purple/50 dark:text-white/50">No photo</div>`}
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate">${title}</p>
-              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}</p>
+              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}${item.source === "bulk_csv" ? " · CSV" : ""}</p>
               <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${escapeHtml(status)}</span>
+              ${needsPhoto ? `<p class="text-xs text-brand-purple/60 dark:text-white/65 mt-2">Add photos before posting.</p>` : ""}
               ${status === "hidden" && reason ? `<p class="sell-moderation-reason mt-2 text-xs font-medium text-red-700 dark:text-red-300">${escapeHtml(reason)}</p>` : ""}
-              ${status === "hidden" && hint ? `<p class="sell-moderation-hint mt-1 text-xs text-brand-purple/65 dark:text-white/65">${escapeHtml(hint)}</p>` : ""}
+              ${status === "hidden" && sellerHint ? `<p class="sell-moderation-hint mt-1 text-xs text-brand-purple/65 dark:text-white/65">${escapeHtml(sellerHint)}</p>` : ""}
               ${status === "draft" ? `
               <div class="flex flex-wrap gap-2 mt-3">
-                <button type="button" class="text-xs font-semibold text-brand-green hover:underline continue-draft-btn" data-id="${escapeHtml(pid)}">Continue editing</button>
+                <button type="button" class="text-xs font-semibold text-brand-green hover:underline continue-draft-btn" data-id="${escapeHtml(pid)}">${needsPhoto ? "Add photos & edit" : "Continue editing"}</button>
                 <button type="button" class="text-xs font-semibold text-brand-purple/70 dark:text-white/70 hover:underline delete-draft-btn" data-id="${escapeHtml(pid)}">Delete draft</button>
               </div>` : ""}
               ${status === "live" ? `
@@ -3837,6 +3963,7 @@ function init() {
   el("post-btn")?.addEventListener("click", onPublish);
   el("save-draft-btn")?.addEventListener("click", onSaveDraft);
   el("load-listings-btn")?.addEventListener("click", loadMyListings);
+  bindBulkCsvUi();
   el("load-ledger-btn")?.addEventListener("click", loadEscrowLedger);
   el("onboard-btn")?.addEventListener("click", onOnboard);
   el("send-code-btn")?.addEventListener("click", onSendCode);
