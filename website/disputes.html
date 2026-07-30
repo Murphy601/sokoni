@@ -30,12 +30,7 @@
 </script>
 <script>
   (function () {
-    try {
-      var t = localStorage.getItem("sokoni-theme");
-      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-        document.documentElement.classList.add("dark");
-      }
-    } catch (e) {}
+    document.documentElement.classList.add("dark");
   })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -63,25 +58,26 @@
       <div class="space-y-1">
         <p class="text-xs font-bold text-emerald-400">Sokoni Escrow Protection active</p>
         <p class="text-xs text-zinc-400">
-          Funds stay locked until delivery is confirmed or a dispute is resolved. Open claims from your tracking page after you pay.
+          Funds stay locked until delivery is confirmed or a dispute is resolved. Open a claim below after you pay — or from Track.
         </p>
       </div>
-      <a href="track.html" class="depop-btn-ghost shrink-0">
-        Track an order
-      </a>
+      <div class="flex flex-wrap gap-2 shrink-0">
+        <a href="#open-dispute-panel" class="depop-btn-accent">Open a dispute</a>
+        <a href="track.html" class="depop-btn-ghost">Track an order</a>
+      </div>
     </section>
 
     <section class="space-y-3">
       <div>
         <h2 class="text-sm font-black text-white">Protection &amp; resolution guides</h2>
-        <p class="text-xs text-zinc-400">How escrow and returns work on Sokoni</p>
+        <p class="text-xs text-zinc-400">Tap a card to expand — how escrow and returns work on Sokoni</p>
       </div>
       <div id="dispute-guides" class="dispute-guide-carousel" role="list"></div>
     </section>
 
     <section id="buyer-auth-panel" class="dispute-card space-y-3">
       <p class="text-sm font-semibold text-white">Buyer WhatsApp sign-in</p>
-      <p class="text-xs text-zinc-400">Verify to see your dispute tickets.</p>
+      <p class="text-xs text-zinc-400">Verify to see tickets and open a claim.</p>
       <div class="flex flex-col sm:flex-row gap-2">
         <label class="flex-1 text-xs font-medium text-zinc-300">
           WhatsApp number
@@ -97,6 +93,39 @@
         <button id="buyer-auth-verify-btn" type="button" class="depop-btn-accent">Verify</button>
       </div>
       <p id="buyer-auth-status" class="text-xs text-zinc-400"></p>
+    </section>
+
+    <section id="open-dispute-panel" class="dispute-card space-y-4 scroll-mt-24">
+      <div>
+        <p class="depop-label">Buyer claim</p>
+        <h2 class="text-base font-black text-white mt-1">Open a dispute</h2>
+        <p id="open-dispute-auth-hint" class="text-xs text-zinc-400 mt-1">Verify WhatsApp above first, then submit your claim here.</p>
+      </div>
+      <form id="open-dispute-form" class="space-y-3">
+        <label class="block text-sm font-medium text-zinc-300">
+          Order number (SK-####)
+          <input id="open-dispute-order" type="text" autocomplete="off" placeholder="SK-1042" class="mt-1 w-full min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]" />
+        </label>
+        <label class="block text-sm font-medium text-zinc-300">
+          Reason
+          <select id="open-dispute-reason" class="mt-1 w-full min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-sm text-white">
+            <option value="not_received">Not delivered</option>
+            <option value="damaged">Arrived damaged</option>
+            <option value="not_as_described">Not as described</option>
+            <option value="wrong_item">Wrong item</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label class="block text-sm font-medium text-zinc-300">
+          What happened
+          <textarea id="open-dispute-statement" rows="3" maxlength="2000" placeholder="Short facts help — photos can follow on WhatsApp with your ticket #." class="mt-1 w-full rounded-2xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]"></textarea>
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" id="open-dispute-submit" class="depop-btn-accent">Submit claim</button>
+          <button type="button" id="open-dispute-track-btn" class="depop-btn-ghost">Open in Track instead</button>
+        </div>
+        <p id="open-dispute-status" class="text-sm text-zinc-400"></p>
+      </form>
     </section>
 
     <section class="space-y-3">

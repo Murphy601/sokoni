@@ -7,20 +7,32 @@ const DISPUTES_API = `${API_BASE}/api/disputes`;
 
 const GUIDES = [
   {
+    id: "photo",
     title: "How photo evidence works",
     blurb: "Clear daylight shots of the tag, item, and packaging help admin decide faster.",
+    detail:
+      "Take photos in daylight of: (1) the item front and back, (2) tags/labels, (3) packaging and seal if damaged, (4) any stains or flaws. Upload or WhatsApp them with your ticket number once the claim is open.",
   },
   {
+    id: "escrow",
     title: "What happens in escrow",
     blurb: "When you open a claim, payout freezes. Money stays held until refund or release.",
+    detail:
+      "After you pay, Sokoni holds funds until delivery is confirmed. If you open a dispute, seller payout stays frozen while admin reviews tracking, your statement, and any photos. Outcome is refund, partial refund, or release to the seller.",
   },
   {
+    id: "returns",
     title: "SK Station returns",
     blurb: "If a return is approved, drop at a Sokoni hub with your order ref on the parcel.",
+    detail:
+      "Only return after admin approves. Write your SK-#### on the parcel, drop at an SK Station / Sokoni hub, and keep the drop receipt. Returns without approval may not be refunded.",
   },
   {
+    id: "open",
     title: "Open a claim from Track",
     blurb: "After you pay, use Track order → Open dispute with a short statement.",
+    detail:
+      "Go to Track, enter your SK-####, verify WhatsApp if asked, then use Open dispute. Or use the form on this page: enter your order number, pick a reason, and submit a short statement.",
   },
 ];
 
@@ -36,12 +48,30 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function buyerSession() {
+  return window.SokoniBuyerAuth?.readSession?.() || null;
+}
+
+function isSignedIn() {
+  const session = buyerSession();
+  return Boolean(session?.sessionToken && session?.userId);
+}
+
 function setStatus(msg, isError = false) {
   const node = el("disputes-status");
   if (!node) return;
   node.textContent = msg || "";
-  node.classList.toggle("text-red-600", isError);
-  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-red-400", isError);
+  node.classList.toggle("text-[#FF2300]", isError);
+  node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
+}
+
+function setOpenStatus(msg, isError = false) {
+  const node = el("open-dispute-status");
+  if (!node) return;
+  node.textContent = msg || "";
+  node.classList.toggle("text-red-400", isError);
+  node.classList.toggle("text-[#FF2300]", isError);
   node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
 }
 
@@ -74,17 +104,53 @@ function formatWhen(ts) {
   return d.toLocaleString();
 }
 
+function normalizeOrderId(raw) {
+  const t = String(raw || "").trim().toUpperCase();
+  if (!t) return "";
+  if (t.startsWith("SK-")) return t;
+  const digits = t.replace(/\D/g, "");
+  return digits ? `SK-${digits}` : t;
+}
+
 function renderGuides() {
   const wrap = el("dispute-guides");
   if (!wrap) return;
   wrap.innerHTML = GUIDES.map(
     (g) => `
-    <article class="dispute-guide-card" role="listitem">
-      <p class="text-sm font-bold">${escapeHtml(g.title)}</p>
+    <button type="button" class="dispute-guide-card text-left" role="listitem" data-guide-id="${escapeHtml(g.id)}" aria-expanded="false">
+      <p class="text-sm font-bold text-white">${escapeHtml(g.title)}</p>
       <p class="text-[11px] text-zinc-400 mt-2 leading-snug">${escapeHtml(g.blurb)}</p>
-      <p class="text-[10px] font-bold text-[#FF2300] mt-3">Learn →</p>
-    </article>`
+      <p class="dispute-guide-detail hidden text-[11px] text-zinc-300 mt-3 leading-relaxed border-t border-zinc-800 pt-3">${escapeHtml(g.detail)}</p>
+      <p class="text-[10px] font-bold text-[#FF2300] mt-3 dispute-guide-cta">Learn →</p>
+    </button>`
   ).join("");
+
+  wrap.querySelectorAll("[data-guide-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const detail = btn.querySelector(".dispute-guide-detail");
+      const cta = btn.querySelector(".dispute-guide-cta");
+      const open = btn.getAttribute("aria-expanded") === "true";
+      wrap.querySelectorAll("[data-guide-id]").forEach((other) => {
+        if (other === btn) return;
+        other.setAttribute("aria-expanded", "false");
+        other.querySelector(".dispute-guide-detail")?.classList.add("hidden");
+        const otherCta = other.querySelector(".dispute-guide-cta");
+        if (otherCta) otherCta.textContent = "Learn →";
+      });
+      if (open) {
+        btn.setAttribute("aria-expanded", "false");
+        detail?.classList.add("hidden");
+        if (cta) cta.textContent = "Learn →";
+      } else {
+        btn.setAttribute("aria-expanded", "true");
+        detail?.classList.remove("hidden");
+        if (cta) cta.textContent = "Close ←";
+        if (btn.dataset.guideId === "open") {
+          el("open-dispute-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    });
+  });
 }
 
 function disputeCard(d) {
@@ -138,9 +204,10 @@ function disputeCard(d) {
 async function loadDisputes() {
   const wrap = el("disputes-list");
   if (!wrap) return;
-  const session = window.SokoniBuyerAuth?.readSession?.();
-  if (!session?.token) {
+  const session = buyerSession();
+  if (!session?.sessionToken) {
     wrap.innerHTML = `<p class="text-sm text-zinc-400">Verify WhatsApp above to load your tickets.</p>`;
+    setStatus("Sign in to see open claims.");
     return;
   }
   wrap.innerHTML = `<p class="text-sm text-zinc-500">Loading…</p>`;
@@ -158,15 +225,87 @@ async function loadDisputes() {
     const disputes = Array.isArray(data.disputes) ? data.disputes : [];
     if (!disputes.length) {
       wrap.innerHTML = `<div class="dispute-card text-sm text-zinc-400">
-        No open tickets. If something’s wrong with a paid order, open a claim from
-        <a href="track.html" class="text-[#FF2300] font-semibold hover:underline">Track</a>.
+        No tickets yet. Paid order problem? Use <strong class="text-white">Open a dispute</strong> below, or
+        <a href="track.html" class="text-[#FF2300] font-semibold hover:underline">Track</a> your SK-####.
       </div>`;
+      setStatus("Signed in — no open tickets.");
       return;
     }
     wrap.innerHTML = disputes.map(disputeCard).join("");
+    setStatus(`${disputes.length} ticket${disputes.length === 1 ? "" : "s"}`);
   } catch {
     wrap.innerHTML = `<p class="text-sm text-red-400">Network error.</p>`;
     setStatus("Network error.", true);
+  }
+}
+
+async function submitOpenDispute(ev) {
+  ev.preventDefault();
+  const session = buyerSession();
+  if (!session?.sessionToken || !session?.userId) {
+    setOpenStatus("Verify WhatsApp above first.", true);
+    el("buyer-auth-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  const orderId = normalizeOrderId(el("open-dispute-order")?.value);
+  const reason = el("open-dispute-reason")?.value || "other";
+  const statement = String(el("open-dispute-statement")?.value || "").trim();
+  if (!orderId) {
+    setOpenStatus("Enter your SK-#### order number.", true);
+    return;
+  }
+  if (statement.length < 8) {
+    setOpenStatus("Add a short statement (what went wrong).", true);
+    return;
+  }
+  const btn = el("open-dispute-submit");
+  if (btn) btn.disabled = true;
+  setOpenStatus("Opening dispute…");
+  try {
+    const body = window.SokoniBuyerAuth?.authFields
+      ? window.SokoniBuyerAuth.authFields({
+          orderId,
+          buyerUserId: session.userId,
+          reason,
+          statement,
+        })
+      : {
+          orderId,
+          buyerUserId: session.userId,
+          reason,
+          statement,
+          phone: session.phone,
+          sessionToken: session.sessionToken,
+        };
+    const res = await fetch(DISPUTES_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setOpenStatus(data.message || data.error || "Could not open dispute.", true);
+      return;
+    }
+    const ticket = data.dispute?.id ? `TK-${data.dispute.id}` : "opened";
+    setOpenStatus(`${ticket} — escrow held while Sokoni reviews.`);
+    if (el("open-dispute-statement")) el("open-dispute-statement").value = "";
+    void loadDisputes();
+    el("disputes-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch {
+    setOpenStatus("Network error. Try again or WhatsApp Sokoni.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function syncSignedInUi() {
+  const signedIn = isSignedIn();
+  const hint = el("open-dispute-auth-hint");
+  if (hint) {
+    hint.textContent = signedIn
+      ? "Signed in — enter your paid order number to open a claim."
+      : "Verify WhatsApp above first, then submit your claim here.";
   }
 }
 
@@ -175,13 +314,32 @@ function init() {
   window.SokoniBuyerAuth?.bindPanel?.({
     onVerified: () => {
       setStatus("WhatsApp verified.");
+      syncSignedInUi();
       void loadDisputes();
     },
   });
   el("disputes-refresh-btn")?.addEventListener("click", () => void loadDisputes());
-  if (window.SokoniBuyerAuth?.readSession?.()?.token) {
-    el("buyer-auth-panel")?.classList.add("opacity-80");
+  el("open-dispute-form")?.addEventListener("submit", (ev) => void submitOpenDispute(ev));
+  el("open-dispute-track-btn")?.addEventListener("click", () => {
+    const orderId = normalizeOrderId(el("open-dispute-order")?.value);
+    window.location.href = orderId ? `track.html?order=${encodeURIComponent(orderId)}` : "track.html";
+  });
+
+  syncSignedInUi();
+  if (isSignedIn()) {
     void loadDisputes();
+  } else {
+    const wrap = el("disputes-list");
+    if (wrap) {
+      wrap.innerHTML = `<p class="text-sm text-zinc-400">Verify WhatsApp above to load your tickets.</p>`;
+    }
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const prefill = normalizeOrderId(params.get("order") || params.get("orderId") || "");
+  if (prefill && el("open-dispute-order")) {
+    el("open-dispute-order").value = prefill;
+    el("open-dispute-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
