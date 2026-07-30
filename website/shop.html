@@ -147,6 +147,12 @@
           class="hidden min-h-[44px] px-5 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold inline-flex items-center justify-center hover:border-brand-green">
           Message seller
         </a>
+        <a
+          id="shop-rate-cta"
+          href="#shop-rate-section"
+          class="min-h-[44px] px-5 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold inline-flex items-center justify-center hover:border-brand-green">
+          Leave a review
+        </a>
       </div>
       <p class="text-xs text-brand-purple/60 dark:text-white/65 mt-3">
         Sokoni is countrywide. Prepaid orders are confirmed via M-Pesa Till 4775847, with home delivery and pickup partners across Kenya.
@@ -224,6 +230,63 @@
       </p>
     </section>
 
+    <section
+      id="shop-rate-section"
+      class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6 scroll-mt-24">
+      <h2 class="font-display text-2xl font-bold">Rate this shop</h2>
+      <p class="text-sm text-brand-purple/65 dark:text-white/70 mt-2">
+        After your order is delivered, leave a star rating and a short note. It helps the next buyer.
+      </p>
+      <form id="shop-review-form" class="mt-4 space-y-3">
+        <label class="block text-sm font-medium">
+          Order number
+          <select
+            id="shop-review-order"
+            class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green">
+            <option value="">Select a delivered order…</option>
+          </select>
+        </label>
+        <label class="block text-sm font-medium">
+          Or type SK number
+          <input
+            id="shop-review-order-manual"
+            type="text"
+            autocomplete="off"
+            placeholder="SK-1042"
+            class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+          />
+        </label>
+        <fieldset>
+          <legend class="text-sm font-medium mb-2">Your rating</legend>
+          <div id="shop-review-stars" class="flex flex-wrap gap-2" role="radiogroup" aria-label="Star rating">
+            <button type="button" class="shop-star-btn min-h-[44px] min-w-[44px] rounded-full border border-black/10 dark:border-white/15 text-lg" data-stars="1" aria-label="1 star">★</button>
+            <button type="button" class="shop-star-btn min-h-[44px] min-w-[44px] rounded-full border border-black/10 dark:border-white/15 text-lg" data-stars="2" aria-label="2 stars">★</button>
+            <button type="button" class="shop-star-btn min-h-[44px] min-w-[44px] rounded-full border border-black/10 dark:border-white/15 text-lg" data-stars="3" aria-label="3 stars">★</button>
+            <button type="button" class="shop-star-btn min-h-[44px] min-w-[44px] rounded-full border border-black/10 dark:border-white/15 text-lg" data-stars="4" aria-label="4 stars">★</button>
+            <button type="button" class="shop-star-btn min-h-[44px] min-w-[44px] rounded-full border border-black/10 dark:border-white/15 text-lg" data-stars="5" aria-label="5 stars">★</button>
+          </div>
+          <input type="hidden" id="shop-review-rating" value="" />
+        </fieldset>
+        <label class="block text-sm font-medium">
+          Comment (optional)
+          <textarea
+            id="shop-review-comment"
+            rows="3"
+            maxlength="500"
+            placeholder="Item matched photos, fast packing…"
+            class="mt-1 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+          ></textarea>
+        </label>
+        <button
+          type="submit"
+          id="shop-review-submit"
+          class="min-h-[48px] px-6 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          Submit review
+        </button>
+        <p id="shop-review-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+      </form>
+    </section>
+
     <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6">
       <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 class="font-display text-2xl font-bold">Recent reviews</h2>
@@ -231,7 +294,7 @@
       </div>
       <div id="shop-reviews-list" class="space-y-3"></div>
       <p id="shop-reviews-empty" class="hidden text-sm text-brand-purple/60 dark:text-white/65">
-        No reviews yet. Buyers can rate this shop after delivered orders.
+        No reviews yet. Be the first to rate after a delivered order.
       </p>
     </section>
   </main>

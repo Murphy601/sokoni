@@ -5,6 +5,7 @@ import {
   getAcceptedOfferForCheckout,
   getDirectThread,
   getShopProfileByHandle,
+  listReviewableOrdersForSeller,
   listSellerHandledOfferQueueEvents,
   listSellerHandledOfferQueue,
   listSellerReviews,
@@ -75,9 +76,16 @@ function socialErrorStatus(error) {
     error === "offer_above_price" ||
     error === "offer_too_low_for_shipping" ||
     error === "invalid_delivery_details" ||
-    error === "review_exists"
+    error === "review_exists" ||
+    error === "review_not_allowed"
   ) {
     return 409;
+  }
+  if (
+    error === "buyer_mismatch" ||
+    error === "seller_mismatch"
+  ) {
+    return 403;
   }
   if (
     error === "user_not_found" ||
@@ -1098,7 +1106,15 @@ router.post("/reviews/create", async (req, res) => {
         message: gated.message,
       });
     }
-    const result = await createOrderReview(gated.payload || {});
+    const payload = gated.payload || {};
+    const result = await createOrderReview({
+      ...payload,
+      orderId: payload.orderId ?? payload.orderRef ?? req.body?.orderId ?? req.body?.orderRef,
+      sellerUserId: payload.sellerUserId ?? req.body?.sellerUserId,
+      rating: payload.rating ?? req.body?.rating,
+      comment: payload.comment ?? req.body?.comment,
+      buyerPhone: gated.phone || payload.phone || req.body?.phone,
+    });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
@@ -1107,7 +1123,41 @@ router.post("/reviews/create", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: "review_create_failed",
+      message: err.message || "Could not save review right now.",
+    });
+  }
+});
+
+/** GET /api/social/reviews/reviewable?sellerUserId= — delivered orders buyer can still rate */
+router.get("/reviews/reviewable", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedBuyerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || socialErrorStatus(auth.error)).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+    const result = await listReviewableOrdersForSeller({
+      buyerUserId: auth.buyerUserId,
+      sellerUserId: req.query.sellerUserId,
+      buyerPhone: auth.phone,
+      limit: req.query.limit,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      error: "reviewable_orders_failed",
+      message: err.message || "Could not load reviewable orders.",
+    });
   }
 });
 

@@ -16,6 +16,8 @@ const state = {
   reviewsRequestToken: 0,
   socialListRequestToken: 0,
   socialListDirection: null,
+  reviewRating: 0,
+  reviewableOrders: [],
 };
 
 function el(id) {
@@ -184,15 +186,187 @@ function inboxLinkForShop(shop) {
 
 function resetReviewsUi() {
   state.reviewsRequestToken += 1;
+  state.reviewRating = 0;
+  state.reviewableOrders = [];
   const list = el("shop-reviews-list");
   const count = el("shop-reviews-count");
   const empty = el("shop-reviews-empty");
   if (list) list.innerHTML = "";
   if (count) count.textContent = "No ratings yet";
   if (empty) {
-    empty.textContent = "No reviews yet. Buyers can rate this shop after delivered orders.";
+    empty.textContent = "No reviews yet. Be the first to rate after a delivered order.";
     empty.classList.add("hidden");
   }
+  syncStarButtons();
+  const orderSelect = el("shop-review-order");
+  if (orderSelect) {
+    orderSelect.innerHTML = `<option value="">Select a delivered order…</option>`;
+  }
+  const manual = el("shop-review-order-manual");
+  if (manual) manual.value = "";
+  const comment = el("shop-review-comment");
+  if (comment) comment.value = "";
+  const rating = el("shop-review-rating");
+  if (rating) rating.value = "";
+  setReviewStatus("");
+}
+
+function setReviewStatus(message, isError = false) {
+  const node = el("shop-review-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+function syncStarButtons() {
+  const selected = Number(state.reviewRating) || 0;
+  document.querySelectorAll(".shop-star-btn").forEach((btn) => {
+    const n = Number(btn.dataset.stars) || 0;
+    const on = selected > 0 && n <= selected;
+    btn.classList.toggle("bg-brand-green", on);
+    btn.classList.toggle("text-brand-purple", on);
+    btn.classList.toggle("border-brand-green", on);
+    btn.setAttribute("aria-checked", on && n === selected ? "true" : "false");
+  });
+  const hidden = el("shop-review-rating");
+  if (hidden) hidden.value = selected ? String(selected) : "";
+}
+
+function populateReviewableOrders(orders = []) {
+  state.reviewableOrders = Array.isArray(orders) ? orders : [];
+  const select = el("shop-review-order");
+  if (!select) return;
+  const options = [`<option value="">Select a delivered order…</option>`];
+  for (const order of state.reviewableOrders) {
+    const id = escapeHtml(order.orderRef || order.orderId || "");
+    const title = escapeHtml(order.productName || "Order");
+    options.push(`<option value="${id}">${id} · ${title}</option>`);
+  }
+  select.innerHTML = options.join("");
+}
+
+async function loadReviewableOrders(shop) {
+  const shopUserId = Number(shop?.userId);
+  const session = window.SokoniBuyerAuth?.readSession?.();
+  if (!Number.isInteger(shopUserId) || shopUserId < 1 || !session?.userId || !session?.sessionToken) {
+    populateReviewableOrders([]);
+    return;
+  }
+  if (Number(session.userId) === shopUserId) {
+    populateReviewableOrders([]);
+    setReviewStatus("This is your shop — buyers rate you after delivery.");
+    return;
+  }
+  try {
+    const params = new URLSearchParams({ sellerUserId: String(shopUserId), limit: "20" });
+    if (window.SokoniBuyerAuth?.appendAuthQuery) {
+      window.SokoniBuyerAuth.appendAuthQuery(params);
+    }
+    const res = await fetch(`${SHOP_API_BASE}/reviews/reviewable?${params.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      populateReviewableOrders([]);
+      return;
+    }
+    populateReviewableOrders(data.orders || []);
+    if (!(data.orders || []).length) {
+      setReviewStatus("No delivered orders with this shop yet — enter your SK number after delivery.");
+    } else {
+      setReviewStatus(`${data.orders.length} delivered order${data.orders.length === 1 ? "" : "s"} ready to rate.`);
+    }
+  } catch {
+    populateReviewableOrders([]);
+  }
+}
+
+async function submitShopReview(ev) {
+  ev?.preventDefault?.();
+  const shop = state.currentShop;
+  const shopUserId = Number(shop?.userId);
+  const session = window.SokoniBuyerAuth?.readSession?.();
+  if (!Number.isInteger(shopUserId) || shopUserId < 1) {
+    setReviewStatus("Load a shop first.", true);
+    return;
+  }
+  if (!session?.userId || !session?.sessionToken) {
+    setReviewStatus("Verify WhatsApp above to leave a review.", true);
+    el("buyer-auth-phone")?.focus();
+    return;
+  }
+  if (Number(session.userId) === shopUserId) {
+    setReviewStatus("You cannot rate your own shop.", true);
+    return;
+  }
+
+  const orderRef = String(
+    el("shop-review-order")?.value || el("shop-review-order-manual")?.value || ""
+  )
+    .trim()
+    .toUpperCase();
+  const rating = Number(el("shop-review-rating")?.value || state.reviewRating);
+  const comment = String(el("shop-review-comment")?.value || "").trim();
+
+  if (!orderRef) {
+    setReviewStatus("Enter or select your delivered order number (SK-xxxx).", true);
+    return;
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    setReviewStatus("Tap a star rating from 1 to 5.", true);
+    return;
+  }
+
+  const btn = el("shop-review-submit");
+  if (btn) btn.disabled = true;
+  setReviewStatus("Sending review…");
+  try {
+    const fields = {
+      orderId: orderRef,
+      sellerUserId: shopUserId,
+      buyerUserId: session.userId,
+      rating,
+      comment,
+    };
+    const payload = window.SokoniBuyerAuth?.authFields
+      ? window.SokoniBuyerAuth.authFields(fields)
+      : fields;
+    const res = await fetch(`${SHOP_API_BASE}/reviews/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setReviewStatus(data?.message || data?.error || "Could not save review.", true);
+      return;
+    }
+    setReviewStatus("Asante! Your review is live.");
+    el("shop-review-comment").value = "";
+    el("shop-review-order-manual").value = "";
+    state.reviewRating = 0;
+    syncStarButtons();
+    await loadReviewableOrders(shop);
+    await loadShopReviews(shop, shop.stats || {});
+    // refresh header rating metric
+    if (state.activeHandle) void loadShop(state.activeHandle);
+  } catch {
+    setReviewStatus("Network error while saving review.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function bindReviewForm() {
+  document.querySelectorAll(".shop-star-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.reviewRating = Number(btn.dataset.stars) || 0;
+      syncStarButtons();
+    });
+  });
+  el("shop-review-form")?.addEventListener("submit", (ev) => {
+    void submitShopReview(ev);
+  });
 }
 
 function reviewCard(review) {
@@ -717,6 +891,7 @@ async function loadShop(handle) {
     applyViewerState(data);
     renderShopHeader(data);
     renderProducts(data);
+    void loadReviewableOrders(data.shop || {});
   } catch {
     statusMessage("Could not reach Sokoni right now. Please try again.", true);
   }
@@ -742,11 +917,13 @@ function init() {
   window.SokoniBuyerAuth?.bindPanel?.({
     onVerified: () => {
       refreshViewerAndShopActions();
-      statusMessage("WhatsApp verified — you can follow and like now.");
+      statusMessage("WhatsApp verified — you can follow, like, and leave a review.");
+      if (state.currentShop) void loadReviewableOrders(state.currentShop);
     },
   });
 
   el("shop-social-list-close")?.addEventListener("click", () => closeSocialList());
+  bindReviewForm();
 
   if (form) {
     form.addEventListener("submit", (ev) => {

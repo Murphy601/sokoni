@@ -5,6 +5,9 @@ import {
 } from "../../services/shipping-tiers.js";
 import { resolveStorefrontImageUrl } from "../../lib/catalog-images.js";
 import { CONDITION_LABELS } from "../product-mapper.js";
+import { getOrder, getOrdersForCustomer } from "../../services/orders.js";
+import { getProductById } from "../../services/catalog.js";
+import { getSupplier } from "../../services/suppliers.js";
 
 /** Shared product columns for offer hydration (includes shipping for escrow math). */
 const OFFER_PRODUCT_SELECT = `
@@ -166,23 +169,164 @@ async function productExists(productId) {
   return Boolean(rows[0]);
 }
 
-async function getOrderByReference(orderRef) {
+const ORDER_SELECT_WITH_SELLER = `
+  SELECT
+    o.id,
+    o.tracking_code,
+    o.status,
+    o.buyer_id,
+    o.buyer_phone,
+    (
+      SELECT COALESCE(p.seller_user_id, s.user_id)
+      FROM order_items oi
+      LEFT JOIN products p ON p.id = oi.product_id
+      LEFT JOIN sellers s ON s.id = oi.seller_id
+      WHERE oi.order_id = o.id
+      ORDER BY oi.id ASC
+      LIMIT 1
+    ) AS seller_user_id
+  FROM orders o`;
+
+async function getPostgresOrderByReference(orderRef) {
   const raw = String(orderRef || "").trim();
   if (!raw) return null;
 
   const numericId = parseOrderId(raw);
   if (numericId) {
-    const byId = await query(`SELECT id, tracking_code, status, buyer_id, seller_id FROM orders WHERE id = $1 LIMIT 1`, [
-      numericId,
-    ]);
-    if (byId.rows[0]) return byId.rows[0];
+    const byId = await query(`${ORDER_SELECT_WITH_SELLER} WHERE o.id = $1 LIMIT 1`, [numericId]);
+    if (byId.rows[0]) return { ...byId.rows[0], source: "postgres" };
   }
 
-  const byTracking = await query(
-    `SELECT id, tracking_code, status, buyer_id, seller_id FROM orders WHERE tracking_code = $1 LIMIT 1`,
-    [raw.toUpperCase()]
+  const byTracking = await query(`${ORDER_SELECT_WITH_SELLER} WHERE UPPER(o.tracking_code) = $1 LIMIT 1`, [
+    raw.toUpperCase(),
+  ]);
+  if (byTracking.rows[0]) return { ...byTracking.rows[0], source: "postgres" };
+  return null;
+}
+
+async function lookupSellerUserIdByKey(key) {
+  const raw = String(key || "").trim();
+  if (!raw) return null;
+  const numeric = Number(raw);
+  if (Number.isInteger(numeric) && numeric > 0) {
+    const byUser = await query(`SELECT id AS user_id FROM users WHERE id = $1 LIMIT 1`, [numeric]);
+    if (byUser.rows[0]?.user_id != null) return Number(byUser.rows[0].user_id);
+    const bySellerId = await query(`SELECT user_id FROM sellers WHERE id = $1 LIMIT 1`, [numeric]);
+    if (bySellerId.rows[0]?.user_id != null) return Number(bySellerId.rows[0].user_id);
+  }
+  const handle = raw.replace(/^@+/, "").toLowerCase();
+  const bySlug = await query(
+    `SELECT user_id FROM sellers WHERE LOWER(slug) = LOWER($1) LIMIT 1`,
+    [handle]
   );
-  return byTracking.rows[0] || null;
+  if (bySlug.rows[0]?.user_id != null) return Number(bySlug.rows[0].user_id);
+  return null;
+}
+
+async function resolveSellerUserIdForJsonOrder(order) {
+  if (!order || typeof order !== "object") return null;
+
+  const productId = String(order.productId || order.product_id || "").trim();
+  if (productId) {
+    try {
+      const product = await getProductById(productId);
+      if (product?.sellerUserId != null) {
+        const n = Number(product.sellerUserId);
+        if (Number.isInteger(n) && n > 0) return n;
+      }
+      if (product?.supplierId) {
+        const fromSupplier = await lookupSellerUserIdByKey(product.supplierId);
+        if (fromSupplier) return fromSupplier;
+      }
+    } catch {
+      /* catalog optional */
+    }
+    try {
+      const { rows } = await query(
+        `SELECT COALESCE(p.seller_user_id, s.user_id) AS seller_user_id
+         FROM products p
+         LEFT JOIN sellers s ON s.id = p.seller_id
+         WHERE p.id = $1
+         LIMIT 1`,
+        [productId]
+      );
+      if (rows[0]?.seller_user_id != null) return Number(rows[0].seller_user_id);
+    } catch {
+      /* db optional for this lookup */
+    }
+  }
+
+  const supplierKey = String(order.supplierId || order.supplier_id || "").trim();
+  if (supplierKey) {
+    try {
+      const supplier = getSupplier(supplierKey);
+      if (supplier?.userId != null) {
+        const n = Number(supplier.userId);
+        if (Number.isInteger(n) && n > 0) return n;
+      }
+      const fromSupplier =
+        (await lookupSellerUserIdByKey(supplier?.shopHandle || supplier?.slug || supplierKey)) ||
+        (await lookupSellerUserIdByKey(supplierKey));
+      if (fromSupplier) return fromSupplier;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return null;
+}
+
+function jsonOrderBuyerMatches(order, buyerUserId, buyerPhone = "") {
+  const key = String(order?.customerKey || "");
+  if (key === `web:buyer:${buyerUserId}`) return true;
+  const want = String(buyerPhone || "").replace(/\D/g, "");
+  if (!want) return false;
+  const norm = (d) => {
+    let x = String(d || "").replace(/\D/g, "");
+    if (x.startsWith("0") && x.length >= 10) x = `254${x.slice(1)}`;
+    if (x.length === 9) x = `254${x}`;
+    return x;
+  };
+  const wantN = norm(want);
+  return norm(order?.phone) === wantN || norm(order?.mpesaPhone) === wantN;
+}
+
+async function getOrderByReference(orderRef) {
+  const raw = String(orderRef || "").trim();
+  if (!raw) return null;
+
+  // Prepaid marketplace orders live in JSON as SK-####.
+  const jsonOrder = getOrder(raw);
+  if (jsonOrder) {
+    const sellerUserId = await resolveSellerUserIdForJsonOrder(jsonOrder);
+    return {
+      source: "json",
+      id: null,
+      tracking_code: jsonOrder.id,
+      status: jsonOrder.status || jsonOrder.shipmentStatus || null,
+      buyer_id: null,
+      buyer_phone: jsonOrder.phone || null,
+      seller_user_id: sellerUserId,
+      jsonOrder,
+    };
+  }
+
+  return getPostgresOrderByReference(raw);
+}
+
+async function reviewAlreadyExists({ orderId = null, orderRef = null } = {}) {
+  if (orderId != null) {
+    const byId = await query(`SELECT id FROM order_reviews WHERE order_id = $1 LIMIT 1`, [orderId]);
+    if (byId.rows[0]) return true;
+  }
+  if (orderRef) {
+    const byRef = await query(
+      `SELECT id FROM order_reviews WHERE UPPER(order_ref) = UPPER($1) LIMIT 1`,
+      [String(orderRef)]
+    );
+    if (byRef.rows[0]) return true;
+  }
+  return false;
 }
 
 async function expirePendingOffers() {
@@ -2333,8 +2477,9 @@ export async function getDirectThread({ userAId, userBId, limit = 50, offset = 0
 function mapReviewRow(row) {
   return {
     id: Number(row.id),
-    orderId: Number(row.order_id),
-    orderTrackingCode: row.tracking_code || null,
+    orderId: row.order_id != null ? Number(row.order_id) : null,
+    orderTrackingCode: row.tracking_code || row.order_ref || null,
+    orderRef: row.order_ref || row.tracking_code || null,
     sellerUserId: Number(row.seller_user_id),
     buyerUserId: Number(row.buyer_user_id),
     rating: Number(row.rating),
@@ -2343,7 +2488,19 @@ function mapReviewRow(row) {
   };
 }
 
-export async function createOrderReview({ orderId, buyerUserId, sellerUserId, rating, comment = "" } = {}) {
+function isDeliveredStatus(status) {
+  const s = String(status || "").toLowerCase();
+  return s === "delivered" || s === "completed";
+}
+
+export async function createOrderReview({
+  orderId,
+  buyerUserId,
+  sellerUserId,
+  rating,
+  comment = "",
+  buyerPhone = "",
+} = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -2352,18 +2509,19 @@ export async function createOrderReview({ orderId, buyerUserId, sellerUserId, ra
   const sellerId = parseUserId(sellerUserId);
   const score = Number(rating);
   const text = String(comment || "").trim();
+  const orderRefInput = String(orderId || "").trim();
 
-  if (!orderId || !buyerId || !sellerId || !Number.isFinite(score)) {
+  if (!orderRefInput || !buyerId || !sellerId || !Number.isFinite(score)) {
     return {
       error: "invalid_review_payload",
-      message: "orderId, buyerUserId, sellerUserId, and rating are required.",
+      message: "Order number (SK-xxxx), buyer, seller, and rating are required.",
     };
   }
   if (!Number.isInteger(score) || score < 1 || score > 5) {
-    return { error: "invalid_rating", message: "rating must be an integer from 1 to 5." };
+    return { error: "invalid_rating", message: "Rating must be 1 to 5 stars." };
   }
   if (buyerId === sellerId) {
-    return { error: "invalid_review_payload", message: "buyerUserId and sellerUserId cannot be the same." };
+    return { error: "invalid_review_payload", message: "You cannot rate your own shop." };
   }
   if (!(await userExists(buyerId))) {
     return { error: "buyer_not_found", message: "Buyer user not found." };
@@ -2372,52 +2530,176 @@ export async function createOrderReview({ orderId, buyerUserId, sellerUserId, ra
     return { error: "seller_not_found", message: "Seller user not found." };
   }
 
-  const order = await getOrderByReference(orderId);
+  const order = await getOrderByReference(orderRefInput);
   if (!order) {
-    return { error: "order_not_found", message: "Order not found." };
-  }
-
-  const status = String(order.status || "").toLowerCase();
-  if (!["delivered", "completed"].includes(status)) {
     return {
-      error: "review_not_allowed",
-      message: "Reviews can only be left for delivered items.",
+      error: "order_not_found",
+      message: "Order not found. Use your Sokoni order number (e.g. SK-1042).",
     };
   }
 
-  if (order.buyer_id != null && Number(order.buyer_id) !== buyerId) {
+  const status =
+    order.source === "json"
+      ? order.jsonOrder?.status || order.jsonOrder?.shipmentStatus || order.status
+      : order.status;
+  if (!isDeliveredStatus(status)) {
+    return {
+      error: "review_not_allowed",
+      message: "You can rate this shop after the order is marked delivered.",
+    };
+  }
+
+  if (order.source === "json") {
+    if (!jsonOrderBuyerMatches(order.jsonOrder, buyerId, buyerPhone || order.buyer_phone)) {
+      return {
+        error: "buyer_mismatch",
+        message: "This order does not match your WhatsApp buyer account.",
+      };
+    }
+  } else if (order.buyer_id != null && Number(order.buyer_id) !== buyerId) {
     return {
       error: "buyer_mismatch",
       message: "This order does not belong to the buyer provided.",
     };
   }
-  if (order.seller_id != null && Number(order.seller_id) !== sellerId) {
+
+  const orderSellerUserId =
+    order.seller_user_id != null ? Number(order.seller_user_id) : null;
+  if (orderSellerUserId != null && orderSellerUserId !== sellerId) {
     return {
       error: "seller_mismatch",
-      message: "This order does not belong to the seller provided.",
+      message: "This order is for a different shop.",
+    };
+  }
+  if (orderSellerUserId == null && order.source === "json") {
+    return {
+      error: "seller_mismatch",
+      message: "Could not match this order to the shop. Message Sokoni support with your SK number.",
     };
   }
 
-  const existing = await query(`SELECT id FROM order_reviews WHERE order_id = $1 LIMIT 1`, [order.id]);
-  if (existing.rows[0]) {
+  const orderRef = String(order.tracking_code || orderRefInput).toUpperCase();
+  const pgOrderId = order.source === "postgres" ? Number(order.id) : null;
+
+  if (await reviewAlreadyExists({ orderId: pgOrderId, orderRef })) {
     return {
       error: "review_exists",
-      message: "A review for this order already exists.",
+      message: "You already left a review for this order.",
     };
   }
 
   const inserted = await query(
-    `INSERT INTO order_reviews (order_id, seller_user_id, buyer_user_id, rating, comment)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, order_id, seller_user_id, buyer_user_id, rating, comment, created_at`,
-    [order.id, sellerId, buyerId, score, text || null]
+    `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, created_at`,
+    [pgOrderId, orderRef, sellerId, buyerId, score, text || null]
   );
 
   const review = {
     ...mapReviewRow(inserted.rows[0]),
-    orderTrackingCode: order.tracking_code || null,
+    orderTrackingCode: orderRef,
   };
   return { success: true, review };
+}
+
+/**
+ * Delivered orders for this buyer+seller that still need a rating.
+ */
+export async function listReviewableOrdersForSeller({
+  buyerUserId,
+  sellerUserId,
+  buyerPhone = "",
+  limit = 20,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const buyerId = parseUserId(buyerUserId);
+  const sellerId = parseUserId(sellerUserId);
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
+  if (!buyerId || !sellerId) {
+    return {
+      error: "invalid_review_payload",
+      message: "buyerUserId and sellerUserId are required.",
+    };
+  }
+
+  const out = [];
+
+  // JSON prepaid orders (SK-*)
+  const customerKey = `web:buyer:${buyerId}`;
+  const jsonOrders = getOrdersForCustomer(customerKey, buyerPhone);
+  for (const order of jsonOrders) {
+    if (out.length >= safeLimit) break;
+    if (!isDeliveredStatus(order.status) && !isDeliveredStatus(order.shipmentStatus)) continue;
+    const orderSeller = await resolveSellerUserIdForJsonOrder(order);
+    if (orderSeller !== sellerId) continue;
+    if (await reviewAlreadyExists({ orderRef: order.id })) continue;
+    out.push({
+      orderId: order.id,
+      orderRef: order.id,
+      productName: order.productName || order.productId || "Order",
+      status: order.status,
+      createdAt: order.createdAt ? new Date(order.createdAt).toISOString() : null,
+      source: "json",
+    });
+  }
+
+  // Postgres orders linked via order_items → products.seller_user_id
+  try {
+    const { rows } = await query(
+      `SELECT
+         o.id,
+         o.tracking_code,
+         o.status,
+         o.created_at,
+         (
+           SELECT oi.title FROM order_items oi WHERE oi.order_id = o.id ORDER BY oi.id ASC LIMIT 1
+         ) AS product_title
+       FROM orders o
+       WHERE o.buyer_id = $1
+         AND o.status::text IN ('delivered', 'completed')
+         AND EXISTS (
+           SELECT 1
+           FROM order_items oi
+           LEFT JOIN products p ON p.id = oi.product_id
+           LEFT JOIN sellers s ON s.id = oi.seller_id
+           WHERE oi.order_id = o.id
+             AND COALESCE(p.seller_user_id, s.user_id) = $2
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM order_reviews r
+           WHERE r.order_id = o.id
+              OR (r.order_ref IS NOT NULL AND UPPER(r.order_ref) = UPPER(o.tracking_code))
+         )
+       ORDER BY o.created_at DESC
+       LIMIT $3`,
+      [buyerId, sellerId, safeLimit]
+    );
+    for (const row of rows) {
+      if (out.length >= safeLimit) break;
+      const ref = row.tracking_code || String(row.id);
+      if (out.some((o) => String(o.orderRef).toUpperCase() === String(ref).toUpperCase())) continue;
+      out.push({
+        orderId: row.tracking_code || String(row.id),
+        orderRef: ref,
+        productName: row.product_title || "Order",
+        status: row.status,
+        createdAt: row.created_at,
+        source: "postgres",
+      });
+    }
+  } catch (err) {
+    console.warn("[social] listReviewableOrdersForSeller pg:", err.message);
+  }
+
+  return {
+    buyerUserId: buyerId,
+    sellerUserId: sellerId,
+    orders: out.slice(0, safeLimit),
+    count: Math.min(out.length, safeLimit),
+  };
 }
 
 export async function listSellerReviews({ sellerUserId, limit = 20, offset = 0 } = {}) {
@@ -2438,12 +2720,13 @@ export async function listSellerReviews({ sellerUserId, limit = 20, offset = 0 }
     `SELECT
        r.id,
        r.order_id,
+       r.order_ref,
        r.seller_user_id,
        r.buyer_user_id,
        r.rating,
        r.comment,
        r.created_at,
-       o.tracking_code
+       COALESCE(o.tracking_code, r.order_ref) AS tracking_code
      FROM order_reviews r
      LEFT JOIN orders o ON o.id = r.order_id
      WHERE r.seller_user_id = $1

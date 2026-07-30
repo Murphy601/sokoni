@@ -8,6 +8,17 @@ const SCHEMA_PATH = path.join(__dirname, "..", "..", "db", "schema.sql");
 const SCHEMA_PHASE2_PATH = path.join(__dirname, "..", "..", "db", "schema-phase2-browse.sql");
 const SCHEMA_PHASE5_PATH = path.join(__dirname, "..", "..", "db", "schema-phase5-shipping.sql");
 const SCHEMA_PHASE10_PATH = path.join(__dirname, "..", "..", "db", "schema-phase10-social.sql");
+const SCHEMA_PHASE11_PATH = path.join(__dirname, "..", "..", "db", "schema-phase11-shop-reviews.sql");
+
+async function applySchemaFile(label, filePath) {
+  try {
+    const sql = await readFile(filePath, "utf-8");
+    await query(sql);
+    console.log(`[db] ${label} applied:`, filePath);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+}
 
 export async function runMigrations() {
   if (!isDbEnabled()) {
@@ -17,29 +28,10 @@ export async function runMigrations() {
   await query(sql);
   console.log("[db] schema applied:", SCHEMA_PATH);
 
-  try {
-    const phase2 = await readFile(SCHEMA_PHASE2_PATH, "utf-8");
-    await query(phase2);
-    console.log("[db] phase2 browse schema applied:", SCHEMA_PHASE2_PATH);
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-  }
-
-  try {
-    const phase5 = await readFile(SCHEMA_PHASE5_PATH, "utf-8");
-    await query(phase5);
-    console.log("[db] phase5 shipping schema applied:", SCHEMA_PHASE5_PATH);
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-  }
-
-  try {
-    const phase10 = await readFile(SCHEMA_PHASE10_PATH, "utf-8");
-    await query(phase10);
-    console.log("[db] phase10 social schema applied:", SCHEMA_PHASE10_PATH);
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-  }
+  await applySchemaFile("phase2 browse schema", SCHEMA_PHASE2_PATH);
+  await applySchemaFile("phase5 shipping schema", SCHEMA_PHASE5_PATH);
+  await applySchemaFile("phase10 social schema", SCHEMA_PHASE10_PATH);
+  await applySchemaFile("phase11 shop reviews", SCHEMA_PHASE11_PATH);
 }
 
 async function main() {
