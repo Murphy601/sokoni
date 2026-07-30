@@ -2133,19 +2133,29 @@ function activityEventRow(event) {
   const handle = normalizeHandleForLookup(event?.actor?.handle || "");
   const handleLabel = handle ? `@${escapeHtml(handle)}` : "";
   const when = escapeHtml(formatActivityTime(event?.createdAt));
+  const kind = event?.type === "like" ? "like" : event?.type === "follow" ? "follow" : "other";
   let text = "";
-  if (event?.type === "follow") {
-    text = `<strong>${actorName}</strong> ${handleLabel} followed your shop`;
-  } else if (event?.type === "like") {
+  if (kind === "follow") {
+    text = `<strong class="text-white">${actorName}</strong> <span class="text-zinc-400">${handleLabel}</span> followed your shop`;
+  } else if (kind === "like") {
     const title = escapeHtml(event?.product?.title || "your item");
-    text = `<strong>${actorName}</strong> ${handleLabel} liked <em>${title}</em>`;
+    text = `<strong class="text-white">${actorName}</strong> <span class="text-zinc-400">${handleLabel}</span> liked <em class="text-zinc-200 not-italic font-semibold">${title}</em>`;
   } else {
-    text = `<strong>${actorName}</strong> interacted with your shop`;
+    text = `<strong class="text-white">${actorName}</strong> interacted with your shop`;
   }
+  const pill =
+    kind === "like"
+      ? `<span class="sell-activity-pill sell-activity-pill--like">Like</span>`
+      : kind === "follow"
+        ? `<span class="sell-activity-pill sell-activity-pill--follow">Follow</span>`
+        : `<span class="sell-activity-pill">Activity</span>`;
   return `
-    <article class="rounded-2xl border border-black/5 dark:border-white/10 px-4 py-3">
-      <p class="text-sm">${text}</p>
-      <p class="text-[11px] text-zinc-500 mt-1">${when}</p>
+    <article class="sell-activity-row" data-activity-type="${kind}">
+      <div class="flex items-start justify-between gap-3">
+        <p class="text-sm text-zinc-300 leading-snug">${text}</p>
+        ${pill}
+      </div>
+      <p class="text-[11px] text-zinc-500 mt-1.5 font-mono">${when}</p>
     </article>`;
 }
 
@@ -2184,7 +2194,7 @@ async function loadSellerActivity() {
     }
     wrap.innerHTML = events.map((event) => activityEventRow(event)).join("");
   } catch {
-    wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error while loading activity.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-red-400">Network error while loading activity.</p>`;
   }
 }
 

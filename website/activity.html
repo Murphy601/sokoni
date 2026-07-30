@@ -30,12 +30,7 @@
 </script>
 <script>
   (function () {
-    try {
-      var t = localStorage.getItem("sokoni-theme");
-      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-        document.documentElement.classList.add("dark");
-      }
-    } catch (e) {}
+    document.documentElement.classList.add("dark");
   })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -44,24 +39,27 @@
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
 <link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
 </head>
-<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col" data-shell-page="activity">
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="activity">
   <div id="sokoni-shell-header"></div>
 
   <main class="depop-main-content max-w-3xl mx-auto w-full px-5 py-7 flex-1 flex flex-col gap-4">
-    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-5">
-      <h1 class="font-display text-2xl font-bold">Your activity</h1>
-      <p class="text-sm text-brand-purple/65 dark:text-white/70 mt-2">
+    <section class="depop-card p-5 space-y-1">
+      <p class="depop-label">Activity</p>
+      <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Your activity</h1>
+      <p class="text-sm text-zinc-400 mt-2">
         Offer replies from sellers, shops you follow, and items you liked — all in one place.
       </p>
-      <p id="activity-status" class="text-sm mt-2 text-brand-purple/60 dark:text-white/65"></p>
-      <div id="buyer-auth-panel" class="mt-4 rounded-2xl border border-black/5 dark:border-white/10 p-4 space-y-3">
-        <p class="text-sm font-semibold">Buyer WhatsApp sign-in</p>
-        <p class="text-xs text-brand-purple/60 dark:text-white/65">
+      <p id="activity-status" class="text-sm mt-2 text-zinc-400"></p>
+
+      <div id="buyer-auth-panel" class="mt-4 depop-card !bg-black p-4 space-y-3">
+        <p class="text-sm font-semibold text-white">Buyer WhatsApp sign-in</p>
+        <p class="text-xs text-zinc-400">
           Verify once to load your offers, follows, and likes.
         </p>
         <div class="flex flex-col sm:flex-row gap-2">
-          <label class="flex-1 text-xs font-medium">
+          <label class="flex-1 text-xs font-medium text-zinc-300">
             WhatsApp number
             <input
               id="buyer-auth-phone"
@@ -69,10 +67,10 @@
               inputmode="tel"
               autocomplete="tel"
               placeholder="07XXXXXXXX"
-              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
             />
           </label>
-          <label class="sm:w-36 text-xs font-medium">
+          <label class="sm:w-36 text-xs font-medium text-zinc-300">
             Code
             <input
               id="buyer-auth-code"
@@ -80,69 +78,68 @@
               inputmode="numeric"
               maxlength="6"
               placeholder="6 digits"
-              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
             />
           </label>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button id="buyer-auth-send-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
+          <button id="buyer-auth-send-btn" type="button" class="depop-btn-ghost">
             Send code
           </button>
-          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          <button id="buyer-auth-verify-btn" type="button" class="depop-btn-accent">
             Verify
           </button>
         </div>
-        <p id="buyer-auth-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
+        <p id="buyer-auth-status" class="text-xs text-zinc-400"></p>
       </div>
+
       <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          id="activity-refresh-btn"
-          class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
+        <button type="button" id="activity-refresh-btn" class="depop-btn-ghost">
           Refresh
         </button>
         <a
           href="https://wa.me/254117422428?text=Hi%20Sokoni%2C%20I%20need%20help%20with%20my%20offers"
           target="_blank"
           rel="noopener"
-          class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold inline-flex items-center">
+          class="depop-btn-accent">
           Ask on WhatsApp
         </a>
       </div>
+
       <fieldset id="activity-notify-row" class="hidden mt-4 space-y-2">
-        <legend class="text-sm font-medium">WhatsApp alerts</legend>
-        <p class="text-xs text-brand-purple/60 dark:text-white/60">Offer accept/decline pings. Orders stay on. Sellers manage follow/like alerts on their shop profile.</p>
-        <label class="flex items-start gap-3 text-sm font-medium min-h-[44px]">
-          <input id="activity-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+        <legend class="text-sm font-medium text-white">WhatsApp alerts</legend>
+        <p class="text-xs text-zinc-400">Offer accept/decline pings. Orders stay on. Sellers manage follow/like alerts on their shop profile.</p>
+        <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] text-zinc-300">
+          <input id="activity-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#FF2300]" checked />
           <span>All social WhatsApp pings</span>
         </label>
-        <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
-          <input id="activity-wa-notify-offers" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+        <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2 text-zinc-300">
+          <input id="activity-wa-notify-offers" type="checkbox" class="mt-1 h-5 w-5 accent-[#FF2300]" checked />
           <span>Offer accept / decline</span>
         </label>
-        <p id="activity-notify-status" class="text-xs text-brand-purple/60 dark:text-white/65"></p>
+        <p id="activity-notify-status" class="text-xs text-zinc-400"></p>
       </fieldset>
     </section>
 
-    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-4 space-y-3">
+    <section class="depop-card p-4 space-y-3">
       <div>
-        <h2 class="font-semibold text-sm">Ratings from sellers</h2>
-        <p class="text-xs text-brand-purple/60 dark:text-white/65 mt-1">After delivery, sellers can rate you. This stays on your buyer profile.</p>
+        <h2 class="font-semibold text-sm text-white">Ratings from sellers</h2>
+        <p class="text-xs text-zinc-400 mt-1">After delivery, sellers can rate you. This stays on your buyer profile.</p>
       </div>
-      <p id="buyer-ratings-summary" class="text-sm text-brand-purple/70 dark:text-white/70">Sign in to see ratings.</p>
+      <p id="buyer-ratings-summary" class="text-sm text-zinc-400">Sign in to see ratings.</p>
       <div id="buyer-ratings-list" class="space-y-2"></div>
     </section>
 
-    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-4">
+    <section class="depop-card p-4">
       <div id="activity-list" class="space-y-2"></div>
-      <p id="activity-empty" class="hidden text-sm text-brand-purple/60 dark:text-white/65">
+      <p id="activity-empty" class="hidden text-sm text-zinc-400">
         Nothing here yet. Like an item, follow a shop, or make an offer — updates show up here.
       </p>
     </section>
   </main>
 
-  <footer class="border-t border-black/5 dark:border-white/10 py-6 text-center text-xs text-brand-purple/50 dark:text-white/55">
-    Need instant help? <a href="https://wa.me/254117422428" target="_blank" rel="noopener" class="text-brand-green font-semibold">Message Sokoni on WhatsApp</a>
+  <footer class="border-t border-zinc-900 py-6 text-center text-xs text-zinc-500">
+    Need instant help? <a href="https://wa.me/254117422428" target="_blank" rel="noopener" class="text-[#FF2300] font-semibold">Message Sokoni on WhatsApp</a>
   </footer>
 
   <div id="sokoni-shell-nav"></div>
