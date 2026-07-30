@@ -146,12 +146,51 @@ function eventCard(event) {
     </article>`;
 }
 
+async function loadBuyerRatings() {
+  const summary = el("buyer-ratings-summary");
+  const list = el("buyer-ratings-list");
+  if (!summary || !list) return;
+  const session = window.SokoniBuyerAuth?.readSession?.();
+  if (!session?.userId) {
+    summary.textContent = "Sign in to see ratings sellers left for you.";
+    list.innerHTML = "";
+    return;
+  }
+  try {
+    const res = await fetch(`${SOCIAL_API}/reviews/buyer/${encodeURIComponent(session.userId)}?limit=8`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      summary.textContent = data?.message || "Ratings unavailable right now.";
+      list.innerHTML = "";
+      return;
+    }
+    const total = Number(data.totalReviews || 0);
+    const avg = Number(data.avgRating || 0);
+    summary.textContent =
+      total > 0 ? `★ ${avg.toFixed(1)} · ${total.toLocaleString()} seller rating${total === 1 ? "" : "s"}` : "No seller ratings yet.";
+    const reviews = Array.isArray(data.reviews) ? data.reviews : [];
+    list.innerHTML = reviews
+      .map((r) => {
+        const stars = "★".repeat(Math.max(1, Math.min(5, Number(r.rating) || 0)));
+        return `<article class="rounded-2xl border border-black/5 dark:border-white/10 px-3 py-2">
+          <p class="text-sm font-semibold">${stars} · ${escapeHtml(r.orderRef || "Order")}</p>
+          ${r.comment ? `<p class="text-xs text-brand-purple/65 dark:text-white/65 mt-1">${escapeHtml(r.comment)}</p>` : ""}
+        </article>`;
+      })
+      .join("");
+  } catch {
+    summary.textContent = "Could not load ratings.";
+    list.innerHTML = "";
+  }
+}
+
 async function loadActivity() {
   const list = el("activity-list");
   const empty = el("activity-empty");
   if (!list || !empty) return;
 
   const session = window.SokoniBuyerAuth?.readSession?.();
+  void loadBuyerRatings();
   if (!session?.userId) {
     list.innerHTML = "";
     empty.textContent = "Verify WhatsApp above to see your activity.";

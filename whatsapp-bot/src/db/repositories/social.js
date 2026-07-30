@@ -276,6 +276,31 @@ async function resolveSellerUserIdForJsonOrder(order) {
   return null;
 }
 
+async function resolveBuyerUserIdForJsonOrder(order) {
+  if (!order || typeof order !== "object") return null;
+  const key = String(order.customerKey || "");
+  const match = key.match(/^web:buyer:(\d+)$/i);
+  if (match) {
+    const n = Number(match[1]);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  const phone = String(order.phone || order.mpesaPhone || "").replace(/\D/g, "");
+  if (!phone) return null;
+  try {
+    let digits = phone;
+    if (digits.startsWith("0") && digits.length >= 10) digits = `254${digits.slice(1)}`;
+    if (digits.length === 9) digits = `254${digits}`;
+    const { rows } = await query(
+      `SELECT id FROM users WHERE phone = $1 OR phone = $2 LIMIT 1`,
+      [digits, phone]
+    );
+    if (rows[0]?.id != null) return Number(rows[0].id);
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function jsonOrderBuyerMatches(order, buyerUserId, buyerPhone = "") {
   const key = String(order?.customerKey || "");
   if (key === `web:buyer:${buyerUserId}`) return true;
@@ -314,15 +339,21 @@ async function getOrderByReference(orderRef) {
   return getPostgresOrderByReference(raw);
 }
 
-async function reviewAlreadyExists({ orderId = null, orderRef = null } = {}) {
+async function reviewAlreadyExists({ orderId = null, orderRef = null, direction = "buyer_to_seller" } = {}) {
+  const dir = direction === "seller_to_buyer" ? "seller_to_buyer" : "buyer_to_seller";
   if (orderId != null) {
-    const byId = await query(`SELECT id FROM order_reviews WHERE order_id = $1 LIMIT 1`, [orderId]);
+    const byId = await query(
+      `SELECT id FROM order_reviews WHERE order_id = $1 AND direction = $2 LIMIT 1`,
+      [orderId, dir]
+    );
     if (byId.rows[0]) return true;
   }
   if (orderRef) {
     const byRef = await query(
-      `SELECT id FROM order_reviews WHERE UPPER(order_ref) = UPPER($1) LIMIT 1`,
-      [String(orderRef)]
+      `SELECT id FROM order_reviews
+        WHERE UPPER(order_ref) = UPPER($1) AND direction = $2
+        LIMIT 1`,
+      [String(orderRef), dir]
     );
     if (byRef.rows[0]) return true;
   }
@@ -1804,7 +1835,25 @@ async function getReviewSummary(userId = null) {
        COALESCE(AVG(rating), 0)::numeric(10,2) AS avg_rating,
        COUNT(*)::int AS total_reviews
      FROM order_reviews
-     WHERE seller_user_id = $1`,
+     WHERE seller_user_id = $1
+       AND direction = 'buyer_to_seller'`,
+    [Number(userId)]
+  );
+  return {
+    avgRating: Number(rows[0]?.avg_rating || 0),
+    totalReviews: Number(rows[0]?.total_reviews || 0),
+  };
+}
+
+async function getBuyerReviewSummary(userId = null) {
+  if (!userId) return { avgRating: 0, totalReviews: 0 };
+  const { rows } = await query(
+    `SELECT
+       COALESCE(AVG(rating), 0)::numeric(10,2) AS avg_rating,
+       COUNT(*)::int AS total_reviews
+     FROM order_reviews
+     WHERE buyer_user_id = $1
+       AND direction = 'seller_to_buyer'`,
     [Number(userId)]
   );
   return {
@@ -2657,6 +2706,7 @@ function mapReviewRow(row) {
     orderRef: row.order_ref || row.tracking_code || null,
     sellerUserId: Number(row.seller_user_id),
     buyerUserId: Number(row.buyer_user_id),
+    direction: row.direction === "seller_to_buyer" ? "seller_to_buyer" : "buyer_to_seller",
     rating: Number(row.rating),
     comment: row.comment || null,
     createdAt: row.created_at,
@@ -2675,11 +2725,13 @@ export async function createOrderReview({
   rating,
   comment = "",
   buyerPhone = "",
+  direction = "buyer_to_seller",
 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
 
+  const dir = direction === "seller_to_buyer" ? "seller_to_buyer" : "buyer_to_seller";
   const buyerId = parseUserId(buyerUserId);
   const sellerId = parseUserId(sellerUserId);
   const score = Number(rating);
@@ -2696,7 +2748,10 @@ export async function createOrderReview({
     return { error: "invalid_rating", message: "Rating must be 1 to 5 stars." };
   }
   if (buyerId === sellerId) {
-    return { error: "invalid_review_payload", message: "You cannot rate your own shop." };
+    return {
+      error: "invalid_review_payload",
+      message: dir === "seller_to_buyer" ? "You cannot rate yourself as a buyer." : "You cannot rate your own shop.",
+    };
   }
   if (!(await userExists(buyerId))) {
     return { error: "buyer_not_found", message: "Buyer user not found." };
@@ -2720,16 +2775,35 @@ export async function createOrderReview({
   if (!isDeliveredStatus(status)) {
     return {
       error: "review_not_allowed",
-      message: "You can rate this shop after the order is marked delivered.",
+      message:
+        dir === "seller_to_buyer"
+          ? "You can rate this buyer after the order is marked delivered."
+          : "You can rate this shop after the order is marked delivered.",
     };
   }
 
   if (order.source === "json") {
-    if (!jsonOrderBuyerMatches(order.jsonOrder, buyerId, buyerPhone || order.buyer_phone)) {
-      return {
-        error: "buyer_mismatch",
-        message: "This order does not match your WhatsApp buyer account.",
-      };
+    if (dir === "buyer_to_seller") {
+      if (!jsonOrderBuyerMatches(order.jsonOrder, buyerId, buyerPhone || order.buyer_phone)) {
+        return {
+          error: "buyer_mismatch",
+          message: "This order does not match your WhatsApp buyer account.",
+        };
+      }
+    } else {
+      const resolvedBuyer = await resolveBuyerUserIdForJsonOrder(order.jsonOrder);
+      if (resolvedBuyer != null && resolvedBuyer !== buyerId) {
+        return {
+          error: "buyer_mismatch",
+          message: "This order buyer does not match the buyer you are rating.",
+        };
+      }
+      if (resolvedBuyer == null && !jsonOrderBuyerMatches(order.jsonOrder, buyerId, buyerPhone || order.buyer_phone)) {
+        return {
+          error: "buyer_mismatch",
+          message: "Could not match this order to that buyer account.",
+        };
+      }
     }
   } else if (order.buyer_id != null && Number(order.buyer_id) !== buyerId) {
     return {
@@ -2756,18 +2830,21 @@ export async function createOrderReview({
   const orderRef = String(order.tracking_code || orderRefInput).toUpperCase();
   const pgOrderId = order.source === "postgres" ? Number(order.id) : null;
 
-  if (await reviewAlreadyExists({ orderId: pgOrderId, orderRef })) {
+  if (await reviewAlreadyExists({ orderId: pgOrderId, orderRef, direction: dir })) {
     return {
       error: "review_exists",
-      message: "You already left a review for this order.",
+      message:
+        dir === "seller_to_buyer"
+          ? "You already rated this buyer for this order."
+          : "You already left a review for this order.",
     };
   }
 
   const inserted = await query(
-    `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, created_at`,
-    [pgOrderId, orderRef, sellerId, buyerId, score, text || null]
+    `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction, created_at`,
+    [pgOrderId, orderRef, sellerId, buyerId, score, text || null, dir]
   );
 
   const review = {
@@ -2810,7 +2887,7 @@ export async function listReviewableOrdersForSeller({
     if (!isDeliveredStatus(order.status) && !isDeliveredStatus(order.shipmentStatus)) continue;
     const orderSeller = await resolveSellerUserIdForJsonOrder(order);
     if (orderSeller !== sellerId) continue;
-    if (await reviewAlreadyExists({ orderRef: order.id })) continue;
+    if (await reviewAlreadyExists({ orderRef: order.id, direction: "buyer_to_seller" })) continue;
     out.push({
       orderId: order.id,
       orderRef: order.id,
@@ -2845,8 +2922,11 @@ export async function listReviewableOrdersForSeller({
          )
          AND NOT EXISTS (
            SELECT 1 FROM order_reviews r
-           WHERE r.order_id = o.id
-              OR (r.order_ref IS NOT NULL AND UPPER(r.order_ref) = UPPER(o.tracking_code))
+           WHERE r.direction = 'buyer_to_seller'
+             AND (
+               r.order_id = o.id
+               OR (r.order_ref IS NOT NULL AND UPPER(r.order_ref) = UPPER(o.tracking_code))
+             )
          )
        ORDER BY o.created_at DESC
        LIMIT $3`,
@@ -2900,11 +2980,13 @@ export async function listSellerReviews({ sellerUserId, limit = 20, offset = 0 }
        r.buyer_user_id,
        r.rating,
        r.comment,
+       r.direction,
        r.created_at,
        COALESCE(o.tracking_code, r.order_ref) AS tracking_code
      FROM order_reviews r
      LEFT JOIN orders o ON o.id = r.order_id
      WHERE r.seller_user_id = $1
+       AND r.direction = 'buyer_to_seller'
      ORDER BY r.created_at DESC
      LIMIT $2 OFFSET $3`,
     [sellerId, safeLimit, safeOffset]
@@ -2915,5 +2997,160 @@ export async function listSellerReviews({ sellerUserId, limit = 20, offset = 0 }
     count: rows.length,
     limit: safeLimit,
     offset: safeOffset,
+  };
+}
+
+/**
+ * Delivered orders for this seller that still need a buyer rating.
+ */
+export async function listReviewableBuyersForSeller({
+  sellerUserId,
+  supplierId = null,
+  limit = 20,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const sellerId = parseUserId(sellerUserId);
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
+  if (!sellerId) {
+    return { error: "invalid_user", message: "Valid sellerUserId is required." };
+  }
+
+  const out = [];
+
+  // JSON prepaid orders owned by this seller
+  try {
+    const { listAllOrders } = await import("../../services/orders.js");
+    const orders = listAllOrders();
+    for (const order of orders) {
+      if (out.length >= safeLimit) break;
+      if (order.status === "cancelled") continue;
+      if (!isDeliveredStatus(order.status) && !isDeliveredStatus(order.shipmentStatus)) continue;
+      const orderSeller = await resolveSellerUserIdForJsonOrder(order);
+      const ownsOrder =
+        orderSeller === sellerId || (supplierId && order.supplierId === supplierId);
+      if (!ownsOrder) continue;
+      const buyerId = await resolveBuyerUserIdForJsonOrder(order);
+      if (!buyerId) continue;
+      if (await reviewAlreadyExists({ orderRef: order.id, direction: "seller_to_buyer" })) continue;
+      out.push({
+        orderId: order.id,
+        orderRef: order.id,
+        buyerUserId: buyerId,
+        productName: order.productName || order.productId || "Order",
+        status: order.status,
+        createdAt: order.createdAt ? new Date(order.createdAt).toISOString() : null,
+        source: "json",
+      });
+    }
+  } catch (err) {
+    console.warn("[social] listReviewableBuyersForSeller json:", err.message);
+  }
+
+  try {
+    const { rows } = await query(
+      `SELECT
+         o.id,
+         o.tracking_code,
+         o.status,
+         o.created_at,
+         o.buyer_id,
+         (
+           SELECT oi.title FROM order_items oi WHERE oi.order_id = o.id ORDER BY oi.id ASC LIMIT 1
+         ) AS product_title
+       FROM orders o
+       WHERE o.status::text IN ('delivered', 'completed')
+         AND o.buyer_id IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM order_items oi
+           LEFT JOIN products p ON p.id = oi.product_id
+           LEFT JOIN sellers s ON s.id = oi.seller_id
+           WHERE oi.order_id = o.id
+             AND COALESCE(p.seller_user_id, s.user_id) = $1
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM order_reviews r
+           WHERE r.direction = 'seller_to_buyer'
+             AND (
+               r.order_id = o.id
+               OR (r.order_ref IS NOT NULL AND UPPER(r.order_ref) = UPPER(o.tracking_code))
+             )
+         )
+       ORDER BY o.created_at DESC
+       LIMIT $2`,
+      [sellerId, safeLimit]
+    );
+    for (const row of rows) {
+      if (out.length >= safeLimit) break;
+      const ref = row.tracking_code || String(row.id);
+      if (out.some((o) => String(o.orderRef).toUpperCase() === String(ref).toUpperCase())) continue;
+      out.push({
+        orderId: row.tracking_code || String(row.id),
+        orderRef: ref,
+        buyerUserId: Number(row.buyer_id),
+        productName: row.product_title || "Order",
+        status: row.status,
+        createdAt: row.created_at,
+        source: "postgres",
+      });
+    }
+  } catch (err) {
+    console.warn("[social] listReviewableBuyersForSeller pg:", err.message);
+  }
+
+  return {
+    sellerUserId: sellerId,
+    orders: out.slice(0, safeLimit),
+    count: Math.min(out.length, safeLimit),
+  };
+}
+
+export async function listBuyerReviews({ buyerUserId, limit = 20, offset = 0 } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const buyerId = parseUserId(buyerUserId);
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+
+  if (!buyerId) return { error: "invalid_user", message: "Valid buyerUserId is required." };
+  if (!(await userExists(buyerId))) {
+    return { error: "buyer_not_found", message: "Buyer user not found." };
+  }
+
+  const { rows } = await query(
+    `SELECT
+       r.id,
+       r.order_id,
+       r.order_ref,
+       r.seller_user_id,
+       r.buyer_user_id,
+       r.rating,
+       r.comment,
+       r.direction,
+       r.created_at,
+       COALESCE(o.tracking_code, r.order_ref) AS tracking_code
+     FROM order_reviews r
+     LEFT JOIN orders o ON o.id = r.order_id
+     WHERE r.buyer_user_id = $1
+       AND r.direction = 'seller_to_buyer'
+     ORDER BY r.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [buyerId, safeLimit, safeOffset]
+  );
+
+  const summary = await getBuyerReviewSummary(buyerId);
+
+  return {
+    reviews: rows.map(mapReviewRow),
+    count: rows.length,
+    limit: safeLimit,
+    offset: safeOffset,
+    avgRating: summary.avgRating,
+    totalReviews: summary.totalReviews,
   };
 }

@@ -6,9 +6,11 @@ import {
   getDirectThread,
   getShopProfileByHandle,
   listReviewableOrdersForSeller,
+  listReviewableBuyersForSeller,
   listSellerHandledOfferQueueEvents,
   listSellerHandledOfferQueue,
   listSellerReviews,
+  listBuyerReviews,
   getUserSocialStats,
   listOffers,
   listThreadOffers,
@@ -1099,9 +1101,40 @@ router.get("/chat/thread", async (req, res) => {
   }
 });
 
-/** POST /api/social/reviews/create — review only after delivered/completed order */
+/** POST /api/social/reviews/create — buyer→seller or seller→buyer after delivery */
 router.post("/reviews/create", async (req, res) => {
   try {
+    const direction =
+      String(req.body?.direction || "buyer_to_seller").toLowerCase() === "seller_to_buyer"
+        ? "seller_to_buyer"
+        : "buyer_to_seller";
+
+    if (direction === "seller_to_buyer") {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.error) {
+        return res.status(auth.status || socialErrorStatus(auth.error)).json({
+          error: auth.error,
+          message: auth.message,
+        });
+      }
+      const result = await createOrderReview({
+        orderId: req.body?.orderId ?? req.body?.orderRef,
+        sellerUserId: auth.sellerUserId,
+        buyerUserId: req.body?.buyerUserId,
+        rating: req.body?.rating,
+        comment: req.body?.comment,
+        direction: "seller_to_buyer",
+        buyerPhone: req.body?.buyerPhone || req.body?.phone,
+      });
+      if (result.error) {
+        return res.status(socialErrorStatus(result.error)).json({
+          error: result.error,
+          message: result.message,
+        });
+      }
+      return res.status(201).json(result);
+    }
+
     const gated = await applyBuyerIdentityAuth(req, req.body || {}, "buyerUserId");
     if (gated.error) {
       return res.status(gated.status || socialErrorStatus(gated.error)).json({
@@ -1117,6 +1150,7 @@ router.post("/reviews/create", async (req, res) => {
       rating: payload.rating ?? req.body?.rating,
       comment: payload.comment ?? req.body?.comment,
       buyerPhone: gated.phone || payload.phone || req.body?.phone,
+      direction: "buyer_to_seller",
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
@@ -1164,11 +1198,61 @@ router.get("/reviews/reviewable", async (req, res) => {
   }
 });
 
+/** GET /api/social/reviews/reviewable-buyers — delivered orders seller can still rate */
+router.get("/reviews/reviewable-buyers", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || socialErrorStatus(auth.error)).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+    const result = await listReviewableBuyersForSeller({
+      sellerUserId: auth.sellerUserId,
+      supplierId: auth.supplierId || null,
+      limit: req.query.limit,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      error: "reviewable_buyers_failed",
+      message: err.message || "Could not load buyers to rate.",
+    });
+  }
+});
+
 /** GET /api/social/reviews/seller/:sellerUserId */
 router.get("/reviews/seller/:sellerUserId", async (req, res) => {
   try {
     const result = await listSellerReviews({
       sellerUserId: req.params.sellerUserId,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/reviews/buyer/:buyerUserId — seller→buyer ratings on this buyer */
+router.get("/reviews/buyer/:buyerUserId", async (req, res) => {
+  try {
+    const result = await listBuyerReviews({
+      buyerUserId: req.params.buyerUserId,
       limit: req.query.limit,
       offset: req.query.offset,
     });

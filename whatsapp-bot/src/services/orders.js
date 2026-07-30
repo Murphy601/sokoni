@@ -209,6 +209,11 @@ export function getOrder(id) {
   return store.orders[key] || null;
 }
 
+export function listAllOrders() {
+  load();
+  return Object.values(store.orders || {});
+}
+
 export function findOrderByCheckoutRequestId(checkoutRequestId) {
   if (!checkoutRequestId) return null;
   load();

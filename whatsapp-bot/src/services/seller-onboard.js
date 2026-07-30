@@ -361,7 +361,7 @@ export async function confirmOrderDelivery(orderId) {
   });
 
   const { onOrderDelivered } = await import("./escrow-automation.js");
-  onOrderDelivered(getOrder(orderId) || order);
+  await onOrderDelivered(getOrder(orderId) || order);
 
   const fresh = getOrder(orderId);
   const payout = await releaseEscrowPayout(orderId);
