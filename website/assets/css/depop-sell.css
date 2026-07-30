@@ -1032,3 +1032,96 @@ html.dark .bulk-studio-remove {
 html.dark .bulk-studio-remove:hover {
   color: #f87171;
 }
+
+/* Selling Hub overview — Depop layout zones, Sokoni tokens */
+.seller-hub-carousel {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.seller-hub-carousel > * {
+  scroll-snap-align: start;
+}
+
+.seller-hub-card {
+  min-width: 11.5rem;
+  max-width: 14rem;
+  flex-shrink: 0;
+  border-radius: 1rem;
+  border: 1px solid rgba(27, 16, 53, 0.1);
+  background: #fff;
+  padding: 1rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+html.dark .seller-hub-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(46, 27, 87, 0.45);
+}
+
+.seller-hub-card:hover,
+.seller-hub-card:focus-visible {
+  border-color: rgba(37, 211, 102, 0.55);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .seller-hub-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.seller-hub-card--draft {
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.seller-hub-card--guide {
+  min-width: 15rem;
+}
+
+.seller-hub-stat {
+  min-height: 6.5rem;
+}
+
+.seller-hub-thumb {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  object-fit: cover;
+  background: rgba(27, 16, 53, 0.06);
+  flex-shrink: 0;
+}
+
+html.dark .seller-hub-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.seller-hub-growth {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(37, 211, 102, 0.12);
+  color: #128c3a;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+html.dark .seller-hub-growth {
+  color: #25d366;
+}
+
+.seller-hub-level-done {
+  border-color: rgba(37, 211, 102, 0.45) !important;
+  background: rgba(37, 211, 102, 0.08);
+  color: #1b1035;
+  font-weight: 600;
+}
+
+html.dark .seller-hub-level-done {
+  color: #fff;
+}
