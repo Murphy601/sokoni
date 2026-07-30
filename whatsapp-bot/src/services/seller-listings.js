@@ -19,7 +19,6 @@ import {
   validateShippingKes,
   computeFeeBreakdown,
   normalizeDeliveryMethod,
-  isSellerHandledDelivery,
   deliveryMethodMeta,
 } from "./shipping-tiers.js";
 import {
