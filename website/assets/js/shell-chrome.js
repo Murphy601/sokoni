@@ -24,6 +24,10 @@
     if (path.includes("ask")) return "ask";
     if (path.includes("shop")) return "shop";
     if (path.includes("suppliers/list")) return "sell";
+    if (path.includes("about")) return "about";
+    if (path.includes("faq")) return "faq";
+    if (path.includes("terms")) return "terms";
+    if (path.includes("privacy")) return "privacy";
     return "home";
   }
 
@@ -64,6 +68,12 @@
         { href: "profile.html", label: "Profile" },
       ];
     }
+    if (page === "about" || page === "faq" || page === "terms" || page === "privacy") {
+      return [
+        { href: "faq.html", label: "FAQ" },
+        { href: "about.html", label: "About" },
+      ];
+    }
     // profile + default
     return [
       { href: "ask.html", label: "Ask Plug" },
@@ -72,7 +82,17 @@
   }
 
   function navActiveKey(page) {
-    if (page === "activity" || page === "track" || page === "shop" || page === "ask" || page === "disputes") {
+    if (
+      page === "activity" ||
+      page === "track" ||
+      page === "shop" ||
+      page === "ask" ||
+      page === "disputes" ||
+      page === "about" ||
+      page === "faq" ||
+      page === "terms" ||
+      page === "privacy"
+    ) {
       return "profile";
     }
     if (page === "sell") return null;
