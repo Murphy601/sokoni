@@ -64,7 +64,7 @@
     if (!node) return;
     const items = list(10);
     if (!items.length) {
-      node.innerHTML = `<p class="text-xs text-brand-purple/50 dark:text-white/50 px-1">Browse fits on the home feed — they’ll show up here for quick chat.</p>`;
+      node.innerHTML = `<p class="text-xs text-zinc-500 px-1">Browse fits on the home feed — they’ll show up here for quick chat.</p>`;
       return;
     }
     node.innerHTML = items
@@ -75,10 +75,10 @@
             ? `KES ${Math.round(Number(item.priceKes)).toLocaleString()}`
             : "";
         return `
-          <button type="button" class="inbox-recent-card" data-recent-id="${escapeHtml(item.id)}" data-recent-handle="${escapeHtml(item.shopHandle || "")}">
+          <button type="button" class="inbox-recent-card" data-recent-id="${escapeHtml(item.id)}" data-recent-handle="${escapeHtml(item.shopHandle || "")}" data-recent-seller="${escapeHtml(item.sellerUserId || "")}">
             ${
               img
-                ? `<img src="${escapeHtml(img)}" alt="" class="inbox-recent-thumb" loading="lazy" />`
+                ? `<img src="${escapeHtml(img)}" alt="" class="inbox-recent-thumb" loading="lazy" onerror="this.classList.add('hidden');this.nextElementSibling?.classList.remove('hidden');" /><div class="inbox-recent-thumb inbox-recent-thumb--empty hidden">Fit</div>`
                 : `<div class="inbox-recent-thumb inbox-recent-thumb--empty">Fit</div>`
             }
             <span class="inbox-recent-name">${escapeHtml(item.name)}</span>
@@ -91,15 +91,20 @@
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-recent-id");
         const handle = btn.getAttribute("data-recent-handle") || "";
+        const sellerUserId = btn.getAttribute("data-recent-seller") || "";
         if (typeof onSelect === "function") {
-          onSelect({ id, handle });
+          onSelect({ id, handle, sellerUserId });
           return;
         }
-        if (handle) {
-          window.location.href = `inbox.html?handle=${encodeURIComponent(handle)}&product=${encodeURIComponent(id)}`;
+        const params = new URLSearchParams();
+        if (id) params.set("product", id);
+        if (handle) params.set("handle", handle);
+        if (sellerUserId) params.set("with", sellerUserId);
+        if (handle || sellerUserId) {
+          window.location.href = `inbox.html?${params.toString()}`;
           return;
         }
-        window.location.href = `index.html?q=${encodeURIComponent(id)}`;
+        window.location.href = `index.html?q=${encodeURIComponent(id || "")}`;
       });
     });
   }

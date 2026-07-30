@@ -104,9 +104,95 @@ function setStatus(msg, isError = false) {
   const node = el("inbox-status");
   if (!node) return;
   node.textContent = msg || "";
-  node.classList.toggle("text-red-600", isError);
-  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-red-400", isError);
+  node.classList.toggle("text-[#FF2300]", isError);
   node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
+  node.classList.toggle("text-zinc-400", !isError && !msg);
+}
+
+function enableChatComposer() {
+  el("chat-form")?.classList.remove("opacity-60");
+  const input = el("chat-input");
+  const sendBtn = el("chat-send-btn");
+  if (input) input.disabled = false;
+  if (sendBtn) sendBtn.disabled = false;
+}
+
+function renderInboxHomeHint({ signedIn }) {
+  const empty = el("chat-empty");
+  const thread = el("chat-thread");
+  if (thread) thread.innerHTML = "";
+  if (!empty) return;
+  empty.classList.remove("hidden");
+  if (signedIn) {
+    empty.innerHTML = `You're signed in. Tap a <strong class="text-white">recently viewed</strong> fit above, or open a shop and hit Message — then this thread unlocks.
+      <span class="block mt-2"><a href="index.html#deals" class="text-[#FF2300] font-semibold hover:underline">Browse fits</a>
+      · <a href="activity.html" class="text-[#FF2300] font-semibold hover:underline">Open activity</a></span>`;
+  } else {
+    empty.innerHTML = `Verify WhatsApp above, then open a shop (or tap a recently viewed fit) to start chatting.`;
+  }
+}
+
+function beginChatIfReady() {
+  const buyerSession = !state.sellerAuthRequired ? window.SokoniBuyerAuth?.readSession?.() : null;
+  if (!state.viewerId && buyerSession?.userId) {
+    state.viewerId = parsePositiveInt(buyerSession.userId);
+  }
+
+  if (!state.viewerId || (!state.peerId && !state.peerHandle)) {
+    const signedIn = Boolean(state.viewerId);
+    if (!signedIn) {
+      setStatus(
+        state.peerId || state.peerHandle
+          ? "Verify your WhatsApp above to open this chat."
+          : "Verify WhatsApp above, then pick a shop to message.",
+        true
+      );
+      renderInboxHomeHint({ signedIn: false });
+    } else if (!state.peerId && !state.peerHandle) {
+      // Signed in, opened Inbox from the tab — not an auth failure.
+      setStatus("Signed in. Pick a shop below or tap a recently viewed fit to chat.");
+      renderInboxHomeHint({ signedIn: true });
+    } else {
+      setStatus("Loading shop…");
+    }
+    disableChatComposer();
+    return false;
+  }
+
+  if (state.viewerId && state.peerId && state.viewerId === state.peerId) {
+    setStatus("You can’t message your own shop in this inbox.", true);
+    disableChatComposer();
+    return false;
+  }
+
+  if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
+    setStatus("Seller session missing - rudi seller dashboard uverify WhatsApp tena.", true);
+    disableChatComposer();
+    return false;
+  }
+
+  if (!state.peerId) {
+    setStatus(
+      state.peerHandle
+        ? `Couldn’t find shop @${normalizeHandle(state.peerHandle)}. Try opening it from the shop page.`
+        : "Pick a shop to message.",
+      true
+    );
+    disableChatComposer();
+    return false;
+  }
+
+  setStatus("");
+  enableChatComposer();
+  const empty = el("chat-empty");
+  if (empty && !empty.dataset.defaultHtml) {
+    empty.dataset.defaultHtml = empty.innerHTML;
+  }
+  if (empty?.dataset.defaultHtml) empty.innerHTML = empty.dataset.defaultHtml;
+  loadThread();
+  startPolling();
+  return true;
 }
 
 function setPeerLabel() {
@@ -115,7 +201,13 @@ function setPeerLabel() {
   const handle = formatHandle(state.peerHandle);
   const text = handle || (state.peerId ? `User #${state.peerId}` : "seller");
   if (label) label.textContent = text;
-  if (head) head.textContent = handle ? `Chat · ${handle}` : text === "seller" ? "Pick a shop to message" : `Chat · ${text}`;
+  if (head) {
+    head.textContent = handle
+      ? `Chat · ${handle}`
+      : text === "seller"
+        ? "Pick a shop to message"
+        : `Chat · ${text}`;
+  }
 }
 
 function messageBubble(msg) {
@@ -513,36 +605,17 @@ async function resolvePeerFromHandle() {
   }
 }
 
-function beginChatIfReady() {
-  if (!state.viewerId || !state.peerId || state.viewerId === state.peerId) {
-    setStatus(
-      state.sellerAuthRequired
-        ? "Open this page from a shop profile with valid viewer and seller IDs."
-        : "Verify your WhatsApp above, or open this page from a shop with a valid seller ID.",
-      true
-    );
-    disableChatComposer();
-    return false;
-  }
-  if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
-    setStatus("Seller session missing - rudi seller dashboard uverify WhatsApp tena.", true);
-    disableChatComposer();
-    return false;
-  }
-  setStatus("");
-  loadThread();
-  startPolling();
-  return true;
-}
-
 function init() {
   parseQuery();
   setPeerLabel();
   syncMakeOfferButton();
   window.SokoniRecentlyViewed?.renderCarousel?.("inbox-recently-viewed", {
-    onSelect: ({ id, handle }) => {
-      if (handle) {
-        const params = new URLSearchParams({ handle, product: id || "" });
+    onSelect: ({ id, handle, sellerUserId }) => {
+      const params = new URLSearchParams();
+      if (id) params.set("product", id);
+      if (handle) params.set("handle", handle);
+      if (sellerUserId) params.set("with", String(sellerUserId));
+      if (handle || sellerUserId) {
         window.location.href = `inbox.html?${params.toString()}`;
         return;
       }
@@ -559,9 +632,8 @@ function init() {
         setPeerLabel();
         syncMakeOfferButton();
         void resolvePeerFromHandle().then(() => {
-          if (state.viewerId && state.peerId && state.viewerId !== state.peerId) {
+          if (beginChatIfReady()) {
             setStatus("WhatsApp verified — you can chat now.");
-            beginChatIfReady();
           }
         });
       },
