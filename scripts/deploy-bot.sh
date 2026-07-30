@@ -130,18 +130,23 @@ if [ -f "$ENV_FILE" ]; then
   echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
   echo "==> Vision: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
   echo "==> Vision fallbacks: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
-  # Prefer Actions/env override, else keep existing .env, else seed from committed default (rotate later).
+  # Always ensure a non-empty GEMINI_API_KEY (rotate later). Actions override wins when set.
   DEFAULT_GEMINI_API_KEY="AQ.Ab8RN6JKsaorEvw8bvKc277LHDh3lL3HMWNbPhrz_LJxDKkhKQ"
+  CURRENT_GEMINI="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
   if [ -n "${SOKONI_GEMINI_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$SOKONI_GEMINI_API_KEY"
     echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY"
-  elif grep -qE '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=.' "$ENV_FILE" 2>/dev/null; then
-    echo "==> Gemini vision: GEMINI_API_KEY present"
-  elif [ -n "$DEFAULT_GEMINI_API_KEY" ]; then
+  elif [ -z "$CURRENT_GEMINI" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$DEFAULT_GEMINI_API_KEY"
-    echo "==> Seeded GEMINI_API_KEY from deploy default (rotate when ready)"
+    echo "==> Seeded GEMINI_API_KEY into $ENV_FILE (was empty/missing — rotate when ready)"
   else
-    echo "WARN: GEMINI_API_KEY not set — add it on the VM or set Actions secret GEMINI_API_KEY (passed as SOKONI_GEMINI_API_KEY)"
+    echo "==> Gemini vision: GEMINI_API_KEY present (${#CURRENT_GEMINI} chars)"
+  fi
+  # Hard verify — never leave deploy without a key when we have a default.
+  VERIFY_GEMINI="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  if [ -z "$VERIFY_GEMINI" ]; then
+    echo "GEMINI_API_KEY=$DEFAULT_GEMINI_API_KEY" >> "$ENV_FILE"
+    echo "==> Appended GEMINI_API_KEY (set_env_kv missed — forced append)"
   fi
 else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
