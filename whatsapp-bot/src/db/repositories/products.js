@@ -420,18 +420,18 @@ export function dbProductsAvailable() {
 const UPSERT_CATALOG_SQL = `
   INSERT INTO products (
     id, seller_id, seller_user_id, title, description, category, sub_category, browse_category, browse_sub_category,
-    brand, color, is_secondhand, condition, stock_quantity,
+    brand, color, size_label, pit_to_pit_in, length_in, waist_in, is_secondhand, condition, stock_quantity,
     price_kes, shipping_kes, price_usd, source_price_kes, original_price_kes, retail_per_ml_kes, volume_ml,
     rating, review_count, source, source_url, scope, fulfillment, payment, emoji, tags,
     in_stock, is_sold, tracking_code, primary_image_url, image_key, image_hash,
     upload_message_id, est_delivery_days, legacy_json, updated_at
   ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9,
-    $10, $11, $12, $13, $14,
-    $15, $16, $17, $18, $19, $20, $21,
-    $22, $23, $24, $25, $26, $27, $28, $29, $30::jsonb,
-    $31, $32, $33, $34, $35, $36,
-    $37, $38, $39::jsonb, NOW()
+    $10, $11, $12, $13, $14, $15, $16, $17, $18,
+    $19, $20, $21, $22, $23, $24, $25,
+    $26, $27, $28, $29, $30, $31, $32, $33, $34::jsonb,
+    $35, $36, $37, $38, $39, $40,
+    $41, $42, $43::jsonb, NOW()
   )
   ON CONFLICT (id) DO UPDATE SET
     seller_id = EXCLUDED.seller_id,
@@ -444,6 +444,10 @@ const UPSERT_CATALOG_SQL = `
     browse_sub_category = EXCLUDED.browse_sub_category,
     brand = EXCLUDED.brand,
     color = EXCLUDED.color,
+    size_label = COALESCE(EXCLUDED.size_label, products.size_label),
+    pit_to_pit_in = COALESCE(EXCLUDED.pit_to_pit_in, products.pit_to_pit_in),
+    length_in = COALESCE(EXCLUDED.length_in, products.length_in),
+    waist_in = COALESCE(EXCLUDED.waist_in, products.waist_in),
     is_secondhand = EXCLUDED.is_secondhand,
     condition = EXCLUDED.condition,
     stock_quantity = EXCLUDED.stock_quantity,
@@ -518,6 +522,10 @@ export async function upsertCatalogProduct(catalogProduct) {
     row.browse_sub_category,
     row.brand,
     row.color,
+    row.size_label,
+    row.pit_to_pit_in,
+    row.length_in,
+    row.waist_in,
     row.is_secondhand,
     row.condition,
     row.stock_quantity,

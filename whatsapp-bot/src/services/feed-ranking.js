@@ -1,8 +1,11 @@
 /**
  * Phase 8 — Trending & personalized feed ranking from behavior signals.
+ * Phase 12 — Following tab: listings from shops the viewer follows.
  */
 import { searchProducts } from "./catalog.js";
 import { listFeedEvents, eventsForSession, logFeedEvent } from "./feed-events.js";
+import { isDbEnabled, query } from "../db/pool.js";
+import { rowToCatalogProduct } from "../db/product-mapper.js";
 
 const WEIGHTS = {
   view: 1,
@@ -195,6 +198,7 @@ export async function buildHomeFeed({ sessionId = "", savedIds = [] } = {}) {
 
   return {
     builtAt: cache.builtAt,
+    mode: "explore",
     sections: {
       forYou: { title: "Picked for you", products: forYou },
       trending: { title: "Trending in Kenya", products: cache.trending },
@@ -207,15 +211,121 @@ export async function buildHomeFeed({ sessionId = "", savedIds = [] } = {}) {
   };
 }
 
+/**
+ * Following feed — newest active listings from shops the viewer follows.
+ * Falls back to empty rails when DB is unavailable or the viewer follows nobody.
+ */
+export async function buildFollowingFeed({ viewerUserId = null, limit = 36 } = {}) {
+  const uid = Number(viewerUserId);
+  if (!Number.isInteger(uid) || uid < 1) {
+    return {
+      builtAt: Date.now(),
+      mode: "following",
+      requiresAuth: true,
+      followingCount: 0,
+      sections: {
+        following: { title: "From shops you follow", products: [] },
+      },
+      personalized: false,
+    };
+  }
+
+  if (!isDbEnabled()) {
+    return {
+      builtAt: Date.now(),
+      mode: "following",
+      requiresAuth: false,
+      followingCount: 0,
+      sections: {
+        following: { title: "From shops you follow", products: [] },
+      },
+      personalized: true,
+      error: "database_not_configured",
+    };
+  }
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 36, 1), 80);
+  const follows = await query(
+    `SELECT following_user_id
+       FROM follows
+      WHERE follower_user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 200`,
+    [uid]
+  );
+  const followingIds = follows.rows
+    .map((row) => Number(row.following_user_id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (!followingIds.length) {
+    return {
+      builtAt: Date.now(),
+      mode: "following",
+      requiresAuth: false,
+      followingCount: 0,
+      sections: {
+        following: { title: "From shops you follow", products: [] },
+      },
+      personalized: true,
+    };
+  }
+
+  const { rows } = await query(
+    `SELECT
+       p.*,
+       u.handle AS seller_handle,
+       u.shop_name AS seller_shop_name,
+       s.slug AS seller_slug,
+       s.business_name AS seller_business_name,
+       s.user_id AS seller_table_user_id
+     FROM products p
+     LEFT JOIN users u ON u.id = p.seller_user_id
+     LEFT JOIN sellers s ON s.id = p.seller_id
+     WHERE p.in_stock = TRUE
+       AND p.is_sold = FALSE
+       AND p.seller_user_id = ANY($1::int[])
+     ORDER BY COALESCE(p.updated_at, p.created_at) DESC
+     LIMIT $2`,
+    [followingIds, safeLimit]
+  );
+
+  const products = [];
+  for (const row of rows) {
+    let imageUrls = [];
+    try {
+      const imgs = await query(
+        `SELECT url FROM product_images WHERE product_id = $1 ORDER BY sort_order ASC LIMIT 8`,
+        [row.id]
+      );
+      imageUrls = imgs.rows.map((r) => r.url).filter(Boolean);
+    } catch {
+      imageUrls = [];
+    }
+    products.push(rowToCatalogProduct(row, imageUrls));
+  }
+
+  return {
+    builtAt: Date.now(),
+    mode: "following",
+    requiresAuth: false,
+    followingCount: followingIds.length,
+    sections: {
+      following: { title: "From shops you follow", products },
+    },
+    personalized: true,
+  };
+}
+
 export function feedMeta() {
   return {
-    phase: 8,
+    phase: 12,
     eventTypes: Object.keys(WEIGHTS),
     endpoints: {
       home: "/api/feed/home",
       event: "/api/feed/event",
       meta: "/api/feed/meta",
     },
+    modes: ["explore", "following"],
     priceTiers: Object.keys(PRICE_TIERS),
   };
 }

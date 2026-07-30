@@ -212,6 +212,8 @@ router.patch("/shop/profile", async (req, res) => {
       bio: req.body?.bio,
       avatarUrl: req.body?.avatarUrl,
       location: req.body?.location ?? req.body?.city,
+      instagramUrl: req.body?.instagramUrl ?? req.body?.instagram,
+      tiktokUrl: req.body?.tiktokUrl ?? req.body?.tiktok,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
@@ -453,6 +455,7 @@ router.get("/shop/:handle", async (req, res) => {
       limit: req.query.limit,
       offset: req.query.offset,
       viewerUserId,
+      tab: req.query.tab || req.query.status || "active",
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({

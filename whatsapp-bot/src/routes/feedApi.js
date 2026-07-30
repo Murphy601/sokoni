@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { logFeedEvent, getFeedEventStats } from "../services/feed-events.js";
-import { buildHomeFeed, feedMeta, refreshFeedCache } from "../services/feed-ranking.js";
+import {
+  buildHomeFeed,
+  buildFollowingFeed,
+  feedMeta,
+  refreshFeedCache,
+} from "../services/feed-ranking.js";
 
 const router = Router();
 
@@ -10,12 +15,18 @@ router.get("/meta", (_req, res) => {
 
 router.get("/home", async (req, res) => {
   try {
+    const mode = String(req.query.mode || "explore").trim().toLowerCase();
     const sessionId = String(req.query.sessionId || "").trim();
     const saved = String(req.query.saved || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const feed = await buildHomeFeed({ sessionId, savedIds: saved });
+    const viewerUserId = Number(req.query.viewerUserId || req.query.viewer || 0) || null;
+
+    const feed =
+      mode === "following"
+        ? await buildFollowingFeed({ viewerUserId, limit: req.query.limit })
+        : await buildHomeFeed({ sessionId, savedIds: saved });
     res.json({ feed, meta: feedMeta() });
   } catch (err) {
     console.error("[feed/home]", err.message);

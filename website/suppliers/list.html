@@ -158,11 +158,19 @@
           </label>
           <label class="text-sm font-medium md:col-span-1">
             Location
-            <input id="edit-shop-location" type="text" maxlength="120" class="sell-form-input mt-1" placeholder="e.g. Nairobi / ships Kenya-wide" />
+            <input id="edit-shop-location" type="text" maxlength="120" class="sell-form-input mt-1" placeholder="e.g. Nairobi CBD / ships Kenya-wide" />
           </label>
           <label class="text-sm font-medium md:col-span-1">
             Avatar URL
             <input id="edit-shop-avatar" type="url" maxlength="1000" class="sell-form-input mt-1" placeholder="https://…" />
+          </label>
+          <label class="text-sm font-medium md:col-span-1">
+            Instagram
+            <input id="edit-shop-instagram" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
+          </label>
+          <label class="text-sm font-medium md:col-span-1">
+            TikTok
+            <input id="edit-shop-tiktok" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
           </label>
           <fieldset class="md:col-span-2 space-y-2">
             <legend class="text-sm font-medium">WhatsApp social pings</legend>
@@ -422,7 +430,7 @@
       <!-- Step 1: Media -->
       <section id="panel-media" class="sell-panel is-active rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
         <h2 class="font-bold text-lg">Product photos (1 required)</h2>
-        <p class="text-sm text-brand-purple/60 dark:text-white/60">Cover photo required. Up to 4 photos total. Optional short video.</p>
+        <p class="text-sm text-brand-purple/60 dark:text-white/60">Cover photo required. Up to 8 photos — front, back, tags, fabric, and any flaws. Optional short video.</p>
         <p id="listing-ai-status" class="text-xs text-brand-purple/65 dark:text-white/65 rounded-2xl border border-brand-purple/10 dark:border-white/10 px-3 py-2">
           Checking AI draft… Listing still works if AI skips — add a caption or fill details yourself.
         </p>
@@ -431,6 +439,10 @@
           <div id="media-slot-1" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-1" /></div>
           <div id="media-slot-2" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-2" /></div>
           <div id="media-slot-3" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-3" /></div>
+          <div id="media-slot-4" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-4" /></div>
+          <div id="media-slot-5" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-5" /></div>
+          <div id="media-slot-6" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-6" /></div>
+          <div id="media-slot-7" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-7" /></div>
         </div>
         <div id="studio-controls" class="sell-studio-controls hidden" hidden>
           <p class="text-sm text-brand-purple/70 dark:text-white/70">Messy bedroom shot? Clean the cover background before you post.</p>
@@ -517,6 +529,28 @@
             Era / source
             <select id="draft-era" class="sell-form-input"></select>
           </label>
+        </div>
+        <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 space-y-3">
+          <div>
+            <h3 class="text-sm font-semibold">Flat measurements (inches)</h3>
+            <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">
+              Thrift sizes vary — measure the garment laid flat to cut down on “wrong size” disputes.
+            </p>
+          </div>
+          <div class="grid sm:grid-cols-3 gap-4">
+            <label class="block text-sm font-medium">
+              Pit-to-pit
+              <input id="draft-pit-to-pit" type="number" min="0" step="0.1" inputmode="decimal" placeholder="e.g. 20" class="sell-form-input" />
+            </label>
+            <label class="block text-sm font-medium">
+              Length
+              <input id="draft-length-in" type="number" min="0" step="0.1" inputmode="decimal" placeholder="e.g. 28" class="sell-form-input" />
+            </label>
+            <label class="block text-sm font-medium">
+              Waist
+              <input id="draft-waist-in" type="number" min="0" step="0.1" inputmode="decimal" placeholder="e.g. 30" class="sell-form-input" />
+            </label>
+          </div>
         </div>
         <label class="flex items-center gap-2 text-sm font-medium">
           <input id="draft-secondhand" type="checkbox" class="rounded border-brand-purple/30" />

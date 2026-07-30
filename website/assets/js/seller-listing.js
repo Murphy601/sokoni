@@ -57,10 +57,11 @@ const CATEGORY_LABELS = {
 
 const STEPS = ["media", "details", "attributes", "pricing", "review"];
 let stepIndex = 0;
-let meta = { conditions: Object.keys(CONDITION_LABELS), maxPhotos: 4, browseTaxonomy: [] };
+const DEFAULT_MAX_PHOTOS = 8;
+let meta = { conditions: Object.keys(CONDITION_LABELS), maxPhotos: DEFAULT_MAX_PHOTOS, browseTaxonomy: [] };
 let draft = {};
-let photoFiles = [null, null, null, null];
-let photoPreviews = [null, null, null, null];
+let photoFiles = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
+let photoPreviews = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
 /** Cleaned cover data URL from Photoroom (cover slot only). */
 let coverCleanBase64 = null;
 /** Prefer cleaned cover for preview + publish when available. */
@@ -367,8 +368,29 @@ let reminderLastSentAtByOfferId = new Map();
 let reminderLastSentStorageKey = null;
 let offerFilterStorageKey = null;
 
+function maxPhotoSlots() {
+  return Math.min(Math.max(Number(meta.maxPhotos) || DEFAULT_MAX_PHOTOS, 1), 8);
+}
+
+function ensurePhotoArrays() {
+  const n = maxPhotoSlots();
+  while (photoFiles.length < n) photoFiles.push(null);
+  while (photoPreviews.length < n) photoPreviews.push(null);
+  if (photoFiles.length > n) photoFiles.length = n;
+  if (photoPreviews.length > n) photoPreviews.length = n;
+}
+
+function parseOptionalInches(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.round(n * 10) / 10;
+}
+
 function bindMediaSlots() {
-  for (let i = 0; i < 4; i += 1) {
+  ensurePhotoArrays();
+  for (let i = 0; i < maxPhotoSlots(); i += 1) {
     const input = el(`photo-slot-${i}`);
     if (!input || input.dataset.bound) continue;
     input.dataset.bound = "1";
@@ -604,6 +626,9 @@ function fillFormFromDraft() {
   if (el("draft-free-shipping")) el("draft-free-shipping").checked = Boolean(draft.freeShipping);
   el("draft-color").value = draft.color || "";
   el("draft-size").value = draft.size || "";
+  if (el("draft-pit-to-pit")) el("draft-pit-to-pit").value = draft.pitToPitIn ?? "";
+  if (el("draft-length-in")) el("draft-length-in").value = draft.lengthIn ?? "";
+  if (el("draft-waist-in")) el("draft-waist-in").value = draft.waistIn ?? "";
   el("draft-location").value = draft.location || "";
   el("draft-era").value = draft.era || "";
   el("draft-secondhand").checked = Boolean(draft.isSecondhand);
@@ -666,6 +691,9 @@ function collectDraft() {
     condition: el("draft-condition").value,
     color: el("draft-color").value.trim(),
     size: el("draft-size").value.trim(),
+    pitToPitIn: parseOptionalInches(el("draft-pit-to-pit")?.value),
+    lengthIn: parseOptionalInches(el("draft-length-in")?.value),
+    waistIn: parseOptionalInches(el("draft-waist-in")?.value),
     era: el("draft-era").value,
     location: el("draft-location").value.trim(),
     isSecondhand: el("draft-secondhand").checked,
@@ -678,7 +706,18 @@ function fillReview() {
   el("review-summary").innerHTML = `
     <p class="font-semibold text-lg">${d.name || "—"}</p>
     <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-2">${d.description || "—"}</p>
-    <p class="text-sm mt-3">${d.browseCategory || ""} → ${d.browseSubCategory || ""} · ${CONDITION_LABELS[d.condition] || d.condition}</p>
+    <p class="text-sm mt-3">${d.browseCategory || ""} → ${d.browseSubCategory || ""} · ${CONDITION_LABELS[d.condition] || d.condition}${d.size ? ` · Size ${d.size}` : ""}</p>
+    ${
+      d.pitToPitIn || d.lengthIn || d.waistIn
+        ? `<p class="text-xs mt-2 text-brand-purple/60 dark:text-white/60">Flat: ${[
+            d.pitToPitIn != null ? `P2P ${d.pitToPitIn}"` : null,
+            d.lengthIn != null ? `L ${d.lengthIn}"` : null,
+            d.waistIn != null ? `W ${d.waistIn}"` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}</p>`
+        : ""
+    }
     <p class="text-xs mt-2 text-brand-purple/50">${(d.tags || []).map((t) => `#${t}`).join(" ")}</p>`;
   renderFeeBreakdown(fees, "review-fee");
 }
@@ -708,7 +747,8 @@ function listingMediaUrl(relOrUrl) {
 }
 
 function clearPhotoSlots() {
-  for (let i = 0; i < 4; i += 1) {
+  ensurePhotoArrays();
+  for (let i = 0; i < maxPhotoSlots(); i += 1) {
     if (photoPreviews[i]) URL.revokeObjectURL(photoPreviews[i]);
     photoFiles[i] = null;
     photoPreviews[i] = null;
@@ -950,6 +990,8 @@ async function loadMeta() {
       return;
     }
     meta = await res.json();
+    ensurePhotoArrays();
+    bindMediaSlots();
     populateBrowseSelects();
     populateSelect(el("draft-condition"), meta.conditions || Object.keys(CONDITION_LABELS), CONDITION_LABELS);
     populateSelect(el("draft-category"), Object.keys(CATEGORY_LABELS), CATEGORY_LABELS);
@@ -1272,6 +1314,8 @@ async function hydrateShopEditFormFromSocial() {
     if (el("edit-shop-bio")) el("edit-shop-bio").value = shop.bio || "";
     if (el("edit-shop-location")) el("edit-shop-location").value = shop.location || sellerProfile.city || "";
     if (el("edit-shop-avatar")) el("edit-shop-avatar").value = shop.avatarUrl || "";
+    if (el("edit-shop-instagram")) el("edit-shop-instagram").value = shop.instagramUrl || "";
+    if (el("edit-shop-tiktok")) el("edit-shop-tiktok").value = shop.tiktokUrl || "";
     if (el("edit-shop-wa-notify")) {
       // Pref comes from notify-prefs endpoint; default on until loaded.
       el("edit-shop-wa-notify").checked = true;
@@ -1332,6 +1376,8 @@ async function saveShopProfile(event) {
     bio: el("edit-shop-bio")?.value || "",
     location: el("edit-shop-location")?.value || "",
     avatarUrl: el("edit-shop-avatar")?.value || "",
+    instagramUrl: el("edit-shop-instagram")?.value || "",
+    tiktokUrl: el("edit-shop-tiktok")?.value || "",
     socialWaNotify: el("edit-shop-wa-notify") ? el("edit-shop-wa-notify").checked : true,
     socialWaNotifyFollows: el("edit-shop-wa-notify-follows")
       ? el("edit-shop-wa-notify-follows").checked

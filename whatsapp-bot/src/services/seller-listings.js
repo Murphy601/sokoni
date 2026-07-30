@@ -44,7 +44,7 @@ const PAUSE_FILE = path.join(REPO_ROOT, "website", "data", "catalog-paused.json"
 const IMAGES_DIR = path.join(REPO_ROOT, "website", "assets", "images", "products");
 const COMMIT_SCRIPT = path.join(REPO_ROOT, "scripts", "commit-catalog.mjs");
 
-export const MAX_PHOTOS = 4;
+export const MAX_PHOTOS = 8;
 export const MAX_TAGS = 5;
 export const MAX_BRANDS = 2;
 
@@ -254,6 +254,9 @@ async function buildProduct(supplier, enriched, media, productId) {
     secondaryBrand: brands[1] || undefined,
     color: enriched.color,
     size: enriched.size,
+    pitToPitIn: enriched.pitToPitIn != null ? Number(enriched.pitToPitIn) : undefined,
+    lengthIn: enriched.lengthIn != null ? Number(enriched.lengthIn) : undefined,
+    waistIn: enriched.waistIn != null ? Number(enriched.waistIn) : undefined,
     era: enriched.era,
     condition: enriched.condition,
     isSecondhand: enriched.isSecondhand,

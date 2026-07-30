@@ -41,7 +41,25 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     browseSubCategory: row.browse_sub_category || undefined,
     brand: row.brand || undefined,
     color: row.color || undefined,
-    size: row.size_label || undefined,
+    size: row.size_label || legacy.size || undefined,
+    pitToPitIn:
+      row.pit_to_pit_in != null
+        ? Number(row.pit_to_pit_in)
+        : legacy.pitToPitIn != null
+          ? Number(legacy.pitToPitIn)
+          : undefined,
+    lengthIn:
+      row.length_in != null
+        ? Number(row.length_in)
+        : legacy.lengthIn != null
+          ? Number(legacy.lengthIn)
+          : undefined,
+    waistIn:
+      row.waist_in != null
+        ? Number(row.waist_in)
+        : legacy.waistIn != null
+          ? Number(legacy.waistIn)
+          : undefined,
     genderFit: row.gender_fit || undefined,
     sellerHandle: row.seller_handle
       ? String(row.seller_handle).replace(/^@+/, "")
@@ -123,6 +141,18 @@ export function jsonToDbProduct(json, sellerId = null) {
     brand: json.brand || null,
     color: json.color || null,
     size_label: json.size || json.sizeLabel || null,
+    pit_to_pit_in:
+      json.pitToPitIn != null && Number.isFinite(Number(json.pitToPitIn))
+        ? Number(json.pitToPitIn)
+        : null,
+    length_in:
+      json.lengthIn != null && Number.isFinite(Number(json.lengthIn))
+        ? Number(json.lengthIn)
+        : null,
+    waist_in:
+      json.waistIn != null && Number.isFinite(Number(json.waistIn))
+        ? Number(json.waistIn)
+        : null,
     gender_fit:
       typeof json.genderFit === "string"
         ? String(json.genderFit).trim().toLowerCase() || null
