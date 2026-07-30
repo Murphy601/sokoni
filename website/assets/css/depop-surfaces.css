@@ -936,3 +936,28 @@ body.sell-depop-page .sell-activity-pill--like {
   font-weight: 700;
   text-decoration: none;
 }
+
+/* Dispute guide cards are buttons */
+.depop-surface-page .dispute-guide-card {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  text-align: left;
+  width: auto;
+}
+
+.depop-surface-page .dispute-guide-card[aria-expanded="true"] {
+  border-color: #3f3f46;
+}
+
+.depop-surface-page .sell-fee-table th,
+.depop-surface-page .sell-fee-table td {
+  color: #e4e4e7;
+  border-bottom-color: #18181b;
+}
+
+.depop-surface-page .sell-fee-table .sell-fee-total th,
+.depop-surface-page .sell-fee-table .sell-fee-total td {
+  color: #fff;
+}
