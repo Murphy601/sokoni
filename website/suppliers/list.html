@@ -678,31 +678,64 @@
           <strong>AI detected:</strong> <span id="ai-weight-label">—</span>
         </p>
         <label class="block text-sm font-medium">
-          Your price — what you receive (KES) *
+          Your price — what you receive for the item (KES) *
           <input id="draft-price" type="number" min="10" class="sell-form-input" />
-          <span class="sell-tag-hint">This is your payout after delivery — shipping and platform fee are added for the buyer.</span>
+          <span id="draft-price-hint" class="sell-tag-hint">This is your item payout. Shipping and platform fee depend on delivery method below.</span>
         </label>
-        <label class="block text-sm font-medium">
-          Estimated size / weight (from photo)
-          <select id="draft-weight-class" class="sell-form-input"></select>
-          <span id="shipping-tier-hint" class="sell-tag-hint"></span>
-        </label>
-        <label class="block text-sm font-medium">
-          Shipping fee (KES)
-          <input id="draft-shipping" type="number" min="0" class="sell-form-input" />
-          <span class="sell-tag-hint">AI suggests a fee from the tier above — you can edit before posting.</span>
-        </label>
-        <label class="flex items-center gap-2 text-sm font-medium">
-          <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />
-          Offer free shipping (you cover delivery — buyer pays your price + platform fee only)
-        </label>
+
+        <fieldset class="space-y-2">
+          <legend class="text-sm font-medium">How will the buyer get this?</legend>
+          <p class="text-xs text-brand-purple/55 dark:text-white/55">Seller express / meetup: you keep the delivery fee. Hub: Sokoni handles courier.</p>
+          <div class="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Delivery method">
+            <label class="sell-delivery-option">
+              <input type="radio" name="draft-delivery-method" value="hub" class="sr-only" checked />
+              <span class="sell-delivery-card">
+                <span class="font-bold text-sm">Sokoni hub</span>
+                <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">Drop at nearest hub — we courier</span>
+              </span>
+            </label>
+            <label class="sell-delivery-option">
+              <input type="radio" name="draft-delivery-method" value="seller_express" class="sr-only" />
+              <span class="sell-delivery-card">
+                <span class="font-bold text-sm">Seller express</span>
+                <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">You dispatch — keep your delivery fee</span>
+              </span>
+            </label>
+            <label class="sell-delivery-option">
+              <input type="radio" name="draft-delivery-method" value="meetup" class="sr-only" />
+              <span class="sell-delivery-card">
+                <span class="font-bold text-sm">Meetup</span>
+                <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">Meet in person — no delivery fee</span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div id="hub-shipping-fields" class="space-y-4">
+          <label class="block text-sm font-medium">
+            Estimated size / weight (from photo)
+            <select id="draft-weight-class" class="sell-form-input"></select>
+            <span id="shipping-tier-hint" class="sell-tag-hint"></span>
+          </label>
+          <label class="block text-sm font-medium">
+            Shipping fee (KES)
+            <input id="draft-shipping" type="number" min="0" class="sell-form-input" />
+            <span id="draft-shipping-hint" class="sell-tag-hint">AI suggests a fee from the tier above — you can edit before posting.</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm font-medium">
+            <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />
+            <span id="draft-free-shipping-label">Offer free shipping (you cover delivery — buyer pays your price + platform fee only)</span>
+          </label>
+        </div>
+
         <table id="fee-breakdown-pricing" class="sell-fee-table" aria-label="Fee breakdown">
           <tbody>
-            <tr><th scope="row">You receive</th><td id="fee-item">—</td></tr>
-            <tr><th scope="row">Shipping</th><td id="fee-shipping">—</td></tr>
-            <tr><th scope="row">Platform fee (10%)</th><td id="fee-platform">—</td></tr>
+            <tr><th scope="row" id="fee-item-label">You receive (item)</th><td id="fee-item">—</td></tr>
+            <tr><th scope="row" id="fee-shipping-label">Shipping</th><td id="fee-shipping">—</td></tr>
+            <tr><th scope="row" id="fee-platform-label">Sokoni fee (10%)</th><td id="fee-platform">—</td></tr>
+            <tr><th scope="row" id="fee-txn-label">M-Pesa fee (varies by amount)</th><td id="fee-txn">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="fee-buyer">—</td></tr>
-            <tr class="sell-fee-net hidden"><th scope="row">You receive</th><td id="fee-net">—</td></tr>
+            <tr class="sell-fee-net"><th scope="row" id="fee-net-label">Your total payout</th><td id="fee-net">—</td></tr>
           </tbody>
         </table>
         <label class="block text-sm font-medium">
@@ -718,11 +751,12 @@
         <div id="review-summary" class="text-sm"></div>
         <table id="fee-breakdown-review" class="sell-fee-table" aria-label="Fee breakdown">
           <tbody>
-            <tr><th scope="row">Item price</th><td id="review-fee-item">—</td></tr>
-            <tr><th scope="row">Shipping</th><td id="review-fee-shipping">—</td></tr>
+            <tr><th scope="row" id="review-fee-item-label">Item (you receive)</th><td id="review-fee-item">—</td></tr>
+            <tr><th scope="row" id="review-fee-shipping-label">Shipping</th><td id="review-fee-shipping">—</td></tr>
+            <tr><th scope="row" id="review-fee-platform-label">Sokoni fee (10%)</th><td id="review-fee-platform">—</td></tr>
+            <tr><th scope="row" id="review-fee-txn-label">M-Pesa fee (varies by amount)</th><td id="review-fee-txn">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="review-fee-buyer">—</td></tr>
-            <tr><th scope="row">Processing &amp; platform fee (10%)</th><td id="review-fee-platform">—</td></tr>
-            <tr class="sell-fee-net"><th scope="row">You receive</th><td id="review-fee-net">—</td></tr>
+            <tr class="sell-fee-net"><th scope="row" id="review-fee-net-label">Your total payout</th><td id="review-fee-net">—</td></tr>
           </tbody>
         </table>
         <p class="text-xs text-brand-purple/60 dark:text-white/60">

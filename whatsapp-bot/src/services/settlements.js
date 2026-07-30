@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getSupplier } from "./suppliers.js";
-import { orderBuyerTotal } from "./shipping-tiers.js";
+import { orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
 import { getOrder } from "./orders.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,10 +48,7 @@ export function addBusinessDays(fromMs, days) {
 function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
   const supplier = getSupplier(order.supplierId);
   const buyerTotal = orderBuyerTotal(order);
-  const payoutAmountKes =
-    order.sellerNetKes != null
-      ? order.sellerNetKes
-      : order.sourcePriceKes || Math.round(buyerTotal * 0.9);
+  const payoutAmountKes = resolveSellerPayoutKes(order) || Math.round(buyerTotal * 0.9);
   return {
     id: `PAY-${order.id}`,
     orderId: order.id,
@@ -64,6 +61,8 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
     retailKes: buyerTotal,
     itemKes: order.priceKes,
     shippingKes: order.shippingKes ?? 0,
+    shippingRecipient: order.shippingRecipient || "platform",
+    deliveryMethod: order.deliveryMethod || "hub",
     status,
     createdAt: Date.now(),
     deliveredAt: Date.now(),
@@ -77,7 +76,7 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
  */
 export function scheduleSellerPayoutAfterDelivery(order) {
   if (!order?.supplierId) return null;
-  const payoutBase = order.sellerNetKes ?? order.sourcePriceKes;
+  const payoutBase = resolveSellerPayoutKes(order);
   if (!payoutBase) return null;
   load();
 

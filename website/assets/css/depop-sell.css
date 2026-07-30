@@ -835,6 +835,39 @@ html.dark .sell-listing-card--hidden {
   line-height: 1.45;
 }
 
+/* Delivery method picker (pricing step) */
+.sell-delivery-option {
+  display: block;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.sell-delivery-card {
+  display: block;
+  height: 100%;
+  padding: 0.85rem 0.9rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(27, 16, 53, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+html.dark .sell-delivery-card {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(46, 27, 87, 0.45);
+}
+
+.sell-delivery-option:hover .sell-delivery-card {
+  border-color: rgba(37, 211, 102, 0.55);
+}
+
+.sell-delivery-option:has(input:checked) .sell-delivery-card,
+.sell-delivery-option input:focus-visible + .sell-delivery-card {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.1);
+  box-shadow: 0 0 0 1px rgba(37, 211, 102, 0.35);
+}
+
 /* Bulk Draft Studio — spreadsheet-style preview (Sokoni tokens) */
 .bulk-studio-chip {
   display: inline-flex;

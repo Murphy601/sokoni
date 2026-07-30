@@ -18,6 +18,8 @@ import {
   MIN_SHIPPING_KES,
   validateShippingKes,
   computeFeeBreakdown,
+  normalizeDeliveryMethod,
+  deliveryMethodMeta,
 } from "./shipping-tiers.js";
 import {
   enrichManualDraft,
@@ -238,7 +240,12 @@ async function buildProduct(supplier, enriched, media, productId) {
   const brands = normalizeBrands(enriched);
   const tags = normalizeTags(enriched.tags);
   const sellerNet = Math.round(Number(enriched.sellerNetKes ?? enriched.priceKes ?? enriched.sourcePriceKes) || 0);
-  const fees = computeFeeBreakdown(sellerNet, enriched.shippingKes, { freeShipping: enriched.freeShipping });
+  const deliveryMethod = normalizeDeliveryMethod(enriched.deliveryMethod);
+  const fees = computeFeeBreakdown(sellerNet, enriched.shippingKes, {
+    freeShipping: enriched.freeShipping,
+    deliveryMethod,
+  });
+  const methodMeta = deliveryMethodMeta(fees.deliveryMethod);
 
   const product = {
     id: productId,
@@ -251,6 +258,10 @@ async function buildProduct(supplier, enriched, media, productId) {
     sourcePriceKes: fees.sellerNetKes,
     priceKes: fees.buyerTotalKes,
     platformFeeKes: fees.platformFeeKes,
+    transactionFeeKes: fees.transactionFeeKes,
+    sellerPayoutKes: fees.sellerPayoutKes,
+    deliveryMethod: fees.deliveryMethod,
+    shippingRecipient: fees.shippingRecipient,
     description: enriched.description,
     brand: brands[0] || enriched.brand || undefined,
     secondaryBrand: brands[1] || undefined,
@@ -264,9 +275,12 @@ async function buildProduct(supplier, enriched, media, productId) {
     isSecondhand: enriched.isSecondhand,
     location: enriched.location || supplier.city || undefined,
     shippingKes: fees.shippingKes,
-    freeShipping: Boolean(enriched.freeShipping),
+    freeShipping: Boolean(fees.freeShipping),
     estimatedWeightClass: enriched.estimatedWeightClass,
-    shippingNote: enriched.shippingNote || (supplier.delivers ? "Seller delivery" : "Hub / pickup coordination"),
+    shippingNote:
+      enriched.shippingNote ||
+      methodMeta.label ||
+      (supplier.delivers ? "Seller delivery" : "Hub / pickup coordination"),
     rating: 4.5,
     reviews: 0,
     source: supplier.businessName,
@@ -501,8 +515,14 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   if (!enriched.name || (!enriched.priceKes && !enriched.sourcePriceKes)) {
     return { error: "missing_fields", message: "Title and price are required." };
   }
+  enriched.deliveryMethod = normalizeDeliveryMethod(draft.deliveryMethod || enriched.deliveryMethod);
+  if (enriched.deliveryMethod === "meetup") {
+    enriched.shippingKes = 0;
+    enriched.freeShipping = true;
+  }
   const shippingCheck = validateShippingKes(enriched.shippingKes, {
     freeShipping: Boolean(enriched.freeShipping),
+    deliveryMethod: enriched.deliveryMethod,
   });
   if (!shippingCheck.ok) return shippingCheck;
   enriched.shippingKes = shippingCheck.shippingKes;

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
 import { getOrder } from "./orders.js";
-import { orderBuyerTotal } from "./shipping-tiers.js";
+import { orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
 import { shipmentStatusLabel } from "./shipments.js";
 import { config } from "../config.js";
 import { labelPageUrlForOrder } from "./prepaid-checkout.js";
@@ -20,6 +20,8 @@ const MASTER_CATALOG = path.join(__dirname, "..", "data", "products.json");
 const REPO_CATALOG = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
 
 function sellerOrderNet(o) {
+  const payout = resolveSellerPayoutKes(o);
+  if (payout > 0) return payout;
   return o.sellerNetKes ?? o.sourcePriceKes ?? Math.round(orderBuyerTotal(o) * 0.9);
 }
 
