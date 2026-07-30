@@ -496,6 +496,45 @@ function hideBuyerAuthPanel() {
   el("buyer-auth-panel")?.classList.add("hidden");
 }
 
+async function resolvePeerFromHandle() {
+  if (state.peerId || !state.peerHandle) return state.peerId;
+  try {
+    const res = await fetch(`${SOCIAL_API}/shop/${encodeURIComponent(state.peerHandle)}?limit=1`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return null;
+    const userId = parsePositiveInt(data?.shop?.userId);
+    if (userId) {
+      state.peerId = userId;
+      setPeerLabel();
+    }
+    return userId;
+  } catch {
+    return null;
+  }
+}
+
+function beginChatIfReady() {
+  if (!state.viewerId || !state.peerId || state.viewerId === state.peerId) {
+    setStatus(
+      state.sellerAuthRequired
+        ? "Open this page from a shop profile with valid viewer and seller IDs."
+        : "Verify your WhatsApp above, or open this page from a shop with a valid seller ID.",
+      true
+    );
+    disableChatComposer();
+    return false;
+  }
+  if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
+    setStatus("Seller session missing - rudi seller dashboard uverify WhatsApp tena.", true);
+    disableChatComposer();
+    return false;
+  }
+  setStatus("");
+  loadThread();
+  startPolling();
+  return true;
+}
+
 function init() {
   parseQuery();
   setPeerLabel();
@@ -509,30 +548,14 @@ function init() {
         state.viewerId = resolveViewerId();
         setPeerLabel();
         syncMakeOfferButton();
-        if (state.viewerId && state.peerId && state.viewerId !== state.peerId) {
-          setStatus("WhatsApp verified — you can chat now.");
-          loadThread();
-          startPolling();
-        }
+        void resolvePeerFromHandle().then(() => {
+          if (state.viewerId && state.peerId && state.viewerId !== state.peerId) {
+            setStatus("WhatsApp verified — you can chat now.");
+            beginChatIfReady();
+          }
+        });
       },
     });
-  }
-
-  if (!state.viewerId || !state.peerId || state.viewerId === state.peerId) {
-    setStatus(
-      state.sellerAuthRequired
-        ? "Open this page from a shop profile with valid viewer and seller IDs."
-        : "Verify your WhatsApp above, or open this page from a shop with a valid seller ID.",
-      true
-    );
-    disableChatComposer();
-    return;
-  }
-
-  if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
-    setStatus("Seller session missing - rudi seller dashboard uverify WhatsApp tena.", true);
-    disableChatComposer();
-    return;
   }
 
   const form = el("chat-form");
@@ -552,8 +575,13 @@ function init() {
     void sendInboxOffer();
   });
 
-  loadThread();
-  startPolling();
+  void (async () => {
+    if (!state.peerId && state.peerHandle) {
+      setStatus("Loading shop…");
+      await resolvePeerFromHandle();
+    }
+    beginChatIfReady();
+  })();
 }
 
 document.addEventListener("DOMContentLoaded", init);

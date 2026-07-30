@@ -54,16 +54,31 @@
 
   function askInboxLink(product) {
     const sellerUserId = resolveSellerUserId(product);
+    const handle = normalizeHandleValue(sellerHandle(product));
+    if (!sellerUserId && !handle) return "";
     const viewerId = resolveViewerUserId();
-    if (!sellerUserId) return "";
-    const params = new URLSearchParams({
-      with: String(sellerUserId),
-    });
+    const params = new URLSearchParams();
+    if (sellerUserId) params.set("with", String(sellerUserId));
     if (viewerId) params.set("viewer", String(viewerId));
     if (product?.id) params.set("product", String(product.id));
-    const handle = normalizeHandleValue(sellerHandle(product));
     if (handle) params.set("handle", handle);
     return `inbox.html?${params.toString()}`;
+  }
+
+  async function resolveSellerUserIdFromHandle(product) {
+    const existing = resolveSellerUserId(product);
+    if (existing) return existing;
+    const handle = normalizeHandleValue(sellerHandle(product));
+    if (!handle) return null;
+    try {
+      const res = await fetch(`${SOCIAL_API_BASE}/shop/${encodeURIComponent(handle)}?limit=1`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return null;
+      const n = Number(data?.shop?.userId);
+      return Number.isInteger(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
   }
 
   function askLink(product) {
@@ -241,9 +256,12 @@
 
   function offerActionBlock(product) {
     const sellerId = resolveSellerUserId(product);
+    const handle = normalizeHandleValue(sellerHandle(product));
     const listedPrice = resolveListedPriceKes(product);
-    if (!sellerId || !listedPrice) return "";
-    if (viewerUserId && viewerUserId === sellerId) return "";
+    // Show offer UI when we have a price and either a social seller id or a shop handle
+    // (handle is resolved to sellerUserId before submit).
+    if (!listedPrice || (!sellerId && !handle)) return "";
+    if (viewerUserId && sellerId && viewerUserId === sellerId) return "";
     const suggested = defaultOfferKes(product);
     const shipping = resolveShippingKes(product);
     const preview = suggested ? computeOfferEscrowBreakdown(suggested, shipping) : null;
@@ -338,16 +356,25 @@
   }
 
   async function submitOffer(product) {
-    const sellerUserId = resolveSellerUserId(product);
     viewerUserId = resolveViewerUserId();
     const buyerUserId = viewerUserId;
     const amountInput = document.getElementById("product-sheet-offer-amount");
     const submitBtn = document.getElementById("product-sheet-offer-submit");
     const listedPrice = resolveListedPriceKes(product);
-    if (!amountInput || !submitBtn || !sellerUserId || !listedPrice) return;
+    if (!amountInput || !submitBtn || !listedPrice) return;
     if (!buyerUserId) {
       setOfferStatus("Verify your WhatsApp above to send an offer.", "error");
       document.getElementById("buyer-auth-phone")?.focus();
+      return;
+    }
+    setOfferStatus("Checking shop…");
+    const sellerUserId = await resolveSellerUserIdFromHandle(product);
+    if (!sellerUserId) {
+      setOfferStatus("Could not find this shop’s seller account yet. Try Message seller, or Ask on WhatsApp.", "error");
+      return;
+    }
+    if (buyerUserId === sellerUserId) {
+      setOfferStatus("You cannot offer on your own listing.", "error");
       return;
     }
 

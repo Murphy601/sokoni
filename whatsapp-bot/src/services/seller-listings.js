@@ -261,6 +261,12 @@ async function buildProduct(supplier, enriched, media, productId) {
     reviews: 0,
     source: supplier.businessName,
     supplierId: supplier.id,
+    shopHandle:
+      String(supplier.shopHandle || supplier.businessName || "")
+        .replace(/^@+/, "")
+        .trim()
+        .toLowerCase() || undefined,
+    sellerPhone: supplier.phone || undefined,
     emoji: CATEGORY_EMOJI[enriched.category] || "🛍️",
     tags,
     scope: "local",
@@ -444,6 +450,19 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   invalidateProductCache();
 
   if (dbProductsAvailable()) {
+    try {
+      const { ensureSellerSocialProfile } = await import("../db/repositories/users.js");
+      await ensureSellerSocialProfile({
+        phone: check.supplier.phone,
+        handle: product.shopHandle || check.supplier.shopHandle || check.supplier.businessName,
+        shopName: check.supplier.businessName,
+        location: check.supplier.city || null,
+        mpesaNumber: check.supplier.mpesaNumber || null,
+        isVerified: check.supplier.isSellerVerified !== false,
+      });
+    } catch (err) {
+      console.warn("[seller-listings] social profile ensure skipped:", err.message);
+    }
     await upsertCatalogProduct(product);
   }
 
