@@ -1,7 +1,7 @@
 /**
  * Shared compact shell chrome for buyer subpages (header + mobile bottom nav).
  * Mount targets: #sokoni-shell-header, #sokoni-shell-nav
- * Optional: body[data-shell-page="home|explore|sell|inbox|profile|activity|track"]
+ * Optional: body[data-shell-page="home|explore|sell|inbox|profile|activity|track|disputes"]
  */
 (function () {
   const PAGES = {
@@ -18,6 +18,7 @@
     const path = (window.location.pathname || "").toLowerCase();
     if (path.includes("profile")) return "profile";
     if (path.includes("inbox")) return "inbox";
+    if (path.includes("disputes")) return "disputes";
     if (path.includes("activity")) return "activity";
     if (path.includes("track")) return "track";
     if (path.includes("ask")) return "ask";
@@ -35,8 +36,14 @@
     }
     if (page === "inbox") {
       return [
-        { href: "ask.html", label: "Ask" },
         { href: "activity.html", label: "Activity" },
+        { href: "disputes.html", label: "Disputes" },
+      ];
+    }
+    if (page === "disputes") {
+      return [
+        { href: "track.html", label: "Track" },
+        { href: "inbox.html", label: "Inbox" },
       ];
     }
     if (page === "shop") {
@@ -47,7 +54,7 @@
     }
     if (page === "track") {
       return [
-        { href: "ask.html", label: "Ask Plug" },
+        { href: "disputes.html", label: "Disputes" },
         { href: "profile.html", label: "Profile" },
       ];
     }
@@ -60,12 +67,14 @@
     // profile + default
     return [
       { href: "ask.html", label: "Ask Plug" },
-      { href: "track.html", label: "Track" },
+      { href: "disputes.html", label: "Disputes" },
     ];
   }
 
   function navActiveKey(page) {
-    if (page === "activity" || page === "track" || page === "shop" || page === "ask") return "profile";
+    if (page === "activity" || page === "track" || page === "shop" || page === "ask" || page === "disputes") {
+      return "profile";
+    }
     if (page === "sell") return null;
     return page;
   }

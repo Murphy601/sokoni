@@ -2955,11 +2955,20 @@ async function loadSellerDisputes() {
     wrap.innerHTML = disputes
       .map((d) => {
         const open = d.status === "open" || d.status === "under_review";
+        const badgeClass =
+          d.status === "under_review" || d.status === "open"
+            ? "dispute-badge dispute-badge--review"
+            : String(d.status || "").startsWith("resolved")
+              ? "dispute-badge dispute-badge--resolved"
+              : "dispute-badge dispute-badge--action";
         return `
         <div class="sell-order-card space-y-2" data-dispute-id="${escapeHtml(String(d.id))}">
-          <div class="flex justify-between gap-2">
-            <p class="font-semibold text-sm">${escapeHtml(d.orderRef)}</p>
-            <span class="text-xs font-semibold">${escapeHtml(d.status)}</span>
+          <div class="flex justify-between gap-2 items-start">
+            <div>
+              <p class="font-semibold text-sm font-mono">${escapeHtml(d.orderRef)}</p>
+              <p class="text-[10px] text-brand-purple/45 mt-0.5">Ticket #TK-${escapeHtml(String(d.id))}</p>
+            </div>
+            <span class="${badgeClass}">${escapeHtml(d.status)}</span>
           </div>
           <p class="text-xs text-brand-purple/55">${escapeHtml(d.reason)}${d.buyerStatement ? ` — ${escapeHtml(d.buyerStatement)}` : ""}</p>
           ${

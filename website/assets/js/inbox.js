@@ -111,9 +111,27 @@ function setStatus(msg, isError = false) {
 
 function setPeerLabel() {
   const label = el("chat-peer-label");
-  if (!label) return;
+  const head = el("chat-peer-head");
   const handle = formatHandle(state.peerHandle);
-  label.textContent = handle || `User #${state.peerId || "?"}`;
+  const text = handle || (state.peerId ? `User #${state.peerId}` : "seller");
+  if (label) label.textContent = text;
+  if (head) head.textContent = handle ? `Chat · ${handle}` : text === "seller" ? "Pick a shop to message" : `Chat · ${text}`;
+}
+
+function messageBubble(msg) {
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const wrapper = mine ? "items-end" : "items-start";
+  const bubble = mine ? "inbox-bubble-mine" : "inbox-bubble-theirs";
+  const who = mine ? "You" : formatHandle(state.peerHandle) || `User #${state.peerId}`;
+
+  return `
+    <div class="flex flex-col ${wrapper} gap-1">
+      <p class="text-[11px] text-brand-purple/50 dark:text-white/55">${who}</p>
+      <div class="max-w-[85%] px-3 py-2 text-sm leading-relaxed ${bubble}">
+        ${escapeHtml(msg.content)}
+      </div>
+      <p class="text-[10px] text-brand-purple/45 dark:text-white/45 font-mono">${formatTime(msg.createdAt)}</p>
+    </div>`;
 }
 
 function formatTime(ts) {
@@ -145,24 +163,6 @@ function withAuthBody(payload) {
     return window.SokoniBuyerAuth.authFields(payload);
   }
   return payload;
-}
-
-function messageBubble(msg) {
-  const mine = Number(msg.senderUserId) === state.viewerId;
-  const wrapper = mine ? "items-end" : "items-start";
-  const bubble = mine
-    ? "bg-brand-green text-brand-purple rounded-2xl rounded-br-sm"
-    : "bg-white dark:bg-brand-purpleLight/55 text-brand-purple dark:text-white rounded-2xl rounded-bl-sm border border-black/5 dark:border-white/10";
-  const who = mine ? "You" : formatHandle(state.peerHandle) || `User #${state.peerId}`;
-
-  return `
-    <div class="flex flex-col ${wrapper} gap-1">
-      <p class="text-[11px] text-brand-purple/50 dark:text-white/55">${who}</p>
-      <div class="max-w-[85%] px-3 py-2 text-sm leading-relaxed ${bubble}">
-        ${escapeHtml(msg.content)}
-      </div>
-      <p class="text-[10px] text-brand-purple/45 dark:text-white/45">${formatTime(msg.createdAt)}</p>
-    </div>`;
 }
 
 function renderMessages(messages) {
@@ -239,16 +239,16 @@ function offerCard(offer) {
   let actions = "";
   if (isSeller && status === "pending" && Number.isInteger(id)) {
     actions = `<div class="mt-3 flex flex-wrap gap-2">
-      <button type="button" class="inbox-offer-respond min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold" data-offer-id="${id}" data-action="accepted">Accept</button>
-      <button type="button" class="inbox-offer-respond min-h-[40px] px-3 rounded-full border border-black/10 dark:border-white/20 text-xs font-semibold" data-offer-id="${id}" data-action="declined">Decline</button>
+      <button type="button" class="inbox-offer-respond inbox-bargain-cta" data-offer-id="${id}" data-action="accepted">Accept bargain</button>
+      <button type="button" class="inbox-offer-respond inbox-bargain-ghost" data-offer-id="${id}" data-action="declined">Decline</button>
     </div>`;
   } else if (isBuyer && status === "accepted" && Number.isInteger(id)) {
     actions = `<div class="mt-3">
-      <a href="checkout.html?offerId=${id}" class="inline-flex min-h-[40px] items-center px-4 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Pay ${escapeHtml(payTotal)} on Sokoni</a>
+      <a href="checkout.html?offerId=${id}" class="inbox-bargain-cta">Checkout at ${escapeHtml(payTotal)}</a>
     </div>`;
   }
 
-  return `<article class="rounded-2xl border border-black/5 dark:border-white/10 bg-brand-cream/60 dark:bg-brand-purple/40 px-4 py-3">
+  return `<article class="inbox-bargain-card">
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-[10px] uppercase tracking-wide text-brand-purple/50 dark:text-white/50 font-semibold">Bargain offer · buyer total</p>
@@ -256,7 +256,7 @@ function offerCard(offer) {
       </div>
       <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded ${offerStatusClass(status)}">${escapeHtml(status)}</span>
     </div>
-    <p class="text-xl font-bold mt-2">${escapeHtml(amount)}</p>
+    <p class="text-xl font-black font-mono mt-2">${escapeHtml(amount)}</p>
     ${listed ? `<p class="text-[11px] text-brand-purple/50 dark:text-white/50 line-through">Was ${escapeHtml(listed)}</p>` : ""}
     ${offerEscrowSummary(offer)}
     ${actions}
@@ -539,6 +539,16 @@ function init() {
   parseQuery();
   setPeerLabel();
   syncMakeOfferButton();
+  window.SokoniRecentlyViewed?.renderCarousel?.("inbox-recently-viewed", {
+    onSelect: ({ id, handle }) => {
+      if (handle) {
+        const params = new URLSearchParams({ handle, product: id || "" });
+        window.location.href = `inbox.html?${params.toString()}`;
+        return;
+      }
+      window.location.href = `index.html?q=${encodeURIComponent(id || "")}`;
+    },
+  });
 
   if (state.sellerAuthRequired) {
     hideBuyerAuthPanel();
