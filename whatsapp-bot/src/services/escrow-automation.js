@@ -80,9 +80,32 @@ async function lockProductForOrder(order) {
 }
 
 async function notifyBuyerPaid(order, payment) {
-  const label = generateDropoffLabel(order);
   const amt = payment.amount ?? orderBuyerTotal(order);
   const trackUrl = `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`;
+  const sellerHandled =
+    order.shippingRecipient === "seller" ||
+    order.deliveryMethod === "seller_express" ||
+    order.deliveryMethod === "meetup";
+
+  if (sellerHandled) {
+    const meet = order.deliveryMethod === "meetup";
+    await sendText(
+      order.customerKey,
+      `✅ *Payment received!*\n\n` +
+        `Receipt: *${payment.mpesaReceiptNumber || "—"}*\n` +
+        `Amount: *KES ${Number(amt).toLocaleString()}*\n` +
+        `Order: *${order.id}*\n\n` +
+        `🔒 Funds held in Sokoni escrow until delivery is confirmed.\n\n` +
+        (meet
+          ? `🤝 Seller will arrange an in-person meetup. Confirm once you have the item.\n\n`
+          : `🛵 Seller will arrange delivery (seller express). Confirm once it arrives.\n\n`) +
+        `Track anytime: type *track* or *${order.id}*\n` +
+        `🌐 Live status: ${trackUrl}`
+    );
+    return;
+  }
+
+  const label = generateDropoffLabel(order);
   await sendText(
     order.customerKey,
     `✅ *Payment received!*\n\n` +
@@ -102,6 +125,32 @@ async function notifySellerDropoff(order, label) {
   const sup = getSupplier(order.supplierId);
   if (!sup?.phone) return;
   const chat = toChatId(sup.phone);
+  const sellerHandled =
+    order.shippingRecipient === "seller" ||
+    order.deliveryMethod === "seller_express" ||
+    order.deliveryMethod === "meetup";
+  const payout = order.sellerPayoutKes ?? order.sellerNetKes;
+
+  if (sellerHandled) {
+    const meet = order.deliveryMethod === "meetup";
+    const shipNote =
+      !meet && order.shippingKes
+        ? `Delivery fee KES ${Number(order.shippingKes).toLocaleString()} is included in your payout.\n`
+        : "";
+    await sendText(
+      chat,
+      `📦 *New prepaid sale — ${order.id}*\n\n` +
+        `*${order.productName}* — buyer paid upfront (escrow held).\n\n` +
+        (meet
+          ? `🤝 Arrange a safe meetup with the buyer, then confirm delivery in Seller Hub.\n`
+          : `🛵 Arrange delivery with your courier, then confirm delivery in Seller Hub.\n`) +
+        shipNote +
+        (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
+        `Payout: 2–3 business days after *Delivered* is confirmed.`
+    );
+    return;
+  }
+
   await sendText(
     chat,
     `📦 *New prepaid sale — ${order.id}*\n\n` +
@@ -123,6 +172,10 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
     return { order, skipped: true, reason: "already_paid" };
   }
 
+  const sellerHandled =
+    order.shippingRecipient === "seller" ||
+    order.deliveryMethod === "seller_express" ||
+    order.deliveryMethod === "meetup";
   const label = generateDropoffLabel(order);
 
   updateOrderMeta(order.id, {
@@ -134,14 +187,16 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
     mpesaPhone: payment.phoneNumber || order.phone,
     checkoutRequestId: payment.checkoutRequestId || order.checkoutRequestId || null,
     paidAt: Date.now(),
-    dropOffCode: label.dropOffCode,
-    labelUrl: label.labelUrl,
+    dropOffCode: sellerHandled ? null : label.dropOffCode,
+    labelUrl: sellerHandled ? null : label.labelUrl,
     qrPayload: label.qrPayload,
     autoPayment: true,
   });
 
-  advanceShipmentStatus(order.id, "label_ready", {
-    note: "Prepaid label generated after M-Pesa payment",
+  advanceShipmentStatus(order.id, sellerHandled ? "pending" : "label_ready", {
+    note: sellerHandled
+      ? "Seller-handled delivery — awaiting meetup or express dispatch"
+      : "Prepaid label generated after M-Pesa payment",
     actor: "daraja_callback",
   });
 
@@ -150,7 +205,7 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   }
 
   let updated = getOrder(order.id);
-  if (updated?.location) {
+  if (updated?.location && !sellerHandled) {
     const plan = planFulfillment(updated.location);
     updated = applyFulfillmentPlan(order.id, plan) || getOrder(order.id);
   }

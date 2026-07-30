@@ -1,7 +1,55 @@
 /** Seller shipping tiers + platform fee (item + shipping). Free shipping optional (seller choice). */
 
+/** Hub logistics: fee on (item + shipping), added on top for the buyer. */
 export const PLATFORM_FEE_RATE = 0.1;
+/** Seller-handled (express / meetup): fee on item only, taken from item price — shipping passes to seller. */
+export const SELLER_HANDLED_FEE_RATE = 0.08;
 export const MIN_SHIPPING_KES = 150;
+
+export const DELIVERY_METHODS = [
+  {
+    id: "hub",
+    label: "Sokoni hub drop-off",
+    hint: "Drop at a Sokoni hub — we handle courier",
+    shippingRecipient: "platform",
+  },
+  {
+    id: "seller_express",
+    label: "Seller express",
+    hint: "You dispatch with your own courier",
+    shippingRecipient: "seller",
+  },
+  {
+    id: "meetup",
+    label: "In-person meetup",
+    hint: "Meet the buyer — no delivery fee",
+    shippingRecipient: "seller",
+  },
+];
+
+export function normalizeDeliveryMethod(raw) {
+  const key = String(raw || "hub")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (key === "seller_express" || key === "express" || key === "seller_delivery" || key === "self") {
+    return "seller_express";
+  }
+  if (key === "meetup" || key === "meet" || key === "in_person" || key === "pickup_meetup") {
+    return "meetup";
+  }
+  return "hub";
+}
+
+export function isSellerHandledDelivery(method) {
+  const m = normalizeDeliveryMethod(method);
+  return m === "seller_express" || m === "meetup";
+}
+
+export function deliveryMethodMeta(method) {
+  const id = normalizeDeliveryMethod(method);
+  return DELIVERY_METHODS.find((d) => d.id === id) || DELIVERY_METHODS[0];
+}
 
 /** Preset rider/courier tiers — AI maps cover photo → class → typical fee. */
 export const SHIPPING_TIERS = [
@@ -125,8 +173,16 @@ export function applyAiShippingSuggestion(draft = {}) {
   };
 }
 
-/** Seller net + shipping → buyer total with platform fee added on top (not deducted from seller). */
-export function computeFeeBreakdown(sellerNetKes, shippingKes, { freeShipping = false } = {}) {
+/** Seller net + shipping → buyer total with platform fee added on top (not deducted from seller). Hub default. */
+export function computeFeeBreakdown(sellerNetKes, shippingKes, { freeShipping = false, deliveryMethod = "hub" } = {}) {
+  const method = normalizeDeliveryMethod(deliveryMethod);
+  if (isSellerHandledDelivery(method)) {
+    return computeSellerHandledFeeBreakdown(sellerNetKes, shippingKes, {
+      freeShipping,
+      deliveryMethod: method,
+    });
+  }
+
   const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
   const shipRaw = Math.round(Number(shippingKes) || 0);
   const shipping = freeShipping || shipRaw === 0 ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw);
@@ -142,18 +198,57 @@ export function computeFeeBreakdown(sellerNetKes, shippingKes, { freeShipping = 
     platformFeeRate: PLATFORM_FEE_RATE,
     buyerTotalKes,
     freeShipping: shipping === 0,
+    deliveryMethod: "hub",
+    shippingRecipient: "platform",
+    sellerPayoutKes: sellerNet,
   };
 }
 
-/** Lowest buyer all-in that still leaves the seller at least KES 1 after shipping + 10% fee. */
-export function minBuyerTotalForOffer(shippingKes, { freeShipping = false } = {}) {
-  return computeFeeBreakdown(1, shippingKes, { freeShipping }).buyerTotalKes;
+/**
+ * Seller-handled delivery escrow split.
+ * Buyer pays itemKes + shipping (no fee on top). Sokoni takes 8% of item from the item slice;
+ * seller receives sellerNet + full shipping.
+ *
+ * Example: sellerNet 1840, ship 250 → item 2000, fee 160, buyer 2250, seller payout 2090.
+ */
+export function computeSellerHandledFeeBreakdown(
+  sellerNetKes,
+  shippingKes,
+  { freeShipping = false, deliveryMethod = "seller_express" } = {}
+) {
+  const method = normalizeDeliveryMethod(deliveryMethod);
+  const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
+  const shipRaw = Math.round(Number(shippingKes) || 0);
+  const shipping =
+    method === "meetup" || freeShipping || shipRaw === 0 ? 0 : Math.max(0, shipRaw);
+  const itemKes = sellerNet > 0 ? Math.round(sellerNet / (1 - SELLER_HANDLED_FEE_RATE)) : 0;
+  const platformFeeKes = Math.max(0, itemKes - sellerNet);
+  const buyerTotalKes = itemKes + shipping;
+  const sellerPayoutKes = sellerNet + shipping;
+  return {
+    sellerNetKes: sellerNet,
+    itemKes,
+    shippingKes: shipping,
+    subtotalKes: buyerTotalKes,
+    platformFeeKes,
+    platformFeeRate: SELLER_HANDLED_FEE_RATE,
+    buyerTotalKes,
+    freeShipping: shipping === 0,
+    deliveryMethod: method === "meetup" ? "meetup" : "seller_express",
+    shippingRecipient: "seller",
+    sellerPayoutKes,
+  };
+}
+
+/** Lowest buyer all-in that still leaves the seller at least KES 1 after shipping + fee. */
+export function minBuyerTotalForOffer(shippingKes, { freeShipping = false, deliveryMethod = "hub" } = {}) {
+  return computeFeeBreakdown(1, shippingKes, { freeShipping, deliveryMethod }).buyerTotalKes;
 }
 
 /**
  * Public escrow split for an offer / checkout payload.
- * Buyer pays `totalKes` into escrow; on delivery seller receives `sellerNetKes`,
- * shipping is reserved for delivery, and Sokoni keeps `platformFeeKes`.
+ * Buyer pays `totalKes` into escrow; on delivery seller receives payout (item net ± shipping by mode),
+ * and Sokoni keeps `platformFeeKes`.
  */
 export function serializeOfferBreakdown(breakdown) {
   if (!breakdown || breakdown.error) return null;
@@ -162,8 +257,11 @@ export function serializeOfferBreakdown(breakdown) {
     shippingKes: breakdown.shippingKes,
     platformFeeKes: breakdown.platformFeeKes,
     sellerNetKes: breakdown.sellerNetKes,
+    sellerPayoutKes: breakdown.sellerPayoutKes ?? breakdown.sellerNetKes,
     totalKes: breakdown.buyerTotalKes,
     freeShipping: Boolean(breakdown.freeShipping),
+    deliveryMethod: breakdown.deliveryMethod || "hub",
+    shippingRecipient: breakdown.shippingRecipient || "platform",
     fromOffer: true,
     agreedBuyerTotalKes: breakdown.agreedBuyerTotalKes ?? breakdown.buyerTotalKes,
   };
@@ -174,10 +272,47 @@ export function serializeOfferBreakdown(breakdown) {
  * `agreedBuyerTotalKes` is the negotiated all-in amount the buyer pays (offer.amount_kes).
  * Shipping is taken from the listing; seller net + platform fee are derived so totals stay consistent.
  */
-export function computeOfferFeeBreakdown(agreedBuyerTotalKes, shippingKes, { freeShipping = false } = {}) {
+export function computeOfferFeeBreakdown(
+  agreedBuyerTotalKes,
+  shippingKes,
+  { freeShipping = false, deliveryMethod = "hub" } = {}
+) {
+  const method = normalizeDeliveryMethod(deliveryMethod);
   const agreed = Math.round(Number(agreedBuyerTotalKes) || 0);
   if (!Number.isFinite(agreed) || agreed < 1) {
     return { error: "invalid_offer_amount", message: "Agreed offer amount must be a positive KES total." };
+  }
+
+  if (isSellerHandledDelivery(method)) {
+    const shipRaw = Math.round(Number(shippingKes) || 0);
+    const shipping =
+      method === "meetup" || freeShipping || shipRaw === 0 ? 0 : Math.max(0, shipRaw);
+    const itemKes = Math.max(0, agreed - shipping);
+    if (itemKes < 1) {
+      return {
+        error: "offer_too_low_for_shipping",
+        message: `Offer must cover delivery (KES ${shipping.toLocaleString("en-KE")}).`,
+        agreedBuyerTotalKes: agreed,
+        shippingKes: shipping,
+        minBuyerTotalKes: shipping + 1,
+      };
+    }
+    const platformFeeKes = Math.round(itemKes * SELLER_HANDLED_FEE_RATE);
+    const sellerNetKes = itemKes - platformFeeKes;
+    const forward = computeSellerHandledFeeBreakdown(sellerNetKes, shipping, {
+      freeShipping: shipping === 0,
+      deliveryMethod: method,
+    });
+    // Prefer agreed buyer total; absorb rounding in fee.
+    const feeAdjust = agreed - forward.buyerTotalKes;
+    return {
+      ...forward,
+      platformFeeKes: forward.platformFeeKes + feeAdjust,
+      buyerTotalKes: agreed,
+      agreedBuyerTotalKes: agreed,
+      minBuyerTotalKes: minBuyerTotalForOffer(shipping, { freeShipping: shipping === 0, deliveryMethod: method }),
+      fromOffer: true,
+    };
   }
 
   const shipRaw = Math.round(Number(shippingKes) || 0);
@@ -213,6 +348,9 @@ export function computeOfferFeeBreakdown(agreedBuyerTotalKes, shippingKes, { fre
     platformFeeRate: PLATFORM_FEE_RATE,
     buyerTotalKes,
     freeShipping: forward.freeShipping,
+    deliveryMethod: "hub",
+    shippingRecipient: "platform",
+    sellerPayoutKes: forward.sellerNetKes,
     agreedBuyerTotalKes: agreed,
     minBuyerTotalKes,
     fromOffer: true,
@@ -238,9 +376,22 @@ export function computeFeeBreakdownLegacy(itemKes, shippingKes, { freeShipping =
   };
 }
 
-export function validateShippingKes(shippingKes, { freeShipping = false } = {}) {
-  if (freeShipping) return { ok: true, shippingKes: 0, freeShipping: true };
+export function validateShippingKes(shippingKes, { freeShipping = false, deliveryMethod = "hub" } = {}) {
+  const method = normalizeDeliveryMethod(deliveryMethod);
+  if (freeShipping || method === "meetup") {
+    return { ok: true, shippingKes: 0, freeShipping: true };
+  }
   const n = Math.round(Number(shippingKes) || 0);
+  if (isSellerHandledDelivery(method)) {
+    if (!Number.isFinite(n) || n < 0) {
+      return {
+        ok: false,
+        error: "invalid_shipping",
+        message: "Enter your delivery fee in KES (or 0 if you cover it).",
+      };
+    }
+    return { ok: true, shippingKes: n, freeShipping: n === 0 };
+  }
   if (!Number.isFinite(n) || n < MIN_SHIPPING_KES) {
     return {
       ok: false,
@@ -255,7 +406,10 @@ function sellerNetMatchesAllInTotal(sellerNet, product, shipping) {
   const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
   if (storedTotal == null) return false;
   const ship = product.freeShipping ? 0 : Math.round(Number(shipping) || 0);
-  const fees = computeFeeBreakdown(sellerNet, ship, { freeShipping: product.freeShipping });
+  const fees = computeFeeBreakdown(sellerNet, ship, {
+    freeShipping: product.freeShipping,
+    deliveryMethod: product.deliveryMethod,
+  });
   return Math.abs(storedTotal - fees.buyerTotalKes) <= 5;
 }
 
@@ -284,16 +438,20 @@ export function resolveSellerNetKes(product = {}) {
 }
 
 function totalsFromSellerNet(product, sellerNet) {
-  if (product.freeShipping) {
-    const fees = computeFeeBreakdown(sellerNet, 0, { freeShipping: true });
+  const deliveryMethod = normalizeDeliveryMethod(product.deliveryMethod);
+  if (product.freeShipping || deliveryMethod === "meetup") {
+    const fees = computeFeeBreakdown(sellerNet, 0, { freeShipping: true, deliveryMethod });
     const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
     return {
-      itemKes: fees.sellerNetKes,
+      itemKes: fees.itemKes,
       shippingKes: 0,
       totalKes: storedTotal != null && Math.abs(storedTotal - fees.buyerTotalKes) <= 5 ? storedTotal : fees.buyerTotalKes,
       platformFeeKes: fees.platformFeeKes,
       sellerNetKes: fees.sellerNetKes,
+      sellerPayoutKes: fees.sellerPayoutKes,
       freeShipping: true,
+      deliveryMethod: fees.deliveryMethod,
+      shippingRecipient: fees.shippingRecipient,
     };
   }
 
@@ -301,11 +459,14 @@ function totalsFromSellerNet(product, sellerNet) {
   const shippingRaw =
     product.shippingKes ??
     product.shippingFeeKes ??
-    getShippingTier(weightClass).typicalKes;
-  const fees = computeFeeBreakdown(sellerNet, clampShippingKes(shippingRaw, weightClass));
+    (isSellerHandledDelivery(deliveryMethod) ? 0 : getShippingTier(weightClass).typicalKes);
+  const shippingKes = isSellerHandledDelivery(deliveryMethod)
+    ? Math.max(0, Math.round(Number(shippingRaw) || 0))
+    : clampShippingKes(shippingRaw, weightClass);
+  const fees = computeFeeBreakdown(sellerNet, shippingKes, { deliveryMethod });
   const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
   return {
-    itemKes: fees.sellerNetKes,
+    itemKes: fees.itemKes,
     shippingKes: fees.shippingKes,
     totalKes:
       storedTotal != null && Math.abs(storedTotal - fees.buyerTotalKes) <= 5
@@ -313,7 +474,10 @@ function totalsFromSellerNet(product, sellerNet) {
         : fees.buyerTotalKes,
     platformFeeKes: fees.platformFeeKes,
     sellerNetKes: fees.sellerNetKes,
+    sellerPayoutKes: fees.sellerPayoutKes,
     freeShipping: false,
+    deliveryMethod: fees.deliveryMethod,
+    shippingRecipient: fees.shippingRecipient,
   };
 }
 
@@ -324,8 +488,9 @@ export function computeProductTotals(product = {}) {
     return totalsFromSellerNet(product, sellerNet);
   }
 
+  const deliveryMethod = normalizeDeliveryMethod(product.deliveryMethod);
   const itemKes = Math.max(0, Math.round(Number(product.priceKes) || 0));
-  if (product.freeShipping) {
+  if (product.freeShipping || deliveryMethod === "meetup") {
     const fees = computeFeeBreakdownLegacy(itemKes, 0, { freeShipping: true });
     return {
       itemKes: fees.itemKes,
@@ -333,7 +498,10 @@ export function computeProductTotals(product = {}) {
       totalKes: fees.buyerTotalKes,
       platformFeeKes: fees.platformFeeKes,
       sellerNetKes: fees.sellerNetKes,
+      sellerPayoutKes: fees.sellerNetKes,
       freeShipping: true,
+      deliveryMethod,
+      shippingRecipient: isSellerHandledDelivery(deliveryMethod) ? "seller" : "platform",
     };
   }
   const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
@@ -348,8 +516,25 @@ export function computeProductTotals(product = {}) {
     totalKes: fees.buyerTotalKes,
     platformFeeKes: fees.platformFeeKes,
     sellerNetKes: fees.sellerNetKes,
+    sellerPayoutKes: fees.sellerNetKes,
     freeShipping: false,
+    deliveryMethod: "hub",
+    shippingRecipient: "platform",
   };
+}
+
+/** Amount paid out to the seller after delivery (item net + shipping when seller-handled). */
+export function resolveSellerPayoutKes(orderOrTotals = {}) {
+  if (orderOrTotals.sellerPayoutKes != null) {
+    return Math.round(Number(orderOrTotals.sellerPayoutKes) || 0);
+  }
+  const net = Math.round(Number(orderOrTotals.sellerNetKes ?? orderOrTotals.sourcePriceKes) || 0);
+  const ship = Math.round(Number(orderOrTotals.shippingKes) || 0);
+  const recipient =
+    orderOrTotals.shippingRecipient ||
+    (isSellerHandledDelivery(orderOrTotals.deliveryMethod) ? "seller" : "platform");
+  if (recipient === "seller") return net + ship;
+  return net;
 }
 
 /** Amount the buyer pays (item + shipping). Falls back for legacy orders. */

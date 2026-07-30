@@ -6,12 +6,15 @@ import {
   computeFeeBreakdownLegacy,
   computeOfferFeeBreakdown,
   computeProductTotals,
+  computeSellerHandledFeeBreakdown,
   minBuyerTotalForOffer,
   orderBuyerTotal,
   formatProductListPrice,
   inferWeightClass,
   resolveSellerNetKes,
+  resolveSellerPayoutKes,
   MIN_SHIPPING_KES,
+  SELLER_HANDLED_FEE_RATE,
   validateShippingKes,
   getShippingTier,
   SHIPPING_TIERS,
@@ -112,6 +115,52 @@ assert("min offer valid", !atMin.error && atMin.sellerNetKes === 1);
 const offerFreeShip = computeOfferFeeBreakdown(1100, 0, { freeShipping: true });
 assert("offer free shipping buyer 1100", offerFreeShip.buyerTotalKes === 1100 && offerFreeShip.shippingKes === 0);
 assert("offer free shipping net 1000", offerFreeShip.sellerNetKes === 1000);
+
+// Seller-handled: 8% on item, shipping to seller (example: net 1840 + ship 250)
+const expressFees = computeFeeBreakdown(1840, 250, { deliveryMethod: "seller_express" });
+assert("express item 2000", expressFees.itemKes === 2000);
+assert("express fee 160", expressFees.platformFeeKes === 160);
+assert("express buyer 2250", expressFees.buyerTotalKes === 2250);
+assert("express seller payout 2090", expressFees.sellerPayoutKes === 2090);
+assert("express shipping to seller", expressFees.shippingRecipient === "seller");
+assert("express rate 8%", expressFees.platformFeeRate === SELLER_HANDLED_FEE_RATE);
+
+const meetupFees = computeFeeBreakdown(1840, 250, { deliveryMethod: "meetup" });
+assert("meetup shipping 0", meetupFees.shippingKes === 0);
+assert("meetup buyer 2000", meetupFees.buyerTotalKes === 2000);
+assert("meetup payout = item net", meetupFees.sellerPayoutKes === 1840);
+
+const expressProduct = computeProductTotals({
+  sellerNetKes: 1840,
+  shippingKes: 250,
+  deliveryMethod: "seller_express",
+});
+assert("product express total 2250", expressProduct.totalKes === 2250);
+assert("product express payout 2090", expressProduct.sellerPayoutKes === 2090);
+assert(
+  "resolveSellerPayoutKes order",
+  resolveSellerPayoutKes({
+    sellerNetKes: 1840,
+    shippingKes: 250,
+    shippingRecipient: "seller",
+  }) === 2090
+);
+assert(
+  "hub payout excludes shipping",
+  resolveSellerPayoutKes({ sellerNetKes: 300, shippingKes: 150, deliveryMethod: "hub" }) === 300
+);
+
+const expressOffer = computeOfferFeeBreakdown(2250, 250, { deliveryMethod: "seller_express" });
+assert("express offer buyer 2250", expressOffer.buyerTotalKes === 2250 && !expressOffer.error);
+assert("express offer seller payout 2090", expressOffer.sellerPayoutKes === 2090);
+
+assert("seller express shipping 0 ok", validateShippingKes(0, { deliveryMethod: "seller_express" }).ok);
+assert("meetup forces 0 ship", validateShippingKes(250, { deliveryMethod: "meetup" }).shippingKes === 0);
+
+assert(
+  "direct seller-handled helper matches",
+  computeSellerHandledFeeBreakdown(1840, 250).sellerPayoutKes === 2090
+);
 
 console.log(`\n${failed ? failed + " failed" : "All seller fee tests passed"}`);
 process.exit(failed ? 1 : 0);

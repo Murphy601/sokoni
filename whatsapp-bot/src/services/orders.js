@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
-import { computeProductTotals, orderBuyerTotal } from "./shipping-tiers.js";
+import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -125,6 +125,10 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
   const totalKes = totals.totalKes;
   const platformFeeKes = totals.platformFeeKes;
   const sellerNetKes = totals.sellerNetKes;
+  const sellerPayoutKes = totals.sellerPayoutKes ?? resolveSellerPayoutKes({ ...totals, ...product });
+  const deliveryMethod = totals.deliveryMethod || product.deliveryMethod || "hub";
+  const shippingRecipient =
+    totals.shippingRecipient || product.shippingRecipient || (deliveryMethod === "hub" ? "platform" : "seller");
   const marginKes =
     sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
 
@@ -142,6 +146,9 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     totalKes,
     platformFeeKes,
     sellerNetKes,
+    sellerPayoutKes,
+    deliveryMethod,
+    shippingRecipient,
     sourcePriceKes,
     marginKes,
     offerId: offerKey,
