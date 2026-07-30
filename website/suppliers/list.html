@@ -685,8 +685,8 @@
 
         <fieldset class="space-y-2">
           <legend class="text-sm font-medium">How will the buyer get this?</legend>
-          <p class="text-xs text-brand-purple/55 dark:text-white/55">Seller express / meetup: you keep the delivery fee. Hub: Sokoni handles courier.</p>
-          <div class="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Delivery method">
+          <p class="text-xs text-brand-purple/55 dark:text-white/55">Seller express: you keep the delivery fee. Hub: Sokoni handles courier.</p>
+          <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Delivery method">
             <label class="sell-delivery-option">
               <input type="radio" name="draft-delivery-method" value="hub" class="sr-only" checked />
               <span class="sell-delivery-card">
@@ -701,13 +701,6 @@
                 <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">You dispatch — keep your delivery fee</span>
               </span>
             </label>
-            <label class="sell-delivery-option">
-              <input type="radio" name="draft-delivery-method" value="meetup" class="sr-only" />
-              <span class="sell-delivery-card">
-                <span class="font-bold text-sm">Meetup</span>
-                <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">Meet in person — no delivery fee</span>
-              </span>
-            </label>
           </div>
         </fieldset>
 
@@ -720,7 +713,7 @@
           <label class="block text-sm font-medium">
             Shipping fee (KES)
             <input id="draft-shipping" type="number" min="0" class="sell-form-input" />
-            <span id="draft-shipping-hint" class="sell-tag-hint">AI suggests a fee from the tier above — you can edit before posting.</span>
+            <span id="draft-shipping-hint" class="sell-tag-hint">AI suggests a fee from the tier above (min KES 300) — you can edit before posting.</span>
           </label>
           <label class="flex items-center gap-2 text-sm font-medium">
             <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />

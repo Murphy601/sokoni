@@ -312,13 +312,13 @@ async function buildListingPrompt(caption = "") {
     `11. tags — array of up to 5 short vibe tags from the photo (e.g. ["vintage","denim","90s"]), else []\n` +
     `12. description — 1–2 factual sentences about the item in the photo (no marketing fluff)\n` +
     `13. estimatedWeightClass — small | medium | large from apparent size\n` +
-    `14. suggestedShippingFeeKsh — integer from SHIPPING TIER TABLE (min 150)\n` +
+    `14. suggestedShippingFeeKsh — integer from SHIPPING TIER TABLE (minimum 300 KES; never below 300)\n` +
     `15. Optional flat measurements in inches if garment is laid flat and measurable: pitToPitIn, lengthIn, waistIn (numbers or null)\n\n` +
     `SHIPPING TIER TABLE:\n${shippingTierPromptBlock()}\n\n` +
     `BROWSE PATHS (browseCategory / browseSubCategory — pick ONLY from this list):\n${browseLines}\n\n` +
     (caption ? `Seller caption (hints only): "${caption}"\n\n` : "") +
     `Example JSON:\n` +
-    `{"name":"Navy Nike Hoodie","sellerNetKes":2500,"category":"fashion","subcategory":"mens-fashion","browseCategory":"men","browseSubCategory":"hoodies","condition":"gently_used","isSecondhand":true,"brand":"Nike","color":"navy","size":"L","tags":["vintage","streetwear","90s"],"description":"Navy Nike pullover hoodie with visible swoosh. Light wear at cuffs.","estimatedWeightClass":"medium","suggestedShippingFeeKsh":275,"pitToPitIn":22,"lengthIn":28,"waistIn":null}`
+    `{"name":"Navy Nike Hoodie","sellerNetKes":2500,"category":"fashion","subcategory":"mens-fashion","browseCategory":"men","browseSubCategory":"hoodies","condition":"gently_used","isSecondhand":true,"brand":"Nike","color":"navy","size":"L","tags":["vintage","streetwear","90s"],"description":"Navy Nike pullover hoodie with visible swoosh. Light wear at cuffs.","estimatedWeightClass":"medium","suggestedShippingFeeKsh":450,"pitToPitIn":22,"lengthIn":28,"waistIn":null}`
   );
 }
 

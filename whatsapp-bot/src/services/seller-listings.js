@@ -516,9 +516,9 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
     return { error: "missing_fields", message: "Title and price are required." };
   }
   enriched.deliveryMethod = normalizeDeliveryMethod(draft.deliveryMethod || enriched.deliveryMethod);
+  // Meetup is no longer offered — coerce legacy drafts to hub.
   if (enriched.deliveryMethod === "meetup") {
-    enriched.shippingKes = 0;
-    enriched.freeShipping = true;
+    enriched.deliveryMethod = "hub";
   }
   const shippingCheck = validateShippingKes(enriched.shippingKes, {
     freeShipping: Boolean(enriched.freeShipping),
