@@ -810,11 +810,20 @@ function onListingPriceInput(ev) {
   }
 }
 
+function isPlaceholderLabel(value) {
+  return /^(unknown|n\/?a|none|null|undefined|not visible|unreadable|no brand|blank|item)$/i.test(
+    String(value || "").trim()
+  );
+}
+
 function fillFormFromDraft() {
-  el("draft-name").value = draft.name || "";
-  el("draft-description").value = draft.description || "";
-  el("draft-tags").value = (draft.tags || []).map((t) => `#${t}`).join(" ");
-  el("draft-brand").value = draft.brand || "";
+  const name = draft.name && !isPlaceholderLabel(draft.name) ? draft.name : "";
+  el("draft-name").value = name;
+  el("draft-description").value =
+    draft.description && String(draft.description).trim().length > 12 ? draft.description : "";
+  const tags = (draft.tags || []).map((t) => String(t).replace(/^#/, "").trim()).filter(Boolean);
+  el("draft-tags").value = tags.map((t) => `#${t}`).join(" ");
+  el("draft-brand").value = draft.brand && !isPlaceholderLabel(draft.brand) ? draft.brand : "";
   el("draft-brand2").value = draft.secondaryBrand || "";
   el("draft-price").value = draft.sellerNetKes ?? draft.priceKes ?? draft.sourcePriceKes ?? "";
   if (el("media-price")) el("media-price").value = el("draft-price").value;
@@ -828,19 +837,39 @@ function fillFormFromDraft() {
       ? 0
       : draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? getShippingTier(draft.estimatedWeightClass)?.typicalKes ?? MIN_SHIPPING_KES;
   if (el("draft-free-shipping")) el("draft-free-shipping").checked = Boolean(draft.freeShipping) || method === "meetup";
-  el("draft-color").value = draft.color || "";
-  el("draft-size").value = draft.size || "";
-  if (el("draft-pit-to-pit")) el("draft-pit-to-pit").value = draft.pitToPitIn ?? "";
-  if (el("draft-length-in")) el("draft-length-in").value = draft.lengthIn ?? "";
-  if (el("draft-waist-in")) el("draft-waist-in").value = draft.waistIn ?? "";
+  el("draft-color").value = draft.color && !isPlaceholderLabel(draft.color) ? draft.color : "";
+  el("draft-size").value = draft.size && !isPlaceholderLabel(draft.size) ? draft.size : "";
+  if (el("draft-pit-to-pit")) {
+    el("draft-pit-to-pit").value = Number(draft.pitToPitIn) > 0 ? draft.pitToPitIn : "";
+  }
+  if (el("draft-length-in")) {
+    el("draft-length-in").value = Number(draft.lengthIn) > 0 ? draft.lengthIn : "";
+  }
+  if (el("draft-waist-in")) {
+    el("draft-waist-in").value = Number(draft.waistIn) > 0 ? draft.waistIn : "";
+  }
   el("draft-location").value = draft.location || "";
   el("draft-era").value = draft.era || "";
   el("draft-secondhand").checked = Boolean(draft.isSecondhand);
 
   populateSelect(el("draft-category"), Object.keys(CATEGORY_LABELS), CATEGORY_LABELS, draft.category);
-  populateSelect(el("draft-condition"), meta.conditions, CONDITION_LABELS, draft.condition);
+  const conditionOk = draft.condition && CONDITION_LABELS[draft.condition];
+  populateSelect(
+    el("draft-condition"),
+    meta.conditions,
+    CONDITION_LABELS,
+    conditionOk ? draft.condition : "gently_used"
+  );
   populateBrowseSelects(draft.browseCategory, draft.browseSubCategory);
   updateFeeBreakdown();
+}
+
+function browsePathInMeta(browseCat, browseSub) {
+  const tax = meta.browseTaxonomy || [];
+  const cat = tax.find((c) => c.id === browseCat);
+  if (!cat) return false;
+  if (!browseSub) return true;
+  return (cat.subcategories || []).some((s) => s.id === browseSub);
 }
 
 function populateBrowseSelects(browseCat, browseSub) {
@@ -850,13 +879,14 @@ function populateBrowseSelects(browseCat, browseSub) {
 
   const tax = meta.browseTaxonomy || [];
   catSelect.innerHTML = tax.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
-  if (browseCat) catSelect.value = browseCat;
+  const validPath = browsePathInMeta(browseCat, browseSub);
+  if (validPath && browseCat) catSelect.value = browseCat;
 
   const cat = tax.find((c) => c.id === catSelect.value) || tax[0];
   subSelect.innerHTML = (cat?.subcategories || [])
     .map((s) => `<option value="${s.id}">${s.label}</option>`)
     .join("");
-  if (browseSub) subSelect.value = browseSub;
+  if (validPath && browseSub) subSelect.value = browseSub;
 
   catSelect.onchange = () => {
     const selected = tax.find((c) => c.id === catSelect.value);

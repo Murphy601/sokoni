@@ -20,10 +20,13 @@ function geminiModelChain() {
 export function normalizeGeminiListingJson(parsed) {
   const out = { ...parsed };
   if (!out.name && out.title) out.name = out.title;
+  if (out.sellerNetKes == null && out.seller_net_kes != null) out.sellerNetKes = out.seller_net_kes;
+  if (!out.sourcePriceKes && out.sellerNetKes != null) out.sourcePriceKes = out.sellerNetKes;
   if (!out.sourcePriceKes && out.suggestedPriceKsh != null) {
     out.sourcePriceKes = out.suggestedPriceKsh;
   }
   if (!out.sourcePriceKes && out.priceKes != null) out.sourcePriceKes = out.priceKes;
+  if (!out.sellerNetKes && out.sourcePriceKes != null) out.sellerNetKes = out.sourcePriceKes;
   if (!out.description && out.desc) out.description = out.desc;
   if (!out.estimatedWeightClass && out.weightClass) out.estimatedWeightClass = out.weightClass;
   if (!out.estimatedWeightClass && out.estimated_weight_class) {
@@ -38,6 +41,16 @@ export function normalizeGeminiListingJson(parsed) {
   if (out.suggestedShippingFeeKsh == null && out.shipping_fee_ksh != null) {
     out.suggestedShippingFeeKsh = out.shipping_fee_ksh;
   }
+  if (!out.browseCategory && out.browse_category) out.browseCategory = out.browse_category;
+  if (!out.browseSubCategory && out.browse_sub_category) out.browseSubCategory = out.browse_sub_category;
+  if (!out.browseSubCategory && out.browseSubcategory) out.browseSubCategory = out.browseSubcategory;
+  if (out.size == null && out.Size != null) out.size = out.Size;
+  if (!Array.isArray(out.tags) && typeof out.tags === "string") {
+    out.tags = out.tags.split(/[,#\s]+/).map((t) => t.replace(/^#/, "").trim()).filter(Boolean);
+  }
+  if (out.pitToPitIn == null && out.pit_to_pit_in != null) out.pitToPitIn = out.pit_to_pit_in;
+  if (out.lengthIn == null && out.length_in != null) out.lengthIn = out.length_in;
+  if (out.waistIn == null && out.waist_in != null) out.waistIn = out.waist_in;
   return out;
 }
 
@@ -69,8 +82,8 @@ export async function geminiGenerateListingJson(opts) {
     ],
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.1,
-      maxOutputTokens: 800,
+      temperature: 0.05,
+      maxOutputTokens: 1200,
     },
   };
 

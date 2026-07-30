@@ -39,8 +39,10 @@ export const config = {
   },
   /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
   catalog: {
-    visionModel: process.env.CATALOG_VISION_MODEL || "krea/krea-2-medium-turbo",
-    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemma-4-26b-a4b-it:free")
+    // Must be a multimodal chat/vision model — never an image-generation model (e.g. krea).
+    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.5-flash",
+    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS ||
+      "google/gemini-2.0-flash-001,google/gemma-4-26b-a4b-it:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
