@@ -7,6 +7,8 @@ import {
   deleteSellerDraft,
   listSellerListings,
   getSellerListingMeta,
+  bulkImportSellerDraftsFromCsv,
+  getBulkListingCsvTemplate,
 } from "../services/seller-listings.js";
 import { previewStudioClean } from "../services/listing-studio.js";
 import { sellerSessionFromReq } from "../services/seller-verification.js";
@@ -124,6 +126,47 @@ router.post("/draft", async (req, res) => {
   if (result.error === "not_found") return res.status(404).json(result);
   if (result.error) return res.status(400).json(result);
   res.status(result.message?.includes("updated") ? 200 : 201).json(result);
+});
+
+/** GET /api/seller/listings/bulk/template — Depop-style CSV template download */
+router.get("/bulk/template", (_req, res) => {
+  const tpl = getBulkListingCsvTemplate();
+  res.setHeader("Content-Type", tpl.contentType);
+  res.setHeader("Content-Disposition", `attachment; filename="${tpl.filename}"`);
+  res.send(tpl.body);
+});
+
+/**
+ * POST /api/seller/listings/bulk/drafts — CSV text → draft listings (photos later).
+ * Body: { phone, csvText } or { phone, csvBase64 }
+ */
+router.post("/bulk/drafts", async (req, res) => {
+  let csvText = req.body?.csvText || req.body?.csv || "";
+  if (!csvText && req.body?.csvBase64) {
+    try {
+      csvText = Buffer.from(String(req.body.csvBase64).replace(/^data:[^;]+;base64,/, ""), "base64").toString(
+        "utf8"
+      );
+    } catch {
+      return res.status(400).json({ error: "invalid_csv", message: "Could not decode CSV file." });
+    }
+  }
+  if (!String(csvText || "").trim()) {
+    return res.status(400).json({ error: "invalid_csv", message: "Paste CSV text or upload a .csv file." });
+  }
+
+  const result = await bulkImportSellerDraftsFromCsv({
+    phone: req.body?.phone,
+    csvText,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
+  if (result.error === "invalid_csv") return res.status(400).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.status(201).json(result);
 });
 
 /** DELETE /api/seller/listings/draft/:draftId — remove a saved draft */

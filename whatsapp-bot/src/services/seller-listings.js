@@ -29,6 +29,11 @@ import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, summarizeModeration } from "./listing-moderation.js";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
+import {
+  BULK_CSV_MAX_ROWS,
+  buildBulkCsvTemplate,
+  csvTextToDraftRows,
+} from "./bulk-listing-csv.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -381,6 +386,96 @@ export async function saveSellerDraft({
     draftId: id,
     status: "draft",
     message: existing ? "Draft updated. Finish and post when ready." : "Draft saved. Finish and post when ready.",
+  };
+}
+
+/**
+ * Depop-style bulk CSV → draft listings (no photos).
+ * Auth once, then create up to BULK_CSV_MAX_ROWS drafts.
+ */
+export async function bulkImportSellerDraftsFromCsv({ phone, csvText, sessionToken }) {
+  await loadStore();
+  const check = await requireApprovedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const parsed = csvTextToDraftRows(csvText, { maxRows: BULK_CSV_MAX_ROWS });
+  if (!parsed.rows.length) {
+    return {
+      error: "invalid_csv",
+      message: parsed.errors[0]?.message || "No valid rows in CSV.",
+      errors: parsed.errors,
+      created: [],
+      count: 0,
+    };
+  }
+
+  const created = [];
+  const rowErrors = [...parsed.errors];
+
+  for (const item of parsed.rows) {
+    try {
+      const enriched = await enrichManualDraft(item.draft);
+      if (!enriched.name) {
+        rowErrors.push({ row: item.sourceRow, message: "Title is required." });
+        continue;
+      }
+      store.seq += 1;
+      const draftId = `DR-${new Date().getFullYear()}-${String(store.seq).padStart(4, "0")}`;
+      store.drafts[draftId] = {
+        id: draftId,
+        status: "draft",
+        sellerId: check.supplier.id,
+        sellerPhone: normalizePhone(phone),
+        businessName: check.supplier.businessName,
+        draft: enriched,
+        source: "bulk_csv",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      created.push({
+        draftId,
+        name: enriched.name,
+        sellerNetKes: enriched.sellerNetKes,
+        sourceRow: item.sourceRow,
+      });
+    } catch (err) {
+      rowErrors.push({ row: item.sourceRow, message: err.message || "Could not save row." });
+    }
+  }
+
+  if (created.length) await saveStore();
+
+  return {
+    success: true,
+    count: created.length,
+    created,
+    errors: rowErrors,
+    maxRows: BULK_CSV_MAX_ROWS,
+    message:
+      created.length > 0
+        ? `${created.length} draft${created.length === 1 ? "" : "s"} ready. Open each to add photos, then Post.`
+        : "No drafts created — check CSV errors.",
+  };
+}
+
+export function getBulkListingCsvTemplate() {
+  return {
+    filename: "sokoni-bulk-listings-template.csv",
+    contentType: "text/csv; charset=utf-8",
+    body: buildBulkCsvTemplate(),
+    maxRows: BULK_CSV_MAX_ROWS,
+    headers: [
+      "title",
+      "price_kes",
+      "category",
+      "size",
+      "condition",
+      "description",
+      "color",
+      "brand",
+      "shipping_kes",
+      "tags",
+    ],
   };
 }
 
