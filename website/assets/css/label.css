@@ -1,12 +1,17 @@
-/* Phase 5.2 — printable prepaid drop-off label */
+/* Prepaid drop-off label — Depop screen chrome; print sheet stays high-contrast */
+
+.label-depop-page {
+  background: #000;
+  color: #fff;
+}
 
 .label-sheet {
   background: #ffffff;
-  color: #1b1035;
-  border: 2px solid #1b1035;
-  border-radius: 1.25rem;
+  color: #000000;
+  border: 2px solid #000000;
+  border-radius: 0.75rem;
   padding: 1.5rem 1.35rem;
-  box-shadow: 0 12px 40px rgba(27, 16, 53, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
 .label-sheet-header {
@@ -16,7 +21,7 @@
   gap: 1rem;
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 2px solid rgba(37, 211, 102, 0.45);
+  border-bottom: 2px solid #ff2300;
 }
 
 .label-brand {
@@ -25,6 +30,7 @@
   font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: #000;
 }
 
 .label-kicker {
@@ -33,7 +39,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(27, 16, 53, 0.5);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .label-order-id {
@@ -42,18 +48,35 @@
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.03em;
+  color: #000;
 }
 
 .label-product {
   margin: 0.5rem 0 0;
   font-size: 1rem;
   font-weight: 600;
+  color: #111;
 }
 
 .label-location {
   margin: 0.25rem 0 0;
   font-size: 0.875rem;
-  color: rgba(27, 16, 53, 0.65);
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.label-route {
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.65rem;
+  background: #fafafa;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.label-dest {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #000;
 }
 
 .label-qr-wrap {
@@ -63,15 +86,16 @@
   gap: 0.5rem;
   margin: 1.25rem 0;
   padding: 1rem;
-  border-radius: 1rem;
-  background: rgba(37, 211, 102, 0.08);
-  border: 1px dashed rgba(37, 211, 102, 0.45);
+  border-radius: 0.75rem;
+  background: #f4f4f5;
+  border: 1px dashed rgba(0, 0, 0, 0.25);
 }
 
 #label-qr {
   width: 200px;
   height: 200px;
   background: #fff;
+  display: block;
 }
 
 .label-qr-caption {
@@ -81,6 +105,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-all;
   text-align: center;
+  color: #18181b;
 }
 
 .label-code-block {
@@ -93,6 +118,7 @@
   font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: 0.04em;
+  color: #000;
 }
 
 .label-steps {
@@ -100,7 +126,7 @@
   padding-left: 1.15rem;
   font-size: 0.875rem;
   line-height: 1.5;
-  color: rgba(27, 16, 53, 0.8);
+  color: rgba(0, 0, 0, 0.8);
 }
 
 .label-steps li + li {
@@ -111,21 +137,21 @@
   margin: 1rem 0 0;
   font-size: 0.8rem;
   font-weight: 600;
-  color: rgba(27, 16, 53, 0.55);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .label-unpaid {
   margin: 0.75rem 0 0;
   padding: 0.65rem 0.85rem;
   border-radius: 0.75rem;
-  background: rgba(254, 226, 226, 0.85);
+  background: rgba(254, 226, 226, 0.95);
   color: #7f1d1d;
   font-size: 0.85rem;
   font-weight: 600;
 }
 
 .label-sheet.is-unpaid {
-  border-color: rgba(185, 28, 28, 0.45);
+  border-color: rgba(185, 28, 28, 0.55);
   opacity: 0.92;
 }
 
@@ -133,7 +159,7 @@
 .label-actions button:focus-visible,
 #label-lookup button:focus-visible,
 #order-id:focus-visible {
-  outline: 2px solid #25d366;
+  outline: 2px solid #ff2300;
   outline-offset: 2px;
 }
 
@@ -142,7 +168,8 @@
     margin: 12mm;
   }
 
-  body {
+  body,
+  body.label-depop-page {
     background: #fff !important;
     color: #000 !important;
   }
