@@ -1,0 +1,290 @@
+/* Inbox messenger + disputes resolution center — Sokoni tokens (not Depop black/scarlet) */
+
+.inbox-hub-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #25d366;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.inbox-recent-strip {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.inbox-recent-card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  width: 6.5rem;
+  text-align: left;
+  border-radius: 1rem;
+  border: 1px solid rgba(27, 16, 53, 0.1);
+  background: #fff;
+  padding: 0.5rem;
+  min-height: 44px;
+  transition: border-color 0.15s ease;
+}
+
+html.dark .inbox-recent-card {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(46, 27, 87, 0.5);
+}
+
+.inbox-recent-card:hover,
+.inbox-recent-card:focus-visible {
+  border-color: rgba(37, 211, 102, 0.55);
+  outline: none;
+}
+
+.inbox-recent-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0.65rem;
+  display: block;
+  background: rgba(27, 16, 53, 0.06);
+}
+
+.inbox-recent-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(27, 16, 53, 0.4);
+}
+
+html.dark .inbox-recent-thumb--empty {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.inbox-recent-name {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #1b1035;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.dark .inbox-recent-name {
+  color: #fff;
+}
+
+.inbox-recent-price {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: rgba(27, 16, 53, 0.5);
+}
+
+html.dark .inbox-recent-price {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.inbox-messenger {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  background: #fff;
+  overflow: hidden;
+}
+
+html.dark .inbox-messenger {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(46, 27, 87, 0.45);
+}
+
+.inbox-messenger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid rgba(27, 16, 53, 0.08);
+  background: rgba(255, 248, 240, 0.65);
+}
+
+html.dark .inbox-messenger-head {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  background: rgba(27, 16, 53, 0.35);
+}
+
+.inbox-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: linear-gradient(180deg, rgba(255, 248, 240, 0.35), transparent 40%);
+}
+
+html.dark .inbox-thread {
+  background: transparent;
+}
+
+.inbox-bubble-mine {
+  background: #25d366;
+  color: #1b1035;
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-bubble-theirs {
+  background: #fff;
+  color: #1b1035;
+  border: 1px solid rgba(27, 16, 53, 0.08);
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+}
+
+html.dark .inbox-bubble-theirs {
+  background: rgba(27, 16, 53, 0.55);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.inbox-bargain-card {
+  border-radius: 1.1rem;
+  border: 1px solid rgba(27, 16, 53, 0.1);
+  background: #fff8f0;
+  padding: 1rem;
+}
+
+html.dark .inbox-bargain-card {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(27, 16, 53, 0.45);
+}
+
+.inbox-bargain-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.inbox-bargain-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.15);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1b1035;
+  background: transparent;
+}
+
+html.dark .inbox-bargain-ghost {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* Disputes / Resolution Center */
+.dispute-hub-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #25d366;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dispute-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.dispute-badge--review {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+html.dark .dispute-badge--review {
+  color: #fbbf24;
+}
+
+.dispute-badge--resolved {
+  background: rgba(37, 211, 102, 0.12);
+  color: #128c3a;
+  border: 1px solid rgba(37, 211, 102, 0.25);
+}
+
+html.dark .dispute-badge--resolved {
+  color: #25d366;
+}
+
+.dispute-badge--action {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+html.dark .dispute-badge--action {
+  color: #f87171;
+}
+
+.dispute-card {
+  border-radius: 1.25rem;
+  border: 1px solid rgba(27, 16, 53, 0.1);
+  background: #fff;
+  padding: 1.25rem;
+}
+
+html.dark .dispute-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(46, 27, 87, 0.45);
+}
+
+.dispute-guide-carousel {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  padding-bottom: 0.25rem;
+}
+
+.dispute-guide-card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  min-width: 14rem;
+  max-width: 16rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(27, 16, 53, 0.1);
+  background: #fff;
+  padding: 1rem;
+  text-align: left;
+}
+
+html.dark .dispute-guide-card {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(46, 27, 87, 0.5);
+}
