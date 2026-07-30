@@ -258,6 +258,7 @@ async function buildProduct(supplier, enriched, media, productId) {
     sourcePriceKes: fees.sellerNetKes,
     priceKes: fees.buyerTotalKes,
     platformFeeKes: fees.platformFeeKes,
+    transactionFeeKes: fees.transactionFeeKes,
     sellerPayoutKes: fees.sellerPayoutKes,
     deliveryMethod: fees.deliveryMethod,
     shippingRecipient: fees.shippingRecipient,

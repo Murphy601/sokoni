@@ -10,8 +10,37 @@ const PHONE_KEY = "sokoni-seller-phone";
 const DRAFT_KEY = "sokoni-seller-draft";
 const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
-const SELLER_HANDLED_FEE_RATE = 0.08;
 const MIN_SHIPPING_KES = 150;
+
+/** Mirror of bot mpesa-transaction-fees.js — fees vary by amount band (not flat). */
+const MPESA_TRANSACTION_FEE_BANDS = [
+  { min: 1, max: 100, feeKes: 0 },
+  { min: 101, max: 500, feeKes: 5 },
+  { min: 501, max: 1000, feeKes: 10 },
+  { min: 1001, max: 1500, feeKes: 15 },
+  { min: 1501, max: 2500, feeKes: 20 },
+  { min: 2501, max: 3500, feeKes: 25 },
+  { min: 3501, max: 5000, feeKes: 34 },
+  { min: 5001, max: 7500, feeKes: 42 },
+  { min: 7501, max: 10000, feeKes: 48 },
+  { min: 10001, max: 15000, feeKes: 57 },
+  { min: 15001, max: 20000, feeKes: 62 },
+  { min: 20001, max: 25000, feeKes: 67 },
+  { min: 25001, max: 30000, feeKes: 72 },
+  { min: 30001, max: 35000, feeKes: 83 },
+  { min: 35001, max: 40000, feeKes: 99 },
+  { min: 40001, max: 45000, feeKes: 103 },
+  { min: 45001, max: 250000, feeKes: 108 },
+];
+
+function mpesaTransactionFeeKes(amountKes) {
+  const amount = Math.round(Number(amountKes) || 0);
+  if (!Number.isFinite(amount) || amount < 1) return 0;
+  for (const band of MPESA_TRANSACTION_FEE_BANDS) {
+    if (amount >= band.min && amount <= band.max) return band.feeKes;
+  }
+  return MPESA_TRANSACTION_FEE_BANDS[MPESA_TRANSACTION_FEE_BANDS.length - 1].feeKes;
+}
 const SELLER_OFFERS_POLL_MS = 45000;
 const OFFER_EXPIRING_SOON_MS = 2 * 60 * 60 * 1000;
 const SELLER_OFFER_FILTERS = new Set([
@@ -287,32 +316,20 @@ function computeFeeBreakdown(
 ) {
   const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
   const method = String(deliveryMethod || "hub");
-
-  if (method === "seller_express" || method === "meetup") {
-    const shipRaw = Math.round(Number(shippingKes) || 0);
-    const shipping = method === "meetup" || freeShipping || shipRaw === 0 ? 0 : Math.max(0, shipRaw);
-    const itemKes = sellerNet > 0 ? Math.round(sellerNet / (1 - SELLER_HANDLED_FEE_RATE)) : 0;
-    const platformFeeKes = Math.max(0, itemKes - sellerNet);
-    return {
-      sellerNetKes: sellerNet,
-      itemKes,
-      shippingKes: shipping,
-      subtotalKes: itemKes + shipping,
-      buyerTotalKes: itemKes + shipping,
-      platformFeeKes,
-      platformFeeRate: SELLER_HANDLED_FEE_RATE,
-      freeShipping: shipping === 0,
-      deliveryMethod: method,
-      shippingRecipient: "seller",
-      sellerPayoutKes: sellerNet + shipping,
-    };
-  }
-
   const shipRaw = Math.round(Number(shippingKes) || 0);
-  const shipping = freeShipping ? 0 : Math.max(MIN_SHIPPING_KES, shipRaw || MIN_SHIPPING_KES);
+
+  let shipping;
+  if (method === "meetup" || freeShipping || shipRaw === 0) shipping = 0;
+  else if (method === "seller_express") shipping = Math.max(0, shipRaw);
+  else shipping = Math.max(MIN_SHIPPING_KES, shipRaw || MIN_SHIPPING_KES);
+
   const subtotal = sellerNet + shipping;
   const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE);
-  const buyerTotal = subtotal + platformFee;
+  const chargeBeforeTxn = subtotal + platformFee;
+  const transactionFeeKes = mpesaTransactionFeeKes(chargeBeforeTxn);
+  const buyerTotal = chargeBeforeTxn + transactionFeeKes;
+  const sellerHandled = method === "seller_express" || method === "meetup";
+
   return {
     sellerNetKes: sellerNet,
     itemKes: sellerNet,
@@ -321,10 +338,12 @@ function computeFeeBreakdown(
     buyerTotalKes: buyerTotal,
     platformFeeKes: platformFee,
     platformFeeRate: PLATFORM_FEE_RATE,
-    freeShipping,
-    deliveryMethod: "hub",
-    shippingRecipient: "platform",
-    sellerPayoutKes: sellerNet,
+    transactionFeeKes,
+    chargeBeforeTxnKes: chargeBeforeTxn,
+    freeShipping: shipping === 0,
+    deliveryMethod: method === "meetup" ? "meetup" : method === "seller_express" ? "seller_express" : "hub",
+    shippingRecipient: sellerHandled ? "seller" : "platform",
+    sellerPayoutKes: sellerHandled ? sellerNet + shipping : sellerNet,
   };
 }
 
@@ -390,13 +409,13 @@ function updateShippingFieldState() {
   }
   if (freeLabel) {
     freeLabel.textContent = isSellerHandledDelivery(method)
-      ? "Cover delivery yourself (buyer pays item + 8% Sokoni fee only)"
-      : "Offer free shipping (you cover delivery — buyer pays your price + platform fee only)";
+      ? "Cover delivery yourself (buyer still pays your price + 10% Sokoni + M-Pesa fee)"
+      : "Offer free shipping (you cover delivery — buyer pays your price + 10% Sokoni + M-Pesa fee)";
   }
   if (priceHint) {
     priceHint.textContent = isSellerHandledDelivery(method)
-      ? "What you receive for the item. Buyer pays item+delivery; Sokoni takes 8% of the item; you keep the full delivery fee."
-      : "This is your item payout. For hub shipping, fee is 10% on item+shipping added for the buyer.";
+      ? "What you receive for the item. You also keep the delivery fee. Buyer pays item + delivery + 10% Sokoni + variable M-Pesa fee."
+      : "What you receive for the item. Buyer pays item + shipping + 10% Sokoni + variable M-Pesa fee (hub shipping stays with Sokoni for courier).";
   }
 }
 
@@ -411,7 +430,7 @@ function renderFeeBreakdown(fees, prefix = "fee") {
     if (node) node.textContent = formatKes(val);
   };
   const sellerHandled = fees.shippingRecipient === "seller";
-  const ratePct = Math.round((fees.platformFeeRate || (sellerHandled ? 0.08 : 0.1)) * 100);
+  const txn = fees.transactionFeeKes ?? 0;
 
   if (prefix === "fee") {
     setFeeLabel("fee-item-label", "You receive (item)");
@@ -419,10 +438,8 @@ function renderFeeBreakdown(fees, prefix = "fee") {
       "fee-shipping-label",
       sellerHandled ? "Delivery fee (you keep)" : "Shipping (hub logistics)"
     );
-    setFeeLabel(
-      "fee-platform-label",
-      sellerHandled ? `Sokoni fee (${ratePct}% on item)` : `Platform fee (${ratePct}%)`
-    );
+    setFeeLabel("fee-platform-label", "Sokoni fee (10%)");
+    setFeeLabel("fee-txn-label", "M-Pesa fee (varies by amount)");
     setFeeLabel("fee-net-label", "Your total payout");
   } else if (prefix === "review-fee") {
     setFeeLabel("review-fee-item-label", "You receive (item)");
@@ -430,10 +447,8 @@ function renderFeeBreakdown(fees, prefix = "fee") {
       "review-fee-shipping-label",
       sellerHandled ? "Delivery fee (you keep)" : "Shipping"
     );
-    setFeeLabel(
-      "review-fee-platform-label",
-      sellerHandled ? `Sokoni fee (${ratePct}% on item)` : `Platform fee (${ratePct}%)`
-    );
+    setFeeLabel("review-fee-platform-label", "Sokoni fee (10%)");
+    setFeeLabel("review-fee-txn-label", "M-Pesa fee (varies by amount)");
     setFeeLabel("review-fee-net-label", "Your total payout");
   }
 
@@ -442,6 +457,8 @@ function renderFeeBreakdown(fees, prefix = "fee") {
   set("buyer", fees.buyerTotalKes);
   const platformNode = el(`${prefix}-platform`);
   if (platformNode) platformNode.textContent = formatKes(fees.platformFeeKes);
+  const txnNode = el(`${prefix}-txn`);
+  if (txnNode) txnNode.textContent = formatKes(txn);
   set("net", fees.sellerPayoutKes ?? fees.sellerNetKes);
 }
 
