@@ -4,6 +4,7 @@ import {
   generateSellerListingDraft,
   publishSellerListing,
   saveSellerDraft,
+  deleteSellerDraft,
   listSellerListings,
   getSellerListingMeta,
 } from "../services/seller-listings.js";
@@ -97,27 +98,48 @@ router.post("/publish", async (req, res) => {
     return res.status(401).json(result);
   }
   if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
+  if (result.error === "not_found") return res.status(404).json(result);
   if (result.error) return res.status(400).json(result);
   res.status(201).json(result);
 });
 
-/** POST /api/seller/listings/draft — save draft for later */
+/** POST /api/seller/listings/draft — save / update draft for later */
 router.post("/draft", async (req, res) => {
-  const { phone, draft, images, imageBase64, videoBase64 } = req.body || {};
+  const { phone, draft, images, imageBase64, videoBase64, draftId } = req.body || {};
   const imageList = Array.isArray(images) ? images : imageBase64 ? [imageBase64] : [];
   const result = await saveSellerDraft({
     phone,
     draft,
     images: imageList,
     videoBase64,
+    draftId,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error === "not_onboarded" || result.error === "not_approved" || result.error === "forbidden") {
+    return res.status(403).json(result);
+  }
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.status(result.message?.includes("updated") ? 200 : 201).json(result);
+});
+
+/** DELETE /api/seller/listings/draft/:draftId — remove a saved draft */
+router.delete("/draft/:draftId", async (req, res) => {
+  const result = await deleteSellerDraft({
+    phone: req.query.phone || req.body?.phone,
+    draftId: req.params.draftId,
     sessionToken: sellerSessionFromReq(req),
   });
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
   }
   if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
+  if (result.error === "not_found") return res.status(404).json(result);
   if (result.error) return res.status(400).json(result);
-  res.status(201).json(result);
+  res.json(result);
 });
 
 /** GET /api/seller/listings?phone=254... — seller drafts + live listings */

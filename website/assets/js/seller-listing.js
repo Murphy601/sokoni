@@ -69,6 +69,8 @@ let studioUiEnabled = false;
 let videoFile = null;
 let videoPreview = null;
 let sellerInfo = null;
+/** Server draft id (DR-YYYY-####) when editing a saved draft. */
+let activeDraftId = null;
 
 function el(id) {
   return document.getElementById(id);
@@ -696,6 +698,124 @@ async function collectImagesBase64() {
   return images;
 }
 
+function listingMediaUrl(relOrUrl) {
+  const raw = String(relOrUrl || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const file = raw.replace(/^\//, "").split("/").pop();
+  if (!file) return "";
+  return `${API_BASE}/catalog-images/${encodeURIComponent(file)}`;
+}
+
+function clearPhotoSlots() {
+  for (let i = 0; i < 4; i += 1) {
+    if (photoPreviews[i]) URL.revokeObjectURL(photoPreviews[i]);
+    photoFiles[i] = null;
+    photoPreviews[i] = null;
+    const slot = el(`media-slot-${i}`);
+    slot?.querySelector("img.preview")?.remove();
+    slot?.classList.remove("has-media", "has-studio");
+    const input = el(`photo-slot-${i}`);
+    if (input) input.value = "";
+  }
+  coverCleanBase64 = null;
+  preferCleanCover = true;
+  const prefer = el("studio-prefer-clean");
+  if (prefer) prefer.checked = true;
+  updateCoverStudioUi();
+}
+
+function setPhotoSlotPreview(index, file, previewUrl) {
+  photoFiles[index] = file;
+  if (photoPreviews[index]) URL.revokeObjectURL(photoPreviews[index]);
+  photoPreviews[index] = previewUrl;
+  const slot = el(`media-slot-${index}`);
+  let img = slot?.querySelector("img.preview");
+  if (!img && slot) {
+    img = document.createElement("img");
+    img.className = "preview";
+    img.alt = "";
+    slot.insertBefore(img, slot.firstChild);
+  }
+  if (img) img.src = previewUrl;
+  slot?.classList.add("has-media");
+  slot?.classList.remove("has-studio");
+}
+
+async function hydratePhotosFromListing(item) {
+  clearPhotoSlots();
+  const paths = [];
+  if (Array.isArray(item?.images) && item.images.length) paths.push(...item.images);
+  else if (item?.imageUrl) paths.push(item.imageUrl);
+  const limited = paths.filter(Boolean).slice(0, 4);
+  for (let i = 0; i < limited.length; i += 1) {
+    const url = listingMediaUrl(limited[i]);
+    if (!url) continue;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (!blob.size) continue;
+      const file = new File([blob], `draft-${i + 1}.jpg`, { type: blob.type || "image/jpeg" });
+      setPhotoSlotPreview(i, file, URL.createObjectURL(file));
+    } catch {
+      /* keep going — seller can re-upload if fetch fails */
+    }
+  }
+  updateCoverStudioUi();
+}
+
+async function openDraftForEdit(item) {
+  if (!item || (item.status && item.status !== "draft")) return;
+  activeDraftId = item.id || item.draftId || null;
+  draft = { ...(item.draft || {}) };
+  el("success-box")?.classList.add("hidden");
+  el("wizard-root")?.classList.remove("hidden");
+  fillFormFromDraft();
+  setStatus(activeDraftId ? `Editing draft ${activeDraftId}…` : "Opening draft…");
+  showSellerView("listing");
+  stepIndex = 0;
+  updateStepUi();
+  await hydratePhotosFromListing(item);
+  if (!photoFiles[0]) {
+    setStatus("Draft opened — add at least one photo before posting.", true);
+  } else {
+    setStatus(`Draft ${activeDraftId || ""} loaded. Edit and post when ready.`);
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function deleteDraft(draftId) {
+  const phone = apiPhone();
+  const id = String(draftId || "").trim();
+  if (!phone || !id) return;
+  if (!window.confirm(`Delete draft ${id}? This cannot be undone.`)) return;
+  setStatus("Deleting draft…");
+  try {
+    const params = new URLSearchParams({ phone: normalizePhoneInput(phone) });
+    const token = getSessionToken();
+    if (token) params.set("sessionToken", token);
+    const res = await fetch(`${LISTINGS_API}/draft/${encodeURIComponent(id)}?${params}`, {
+      method: "DELETE",
+      headers: sellerAuthHeaders(),
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      setStatus(parsed.data?.message || parsed.data?.error || "Could not delete draft.", true);
+      return;
+    }
+    if (activeDraftId === id) activeDraftId = null;
+    setStatus(`Draft ${id} deleted.`);
+    await loadMyListings();
+  } catch {
+    setStatus("Network error while deleting draft.", true);
+  }
+}
+
 async function onPublish() {
   const phone = apiPhone();
   if (!phone) {
@@ -706,7 +826,7 @@ async function onPublish() {
     setStatus("Finish seller setup first.", true);
     return;
   }
-  if (!photoFiles[0]) {
+  if (!photoFiles[0] && !activeDraftId) {
     setStatus("Add at least one photo.", true);
     goStep(-(stepIndex));
     return;
@@ -730,7 +850,15 @@ async function onPublish() {
     const res = await fetch(`${LISTINGS_API}/publish`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(jsonAuthBody({ phone, draft: collectDraft(), images, videoBase64 })),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          draft: collectDraft(),
+          images,
+          videoBase64,
+          draftId: activeDraftId || undefined,
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
@@ -752,6 +880,7 @@ async function onPublish() {
         : "Your listing is live on Sokoni now.");
     el("wizard-root")?.classList.add("hidden");
     localStorage.removeItem(DRAFT_KEY);
+    activeDraftId = null;
     await loadMyListings();
   } catch {
     setStatus("Network error — try again.", true);
@@ -777,7 +906,7 @@ async function onSaveDraft() {
     return;
   }
   savePhone();
-  setStatus("Saving draft…");
+  setStatus(activeDraftId ? "Updating draft…" : "Saving draft…");
   try {
     const images = await collectImagesBase64();
     let videoBase64 = null;
@@ -785,7 +914,15 @@ async function onSaveDraft() {
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(jsonAuthBody({ phone, draft: d, images, videoBase64 })),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          draft: d,
+          images,
+          videoBase64,
+          draftId: activeDraftId || undefined,
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
@@ -796,7 +933,8 @@ async function onSaveDraft() {
       setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Save failed.", true);
       return;
     }
-    setStatus(`Draft saved (${parsed.data.draftId}).`);
+    activeDraftId = parsed.data.draftId || activeDraftId;
+    setStatus(`Draft saved (${activeDraftId}). Continue editing or post when ready.`);
     await loadMyListings();
   } catch {
     setStatus("Could not reach Sokoni — check your connection.", true);
@@ -871,11 +1009,12 @@ async function loadMyListings() {
       wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">${data.message || data.error}</p>`;
       return;
     }
-    const items = [...(data.listings || []), ...(data.drafts || [])];
+    const items = [...(data.drafts || []), ...(data.listings || [])];
     if (!items.length) {
       wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet — add your first item above.</p>`;
       return;
     }
+    const draftById = new Map();
     wrap.innerHTML = items
       .map((item) => {
         const status = item.status || "draft";
@@ -886,26 +1025,33 @@ async function loadMyListings() {
             : status === "hidden"
               ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
               : "bg-brand-purple/10 text-brand-purple dark:bg-white/10 dark:text-white";
-        const title = item.draft?.name || item.id;
+        const title = escapeHtml(item.draft?.name || item.id);
         const img = item.imageUrl || item.images?.[0];
+        const imgSrc = listingMediaUrl(img);
         const pid = item.productId || item.id;
-        const price = item.draft?.buyerTotalKes ?? item.draft?.priceKes ?? item.draft?.sourcePriceKes;
+        const price = item.draft?.buyerTotalKes ?? item.draft?.priceKes ?? item.draft?.sourcePriceKes ?? item.draft?.sellerNetKes;
         const shareUrl = `https://sokonimall.com/?q=${encodeURIComponent(pid)}`;
         const reason = summary.reason || (Array.isArray(summary.labels) ? summary.labels.join(" · ") : "");
         const hint = summary.sellerHint || "";
+        if (status === "draft") draftById.set(String(pid), item);
         return `
-          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${pid}">
-            ${img ? `<img src="../${img}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : ""}
+          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${escapeHtml(pid)}" data-status="${escapeHtml(status)}">
+            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : ""}
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate">${title}</p>
-              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${pid}${price ? ` · ${formatKes(price)}` : ""}</p>
-              <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${status}</span>
-              ${status === "hidden" && reason ? `<p class="sell-moderation-reason mt-2 text-xs font-medium text-red-700 dark:text-red-300">${reason}</p>` : ""}
-              ${status === "hidden" && hint ? `<p class="sell-moderation-hint mt-1 text-xs text-brand-purple/65 dark:text-white/65">${hint}</p>` : ""}
+              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}</p>
+              <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${escapeHtml(status)}</span>
+              ${status === "hidden" && reason ? `<p class="sell-moderation-reason mt-2 text-xs font-medium text-red-700 dark:text-red-300">${escapeHtml(reason)}</p>` : ""}
+              ${status === "hidden" && hint ? `<p class="sell-moderation-hint mt-1 text-xs text-brand-purple/65 dark:text-white/65">${escapeHtml(hint)}</p>` : ""}
+              ${status === "draft" ? `
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button type="button" class="text-xs font-semibold text-brand-green hover:underline continue-draft-btn" data-id="${escapeHtml(pid)}">Continue editing</button>
+                <button type="button" class="text-xs font-semibold text-brand-purple/70 dark:text-white/70 hover:underline delete-draft-btn" data-id="${escapeHtml(pid)}">Delete draft</button>
+              </div>` : ""}
               ${status === "live" ? `
               <div class="flex flex-wrap gap-2 mt-3">
-                <button type="button" class="text-xs font-semibold text-brand-green hover:underline refresh-listing-btn" data-id="${pid}">↻ Refresh listing</button>
-                <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${title} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-green hover:underline">Share to WhatsApp</a>
+                <button type="button" class="text-xs font-semibold text-brand-green hover:underline refresh-listing-btn" data-id="${escapeHtml(pid)}">↻ Refresh listing</button>
+                <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-green hover:underline">Share to WhatsApp</a>
               </div>` : ""}
             </div>
           </div>`;
@@ -914,6 +1060,17 @@ async function loadMyListings() {
 
     wrap.querySelectorAll(".refresh-listing-btn").forEach((btn) => {
       btn.addEventListener("click", () => refreshListing(btn.dataset.id));
+    });
+    wrap.querySelectorAll(".continue-draft-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const item = draftById.get(String(btn.dataset.id || ""));
+        if (item) void openDraftForEdit(item);
+      });
+    });
+    wrap.querySelectorAll(".delete-draft-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void deleteDraft(btn.dataset.id);
+      });
     });
   } catch {
     wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error.</p>`;

@@ -278,8 +278,51 @@ async function buildProduct(supplier, enriched, media, productId) {
   return product;
 }
 
-/** Save draft without publishing. */
-export async function saveSellerDraft({ phone, draft, images = [], videoBase64 = null, sessionToken }) {
+function sellerOwnsDraft(record, phone, supplier) {
+  if (!record) return false;
+  const digits = normalizePhone(phone);
+  return record.sellerPhone === digits || (supplier?.id && record.sellerId === supplier.id);
+}
+
+async function loadStoredMediaAsBase64(record) {
+  const images = [];
+  for (const rel of record?.images || []) {
+    const file = path.basename(String(rel || ""));
+    if (!file) continue;
+    const full = path.join(IMAGES_DIR, file);
+    if (!existsSync(full)) continue;
+    try {
+      const buf = await readFile(full);
+      if (buf.length) images.push(`data:image/jpeg;base64,${buf.toString("base64")}`);
+    } catch {
+      /* skip missing/unreadable */
+    }
+  }
+  let videoBase64 = null;
+  if (record?.videoUrl) {
+    const file = path.basename(String(record.videoUrl));
+    const full = path.join(IMAGES_DIR, file);
+    if (existsSync(full)) {
+      try {
+        const buf = await readFile(full);
+        if (buf.length) videoBase64 = `data:video/mp4;base64,${buf.toString("base64")}`;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return { images, videoBase64 };
+}
+
+/** Save draft without publishing. Upserts when draftId belongs to this seller. */
+export async function saveSellerDraft({
+  phone,
+  draft,
+  images = [],
+  videoBase64 = null,
+  draftId = null,
+  sessionToken,
+}) {
   await loadStore();
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
@@ -289,27 +332,66 @@ export async function saveSellerDraft({ phone, draft, images = [], videoBase64 =
     return { error: "missing_fields", message: "Title is required to save a draft." };
   }
 
-  store.seq += 1;
-  const draftId = `DR-${new Date().getFullYear()}-${String(store.seq).padStart(4, "0")}`;
-  const media = images.length ? await saveMediaFiles(`draft-${draftId}`, images, videoBase64) : {};
+  const requestedId = String(draftId || "").trim();
+  const existing = requestedId ? store.drafts[requestedId] : null;
+  if (requestedId && existing && !sellerOwnsDraft(existing, phone, check.supplier)) {
+    return { error: "forbidden", message: "Draft not found." };
+  }
+  if (requestedId && !existing) {
+    return { error: "not_found", message: "Draft not found. Save again to create a new one." };
+  }
 
-  store.drafts[draftId] = {
-    id: draftId,
+  let id = existing?.id;
+  if (!id) {
+    store.seq += 1;
+    id = `DR-${new Date().getFullYear()}-${String(store.seq).padStart(4, "0")}`;
+  }
+
+  let media = {};
+  if (images.length) {
+    media = await saveMediaFiles(`draft-${id}`, images, videoBase64);
+  } else if (existing) {
+    media = {
+      imageUrl: existing.imageUrl || null,
+      images: existing.images || [],
+      videoUrl: existing.videoUrl || null,
+    };
+  }
+
+  store.drafts[id] = {
+    id,
     status: "draft",
     sellerId: check.supplier.id,
     sellerPhone: normalizePhone(phone),
     businessName: check.supplier.businessName,
     draft: enriched,
     ...media,
+    createdAt: existing?.createdAt || Date.now(),
     updatedAt: Date.now(),
   };
   await saveStore();
 
   return {
-    draftId,
+    draftId: id,
     status: "draft",
-    message: "Draft saved. Finish and post when ready.",
+    message: existing ? "Draft updated. Finish and post when ready." : "Draft saved. Finish and post when ready.",
   };
+}
+
+/** Delete a seller's draft. */
+export async function deleteSellerDraft({ phone, draftId, sessionToken }) {
+  await loadStore();
+  const check = await requireApprovedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const id = String(draftId || "").trim();
+  const existing = id ? store.drafts[id] : null;
+  if (!existing || !sellerOwnsDraft(existing, phone, check.supplier)) {
+    return { error: "not_found", message: "Draft not found." };
+  }
+  delete store.drafts[id];
+  await saveStore();
+  return { ok: true, draftId: id, message: "Draft deleted." };
 }
 
 /** Post listing — live instantly (Depop-style). */
@@ -328,13 +410,27 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   if (!shippingCheck.ok) return shippingCheck;
   enriched.shippingKes = shippingCheck.shippingKes;
   enriched.freeShipping = shippingCheck.freeShipping;
-  if (!images.length) {
+
+  const requestedDraftId = String(draftId || "").trim();
+  const linkedDraft = requestedDraftId ? store.drafts[requestedDraftId] : null;
+  if (requestedDraftId && (!linkedDraft || !sellerOwnsDraft(linkedDraft, phone, check.supplier))) {
+    return { error: "not_found", message: "Draft not found." };
+  }
+
+  let publishImages = Array.isArray(images) ? images.filter(Boolean) : [];
+  let publishVideo = videoBase64 || null;
+  if (!publishImages.length && linkedDraft) {
+    const stored = await loadStoredMediaAsBase64(linkedDraft);
+    publishImages = stored.images;
+    if (!publishVideo) publishVideo = stored.videoBase64;
+  }
+  if (!publishImages.length) {
     return { error: "missing_image", message: "Add at least one product photo." };
   }
 
   const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
   const productId = nextProductId(master, enriched.category, check.supplier.id);
-  const media = await saveMediaFiles(productId, images, videoBase64);
+  const media = await saveMediaFiles(productId, publishImages, publishVideo);
   if (!media.imageUrl || !(media.images || []).length) {
     return {
       error: "image_save_failed",
@@ -353,8 +449,8 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
 
   linkSupplierProduct(check.supplier, productId);
 
-  if (draftId && store.drafts[draftId]) {
-    delete store.drafts[draftId];
+  if (linkedDraft) {
+    delete store.drafts[linkedDraft.id];
     await saveStore();
   }
 
