@@ -77,7 +77,9 @@ function isSellerAuthQueryFlag(value) {
 
 function readSellerSessionFromStorage() {
   try {
-    const raw = sessionStorage.getItem(SELLER_VERIFY_TOKEN_KEY);
+    const raw =
+      sessionStorage.getItem(SELLER_VERIFY_TOKEN_KEY) ||
+      localStorage.getItem(SELLER_VERIFY_TOKEN_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const token = String(parsed?.token || "").trim();
@@ -85,10 +87,40 @@ function readSellerSessionFromStorage() {
     if (!token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
     const phone = normalizePhoneInput(parsed?.phone || localStorage.getItem(SELLER_PHONE_KEY) || "");
     if (!phone) return null;
+    // Keep both stores warm so other tabs / navigations stay signed in.
+    persistSellerSession({ phone, sessionToken: token, expiresAt });
     return { phone, sessionToken: token };
   } catch {
     return null;
   }
+}
+
+function persistSellerSession({ phone, sessionToken, expiresAt } = {}) {
+  const digits = normalizePhoneInput(phone);
+  const token = String(sessionToken || "").trim();
+  if (!digits || !token) return;
+  const exp = Number(expiresAt);
+  const payload = JSON.stringify({
+    phone: digits,
+    token,
+    expiresAt: Number.isFinite(exp) && exp > Date.now() ? exp : Date.now() + 30 * 60 * 1000,
+  });
+  try {
+    localStorage.setItem(SELLER_PHONE_KEY, digits);
+  } catch {}
+  try {
+    sessionStorage.setItem(SELLER_VERIFY_TOKEN_KEY, payload);
+  } catch {}
+  try {
+    localStorage.setItem(SELLER_VERIFY_TOKEN_KEY, payload);
+  } catch {}
+}
+
+function readSellerSessionFromQuery(params) {
+  const phone = normalizePhoneInput(params.get("phone") || "");
+  const sessionToken = String(params.get("sessionToken") || "").trim();
+  if (!phone || !sessionToken) return null;
+  return { phone, sessionToken };
 }
 
 function disableChatComposer() {
@@ -167,7 +199,10 @@ function beginChatIfReady() {
   }
 
   if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
-    setStatus("Seller session missing - rudi seller dashboard uverify WhatsApp tena.", true);
+    setStatus(
+      "Seller session missing — open Sell, verify WhatsApp, then open chat from Offers again.",
+      true
+    );
     disableChatComposer();
     return false;
   }
@@ -612,7 +647,25 @@ function parseQuery() {
   state.peerHandle = normalizeHandle(params.get("handle") || "");
   state.productId = String(params.get("product") || params.get("productId") || "").trim();
   state.sellerAuthRequired = isSellerAuthQueryFlag(params.get("sellerAuth"));
-  state.sellerSession = state.sellerAuthRequired ? readSellerSessionFromStorage() : null;
+  if (state.sellerAuthRequired) {
+    // Prefer live storage; fall back to deep-link token from the seller dashboard.
+    state.sellerSession = readSellerSessionFromStorage() || readSellerSessionFromQuery(params);
+    if (state.sellerSession?.phone && state.sellerSession?.sessionToken) {
+      persistSellerSession(state.sellerSession);
+      // Drop token from the address bar so it isn't left in history.
+      if (params.has("sessionToken") || params.has("phone")) {
+        params.delete("sessionToken");
+        params.delete("phone");
+        const qs = params.toString();
+        const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`;
+        try {
+          window.history.replaceState({}, "", next);
+        } catch {}
+      }
+    }
+  } else {
+    state.sellerSession = null;
+  }
   state.viewerId = resolveViewerId();
 }
 
