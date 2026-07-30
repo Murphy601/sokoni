@@ -78,6 +78,8 @@ function socialErrorStatus(error) {
     error === "offer_above_list" ||
     error === "offer_above_price" ||
     error === "offer_too_low_for_shipping" ||
+    error === "invalid_counter_amount" ||
+    error === "counter_not_higher" ||
     error === "invalid_delivery_details" ||
     error === "review_exists" ||
     error === "review_not_allowed"
@@ -639,6 +641,7 @@ router.post("/offers/:offerId/respond", async (req, res) => {
       offerId: req.params.offerId,
       sellerUserId: auth.sellerUserId,
       action: req.body?.action,
+      amountKsh: req.body?.amountKsh ?? req.body?.amountKes ?? req.body?.counterAmountKsh,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
@@ -650,7 +653,7 @@ router.post("/offers/:offerId/respond", async (req, res) => {
       });
     }
     if (result.offer) {
-      void notifyBuyerOfferResponse({ offer: result.offer });
+      void notifyBuyerOfferResponse({ offer: result.offer, countered: Boolean(result.countered) });
     }
     res.json(result);
   } catch (err) {

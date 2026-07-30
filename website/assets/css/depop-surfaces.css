@@ -753,7 +753,8 @@ body.sell-depop-page .sell-offer-action {
 body.sell-depop-page .sell-offer-action--accept,
 body.sell-depop-page .sell-offer-action--primary,
 body.sell-depop-page .sell-offer-action--chat,
-body.sell-depop-page .sell-offer-action--remind {
+body.sell-depop-page .sell-offer-action--remind,
+body.sell-depop-page .sell-offer-action--counter {
   background: var(--depop-accent) !important;
   border-color: var(--depop-accent) !important;
   color: #fff !important;
