@@ -128,5 +128,57 @@
     "moderation": {
       "status": "pending_scan"
     }
+  },
+  {
+    "id": "hb-tlom7-002",
+    "name": "BodyLuxe Moisturising Body Lotion",
+    "category": "health-beauty",
+    "subcategory": "skin-care",
+    "browseCategory": "women",
+    "browseSubCategory": "beauty",
+    "sellerNetKes": 150,
+    "sourcePriceKes": 150,
+    "priceKes": 500,
+    "platformFeeKes": 45,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 450,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A pink bottle of BodyLuxe Moisturising Body Lotion enriched with glycerine, featuring a new design and improved formula.",
+    "brand": "BodyLuxe",
+    "color": "pink",
+    "size": "",
+    "era": "",
+    "condition": "brand_new_with_tags",
+    "isSecondhand": false,
+    "location": "Kenol",
+    "shippingKes": 300,
+    "freeShipping": false,
+    "estimatedWeightClass": "small",
+    "shippingNote": "Seller express",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "💄",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/hb-tlom7-002.jpg",
+    "images": [
+      "assets/images/products/hb-tlom7-002.jpg",
+      "assets/images/products/hb-tlom7-002-2.jpg",
+      "assets/images/products/hb-tlom7-002-3.jpg",
+      "assets/images/products/hb-tlom7-002-4.jpg"
+    ],
+    "videoUrl": null,
+    "publishedAt": 1785400148901,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]

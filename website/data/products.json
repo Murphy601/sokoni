@@ -3,7 +3,7 @@
     "id": "sm-tlom7-001",
     "name": "Delamere Premium Yoghurt with Real Lemon Biscuit",
     "category": "supermarket",
-    "priceKes": 475,
+    "priceKes": 600,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -32,7 +32,7 @@
     "id": "fa-tlom7-001",
     "name": "Product listing",
     "category": "fashion",
-    "priceKes": 743,
+    "priceKes": 890,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -51,5 +51,34 @@
     "condition": "brand_new_without_tags",
     "isSecondhand": false,
     "description": "Product listing. 100% prepaid across Kenya."
+  },
+  {
+    "id": "hb-tlom7-002",
+    "name": "BodyLuxe Moisturising Body Lotion",
+    "category": "health-beauty",
+    "priceKes": 500,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/hb-tlom7-002.jpg",
+    "images": [
+      "assets/images/products/hb-tlom7-002.jpg",
+      "assets/images/products/hb-tlom7-002-2.jpg",
+      "assets/images/products/hb-tlom7-002-3.jpg",
+      "assets/images/products/hb-tlom7-002-4.jpg"
+    ],
+    "subcategory": "skin-care",
+    "browseCategory": "women",
+    "browseSubCategory": "beauty",
+    "condition": "brand_new_with_tags",
+    "isSecondhand": false,
+    "brand": "BodyLuxe",
+    "color": "pink",
+    "description": "A pink bottle of BodyLuxe Moisturising Body Lotion enriched with glycerine, featuring a new design and improved formula."
   }
 ]
