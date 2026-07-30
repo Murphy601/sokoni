@@ -55,7 +55,7 @@ function setStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 function shopHref(handle) {
@@ -86,28 +86,39 @@ function eventCard(event) {
   const when = escapeHtml(formatWhen(event?.createdAt));
   const shopLink = shopHref(handle);
   const peerHtml = shopLink
-    ? `<a href="${shopLink}" class="font-semibold hover:text-brand-green underline">${peerName}</a> ${handleLabel}`
-    : `<strong>${peerName}</strong> ${handleLabel}`;
+    ? `<a href="${shopLink}" class="font-semibold text-white hover:text-[#FF2300] underline">${peerName}</a> <span class="text-zinc-400">${handleLabel}</span>`
+    : `<strong class="text-white">${peerName}</strong> <span class="text-zinc-400">${handleLabel}</span>`;
 
   let body = "";
+  let pillClass = "sell-activity-pill";
+  let pillLabel = "Activity";
   const type = String(event?.type || "");
   if (type === "offer_accepted") {
     const title = escapeHtml(event?.product?.title || "your offer");
     const amount = formatKes(event?.offer?.amountKsh);
-    body = `${peerHtml} accepted your offer on <em>${title}</em>${
+    body = `${peerHtml} accepted your offer on <em class="text-zinc-200 not-italic font-semibold">${title}</em>${
       amount ? ` (${escapeHtml(amount)})` : ""
     }.`;
+    pillClass = "sell-activity-pill sell-activity-pill--like";
+    pillLabel = "Accepted";
   } else if (type === "offer_declined") {
     const title = escapeHtml(event?.product?.title || "your offer");
-    body = `${peerHtml} declined your offer on <em>${title}</em>.`;
+    body = `${peerHtml} declined your offer on <em class="text-zinc-200 not-italic font-semibold">${title}</em>.`;
+    pillClass = "sell-activity-pill sell-activity-pill--follow";
+    pillLabel = "Declined";
   } else if (type === "offer_expired") {
     const title = escapeHtml(event?.product?.title || "your offer");
-    body = `Your offer on <em>${title}</em> expired before ${peerHtml} replied.`;
+    body = `Your offer on <em class="text-zinc-200 not-italic font-semibold">${title}</em> expired before ${peerHtml} replied.`;
+    pillLabel = "Expired";
   } else if (type === "follow") {
     body = `You followed ${peerHtml}.`;
+    pillClass = "sell-activity-pill sell-activity-pill--follow";
+    pillLabel = "Follow";
   } else if (type === "like") {
     const title = escapeHtml(event?.product?.title || "an item");
-    body = `You liked <em>${title}</em>${handle ? ` from ${peerHtml}` : ""}.`;
+    body = `You liked <em class="text-zinc-200 not-italic font-semibold">${title}</em>${handle ? ` from ${peerHtml}` : ""}.`;
+    pillClass = "sell-activity-pill sell-activity-pill--like";
+    pillLabel = "Like";
   } else {
     body = `${peerHtml} — activity update.`;
   }
@@ -118,29 +129,32 @@ function eventCard(event) {
     if (payHref) {
       const amountLabel = formatKes(event?.offer?.amountKsh);
       actions.push(
-        `<a href="${payHref}" class="text-xs font-bold text-brand-green underline hover:opacity-90">${
+        `<a href="${payHref}" class="text-xs font-bold text-[#FF2300] underline hover:opacity-90">${
           amountLabel ? `Pay ${escapeHtml(amountLabel)} on Sokoni` : "Pay agreed price on Sokoni"
         }</a>`
       );
     }
   }
   if (shopLink) {
-    actions.push(`<a href="${shopLink}" class="text-xs font-semibold underline hover:text-brand-green">View shop</a>`);
+    actions.push(`<a href="${shopLink}" class="text-xs font-semibold text-zinc-400 underline hover:text-white">View shop</a>`);
   }
   if (
     (type === "offer_accepted" || type === "offer_declined") &&
     event?.peer?.userId
   ) {
     actions.push(
-      `<a href="${inboxHref(event.peer.userId, handle)}" class="text-xs font-semibold underline hover:text-brand-green">Open chat</a>`
+      `<a href="${inboxHref(event.peer.userId, handle)}" class="text-xs font-semibold text-zinc-400 underline hover:text-white">Open chat</a>`
     );
   }
 
   return `
-    <article class="rounded-2xl border border-black/5 dark:border-white/10 px-4 py-3">
-      <p class="text-sm">${body}</p>
+    <article class="sell-activity-row" data-activity-type="${escapeHtml(type)}">
+      <div class="flex items-start justify-between gap-3">
+        <p class="text-sm text-zinc-300 leading-snug">${body}</p>
+        <span class="${pillClass}">${pillLabel}</span>
+      </div>
       <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p class="text-[11px] text-brand-purple/55 dark:text-white/60">${when}</p>
+        <p class="text-[11px] text-zinc-500 font-mono">${when}</p>
         <div class="flex flex-wrap gap-3">${actions.join("")}</div>
       </div>
     </article>`;
@@ -172,9 +186,9 @@ async function loadBuyerRatings() {
     list.innerHTML = reviews
       .map((r) => {
         const stars = "★".repeat(Math.max(1, Math.min(5, Number(r.rating) || 0)));
-        return `<article class="rounded-2xl border border-black/5 dark:border-white/10 px-3 py-2">
-          <p class="text-sm font-semibold">${stars} · ${escapeHtml(r.orderRef || "Order")}</p>
-          ${r.comment ? `<p class="text-xs text-brand-purple/65 dark:text-white/65 mt-1">${escapeHtml(r.comment)}</p>` : ""}
+        return `<article class="sell-activity-row !py-2">
+          <p class="text-sm font-semibold text-white">${stars} · ${escapeHtml(r.orderRef || "Order")}</p>
+          ${r.comment ? `<p class="text-xs text-zinc-400 mt-1">${escapeHtml(r.comment)}</p>` : ""}
         </article>`;
       })
       .join("");
@@ -246,7 +260,7 @@ function setNotifyStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 function applyNotifyPrefs(data = {}) {

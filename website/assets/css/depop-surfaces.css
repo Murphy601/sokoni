@@ -743,3 +743,115 @@ body.sell-depop-page a:not(.depop-btn-accent):not(.depop-btn-white):not(.sell-or
 body.sell-depop-page .font-display {
   color: #fff;
 }
+
+body.sell-depop-page .sell-offer-action {
+  background: #18181b !important;
+  border-color: #27272a !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-offer-action--accept,
+body.sell-depop-page .sell-offer-action--primary,
+body.sell-depop-page .sell-offer-action--chat,
+body.sell-depop-page .sell-offer-action--remind {
+  background: var(--depop-accent) !important;
+  border-color: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-action--decline {
+  background: transparent !important;
+  border-color: #3f3f46 !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .bulk-studio-banner {
+  background: rgba(255, 35, 0, 0.06) !important;
+  border-color: rgba(255, 35, 0, 0.25) !important;
+}
+
+/* Shop activity feed */
+body.sell-depop-page .sell-activity-row {
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.85rem 1rem;
+  color: #e4e4e7;
+}
+
+body.sell-depop-page .sell-activity-row:hover {
+  border-color: #27272a;
+}
+
+body.sell-depop-page .sell-activity-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #18181b;
+  color: #a1a1aa;
+  border: 1px solid #27272a;
+}
+
+body.sell-depop-page .sell-activity-pill--follow {
+  background: rgba(255, 35, 0, 0.12);
+  color: #ff2300;
+  border-color: rgba(255, 35, 0, 0.25);
+}
+
+body.sell-depop-page .sell-activity-pill--like {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+
+/* Activity feed rows (seller hub + buyer activity page) */
+.depop-surface-page .sell-activity-row,
+body.sell-depop-page .sell-activity-row {
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.85rem 1rem;
+  color: #e4e4e7;
+}
+
+.depop-surface-page .sell-activity-row:hover,
+body.sell-depop-page .sell-activity-row:hover {
+  border-color: #27272a;
+}
+
+.depop-surface-page .sell-activity-pill,
+body.sell-depop-page .sell-activity-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #18181b;
+  color: #a1a1aa;
+  border: 1px solid #27272a;
+}
+
+.depop-surface-page .sell-activity-pill--follow,
+body.sell-depop-page .sell-activity-pill--follow {
+  background: rgba(255, 35, 0, 0.12);
+  color: #ff2300;
+  border-color: rgba(255, 35, 0, 0.25);
+}
+
+.depop-surface-page .sell-activity-pill--like,
+body.sell-depop-page .sell-activity-pill--like {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
