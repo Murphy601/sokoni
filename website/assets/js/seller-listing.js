@@ -2609,11 +2609,11 @@ function renderHubTrendingCarousel() {
     (item) => `
       <button type="button" role="listitem" class="seller-hub-card text-left" data-hub-trend="${escapeHtml(item.tag)}">
         <div class="flex items-center justify-between gap-2 mb-2">
-          <span class="text-[10px] font-bold uppercase tracking-wide text-brand-purple/40 dark:text-white/40">Signal</span>
+          <span class="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Signal</span>
           <span class="seller-hub-growth">${escapeHtml(item.growth)}</span>
         </div>
-        <p class="text-sm font-bold text-brand-purple dark:text-white">#${escapeHtml(item.tag.replace(/\s+/g, ""))}</p>
-        <p class="text-[10px] text-brand-purple/50 dark:text-white/50 mt-1">Tap to start a drop with this tag</p>
+        <p class="text-sm font-bold text-zinc-200">#${escapeHtml(item.tag.replace(/\s+/g, ""))}</p>
+        <p class="text-[10px] text-zinc-500 mt-1">Tap to create drop with tag</p>
       </button>`
   ).join("");
   wrap.querySelectorAll("[data-hub-trend]").forEach((btn) => {
@@ -2631,9 +2631,9 @@ function renderHubGuidesCarousel() {
   wrap.innerHTML = HUB_SELLER_GUIDES.map(
     (g, i) => `
       <button type="button" role="listitem" class="seller-hub-card seller-hub-card--guide text-left" data-hub-guide="${i}">
-        <p class="text-sm font-bold text-brand-purple dark:text-white">${escapeHtml(g.title)}</p>
-        <p class="text-[11px] text-brand-purple/55 dark:text-white/55 mt-2 leading-snug">${escapeHtml(g.blurb)}</p>
-        <p class="text-[10px] font-bold text-brand-green mt-3">Open →</p>
+        <p class="text-sm font-bold text-white">${escapeHtml(g.title)}</p>
+        <p class="text-[11px] text-zinc-400 mt-2 leading-snug">${escapeHtml(g.blurb)}</p>
+        <p class="text-[10px] font-bold text-[#FF2300] mt-3">Open →</p>
       </button>`
   ).join("");
   wrap.querySelectorAll("[data-hub-guide]").forEach((btn) => {
@@ -2677,9 +2677,9 @@ function renderHubDraftsCarousel() {
   if (!drafts.length) {
     wrap.innerHTML = `
       <button type="button" role="listitem" class="seller-hub-card seller-hub-card--draft text-left" id="hub-empty-draft-cta">
-        <p class="text-sm font-bold">No drafts yet</p>
-        <p class="text-[11px] text-brand-purple/55 dark:text-white/55 mt-1">Import a CSV or create a drop — photos come after.</p>
-        <p class="text-[10px] font-bold text-brand-green mt-3">+ Create new drop</p>
+        <p class="text-sm font-bold text-white">No drafts yet</p>
+        <p class="text-[11px] text-zinc-400 mt-1">Import a CSV or create a drop — photos come after.</p>
+        <p class="text-[10px] font-bold text-[#FF2300] mt-3">+ Create new drop</p>
       </button>`;
     el("hub-empty-draft-cta")?.addEventListener("click", () => showSellerView("listing"));
     return;
@@ -2702,15 +2702,15 @@ function renderHubDraftsCarousel() {
             ${
               imgSrc
                 ? `<img src="${escapeHtml(imgSrc)}" alt="" class="seller-hub-thumb" />`
-                : `<div class="seller-hub-thumb flex items-center justify-center text-[9px] text-center px-1 text-brand-purple/45">No photo</div>`
+                : `<div class="seller-hub-thumb flex items-center justify-center text-[9px] text-center px-1 text-zinc-500">No photo</div>`
             }
             <div class="min-w-0 flex-1">
-              <p class="text-xs font-bold truncate text-brand-purple dark:text-white">${title}</p>
-              <p class="text-[10px] font-mono text-brand-purple/45 dark:text-white/45 mt-0.5">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}</p>
-              <p class="text-[10px] mt-1 ${needsPhoto ? "text-brand-purple/60" : "text-brand-green"}">${needsPhoto ? "Add photos" : "Ready to review"}</p>
+              <p class="text-xs font-bold truncate text-zinc-200">${title}</p>
+              <p class="text-[10px] font-mono text-zinc-500 mt-0.5">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}</p>
+              <p class="text-[10px] mt-1 ${needsPhoto ? "text-zinc-400" : "text-emerald-400"}">${needsPhoto ? "Add photos" : "Ready to review"}</p>
             </div>
           </div>
-          <button type="button" class="mt-1 text-[11px] font-bold text-brand-green hover:underline hub-continue-draft" data-id="${escapeHtml(pid)}">
+          <button type="button" class="mt-1 text-[11px] font-bold text-[#FF2300] hover:underline hub-continue-draft" data-id="${escapeHtml(pid)}">
             ${needsPhoto ? "+ Add photos" : "Continue editing"}
           </button>
         </div>`;
