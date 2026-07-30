@@ -235,6 +235,48 @@ export async function notifyBuyerOfferResponse({ offer, countered = false } = {}
 }
 
 /**
+ * Seller tapped "Send reminder" on an accepted bargain — ping buyer on WhatsApp
+ * with checkout deep-link (in-app chat already got the DM).
+ */
+export async function notifyBuyerOfferReminder({ reminder } = {}) {
+  try {
+    const buyerUserId = Number(reminder?.buyerUserId);
+    const sellerUserId = Number(reminder?.sellerUserId);
+    const offerId = Number(reminder?.offerId);
+    if (!buyerUserId || !sellerUserId || !offerId) return;
+
+    const seller = await loadUser(sellerUserId);
+    const sellerLabel = displayName(seller);
+    const handle = String(seller?.handle || "")
+      .trim()
+      .replace(/^@+/, "");
+    const title = reminder.productTitle || "your item";
+    const amount =
+      reminder.amountKsh != null ? formatKesNotify(reminder.amountKsh) : "";
+
+    const checkoutPath = `/checkout.html?offerId=${encodeURIComponent(String(offerId))}`;
+    const chatPath = inboxPath({
+      viewerUserId: buyerUserId,
+      peerUserId: sellerUserId,
+      peerHandle: handle,
+    });
+
+    const msg =
+      `⏰ *Offer reminder — Sokoni*\n\n` +
+      `*${sellerLabel}*${handle ? ` (@${handle})` : ""} is waiting on your accepted offer` +
+      `${amount ? ` of *${amount}*` : ""} for *${title}*.\n\n` +
+      `Complete checkout on-site (funds go to escrow until delivery):\n` +
+      `${siteUrl(checkoutPath)}\n\n` +
+      `Chat: ${siteUrl(chatPath)}\n` +
+      `Activity: ${siteUrl("/activity.html")}`;
+
+    await sendUserText(buyerUserId, msg, { event: "offer" });
+  } catch (err) {
+    console.warn("[social-notify] offer reminder ping failed:", err.message);
+  }
+}
+
+/**
  * Notify users who liked/saved a product that the listed buyer price dropped.
  * Soft-fail; never throws. Caps fan-out to avoid WA spam on viral likes.
  */
