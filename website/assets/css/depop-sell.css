@@ -742,6 +742,12 @@ html.dark .sell-offer-filter-count {
   border-color: #25d366;
 }
 
+.sell-offer-action--counter {
+  background: rgba(255, 35, 0, 0.12);
+  border-color: rgba(255, 35, 0, 0.55);
+  color: #FF2300;
+}
+
 .sell-offer-action--decline {
   background: transparent;
 }
@@ -784,6 +790,12 @@ html.dark .sell-offer-action--accept {
   background: #25d366;
   color: #1b1035;
   border-color: #25d366;
+}
+
+html.dark .sell-offer-action--counter {
+  background: rgba(255, 35, 0, 0.22);
+  border-color: rgba(255, 35, 0, 0.55);
+  color: #ff6b4a;
 }
 
 html.dark .sell-offer-action--chat {

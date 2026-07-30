@@ -332,6 +332,7 @@ function offerCard(offer) {
   if (isSeller && status === "pending" && Number.isInteger(id)) {
     actions = `<div class="mt-3 flex flex-wrap gap-2">
       <button type="button" class="inbox-offer-respond inbox-bargain-cta" data-offer-id="${id}" data-action="accepted">Accept bargain</button>
+      <button type="button" class="inbox-offer-respond inbox-bargain-ghost" data-offer-id="${id}" data-action="countered" data-offer-amount="${escapeHtml(String(offer?.amountKsh || ""))}" data-list-price="${escapeHtml(String(offer?.product?.priceKsh || ""))}">Counter</button>
       <button type="button" class="inbox-offer-respond inbox-bargain-ghost" data-offer-id="${id}" data-action="declined">Decline</button>
     </div>`;
   } else if (isBuyer && status === "accepted" && Number.isInteger(id)) {
@@ -365,7 +366,7 @@ function renderOffers(offers) {
   }
   wrap.innerHTML = state.offers.map(offerCard).join("");
   wrap.querySelectorAll(".inbox-offer-respond").forEach((btn) => {
-    btn.addEventListener("click", () => respondToOffer(btn.dataset.offerId, btn.dataset.action));
+    btn.addEventListener("click", () => respondToOffer(btn.dataset.offerId, btn.dataset.action, btn));
   });
 }
 
@@ -472,14 +473,47 @@ async function sendMessage(text) {
   }
 }
 
-async function respondToOffer(offerId, action) {
+async function respondToOffer(offerId, action, button) {
   const id = Number(offerId);
   if (!Number.isInteger(id) || id < 1) return;
   if (!state.sellerAuthRequired || !state.sellerSession) {
     setStatus("Open this chat from the seller dashboard to accept offers.", true);
     return;
   }
-  if (action === "accepted") {
+  let counterAmountKsh = null;
+  if (action === "countered") {
+    const offer = state.offers.find((o) => Number(o?.id) === id);
+    const buyerOffer = Math.round(
+      Number(button?.dataset?.offerAmount || offer?.amountKsh) || 0
+    );
+    const listPrice = Math.round(
+      Number(button?.dataset?.listPrice || offer?.product?.priceKsh) || 0
+    );
+    const suggested =
+      listPrice > buyerOffer + 1
+        ? Math.round((buyerOffer + listPrice) / 2)
+        : buyerOffer + 100;
+    const raw = window.prompt(
+      `Counter offer (buyer all-in KES).\nBuyer offered ${buyerOffer > 0 ? formatKes(buyerOffer) : "—"}${
+        listPrice > 0 ? ` · Listed ${formatKes(listPrice)}` : ""
+      }`,
+      String(suggested)
+    );
+    if (raw == null) return;
+    counterAmountKsh = Math.round(Number(String(raw).replace(/[^\d.]/g, "")));
+    if (!Number.isFinite(counterAmountKsh) || counterAmountKsh < 1) {
+      setStatus("Enter a valid counter amount in KES.", true);
+      return;
+    }
+    if (buyerOffer > 0 && counterAmountKsh <= buyerOffer) {
+      setStatus("Counter must be higher than the buyer's offer.", true);
+      return;
+    }
+    const ok = window.confirm(
+      `Lock counter at ${formatKes(counterAmountKsh)}? Buyer can checkout for 24 hours.`
+    );
+    if (!ok) return;
+  } else if (action === "accepted") {
     const offer = state.offers.find((o) => Number(o?.id) === id);
     const b = offer?.breakdown;
     if (b?.sellerNetKes != null) {
@@ -493,15 +527,15 @@ async function respondToOffer(offerId, action) {
     }
   }
   try {
+    const payload = withAuthBody({
+      sellerUserId: state.viewerId,
+      action,
+    });
+    if (action === "countered") payload.amountKsh = counterAmountKsh;
     const res = await fetch(`${SOCIAL_API}/offers/${id}/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        withAuthBody({
-          sellerUserId: state.viewerId,
-          action,
-        })
-      ),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -509,12 +543,17 @@ async function respondToOffer(offerId, action) {
       return;
     }
     const net = data.breakdown?.sellerNetKes ?? data.offer?.breakdown?.sellerNetKes;
+    const counterAmt = data.offer?.amountKsh;
     setStatus(
       action === "accepted"
         ? net != null
           ? `Offer accepted — you receive ${formatKes(net)} after delivery (buyer pays into escrow).`
           : "Offer accepted — buyer can pay on-site into escrow."
-        : "Offer declined."
+        : action === "countered"
+          ? net != null
+            ? `Counter locked at ${formatKes(counterAmt)} — you receive ${formatKes(net)} after delivery.`
+            : `Counter sent${counterAmt != null ? ` at ${formatKes(counterAmt)}` : ""}.`
+          : "Offer declined."
     );
     await loadOffers();
   } catch {

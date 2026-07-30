@@ -1823,6 +1823,7 @@ async function loadMyListings() {
               ${status === "live" ? `
               <div class="flex flex-wrap gap-2 mt-3">
                 <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline refresh-listing-btn" data-id="${escapeHtml(pid)}">↻ Refresh listing</button>
+                <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline drop-price-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">↓ Drop price</button>
                 <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-[#FF2300] hover:underline">Share to WhatsApp</a>
               </div>` : ""}
             </div>
@@ -1832,6 +1833,11 @@ async function loadMyListings() {
 
     wrap.querySelectorAll(".refresh-listing-btn").forEach((btn) => {
       btn.addEventListener("click", () => refreshListing(btn.dataset.id));
+    });
+    wrap.querySelectorAll(".drop-price-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void dropListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal);
+      });
     });
     wrap.querySelectorAll(".continue-draft-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2551,6 +2557,49 @@ async function refreshListing(productId) {
       return;
     }
     setStatus(data.message || "Listing refreshed.");
+    await loadMyListings();
+  } catch {
+    setStatus("Network error.", true);
+  }
+}
+
+async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) {
+  const phone = apiPhone();
+  if (!phone || !productId) return;
+  const currentNet = Math.round(Number(currentSellerNet) || 0);
+  const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+  const hint =
+    currentNet > 0
+      ? `Current: you receive KES ${currentNet.toLocaleString()}${currentBuyer > 0 ? ` (buyer pays KES ${currentBuyer.toLocaleString()})` : ""}.\n\nNew amount you want to receive (KES):`
+      : "New amount you want to receive (KES):";
+  const raw = window.prompt(hint, currentNet > 0 ? String(currentNet) : "");
+  if (raw == null) return;
+  const nextNet = Math.round(Number(String(raw).replace(/[^\d.]/g, "")));
+  if (!Number.isFinite(nextNet) || nextNet < 50) {
+    setStatus("Enter a valid price you receive (minimum KES 50).", true);
+    return;
+  }
+  if (currentNet > 0 && nextNet === currentNet) {
+    setStatus("Price unchanged.");
+    return;
+  }
+  setStatus("Updating price…");
+  try {
+    const res = await fetch(`${ONBOARD_API}/price`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, productId, sellerNetKes: nextNet })),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      setStatus(data.message || data.error || "Price update failed.", true);
+      return;
+    }
+    setStatus(data.message || "Price updated.");
     await loadMyListings();
   } catch {
     setStatus("Network error.", true);
@@ -4134,6 +4183,9 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
             <button type="button" class="sell-offer-action sell-offer-action--accept offer-action-btn" data-offer-id="${id}" data-action="accepted">
               Accept
             </button>
+            <button type="button" class="sell-offer-action sell-offer-action--counter offer-action-btn" data-offer-id="${id}" data-action="countered" data-offer-amount="${escapeHtml(String(offer?.amountKsh || ""))}" data-list-price="${escapeHtml(String(Number.isFinite(listed) ? listed : ""))}">
+              Counter
+            </button>
             <button type="button" class="sell-offer-action sell-offer-action--decline offer-action-btn" data-offer-id="${id}" data-action="declined">
               Decline
             </button>
@@ -4251,7 +4303,7 @@ async function respondToSellerOffer(button) {
     .trim()
     .toLowerCase();
   if (!Number.isInteger(offerId) || offerId < 1) return;
-  if (!["accepted", "declined"].includes(action)) return;
+  if (!["accepted", "declined", "countered"].includes(action)) return;
 
   const sellerUserId = await resolveSellerSocialUserId();
   if (!sellerUserId) {
@@ -4259,7 +4311,36 @@ async function respondToSellerOffer(button) {
     return;
   }
 
-  if (action === "accepted") {
+  let counterAmountKsh = null;
+  if (action === "countered") {
+    const offer = sellerOffersCache.find((o) => Number(o?.id) === offerId);
+    const buyerOffer = Math.round(Number(button?.dataset?.offerAmount || offer?.amountKsh) || 0);
+    const listPrice = Math.round(Number(button?.dataset?.listPrice || offer?.product?.priceKsh) || 0);
+    const suggested =
+      listPrice > buyerOffer + 1
+        ? Math.round((buyerOffer + listPrice) / 2)
+        : buyerOffer + 100;
+    const raw = window.prompt(
+      `Counter offer (buyer all-in KES).\nBuyer offered ${buyerOffer > 0 ? formatKes(buyerOffer) : "—"}${
+        listPrice > 0 ? ` · Listed ${formatKes(listPrice)}` : ""
+      }\nMust be above their offer.`,
+      String(suggested)
+    );
+    if (raw == null) return;
+    counterAmountKsh = Math.round(Number(String(raw).replace(/[^\d.]/g, "")));
+    if (!Number.isFinite(counterAmountKsh) || counterAmountKsh < 1) {
+      setOffersStatus("Enter a valid counter amount in KES.", true);
+      return;
+    }
+    if (buyerOffer > 0 && counterAmountKsh <= buyerOffer) {
+      setOffersStatus("Counter must be higher than the buyer's offer. Accept instead if you agree.", true);
+      return;
+    }
+    const ok = window.confirm(
+      `Lock counter at ${formatKes(counterAmountKsh)} (buyer total)?\nBuyer can checkout at this price for 24 hours.`
+    );
+    if (!ok) return;
+  } else if (action === "accepted") {
     const offer = sellerOffersCache.find((o) => Number(o?.id) === offerId);
     const b = offer?.breakdown;
     if (b?.sellerNetKes != null) {
@@ -4280,19 +4361,25 @@ async function respondToSellerOffer(button) {
   row?.querySelectorAll(".offer-action-btn").forEach((node) => {
     node.disabled = true;
   });
-  setOffersStatus(action === "accepted" ? "Accepting offer..." : "Declining offer...");
+  setOffersStatus(
+    action === "accepted"
+      ? "Accepting offer..."
+      : action === "countered"
+        ? "Sending counter..."
+        : "Declining offer..."
+  );
 
   try {
+    const body = {
+      phone: apiPhone(),
+      sellerUserId,
+      action,
+    };
+    if (action === "countered") body.amountKsh = counterAmountKsh;
     const res = await fetch(`${SOCIAL_API}/offers/${offerId}/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        jsonAuthBody({
-          phone: apiPhone(),
-          sellerUserId,
-          action,
-        })
-      ),
+      body: JSON.stringify(jsonAuthBody(body)),
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
@@ -4307,12 +4394,17 @@ async function respondToSellerOffer(button) {
       return;
     }
     const net = parsed.data?.breakdown?.sellerNetKes ?? parsed.data?.offer?.breakdown?.sellerNetKes;
+    const counterAmt = parsed.data?.offer?.amountKsh;
     setOffersStatus(
       action === "accepted"
         ? net != null
           ? `Offer accepted — you receive ${formatKes(net)} after delivery.`
           : "Offer accepted."
-        : "Offer declined."
+        : action === "countered"
+          ? net != null
+            ? `Counter locked at ${formatKes(counterAmt)} — you receive ${formatKes(net)} after delivery.`
+            : `Counter sent${counterAmt != null ? ` at ${formatKes(counterAmt)}` : ""}.`
+          : "Offer declined."
     );
     await loadSellerOffers();
   } catch {

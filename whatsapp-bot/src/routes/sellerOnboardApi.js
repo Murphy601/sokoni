@@ -5,6 +5,7 @@ import {
   getSellerEscrowLedgerByPhone,
   getSellerOrdersByPhone,
   refreshSellerListing,
+  updateSellerListingPrice,
 } from "../services/seller-onboard.js";
 import {
   getSellerWithdrawSummaryByPhone,
@@ -134,6 +135,24 @@ router.post("/refresh", async (req, res) => {
     sessionToken: sellerSessionFromReq(req),
   });
   if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/price — update live listing seller-net (notifies likers on drop) */
+router.post("/price", async (req, res) => {
+  const { phone, productId, sellerNetKes, priceKes } = req.body || {};
+  const result = await updateSellerListingPrice({
+    phone,
+    productId,
+    sellerNetKes: sellerNetKes ?? priceKes,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "invalid_price") return res.status(400).json(result);
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
   }

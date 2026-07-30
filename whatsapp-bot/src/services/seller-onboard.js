@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
 import { getOrder } from "./orders.js";
-import { orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
+import { orderBuyerTotal, resolveSellerPayoutKes, computeFeeBreakdown } from "./shipping-tiers.js";
 import { shipmentStatusLabel } from "./shipments.js";
 import { config } from "../config.js";
 import { labelPageUrlForOrder } from "./prepaid-checkout.js";
@@ -342,6 +342,165 @@ export async function refreshSellerListing({ phone, productId, sessionToken }) {
     productId,
     refreshedAt: updated.refreshedAt,
     message: "Listing refreshed — pushed back up the feed.",
+  };
+}
+
+/**
+ * Drop (or raise) a live listing's seller-net price.
+ * On a real drop of buyer all-in price, WhatsApp-notifies users who liked the item.
+ */
+export async function updateSellerListingPrice({ phone, productId, sellerNetKes, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const nextNet = Math.round(Number(sellerNetKes));
+  if (!Number.isFinite(nextNet) || nextNet < 50) {
+    return {
+      error: "invalid_price",
+      message: "Enter a valid price you receive (minimum KES 50).",
+    };
+  }
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  let oldBuyerTotal = null;
+  let oldSellerNet = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      oldBuyerTotal =
+        oldBuyerTotal ??
+        (current.priceKes != null ? Math.round(Number(current.priceKes)) : null);
+      oldSellerNet =
+        oldSellerNet ??
+        Math.round(Number(current.sellerNetKes ?? current.sourcePriceKes) || 0);
+
+      const fees = computeFeeBreakdown(nextNet, current.shippingKes, {
+        freeShipping: Boolean(current.freeShipping),
+        deliveryMethod: current.deliveryMethod || "hub",
+      });
+
+      products[idx] = {
+        ...current,
+        sellerNetKes: fees.sellerNetKes,
+        sourcePriceKes: fees.sellerNetKes,
+        priceKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        transactionFeeKes: fees.transactionFeeKes,
+        sellerPayoutKes: fees.sellerPayoutKes,
+        shippingKes: fees.shippingKes,
+        freeShipping: Boolean(fees.freeShipping),
+        publishedAt: Date.now(),
+        refreshedAt: Date.now(),
+        priceUpdatedAt: Date.now(),
+      };
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = products[idx];
+    } catch (err) {
+      console.warn("[seller-onboard] price update failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  const newBuyerTotal = Math.round(Number(updated.priceKes) || 0);
+
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    const { upsertCatalogProduct } = await import("../db/repositories/products.js");
+    if (isDbEnabled()) {
+      await upsertCatalogProduct(updated);
+      // Ensure ranking bump even if upsert path is partial.
+      await query(
+        `UPDATE products
+            SET price_kes = $2,
+                source_price_kes = $3,
+                shipping_kes = $4,
+                updated_at = NOW(),
+                legacy_json = CASE
+                  WHEN legacy_json IS NULL THEN jsonb_build_object(
+                    'sellerNetKes', $3::int,
+                    'priceKes', $2::int,
+                    'refreshedAt', $5::bigint,
+                    'priceUpdatedAt', $5::bigint
+                  )
+                  ELSE legacy_json
+                       || jsonb_build_object('sellerNetKes', $3::int)
+                       || jsonb_build_object('priceKes', $2::int)
+                       || jsonb_build_object('refreshedAt', $5::bigint)
+                       || jsonb_build_object('priceUpdatedAt', $5::bigint)
+                END
+          WHERE id = $1`,
+        [
+          productId,
+          newBuyerTotal,
+          Math.round(Number(updated.sellerNetKes) || nextNet),
+          Math.round(Number(updated.shippingKes) || 0),
+          Number(updated.priceUpdatedAt || Date.now()),
+        ]
+      );
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB price update skipped:", err.message);
+  }
+
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("node scripts/build-site-catalog.mjs", {
+      cwd: path.join(__dirname, "..", "..", ".."),
+      stdio: "pipe",
+    });
+  } catch {}
+
+  let notified = 0;
+  if (oldBuyerTotal != null && newBuyerTotal < oldBuyerTotal) {
+    try {
+      const { notifyLikersPriceDrop } = await import("./social-notifications.js");
+      let excludeUserId = null;
+      try {
+        const { isDbEnabled, query } = await import("../db/pool.js");
+        if (isDbEnabled()) {
+          const { rows } = await query(
+            `SELECT seller_user_id FROM products WHERE id = $1 LIMIT 1`,
+            [productId]
+          );
+          if (rows[0]?.seller_user_id) excludeUserId = Number(rows[0].seller_user_id);
+        }
+      } catch {}
+      const ping = await notifyLikersPriceDrop({
+        productId,
+        title: updated.name || productId,
+        oldPriceKes: oldBuyerTotal,
+        newPriceKes: newBuyerTotal,
+        excludeUserId,
+      });
+      notified = Number(ping?.notified) || 0;
+    } catch (err) {
+      console.warn("[seller-onboard] price-drop notify skipped:", err.message);
+    }
+  }
+
+  const drop = oldBuyerTotal != null && newBuyerTotal < oldBuyerTotal;
+  return {
+    success: true,
+    productId,
+    sellerNetKes: Math.round(Number(updated.sellerNetKes) || nextNet),
+    priceKes: newBuyerTotal,
+    previousPriceKes: oldBuyerTotal,
+    previousSellerNetKes: oldSellerNet,
+    priceDropped: drop,
+    likersNotified: notified,
+    refreshedAt: updated.refreshedAt,
+    message: drop
+      ? `Price dropped to buyer total KES ${newBuyerTotal.toLocaleString()} — you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.${notified ? ` Notified ${notified} liker${notified === 1 ? "" : "s"}.` : ""}`
+      : `Price updated — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`,
   };
 }
 

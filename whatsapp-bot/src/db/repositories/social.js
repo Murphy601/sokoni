@@ -2051,7 +2051,7 @@ export async function createOffer({
   };
 }
 
-export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
+export async function respondToOffer({ offerId, sellerUserId, action, amountKsh } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -2061,10 +2061,11 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
   const normalizedAction = String(action || "")
     .trim()
     .toLowerCase();
-  if (!oid || !sellerId || !["accepted", "declined"].includes(normalizedAction)) {
+  // "countered" locks a middle buyer-total and accepts it for checkout (no schema change).
+  if (!oid || !sellerId || !["accepted", "declined", "countered"].includes(normalizedAction)) {
     return {
       error: "invalid_offer_action",
-      message: "offerId, sellerUserId, and action (accepted|declined) are required.",
+      message: "offerId, sellerUserId, and action (accepted|declined|countered) are required.",
     };
   }
   if (!(await userExists(sellerId))) {
@@ -2092,27 +2093,60 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
     return { error: "offer_expired", message: "Offer has expired." };
   }
 
-  // Block accepting offers that cannot fund escrow (shipping + fee + seller net ≥ 1).
-  if (normalizedAction === "accepted") {
-    const productRow = await query(
-      `SELECT price_kes, shipping_kes, in_stock, is_sold FROM products WHERE id = $1 LIMIT 1`,
-      [offer.product_id]
-    );
-    const productData = productRow.rows[0];
+  const productRow = await query(
+    `SELECT price_kes, shipping_kes, in_stock, is_sold FROM products WHERE id = $1 LIMIT 1`,
+    [offer.product_id]
+  );
+  const productData = productRow.rows[0];
+
+  let nextAmount = Math.round(Number(offer.amount_kes) || 0);
+  let persistedStatus = normalizedAction;
+  let wasCountered = false;
+
+  if (normalizedAction === "countered") {
+    const counterAmount = Math.round(Number(amountKsh));
+    const listed =
+      productData?.price_kes != null ? Math.round(Number(productData.price_kes)) : null;
+    const buyerOffer = Math.round(Number(offer.amount_kes) || 0);
+    if (!Number.isFinite(counterAmount) || counterAmount < 1) {
+      return {
+        error: "invalid_counter_amount",
+        message: "Enter a counter offer amount in KES (buyer all-in total).",
+      };
+    }
+    if (counterAmount <= buyerOffer) {
+      return {
+        error: "counter_not_higher",
+        message: `Counter must be above the buyer's offer (${buyerOffer.toLocaleString("en-KE")} KES). Accept their offer instead if you agree.`,
+      };
+    }
+    if (listed != null && counterAmount > listed) {
+      return {
+        error: "offer_above_list",
+        message: "Counter cannot exceed the listed buyer price.",
+      };
+    }
+    nextAmount = counterAmount;
+    persistedStatus = "accepted";
+    wasCountered = true;
+  }
+
+  // Block accepting / countering offers that cannot fund escrow.
+  if (persistedStatus === "accepted") {
     if (!productData || productData.in_stock === false || productData.is_sold === true) {
       return {
         error: "product_unavailable",
         message: "This product is no longer available for offers.",
       };
     }
-    if (productData.price_kes != null && Number(offer.amount_kes) > Number(productData.price_kes)) {
+    if (productData.price_kes != null && nextAmount > Number(productData.price_kes)) {
       return {
         error: "offer_above_list",
         message: "Agreed offer cannot exceed the listed buyer price.",
       };
     }
     const shippingKes = Math.round(Number(productData.shipping_kes) || 0);
-    const feeBreakdown = resolveOfferBreakdown(offer.amount_kes, shippingKes);
+    const feeBreakdown = resolveOfferBreakdown(nextAmount, shippingKes);
     const feeErr = offerBreakdownError(feeBreakdown);
     if (feeErr) {
       return {
@@ -2125,16 +2159,17 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
   }
 
   const expiresSql =
-    normalizedAction === "accepted"
+    persistedStatus === "accepted"
       ? `NOW() + INTERVAL '24 hours'`
       : `expires_at`;
   await query(
     `UPDATE offers
         SET status = $2,
+            amount_kes = $3,
             expires_at = ${expiresSql},
             updated_at = NOW()
       WHERE id = $1`,
-    [oid, normalizedAction]
+    [oid, persistedStatus, nextAmount]
   );
 
   const hydrated = await query(
@@ -2159,6 +2194,7 @@ export async function respondToOffer({ offerId, sellerUserId, action } = {}) {
     success: true,
     offer: mapped,
     breakdown: mapped.breakdown,
+    countered: wasCountered,
   };
 }
 

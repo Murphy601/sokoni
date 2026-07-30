@@ -170,7 +170,7 @@ export async function notifySellerNewOffer({ offer } = {}) {
   }
 }
 
-export async function notifyBuyerOfferResponse({ offer } = {}) {
+export async function notifyBuyerOfferResponse({ offer, countered = false } = {}) {
   try {
     if (!offer?.buyerUserId || !offer?.status) return;
     const status = String(offer.status).toLowerCase();
@@ -201,14 +201,25 @@ export async function notifyBuyerOfferResponse({ offer } = {}) {
         b?.totalKes != null
           ? `Pay *${formatKesNotify(b.totalKes)}* on-site (item + shipping + Sokoni fee). Funds stay in escrow until delivery.\n`
           : `Pay the agreed buyer total on-site. Funds stay in escrow until delivery.\n`;
-      msg =
-        `✅ *Offer accepted — Sokoni*\n\n` +
-        `*${sellerLabel}* accepted your offer` +
-        `${amount ? ` of *${amount}*` : ""} on *${title}*.\n\n` +
-        payLine +
-        `(Valid 24 hours)\n${siteUrl(checkoutPath)}\n\n` +
-        `Message the shop: ${siteUrl(chatPath)}\n` +
-        `Activity: ${siteUrl("/activity.html")}`;
+      if (countered) {
+        msg =
+          `💸 *Seller countered — Sokoni*\n\n` +
+          `*${sellerLabel}* countered on *${title}*` +
+          `${amount ? ` at *${amount}*` : ""} (buyer total).\n\n` +
+          payLine +
+          `(Valid 24 hours)\n${siteUrl(checkoutPath)}\n\n` +
+          `Message the shop: ${siteUrl(chatPath)}\n` +
+          `Activity: ${siteUrl("/activity.html")}`;
+      } else {
+        msg =
+          `✅ *Offer accepted — Sokoni*\n\n` +
+          `*${sellerLabel}* accepted your offer` +
+          `${amount ? ` of *${amount}*` : ""} on *${title}*.\n\n` +
+          payLine +
+          `(Valid 24 hours)\n${siteUrl(checkoutPath)}\n\n` +
+          `Message the shop: ${siteUrl(chatPath)}\n` +
+          `Activity: ${siteUrl("/activity.html")}`;
+      }
     } else {
       msg =
         `ℹ️ *Offer update — Sokoni*\n\n` +
@@ -220,6 +231,68 @@ export async function notifyBuyerOfferResponse({ offer } = {}) {
     await sendUserText(offer.buyerUserId, msg, { event: "offer" });
   } catch (err) {
     console.warn("[social-notify] offer reply ping failed:", err.message);
+  }
+}
+
+/**
+ * Notify users who liked/saved a product that the listed buyer price dropped.
+ * Soft-fail; never throws. Caps fan-out to avoid WA spam on viral likes.
+ */
+export async function notifyLikersPriceDrop({
+  productId,
+  title,
+  oldPriceKes,
+  newPriceKes,
+  excludeUserId = null,
+  maxLikers = 40,
+} = {}) {
+  try {
+    if (!isDbEnabled() || !productId) return { skipped: true, reason: "no_db" };
+    const oldP = Math.round(Number(oldPriceKes));
+    const newP = Math.round(Number(newPriceKes));
+    if (!Number.isFinite(oldP) || !Number.isFinite(newP) || newP >= oldP) {
+      return { skipped: true, reason: "not_a_drop" };
+    }
+
+    const lim = Math.min(Math.max(Number(maxLikers) || 40, 1), 80);
+    const params = [String(productId)];
+    let excludeSql = "";
+    if (excludeUserId != null && Number.isInteger(Number(excludeUserId)) && Number(excludeUserId) > 0) {
+      params.push(Number(excludeUserId));
+      excludeSql = ` AND pl.user_id <> $${params.length}`;
+    }
+    params.push(lim);
+    const { rows } = await query(
+      `SELECT pl.user_id
+         FROM product_likes pl
+        WHERE pl.product_id = $1
+          ${excludeSql}
+        ORDER BY pl.created_at DESC
+        LIMIT $${params.length}`,
+      params
+    );
+
+    const productTitle = title || productId;
+    const listingUrl = siteUrl(`/?q=${encodeURIComponent(String(productId))}`);
+    const bagUrl = siteUrl("/index.html#bag");
+    let sent = 0;
+    for (const row of rows) {
+      const uid = Number(row.user_id);
+      if (!uid) continue;
+      const msg =
+        `🔥 *Price drop — Sokoni*\n\n` +
+        `An item you liked just dropped:\n` +
+        `*${productTitle}*\n` +
+        `${formatKesNotify(oldP)} → *${formatKesNotify(newP)}*\n\n` +
+        `View listing: ${listingUrl}\n` +
+        `Saved bag: ${bagUrl}`;
+      const result = await sendUserText(uid, msg, { event: "like" });
+      if (result?.ok) sent += 1;
+    }
+    return { ok: true, notified: sent, candidates: rows.length };
+  } catch (err) {
+    console.warn("[social-notify] price-drop ping failed:", err.message);
+    return { skipped: true, reason: err.message };
   }
 }
 
