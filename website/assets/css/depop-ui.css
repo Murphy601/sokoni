@@ -416,6 +416,39 @@ html.dark .sheet-close {
   font-size: 0.875rem;
 }
 
+.product-sheet-thumbs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.65rem 0 0.25rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.product-sheet-thumb {
+  flex: 0 0 auto;
+  width: 3.5rem;
+  height: 3.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 0.75rem;
+  border: 2px solid transparent;
+  overflow: hidden;
+  background: #f3f4f6;
+  cursor: pointer;
+}
+
+.product-sheet-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-sheet-thumb.is-active {
+  border-color: var(--color-primary, #25d366);
+}
+
 .product-sheet-price {
   font-size: 1.5rem;
   font-weight: 800;

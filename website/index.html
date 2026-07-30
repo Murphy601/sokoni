@@ -144,8 +144,29 @@
     </div>
   </section>
 
-  <!-- Phase 8 — Personalized feed rails -->
-  <div id="feed-rails" class="catalog-main max-w-7xl mx-auto px-4 md:px-5 space-y-10 py-6 hidden"></div>
+  <!-- Phase 8/12 — Explore + Following feed rails -->
+  <section class="catalog-main max-w-7xl mx-auto px-4 md:px-5 pt-6" aria-label="Home feed">
+    <div class="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Feed mode">
+      <button
+        type="button"
+        id="feed-tab-explore"
+        class="feed-mode-tab is-active min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-semibold"
+        role="tab"
+        aria-selected="true">
+        Explore
+      </button>
+      <button
+        type="button"
+        id="feed-tab-following"
+        class="feed-mode-tab min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold"
+        role="tab"
+        aria-selected="false">
+        Following
+      </button>
+    </div>
+    <p id="feed-mode-hint" class="text-sm text-brand-purple/60 dark:text-white/65 mb-2 hidden"></p>
+    <div id="feed-rails" class="space-y-10 hidden"></div>
+  </section>
 
   <div class="depop-main-content">
 

@@ -661,6 +661,48 @@ function cleanOptionalText(value, { max = 500, allowEmpty = true } = {}) {
   return text.slice(0, max);
 }
 
+function normalizeSocialUrl(value, { platforms = [] } = {}) {
+  if (value === undefined) return undefined;
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (raw.length > 300) {
+    return { error: "invalid_social_url", message: "Social link is too long." };
+  }
+
+  const handleOnly = raw.replace(/^@+/, "").trim();
+  const lower = raw.toLowerCase();
+
+  if (platforms.includes("instagram")) {
+    if (/^https?:\/\//i.test(raw)) {
+      if (!/instagram\.com/i.test(raw)) {
+        return { error: "invalid_social_url", message: "Instagram link must be an instagram.com URL." };
+      }
+      return raw.slice(0, 300);
+    }
+    if (/^[a-zA-Z0-9._]{1,30}$/.test(handleOnly)) {
+      return `https://instagram.com/${handleOnly}`;
+    }
+    return { error: "invalid_social_url", message: "Enter an Instagram handle or profile URL." };
+  }
+
+  if (platforms.includes("tiktok")) {
+    if (/^https?:\/\//i.test(raw)) {
+      if (!/tiktok\.com/i.test(raw)) {
+        return { error: "invalid_social_url", message: "TikTok link must be a tiktok.com URL." };
+      }
+      return raw.slice(0, 300);
+    }
+    if (/^[a-zA-Z0-9._]{2,24}$/.test(handleOnly)) {
+      return `https://www.tiktok.com/@${handleOnly}`;
+    }
+    return { error: "invalid_social_url", message: "Enter a TikTok handle or profile URL." };
+  }
+
+  if (/^https?:\/\//i.test(raw)) return raw.slice(0, 300);
+  return lower.slice(0, 300);
+}
+
 /**
  * Update storefront identity fields on users (+ soft sync sellers row when present).
  * Only provided fields are changed (undefined = leave unchanged).
@@ -673,6 +715,8 @@ export async function updateUserShopProfile({
   bio,
   avatarUrl,
   location,
+  instagramUrl,
+  tiktokUrl,
 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
@@ -715,13 +759,21 @@ export async function updateUserShopProfile({
   const nextBio = cleanOptionalText(bio, { max: 1000 });
   const nextAvatar = cleanOptionalText(avatarUrl, { max: 1000 });
   const nextLocation = cleanOptionalText(location, { max: 120 });
+  const nextInstagram =
+    instagramUrl === undefined ? undefined : normalizeSocialUrl(instagramUrl, { platforms: ["instagram"] });
+  if (nextInstagram && nextInstagram.error) return nextInstagram;
+  const nextTiktok =
+    tiktokUrl === undefined ? undefined : normalizeSocialUrl(tiktokUrl, { platforms: ["tiktok"] });
+  if (nextTiktok && nextTiktok.error) return nextTiktok;
 
   if (
     nextHandle === undefined &&
     nextShopName === undefined &&
     nextBio === undefined &&
     nextAvatar === undefined &&
-    nextLocation === undefined
+    nextLocation === undefined &&
+    nextInstagram === undefined &&
+    nextTiktok === undefined
   ) {
     return { error: "invalid_request", message: "Provide at least one profile field to update." };
   }
@@ -742,13 +794,16 @@ export async function updateUserShopProfile({
   if (nextBio !== undefined) pushSet("bio", nextBio);
   if (nextAvatar !== undefined) pushSet("avatar_url", nextAvatar);
   if (nextLocation !== undefined) pushSet("location", nextLocation);
+  if (nextInstagram !== undefined) pushSet("instagram_url", nextInstagram);
+  if (nextTiktok !== undefined) pushSet("tiktok_url", nextTiktok);
   params.push(uid);
 
   const { rows } = await query(
     `UPDATE users
         SET ${sets.join(", ")}
       WHERE id = $${params.length}
-      RETURNING id, handle, shop_name, bio, avatar_url, location, display_name, is_seller_verified, social_wa_notify`,
+      RETURNING id, handle, shop_name, bio, avatar_url, location, instagram_url, tiktok_url,
+               display_name, is_seller_verified, social_wa_notify`,
     params
   );
   const row = rows[0];
@@ -823,6 +878,8 @@ export async function updateUserShopProfile({
       bio: row.bio || null,
       avatarUrl: row.avatar_url || null,
       location: row.location || null,
+      instagramUrl: row.instagram_url || null,
+      tiktokUrl: row.tiktok_url || null,
       isSellerVerified: Boolean(row.is_seller_verified),
       socialWaNotify: row.social_wa_notify !== false,
     },
@@ -1311,6 +1368,7 @@ export async function getShopProfileByHandle({
   limit = 24,
   offset = 0,
   viewerUserId = null,
+  tab = "active",
 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
@@ -1320,6 +1378,7 @@ export async function getShopProfileByHandle({
   if (!cleanHandle) {
     return { error: "invalid_handle", message: "A valid shop handle is required." };
   }
+  const listingTab = String(tab || "active").toLowerCase() === "sold" ? "sold" : "active";
 
   const userResult = await query(
     `SELECT
@@ -1332,6 +1391,8 @@ export async function getShopProfileByHandle({
        bio,
        avatar_url,
        location,
+       instagram_url,
+       tiktok_url,
        role,
        is_seller_verified
      FROM users
@@ -1350,18 +1411,31 @@ export async function getShopProfileByHandle({
       [user.id]
     );
     const linkedSeller = linkedSellerResult.rows[0] || null;
-    const storefront = await listActiveStorefrontProducts({
+    const activeStorefront = await listStorefrontProducts({
       sellerUserId: user.id,
       sellerId: linkedSeller?.id || null,
       limit,
       offset,
+      status: "active",
     });
+    const soldStorefront = await listStorefrontProducts({
+      sellerUserId: user.id,
+      sellerId: linkedSeller?.id || null,
+      limit: listingTab === "sold" ? limit : 1,
+      offset: listingTab === "sold" ? offset : 0,
+      status: "sold",
+    });
+    const storefront = listingTab === "sold" ? soldStorefront : activeStorefront;
     const likesReceived = await getLikesReceivedForOwner({
       sellerUserId: user.id,
       sellerId: linkedSeller?.id || null,
     });
     const follows = await getFollowCounts(user.id);
     const reviewSummary = await getReviewSummary(user.id);
+    const sellerMetrics = await getSellerStorefrontMetrics({
+      sellerUserId: user.id,
+      sellerId: linkedSeller?.id || null,
+    });
 
     return attachViewerToShopProfile(
       {
@@ -1377,18 +1451,24 @@ export async function getShopProfileByHandle({
           bio: user.bio || linkedSeller?.bio || null,
           avatarUrl: user.avatar_url || null,
           location: user.location || linkedSeller?.city || null,
+          instagramUrl: user.instagram_url || null,
+          tiktokUrl: user.tiktok_url || null,
           isSellerVerified: Boolean(user.is_seller_verified || linkedSeller?.is_verified),
           role: user.role || "seller",
           source: linkedSeller ? "user_linked_seller" : "user",
         },
         stats: {
-          listingsCount: storefront.count,
+          listingsCount: activeStorefront.count,
+          soldCount: soldStorefront.count,
+          salesCount: sellerMetrics.salesCount,
+          avgDispatchHours: sellerMetrics.avgDispatchHours,
           followersCount: follows.followersCount,
           followingCount: follows.followingCount,
           likesReceivedCount: likesReceived,
           avgRating: reviewSummary.avgRating,
           totalReviews: reviewSummary.totalReviews,
         },
+        tab: listingTab,
         products: storefront.products,
         pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
       },
@@ -1426,6 +1506,8 @@ export async function getShopProfileByHandle({
          bio,
          avatar_url,
          location,
+         instagram_url,
+         tiktok_url,
          role,
          is_seller_verified
        FROM users
@@ -1436,18 +1518,31 @@ export async function getShopProfileByHandle({
     sellerUser = sellerUserResult.rows[0] || null;
   }
 
-  const storefront = await listActiveStorefrontProducts({
+  const activeStorefront = await listStorefrontProducts({
     sellerUserId: sellerUser?.id || null,
     sellerId: seller.id,
     limit,
     offset,
+    status: "active",
   });
+  const soldStorefront = await listStorefrontProducts({
+    sellerUserId: sellerUser?.id || null,
+    sellerId: seller.id,
+    limit: listingTab === "sold" ? limit : 1,
+    offset: listingTab === "sold" ? offset : 0,
+    status: "sold",
+  });
+  const storefront = listingTab === "sold" ? soldStorefront : activeStorefront;
   const likesReceived = await getLikesReceivedForOwner({
     sellerUserId: sellerUser?.id || null,
     sellerId: seller.id,
   });
   const follows = await getFollowCounts(sellerUser?.id || null);
   const reviewSummary = await getReviewSummary(sellerUser?.id || null);
+  const sellerMetrics = await getSellerStorefrontMetrics({
+    sellerUserId: sellerUser?.id || null,
+    sellerId: seller.id,
+  });
 
   return attachViewerToShopProfile(
     {
@@ -1463,18 +1558,24 @@ export async function getShopProfileByHandle({
         bio: sellerUser?.bio || seller.bio || null,
         avatarUrl: sellerUser?.avatar_url || null,
         location: sellerUser?.location || seller.city || null,
+        instagramUrl: sellerUser?.instagram_url || null,
+        tiktokUrl: sellerUser?.tiktok_url || null,
         isSellerVerified: Boolean(sellerUser?.is_seller_verified || seller.is_verified),
         role: sellerUser?.role || "seller",
         source: sellerUser ? "seller_linked_user" : "seller",
       },
       stats: {
-        listingsCount: storefront.count,
+        listingsCount: activeStorefront.count,
+        soldCount: soldStorefront.count,
+        salesCount: sellerMetrics.salesCount,
+        avgDispatchHours: sellerMetrics.avgDispatchHours,
         followersCount: follows.followersCount,
         followingCount: follows.followingCount,
         likesReceivedCount: likesReceived,
         avgRating: reviewSummary.avgRating,
         totalReviews: reviewSummary.totalReviews,
       },
+      tab: listingTab,
       products: storefront.products,
       pagination: { limit: storefront.limit, offset: storefront.offset, total: storefront.count },
     },
@@ -1502,19 +1603,30 @@ function mapStorefrontProductRow(row) {
     category: row.category,
     subCategory: row.sub_category || null,
     size: row.size_label || null,
+    pitToPitIn: row.pit_to_pit_in != null ? Number(row.pit_to_pit_in) : null,
+    lengthIn: row.length_in != null ? Number(row.length_in) : null,
+    waistIn: row.waist_in != null ? Number(row.waist_in) : null,
     condition,
     conditionLabel: CONDITION_LABELS[condition] || (condition ? String(condition).replace(/_/g, " ") : null),
     brand: row.brand || null,
     genderFit: row.gender_fit || null,
     isSecondhand: Boolean(row.is_secondhand),
+    isSold: Boolean(row.is_sold),
     likesCount: Number(row.likes_count || 0),
     createdAt: row.created_at,
   };
 }
 
-async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = null, limit = 24, offset = 0 } = {}) {
+async function listStorefrontProducts({
+  sellerUserId = null,
+  sellerId = null,
+  limit = 24,
+  offset = 0,
+  status = "active",
+} = {}) {
   const safeLimit = Math.min(Math.max(Number(limit) || 24, 1), 100);
   const safeOffset = Math.max(Number(offset) || 0, 0);
+  const listingStatus = String(status || "active").toLowerCase() === "sold" ? "sold" : "active";
 
   const ownerParams = [];
   const ownerClauses = [];
@@ -1527,11 +1639,14 @@ async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = nu
     ownerClauses.push(`p.seller_id = $${ownerParams.length}`);
   }
   if (!ownerClauses.length) {
-    return { products: [], count: 0, limit: safeLimit, offset: safeOffset };
+    return { products: [], count: 0, limit: safeLimit, offset: safeOffset, status: listingStatus };
   }
 
   const whereOwner = `(${ownerClauses.join(" OR ")})`;
-  const whereActive = `${whereOwner} AND p.in_stock = TRUE AND p.is_sold = FALSE`;
+  const whereStatus =
+    listingStatus === "sold"
+      ? `${whereOwner} AND p.is_sold = TRUE`
+      : `${whereOwner} AND p.in_stock = TRUE AND p.is_sold = FALSE`;
 
   const listParams = [...ownerParams, safeLimit, safeOffset];
   const listLimitParam = `$${ownerParams.length + 1}`;
@@ -1547,10 +1662,14 @@ async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = nu
        p.category,
        p.sub_category,
        p.size_label,
+       p.pit_to_pit_in,
+       p.length_in,
+       p.waist_in,
        p.condition,
        p.brand,
        p.gender_fit,
        p.is_secondhand,
+       p.is_sold,
        p.created_at,
        COALESCE(
          (SELECT pi.url FROM product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC LIMIT 1),
@@ -1563,7 +1682,7 @@ async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = nu
        FROM product_likes
        GROUP BY product_id
      ) pl ON pl.product_id = p.id
-     WHERE ${whereActive}
+     WHERE ${whereStatus}
      ORDER BY p.created_at DESC
      LIMIT ${listLimitParam}
      OFFSET ${listOffsetParam}`,
@@ -1573,7 +1692,7 @@ async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = nu
   const countResult = await query(
     `SELECT COUNT(*)::int AS listings_count
        FROM products p
-      WHERE ${whereActive}`,
+      WHERE ${whereStatus}`,
     ownerParams
   );
 
@@ -1582,7 +1701,63 @@ async function listActiveStorefrontProducts({ sellerUserId = null, sellerId = nu
     count: Number(countResult.rows[0]?.listings_count || 0),
     limit: safeLimit,
     offset: safeOffset,
+    status: listingStatus,
   };
+}
+
+/** @deprecated Prefer listStorefrontProducts({ status: "active" }) */
+async function listActiveStorefrontProducts(opts = {}) {
+  return listStorefrontProducts({ ...opts, status: "active" });
+}
+
+async function getSellerStorefrontMetrics({ sellerUserId = null, sellerId = null } = {}) {
+  const ownerParams = [];
+  const ownerClauses = [];
+  if (sellerUserId != null) {
+    ownerParams.push(Number(sellerUserId));
+    ownerClauses.push(`p.seller_user_id = $${ownerParams.length}`);
+  }
+  if (sellerId != null) {
+    ownerParams.push(Number(sellerId));
+    ownerClauses.push(`p.seller_id = $${ownerParams.length}`);
+  }
+  if (!ownerClauses.length) {
+    return { salesCount: 0, avgDispatchHours: null };
+  }
+
+  const whereOwner = `(${ownerClauses.join(" OR ")})`;
+  let salesCount = 0;
+  try {
+    const sold = await query(
+      `SELECT COUNT(*)::int AS n FROM products p WHERE ${whereOwner} AND p.is_sold = TRUE`,
+      ownerParams
+    );
+    salesCount = Number(sold.rows[0]?.n || 0);
+  } catch {
+    salesCount = 0;
+  }
+
+  let avgDispatchHours = null;
+  if (sellerId != null) {
+    try {
+      const dispatch = await query(
+        `SELECT AVG(EXTRACT(EPOCH FROM (s.dispatched_at - s.created_at)) / 3600.0) AS avg_hours
+           FROM shipments s
+          WHERE s.seller_id = $1
+            AND s.dispatched_at IS NOT NULL
+            AND s.created_at IS NOT NULL`,
+        [Number(sellerId)]
+      );
+      const raw = dispatch.rows[0]?.avg_hours;
+      if (raw != null && Number.isFinite(Number(raw))) {
+        avgDispatchHours = Math.round(Number(raw) * 10) / 10;
+      }
+    } catch {
+      avgDispatchHours = null;
+    }
+  }
+
+  return { salesCount, avgDispatchHours };
 }
 
 async function getLikesReceivedForOwner({ sellerUserId = null, sellerId = null } = {}) {

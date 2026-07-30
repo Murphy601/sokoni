@@ -62,6 +62,7 @@
           </div>
           <p id="shop-bio" class="hidden text-sm text-brand-purple/75 dark:text-white/75 mt-3"></p>
           <p id="shop-location" class="hidden text-xs text-brand-purple/60 dark:text-white/60 mt-1"></p>
+          <p id="shop-social-links" class="hidden flex flex-wrap gap-3 mt-2 text-xs"></p>
           <p id="shop-policy-note" class="text-xs text-brand-purple/55 dark:text-white/55 mt-3">
             Final sale unless the item is misdescribed. Protected by Sokoni escrow — refund if it doesn’t match photos/description.
           </p>
@@ -102,12 +103,12 @@
           <p id="shop-reviews-metric" class="text-sm font-semibold mt-0.5">—</p>
         </div>
         <div class="rounded-2xl border border-black/5 dark:border-white/10 px-3 py-2.5 text-center sm:text-left">
-          <p class="text-[11px] uppercase tracking-wide text-brand-purple/45 dark:text-white/45">Ships</p>
-          <p class="text-sm font-semibold mt-0.5">Prepaid · countrywide</p>
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/45 dark:text-white/45">Sales</p>
+          <p id="shop-sales-metric" class="text-sm font-semibold mt-0.5">—</p>
         </div>
         <div class="rounded-2xl border border-black/5 dark:border-white/10 px-3 py-2.5 text-center sm:text-left">
-          <p class="text-[11px] uppercase tracking-wide text-brand-purple/45 dark:text-white/45">Buyer protection</p>
-          <p class="text-sm font-semibold mt-0.5">Sokoni escrow</p>
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/45 dark:text-white/45">Avg dispatch</p>
+          <p id="shop-dispatch-metric" class="text-sm font-semibold mt-0.5">—</p>
         </div>
       </div>
 
@@ -221,7 +222,24 @@
 
     <section>
       <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <h2 class="font-display text-2xl font-bold">Active listings</h2>
+        <div class="flex flex-wrap items-center gap-2" role="tablist" aria-label="Shop listings">
+          <button
+            type="button"
+            id="shop-tab-active"
+            class="shop-listings-tab is-active min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold"
+            role="tab"
+            aria-selected="true">
+            Active
+          </button>
+          <button
+            type="button"
+            id="shop-tab-sold"
+            class="shop-listings-tab min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold"
+            role="tab"
+            aria-selected="false">
+            Sold
+          </button>
+        </div>
         <p id="shop-products-count" class="text-xs text-brand-purple/60 dark:text-white/65">0 live items</p>
       </div>
       <div id="shop-products-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>

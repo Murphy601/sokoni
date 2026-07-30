@@ -13,6 +13,7 @@ const state = {
   following: false,
   likedProductIds: new Set(),
   currentShop: null,
+  listingsTab: "active",
   reviewsRequestToken: 0,
   socialListRequestToken: 0,
   socialListDirection: null,
@@ -479,10 +480,32 @@ function renderShopHeader(payload) {
   const location = el("shop-location");
   if (location) {
     if (shop.location) {
-      location.textContent = `Kenya: ${shop.location}`;
+      location.textContent = shop.location;
       location.classList.remove("hidden");
     } else {
       location.classList.add("hidden");
+    }
+  }
+
+  const socialLinks = el("shop-social-links");
+  if (socialLinks) {
+    const parts = [];
+    if (shop.instagramUrl) {
+      parts.push(
+        `<a href="${escapeHtml(shop.instagramUrl)}" target="_blank" rel="noopener" class="underline hover:text-brand-green">Instagram</a>`
+      );
+    }
+    if (shop.tiktokUrl) {
+      parts.push(
+        `<a href="${escapeHtml(shop.tiktokUrl)}" target="_blank" rel="noopener" class="underline hover:text-brand-green">TikTok</a>`
+      );
+    }
+    if (parts.length) {
+      socialLinks.innerHTML = parts.join('<span aria-hidden="true">·</span>');
+      socialLinks.classList.remove("hidden");
+    } else {
+      socialLinks.innerHTML = "";
+      socialLinks.classList.add("hidden");
     }
   }
 
@@ -498,6 +521,22 @@ function renderShopHeader(payload) {
     reviewsMetric.textContent =
       totalReviews > 0 ? `★ ${avg.toFixed(1)} · ${totalReviews.toLocaleString()}` : "No reviews yet";
   }
+  const salesMetric = el("shop-sales-metric");
+  if (salesMetric) {
+    const sales = Number(stats.salesCount ?? stats.soldCount ?? 0);
+    salesMetric.textContent = sales > 0 ? `${sales.toLocaleString()} sold` : "No sales yet";
+  }
+  const dispatchMetric = el("shop-dispatch-metric");
+  if (dispatchMetric) {
+    const hours = Number(stats.avgDispatchHours);
+    if (Number.isFinite(hours) && hours > 0) {
+      dispatchMetric.textContent =
+        hours < 24 ? `~${hours}h` : `~${Math.round((hours / 24) * 10) / 10} days`;
+    } else {
+      dispatchMetric.textContent = "Building history";
+    }
+  }
+  syncListingsTabs();
   bindSocialListButtons(shop);
   closeSocialList();
 
@@ -742,20 +781,40 @@ function productCard(product, shop) {
       (product.condition ? String(product.condition).replace(/_/g, " ") : "—")
   );
   const size = product.size ? escapeHtml(product.size) : "—";
+  const measureBits = [
+    product.pitToPitIn != null ? `P2P ${product.pitToPitIn}"` : null,
+    product.lengthIn != null ? `L ${product.lengthIn}"` : null,
+    product.waistIn != null ? `W ${product.waistIn}"` : null,
+  ].filter(Boolean);
   const likes = Number(product.likesCount || 0);
   const liked = Boolean(product.liked) || state.likedProductIds.has(String(product.id));
+  const sold = Boolean(product.isSold) || state.listingsTab === "sold";
 
   return `
-    <article class="product-card bg-white dark:bg-brand-purpleLight/45 rounded-2xl border border-black/5 dark:border-white/10 p-4 flex flex-col">
+    <article class="product-card bg-white dark:bg-brand-purpleLight/45 rounded-2xl border border-black/5 dark:border-white/10 p-4 flex flex-col ${
+      sold ? "opacity-90" : ""
+    }">
       <div class="relative mb-3 rounded-xl overflow-hidden bg-brand-cream dark:bg-brand-purple/20 aspect-square">
-        <span class="absolute top-2 left-2 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">Prepaid</span>
+        <span class="absolute top-2 left-2 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">${
+          sold ? "Sold" : "Prepaid"
+        }</span>
         ${image}
       </div>
       <h3 class="font-semibold text-sm line-clamp-2">${title}</h3>
       <p class="text-xs text-brand-purple/55 dark:text-white/65 mt-1">${condition} · Size ${size}</p>
+      ${
+        measureBits.length
+          ? `<p class="text-[11px] text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
+              measureBits.join(" · ")
+            )}</p>`
+          : ""
+      }
       <p class="text-base font-bold mt-2">${escapeHtml(formatKes(product.priceKsh ?? product.priceKes))}</p>
       <div class="mt-3 flex items-center justify-between gap-2">
-        <button
+        ${
+          sold
+            ? `<span class="text-xs font-semibold text-brand-purple/55 dark:text-white/60">Past sale</span>`
+            : `<button
           type="button"
           data-like-product="${escapeHtml(product.id)}"
           class="min-h-[44px] px-3 rounded-full border border-brand-purple/20 dark:border-white/20 text-xs font-semibold"
@@ -769,7 +828,8 @@ function productCard(product, shop) {
           rel="noopener"
           class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-xs font-bold inline-flex items-center">
           Order on WhatsApp
-        </a>
+        </a>`
+        }
       </div>
     </article>`;
 }
@@ -839,6 +899,26 @@ function bindLikeButtons() {
   });
 }
 
+function syncListingsTabs() {
+  const activeBtn = el("shop-tab-active");
+  const soldBtn = el("shop-tab-sold");
+  const isSold = state.listingsTab === "sold";
+  if (activeBtn) {
+    activeBtn.classList.toggle("is-active", !isSold);
+    activeBtn.classList.toggle("bg-brand-green", !isSold);
+    activeBtn.classList.toggle("text-brand-purple", !isSold);
+    activeBtn.setAttribute("aria-selected", (!isSold).toString());
+  }
+  if (soldBtn) {
+    soldBtn.classList.toggle("is-active", isSold);
+    soldBtn.classList.toggle("bg-brand-green", isSold);
+    soldBtn.classList.toggle("text-brand-purple", isSold);
+    soldBtn.setAttribute("aria-selected", isSold.toString());
+    const soldCount = Number(state.currentShop?.stats?.soldCount || 0);
+    soldBtn.textContent = soldCount > 0 ? `Sold (${soldCount})` : "Sold";
+  }
+}
+
 function renderProducts(payload) {
   const grid = el("shop-products-grid");
   const empty = el("shop-products-empty");
@@ -847,7 +927,17 @@ function renderProducts(payload) {
 
   const products = Array.isArray(payload.products) ? payload.products : [];
   const total = Number(payload?.pagination?.total ?? products.length);
-  countNode.textContent = `${total.toLocaleString()} live item${total === 1 ? "" : "s"}`;
+  const tab = payload.tab === "sold" || state.listingsTab === "sold" ? "sold" : "active";
+  state.listingsTab = tab;
+  syncListingsTabs();
+  countNode.textContent =
+    tab === "sold"
+      ? `${total.toLocaleString()} sold item${total === 1 ? "" : "s"}`
+      : `${total.toLocaleString()} live item${total === 1 ? "" : "s"}`;
+  empty.textContent =
+    tab === "sold"
+      ? "No sold items archived yet. Past sales will show here as social proof."
+      : "No active listings yet. Check back soon, or message this seller on WhatsApp.";
 
   if (!products.length) {
     grid.innerHTML = "";
@@ -860,10 +950,10 @@ function renderProducts(payload) {
   if (window.SokoniComponents?.upgradeIn) {
     window.SokoniComponents.upgradeIn(grid);
   }
-  bindLikeButtons();
+  if (tab !== "sold") bindLikeButtons();
 }
 
-async function loadShop(handle) {
+async function loadShop(handle, { tab = state.listingsTab || "active", soft = false } = {}) {
   const clean = normalizeHandle(handle);
   if (!clean) {
     statusMessage("Enter a valid handle like @nairobi_thrifts.", true);
@@ -871,15 +961,19 @@ async function loadShop(handle) {
   }
 
   state.activeHandle = clean;
+  state.listingsTab = tab === "sold" ? "sold" : "active";
   setHandleInUrl(clean);
-  statusMessage("Loading shop...");
+  statusMessage(soft ? "Loading listings..." : "Loading shop...");
   el("shop-products-grid").innerHTML = "";
   el("shop-products-empty")?.classList.add("hidden");
-  resetReviewsUi();
-  closeSocialList();
+  if (!soft) {
+    resetReviewsUi();
+    closeSocialList();
+  }
+  syncListingsTabs();
 
   try {
-    const query = shopFetchQuery({ limit: 24 });
+    const query = shopFetchQuery({ limit: 24, tab: state.listingsTab });
     const res = await fetch(`${SHOP_API_BASE}/shop/${encodeURIComponent(clean)}?${query.toString()}`);
     const data = await res.json();
     if (!res.ok) {
@@ -891,7 +985,7 @@ async function loadShop(handle) {
     applyViewerState(data);
     renderShopHeader(data);
     renderProducts(data);
-    void loadReviewableOrders(data.shop || {});
+    if (!soft) void loadReviewableOrders(data.shop || {});
   } catch {
     statusMessage("Could not reach Sokoni right now. Please try again.", true);
   }
@@ -924,17 +1018,25 @@ function init() {
 
   el("shop-social-list-close")?.addEventListener("click", () => closeSocialList());
   bindReviewForm();
+  el("shop-tab-active")?.addEventListener("click", () => {
+    if (!state.activeHandle || state.listingsTab === "active") return;
+    void loadShop(state.activeHandle, { tab: "active", soft: true });
+  });
+  el("shop-tab-sold")?.addEventListener("click", () => {
+    if (!state.activeHandle || state.listingsTab === "sold") return;
+    void loadShop(state.activeHandle, { tab: "sold", soft: true });
+  });
 
   if (form) {
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      loadShop(input?.value || "");
+      loadShop(input?.value || "", { tab: "active" });
     });
   }
 
   const initialHandle = readHandleFromUrl();
   if (input && initialHandle) input.value = formatHandle(initialHandle);
-  if (initialHandle) loadShop(initialHandle);
+  if (initialHandle) loadShop(initialHandle, { tab: "active" });
   else statusMessage("Enter a shop handle to view listings.");
 }
 

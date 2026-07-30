@@ -295,27 +295,80 @@
     `;
   }
 
+  function measurementsLine(product) {
+    const bits = [
+      product.pitToPitIn != null ? `Pit-to-pit ${product.pitToPitIn}"` : null,
+      product.lengthIn != null ? `Length ${product.lengthIn}"` : null,
+      product.waistIn != null ? `Waist ${product.waistIn}"` : null,
+    ].filter(Boolean);
+    if (product.size) bits.unshift(`Size ${product.size}`);
+    return bits.join(" · ");
+  }
+
+  function galleryHtml(product) {
+    const urls = [];
+    const primary = resolveImage(product);
+    if (primary) urls.push(primary);
+    if (Array.isArray(product.images)) {
+      for (const img of product.images) {
+        if (!img) continue;
+        const resolved =
+          window.SokoniApp?.resolveProductImage?.({ ...product, imageUrl: img }) ||
+          (/^https?:\/\//i.test(String(img)) ? String(img) : null);
+        if (resolved && !urls.includes(resolved)) urls.push(resolved);
+        if (urls.length >= 8) break;
+      }
+    }
+    if (!urls.length) {
+      return `<div class="product-sheet-image product-sheet-image--empty">Photo coming soon</div>`;
+    }
+    const main = `<img src="${escapeHtml(urls[0])}" alt="${escapeHtml(
+      product.name
+    )}" class="product-sheet-image" data-sheet-main-image />`;
+    if (urls.length === 1) return main;
+    const thumbs = urls
+      .map(
+        (url, i) =>
+          `<button type="button" class="product-sheet-thumb ${
+            i === 0 ? "is-active" : ""
+          }" data-sheet-thumb="${escapeHtml(url)}" aria-label="Photo ${i + 1}">
+            <img src="${escapeHtml(url)}" alt="" />
+          </button>`
+      )
+      .join("");
+    return `${main}<div class="product-sheet-thumbs">${thumbs}</div>`;
+  }
+
+  function productShareUrl(product) {
+    const id = encodeURIComponent(product.id || "");
+    const origin = window.location.origin || "https://sokonimall.com";
+    return `${origin}/index.html?q=${id}`;
+  }
+
   function renderBody(product) {
-    const src = resolveImage(product);
     const saved = window.SokoniShopShell?.isHearted?.(product.id) ?? window.SokoniShopShell?.isInBag?.(product.id);
     const condition = product.conditionLabel || product.condition || "";
     const secondhand = product.isSecondhand ? "Pre-Loved" : "Brand New";
     const handle = sellerHandle(product);
     const shopLink = sellerShopLink(product);
     const offerAction = offerActionBlock(product);
+    const measures = measurementsLine(product);
 
     return `
       <div class="product-sheet-gallery">
-        ${
-          src
-            ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(product.name)}" class="product-sheet-image" />`
-            : `<div class="product-sheet-image product-sheet-image--empty">Photo coming soon</div>`
-        }
+        ${galleryHtml(product)}
       </div>
       <div class="product-sheet-meta">
         <p class="product-sheet-price">${escapeHtml(formatPrice(product))}</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
         <p class="product-sheet-tags">${escapeHtml([browseLabel(product), secondhand, condition].filter(Boolean).join(" · "))}</p>
+        ${
+          measures
+            ? `<p class="product-sheet-measures text-sm text-brand-purple/70 dark:text-white/70 mt-2">${escapeHtml(
+                measures
+              )}</p>`
+            : ""
+        }
         <p class="product-sheet-id">${escapeHtml(product.id || "")}</p>
         ${
           product.description
@@ -334,6 +387,9 @@
         <button type="button" id="product-sheet-save" class="product-sheet-save ${saved ? "is-saved" : ""}">
           ${saved ? "♥ Saved" : "♡ Save for later"}
         </button>
+        <button type="button" id="product-sheet-share" class="product-sheet-ask">
+          Share card
+        </button>
         ${offerAction}
         ${
           handle && shopLink
@@ -344,6 +400,116 @@
           askInboxLink(product) ? "💬 Message seller on Sokoni" : "💬 Ask on WhatsApp"
         }</a>
       </div>`;
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  async function buildShareCardBlob(product) {
+    const width = 1080;
+    const height = 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas_unavailable");
+
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#1B1035");
+    gradient.addColorStop(1, "#2E1B57");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    const src = resolveImage(product);
+    if (src) {
+      try {
+        const img = await loadImage(src);
+        const boxX = 80;
+        const boxY = 220;
+        const boxW = width - 160;
+        const boxH = 1080;
+        ctx.fillStyle = "#FFF8F0";
+        ctx.fillRect(boxX, boxY, boxW, boxH);
+        const scale = Math.max(boxW / img.width, boxH / img.height);
+        const dw = img.width * scale;
+        const dh = img.height * scale;
+        const dx = boxX + (boxW - dw) / 2;
+        const dy = boxY + (boxH - dh) / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(boxX, boxY, boxW, boxH);
+        ctx.clip();
+        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.restore();
+      } catch {
+        /* keep solid card if photo blocked by CORS */
+      }
+    }
+
+    ctx.fillStyle = "#25D366";
+    ctx.font = "bold 54px DM Sans, sans-serif";
+    ctx.fillText("Sokoni", 80, 140);
+    ctx.fillStyle = "#FFF8F0";
+    ctx.font = "600 64px Fraunces, Georgia, serif";
+    const title = String(product.name || "Item on Sokoni").slice(0, 42);
+    ctx.fillText(title, 80, 1420);
+    ctx.font = "bold 72px DM Sans, sans-serif";
+    ctx.fillStyle = "#25D366";
+    ctx.fillText(formatPrice(product) || "KES —", 80, 1520);
+    ctx.fillStyle = "rgba(255,248,240,0.85)";
+    ctx.font = "36px DM Sans, sans-serif";
+    ctx.fillText("Prepaid escrow · sokonimall.com", 80, 1600);
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) reject(new Error("share_card_failed"));
+        else resolve(blob);
+      }, "image/jpeg", 0.92);
+    });
+  }
+
+  async function shareProductCard(product) {
+    const statusNode = document.getElementById("product-sheet-offer-status");
+    const setMsg = (msg) => {
+      if (statusNode) statusNode.textContent = msg || "";
+    };
+    try {
+      setMsg("Building share card…");
+      const blob = await buildShareCardBlob(product);
+      const file = new File([blob], `sokoni-${product.id || "item"}.jpg`, { type: "image/jpeg" });
+      const shareUrl = productShareUrl(product);
+      const text = `${product.name || "Item"} — ${formatPrice(product)} on Sokoni\n${shareUrl}`;
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Sokoni", text });
+        setMsg("Shared.");
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = file.name;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+      window.open(waLink(text), "_blank", "noopener");
+      setMsg("Card downloaded — WhatsApp opened with the caption.");
+    } catch (err) {
+      const shareUrl = productShareUrl(product);
+      window.open(
+        waLink(`${product.name || "Item"} — ${formatPrice(product)} on Sokoni\n${shareUrl}`),
+        "_blank",
+        "noopener"
+      );
+      setMsg(err?.message === "share_card_failed" ? "Opened WhatsApp share." : "Opened WhatsApp share.");
+    }
   }
 
   function setOfferStatus(message, tone = "info") {
@@ -531,6 +697,21 @@
     document.getElementById("product-sheet-close")?.addEventListener("click", close);
     document.querySelector("#product-sheet .sheet-backdrop")?.addEventListener("click", close);
     document.getElementById("product-sheet-body")?.addEventListener("click", (e) => {
+      const thumb = e.target.closest("[data-sheet-thumb]");
+      if (thumb) {
+        const main = document.querySelector("[data-sheet-main-image]");
+        const url = thumb.getAttribute("data-sheet-thumb");
+        if (main && url) main.src = url;
+        document.querySelectorAll("[data-sheet-thumb]").forEach((node) => {
+          node.classList.toggle("is-active", node === thumb);
+        });
+        return;
+      }
+      if (e.target.closest("#product-sheet-share")) {
+        if (!currentProduct) return;
+        void shareProductCard(currentProduct);
+        return;
+      }
       if (!e.target.closest("#product-sheet-save")) return;
       if (!currentProduct) return;
       window.SokoniShopShell?.toggleBag(currentProduct.id);

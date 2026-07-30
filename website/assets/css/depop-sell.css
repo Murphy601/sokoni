@@ -35,6 +35,12 @@ html.dark .sell-wizard-step {
   }
 }
 
+@media (min-width: 1024px) {
+  .sell-media-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .sell-media-slot {
   position: relative;
   aspect-ratio: 1;
