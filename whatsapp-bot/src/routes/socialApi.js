@@ -32,6 +32,7 @@ import { updatePeerSellerProfile } from "../services/suppliers.js";
 import { uploadSellerShopAvatar } from "../services/seller-avatar.js";
 import {
   notifyBuyerOfferResponse,
+  notifyBuyerOfferReminder,
   notifyNewDirectMessage,
   notifySellerNewFollower,
   notifySellerNewOffer,
@@ -698,6 +699,10 @@ router.post("/offers/:offerId/remind", async (req, res) => {
         lastReminderAt: result.lastReminderAt,
         cooldownEndsAt: result.cooldownEndsAt,
       });
+    }
+    if (result.reminder) {
+      // In-app DM is already written; also ping buyer on WhatsApp (soft-fail).
+      void notifyBuyerOfferReminder({ reminder: result.reminder });
     }
     res.status(201).json(result);
   } catch (err) {
