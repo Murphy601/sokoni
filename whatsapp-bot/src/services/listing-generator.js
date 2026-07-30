@@ -75,7 +75,7 @@ function visionModelChain() {
   const chain = [...new Set([primary, ...fallbacks].filter(Boolean))];
   if (chain.some((m) => /^krea\//i.test(m) || /image-gen|flux|dall-e|stable-diffusion/i.test(m))) {
     console.warn(
-      "[listing-generator] CATALOG_VISION_MODEL includes a non-vision/image-gen model — skipping those. Set CATALOG_VISION_MODEL=google/gemini-2.5-flash (and GEMINI_API_KEY) on the bot."
+      "[listing-generator] image-gen models (e.g. krea) stay in CATALOG_VISION_FALLBACKS but are skipped for photo→JSON — Gemini / multimodal chat models handle listing drafts."
     );
   }
   return chain;

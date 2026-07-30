@@ -21,8 +21,9 @@ In **GitHub → Settings → Secrets and variables → Actions**, set:
 | `VM_HOST` | `104.197.128.235` | Public IP of `sokoni-bot` (same as `bot.sokonimall.com` A record) |
 | `VM_USER` | `daviemuiruri3888` | Linux user that owns `~/sokoni` |
 | `VM_SSH_KEY` | `-----BEGIN … PRIVATE KEY-----` | Full private key; matching public key in `~/.ssh/authorized_keys` on the VM |
+| `GEMINI_API_KEY` | Google AI Studio key | Seller cover photo → listing draft (deploy writes it into VM `.env`) |
 
-Without these, Bot Deploy fails immediately with `missing server host` / empty key.
+Without `VM_*`, Bot Deploy fails immediately with `missing server host` / empty key.
 
 **Manual deploy (if Actions secrets are not set yet):**
 
@@ -126,8 +127,14 @@ WAHA_SESSION=default
 
 OPENAI_API_KEY=sk-or-v1-...your key...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=google/gemini-2.5-flash
-OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free
+OPENAI_MODEL=openrouter/free
+OPENAI_MODEL_FALLBACKS=google/gemma-4-26b-a4b-it:free
+
+# Seller photos → listing draft (primary Gemini; keep krea as OpenRouter fallback)
+CATALOG_VISION_MODEL=google/gemini-2.5-flash
+CATALOG_VISION_FALLBACKS=google/gemini-2.0-flash-001,krea/krea-2-medium-turbo
+GEMINI_API_KEY=...your Google AI Studio key...
+GEMINI_VISION_MODEL=gemini-2.5-flash
 
 PORT=3001
 PUBLIC_SITE_URL=https://sokonimall.com

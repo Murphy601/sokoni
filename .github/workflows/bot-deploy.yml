@@ -5,6 +5,7 @@ name: Bot Deploy
 #   VM_HOST          — e.g. 104.197.128.235
 #   VM_USER          — e.g. daviemuiruri3888
 #   VM_SSH_KEY       — private key with access to the VM
+#   GEMINI_API_KEY   — Google Gemini key for seller photo → listing drafts
 #
 # Website (sokonimall.com) deploys separately via Cloudflare Workers Builds on main.
 
@@ -38,6 +39,7 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -euo pipefail
           missing=0
@@ -52,6 +54,9 @@ jobs:
           if [ -z "${VM_SSH_KEY}" ]; then
             echo "::error title=Missing VM_SSH_KEY::Set Actions secret VM_SSH_KEY to the private key that can SSH into the VM."
             missing=1
+          fi
+          if [ -z "${GEMINI_API_KEY}" ]; then
+            echo "::warning title=Missing GEMINI_API_KEY::Set Actions secret GEMINI_API_KEY for best seller photo drafts (or set GEMINI_API_KEY on the VM .env)."
           fi
           if [ "$missing" -ne 0 ]; then
             echo ""
@@ -77,6 +82,7 @@ jobs:
             git fetch origin main
             git checkout main
             git pull --rebase origin main
+            export SOKONI_GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}'
             bash scripts/deploy-bot.sh
 
       - name: Smoke-check bot health
