@@ -479,6 +479,45 @@ function retailFromSupply(supply) {
 
 let sellerProfile = null;
 let ledgerData = null;
+/** Cached dashboard slices for Selling Hub metrics / carousels. */
+let hubCache = {
+  orders: [],
+  drafts: [],
+  liveCount: 0,
+  draftCount: 0,
+};
+
+const HUB_TRENDING_SEARCHES = [
+  { tag: "Vintage Nike", growth: "High demand" },
+  { tag: "Baggy Denim", growth: "Rising" },
+  { tag: "Leather Jackets", growth: "Steady" },
+  { tag: "Adidas Samba", growth: "Hot" },
+  { tag: "Y2K Baby Tees", growth: "Rising" },
+  { tag: "Thrift Dresses", growth: "Weekend spike" },
+];
+
+const HUB_SELLER_GUIDES = [
+  {
+    title: "Photograph fits on your phone",
+    blurb: "Daylight, plain wall, fill the frame — buyers swipe past dark blurry shots.",
+    action: "list",
+  },
+  {
+    title: "Price pre-loved for fast sales",
+    blurb: "Start with what you want to receive (seller-net). Shipping starts at KES 300.",
+    action: "list",
+  },
+  {
+    title: "Bulk Draft Studio",
+    blurb: "Import up to 50 rows from CSV, then add photos before you post.",
+    action: "bulk",
+  },
+  {
+    title: "Ship within 48 hours",
+    blurb: "Print the SK drop tag, hand over at a hub — escrow releases after delivery.",
+    action: "orders",
+  },
+];
 let activeLedgerTab = "available";
 let verificationToken = null;
 let phoneVerified = false;
@@ -1730,6 +1769,10 @@ async function loadMyListings() {
       return;
     }
     const items = [...(data.drafts || []), ...(data.listings || [])];
+    hubCache.drafts = data.drafts || [];
+    hubCache.draftCount = hubCache.drafts.length;
+    hubCache.liveCount = (data.listings || []).filter((l) => (l.status || "live") === "live").length;
+    renderSellerHubOverview();
     if (!items.length) {
       wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet — add your first item above, or import a CSV.</p>`;
       return;
@@ -2549,11 +2592,201 @@ function shipmentBadgeClass(status) {
   return "sell-order-badge--transit";
 }
 
+function hubOrdersToShip(orders = hubCache.orders) {
+  return (orders || []).filter((o) => o.paid && o.shipmentStatus !== "delivered");
+}
+
+function hubGrossSalesKes(orders = hubCache.orders) {
+  return (orders || [])
+    .filter((o) => o.paid)
+    .reduce((sum, o) => sum + Math.round(Number(o.sellerNetKes) || 0), 0);
+}
+
+function renderHubTrendingCarousel() {
+  const wrap = el("hub-trending-carousel");
+  if (!wrap || wrap.dataset.bound === "1") return;
+  wrap.innerHTML = HUB_TRENDING_SEARCHES.map(
+    (item) => `
+      <button type="button" role="listitem" class="seller-hub-card text-left" data-hub-trend="${escapeHtml(item.tag)}">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <span class="text-[10px] font-bold uppercase tracking-wide text-brand-purple/40 dark:text-white/40">Signal</span>
+          <span class="seller-hub-growth">${escapeHtml(item.growth)}</span>
+        </div>
+        <p class="text-sm font-bold text-brand-purple dark:text-white">#${escapeHtml(item.tag.replace(/\s+/g, ""))}</p>
+        <p class="text-[10px] text-brand-purple/50 dark:text-white/50 mt-1">Tap to start a drop with this tag</p>
+      </button>`
+  ).join("");
+  wrap.querySelectorAll("[data-hub-trend]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tag = btn.getAttribute("data-hub-trend") || "";
+      startDropWithTrendTag(tag);
+    });
+  });
+  wrap.dataset.bound = "1";
+}
+
+function renderHubGuidesCarousel() {
+  const wrap = el("hub-guides-carousel");
+  if (!wrap || wrap.dataset.bound === "1") return;
+  wrap.innerHTML = HUB_SELLER_GUIDES.map(
+    (g, i) => `
+      <button type="button" role="listitem" class="seller-hub-card seller-hub-card--guide text-left" data-hub-guide="${i}">
+        <p class="text-sm font-bold text-brand-purple dark:text-white">${escapeHtml(g.title)}</p>
+        <p class="text-[11px] text-brand-purple/55 dark:text-white/55 mt-2 leading-snug">${escapeHtml(g.blurb)}</p>
+        <p class="text-[10px] font-bold text-brand-green mt-3">Open →</p>
+      </button>`
+  ).join("");
+  wrap.querySelectorAll("[data-hub-guide]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const guide = HUB_SELLER_GUIDES[Number(btn.getAttribute("data-hub-guide"))];
+      if (!guide) return;
+      if (guide.action === "bulk") {
+        showSellerView("dashboard");
+        el("bulk-draft-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (guide.action === "orders") {
+        el("seller-orders")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        showSellerView("listing");
+      }
+    });
+  });
+  wrap.dataset.bound = "1";
+}
+
+function startDropWithTrendTag(tag) {
+  showSellerView("listing");
+  const tagsEl = el("draft-tags");
+  if (tagsEl && tag) {
+    const slug = String(tag)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 24);
+    const existing = String(tagsEl.value || "");
+    if (slug && !existing.toLowerCase().includes(slug)) {
+      tagsEl.value = existing ? `${existing} #${slug}` : `#${slug}`;
+    }
+  }
+  setStatus(tag ? `Started a drop — tagged #${tag.replace(/\s+/g, "")}. Add a cover photo next.` : "");
+}
+
+function renderHubDraftsCarousel() {
+  const wrap = el("hub-drafts-carousel");
+  if (!wrap) return;
+  const drafts = hubCache.drafts || [];
+  if (!drafts.length) {
+    wrap.innerHTML = `
+      <button type="button" role="listitem" class="seller-hub-card seller-hub-card--draft text-left" id="hub-empty-draft-cta">
+        <p class="text-sm font-bold">No drafts yet</p>
+        <p class="text-[11px] text-brand-purple/55 dark:text-white/55 mt-1">Import a CSV or create a drop — photos come after.</p>
+        <p class="text-[10px] font-bold text-brand-green mt-3">+ Create new drop</p>
+      </button>`;
+    el("hub-empty-draft-cta")?.addEventListener("click", () => showSellerView("listing"));
+    return;
+  }
+
+  const draftById = new Map();
+  wrap.innerHTML = drafts
+    .slice(0, 12)
+    .map((item) => {
+      const pid = item.productId || item.id;
+      draftById.set(String(pid), item);
+      const title = escapeHtml(item.draft?.name || pid);
+      const img = item.imageUrl || item.images?.[0];
+      const imgSrc = listingMediaUrl(img);
+      const needsPhoto = !img;
+      const price = item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? item.draft?.priceKes;
+      return `
+        <div role="listitem" class="seller-hub-card seller-hub-card--draft">
+          <div class="flex items-start gap-3">
+            ${
+              imgSrc
+                ? `<img src="${escapeHtml(imgSrc)}" alt="" class="seller-hub-thumb" />`
+                : `<div class="seller-hub-thumb flex items-center justify-center text-[9px] text-center px-1 text-brand-purple/45">No photo</div>`
+            }
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-bold truncate text-brand-purple dark:text-white">${title}</p>
+              <p class="text-[10px] font-mono text-brand-purple/45 dark:text-white/45 mt-0.5">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}</p>
+              <p class="text-[10px] mt-1 ${needsPhoto ? "text-brand-purple/60" : "text-brand-green"}">${needsPhoto ? "Add photos" : "Ready to review"}</p>
+            </div>
+          </div>
+          <button type="button" class="mt-1 text-[11px] font-bold text-brand-green hover:underline hub-continue-draft" data-id="${escapeHtml(pid)}">
+            ${needsPhoto ? "+ Add photos" : "Continue editing"}
+          </button>
+        </div>`;
+    })
+    .join("");
+
+  wrap.querySelectorAll(".hub-continue-draft").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = draftById.get(String(btn.dataset.id || ""));
+      if (item) void openDraftForEdit(item);
+    });
+  });
+}
+
+function renderSellerHubOverview() {
+  const handle = String(sellerProfile?.shopHandle || sellerProfile?.handle || "").replace(/^@+/, "");
+  if (el("hub-shop-handle")) {
+    el("hub-shop-handle").textContent = handle ? `@${handle}` : "@yourshop";
+  }
+
+  const toShip = hubOrdersToShip();
+  const gross = hubGrossSalesKes();
+  const live = hubCache.liveCount || 0;
+  const drafts = hubCache.draftCount || 0;
+  const escrow = ledgerData?.available?.totalKes || 0;
+
+  if (el("hub-stat-gross")) el("hub-stat-gross").textContent = formatKes(gross);
+  if (el("hub-stat-orders")) el("hub-stat-orders").textContent = String(toShip.length);
+  if (el("hub-stat-live")) el("hub-stat-live").textContent = String(live);
+  if (el("hub-stat-drafts-meta")) {
+    el("hub-stat-drafts-meta").textContent = `Drafts pending: ${drafts}`;
+  }
+  if (el("hub-stat-escrow")) el("hub-stat-escrow").textContent = formatKes(escrow);
+
+  const goal = 20;
+  const progress = Math.min(goal, live);
+  const pct = Math.round((progress / goal) * 100);
+  if (el("hub-level-label")) el("hub-level-label").textContent = `${progress} / ${goal} live`;
+  if (el("hub-level-bar")) el("hub-level-bar").style.width = `${pct}%`;
+  if (el("hub-level-bar-wrap")) el("hub-level-bar-wrap").setAttribute("aria-valuenow", String(progress));
+
+  const checklist = el("hub-level-checklist");
+  if (checklist) {
+    const items = checklist.querySelectorAll("li");
+    items[0]?.classList.toggle("seller-hub-level-done", live >= goal);
+    items[1]?.classList.toggle("seller-hub-level-done", toShip.length === 0 && hubCache.orders.some((o) => o.paid));
+    // Ratings: soft milestone when they have live listings (full ratings API later)
+    items[2]?.classList.toggle("seller-hub-level-done", live >= 5);
+  }
+
+  renderHubTrendingCarousel();
+  renderHubGuidesCarousel();
+  renderHubDraftsCarousel();
+}
+
+function bindSellerHubUi() {
+  el("hub-bulk-studio-btn")?.addEventListener("click", () => {
+    showSellerView("dashboard");
+    el("bulk-draft-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  el("hub-create-drop-btn")?.addEventListener("click", () => showSellerView("listing"));
+  el("hub-view-all-drafts-btn")?.addEventListener("click", () => {
+    el("my-listings")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  renderHubTrendingCarousel();
+  renderHubGuidesCarousel();
+  renderSellerHubOverview();
+}
+
 function renderSellerOrders(orders) {
   const wrap = el("seller-orders");
   if (!wrap) return;
+  hubCache.orders = Array.isArray(orders) ? orders : [];
+  renderSellerHubOverview();
 
-  const active = (orders || []).filter((o) => o.paid && o.shipmentStatus !== "delivered");
+  const active = hubOrdersToShip(hubCache.orders);
   if (!active.length) {
     wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No active orders — when someone buys, it shows here with your drop-off label.</p>`;
     return;
@@ -2576,7 +2809,7 @@ function renderSellerOrders(orders) {
             <p class="font-semibold">${o.productName || "Order"}</p>
             <span class="sell-order-badge ${shipmentBadgeClass(o.shipmentStatus)}">${o.shipmentStatusLabel}</span>
           </div>
-          <p class="text-xs text-brand-purple/50 mt-1">${o.orderId} · You receive ${formatKes(o.sellerNetKes)}</p>
+          <p class="text-xs text-brand-purple/50 mt-1"><span class="font-mono">${o.orderId}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
           <div class="sell-order-actions">${actions.join("")}</div>
         </div>`;
     })
@@ -4778,6 +5011,7 @@ async function loadEscrowLedger() {
     el("ledger-pending-total").textContent = formatKes(ledgerData.pendingEscrow?.totalKes || 0);
     el("ledger-transit-total").textContent = formatKes(ledgerData.inTransit?.totalKes || 0);
     renderLedgerDetail();
+    renderSellerHubOverview();
   } catch {}
 }
 
@@ -4848,6 +5082,7 @@ function init() {
   el("save-draft-btn")?.addEventListener("click", onSaveDraft);
   el("load-listings-btn")?.addEventListener("click", loadMyListings);
   bindBulkCsvUi();
+  bindSellerHubUi();
   el("load-ledger-btn")?.addEventListener("click", loadEscrowLedger);
   el("onboard-btn")?.addEventListener("click", onOnboard);
   el("send-code-btn")?.addEventListener("click", onSendCode);
