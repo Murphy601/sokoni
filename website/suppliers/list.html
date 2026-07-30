@@ -229,6 +229,30 @@
           <div id="seller-orders" class="space-y-3"></div>
         </section>
 
+        <section class="rounded-3xl border border-black/5 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg">Rate buyers</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">After delivery, leave a star rating for the buyer (helps the next seller).</p>
+            </div>
+            <button id="load-buyer-reviews-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div id="seller-buyer-reviews" class="space-y-3"></div>
+          <p id="seller-buyer-reviews-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+        </section>
+
+        <section class="rounded-3xl border border-black/5 dark:border-white/10 p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg">Disputes</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">Respond when a buyer opens a ticket. Escrow stays held until admin decides.</p>
+            </div>
+            <button id="load-seller-disputes-btn" type="button" class="text-sm font-semibold text-brand-green hover:underline">Refresh</button>
+          </div>
+          <div id="seller-disputes" class="space-y-3"></div>
+          <p id="seller-disputes-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+        </section>
+
         <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <div>

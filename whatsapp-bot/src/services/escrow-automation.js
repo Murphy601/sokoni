@@ -206,8 +206,25 @@ export function resolveOrderFromStkCallback(parsed) {
 }
 
 /** On courier delivery scan — schedule seller payout after escrow hold. */
-export function onOrderDelivered(order) {
+export async function onOrderDelivered(order) {
   if (!order?.id) return;
+
+  try {
+    const { orderHasOpenDispute, orderHasDisputeHold } = await import("./disputes.js");
+    if (orderHasDisputeHold(order) || (await orderHasOpenDispute(order.id))) {
+      updateOrderMeta(order.id, {
+        deliveredAt: Date.now(),
+        disputeHold: true,
+        escrowStatus: "held",
+        payoutStatus: "held_for_dispute",
+      });
+      console.warn("[escrow] payout blocked — open dispute on", order.id);
+      return;
+    }
+  } catch (err) {
+    console.warn("[escrow] dispute check skipped:", err.message);
+  }
+
   const eligibleAt = addBusinessDays(Date.now(), 3);
   updateOrderMeta(order.id, {
     escrowStatus: "released",

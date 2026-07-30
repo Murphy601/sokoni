@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getSupplier } from "./suppliers.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
+import { getOrder } from "./orders.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -99,6 +100,12 @@ export function processDuePayouts() {
   for (const entry of store.entries) {
     if (entry.status !== "scheduled") continue;
     if (!entry.payoutEligibleAt || entry.payoutEligibleAt > now) continue;
+    try {
+      const order = getOrder(entry.orderId);
+      if (order?.disputeHold || order?.escrowStatus === "refunded") continue;
+    } catch {
+      /* ignore */
+    }
     entry.status = "owed";
     promoted += 1;
   }
@@ -137,6 +144,32 @@ export function markPayoutPaid(orderId) {
   if (!entry) return null;
   entry.status = "paid";
   entry.paidAt = Date.now();
+  persist();
+  return entry;
+}
+
+export function cancelSettlementPayout(orderId, reason = "dispute") {
+  load();
+  const entry = store.entries.find(
+    (e) => e.orderId === orderId && (e.status === "scheduled" || e.status === "owed")
+  );
+  if (!entry) return null;
+  entry.status = "cancelled";
+  entry.cancelledAt = Date.now();
+  entry.cancelReason = reason;
+  persist();
+  return entry;
+}
+
+export function reinstateSettlementPayout(orderId) {
+  load();
+  const entry = store.entries.find((e) => e.orderId === orderId && e.status === "cancelled");
+  if (!entry) return null;
+  const eligibleAt = entry.payoutEligibleAt || addBusinessDays(Date.now(), 1);
+  entry.status = "scheduled";
+  entry.payoutEligibleAt = eligibleAt;
+  entry.reinstatedAt = Date.now();
+  delete entry.cancelReason;
   persist();
   return entry;
 }

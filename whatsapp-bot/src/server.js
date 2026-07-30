@@ -20,6 +20,7 @@ import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
 import socialApiRouter from "./routes/socialApi.js";
 import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
 import ordersApiRouter from "./routes/ordersApi.js";
+import disputesApiRouter from "./routes/disputesApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
 import paymentsApiRouter from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
@@ -62,7 +63,7 @@ app.use((req, res, next) => {
   if (origin && SITE_ORIGINS.has(origin.replace(/\/$/, ""))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Seller-Session, X-Buyer-Session");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Seller-Session, X-Buyer-Session, X-Admin-Token");
   }
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -176,6 +177,7 @@ app.use("/api/seller/onboard", sellerOnboardApiRouter);
 app.use("/api/social", socialApiRouter);
 app.use("/api/buyer/auth", buyerAuthApiRouter);
 app.use("/api/orders", ordersApiRouter);
+app.use("/api/disputes", disputesApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/payments", paymentsApiRouter);
 app.use("/api/tracking", trackingApiRouter);

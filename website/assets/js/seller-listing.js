@@ -1937,6 +1937,194 @@ function renderSellerOrders(orders) {
     .join("");
 }
 
+function setBuyerReviewStatus(message, isError = false) {
+  const node = el("seller-buyer-reviews-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+function setSellerDisputesStatus(message, isError = false) {
+  const node = el("seller-disputes-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("text-red-600", isError);
+  node.classList.toggle("dark:text-red-400", isError);
+  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+}
+
+async function loadSellerBuyerReviews() {
+  const wrap = el("seller-buyer-reviews");
+  if (!wrap) return;
+  const phone = apiPhone();
+  if (!phone || !getSessionToken()) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Sign in to rate buyers after delivery.</p>`;
+    return;
+  }
+  wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Loading…</p>`;
+  try {
+    const params = new URLSearchParams({ phone, sessionToken: getSessionToken() });
+    const res = await fetch(`${SOCIAL_API}/reviews/reviewable-buyers?${params.toString()}`, {
+      headers: { ...sellerAuthHeaders() },
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">${escapeHtml(parsed.data?.message || "Could not load buyers.")}</p>`;
+      return;
+    }
+    const orders = Array.isArray(parsed.data?.orders) ? parsed.data.orders : [];
+    if (!orders.length) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">No delivered orders waiting for a buyer rating.</p>`;
+      return;
+    }
+    wrap.innerHTML = orders
+      .map(
+        (o) => `
+      <form class="sell-order-card space-y-2" data-rate-buyer="${escapeHtml(o.orderId)}" data-buyer-id="${escapeHtml(String(o.buyerUserId))}">
+        <p class="font-semibold text-sm">${escapeHtml(o.productName || o.orderId)}</p>
+        <p class="text-xs text-brand-purple/50">${escapeHtml(o.orderId)} · buyer #${escapeHtml(String(o.buyerUserId))}</p>
+        <label class="block text-xs font-medium">Stars
+          <select name="rating" class="sell-form-input mt-1">
+            <option value="5">5 — Great</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1</option>
+          </select>
+        </label>
+        <label class="block text-xs font-medium">Note (optional)
+          <input name="comment" maxlength="500" class="sell-form-input mt-1" placeholder="Paid fast, clear chat…" />
+        </label>
+        <button type="submit" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Submit rating</button>
+      </form>`
+      )
+      .join("");
+    wrap.querySelectorAll("form[data-rate-buyer]").forEach((form) => {
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const orderId = form.getAttribute("data-rate-buyer");
+        const buyerUserId = Number(form.getAttribute("data-buyer-id"));
+        const fd = new FormData(form);
+        setBuyerReviewStatus("Saving…");
+        try {
+          const res = await fetch(`${SOCIAL_API}/reviews/create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
+            body: JSON.stringify(
+              jsonAuthBody({
+                phone,
+                direction: "seller_to_buyer",
+                orderId,
+                buyerUserId,
+                rating: Number(fd.get("rating") || 5),
+                comment: String(fd.get("comment") || ""),
+              })
+            ),
+          });
+          const parsed = await parseApiResponse(res);
+          if (!parsed.ok) {
+            setBuyerReviewStatus(parsed.data?.message || "Could not save rating.", true);
+            return;
+          }
+          setBuyerReviewStatus("Buyer rated — thanks.");
+          void loadSellerBuyerReviews();
+        } catch {
+          setBuyerReviewStatus("Network error.", true);
+        }
+      });
+    });
+  } catch {
+    wrap.innerHTML = `<p class="text-sm text-red-600">Network error.</p>`;
+  }
+}
+
+async function loadSellerDisputes() {
+  const wrap = el("seller-disputes");
+  if (!wrap) return;
+  const phone = apiPhone();
+  if (!phone || !getSessionToken()) {
+    wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Sign in to see disputes.</p>`;
+    return;
+  }
+  wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Loading…</p>`;
+  const DISPUTES_API = `${API_BASE}/api/disputes`;
+  try {
+    const params = new URLSearchParams({ phone, sessionToken: getSessionToken() });
+    const res = await fetch(`${DISPUTES_API}/seller?${params.toString()}`, {
+      headers: { ...sellerAuthHeaders() },
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    if (!parsed.ok) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">${escapeHtml(parsed.data?.message || "Could not load disputes.")}</p>`;
+      return;
+    }
+    const disputes = Array.isArray(parsed.data?.disputes) ? parsed.data.disputes : [];
+    if (!disputes.length) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">No open disputes. If a buyer opens one, it shows here.</p>`;
+      return;
+    }
+    wrap.innerHTML = disputes
+      .map((d) => {
+        const open = d.status === "open" || d.status === "under_review";
+        return `
+        <div class="sell-order-card space-y-2" data-dispute-id="${escapeHtml(String(d.id))}">
+          <div class="flex justify-between gap-2">
+            <p class="font-semibold text-sm">${escapeHtml(d.orderRef)}</p>
+            <span class="text-xs font-semibold">${escapeHtml(d.status)}</span>
+          </div>
+          <p class="text-xs text-brand-purple/55">${escapeHtml(d.reason)}${d.buyerStatement ? ` — ${escapeHtml(d.buyerStatement)}` : ""}</p>
+          ${
+            open
+              ? `<label class="block text-xs font-medium">Your response
+                  <textarea data-dispute-response rows="2" maxlength="2000" class="sell-form-input mt-1" placeholder="Facts + photos help admin decide.">${escapeHtml(d.sellerResponse || "")}</textarea>
+                </label>
+                <button type="button" data-dispute-respond class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-xs font-semibold">Send response</button>`
+              : d.sellerResponse
+                ? `<p class="text-xs">Your response: ${escapeHtml(d.sellerResponse)}</p>`
+                : ""
+          }
+        </div>`;
+      })
+      .join("");
+    wrap.querySelectorAll("[data-dispute-respond]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const card = btn.closest("[data-dispute-id]");
+        const id = card?.getAttribute("data-dispute-id");
+        const response = card?.querySelector("[data-dispute-response]")?.value || "";
+        setSellerDisputesStatus("Sending…");
+        try {
+          const res = await fetch(`${DISPUTES_API}/${encodeURIComponent(id)}/seller-response`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
+            body: JSON.stringify(jsonAuthBody({ phone, response })),
+          });
+          const parsed = await parseApiResponse(res);
+          if (!parsed.ok) {
+            setSellerDisputesStatus(parsed.data?.message || "Could not send response.", true);
+            return;
+          }
+          setSellerDisputesStatus("Response saved for admin review.");
+          void loadSellerDisputes();
+        } catch {
+          setSellerDisputesStatus("Network error.", true);
+        }
+      });
+    });
+  } catch {
+    wrap.innerHTML = `<p class="text-sm text-red-600">Network error.</p>`;
+  }
+}
+
 function normalizeHandleForLookup(value) {
   return String(value || "")
     .trim()
@@ -3911,6 +4099,8 @@ function showSellerView(view) {
     loadSellerOffers();
     loadEscrowLedger();
     loadMyListings();
+    void loadSellerBuyerReviews();
+    void loadSellerDisputes();
     startSellerOffersPolling();
     ensureReminderCooldownTicker();
   } else if (view === "withdraw") {
@@ -3991,6 +4181,8 @@ function init() {
   el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
+  el("load-buyer-reviews-btn")?.addEventListener("click", loadSellerBuyerReviews);
+  el("load-seller-disputes-btn")?.addEventListener("click", loadSellerDisputes);
   el("load-activity-btn")?.addEventListener("click", loadSellerActivity);
   el("load-offers-btn")?.addEventListener("click", () => loadSellerOffers());
   el("offers-quick-chat-btn")?.addEventListener("click", openNextAcceptedOfferChat);
