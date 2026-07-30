@@ -20,6 +20,7 @@
     if (path.includes("inbox")) return "inbox";
     if (path.includes("activity")) return "activity";
     if (path.includes("track")) return "track";
+    if (path.includes("ask")) return "ask";
     if (path.includes("shop")) return "shop";
     if (path.includes("suppliers/list")) return "sell";
     return "home";
@@ -28,37 +29,43 @@
   function headerLinks(page) {
     if (page === "activity") {
       return [
+        { href: "ask.html", label: "Ask" },
         { href: "inbox.html", label: "Inbox" },
-        { href: "profile.html", label: "Profile" },
       ];
     }
     if (page === "inbox") {
       return [
+        { href: "ask.html", label: "Ask" },
         { href: "activity.html", label: "Activity" },
-        { href: "profile.html", label: "Profile" },
       ];
     }
     if (page === "shop") {
       return [
-        { href: "activity.html", label: "Activity" },
+        { href: "ask.html", label: "Ask" },
         { href: "profile.html", label: "Profile" },
       ];
     }
     if (page === "track") {
       return [
+        { href: "ask.html", label: "Ask Plug" },
         { href: "profile.html", label: "Profile" },
-        { href: "faq.html", label: "FAQ" },
+      ];
+    }
+    if (page === "ask") {
+      return [
+        { href: "track.html", label: "Track" },
+        { href: "profile.html", label: "Profile" },
       ];
     }
     // profile + default
     return [
-      { href: "activity.html", label: "Activity" },
+      { href: "ask.html", label: "Ask Plug" },
       { href: "track.html", label: "Track" },
     ];
   }
 
   function navActiveKey(page) {
-    if (page === "activity" || page === "track" || page === "shop") return "profile";
+    if (page === "activity" || page === "track" || page === "shop" || page === "ask") return "profile";
     if (page === "sell") return null;
     return page;
   }
