@@ -29,6 +29,7 @@ import {
 } from "../db/repositories/social.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { updatePeerSellerProfile } from "../services/suppliers.js";
+import { uploadSellerShopAvatar } from "../services/seller-avatar.js";
 import {
   notifyBuyerOfferResponse,
   notifyNewDirectMessage,
@@ -190,6 +191,45 @@ router.get("/users/:userId/following", async (req, res) => {
       });
     }
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/shop/avatar — optional shop profile photo upload */
+router.post("/shop/avatar", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({
+        error: auth.error,
+        message: auth.message,
+      });
+    }
+
+    const result = await uploadSellerShopAvatar({
+      userId: auth.sellerUserId,
+      sellerId: auth.sellerId,
+      imageBase64: req.body?.imageBase64 || req.body?.avatarBase64,
+      mimeType: req.body?.mimeType || "image/jpeg",
+    });
+    if (result.error) {
+      const status =
+        result.error === "missing_image" || result.error === "image_too_large" || result.error === "invalid_avatar_url"
+          ? 400
+          : socialErrorStatus(result.error);
+      return res.status(status).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+
+    res.json({
+      success: true,
+      avatarUrl: result.avatarUrl,
+      shop: result.shop,
+      message: result.message || "Profile photo updated.",
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

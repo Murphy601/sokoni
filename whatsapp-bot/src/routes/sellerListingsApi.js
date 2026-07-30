@@ -29,7 +29,15 @@ function sessionAuthStatus(result) {
 
 /** POST /api/seller/listings/generate — approved seller + photo → AI draft (+ optional studio clean) */
 router.post("/generate", async (req, res) => {
-  const { phone, imageBase64, mimeType = "image/jpeg", caption = "", skipStudio = false } = req.body || {};
+  const {
+    phone,
+    imageBase64,
+    mimeType = "image/jpeg",
+    caption = "",
+    skipStudio = false,
+    sellerNetKes,
+    priceKes,
+  } = req.body || {};
   const sessionToken = sellerSessionFromReq(req);
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) {
@@ -40,9 +48,16 @@ router.post("/generate", async (req, res) => {
     return res.status(400).json({ error: "missing_image" });
   }
 
+  // Prefer structured seller-net from the form so AI doesn't fail when the photo has no price sticker.
+  let effectiveCaption = String(caption || "").trim();
+  const formPrice = Math.round(Number(sellerNetKes ?? priceKes) || 0);
+  if (formPrice > 0 && !/\b\d{2,7}\s*(?:ksh|kes)\b/i.test(effectiveCaption) && !/\b(?:ksh|kes)\s*\d{2,7}\b/i.test(effectiveCaption)) {
+    effectiveCaption = `${formPrice} ksh ${effectiveCaption}`.trim();
+  }
+
   try {
     const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
-    const result = await generateSellerListingDraft(buffer, mimeType, caption, { skipStudio });
+    const result = await generateSellerListingDraft(buffer, mimeType, effectiveCaption, { skipStudio });
     res.json({
       draft: result.draft,
       studioApplied: result.studioApplied,

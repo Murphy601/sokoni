@@ -160,10 +160,21 @@
             Location
             <input id="edit-shop-location" type="text" maxlength="120" class="sell-form-input mt-1" placeholder="e.g. Nairobi CBD / ships Kenya-wide" />
           </label>
-          <label class="text-sm font-medium md:col-span-1">
-            Avatar URL
-            <input id="edit-shop-avatar" type="url" maxlength="1000" class="sell-form-input mt-1" placeholder="https://…" />
-          </label>
+          <div class="text-sm font-medium md:col-span-1 space-y-2">
+            <span>Shop photo <span class="font-normal text-brand-purple/50">(optional)</span></span>
+            <div class="flex items-center gap-3">
+              <div id="edit-shop-avatar-preview" class="h-16 w-16 rounded-2xl border border-brand-purple/15 dark:border-white/15 bg-brand-cream dark:bg-brand-purple overflow-hidden flex items-center justify-center text-xs text-brand-purple/40">
+                —
+              </div>
+              <div class="flex-1 space-y-2 min-w-0">
+                <label class="inline-flex min-h-[44px] items-center px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-xs font-semibold cursor-pointer hover:border-brand-green">
+                  Upload photo
+                  <input id="edit-shop-avatar-file" type="file" accept="image/*" class="sr-only" />
+                </label>
+                <input id="edit-shop-avatar" type="url" maxlength="1000" class="sell-form-input text-xs" placeholder="Or paste https://… image link" />
+              </div>
+            </div>
+          </div>
           <label class="text-sm font-medium md:col-span-1">
             Instagram
             <input id="edit-shop-instagram" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
@@ -529,7 +540,7 @@
         <h2 class="font-bold text-lg">Product photos (1 required)</h2>
         <p class="text-sm text-brand-purple/60 dark:text-white/60">Cover photo required. Up to 8 photos — front, back, tags, fabric, and any flaws. Optional short video.</p>
         <p id="listing-ai-status" class="text-xs text-brand-purple/65 dark:text-white/65 rounded-2xl border border-brand-purple/10 dark:border-white/10 px-3 py-2">
-          Checking AI draft… Listing still works if AI skips — add a caption or fill details yourself.
+          Checking AI draft… AI waits for your price before reading the cover. Listing still works if AI skips — fill details yourself.
         </p>
         <div class="sell-media-grid">
           <div id="media-slot-0" class="sell-media-slot sell-media-slot-cover"><span class="sell-slot-label">📷 Cover *</span><span class="sell-studio-badge" hidden>Cleaned</span><input type="file" accept="image/*" capture="environment" id="photo-slot-0" /></div>
@@ -553,9 +564,14 @@
           <p id="studio-status" class="sell-tag-hint"></p>
         </div>
         <label class="block text-sm font-medium">
+          Your price (KES) — what you receive
+          <input id="media-price" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 2500" class="sell-form-input" />
+          <span class="sell-tag-hint">Add this before AI drafts from the cover. Buyers pay shipping + 10% Sokoni fee on top.</span>
+        </label>
+        <label class="block text-sm font-medium">
           Caption hint for AI (optional)
-          <input id="photo-caption" type="text" placeholder="e.g. 130 ksh women sandals burgundy" class="sell-form-input" />
-          <span class="sell-tag-hint">Price is what you receive. Buyers see shipping + platform fee on top. Prepaid escrow — no COD.</span>
+          <input id="photo-caption" type="text" placeholder="e.g. women sandals burgundy vintage" class="sell-form-input" />
+          <span class="sell-tag-hint">Extra hints for title/category — price belongs in the field above.</span>
         </label>
         <label class="block text-sm font-medium">
           Video (optional)

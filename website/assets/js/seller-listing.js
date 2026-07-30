@@ -455,9 +455,9 @@ function updateCoverStudioUi() {
   el("media-slot-0")?.classList.toggle("has-studio", showingClean);
   if (badge) badge.hidden = !showingClean;
   if (status && !coverCleanBase64 && studioUiEnabled) {
-    status.textContent = photoFiles[0]
-      ? "Preview cleans the cover only — AI draft still runs separately when you upload."
-      : "Add a cover photo to try background cleanup.";
+      status.textContent = photoFiles[0]
+        ? "Preview cleans the cover only — AI draft waits until you add your price."
+        : "Add a cover photo to try background cleanup.";
   }
 }
 
@@ -560,11 +560,18 @@ async function maybeAutoGenerate() {
   const phone = apiPhone();
   if (!phone) return;
 
+  const priceKes = listingPriceHintKes();
+  if (!priceKes) {
+    setStatus("Cover saved. Add your price (what you receive) — then AI will draft from the photo.");
+    return;
+  }
+
   setStatus("AI reading your first photo…");
   try {
     const compressed = await compressImageFile(photoFiles[0]);
     const imageBase64 = await readFileAsDataUrl(compressed);
     const skipStudio = !studioUiEnabled || !preferCleanCover;
+    const caption = el("photo-caption")?.value.trim() || "";
     const res = await fetch(`${LISTINGS_API}/generate`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
@@ -573,7 +580,8 @@ async function maybeAutoGenerate() {
           phone,
           imageBase64,
           mimeType: compressed.type || "image/jpeg",
-          caption: el("photo-caption")?.value.trim() || "",
+          caption,
+          sellerNetKes: priceKes,
           skipStudio,
         })
       ),
@@ -587,13 +595,19 @@ async function maybeAutoGenerate() {
       setStatus(
         parsed.data?.message ||
           parsed.message ||
-          "AI skipped — add a caption like `130 ksh women sandals` or fill in manually.",
+          "AI skipped — check your price or fill details manually.",
         true
       );
       return;
     }
     const data = parsed.data;
     draft = { ...draft, ...data.draft };
+    // Keep the seller’s entered net price if AI somehow drifted.
+    if (priceKes > 0) {
+      draft.sellerNetKes = priceKes;
+      draft.priceKes = priceKes;
+      draft.sourcePriceKes = priceKes;
+    }
     sellerInfo = data.seller;
     if (data.studioApplied && data.cleanImageBase64) {
       applyCoverStudioResult(
@@ -613,6 +627,51 @@ async function maybeAutoGenerate() {
   }
 }
 
+/** Seller-net price from media step, pricing step, or caption (KES). */
+function listingPriceHintKes() {
+  syncMediaPriceFields();
+  const fromForm = Math.round(Number(el("media-price")?.value || el("draft-price")?.value || 0));
+  if (fromForm > 0) return fromForm;
+  const cap = String(el("photo-caption")?.value || "");
+  const patterns = [
+    /\b(\d{2,7})\s*(?:ksh|kes)\b/i,
+    /\b(?:ksh|kes)\s*(\d{2,7})\b/i,
+    /(?:cost|price|@)\s*[:=]?\s*(?:ksh|kes)?\s*(\d{2,7})/i,
+  ];
+  for (const re of patterns) {
+    const m = cap.match(re);
+    if (m) {
+      const n = Math.round(Number(m[1]));
+      if (n > 0) return n;
+    }
+  }
+  return 0;
+}
+
+function syncMediaPriceFields(sourceId) {
+  const media = el("media-price");
+  const draftPrice = el("draft-price");
+  if (!media || !draftPrice) return;
+  if (sourceId === "draft-price" && draftPrice.value !== "") {
+    media.value = draftPrice.value;
+  } else if (sourceId === "media-price" && media.value !== "") {
+    draftPrice.value = media.value;
+  } else if (media.value && !draftPrice.value) {
+    draftPrice.value = media.value;
+  } else if (draftPrice.value && !media.value) {
+    media.value = draftPrice.value;
+  }
+}
+
+function onListingPriceInput(ev) {
+  const sourceId = ev?.target?.id || "media-price";
+  syncMediaPriceFields(sourceId);
+  updateFeeBreakdown();
+  if (photoFiles[0] && !draft.name && listingPriceHintKes() > 0) {
+    void maybeAutoGenerate();
+  }
+}
+
 function fillFormFromDraft() {
   el("draft-name").value = draft.name || "";
   el("draft-description").value = draft.description || "";
@@ -620,6 +679,7 @@ function fillFormFromDraft() {
   el("draft-brand").value = draft.brand || "";
   el("draft-brand2").value = draft.secondaryBrand || "";
   el("draft-price").value = draft.sellerNetKes ?? draft.priceKes ?? draft.sourcePriceKes ?? "";
+  if (el("media-price")) el("media-price").value = el("draft-price").value;
   populateWeightClassSelect(draft.estimatedWeightClass || "small");
   el("draft-shipping").value =
     draft.freeShipping ? 0 : draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? getShippingTier(draft.estimatedWeightClass)?.typicalKes ?? MIN_SHIPPING_KES;
@@ -663,6 +723,7 @@ function populateBrowseSelects(browseCat, browseSub) {
 }
 
 function collectDraft() {
+  syncMediaPriceFields();
   const tagsRaw = el("draft-tags")?.value || "";
   const tags = tagsRaw
     .split(/[\s,#]+/)
@@ -670,6 +731,7 @@ function collectDraft() {
     .filter(Boolean)
     .slice(0, meta.maxTags || 5);
 
+  const net = Math.round(Number(el("draft-price")?.value || el("media-price")?.value || 0));
   return {
     ...draft,
     name: el("draft-name").value.trim(),
@@ -677,9 +739,9 @@ function collectDraft() {
     tags,
     brand: el("draft-brand").value.trim(),
     secondaryBrand: el("draft-brand2").value.trim(),
-    sellerNetKes: Math.round(Number(el("draft-price").value) || 0),
-    priceKes: Math.round(Number(el("draft-price").value) || 0),
-    sourcePriceKes: Math.round(Number(el("draft-price").value) || 0),
+    sellerNetKes: net,
+    priceKes: net,
+    sourcePriceKes: net,
     estimatedWeightClass: el("draft-weight-class")?.value || draft.estimatedWeightClass || "small",
     freeShipping: isFreeShipping(),
     shippingKes: isFreeShipping()
@@ -1640,6 +1702,7 @@ async function hydrateShopEditFormFromSocial() {
     if (el("edit-shop-bio")) el("edit-shop-bio").value = shop.bio || "";
     if (el("edit-shop-location")) el("edit-shop-location").value = shop.location || sellerProfile.city || "";
     if (el("edit-shop-avatar")) el("edit-shop-avatar").value = shop.avatarUrl || "";
+    updateShopAvatarPreview(shop.avatarUrl || "");
     if (el("edit-shop-instagram")) el("edit-shop-instagram").value = shop.instagramUrl || "";
     if (el("edit-shop-tiktok")) el("edit-shop-tiktok").value = shop.tiktokUrl || "";
     if (el("edit-shop-wa-notify")) {
@@ -1695,6 +1758,17 @@ async function saveShopProfile(event) {
     setEditShopStatus("Sign in again to edit your shop profile.", true);
     return;
   }
+
+  // Optional file upload first — sets avatar_url, then profile PATCH can keep or clear URL field.
+  const fileInput = el("edit-shop-avatar-file");
+  const pendingFile = fileInput?.files?.[0] || shopAvatarPendingFile;
+  if (pendingFile) {
+    const uploaded = await uploadShopAvatarFile(pendingFile);
+    if (!uploaded) {
+      return;
+    }
+  }
+
   const payload = jsonAuthBody({
     phone,
     shopName: el("edit-shop-name")?.value || "",
@@ -1744,13 +1818,86 @@ async function saveShopProfile(event) {
     fillShopEditFormFromSeller(sellerProfile);
     if (el("edit-shop-bio")) el("edit-shop-bio").value = shop.bio || "";
     if (el("edit-shop-avatar")) el("edit-shop-avatar").value = shop.avatarUrl || "";
+    updateShopAvatarPreview(shop.avatarUrl || "");
     applySellerNotifyPrefs(shop);
+    shopAvatarPendingFile = null;
+    if (fileInput) fileInput.value = "";
     setEditShopStatus(parsed.data?.message || "Shop profile updated.");
   } catch {
     setEditShopStatus("Network error while saving shop profile.", true);
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+/** Pending avatar file chosen before Save (uploaded on save). */
+let shopAvatarPendingFile = null;
+
+function updateShopAvatarPreview(urlOrObjectUrl) {
+  const wrap = el("edit-shop-avatar-preview");
+  if (!wrap) return;
+  const src = String(urlOrObjectUrl || "").trim();
+  if (!src) {
+    wrap.innerHTML = `<span class="text-xs text-brand-purple/40">—</span>`;
+    return;
+  }
+  wrap.innerHTML = `<img src="${escapeHtml(src)}" alt="" class="h-full w-full object-cover" />`;
+}
+
+async function uploadShopAvatarFile(file) {
+  const phone = apiPhone();
+  if (!phone || !getSessionToken()) {
+    setEditShopStatus("Sign in again to upload a profile photo.", true);
+    return false;
+  }
+  setEditShopStatus("Uploading profile photo…");
+  try {
+    const compressed = await compressImageFile(file, 800, 0.85);
+    const imageBase64 = await readFileAsDataUrl(compressed);
+    const res = await fetch(`${SOCIAL_API}/shop/avatar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          imageBase64,
+          mimeType: compressed.type || "image/jpeg",
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return false;
+    }
+    if (!parsed.ok) {
+      setEditShopStatus(parsed.data?.message || "Could not upload profile photo.", true);
+      return false;
+    }
+    const avatarUrl = parsed.data?.avatarUrl || parsed.data?.shop?.avatarUrl || "";
+    if (el("edit-shop-avatar")) el("edit-shop-avatar").value = avatarUrl;
+    updateShopAvatarPreview(avatarUrl);
+    shopAvatarPendingFile = null;
+    if (el("edit-shop-avatar-file")) el("edit-shop-avatar-file").value = "";
+    return true;
+  } catch {
+    setEditShopStatus("Network error uploading profile photo.", true);
+    return false;
+  }
+}
+
+function bindShopAvatarUi() {
+  el("edit-shop-avatar-file")?.addEventListener("change", (ev) => {
+    const file = ev.target?.files?.[0];
+    if (!file) return;
+    shopAvatarPendingFile = file;
+    const url = URL.createObjectURL(file);
+    updateShopAvatarPreview(url);
+    setEditShopStatus("Photo ready — tap Save shop profile to upload.");
+  });
+  el("edit-shop-avatar")?.addEventListener("change", () => {
+    updateShopAvatarPreview(el("edit-shop-avatar")?.value || "");
+  });
 }
 
 function formatActivityTime(value) {
@@ -4538,12 +4685,19 @@ function init() {
   });
   el("sign-out-btn")?.addEventListener("click", onSignOut);
   el("seller-shop-edit-form")?.addEventListener("submit", saveShopProfile);
+  bindShopAvatarUi();
   el("seller-phone")?.addEventListener("change", () => {
     savePhone();
     clearSession();
     showVerifyPanel();
   });
-  el("draft-price")?.addEventListener("input", updateFeeBreakdown);
+  el("draft-price")?.addEventListener("input", onListingPriceInput);
+  el("media-price")?.addEventListener("input", onListingPriceInput);
+  el("photo-caption")?.addEventListener("change", () => {
+    if (photoFiles[0] && !draft.name && listingPriceHintKes() > 0) {
+      void maybeAutoGenerate();
+    }
+  });
   el("draft-shipping")?.addEventListener("input", updateFeeBreakdown);
   el("draft-weight-class")?.addEventListener("change", () => {
     draft.estimatedWeightClass = el("draft-weight-class")?.value;

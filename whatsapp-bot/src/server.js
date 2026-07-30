@@ -149,6 +149,19 @@ app.use("/catalog-images", catalogImageStatic);
 /** Alias so relative assets/images/products/* URLs also hit the VM when proxied. */
 app.use("/assets/images/products", catalogImageStatic);
 
+/** Seller shop avatars — optional profile photos. */
+const avatarsDir = path.join(CATALOG_IMAGES_DIR, "..", "avatars");
+app.use(
+  "/assets/images/avatars",
+  express.static(avatarsDir, {
+    maxAge: "1d",
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    },
+  })
+);
+
 /** Public reviews for website + WhatsApp-collected feedback. */
 app.get("/api/reviews", (_req, res) => {
   res.json({ reviews: listReviews(30) });
