@@ -1043,9 +1043,242 @@ function setBulkCsvStatus(message, isError = false) {
   node.classList.toggle("text-brand-green", !isError && Boolean(message));
 }
 
+/** In-browser draft preview rows before POST (data-only CSV — no # instruction rows). */
+let bulkPreviewRows = [];
+let bulkPreviewHeaders = [
+  "title",
+  "price_kes",
+  "category",
+  "subcategory",
+  "size",
+  "condition",
+  "color",
+  "brand",
+  "shipping_kes",
+  "vibe_tags",
+  "description",
+  "pit_to_pit_in",
+  "length_in",
+  "waist_in",
+];
+
+function csvEscapeCell(value) {
+  const s = String(value ?? "");
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function parseCsvClient(text) {
+  const src = String(text || "").replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cell += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if (ch === "\n" || (ch === "\r" && next === "\n")) {
+      if (ch === "\r") i += 1;
+      row.push(cell);
+      cell = "";
+      if (row.some((c) => String(c).trim() !== "")) rows.push(row);
+      row = [];
+      continue;
+    }
+    if (ch === "\r") {
+      row.push(cell);
+      cell = "";
+      if (row.some((c) => String(c).trim() !== "")) rows.push(row);
+      row = [];
+      continue;
+    }
+    cell += ch;
+  }
+  row.push(cell);
+  if (row.some((c) => String(c).trim() !== "")) rows.push(row);
+  return rows;
+}
+
+function normalizeBulkHeader(raw) {
+  const key = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[()]/g, "")
+    .trim()
+    .replace(/\s+/g, "_");
+  const aliases = {
+    title: "title",
+    name: "title",
+    price_kes: "price_kes",
+    price: "price_kes",
+    seller_net: "price_kes",
+    category: "category",
+    subcategory: "subcategory",
+    sub_category: "subcategory",
+    size: "size",
+    condition: "condition",
+    color: "color",
+    colour: "color",
+    brand: "brand",
+    shipping_kes: "shipping_kes",
+    shipping: "shipping_kes",
+    vibe_tags: "vibe_tags",
+    tags: "vibe_tags",
+    description: "description",
+    pit_to_pit_in: "pit_to_pit_in",
+    length_in: "length_in",
+    waist_in: "waist_in",
+  };
+  return aliases[key] || null;
+}
+
+function buildBulkPreviewFromCsv(csvText) {
+  const table = parseCsvClient(csvText).filter((r) => !String(r[0] || "").trim().startsWith("#"));
+  if (!table.length) return { rows: [], error: "CSV is empty." };
+  const headerMap = table[0].map((h) => normalizeBulkHeader(h));
+  if (!headerMap.includes("title") || !headerMap.includes("price_kes")) {
+    return { rows: [], error: "CSV needs title and price_kes columns — download the latest template." };
+  }
+  const known = bulkPreviewHeaders.filter((h) => headerMap.includes(h));
+  if (known.length) bulkPreviewHeaders = [...new Set([...known, ...bulkPreviewHeaders])];
+
+  const body = table.slice(1).filter((cells) => {
+    const first = String(cells[0] || "").trim();
+    return first && !first.startsWith("#") && cells.some((c) => String(c || "").trim() !== "");
+  });
+  if (!body.length) return { rows: [], error: "No data rows found (comment lines are ignored)." };
+  if (body.length > 50) {
+    return { rows: [], error: `Too many rows (${body.length}). Max 50 per upload — split the file.` };
+  }
+
+  const rows = body.map((cells, idx) => {
+    const obj = { _id: idx + 1 };
+    for (let c = 0; c < headerMap.length; c += 1) {
+      const key = headerMap[c];
+      if (!key) continue;
+      obj[key] = cells[c] != null ? String(cells[c]).trim() : "";
+    }
+    if (obj.tags && !obj.vibe_tags) obj.vibe_tags = obj.tags;
+    return obj;
+  });
+  return { rows, error: null };
+}
+
+function serializeBulkPreviewToCsv() {
+  const headers = bulkPreviewHeaders;
+  const lines = [headers.join(",")];
+  for (const row of bulkPreviewRows) {
+    lines.push(headers.map((h) => csvEscapeCell(row[h] ?? "")).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function updateBulkImportButton() {
+  const btn = el("bulk-csv-import-btn");
+  const count = el("bulk-preview-count");
+  if (count) count.textContent = String(bulkPreviewRows.length);
+  if (btn) btn.disabled = bulkPreviewRows.length === 0;
+}
+
+function conditionChipLabel(raw) {
+  const key = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  return CONDITION_LABELS[key] || raw || "—";
+}
+
+function renderBulkPreview() {
+  const panel = el("bulk-preview-panel");
+  const tbody = el("bulk-preview-tbody");
+  if (!panel || !tbody) return;
+  if (!bulkPreviewRows.length) {
+    panel.classList.add("hidden");
+    tbody.innerHTML = "";
+    updateBulkImportButton();
+    return;
+  }
+  panel.classList.remove("hidden");
+  tbody.innerHTML = bulkPreviewRows
+    .map((row, index) => {
+      const vibes = String(row.vibe_tags || "")
+        .split(/[,;#]+/)
+        .map((t) => t.replace(/^#/, "").trim())
+        .filter(Boolean)
+        .slice(0, 5);
+      const catBits = [row.category, row.subcategory].filter(Boolean).join(" › ") || "—";
+      return `<tr data-bulk-idx="${index}">
+        <td class="font-mono text-brand-purple/40 dark:text-white/40">${index + 1}</td>
+        <td><input class="bulk-studio-input" data-field="title" value="${escapeHtml(row.title || "")}" aria-label="Title" /></td>
+        <td><input class="bulk-studio-input bulk-studio-input--price" data-field="price_kes" type="number" min="1" step="1" value="${escapeHtml(row.price_kes || "")}" aria-label="Price KES" /></td>
+        <td class="text-brand-purple/60 dark:text-white/60 whitespace-nowrap">${escapeHtml(catBits)}</td>
+        <td><input class="bulk-studio-input bulk-studio-input--size" data-field="size" value="${escapeHtml(row.size || "")}" aria-label="Size" /></td>
+        <td><span class="bulk-studio-condition">${escapeHtml(conditionChipLabel(row.condition))}</span></td>
+        <td class="text-brand-purple/60 dark:text-white/60">${escapeHtml(row.brand || "—")}</td>
+        <td>${
+          vibes.length
+            ? vibes.map((t) => `<span class="bulk-studio-vibe">#${escapeHtml(t)}</span>`).join("")
+            : `<span class="text-brand-purple/35 dark:text-white/35">—</span>`
+        }</td>
+        <td class="text-right">
+          <button type="button" class="bulk-studio-remove" data-bulk-remove="${index}" aria-label="Remove row">Remove</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+  updateBulkImportButton();
+}
+
+function loadBulkPreviewFromText(csvText, sourceLabel) {
+  const parsed = buildBulkPreviewFromCsv(csvText);
+  if (parsed.error) {
+    bulkPreviewRows = [];
+    renderBulkPreview();
+    setBulkCsvStatus(parsed.error, true);
+    return false;
+  }
+  bulkPreviewRows = parsed.rows;
+  renderBulkPreview();
+  setBulkCsvStatus(
+    `${bulkPreviewRows.length} item${bulkPreviewRows.length === 1 ? "" : "s"} ready to review${
+      sourceLabel ? ` from ${sourceLabel}` : ""
+    }. Edit the grid, then Create drafts.`
+  );
+  return true;
+}
+
+function clearBulkPreview() {
+  bulkPreviewRows = [];
+  renderBulkPreview();
+  if (el("bulk-csv-paste")) el("bulk-csv-paste").value = "";
+  if (el("bulk-csv-file")) el("bulk-csv-file").value = "";
+  setBulkCsvStatus("Preview cleared.");
+}
+
 async function downloadBulkCsvTemplate(ev) {
   ev?.preventDefault?.();
-  const phone = apiPhone();
   try {
     const res = await fetch(`${LISTINGS_API}/bulk/template`, { headers: sellerAuthHeaders() });
     if (!res.ok) {
@@ -1061,11 +1294,29 @@ async function downloadBulkCsvTemplate(ev) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setBulkCsvStatus("Template downloaded — fill rows, then Upload CSV or paste.");
+    setBulkCsvStatus("Template downloaded — data rows only. Tips stay in this panel, not the CSV.");
   } catch {
     setBulkCsvStatus("Network error downloading template.", true);
   }
-  void phone;
+}
+
+async function loadBulkCsvHelp() {
+  const list = el("bulk-csv-help-list");
+  if (!list) return;
+  try {
+    const res = await fetch(`${LISTINGS_API}/bulk/template?format=json`, { headers: sellerAuthHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    const tips = data?.help?.tips;
+    if (Array.isArray(tips) && tips.length) {
+      list.innerHTML = tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+    }
+    if (Array.isArray(data?.headers) && data.headers.length) {
+      bulkPreviewHeaders = data.headers;
+    }
+  } catch {
+    /* keep static fallback tips */
+  }
 }
 
 async function importBulkCsvText(csvText) {
@@ -1086,7 +1337,7 @@ async function importBulkCsvText(csvText) {
 
   const btn = el("bulk-csv-import-btn");
   if (btn) btn.disabled = true;
-  setBulkCsvStatus("Importing drafts…");
+  setBulkCsvStatus("Creating drafts…");
   try {
     const res = await fetch(`${LISTINGS_API}/bulk/drafts`, {
       method: "POST",
@@ -1115,9 +1366,11 @@ async function importBulkCsvText(csvText) {
     const errCount = Array.isArray(parsed.data?.errors) ? parsed.data.errors.length : 0;
     setBulkCsvStatus(
       count
-        ? `${count} draft${count === 1 ? "" : "s"} imported${errCount ? ` (${errCount} row warning${errCount === 1 ? "" : "s"})` : ""}. Add photos via Continue editing, then Post.`
+        ? `${count} draft${count === 1 ? "" : "s"} created${errCount ? ` (${errCount} row warning${errCount === 1 ? "" : "s"})` : ""}. Add photos via Continue editing, then Post.`
         : parsed.data?.message || "No drafts imported."
     );
+    bulkPreviewRows = [];
+    renderBulkPreview();
     if (el("bulk-csv-paste")) el("bulk-csv-paste").value = "";
     if (el("bulk-csv-file")) el("bulk-csv-file").value = "";
     await loadMyListings();
@@ -1125,16 +1378,64 @@ async function importBulkCsvText(csvText) {
   } catch {
     setBulkCsvStatus("Network error during import.", true);
   } finally {
-    if (btn) btn.disabled = false;
+    updateBulkImportButton();
   }
+}
+
+function bindBulkDropzone() {
+  const zone = el("bulk-csv-dropzone");
+  if (!zone) return;
+
+  const onDrag = (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    zone.classList.add("is-dragover");
+  };
+  const onLeave = (ev) => {
+    ev.preventDefault();
+    zone.classList.remove("is-dragover");
+  };
+  zone.addEventListener("dragenter", onDrag);
+  zone.addEventListener("dragover", onDrag);
+  zone.addEventListener("dragleave", onLeave);
+  zone.addEventListener("drop", async (ev) => {
+    ev.preventDefault();
+    zone.classList.remove("is-dragover");
+    const file = ev.dataTransfer?.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      if (el("bulk-csv-paste")) el("bulk-csv-paste").value = text;
+      loadBulkPreviewFromText(text, file.name);
+    } catch {
+      setBulkCsvStatus("Could not read that file.", true);
+    }
+  });
+  zone.addEventListener("click", () => el("bulk-csv-file")?.click());
+  zone.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      el("bulk-csv-file")?.click();
+    }
+  });
 }
 
 function bindBulkCsvUi() {
   el("bulk-csv-template-btn")?.addEventListener("click", (ev) => {
     void downloadBulkCsvTemplate(ev);
   });
+  el("bulk-csv-preview-btn")?.addEventListener("click", () => {
+    loadBulkPreviewFromText(el("bulk-csv-paste")?.value || "", "paste");
+  });
+  el("bulk-csv-clear-btn")?.addEventListener("click", () => {
+    clearBulkPreview();
+  });
   el("bulk-csv-import-btn")?.addEventListener("click", () => {
-    void importBulkCsvText(el("bulk-csv-paste")?.value || "");
+    if (!bulkPreviewRows.length) {
+      setBulkCsvStatus("Preview a CSV first — nothing to create yet.", true);
+      return;
+    }
+    void importBulkCsvText(serializeBulkPreviewToCsv());
   });
   el("bulk-csv-file")?.addEventListener("change", async (ev) => {
     const file = ev.target?.files?.[0];
@@ -1142,11 +1443,36 @@ function bindBulkCsvUi() {
     try {
       const text = await file.text();
       if (el("bulk-csv-paste")) el("bulk-csv-paste").value = text;
-      setBulkCsvStatus(`Loaded ${file.name} — tap Import drafts.`);
+      loadBulkPreviewFromText(text, file.name);
     } catch {
       setBulkCsvStatus("Could not read that file.", true);
     }
   });
+  el("bulk-preview-tbody")?.addEventListener("input", (ev) => {
+    const input = ev.target?.closest?.("[data-field]");
+    const tr = ev.target?.closest?.("tr[data-bulk-idx]");
+    if (!input || !tr) return;
+    const idx = Number(tr.getAttribute("data-bulk-idx"));
+    const field = input.getAttribute("data-field");
+    if (!Number.isFinite(idx) || !bulkPreviewRows[idx] || !field) return;
+    bulkPreviewRows[idx][field] = input.value;
+  });
+  el("bulk-preview-tbody")?.addEventListener("click", (ev) => {
+    const btn = ev.target?.closest?.("[data-bulk-remove]");
+    if (!btn) return;
+    const idx = Number(btn.getAttribute("data-bulk-remove"));
+    if (!Number.isFinite(idx)) return;
+    bulkPreviewRows.splice(idx, 1);
+    renderBulkPreview();
+    setBulkCsvStatus(
+      bulkPreviewRows.length
+        ? `${bulkPreviewRows.length} item${bulkPreviewRows.length === 1 ? "" : "s"} left in preview.`
+        : "Preview empty — import another CSV."
+    );
+  });
+  bindBulkDropzone();
+  void loadBulkCsvHelp();
+  updateBulkImportButton();
 }
 
 async function loadMyListings() {

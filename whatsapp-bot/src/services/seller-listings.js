@@ -31,7 +31,9 @@ import { runPostPublishModeration, listFlaggedListings, takedownListing, restore
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
 import {
   BULK_CSV_MAX_ROWS,
+  BULK_CSV_HEADERS,
   buildBulkCsvTemplate,
+  bulkCsvUiHelp,
   csvTextToDraftRows,
 } from "./bulk-listing-csv.js";
 
@@ -462,23 +464,14 @@ export async function bulkImportSellerDraftsFromCsv({ phone, csvText, sessionTok
 }
 
 export function getBulkListingCsvTemplate() {
+  const help = bulkCsvUiHelp();
   return {
     filename: "sokoni-bulk-listings-template.csv",
     contentType: "text/csv; charset=utf-8",
     body: buildBulkCsvTemplate(),
     maxRows: BULK_CSV_MAX_ROWS,
-    headers: [
-      "title",
-      "price_kes",
-      "category",
-      "size",
-      "condition",
-      "description",
-      "color",
-      "brand",
-      "shipping_kes",
-      "tags",
-    ],
+    headers: BULK_CSV_HEADERS,
+    help,
   };
 }
 

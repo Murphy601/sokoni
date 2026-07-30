@@ -354,37 +354,110 @@
           <div id="ledger-detail" class="text-sm space-y-2"></div>
         </section>
 
-        <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
-          <div>
-            <h2 class="font-bold text-lg">Bulk upload (CSV)</h2>
-            <p class="text-sm text-brand-purple/60 dark:text-white/60 mt-1">
-              Like Depop’s Selling Hub — fill a spreadsheet, import drafts, then add photos and post. Max 50 rows. <strong>price_kes</strong> is what you receive.
-            </p>
+        <section id="bulk-draft-studio" class="bulk-studio rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-widest text-brand-green">Seller Hub · Bulk Draft Studio</p>
+              <h2 class="font-display text-2xl font-bold mt-1">Manage item drops</h2>
+              <p class="text-sm text-brand-purple/65 dark:text-white/65 mt-1 max-w-xl">
+                Download a clean spreadsheet, tweak rows here, then create drafts. Photos come after — up to 8 per item.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <a
+                id="bulk-csv-template-btn"
+                href="#"
+                class="min-h-[44px] inline-flex items-center px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold hover:border-brand-green">
+                Download CSV template
+              </a>
+              <label class="min-h-[44px] inline-flex items-center px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold cursor-pointer hover:border-brand-green">
+                Import CSV
+                <input id="bulk-csv-file" type="file" accept=".csv,text/csv" class="sr-only" />
+              </label>
+              <button id="bulk-csv-import-btn" type="button" class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold disabled:opacity-40" disabled>
+                Create drafts (<span id="bulk-preview-count">0</span>)
+              </button>
+            </div>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <a
-              id="bulk-csv-template-btn"
-              href="#"
-              class="min-h-[44px] inline-flex items-center px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold hover:border-brand-green">
-              Download template
-            </a>
-            <label class="min-h-[44px] inline-flex items-center px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold cursor-pointer">
-              Upload CSV
-              <input id="bulk-csv-file" type="file" accept=".csv,text/csv" class="sr-only" />
-            </label>
+
+          <div class="bulk-studio-banner rounded-2xl border border-brand-green/25 bg-brand-green/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wide text-brand-green">Seller-net pricing</p>
+              <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-0.5">
+                <strong>price_kes</strong> is what you receive. Buyers pay shipping + 10% Sokoni fee at checkout.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2 text-[11px] text-brand-purple/60 dark:text-white/55">
+              <span class="bulk-studio-chip">Max 50 items</span>
+              <span class="bulk-studio-chip">Up to 8 photos each</span>
+              <span class="bulk-studio-chip">Men · Women · Kids</span>
+            </div>
           </div>
+
+          <details id="bulk-csv-help" class="bulk-studio-help rounded-2xl border border-brand-purple/10 dark:border-white/10 px-4 py-3">
+            <summary class="cursor-pointer text-sm font-semibold select-none">How the template works</summary>
+            <ul id="bulk-csv-help-list" class="mt-3 space-y-1.5 text-sm text-brand-purple/70 dark:text-white/70 list-disc pl-5">
+              <li>Use category <strong>Men</strong>, <strong>Women</strong>, or <strong>Kids</strong> plus a subcategory (Outerwear, Jeans, Sneakers…).</li>
+              <li>condition: brand_new_with_tags · brand_new_without_tags · like_new · gently_used · fair_condition</li>
+              <li>vibe_tags: vintage, streetwear, y2k, denim (comma-separated, up to 5)</li>
+              <li>Optional flat measurements in inches: pit_to_pit_in, length_in, waist_in</li>
+              <li>CSV creates drafts only — add photos, then Post from My listings</li>
+            </ul>
+          </details>
+
+          <div
+            id="bulk-csv-dropzone"
+            class="bulk-studio-dropzone rounded-2xl border-2 border-dashed border-brand-purple/15 dark:border-white/15 px-4 py-8 text-center transition-colors"
+            tabindex="0"
+            role="button"
+            aria-label="Drop CSV file here or choose a file">
+            <p class="text-sm font-semibold">Drop your CSV here</p>
+            <p class="text-xs text-brand-purple/55 dark:text-white/55 mt-1">or choose a file / paste below — preview opens before anything is saved</p>
+          </div>
+
           <label class="block text-sm font-medium">
             Or paste CSV
             <textarea
               id="bulk-csv-paste"
-              rows="4"
-              placeholder="title,price_kes,category,size,condition,description…"
+              rows="3"
+              placeholder="title,price_kes,category,subcategory,size,condition,color,brand,shipping_kes,vibe_tags,description…"
               class="mt-1 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"></textarea>
           </label>
-          <button id="bulk-csv-import-btn" type="button" class="min-h-[48px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
-            Import drafts
-          </button>
-          <p id="bulk-csv-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+          <div class="flex flex-wrap gap-2">
+            <button id="bulk-csv-preview-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold hover:border-brand-green">
+              Preview paste
+            </button>
+            <button id="bulk-csv-clear-btn" type="button" class="min-h-[44px] px-4 rounded-full text-sm font-semibold text-brand-purple/55 dark:text-white/55 hover:text-red-600 dark:hover:text-red-400">
+              Clear preview
+            </button>
+          </div>
+
+          <div id="bulk-preview-panel" class="bulk-studio-grid hidden rounded-2xl border border-brand-purple/10 dark:border-white/10 overflow-hidden">
+            <div class="px-4 py-3 border-b border-brand-purple/10 dark:border-white/10 flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-sm font-bold">Draft inventory preview</h3>
+              <span class="text-xs text-brand-purple/50 dark:text-white/50">Edit title, price, size — then Create drafts</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="bulk-studio-table w-full text-left text-xs">
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Title</th>
+                    <th scope="col">Price (KES)</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">Condition</th>
+                    <th scope="col">Brand</th>
+                    <th scope="col">Vibes</th>
+                    <th scope="col" class="text-right">Remove</th>
+                  </tr>
+                </thead>
+                <tbody id="bulk-preview-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <p id="bulk-csv-status" class="text-sm text-brand-purple/60 dark:text-white/65" role="status"></p>
         </section>
 
         <section class="rounded-3xl border border-brand-purple/10 dark:border-white/10 p-6 space-y-4">
