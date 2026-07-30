@@ -1,31 +1,38 @@
 /**
  * Depop-style bulk CSV → seller draft rows (no photos yet).
- * Sellers attach photos later via Continue editing / Post.
+ * Template is data-only — seller instructions live in the web UI, not CSV rows.
  */
 import { VALID_CONDITIONS } from "./listing-generator.js";
 
 export const BULK_CSV_MAX_ROWS = 50;
 
+/** Clean data headers for the downloadable template (no instruction rows). */
 export const BULK_CSV_HEADERS = [
   "title",
   "price_kes",
   "category",
+  "subcategory",
   "size",
   "condition",
-  "description",
   "color",
   "brand",
   "shipping_kes",
-  "tags",
+  "vibe_tags",
+  "description",
+  "pit_to_pit_in",
+  "length_in",
+  "waist_in",
 ];
 
-const CATEGORY_ALIASES = {
+/** Catalog category aliases (legacy product.category). */
+const CATALOG_CATEGORY_ALIASES = {
   fashion: "fashion",
   streetwear: "fashion",
   vintage: "fashion",
   sneakers: "fashion",
   shoes: "fashion",
   clothing: "fashion",
+  thrift: "fashion",
   "phones-tablets": "phones-tablets",
   phones: "phones-tablets",
   phone: "phones-tablets",
@@ -42,6 +49,46 @@ const CATEGORY_ALIASES = {
   supermarket: "supermarket",
   "baby-products": "baby-products",
   baby: "baby-products",
+};
+
+/** Browse department aliases (Depop-style). */
+const BROWSE_CATEGORY_ALIASES = {
+  men: "men",
+  mens: "men",
+  "men's": "men",
+  women: "women",
+  womens: "women",
+  "women's": "women",
+  kids: "kids",
+  kid: "kids",
+  unisex: "trending",
+  sneakers: "men",
+  streetwear: "trending",
+  vintage: "trending",
+  fashion: "trending",
+};
+
+const SUBCATEGORY_ALIASES = {
+  "jackets-coats": "outerwear",
+  jackets: "outerwear",
+  coat: "outerwear",
+  coats: "outerwear",
+  outerwear: "outerwear",
+  jeans: "jeans",
+  denim: "jeans",
+  "low-tops": "sneakers",
+  lowtops: "sneakers",
+  sneakers: "sneakers",
+  trainers: "sneakers",
+  tops: "tops",
+  "t-shirts": "t-shirts",
+  tshirts: "t-shirts",
+  tees: "t-shirts",
+  hoodies: "hoodies",
+  dresses: "dresses",
+  shoes: "shoes",
+  bags: "bags",
+  shirts: "shirts",
 };
 
 const CONDITION_ALIASES = {
@@ -72,12 +119,18 @@ const HEADER_ALIASES = {
   product: "title",
   price_kes: "price_kes",
   price: "price_kes",
-  "price (kes)": "price_kes",
+  "price_(kes)": "price_kes",
   pricekes: "price_kes",
   seller_net: "price_kes",
   sellernet: "price_kes",
   category: "category",
   cat: "category",
+  department: "category",
+  subcategory: "subcategory",
+  sub_category: "subcategory",
+  subcat: "subcategory",
+  browse_sub: "subcategory",
+  "browse_subcategory": "subcategory",
   size: "size",
   condition: "condition",
   description: "description",
@@ -88,8 +141,19 @@ const HEADER_ALIASES = {
   brand: "brand",
   shipping_kes: "shipping_kes",
   shipping: "shipping_kes",
-  tags: "tags",
-  hashtags: "tags",
+  tags: "vibe_tags",
+  hashtags: "vibe_tags",
+  vibe_tags: "vibe_tags",
+  vibes: "vibe_tags",
+  aesthetics: "vibe_tags",
+  pit_to_pit_in: "pit_to_pit_in",
+  pit_to_pit: "pit_to_pit_in",
+  p2p: "pit_to_pit_in",
+  chest: "pit_to_pit_in",
+  length_in: "length_in",
+  length: "length_in",
+  waist_in: "waist_in",
+  waist: "waist_in",
 };
 
 /** Minimal RFC4180-ish CSV parse (quoted fields, commas, newlines). */
@@ -164,70 +228,97 @@ function mapHeader(raw) {
   return null;
 }
 
-export function buildBulkCsvTemplate() {
-  const sample = [
-    [
-      "Vintage Nike Windbreaker",
-      "2500",
-      "fashion",
-      "L",
-      "gently_used",
-      "90s overhead pullover in classic navy",
-      "navy",
-      "Nike",
-      "275",
-      "vintage,streetwear,90s",
-    ],
-    [
-      "Levi's 501 Denim Jeans",
-      "1800",
-      "fashion",
-      "32W/32L",
-      "like_new",
-      "Original blue wash denim",
-      "blue",
-      "Levi's",
-      "275",
-      "denim,vintage",
-    ],
-    [
-      "Adidas Samba OG",
-      "4500",
-      "fashion",
-      "UK 9",
-      "brand_new_without_tags",
-      "Unworn with original box",
-      "white",
-      "Adidas",
-      "300",
-      "sneakers",
-    ],
-  ];
-  const lines = [BULK_CSV_HEADERS.join(",")];
-  for (const cols of sample) {
-    lines.push(cols.map(csvEscape).join(","));
-  }
-  lines.push("");
-  lines.push("# price_kes = what YOU receive (seller-net). Buyers pay shipping + 10% Sokoni fee on top.");
-  lines.push("# condition: brand_new_with_tags | brand_new_without_tags | like_new | gently_used | fair_condition");
-  lines.push("# category: fashion | phones-tablets | tvs-audio | appliances | health-beauty | home-office | computing | gaming | supermarket | baby-products");
-  lines.push("# Photos are added later — CSV creates drafts only. Max 50 rows per upload.");
-  return `${lines.join("\n")}\n`;
-}
-
 function csvEscape(value) {
   const s = String(value ?? "");
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
 
-function normalizeCategory(raw) {
-  const key = String(raw || "")
+/** Data-only template — helpers/tooltips live in the seller Hub UI. */
+export function buildBulkCsvTemplate() {
+  const sample = [
+    [
+      "Vintage Nike Windbreaker",
+      "2500",
+      "Men",
+      "Outerwear",
+      "L",
+      "gently_used",
+      "Navy",
+      "Nike",
+      "275",
+      "vintage,streetwear,90s",
+      "90s overhead pullover in classic navy",
+      "22",
+      "28",
+      "",
+    ],
+    [
+      "Levi's 501 Denim Jeans",
+      "1800",
+      "Women",
+      "Jeans",
+      "32W/32L",
+      "like_new",
+      "Blue",
+      "Levi's",
+      "275",
+      "denim,vintage,y2k",
+      "Original blue wash denim in top shape",
+      "",
+      "42",
+      "32",
+    ],
+    [
+      "Adidas Samba OG",
+      "4500",
+      "Men",
+      "Sneakers",
+      "UK 9",
+      "brand_new_without_tags",
+      "White",
+      "Adidas",
+      "300",
+      "streetwear,retro",
+      "Unworn with original box",
+      "",
+      "",
+      "",
+    ],
+  ];
+  const lines = [BULK_CSV_HEADERS.join(",")];
+  for (const cols of sample) {
+    lines.push(cols.map(csvEscape).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function slugKey(raw) {
+  return String(raw || "")
     .trim()
     .toLowerCase()
+    .replace(/&/g, " ")
     .replace(/[_/]+/g, "-")
-    .replace(/\s+/g, "-");
-  return CATEGORY_ALIASES[key] || null;
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function normalizeCatalogCategory(raw) {
+  const key = slugKey(raw);
+  return CATALOG_CATEGORY_ALIASES[key] || null;
+}
+
+function normalizeBrowseCategory(raw) {
+  const key = slugKey(raw).replace(/-/g, "");
+  const withDash = slugKey(raw);
+  return BROWSE_CATEGORY_ALIASES[withDash] || BROWSE_CATEGORY_ALIASES[key] || null;
+}
+
+function normalizeSubcategory(raw) {
+  const key = slugKey(raw);
+  if (!key) return null;
+  if (SUBCATEGORY_ALIASES[key]) return SUBCATEGORY_ALIASES[key];
+  return key.slice(0, 40);
 }
 
 function normalizeCondition(raw) {
@@ -256,6 +347,41 @@ function parseMoney(raw) {
   return Number.isFinite(n) ? Math.round(n) : NaN;
 }
 
+function parseOptionalInches(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return undefined;
+  const n = Number(s.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.round(n * 10) / 10;
+}
+
+function resolveCategories(categoryRaw, subcategoryRaw) {
+  const browse = normalizeBrowseCategory(categoryRaw);
+  const catalog = normalizeCatalogCategory(categoryRaw);
+  const sub = normalizeSubcategory(subcategoryRaw);
+
+  // Thrift-first defaults: Men/Women/Kids → fashion catalog + browse path
+  if (browse && browse !== "trending") {
+    return {
+      category: catalog && catalog !== "fashion" ? catalog : "fashion",
+      browseCategory: browse,
+      browseSubCategory: sub || undefined,
+    };
+  }
+  if (catalog) {
+    return {
+      category: catalog,
+      browseCategory: browse || (catalog === "fashion" ? "trending" : undefined),
+      browseSubCategory: sub || undefined,
+    };
+  }
+  return {
+    category: "fashion",
+    browseCategory: "trending",
+    browseSubCategory: sub || "streetwear",
+  };
+}
+
 /**
  * @returns {{ rows: object[], errors: { row: number, message: string }[] }}
  */
@@ -266,7 +392,7 @@ export function csvTextToDraftRows(csvText, { maxRows = BULK_CSV_MAX_ROWS } = {}
     return { rows: [], errors: [{ row: 0, message: "CSV is empty." }] };
   }
 
-  // Skip comment lines starting with #
+  // Ignore leftover comment rows from older templates
   const dataTable = table.filter((r) => !String(r[0] || "").trim().startsWith("#"));
   if (!dataTable.length) {
     return { rows: [], errors: [{ row: 0, message: "CSV has no data rows." }] };
@@ -283,13 +409,19 @@ export function csvTextToDraftRows(csvText, { maxRows = BULK_CSV_MAX_ROWS } = {}
       errors: [
         {
           row: 1,
-          message: "CSV needs title and price_kes columns (see template).",
+          message: "CSV needs title and price_kes columns (download the latest template).",
         },
       ],
     };
   }
 
-  const body = dataTable.slice(1);
+  const body = dataTable.slice(1).filter((cells) => {
+    const first = String(cells[0] || "").trim();
+    if (!first || first.startsWith("#")) return false;
+    // Skip rows that are entirely empty / NaN-like
+    return cells.some((c) => String(c || "").trim() !== "");
+  });
+
   if (body.length > maxRows) {
     errors.push({
       row: 0,
@@ -300,7 +432,7 @@ export function csvTextToDraftRows(csvText, { maxRows = BULK_CSV_MAX_ROWS } = {}
   const rows = [];
   const limited = body.slice(0, maxRows);
   for (let i = 0; i < limited.length; i += 1) {
-    const lineNo = i + 2; // 1-based incl header
+    const lineNo = i + 2;
     const cells = limited[i];
     const obj = {};
     for (let c = 0; c < headerMap.length; c += 1) {
@@ -320,9 +452,16 @@ export function csvTextToDraftRows(csvText, { maxRows = BULK_CSV_MAX_ROWS } = {}
       continue;
     }
 
-    const category = normalizeCategory(obj.category) || "fashion";
+    const cats = resolveCategories(obj.category, obj.subcategory);
     const condition = normalizeCondition(obj.condition) || "gently_used";
-    const shippingRaw = obj.shipping_kes != null && String(obj.shipping_kes).trim() !== "" ? parseMoney(obj.shipping_kes) : null;
+    const shippingRaw =
+      obj.shipping_kes != null && String(obj.shipping_kes).trim() !== ""
+        ? parseMoney(obj.shipping_kes)
+        : null;
+    const tags = parseTags(obj.vibe_tags || obj.tags);
+    const pitToPitIn = parseOptionalInches(obj.pit_to_pit_in);
+    const lengthIn = parseOptionalInches(obj.length_in);
+    const waistIn = parseOptionalInches(obj.waist_in);
 
     rows.push({
       sourceRow: lineNo,
@@ -332,18 +471,40 @@ export function csvTextToDraftRows(csvText, { maxRows = BULK_CSV_MAX_ROWS } = {}
         sellerNetKes: price,
         priceKes: price,
         sourcePriceKes: price,
-        category,
+        category: cats.category,
+        browseCategory: cats.browseCategory,
+        browseSubCategory: cats.browseSubCategory,
         size: String(obj.size || "").trim().slice(0, 40) || undefined,
         condition,
         isSecondhand: !String(condition).startsWith("brand_new"),
         color: String(obj.color || "").trim().slice(0, 40) || undefined,
         brand: String(obj.brand || "").trim().slice(0, 60) || undefined,
-        tags: parseTags(obj.tags),
+        tags,
         shippingKes: Number.isFinite(shippingRaw) ? Math.max(0, shippingRaw) : undefined,
         freeShipping: Number.isFinite(shippingRaw) && shippingRaw === 0,
+        pitToPitIn,
+        lengthIn,
+        waistIn,
       },
     });
   }
 
   return { rows, errors };
+}
+
+/** Help copy for UI (never embedded in CSV data rows). */
+export function bulkCsvUiHelp() {
+  return {
+    maxRows: BULK_CSV_MAX_ROWS,
+    headers: BULK_CSV_HEADERS,
+    tips: [
+      "price_kes is what you receive (seller-net). Buyers pay shipping + 10% Sokoni fee on top.",
+      "category: Men, Women, Kids — or fashion / phones-tablets for catalog categories.",
+      "subcategory examples: Outerwear, Jeans, Sneakers, Tops, Hoodies, Dresses.",
+      "condition: brand_new_with_tags | brand_new_without_tags | like_new | gently_used | fair_condition",
+      "vibe_tags: vintage, streetwear, y2k, denim (comma-separated, up to 5).",
+      "Flat measurements (inches) cut size disputes: pit_to_pit_in, length_in, waist_in.",
+      "CSV creates drafts only — add up to 8 photos, then Post.",
+    ],
+  };
 }

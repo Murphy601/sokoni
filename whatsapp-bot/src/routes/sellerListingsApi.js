@@ -129,8 +129,17 @@ router.post("/draft", async (req, res) => {
 });
 
 /** GET /api/seller/listings/bulk/template — Depop-style CSV template download */
-router.get("/bulk/template", (_req, res) => {
+router.get("/bulk/template", (req, res) => {
   const tpl = getBulkListingCsvTemplate();
+  if (String(req.query?.format || "").toLowerCase() === "json") {
+    return res.json({
+      filename: tpl.filename,
+      maxRows: tpl.maxRows,
+      headers: tpl.headers,
+      help: tpl.help,
+      csv: tpl.body,
+    });
+  }
   res.setHeader("Content-Type", tpl.contentType);
   res.setHeader("Content-Disposition", `attachment; filename="${tpl.filename}"`);
   res.send(tpl.body);

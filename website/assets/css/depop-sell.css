@@ -834,3 +834,168 @@ html.dark .sell-listing-card--hidden {
 .sell-moderation-hint {
   line-height: 1.45;
 }
+
+/* Bulk Draft Studio — spreadsheet-style preview (Sokoni tokens) */
+.bulk-studio-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(27, 16, 53, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+html.dark .bulk-studio-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(46, 27, 87, 0.45);
+}
+
+.bulk-studio-dropzone.is-dragover {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.08);
+}
+
+.bulk-studio-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.bulk-studio-help summary::after {
+  content: "+";
+  float: right;
+  color: rgba(27, 16, 53, 0.45);
+  font-weight: 700;
+}
+
+html.dark .bulk-studio-help summary::after {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.bulk-studio-help[open] summary::after {
+  content: "−";
+}
+
+.bulk-studio-table {
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.bulk-studio-table thead {
+  background: rgba(27, 16, 53, 0.04);
+  color: rgba(27, 16, 53, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+html.dark .bulk-studio-table thead {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.bulk-studio-table th,
+.bulk-studio-table td {
+  padding: 0.65rem 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(27, 16, 53, 0.08);
+}
+
+html.dark .bulk-studio-table th,
+html.dark .bulk-studio-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.bulk-studio-table tbody tr:hover {
+  background: rgba(37, 211, 102, 0.04);
+}
+
+.bulk-studio-input {
+  width: 100%;
+  min-width: 8rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  color: inherit;
+  font: inherit;
+}
+
+.bulk-studio-input:hover,
+.bulk-studio-input:focus {
+  border-color: rgba(27, 16, 53, 0.18);
+  outline: none;
+}
+
+html.dark .bulk-studio-input:hover,
+html.dark .bulk-studio-input:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.bulk-studio-input--price {
+  max-width: 6.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #128c3a;
+}
+
+html.dark .bulk-studio-input--price {
+  color: #25d366;
+}
+
+.bulk-studio-input--size {
+  max-width: 5.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.bulk-studio-condition {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(37, 211, 102, 0.25);
+  background: rgba(37, 211, 102, 0.1);
+  color: #128c3a;
+  font-weight: 700;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+html.dark .bulk-studio-condition {
+  color: #25d366;
+}
+
+.bulk-studio-vibe {
+  display: inline-flex;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.35rem;
+  background: rgba(27, 16, 53, 0.06);
+  color: rgba(27, 16, 53, 0.55);
+  margin-right: 0.2rem;
+  white-space: nowrap;
+}
+
+html.dark .bulk-studio-vibe {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.bulk-studio-remove {
+  min-width: 44px;
+  min-height: 44px;
+  color: rgba(27, 16, 53, 0.4);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.bulk-studio-remove:hover {
+  color: #dc2626;
+}
+
+html.dark .bulk-studio-remove {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+html.dark .bulk-studio-remove:hover {
+  color: #f87171;
+}
