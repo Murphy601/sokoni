@@ -375,3 +375,371 @@ body.depop-surface-page,
 .dispute-guide-carousel {
   scrollbar-color: #27272a transparent;
 }
+
+
+/* —— Full seller sell page (dashboard + withdraw + listing) —— */
+body.sell-depop-page {
+  background: var(--depop-bg) !important;
+  color: var(--depop-text) !important;
+}
+
+body.sell-depop-page header {
+  background: rgba(0, 0, 0, 0.95) !important;
+  border-bottom: 1px solid var(--depop-border) !important;
+  color: var(--depop-text);
+}
+
+body.sell-depop-page .sell-depop-section,
+body.sell-depop-page #onboard-panel,
+body.sell-depop-page #seller-shop-edit,
+body.sell-depop-page #seller-profile-bar,
+body.sell-depop-page #success-box,
+body.sell-depop-page .sell-panel,
+body.sell-depop-page #bulk-draft-studio {
+  background: var(--depop-surface) !important;
+  border: 1px solid var(--depop-border) !important;
+  color: var(--depop-text);
+  border-radius: 1.5rem;
+}
+
+body.sell-depop-page #seller-hub-overview {
+  /* already depop-surface; keep flush with page */
+  background: var(--depop-surface) !important;
+}
+
+body.sell-depop-page .text-brand-green,
+body.sell-depop-page .hover\:text-brand-green:hover {
+  color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .text-brand-purple,
+body.sell-depop-page .dark\:text-white {
+  color: var(--depop-text) !important;
+}
+
+body.sell-depop-page .text-brand-purple\/60,
+body.sell-depop-page .text-brand-purple\/65,
+body.sell-depop-page .text-brand-purple\/70,
+body.sell-depop-page .text-brand-purple\/55,
+body.sell-depop-page .text-brand-purple\/50,
+body.sell-depop-page .text-brand-purple\/45,
+body.sell-depop-page .dark\:text-white\/60,
+body.sell-depop-page .dark\:text-white\/65,
+body.sell-depop-page .dark\:text-white\/70,
+body.sell-depop-page .dark\:text-white\/55,
+body.sell-depop-page .dark\:text-white\/50 {
+  color: var(--depop-muted) !important;
+}
+
+body.sell-depop-page .bg-brand-green\/5,
+body.sell-depop-page .bg-brand-green\/10,
+body.sell-depop-page .border-brand-green\/20,
+body.sell-depop-page .border-brand-green\/25,
+body.sell-depop-page .border-brand-green\/30,
+body.sell-depop-page .border-brand-green\/40 {
+  background: rgba(255, 35, 0, 0.06) !important;
+  border-color: rgba(255, 35, 0, 0.25) !important;
+}
+
+body.sell-depop-page .bg-brand-green,
+body.sell-depop-page .bg-brand-green\/20,
+body.sell-depop-page button.bg-brand-green,
+body.sell-depop-page .btn-whatsapp {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+body.sell-depop-page .btn-whatsapp:hover {
+  background: var(--depop-accent-hover) !important;
+}
+
+body.sell-depop-page .bg-white,
+body.sell-depop-page .bg-white\/70,
+body.sell-depop-page .dark\:bg-brand-purple,
+body.sell-depop-page .dark\:bg-brand-purpleLight\/40,
+body.sell-depop-page .bg-brand-cream,
+body.sell-depop-page .dark\:bg-brand-purple\/30 {
+  background: #000 !important;
+  color: var(--depop-text) !important;
+}
+
+body.sell-depop-page .border-black\/5,
+body.sell-depop-page .border-brand-purple\/10,
+body.sell-depop-page .border-brand-purple\/15,
+body.sell-depop-page .border-brand-purple\/20,
+body.sell-depop-page .dark\:border-white\/10,
+body.sell-depop-page .dark\:border-white\/15,
+body.sell-depop-page .dark\:border-white\/20 {
+  border-color: var(--depop-border) !important;
+}
+
+body.sell-depop-page .sell-form-input,
+body.sell-depop-page .sell-form-input select,
+body.sell-depop-page .sell-form-input textarea,
+body.sell-depop-page textarea,
+body.sell-depop-page input[type="text"],
+body.sell-depop-page input[type="tel"],
+body.sell-depop-page input[type="url"],
+body.sell-depop-page input[type="number"],
+body.sell-depop-page select {
+  background: #000 !important;
+  color: #fff !important;
+  border-color: #27272a !important;
+  caret-color: #fff !important;
+}
+
+body.sell-depop-page .sell-form-input:focus,
+body.sell-depop-page textarea:focus,
+body.sell-depop-page input:focus,
+body.sell-depop-page select:focus {
+  border-color: var(--depop-accent) !important;
+  box-shadow: 0 0 0 2px rgba(255, 35, 0, 0.35) !important;
+}
+
+body.sell-depop-page .sell-form-input::placeholder,
+body.sell-depop-page textarea::placeholder {
+  color: #71717a !important;
+}
+
+body.sell-depop-page .sell-view-tabs {
+  background: #18181b !important;
+}
+
+body.sell-depop-page .sell-view-tab {
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .sell-view-tab.is-active {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-tab-badge {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-order-card,
+body.sell-depop-page .sell-offer-card {
+  background: #000 !important;
+  border-color: var(--depop-border) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-card {
+  border-color: rgba(255, 35, 0, 0.28) !important;
+}
+
+body.sell-depop-page .sell-order-badge--action {
+  background: rgba(255, 35, 0, 0.12) !important;
+  color: #ff7a66 !important;
+}
+
+body.sell-depop-page .sell-order-badge--transit {
+  background: rgba(251, 191, 36, 0.12) !important;
+  color: #fbbf24 !important;
+}
+
+body.sell-depop-page .sell-order-badge--done {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #34d399 !important;
+}
+
+body.sell-depop-page .sell-order-badge--reminded {
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #34d399 !important;
+}
+
+body.sell-depop-page .sell-order-action {
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-order-action--primary {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-quick-btn {
+  background: var(--depop-accent) !important;
+  border-color: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-reset-btn,
+body.sell-depop-page .sell-offer-undo-btn,
+body.sell-depop-page .sell-offer-undo-open-btn,
+body.sell-depop-page .sell-btn-ghost {
+  background: var(--depop-surface) !important;
+  border-color: #27272a !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-ledger-tab {
+  background: #000 !important;
+  border-color: var(--depop-border) !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-ledger-tab.is-active {
+  border-color: var(--depop-accent) !important;
+  background: rgba(255, 35, 0, 0.1) !important;
+}
+
+body.sell-depop-page .sell-ledger-dot.available {
+  background: var(--depop-success) !important;
+}
+
+body.sell-depop-page .sell-ledger-dot.transit {
+  background: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-wizard-step.is-active,
+body.sell-depop-page .sell-wizard-step.is-done {
+  background: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-wizard-step {
+  background: #27272a !important;
+}
+
+body.sell-depop-page .sell-media-slot {
+  background: #000 !important;
+  border-color: #27272a !important;
+}
+
+body.sell-depop-page .sell-media-slot-cover {
+  border-color: rgba(255, 35, 0, 0.55) !important;
+}
+
+body.sell-depop-page .sell-media-slot .sell-slot-label {
+  color: #71717a !important;
+}
+
+body.sell-depop-page .sell-studio-badge {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-studio-controls {
+  border-color: rgba(255, 35, 0, 0.28) !important;
+  background: rgba(255, 35, 0, 0.08) !important;
+}
+
+body.sell-depop-page .sell-studio-toggle input {
+  accent-color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-fee-table .sell-fee-net th,
+body.sell-depop-page .sell-fee-table .sell-fee-net td,
+body.sell-depop-page .depop-card-total,
+body.sell-depop-page .product-sheet-total {
+  color: var(--depop-success) !important;
+}
+
+body.sell-depop-page .sell-fee-table th,
+body.sell-depop-page .sell-fee-table td {
+  border-bottom-color: var(--depop-border) !important;
+}
+
+body.sell-depop-page .sell-price-range {
+  background: rgba(255, 35, 0, 0.08) !important;
+  color: var(--depop-muted) !important;
+}
+
+body.sell-depop-page .sell-tag-hint {
+  color: var(--depop-faint) !important;
+}
+
+body.sell-depop-page .bulk-studio-banner {
+  background: rgba(255, 35, 0, 0.06) !important;
+  border-color: rgba(255, 35, 0, 0.25) !important;
+}
+
+body.sell-depop-page .bulk-studio-chip {
+  background: #18181b !important;
+  border-color: #27272a !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .bulk-studio-dropzone {
+  border-color: #27272a !important;
+  background: #000 !important;
+}
+
+body.sell-depop-page .bulk-studio-dropzone.is-dragover {
+  border-color: var(--depop-accent) !important;
+  background: rgba(255, 35, 0, 0.06) !important;
+}
+
+body.sell-depop-page .bulk-studio-help,
+body.sell-depop-page .bulk-studio-grid {
+  border-color: var(--depop-border) !important;
+  background: #000 !important;
+}
+
+body.sell-depop-page .bulk-studio-table thead {
+  background: #18181b !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .bulk-studio-table th,
+body.sell-depop-page .bulk-studio-table td {
+  border-color: var(--depop-border) !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .bulk-studio-input,
+body.sell-depop-page .bulk-studio-condition,
+body.sell-depop-page .bulk-studio-vibe {
+  background: #09090b !important;
+  border-color: #27272a !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .bulk-studio-input:focus,
+body.sell-depop-page .bulk-studio-input:hover {
+  border-color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-offer-filter {
+  background: #000 !important;
+  border-color: #27272a !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .sell-offer-filter.is-active {
+  border-color: var(--depop-accent) !important;
+  color: #fff !important;
+  background: rgba(255, 35, 0, 0.1) !important;
+}
+
+body.sell-depop-page .sell-offer-filter-count {
+  background: #27272a !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-offer-filter.is-active .sell-offer-filter-count {
+  background: rgba(255, 35, 0, 0.35) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-filters {
+  gap: 0.5rem;
+}
+
+body.sell-depop-page input[type="checkbox"] {
+  accent-color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page a:not(.depop-btn-accent):not(.depop-btn-white):not(.sell-order-action--primary):not(.btn-whatsapp) {
+  color: var(--depop-muted);
+}
+
+body.sell-depop-page a:not(.depop-btn-accent):not(.depop-btn-white):not(.sell-order-action--primary):not(.btn-whatsapp):hover {
+  color: #fff;
+}
+
+body.sell-depop-page .font-display {
+  color: #fff;
+}
