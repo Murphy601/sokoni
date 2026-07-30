@@ -6,7 +6,7 @@ import { mpesaTransactionFeeKes } from "./mpesa-transaction-fees.js";
 export const PLATFORM_FEE_RATE = 0.1;
 /** @deprecated Use PLATFORM_FEE_RATE — seller-handled no longer uses a lower rate. */
 export const SELLER_HANDLED_FEE_RATE = PLATFORM_FEE_RATE;
-export const MIN_SHIPPING_KES = 150;
+export const MIN_SHIPPING_KES = 300;
 
 export const DELIVERY_METHODS = [
   {
@@ -21,12 +21,6 @@ export const DELIVERY_METHODS = [
     hint: "You dispatch with your own courier",
     shippingRecipient: "seller",
   },
-  {
-    id: "meetup",
-    label: "In-person meetup",
-    hint: "Meet the buyer — no delivery fee",
-    shippingRecipient: "seller",
-  },
 ];
 
 export function normalizeDeliveryMethod(raw) {
@@ -37,6 +31,7 @@ export function normalizeDeliveryMethod(raw) {
   if (key === "seller_express" || key === "express" || key === "seller_delivery" || key === "self") {
     return "seller_express";
   }
+  // Meetup removed as a seller option — legacy meetup orders still recognised for escrow.
   if (key === "meetup" || key === "meet" || key === "in_person" || key === "pickup_meetup") {
     return "meetup";
   }
@@ -50,36 +45,47 @@ export function isSellerHandledDelivery(method) {
 
 export function deliveryMethodMeta(method) {
   const id = normalizeDeliveryMethod(method);
-  return DELIVERY_METHODS.find((d) => d.id === id) || DELIVERY_METHODS[0];
+  const found = DELIVERY_METHODS.find((d) => d.id === id);
+  if (found) return found;
+  // Legacy meetup listings/orders — not offered on new sells.
+  if (id === "meetup") {
+    return {
+      id: "meetup",
+      label: "In-person meetup",
+      hint: "Meet the buyer — no delivery fee",
+      shippingRecipient: "seller",
+    };
+  }
+  return DELIVERY_METHODS[0];
 }
 
-/** Preset rider/courier tiers — AI maps cover photo → class → typical fee. */
+/** Preset rider/courier tiers — AI maps cover photo → class → typical fee (floor KES 300). */
 export const SHIPPING_TIERS = [
   {
     id: "small",
     label: "Small — tops, cosmetics, accessories",
     weightNote: "< 500 g",
-    minKes: 150,
-    maxKes: 200,
-    typicalKes: 175,
+    minKes: 300,
+    maxKes: 350,
+    typicalKes: 300,
     examples: "T-shirt, dress, jewelry, lipstick, phone case, yogurt",
   },
   {
     id: "medium",
     label: "Medium — shoes, trousers, hoodies",
     weightNote: "500 g – 1.5 kg",
-    minKes: 250,
-    maxKes: 300,
-    typicalKes: 275,
+    minKes: 400,
+    maxKes: 500,
+    typicalKes: 450,
     examples: "Jeans, shoes, handbag, hoodie, headphones",
   },
   {
     id: "large",
     label: "Large — boots, jackets, electronics",
     weightNote: "> 1.5 kg",
-    minKes: 350,
-    maxKes: 500,
-    typicalKes: 425,
+    minKes: 550,
+    maxKes: 750,
+    typicalKes: 650,
     examples: "Boots, heavy coat, laptop, blender, microwave",
   },
 ];

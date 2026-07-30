@@ -175,13 +175,13 @@
   function resolveShippingKes(product) {
     if (product?.freeShipping === true) return 0;
     const ship = Math.round(Number(product?.shippingKes ?? product?.shippingKsh ?? 0) || 0);
-    return ship > 0 ? Math.max(150, ship) : 0;
+    return ship > 0 ? Math.max(300, ship) : 0;
   }
 
   /** Mirror bot computeOfferFeeBreakdown — offer amount is buyer all-in into escrow. */
   function computeOfferEscrowBreakdown(buyerTotalKes, shippingKes) {
     const agreed = Math.round(Number(buyerTotalKes) || 0);
-    const shipping = Math.round(Number(shippingKes) || 0) > 0 ? Math.max(150, Math.round(Number(shippingKes))) : 0;
+    const shipping = Math.round(Number(shippingKes) || 0) > 0 ? Math.max(300, Math.round(Number(shippingKes))) : 0;
     if (!Number.isFinite(agreed) || agreed < 1) {
       return { error: "invalid_offer_amount", message: "Enter a valid offer amount in KES." };
     }
