@@ -11,10 +11,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
 
 let cachedProducts = null;
+let cachedAtMs = 0;
+/** Soft TTL so Ask / WhatsApp pick up new listings without waiting for a restart. */
+const CATALOG_CACHE_TTL_MS = 30_000;
 
 /** Clear in-memory cache after admin/catalog writes. */
 export function invalidateProductCache() {
   cachedProducts = null;
+  cachedAtMs = 0;
 }
 
 /**
@@ -25,19 +29,24 @@ async function loadProducts() {
   if (await isCatalogPubliclyDisabled()) {
     return [];
   }
-  if (!cachedProducts) {
-    if (isDbEnabled()) {
-      try {
-        cachedProducts = await listProductsFromDb();
-        return cachedProducts;
-      } catch (err) {
-        console.warn("[catalog] DB load failed, falling back to JSON:", err.message);
-        cachedProducts = null;
-      }
-    }
-    const raw = await readFile(PRODUCTS_PATH, "utf-8");
-    cachedProducts = JSON.parse(raw);
+  const now = Date.now();
+  if (cachedProducts && now - cachedAtMs < CATALOG_CACHE_TTL_MS) {
+    return cachedProducts;
   }
+  if (isDbEnabled()) {
+    try {
+      cachedProducts = await listProductsFromDb();
+      cachedAtMs = now;
+      return cachedProducts;
+    } catch (err) {
+      console.warn("[catalog] DB load failed, falling back to JSON:", err.message);
+      cachedProducts = null;
+      cachedAtMs = 0;
+    }
+  }
+  const raw = await readFile(PRODUCTS_PATH, "utf-8");
+  cachedProducts = JSON.parse(raw);
+  cachedAtMs = now;
   return cachedProducts;
 }
 
