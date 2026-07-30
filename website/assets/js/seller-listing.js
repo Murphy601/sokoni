@@ -207,7 +207,7 @@ function setStatus(msg, isError = false) {
   node.textContent = msg || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(msg));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
 }
 
 function readFileAsDataUrl(file) {
@@ -1314,7 +1314,7 @@ function setBulkCsvStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 /** In-browser draft preview rows before POST (data-only CSV — no # instruction rows). */
@@ -1754,7 +1754,7 @@ async function loadMyListings() {
   const wrap = el("my-listings");
   if (!phone || !wrap) return;
 
-  wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading…</p>`;
+  wrap.innerHTML = `<p class="text-sm text-zinc-500">Loading…</p>`;
   const hint = el("bulk-drafts-hint");
   if (hint) hint.classList.add("hidden");
   try {
@@ -1774,7 +1774,7 @@ async function loadMyListings() {
     hubCache.liveCount = (data.listings || []).filter((l) => (l.status || "live") === "live").length;
     renderSellerHubOverview();
     if (!items.length) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No listings yet — add your first item above, or import a CSV.</p>`;
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">No listings yet — add your first item above, or import a CSV.</p>`;
       return;
     }
     const draftById = new Map();
@@ -1791,10 +1791,10 @@ async function loadMyListings() {
         const summary = item.moderationSummary || {};
         const badge =
           status === "live"
-            ? "bg-brand-green/20 text-brand-purple dark:text-brand-green"
+            ? "bg-emerald-500/15 text-emerald-400"
             : status === "hidden"
-              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-              : "bg-brand-purple/10 text-brand-purple dark:bg-white/10 dark:text-white";
+              ? "bg-red-500/15 text-red-400"
+              : "bg-zinc-800 text-zinc-300";
         const title = escapeHtml(item.draft?.name || item.id);
         const img = item.imageUrl || item.images?.[0];
         const imgSrc = listingMediaUrl(img);
@@ -1806,24 +1806,24 @@ async function loadMyListings() {
         const needsPhoto = status === "draft" && !img;
         if (status === "draft") draftById.set(String(pid), item);
         return `
-          <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${escapeHtml(pid)}" data-status="${escapeHtml(status)}">
-            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : `<div class="w-16 h-16 rounded-xl bg-brand-purple/5 dark:bg-white/10 shrink-0 flex items-center justify-center text-[10px] text-center px-1 text-brand-purple/50 dark:text-white/50">No photo</div>`}
+          <div class="rounded-2xl border border-zinc-800 bg-black p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${escapeHtml(pid)}" data-status="${escapeHtml(status)}">
+            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : `<div class="w-16 h-16 rounded-xl bg-zinc-900 shrink-0 flex items-center justify-center text-[10px] text-center px-1 text-zinc-500">No photo</div>`}
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate">${title}</p>
-              <p class="text-xs text-brand-purple/60 dark:text-white/60 mt-1">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}${item.source === "bulk_csv" ? " · CSV" : ""}</p>
+              <p class="text-xs text-zinc-400 mt-1">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}${item.source === "bulk_csv" ? " · CSV" : ""}</p>
               <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${escapeHtml(status)}</span>
-              ${needsPhoto ? `<p class="text-xs text-brand-purple/60 dark:text-white/65 mt-2">Add photos before posting.</p>` : ""}
+              ${needsPhoto ? `<p class="text-xs text-zinc-400 mt-2">Add photos before posting.</p>` : ""}
               ${status === "hidden" && reason ? `<p class="sell-moderation-reason mt-2 text-xs font-medium text-red-700 dark:text-red-300">${escapeHtml(reason)}</p>` : ""}
-              ${status === "hidden" && sellerHint ? `<p class="sell-moderation-hint mt-1 text-xs text-brand-purple/65 dark:text-white/65">${escapeHtml(sellerHint)}</p>` : ""}
+              ${status === "hidden" && sellerHint ? `<p class="sell-moderation-hint mt-1 text-xs text-zinc-400">${escapeHtml(sellerHint)}</p>` : ""}
               ${status === "draft" ? `
               <div class="flex flex-wrap gap-2 mt-3">
-                <button type="button" class="text-xs font-semibold text-brand-green hover:underline continue-draft-btn" data-id="${escapeHtml(pid)}">${needsPhoto ? "Add photos & edit" : "Continue editing"}</button>
+                <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline continue-draft-btn" data-id="${escapeHtml(pid)}">${needsPhoto ? "Add photos & edit" : "Continue editing"}</button>
                 <button type="button" class="text-xs font-semibold text-brand-purple/70 dark:text-white/70 hover:underline delete-draft-btn" data-id="${escapeHtml(pid)}">Delete draft</button>
               </div>` : ""}
               ${status === "live" ? `
               <div class="flex flex-wrap gap-2 mt-3">
-                <button type="button" class="text-xs font-semibold text-brand-green hover:underline refresh-listing-btn" data-id="${escapeHtml(pid)}">↻ Refresh listing</button>
-                <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-brand-green hover:underline">Share to WhatsApp</a>
+                <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline refresh-listing-btn" data-id="${escapeHtml(pid)}">↻ Refresh listing</button>
+                <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-[#FF2300] hover:underline">Share to WhatsApp</a>
               </div>` : ""}
             </div>
           </div>`;
@@ -1884,7 +1884,7 @@ function setEditShopStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 function fillShopEditFormFromSeller(profile = {}) {
@@ -2145,7 +2145,7 @@ function activityEventRow(event) {
   return `
     <article class="rounded-2xl border border-black/5 dark:border-white/10 px-4 py-3">
       <p class="text-sm">${text}</p>
-      <p class="text-[11px] text-brand-purple/55 dark:text-white/60 mt-1">${when}</p>
+      <p class="text-[11px] text-zinc-500 mt-1">${when}</p>
     </article>`;
 }
 
@@ -2154,11 +2154,11 @@ async function loadSellerActivity() {
   if (!wrap) return;
   const phone = apiPhone();
   if (!phone || !getSessionToken()) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Sign in to see shop activity.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">Sign in to see shop activity.</p>`;
     return;
   }
 
-  wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading activity…</p>`;
+  wrap.innerHTML = `<p class="text-sm text-zinc-500">Loading activity…</p>`;
   try {
     const params = new URLSearchParams({
       phone: normalizePhoneInput(phone),
@@ -2172,14 +2172,14 @@ async function loadSellerActivity() {
       return;
     }
     if (!parsed.ok) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">${escapeHtml(
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">${escapeHtml(
         parsed.data?.message || "Activity unavailable right now."
       )}</p>`;
       return;
     }
     const events = Array.isArray(parsed.data?.events) ? parsed.data.events : [];
     if (!events.length) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No follows or likes yet. Share your shop handle to get started.</p>`;
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">No follows or likes yet. Share your shop handle to get started.</p>`;
       return;
     }
     wrap.innerHTML = events.map((event) => activityEventRow(event)).join("");
@@ -2285,7 +2285,7 @@ function setOnboardStatus(msg, isError = false) {
   node.textContent = msg || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(msg));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
 }
 
 function loadSessionFromStorage() {
@@ -2567,14 +2567,14 @@ function renderLedgerDetail() {
 
   node.innerHTML = items
     .map((item) => {
-      const statusLine = item.shipmentStatusLabel ? `<span class="text-xs text-brand-purple/50">${item.shipmentStatusLabel}</span>` : "";
+      const statusLine = item.shipmentStatusLabel ? `<span class="text-xs text-zinc-500">${item.shipmentStatusLabel}</span>` : "";
       const trackLink = item.trackUrl
-        ? `<a href="${item.trackUrl}" class="text-xs font-semibold text-brand-green hover:underline shrink-0">Track</a>`
+        ? `<a href="${item.trackUrl}" class="text-xs font-semibold text-[#FF2300] hover:underline shrink-0">Track</a>`
         : "";
       return `<div class="flex flex-wrap justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
           <div class="min-w-0">
             <span class="block truncate">${item.productName || item.orderId}</span>
-            ${item.orderId ? `<span class="text-xs text-brand-purple/50">${item.orderId}</span>` : ""}
+            ${item.orderId ? `<span class="text-xs text-zinc-500">${item.orderId}</span>` : ""}
             ${statusLine}
           </div>
           <div class="text-right shrink-0">
@@ -2788,7 +2788,7 @@ function renderSellerOrders(orders) {
 
   const active = hubOrdersToShip(hubCache.orders);
   if (!active.length) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">No active orders — when someone buys, it shows here with your drop-off label.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">No active orders — when someone buys, it shows here with your drop-off label.</p>`;
     return;
   }
 
@@ -2809,7 +2809,7 @@ function renderSellerOrders(orders) {
             <p class="font-semibold">${o.productName || "Order"}</p>
             <span class="sell-order-badge ${shipmentBadgeClass(o.shipmentStatus)}">${o.shipmentStatusLabel}</span>
           </div>
-          <p class="text-xs text-brand-purple/50 mt-1"><span class="font-mono">${o.orderId}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
+          <p class="text-xs text-zinc-500 mt-1"><span class="font-mono">${o.orderId}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
           <div class="sell-order-actions">${actions.join("")}</div>
         </div>`;
     })
@@ -2822,7 +2822,7 @@ function setBuyerReviewStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 function setSellerDisputesStatus(message, isError = false) {
@@ -2831,7 +2831,7 @@ function setSellerDisputesStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 async function loadSellerBuyerReviews() {
@@ -2839,10 +2839,10 @@ async function loadSellerBuyerReviews() {
   if (!wrap) return;
   const phone = apiPhone();
   if (!phone || !getSessionToken()) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Sign in to rate buyers after delivery.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">Sign in to rate buyers after delivery.</p>`;
     return;
   }
-  wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Loading…</p>`;
+  wrap.innerHTML = `<p class="text-sm text-zinc-500">Loading…</p>`;
   try {
     const params = new URLSearchParams({ phone, sessionToken: getSessionToken() });
     const res = await fetch(`${SOCIAL_API}/reviews/reviewable-buyers?${params.toString()}`, {
@@ -2854,12 +2854,12 @@ async function loadSellerBuyerReviews() {
       return;
     }
     if (!parsed.ok) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">${escapeHtml(parsed.data?.message || "Could not load buyers.")}</p>`;
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">${escapeHtml(parsed.data?.message || "Could not load buyers.")}</p>`;
       return;
     }
     const orders = Array.isArray(parsed.data?.orders) ? parsed.data.orders : [];
     if (!orders.length) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">No delivered orders waiting for a buyer rating.</p>`;
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">No delivered orders waiting for a buyer rating.</p>`;
       return;
     }
     wrap.innerHTML = orders
@@ -2867,7 +2867,7 @@ async function loadSellerBuyerReviews() {
         (o) => `
       <form class="sell-order-card space-y-2" data-rate-buyer="${escapeHtml(o.orderId)}" data-buyer-id="${escapeHtml(String(o.buyerUserId))}">
         <p class="font-semibold text-sm">${escapeHtml(o.productName || o.orderId)}</p>
-        <p class="text-xs text-brand-purple/50">${escapeHtml(o.orderId)} · buyer #${escapeHtml(String(o.buyerUserId))}</p>
+        <p class="text-xs text-zinc-500">${escapeHtml(o.orderId)} · buyer #${escapeHtml(String(o.buyerUserId))}</p>
         <label class="block text-xs font-medium">Stars
           <select name="rating" class="sell-form-input mt-1">
             <option value="5">5 — Great</option>
@@ -2880,7 +2880,7 @@ async function loadSellerBuyerReviews() {
         <label class="block text-xs font-medium">Note (optional)
           <input name="comment" maxlength="500" class="sell-form-input mt-1" placeholder="Paid fast, clear chat…" />
         </label>
-        <button type="submit" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Submit rating</button>
+        <button type="submit" class="depop-btn-accent text-xs">Submit rating</button>
       </form>`
       )
       .join("");
@@ -2928,10 +2928,10 @@ async function loadSellerDisputes() {
   if (!wrap) return;
   const phone = apiPhone();
   if (!phone || !getSessionToken()) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Sign in to see disputes.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">Sign in to see disputes.</p>`;
     return;
   }
-  wrap.innerHTML = `<p class="text-sm text-brand-purple/50">Loading…</p>`;
+  wrap.innerHTML = `<p class="text-sm text-zinc-500">Loading…</p>`;
   const DISPUTES_API = `${API_BASE}/api/disputes`;
   try {
     const params = new URLSearchParams({ phone, sessionToken: getSessionToken() });
@@ -2944,12 +2944,12 @@ async function loadSellerDisputes() {
       return;
     }
     if (!parsed.ok) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">${escapeHtml(parsed.data?.message || "Could not load disputes.")}</p>`;
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">${escapeHtml(parsed.data?.message || "Could not load disputes.")}</p>`;
       return;
     }
     const disputes = Array.isArray(parsed.data?.disputes) ? parsed.data.disputes : [];
     if (!disputes.length) {
-      wrap.innerHTML = `<p class="text-sm text-brand-purple/50">No open disputes. If a buyer opens one, it shows here.</p>`;
+      wrap.innerHTML = `<p class="text-sm text-zinc-500">No open disputes. If a buyer opens one, it shows here.</p>`;
       return;
     }
     wrap.innerHTML = disputes
@@ -2966,11 +2966,11 @@ async function loadSellerDisputes() {
           <div class="flex justify-between gap-2 items-start">
             <div>
               <p class="font-semibold text-sm font-mono">${escapeHtml(d.orderRef)}</p>
-              <p class="text-[10px] text-brand-purple/45 mt-0.5">Ticket #TK-${escapeHtml(String(d.id))}</p>
+              <p class="text-[10px] text-zinc-500 mt-0.5">Ticket #TK-${escapeHtml(String(d.id))}</p>
             </div>
             <span class="${badgeClass}">${escapeHtml(d.status)}</span>
           </div>
-          <p class="text-xs text-brand-purple/55">${escapeHtml(d.reason)}${d.buyerStatement ? ` — ${escapeHtml(d.buyerStatement)}` : ""}</p>
+          <p class="text-xs text-zinc-400">${escapeHtml(d.reason)}${d.buyerStatement ? ` — ${escapeHtml(d.buyerStatement)}` : ""}</p>
           ${
             open
               ? `<label class="block text-xs font-medium">Your response
@@ -3026,7 +3026,7 @@ function setOffersStatus(message, isError = false) {
   node.textContent = message || "";
   node.classList.toggle("text-red-600", isError);
   node.classList.toggle("dark:text-red-400", isError);
-  node.classList.toggle("text-brand-green", !isError && Boolean(message));
+  node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
 function setDashboardOfferBadge(pendingCount = 0) {
@@ -4067,7 +4067,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
   if (!wrap) return;
 
   if (!offers.length) {
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">${escapeHtml(emptyMessage)}</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
 
@@ -4084,14 +4084,14 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
       const breakdown = offer?.breakdown;
       const escrowLine =
         breakdown?.sellerNetKes != null
-          ? `<p class="text-xs text-brand-purple/65 dark:text-white/65 mt-1">Buyer pays ${escapeHtml(formatKes(breakdown.totalKes))} into escrow → you receive <strong>${escapeHtml(formatKes(breakdown.sellerNetKes))}</strong> after delivery (${
+          ? `<p class="text-xs text-zinc-400 mt-1">Buyer pays ${escapeHtml(formatKes(breakdown.totalKes))} into escrow → you receive <strong>${escapeHtml(formatKes(breakdown.sellerNetKes))}</strong> after delivery (${
               breakdown.freeShipping || !breakdown.shippingKes
                 ? "shipping free"
                 : `shipping ${escapeHtml(formatKes(breakdown.shippingKes))}`
             }, Sokoni fee ${escapeHtml(formatKes(breakdown.platformFeeKes))})</p>`
           : offer?.breakdownError?.message
             ? `<p class="text-xs text-amber-700 dark:text-amber-300 mt-1">${escapeHtml(offer.breakdownError.message)}</p>`
-            : `<p class="text-xs text-brand-purple/55 dark:text-white/55 mt-1">Offer is buyer all-in (shipping + Sokoni fee come out before your payout).</p>`;
+            : `<p class="text-xs text-zinc-400 dark:text-white/55 mt-1">Offer is buyer all-in (shipping + Sokoni fee come out before your payout).</p>`;
       const canRespond = Number.isInteger(id) && id > 0 && status === "pending";
       const sellerUserId = currentSellerSocialUserId();
       const buyerUserId = offerBuyerUserId(offer);
@@ -4153,7 +4153,7 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
         ? `<span class="sell-order-badge sell-order-badge--reminded">Reminded</span>`
         : "";
       const handledNote = handledInQuickQueue
-        ? `<p class="text-xs text-brand-green mt-2">Handled in quick mode queue.</p>`
+        ? `<p class="text-xs text-emerald-400 mt-2">Handled in quick mode queue.</p>`
         : "";
       const chatBlockedNote = chatBlockedReason
         ? `<p class="text-xs text-amber-700 dark:text-amber-300 mt-2">${escapeHtml(chatBlockedReason)}</p>`
@@ -4167,13 +4167,13 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
               ${remindedBadge}
             </div>
           </div>
-          <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(offerBuyerLabel(offer))}</p>
+          <p class="text-xs text-zinc-500 dark:text-white/55 mt-1">${escapeHtml(offerBuyerLabel(offer))}</p>
           <p class="text-sm mt-2"><strong>Buyer total offered:</strong> ${escapeHtml(amount)}${escapeHtml(listedLine)}</p>
           ${escrowLine}
-          <p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(
+          <p class="text-xs text-zinc-500 dark:text-white/55 mt-1">${escapeHtml(
             formatOfferExpiry(offer?.expiresAt, status)
           )}</p>
-          ${reminderSentNote ? `<p class="text-xs text-brand-purple/50 dark:text-white/55 mt-1">${escapeHtml(reminderSentNote)}</p>` : ""}
+          ${reminderSentNote ? `<p class="text-xs text-zinc-500 dark:text-white/55 mt-1">${escapeHtml(reminderSentNote)}</p>` : ""}
           ${chatBlockedNote}
           ${handledNote}
           ${actionBlock}
@@ -4765,7 +4765,7 @@ async function loadSellerOffers({ silent = false } = {}) {
   sellerOffersRequestInFlight = true;
   if (!silent) {
     setOffersStatus("Loading offers...");
-    wrap.innerHTML = `<p class="text-sm text-brand-purple/50 dark:text-white/50">Loading buyer offers…</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">Loading buyer offers…</p>`;
   }
 
   try {
@@ -4950,7 +4950,7 @@ async function requestWithdrawal() {
       return;
     }
     statusEl.textContent = data.message || "Withdrawal requested.";
-    statusEl.classList.add("text-brand-green");
+    statusEl.classList.add("text-emerald-400");
     await loadWithdrawPanel();
     await loadEscrowLedger();
   } catch {
