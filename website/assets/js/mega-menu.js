@@ -197,6 +197,7 @@
     ensureRoot();
     render();
     root.hidden = false;
+    root.setAttribute("aria-hidden", "false");
     root.classList.add("is-open");
     isOpen = true;
     document.body.classList.add("mega-menu-open");
@@ -214,6 +215,7 @@
     if (!root) return;
     root.classList.remove("is-open");
     root.hidden = true;
+    root.setAttribute("aria-hidden", "true");
     isOpen = false;
     document.body.classList.remove("mega-menu-open");
     const toggle = document.getElementById("catalog-nav-toggle");
