@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "itemTypes": [
     {
       "id": "all",
@@ -265,6 +265,37 @@
       ]
     },
     {
+      "id": "health-beauty",
+      "label": "Health & Beauty",
+      "emoji": "💄",
+      "subcategories": [
+        {
+          "id": "skincare",
+          "label": "Skincare"
+        },
+        {
+          "id": "makeup",
+          "label": "Makeup"
+        },
+        {
+          "id": "haircare",
+          "label": "Haircare"
+        },
+        {
+          "id": "fragrances",
+          "label": "Fragrances"
+        },
+        {
+          "id": "personal-care",
+          "label": "Personal Care"
+        },
+        {
+          "id": "mens-grooming",
+          "label": "Men's Grooming"
+        }
+      ]
+    },
+    {
       "id": "brands",
       "label": "Brands",
       "emoji": "✨",
@@ -299,6 +330,314 @@
         {
           "id": "equipment",
           "label": "Equipment"
+        },
+        {
+          "id": "gym-fitness",
+          "label": "Gym & Fitness"
+        },
+        {
+          "id": "outdoor",
+          "label": "Outdoor"
+        },
+        {
+          "id": "football",
+          "label": "Football"
+        },
+        {
+          "id": "cycling",
+          "label": "Cycling"
+        }
+      ]
+    },
+    {
+      "id": "phones",
+      "label": "Phones & Accessories",
+      "emoji": "📱",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "phones"
+      },
+      "subcategories": [
+        {
+          "id": "phones",
+          "label": "All Phones & Tablets",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "smartphones",
+          "label": "Smartphones",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "tablets",
+          "label": "Tablets",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "phone-accessories",
+          "label": "Phone Accessories",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "power-banks",
+          "label": "Power Banks",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tv-audio",
+      "label": "TV & Audio",
+      "emoji": "📺",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "tvs-audio"
+      },
+      "subcategories": [
+        {
+          "id": "tvs-audio",
+          "label": "All TVs & Audio",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "televisions",
+          "label": "Televisions",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "headphones",
+          "label": "Headphones",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "speakers",
+          "label": "Speakers",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "wearables",
+          "label": "Wearables",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        }
+      ]
+    },
+    {
+      "id": "computers",
+      "label": "Computers & Accessories",
+      "emoji": "💻",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "computing"
+      },
+      "subcategories": [
+        {
+          "id": "computing",
+          "label": "All Computing",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        },
+        {
+          "id": "laptops",
+          "label": "Laptops",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        },
+        {
+          "id": "desktops",
+          "label": "Desktops",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        },
+        {
+          "id": "accessories",
+          "label": "Computer Accessories",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "appliances-home",
+      "label": "Appliances",
+      "emoji": "🔌",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "appliances"
+      },
+      "subcategories": [
+        {
+          "id": "appliances",
+          "label": "All Appliances",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        },
+        {
+          "id": "kitchen-appliances",
+          "label": "Kitchen Appliances",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        },
+        {
+          "id": "laundry",
+          "label": "Laundry",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        },
+        {
+          "id": "cooling",
+          "label": "Cooling & Fans",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        }
+      ]
+    },
+    {
+      "id": "electronics",
+      "label": "Electronics",
+      "emoji": "📱",
+      "subcategories": [
+        {
+          "id": "phones",
+          "label": "Phones & Tablets"
+        },
+        {
+          "id": "tvs-audio",
+          "label": "TVs & Audio"
+        },
+        {
+          "id": "computing",
+          "label": "Computing"
+        },
+        {
+          "id": "gaming",
+          "label": "Gaming"
+        },
+        {
+          "id": "appliances",
+          "label": "Appliances"
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "label": "Home & Living",
+      "emoji": "🏠",
+      "subcategories": [
+        {
+          "id": "kitchen",
+          "label": "Kitchen"
+        },
+        {
+          "id": "bedding",
+          "label": "Bedding"
+        },
+        {
+          "id": "decor",
+          "label": "Decor"
+        },
+        {
+          "id": "supermarket",
+          "label": "Supermarket"
+        }
+      ]
+    },
+    {
+      "id": "supermarket",
+      "label": "Supermarket",
+      "emoji": "🛒",
+      "subcategories": [
+        {
+          "id": "food-staples",
+          "label": "Food Staples"
+        },
+        {
+          "id": "beverages",
+          "label": "Beverages"
+        },
+        {
+          "id": "household",
+          "label": "Household"
+        },
+        {
+          "id": "personal-grocery",
+          "label": "Personal Care Grocery"
+        }
+      ]
+    },
+    {
+      "id": "automotive",
+      "label": "Automotive",
+      "emoji": "🚗",
+      "subcategories": [
+        {
+          "id": "car-accessories",
+          "label": "Car Accessories"
+        },
+        {
+          "id": "oils-fluids",
+          "label": "Oils & Fluids"
+        },
+        {
+          "id": "tyres-wheels",
+          "label": "Tyres & Wheels"
+        },
+        {
+          "id": "motorbike",
+          "label": "Motorbike"
+        },
+        {
+          "id": "tools-care",
+          "label": "Tools & Care"
         }
       ]
     },
@@ -353,56 +692,6 @@
           "id": "under-10000",
           "label": "Under KES 10,000",
           "priceTier": "under-10000"
-        }
-      ]
-    },
-    {
-      "id": "electronics",
-      "label": "Electronics",
-      "emoji": "📱",
-      "subcategories": [
-        {
-          "id": "phones",
-          "label": "Phones & Tablets"
-        },
-        {
-          "id": "tvs-audio",
-          "label": "TVs & Audio"
-        },
-        {
-          "id": "computing",
-          "label": "Computing"
-        },
-        {
-          "id": "gaming",
-          "label": "Gaming"
-        },
-        {
-          "id": "appliances",
-          "label": "Appliances"
-        }
-      ]
-    },
-    {
-      "id": "home",
-      "label": "Home & Living",
-      "emoji": "🏠",
-      "subcategories": [
-        {
-          "id": "kitchen",
-          "label": "Kitchen"
-        },
-        {
-          "id": "bedding",
-          "label": "Bedding"
-        },
-        {
-          "id": "decor",
-          "label": "Decor"
-        },
-        {
-          "id": "supermarket",
-          "label": "Supermarket"
         }
       ]
     }

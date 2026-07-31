@@ -51,12 +51,20 @@ export async function buildBrowseSubmenus() {
 
   for (const cat of menu.categories || []) {
     const menuId = `browse_${cat.id}`;
-    const rows = (cat.subcategories || []).map((sub) => ({
-      id: `sub_${cat.id}_${sub.id}`,
-      title: sub.label,
-      browseSubCategory: sub.id,
-      priceTier: sub.priceTier || null,
-    }));
+    const catResolve = cat.resolvesTo || null;
+    const rows = (cat.subcategories || []).map((sub) => {
+      const resolved = sub.resolvesTo || catResolve || null;
+      return {
+        id: `sub_${cat.id}_${sub.id}`,
+        title: sub.label,
+        browseSubCategory: resolved?.sub ?? sub.id,
+        priceTier: sub.priceTier || null,
+        // When nav alias (e.g. Phones → electronics/phones), query the canonical path
+        ...(resolved?.browse
+          ? { browseCategory: resolved.browse }
+          : {}),
+      };
+    });
 
     if (cat.id === "women") {
       rows.push({
@@ -68,7 +76,7 @@ export async function buildBrowseSubmenus() {
     }
 
     submenus[menuId] = {
-      browseCategory: cat.id,
+      browseCategory: catResolve?.browse || cat.id,
       label: `${cat.emoji || "🛍️"} ${cat.label}`,
       rows,
     };

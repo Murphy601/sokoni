@@ -249,7 +249,7 @@ function sanitizeOptionalLabel(value, maxLen = 60) {
 
 function isValidBrowsePath(tax, browseCategory, browseSubCategory) {
   const cat = tax.BROWSE_TAXONOMY.find((c) => c.id === browseCategory);
-  if (!cat) return false;
+  if (!cat || cat.navOnly) return false;
   return Boolean(cat.subcategories?.some((s) => s.id === browseSubCategory));
 }
 

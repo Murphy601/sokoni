@@ -57,8 +57,18 @@
     }
   }
 
+  function canonicalKey(categoryId, subId) {
+    const nav = window.SokoniBrowse?.resolveNavFilter?.(categoryId, subId);
+    if (nav?.browse) return productKey(nav.browse, nav.sub);
+    return productKey(categoryId, subId);
+  }
+
   function countForSub(categoryId, subId) {
-    return productsByKey.get(productKey(categoryId, subId))?.length || 0;
+    return productsByKey.get(canonicalKey(categoryId, subId))?.length || 0;
+  }
+
+  function productsForSub(categoryId, subId) {
+    return productsByKey.get(canonicalKey(categoryId, subId)) || [];
   }
 
   function findSubDef(categoryId, subId) {
@@ -127,7 +137,7 @@
         const count = countForSub(cat.id, sub.id);
         const subKey = `${cat.id}::${sub.id}`;
         const subExpanded = expandedSubcategories.has(subKey);
-        const products = (productsByKey.get(productKey(cat.id, sub.id)) || []).slice(0, MAX_PRODUCTS_PER_SUB);
+        const products = productsForSub(cat.id, sub.id).slice(0, MAX_PRODUCTS_PER_SUB);
         const more = count - products.length;
 
         html += `
