@@ -202,7 +202,11 @@
         },
         {
           "id": "beauty",
-          "label": "Beauty"
+          "label": "Beauty",
+          "resolvesTo": {
+            "browse": "health-beauty",
+            "sub": null
+          }
         }
       ]
     },
@@ -587,7 +591,11 @@
         },
         {
           "id": "supermarket",
-          "label": "Supermarket"
+          "label": "Supermarket",
+          "resolvesTo": {
+            "browse": "supermarket",
+            "sub": null
+          }
         }
       ]
     },
@@ -722,32 +730,32 @@
       "sub": "watches"
     },
     "health-beauty": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "personal-care"
     },
     "health-beauty/skincare": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "skincare"
     },
     "health-beauty/makeup": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "makeup"
     },
     "health-beauty/haircare": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "haircare"
     },
     "health-beauty/fragrances": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "fragrances"
     },
     "health-beauty/perfume-oils": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "fragrances"
     },
     "health-beauty/personal-care": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "personal-care"
     },
     "phones-tablets": {
       "browse": "electronics",
@@ -814,8 +822,24 @@
       "sub": "bedding"
     },
     "supermarket": {
-      "browse": "home",
-      "sub": "supermarket"
+      "browse": "supermarket",
+      "sub": "food-staples"
+    },
+    "supermarket/food-staples": {
+      "browse": "supermarket",
+      "sub": "food-staples"
+    },
+    "supermarket/beverages": {
+      "browse": "supermarket",
+      "sub": "beverages"
+    },
+    "supermarket/household": {
+      "browse": "supermarket",
+      "sub": "household"
+    },
+    "supermarket/personal-grocery": {
+      "browse": "supermarket",
+      "sub": "personal-grocery"
     },
     "baby-products": {
       "browse": "kids",
@@ -824,6 +848,30 @@
     "baby-products/toys": {
       "browse": "kids",
       "sub": "toys"
+    },
+    "automotive": {
+      "browse": "automotive",
+      "sub": "car-accessories"
+    },
+    "automotive/car-accessories": {
+      "browse": "automotive",
+      "sub": "car-accessories"
+    },
+    "automotive/oils-fluids": {
+      "browse": "automotive",
+      "sub": "oils-fluids"
+    },
+    "automotive/tyres-wheels": {
+      "browse": "automotive",
+      "sub": "tyres-wheels"
+    },
+    "automotive/motorbike": {
+      "browse": "automotive",
+      "sub": "motorbike"
+    },
+    "automotive/tools-care": {
+      "browse": "automotive",
+      "sub": "tools-care"
     }
   }
 }

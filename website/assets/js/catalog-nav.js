@@ -57,18 +57,32 @@
     }
   }
 
-  function canonicalKey(categoryId, subId) {
-    const nav = window.SokoniBrowse?.resolveNavFilter?.(categoryId, subId);
-    if (nav?.browse) return productKey(nav.browse, nav.sub);
-    return productKey(categoryId, subId);
+  function resolveNav(categoryId, subId) {
+    return (
+      window.SokoniBrowse?.resolveNavFilter?.(categoryId, subId) || {
+        browse: categoryId,
+        sub: subId,
+      }
+    );
+  }
+
+  /** Products under a nav sub — honors resolvesTo (including browse-only aliases). */
+  function productsForSub(categoryId, subId) {
+    const nav = resolveNav(categoryId, subId);
+    if (!nav?.browse) return [];
+    if (nav.sub) return productsByKey.get(productKey(nav.browse, nav.sub)) || [];
+    // sub null → all products in that browse category
+    const out = [];
+    for (const [key, list] of productsByKey.entries()) {
+      if (key === nav.browse || key.startsWith(`${nav.browse}::`)) {
+        out.push(...list);
+      }
+    }
+    return out;
   }
 
   function countForSub(categoryId, subId) {
-    return productsByKey.get(canonicalKey(categoryId, subId))?.length || 0;
-  }
-
-  function productsForSub(categoryId, subId) {
-    return productsByKey.get(canonicalKey(categoryId, subId)) || [];
+    return productsForSub(categoryId, subId).length;
   }
 
   function findSubDef(categoryId, subId) {

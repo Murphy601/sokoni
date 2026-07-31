@@ -96,8 +96,12 @@ export const BROWSE_TAXONOMY = [
       { id: "shoes", label: "Shoes" },
       { id: "bags", label: "Bags & Purses" },
       { id: "jewelry", label: "Jewelry" },
-      // Phase 1: keep filtering women/beauty (live products). Phase 2 remaps + alias.
-      { id: "beauty", label: "Beauty" },
+      // Alias after Phase 2 remap — products live under health-beauty/*
+      {
+        id: "beauty",
+        label: "Beauty",
+        resolvesTo: { browse: "health-beauty", sub: null },
+      },
     ],
   },
   {
@@ -214,8 +218,12 @@ export const BROWSE_TAXONOMY = [
       { id: "kitchen", label: "Kitchen" },
       { id: "bedding", label: "Bedding" },
       { id: "decor", label: "Decor" },
-      // Phase 1: keep filtering home/supermarket. Phase 2 remaps + alias.
-      { id: "supermarket", label: "Supermarket" },
+      // Alias after Phase 2 remap — products live under supermarket/*
+      {
+        id: "supermarket",
+        label: "Supermarket",
+        resolvesTo: { browse: "supermarket", sub: null },
+      },
     ],
   },
   {
@@ -263,7 +271,7 @@ export const BROWSE_TAXONOMY = [
 
 /**
  * legacy category[/subcategory] → { browse, sub }
- * Phase 1 keeps prior mappings valid; Phase 2 remaps health-beauty + supermarket.
+ * Phase 2: health-beauty → Health & Beauty top-level; supermarket → Supermarket top-level.
  */
 export const LEGACY_BROWSE_MAP = {
   fashion: { browse: "women", sub: "tops" },
@@ -272,14 +280,13 @@ export const LEGACY_BROWSE_MAP = {
   "fashion/shoes": { browse: "women", sub: "shoes" },
   "fashion/bags": { browse: "women", sub: "bags" },
   "fashion/watches": { browse: "men", sub: "watches" },
-  // Kept pointing at women/beauty until Phase 2 remaps to health-beauty/*
-  "health-beauty": { browse: "women", sub: "beauty" },
-  "health-beauty/skincare": { browse: "women", sub: "beauty" },
-  "health-beauty/makeup": { browse: "women", sub: "beauty" },
-  "health-beauty/haircare": { browse: "women", sub: "beauty" },
-  "health-beauty/fragrances": { browse: "women", sub: "beauty" },
-  "health-beauty/perfume-oils": { browse: "women", sub: "beauty" },
-  "health-beauty/personal-care": { browse: "women", sub: "beauty" },
+  "health-beauty": { browse: "health-beauty", sub: "personal-care" },
+  "health-beauty/skincare": { browse: "health-beauty", sub: "skincare" },
+  "health-beauty/makeup": { browse: "health-beauty", sub: "makeup" },
+  "health-beauty/haircare": { browse: "health-beauty", sub: "haircare" },
+  "health-beauty/fragrances": { browse: "health-beauty", sub: "fragrances" },
+  "health-beauty/perfume-oils": { browse: "health-beauty", sub: "fragrances" },
+  "health-beauty/personal-care": { browse: "health-beauty", sub: "personal-care" },
   "phones-tablets": { browse: "electronics", sub: "phones" },
   "phones-tablets/smartphones": { browse: "electronics", sub: "phones" },
   "phones-tablets/tablets": { browse: "electronics", sub: "phones" },
@@ -296,10 +303,20 @@ export const LEGACY_BROWSE_MAP = {
   "home-office": { browse: "home", sub: "decor" },
   "home-office/kitchen-dining": { browse: "home", sub: "kitchen" },
   "home-office/bedding": { browse: "home", sub: "bedding" },
-  // Kept on home/supermarket until Phase 2 remaps to supermarket/*
-  supermarket: { browse: "home", sub: "supermarket" },
+  supermarket: { browse: "supermarket", sub: "food-staples" },
+  "supermarket/food-staples": { browse: "supermarket", sub: "food-staples" },
+  "supermarket/beverages": { browse: "supermarket", sub: "beverages" },
+  "supermarket/household": { browse: "supermarket", sub: "household" },
+  "supermarket/personal-grocery": { browse: "supermarket", sub: "personal-grocery" },
   "baby-products": { browse: "kids", sub: "baby-gear" },
   "baby-products/toys": { browse: "kids", sub: "toys" },
+  // Automotive — ready when catalog uses these legacy ids
+  automotive: { browse: "automotive", sub: "car-accessories" },
+  "automotive/car-accessories": { browse: "automotive", sub: "car-accessories" },
+  "automotive/oils-fluids": { browse: "automotive", sub: "oils-fluids" },
+  "automotive/tyres-wheels": { browse: "automotive", sub: "tyres-wheels" },
+  "automotive/motorbike": { browse: "automotive", sub: "motorbike" },
+  "automotive/tools-care": { browse: "automotive", sub: "tools-care" },
 };
 
 export function mapLegacyToBrowse(category, subcategory) {
