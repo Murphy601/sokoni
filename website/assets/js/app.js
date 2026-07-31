@@ -1249,17 +1249,23 @@ async function renderProducts() {
       await window.SokoniShopShell.hydrateLikesFromServer(storeProducts.map((p) => p.id));
     }
 
+    const navigateBrowse = (sel) =>
+      setCatalogFilter({
+        category: sel.category,
+        subcategory: sel.subcategory,
+        productId: sel.productId,
+        priceTier: sel.priceTier ?? activePriceTier,
+        scroll: sel.scroll,
+      });
+
+    if (window.SokoniMegaMenu) {
+      await window.SokoniMegaMenu.init({ navigate: navigateBrowse });
+    }
+
     if (window.SokoniCatalogNav) {
       await window.SokoniCatalogNav.init({
         products: storeProducts,
-        navigate: (sel) =>
-          setCatalogFilter({
-            category: sel.category,
-            subcategory: sel.subcategory,
-            productId: sel.productId,
-            priceTier: sel.priceTier ?? activePriceTier,
-            scroll: sel.scroll,
-          }),
+        navigate: navigateBrowse,
       });
     }
 

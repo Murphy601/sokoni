@@ -296,6 +296,19 @@
   }
 
   function openPanel() {
+    // Desktop: mega-menu flyout (keep drawer for mobile / narrow viewports)
+    if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.open) {
+      window.SokoniMegaMenu.close?.();
+      if (window.SokoniMegaMenu.open()) {
+        isOpen = false;
+        syncToggleUi();
+        const toggle = document.getElementById("catalog-nav-toggle");
+        toggle?.classList.add("is-open");
+        toggle?.setAttribute("aria-expanded", "true");
+        return;
+      }
+    }
+    window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
     if (!panel) return;
@@ -310,6 +323,7 @@
   }
 
   function closePanel() {
+    window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
     if (!panel) return;
@@ -323,6 +337,11 @@
   }
 
   function togglePanel() {
+    if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.isOpen?.()) {
+      window.SokoniMegaMenu.close();
+      syncToggleUi();
+      return;
+    }
     if (isOpen) closePanel();
     else openPanel();
   }
