@@ -210,7 +210,56 @@
           "image": "assets/images/subcats/skincare.svg"
         }
       ],
-      "image": "assets/images/categories/women.svg"
+      "image": "assets/images/categories/women.svg",
+      "groups": [
+        {
+          "title": "Clothing",
+          "subcategories": [
+            {
+              "id": "tops",
+              "label": "Tops"
+            },
+            {
+              "id": "dresses",
+              "label": "Dresses"
+            },
+            {
+              "id": "jeans",
+              "label": "Jeans & Denim"
+            },
+            {
+              "id": "outerwear",
+              "label": "Outerwear"
+            }
+          ]
+        },
+        {
+          "title": "Accessories",
+          "subcategories": [
+            {
+              "id": "shoes",
+              "label": "Shoes"
+            },
+            {
+              "id": "bags",
+              "label": "Bags & Purses"
+            },
+            {
+              "id": "jewelry",
+              "label": "Jewelry"
+            },
+            {
+              "id": "beauty",
+              "label": "Beauty",
+              "resolvesTo": {
+                "browse": "health-beauty",
+                "sub": null
+              },
+              "image": "assets/images/subcats/skincare.svg"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "men",
@@ -246,7 +295,47 @@
           "label": "Watches"
         }
       ],
-      "image": "assets/images/categories/men.svg"
+      "image": "assets/images/categories/men.svg",
+      "groups": [
+        {
+          "title": "Clothing",
+          "subcategories": [
+            {
+              "id": "t-shirts",
+              "label": "T-Shirts"
+            },
+            {
+              "id": "shirts",
+              "label": "Shirts"
+            },
+            {
+              "id": "hoodies",
+              "label": "Hoodies"
+            },
+            {
+              "id": "jeans",
+              "label": "Jeans"
+            }
+          ]
+        },
+        {
+          "title": "Accessories",
+          "subcategories": [
+            {
+              "id": "sneakers",
+              "label": "Sneakers"
+            },
+            {
+              "id": "caps",
+              "label": "Caps"
+            },
+            {
+              "id": "watches",
+              "label": "Watches"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "kids",
@@ -308,7 +397,54 @@
           "image": "assets/images/subcats/mens-grooming.svg"
         }
       ],
-      "image": "assets/images/categories/health-beauty.svg"
+      "image": "assets/images/categories/health-beauty.svg",
+      "groups": [
+        {
+          "title": "Face & Skin",
+          "subcategories": [
+            {
+              "id": "skincare",
+              "label": "Skincare",
+              "image": "assets/images/subcats/skincare.svg"
+            },
+            {
+              "id": "makeup",
+              "label": "Makeup",
+              "image": "assets/images/subcats/makeup.svg"
+            }
+          ]
+        },
+        {
+          "title": "Hair & Scent",
+          "subcategories": [
+            {
+              "id": "haircare",
+              "label": "Haircare",
+              "image": "assets/images/subcats/haircare.svg"
+            },
+            {
+              "id": "fragrances",
+              "label": "Fragrances",
+              "image": "assets/images/subcats/fragrances.svg"
+            }
+          ]
+        },
+        {
+          "title": "Care",
+          "subcategories": [
+            {
+              "id": "personal-care",
+              "label": "Personal Care",
+              "image": "assets/images/subcats/personal-care.svg"
+            },
+            {
+              "id": "mens-grooming",
+              "label": "Men's Grooming",
+              "image": "assets/images/subcats/mens-grooming.svg"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "brands",
@@ -368,7 +504,56 @@
           "image": "assets/images/subcats/cycling.svg"
         }
       ],
-      "image": "assets/images/categories/sports.svg"
+      "image": "assets/images/categories/sports.svg",
+      "groups": [
+        {
+          "title": "Wear",
+          "subcategories": [
+            {
+              "id": "activewear",
+              "label": "Activewear"
+            },
+            {
+              "id": "trainers",
+              "label": "Trainers"
+            }
+          ]
+        },
+        {
+          "title": "Play",
+          "subcategories": [
+            {
+              "id": "equipment",
+              "label": "Equipment"
+            },
+            {
+              "id": "football",
+              "label": "Football",
+              "image": "assets/images/subcats/football.svg"
+            },
+            {
+              "id": "cycling",
+              "label": "Cycling",
+              "image": "assets/images/subcats/cycling.svg"
+            }
+          ]
+        },
+        {
+          "title": "Train outdoors",
+          "subcategories": [
+            {
+              "id": "gym-fitness",
+              "label": "Gym & Fitness",
+              "image": "assets/images/subcats/gym-fitness.svg"
+            },
+            {
+              "id": "outdoor",
+              "label": "Outdoor",
+              "image": "assets/images/subcats/outdoor.svg"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "phones",
@@ -592,7 +777,44 @@
           "label": "Appliances"
         }
       ],
-      "image": "assets/images/categories/electronics.svg"
+      "image": "assets/images/categories/electronics.svg",
+      "groups": [
+        {
+          "title": "Mobile & compute",
+          "subcategories": [
+            {
+              "id": "phones",
+              "label": "Phones & Tablets"
+            },
+            {
+              "id": "computing",
+              "label": "Computing"
+            }
+          ]
+        },
+        {
+          "title": "Home entertainment",
+          "subcategories": [
+            {
+              "id": "tvs-audio",
+              "label": "TVs & Audio"
+            },
+            {
+              "id": "gaming",
+              "label": "Gaming"
+            }
+          ]
+        },
+        {
+          "title": "Home power",
+          "subcategories": [
+            {
+              "id": "appliances",
+              "label": "Appliances"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "home",
@@ -647,7 +869,38 @@
           "label": "Personal Care Grocery"
         }
       ],
-      "image": "assets/images/categories/supermarket.svg"
+      "image": "assets/images/categories/supermarket.svg",
+      "groups": [
+        {
+          "title": "Food & drink",
+          "subcategories": [
+            {
+              "id": "food-staples",
+              "label": "Food Staples",
+              "image": "assets/images/subcats/food-staples.svg"
+            },
+            {
+              "id": "beverages",
+              "label": "Beverages",
+              "image": "assets/images/subcats/beverages.svg"
+            }
+          ]
+        },
+        {
+          "title": "Home care",
+          "subcategories": [
+            {
+              "id": "household",
+              "label": "Household",
+              "image": "assets/images/subcats/household.svg"
+            },
+            {
+              "id": "personal-grocery",
+              "label": "Personal Care Grocery"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "automotive",
@@ -677,7 +930,41 @@
           "label": "Tools & Care"
         }
       ],
-      "image": "assets/images/categories/automotive.svg"
+      "image": "assets/images/categories/automotive.svg",
+      "groups": [
+        {
+          "title": "Vehicle",
+          "subcategories": [
+            {
+              "id": "car-accessories",
+              "label": "Car Accessories",
+              "image": "assets/images/subcats/car-accessories.svg"
+            },
+            {
+              "id": "tyres-wheels",
+              "label": "Tyres & Wheels",
+              "image": "assets/images/subcats/tyres-wheels.svg"
+            },
+            {
+              "id": "motorbike",
+              "label": "Motorbike"
+            }
+          ]
+        },
+        {
+          "title": "Care & fluids",
+          "subcategories": [
+            {
+              "id": "oils-fluids",
+              "label": "Oils & Fluids"
+            },
+            {
+              "id": "tools-care",
+              "label": "Tools & Care"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "trending",

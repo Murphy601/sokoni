@@ -75,17 +75,67 @@ const SUBCAT_IMAGE_IDS = new Set([
   "beauty",
 ]);
 
+/** Optional mega-menu column groups (presentation only — flat subs stay canonical). */
+const MEGA_GROUPS = {
+  women: [
+    { title: "Clothing", ids: ["tops", "dresses", "jeans", "outerwear"] },
+    { title: "Accessories", ids: ["shoes", "bags", "jewelry", "beauty"] },
+  ],
+  men: [
+    { title: "Clothing", ids: ["t-shirts", "shirts", "hoodies", "jeans"] },
+    { title: "Accessories", ids: ["sneakers", "caps", "watches"] },
+  ],
+  "health-beauty": [
+    { title: "Face & Skin", ids: ["skincare", "makeup"] },
+    { title: "Hair & Scent", ids: ["haircare", "fragrances"] },
+    { title: "Care", ids: ["personal-care", "mens-grooming"] },
+  ],
+  sports: [
+    { title: "Wear", ids: ["activewear", "trainers"] },
+    { title: "Play", ids: ["equipment", "football", "cycling"] },
+    { title: "Train outdoors", ids: ["gym-fitness", "outdoor"] },
+  ],
+  electronics: [
+    { title: "Mobile & compute", ids: ["phones", "computing"] },
+    { title: "Home entertainment", ids: ["tvs-audio", "gaming"] },
+    { title: "Home power", ids: ["appliances"] },
+  ],
+  supermarket: [
+    { title: "Food & drink", ids: ["food-staples", "beverages"] },
+    { title: "Home care", ids: ["household", "personal-grocery"] },
+  ],
+  automotive: [
+    { title: "Vehicle", ids: ["car-accessories", "tyres-wheels", "motorbike"] },
+    { title: "Care & fluids", ids: ["oils-fluids", "tools-care"] },
+  ],
+};
+
 function withBrowseImages(taxonomy) {
-  return taxonomy.map((cat) => ({
-    ...cat,
-    image: cat.image || catImage(cat.id),
-    subcategories: (cat.subcategories || []).map((sub) => {
+  return taxonomy.map((cat) => {
+    const subcategories = (cat.subcategories || []).map((sub) => {
       const image =
         sub.image ||
         (SUBCAT_IMAGE_IDS.has(sub.id) ? subImage(sub.id === "beauty" ? "skincare" : sub.id) : undefined);
       return image ? { ...sub, image } : { ...sub };
-    }),
-  }));
+    });
+    const byId = Object.fromEntries(subcategories.map((s) => [s.id, s]));
+    const layout = MEGA_GROUPS[cat.id];
+    const groups = layout
+      ? layout
+          .map((g) => ({
+            title: g.title,
+            subcategories: g.ids.map((id) => byId[id]).filter(Boolean),
+          }))
+          .filter((g) => g.subcategories.length)
+      : cat.groups || undefined;
+
+    return {
+      ...cat,
+      image: cat.image || catImage(cat.id),
+      subcategories,
+      ...(groups ? { groups } : {}),
+    };
+  });
 }
 
 /** Shared electronics sub lists (canonical under `electronics`). */

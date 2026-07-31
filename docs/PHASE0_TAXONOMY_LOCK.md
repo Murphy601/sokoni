@@ -1,6 +1,6 @@
 # Phase 0 — Locked browse taxonomy (Kilimall gaps, additive)
 
-**Status:** Locked for implementation  
+**Status:** Locked and implemented (Phases 1–5 on branch)  
 **Rule:** Add missing categories. Do **not** remove existing browse IDs, Brands, Trending, Sale, or Women/Men/Kids gender split.  
 **Stack:** Vanilla HTML/JS + `scripts/browse-taxonomy.mjs` → `website/data/browse-menu.json`. No React/Prisma for this work.
 
