@@ -117,8 +117,19 @@
     <a href="#" id="search-hint-link" class="hidden"></a>
   </div>
 
-  <!-- Brand hero carousel -->
-  <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Sokoni"></section>
+  <!-- Kilimall-style: embedded category rail + hero banner (desktop); hero only on mobile -->
+  <section class="sokoni-hero-zone" aria-label="Categories and featured">
+    <div class="sokoni-hero-zone-inner">
+      <aside id="sokoni-category-rail" class="sokoni-category-rail" aria-label="Shop by category">
+        <div class="sokoni-category-rail__head">Categories</div>
+        <div id="sokoni-category-rail-list" class="sokoni-category-rail__list"></div>
+        <div id="sokoni-category-flyout" class="sokoni-category-flyout" hidden aria-hidden="true"></div>
+      </aside>
+      <div class="sokoni-hero-banner-slot">
+        <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Sokoni"></section>
+      </div>
+    </div>
+  </section>
 
   <!-- Popular brands / styles -->
   <section class="depop-brands-bar" aria-label="Popular brands and styles">
@@ -582,8 +593,8 @@
   <!-- Catalog navigator (browse drawer) -->
   <div id="catalog-nav-backdrop" class="catalog-nav-backdrop" hidden></div>
   <aside id="catalog-nav-panel" class="catalog-nav-panel" hidden aria-label="Store catalog"></aside>
-  <div id="sokoni-mega-menu" class="mega-menu" hidden aria-hidden="true"></div>
-  <button type="button" id="catalog-nav-toggle" class="catalog-nav-toggle" aria-expanded="false" aria-controls="catalog-nav-panel" aria-label="Open browse menu">
+  <!-- Mobile-only floating browse control — desktop uses embedded category rail -->
+  <button type="button" id="catalog-nav-toggle" class="catalog-nav-toggle catalog-nav-toggle--mobile-only" aria-expanded="false" aria-controls="catalog-nav-panel" aria-label="Open browse menu">
     <span class="catalog-nav-toggle-icon" aria-hidden="true">☰</span>
     <span class="catalog-nav-toggle-label">Browse</span>
   </button>

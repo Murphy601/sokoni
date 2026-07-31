@@ -314,6 +314,7 @@
     loadBag();
 
     document.getElementById("shop-browse-btn")?.addEventListener("click", () => {
+      // Mobile: open drawer. Desktop rail is always visible (button hidden via CSS).
       window.SokoniCatalogNav?.open?.();
     });
 
