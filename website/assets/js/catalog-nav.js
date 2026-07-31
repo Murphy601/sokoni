@@ -20,6 +20,13 @@
       .replace(/"/g, "&quot;");
   }
 
+  function catIconHtml(cat) {
+    if (cat?.image) {
+      return `<span class="catalog-nav-emoji catalog-nav-emoji--img" aria-hidden="true"><img src="${escapeHtml(cat.image)}" alt="" width="22" height="22" loading="lazy" /></span>`;
+    }
+    return `<span class="catalog-nav-emoji" aria-hidden="true">${escapeHtml(cat?.emoji || "🛍️")}</span>`;
+  }
+
   function truncateName(name, max = 42) {
     const n = String(name || "").replace(/\s+/g, " ").trim();
     return n.length <= max ? n : `${n.slice(0, max - 1)}…`;
@@ -126,7 +133,7 @@
       html += `
         <button type="button" class="catalog-nav-item catalog-nav-top ${isActiveCategory(item.id) ? "is-active" : ""}"
           data-nav-type="top" data-category="${item.id}">
-          <span class="catalog-nav-emoji">${item.emoji}</span>
+          ${catIconHtml(item)}
           <span class="catalog-nav-label">${item.label}</span>
         </button>`;
     }
@@ -141,7 +148,7 @@
           <button type="button" class="catalog-nav-item catalog-nav-cat ${catActive && !selection.subcategory ? "is-active" : ""}"
             data-nav-type="category" data-category="${cat.id}" aria-expanded="${catExpanded}">
             <span class="catalog-nav-chevron" aria-hidden="true"></span>
-            <span class="catalog-nav-emoji">${cat.emoji || "🛍️"}</span>
+            ${catIconHtml(cat)}
             <span class="catalog-nav-label">${escapeHtml(cat.label)}</span>
           </button>
           <div class="catalog-nav-children" ${catExpanded ? "" : "hidden"}>
@@ -298,13 +305,22 @@
   function openPanel() {
     // Desktop: mega-menu flyout (keep drawer for mobile / narrow viewports)
     if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.open) {
-      window.SokoniMegaMenu.close?.();
+      // Ensure drawer is closed before showing flyout
+      const panel = document.getElementById("catalog-nav-panel");
+      const backdrop = document.getElementById("catalog-nav-backdrop");
+      isOpen = false;
+      panel?.classList.remove("is-open");
+      panel?.setAttribute("hidden", "");
+      backdrop?.classList.remove("is-open");
+      backdrop?.setAttribute("hidden", "");
+      document.body.classList.remove("catalog-nav-open");
       if (window.SokoniMegaMenu.open()) {
-        isOpen = false;
-        syncToggleUi();
         const toggle = document.getElementById("catalog-nav-toggle");
         toggle?.classList.add("is-open");
         toggle?.setAttribute("aria-expanded", "true");
+        if (toggle?.querySelector(".catalog-nav-toggle-label")) {
+          toggle.querySelector(".catalog-nav-toggle-label").textContent = "Close";
+        }
         return;
       }
     }

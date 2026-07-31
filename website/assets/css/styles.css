@@ -429,8 +429,32 @@ html.dark #hero-mock .text-brand-green { color: #0b8f43 !important; }
 
 .catalog-nav-emoji {
   flex-shrink: 0;
-  width: 1.25rem;
+  width: 1.35rem;
+  height: 1.35rem;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.catalog-nav-emoji--img img {
+  width: 1.2rem;
+  height: 1.2rem;
+  object-fit: contain;
+  border-radius: 0.3rem;
+}
+
+.depop-cat-strip__img {
+  width: 1.1rem;
+  height: 1.1rem;
+  object-fit: contain;
+  border-radius: 0.25rem;
+  vertical-align: -0.2em;
+  margin-right: 0.15rem;
+}
+
+.depop-cat-strip__emoji {
+  margin-right: 0.1rem;
 }
 
 .catalog-nav-label {

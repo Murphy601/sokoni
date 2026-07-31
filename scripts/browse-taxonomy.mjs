@@ -51,6 +51,43 @@ export const CURATED_THEMES = [
   { id: "thrift-fits", label: "Thrift Fits" },
 ];
 
+/** Optional thumbnail paths (storefront-relative). UI falls back to emoji. */
+const catImage = (id) => `assets/images/categories/${id}.svg`;
+const subImage = (id) => `assets/images/subcats/${id}.svg`;
+
+/** Subcategories that have dedicated placeholder art in Phase 4. */
+const SUBCAT_IMAGE_IDS = new Set([
+  "skincare",
+  "makeup",
+  "haircare",
+  "fragrances",
+  "personal-care",
+  "mens-grooming",
+  "food-staples",
+  "beverages",
+  "household",
+  "car-accessories",
+  "tyres-wheels",
+  "gym-fitness",
+  "football",
+  "cycling",
+  "outdoor",
+  "beauty",
+]);
+
+function withBrowseImages(taxonomy) {
+  return taxonomy.map((cat) => ({
+    ...cat,
+    image: cat.image || catImage(cat.id),
+    subcategories: (cat.subcategories || []).map((sub) => {
+      const image =
+        sub.image ||
+        (SUBCAT_IMAGE_IDS.has(sub.id) ? subImage(sub.id === "beauty" ? "skincare" : sub.id) : undefined);
+      return image ? { ...sub, image } : { ...sub };
+    }),
+  }));
+}
+
 /** Shared electronics sub lists (canonical under `electronics`). */
 const ELECTRONICS_PHONE_SUBS = [
   { id: "phones", label: "All Phones & Tablets", resolvesTo: { browse: "electronics", sub: "phones" } },
@@ -386,7 +423,7 @@ export function buildBrowseMenuPayload() {
     decades: DECADES,
     aesthetics: AESTHETIC_VIBES,
     themes: CURATED_THEMES,
-    categories: BROWSE_TAXONOMY,
+    categories: withBrowseImages(BROWSE_TAXONOMY),
     legacyMap: LEGACY_BROWSE_MAP,
   };
 }

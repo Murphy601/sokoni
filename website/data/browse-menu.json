@@ -206,9 +206,11 @@
           "resolvesTo": {
             "browse": "health-beauty",
             "sub": null
-          }
+          },
+          "image": "assets/images/subcats/skincare.svg"
         }
-      ]
+      ],
+      "image": "assets/images/categories/women.svg"
     },
     {
       "id": "men",
@@ -243,7 +245,8 @@
           "id": "watches",
           "label": "Watches"
         }
-      ]
+      ],
+      "image": "assets/images/categories/men.svg"
     },
     {
       "id": "kids",
@@ -266,7 +269,8 @@
           "id": "baby-gear",
           "label": "Baby Gear"
         }
-      ]
+      ],
+      "image": "assets/images/categories/kids.svg"
     },
     {
       "id": "health-beauty",
@@ -275,29 +279,36 @@
       "subcategories": [
         {
           "id": "skincare",
-          "label": "Skincare"
+          "label": "Skincare",
+          "image": "assets/images/subcats/skincare.svg"
         },
         {
           "id": "makeup",
-          "label": "Makeup"
+          "label": "Makeup",
+          "image": "assets/images/subcats/makeup.svg"
         },
         {
           "id": "haircare",
-          "label": "Haircare"
+          "label": "Haircare",
+          "image": "assets/images/subcats/haircare.svg"
         },
         {
           "id": "fragrances",
-          "label": "Fragrances"
+          "label": "Fragrances",
+          "image": "assets/images/subcats/fragrances.svg"
         },
         {
           "id": "personal-care",
-          "label": "Personal Care"
+          "label": "Personal Care",
+          "image": "assets/images/subcats/personal-care.svg"
         },
         {
           "id": "mens-grooming",
-          "label": "Men's Grooming"
+          "label": "Men's Grooming",
+          "image": "assets/images/subcats/mens-grooming.svg"
         }
-      ]
+      ],
+      "image": "assets/images/categories/health-beauty.svg"
     },
     {
       "id": "brands",
@@ -316,7 +327,8 @@
           "id": "local-labels",
           "label": "Local Labels"
         }
-      ]
+      ],
+      "image": "assets/images/categories/brands.svg"
     },
     {
       "id": "sports",
@@ -337,21 +349,26 @@
         },
         {
           "id": "gym-fitness",
-          "label": "Gym & Fitness"
+          "label": "Gym & Fitness",
+          "image": "assets/images/subcats/gym-fitness.svg"
         },
         {
           "id": "outdoor",
-          "label": "Outdoor"
+          "label": "Outdoor",
+          "image": "assets/images/subcats/outdoor.svg"
         },
         {
           "id": "football",
-          "label": "Football"
+          "label": "Football",
+          "image": "assets/images/subcats/football.svg"
         },
         {
           "id": "cycling",
-          "label": "Cycling"
+          "label": "Cycling",
+          "image": "assets/images/subcats/cycling.svg"
         }
-      ]
+      ],
+      "image": "assets/images/categories/sports.svg"
     },
     {
       "id": "phones",
@@ -403,7 +420,8 @@
             "sub": "phones"
           }
         }
-      ]
+      ],
+      "image": "assets/images/categories/phones.svg"
     },
     {
       "id": "tv-audio",
@@ -455,7 +473,8 @@
             "sub": "tvs-audio"
           }
         }
-      ]
+      ],
+      "image": "assets/images/categories/tv-audio.svg"
     },
     {
       "id": "computers",
@@ -499,7 +518,8 @@
             "sub": "computing"
           }
         }
-      ]
+      ],
+      "image": "assets/images/categories/computers.svg"
     },
     {
       "id": "appliances-home",
@@ -543,7 +563,8 @@
             "sub": "appliances"
           }
         }
-      ]
+      ],
+      "image": "assets/images/categories/appliances-home.svg"
     },
     {
       "id": "electronics",
@@ -570,7 +591,8 @@
           "id": "appliances",
           "label": "Appliances"
         }
-      ]
+      ],
+      "image": "assets/images/categories/electronics.svg"
     },
     {
       "id": "home",
@@ -597,7 +619,8 @@
             "sub": null
           }
         }
-      ]
+      ],
+      "image": "assets/images/categories/home.svg"
     },
     {
       "id": "supermarket",
@@ -606,21 +629,25 @@
       "subcategories": [
         {
           "id": "food-staples",
-          "label": "Food Staples"
+          "label": "Food Staples",
+          "image": "assets/images/subcats/food-staples.svg"
         },
         {
           "id": "beverages",
-          "label": "Beverages"
+          "label": "Beverages",
+          "image": "assets/images/subcats/beverages.svg"
         },
         {
           "id": "household",
-          "label": "Household"
+          "label": "Household",
+          "image": "assets/images/subcats/household.svg"
         },
         {
           "id": "personal-grocery",
           "label": "Personal Care Grocery"
         }
-      ]
+      ],
+      "image": "assets/images/categories/supermarket.svg"
     },
     {
       "id": "automotive",
@@ -629,7 +656,8 @@
       "subcategories": [
         {
           "id": "car-accessories",
-          "label": "Car Accessories"
+          "label": "Car Accessories",
+          "image": "assets/images/subcats/car-accessories.svg"
         },
         {
           "id": "oils-fluids",
@@ -637,7 +665,8 @@
         },
         {
           "id": "tyres-wheels",
-          "label": "Tyres & Wheels"
+          "label": "Tyres & Wheels",
+          "image": "assets/images/subcats/tyres-wheels.svg"
         },
         {
           "id": "motorbike",
@@ -647,7 +676,8 @@
           "id": "tools-care",
           "label": "Tools & Care"
         }
-      ]
+      ],
+      "image": "assets/images/categories/automotive.svg"
     },
     {
       "id": "trending",
@@ -674,7 +704,8 @@
           "id": "viral",
           "label": "Viral Bargains"
         }
-      ]
+      ],
+      "image": "assets/images/categories/trending.svg"
     },
     {
       "id": "sale",
@@ -701,7 +732,8 @@
           "label": "Under KES 10,000",
           "priceTier": "under-10000"
         }
-      ]
+      ],
+      "image": "assets/images/categories/sale.svg"
     }
   ],
   "legacyMap": {

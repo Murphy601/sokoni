@@ -49,11 +49,13 @@
     ];
 
     let html = cats
-      .slice(0, 10)
-      .map(
-        (c) =>
-          `<button type="button" data-depop-filter='${JSON.stringify({ category: c.id, scroll: true })}'>${c.emoji || ""} ${c.label}</button>`
-      )
+      .slice(0, 12)
+      .map((c) => {
+        const icon = c.image
+          ? `<img class="depop-cat-strip__img" src="${c.image}" alt="" width="18" height="18" loading="lazy" />`
+          : `<span class="depop-cat-strip__emoji">${c.emoji || ""}</span>`;
+        return `<button type="button" data-depop-filter='${JSON.stringify({ category: c.id, scroll: true })}'>${icon} ${c.label}</button>`;
+      })
       .join("");
 
     html += staticChips
