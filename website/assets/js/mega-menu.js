@@ -1,14 +1,14 @@
 /**
- * Desktop mega-menu flyout for browse categories.
- * Mobile keeps the left catalog-nav drawer — this only activates ≥900px.
+ * Embedded homepage category rail (Kilimall-style).
+ * Desktop: permanent sidebar beside the hero; hover opens subcategory flyout over the banner.
+ * Mobile: rail hidden — use catalog-nav drawer (hamburger).
  */
 (function () {
   const DESKTOP_MQ = "(min-width: 900px)";
   let menuData = null;
   let activeCategoryId = null;
-  let isOpen = false;
+  let flyoutOpen = false;
   let onNavigate = null;
-  let root = null;
   let leaveTimer = null;
 
   function escapeHtml(str) {
@@ -28,41 +28,28 @@
   }
 
   function activeCategory() {
-    return categories().find((c) => c.id === activeCategoryId) || categories()[0] || null;
+    return categories().find((c) => c.id === activeCategoryId) || null;
   }
 
   function iconHtml(item, sizeClass) {
     if (item?.image) {
-      return `<span class="mega-menu-icon ${sizeClass}" aria-hidden="true">
+      return `<span class="sokoni-cat-icon ${sizeClass}" aria-hidden="true">
         <img src="${escapeHtml(item.image)}" alt="" width="56" height="56" loading="lazy" />
       </span>`;
     }
-    return `<span class="mega-menu-emoji ${sizeClass}" aria-hidden="true">${escapeHtml(item?.emoji || "🛍️")}</span>`;
+    return `<span class="sokoni-cat-emoji ${sizeClass}" aria-hidden="true">${escapeHtml(item?.emoji || "🛍️")}</span>`;
   }
 
-  function ensureRoot() {
-    if (root) return root;
-    root = document.getElementById("sokoni-mega-menu");
-    if (!root) {
-      root = document.createElement("div");
-      root.id = "sokoni-mega-menu";
-      root.className = "mega-menu";
-      root.hidden = true;
-      document.body.appendChild(root);
-    }
-    root.addEventListener("mouseenter", () => {
-      if (leaveTimer) {
-        clearTimeout(leaveTimer);
-        leaveTimer = null;
-      }
-    });
-    root.addEventListener("mouseleave", () => scheduleClose());
-    return root;
+  function railEl() {
+    return document.getElementById("sokoni-category-rail");
   }
 
-  function scheduleClose() {
-    if (leaveTimer) clearTimeout(leaveTimer);
-    leaveTimer = setTimeout(() => close(), 180);
+  function listEl() {
+    return document.getElementById("sokoni-category-rail-list");
+  }
+
+  function flyoutEl() {
+    return document.getElementById("sokoni-category-flyout");
   }
 
   function navigate(spec) {
@@ -75,108 +62,101 @@
     };
     if (onNavigate) onNavigate(payload);
     else if (window.SokoniApp?.setCatalogFilter) window.SokoniApp.setCatalogFilter(payload);
-    close();
+    closeFlyout();
   }
 
-  function render() {
-    const el = ensureRoot();
+  function renderList() {
+    const list = listEl();
+    if (!list) return;
     const cats = categories();
     if (!cats.length) {
-      el.innerHTML = `<div class="mega-menu-empty">Browse menu is loading…</div>`;
+      list.innerHTML = `<p class="sokoni-category-rail__empty">Loading categories…</p>`;
       return;
     }
 
-    if (!activeCategoryId || !cats.some((c) => c.id === activeCategoryId)) {
-      activeCategoryId = cats[0].id;
-    }
-    const active = activeCategory();
-    const subs = active?.subcategories || [];
-
-    let left = "";
-    for (const cat of cats) {
-      const activeCls = cat.id === activeCategoryId ? "is-active" : "";
-      left += `
-        <button type="button" class="mega-menu-cat ${activeCls}" data-mega-cat="${escapeHtml(cat.id)}"
-          aria-current="${cat.id === activeCategoryId ? "true" : "false"}">
-          ${iconHtml(cat, "mega-menu-icon--sm")}
-          <span class="mega-menu-cat-label">${escapeHtml(cat.label)}</span>
-          <span class="mega-menu-cat-chevron" aria-hidden="true">›</span>
+    list.innerHTML = cats
+      .map((cat) => {
+        const active = cat.id === activeCategoryId && flyoutOpen;
+        return `
+        <button type="button" class="sokoni-category-rail__item ${active ? "is-active" : ""}"
+          data-rail-cat="${escapeHtml(cat.id)}" aria-expanded="${active ? "true" : "false"}">
+          ${iconHtml(cat, "sokoni-cat-icon--sm")}
+          <span class="sokoni-category-rail__label">${escapeHtml(cat.label)}</span>
+          <span class="sokoni-category-rail__chevron" aria-hidden="true">›</span>
         </button>`;
-    }
+      })
+      .join("");
 
-    let right = `
-      <div class="mega-menu-panel-head">
-        <h3 class="mega-menu-panel-title">${escapeHtml(active.label)}</h3>
-        <button type="button" class="mega-menu-shop-all" data-mega-shop-all="${escapeHtml(active.id)}">
-          Shop all
+    list.querySelectorAll("[data-rail-cat]").forEach((btn) => {
+      const id = btn.getAttribute("data-rail-cat");
+      btn.addEventListener("mouseenter", () => {
+        if (!isDesktop()) return;
+        openFlyout(id);
+      });
+      btn.addEventListener("focus", () => {
+        if (!isDesktop()) return;
+        openFlyout(id);
+      });
+      btn.addEventListener("click", () => {
+        if (!isDesktop()) {
+          navigate({ category: id });
+          return;
+        }
+        // Click category = shop all in that category
+        navigate({ category: id });
+      });
+    });
+  }
+
+  function renderFlyout() {
+    const flyout = flyoutEl();
+    const active = activeCategory();
+    if (!flyout || !active) return;
+
+    const groups =
+      active.groups?.length > 0
+        ? active.groups
+        : [{ title: active.label, subcategories: active.subcategories || [] }];
+
+    let body = `
+      <div class="sokoni-category-flyout__head">
+        <h3 class="sokoni-category-flyout__title">${escapeHtml(active.label)}</h3>
+        <button type="button" class="sokoni-category-flyout__shop-all" data-flyout-shop-all="${escapeHtml(active.id)}">
+          Shop all ›
         </button>
       </div>`;
 
-    if (active.groups?.length) {
-      for (const group of active.groups) {
-        right += `
-          <div class="mega-menu-group">
-            <p class="mega-menu-group-title">${escapeHtml(group.title)}</p>
-            <div class="mega-menu-grid">
-              ${(group.subcategories || [])
-                .map(
-                  (sub) => `
-                <button type="button" class="mega-menu-sub" data-mega-cat="${escapeHtml(active.id)}" data-mega-sub="${escapeHtml(sub.id)}">
-                  ${iconHtml(sub, "mega-menu-icon--lg")}
-                  <span class="mega-menu-sub-label">${escapeHtml(sub.label || sub.name)}</span>
-                </button>`
-                )
-                .join("")}
-            </div>
-          </div>`;
-      }
-    } else {
-      right += `
-        <div class="mega-menu-grid">
-          ${subs
-            .map(
-              (sub) => `
-            <button type="button" class="mega-menu-sub" data-mega-cat="${escapeHtml(active.id)}" data-mega-sub="${escapeHtml(sub.id)}">
-              ${iconHtml({ emoji: active.emoji, image: sub.image }, "mega-menu-icon--lg")}
-              <span class="mega-menu-sub-label">${escapeHtml(sub.label)}</span>
-            </button>`
-            )
-            .join("")}
+    for (const group of groups) {
+      body += `
+        <div class="sokoni-category-flyout__group">
+          <p class="sokoni-category-flyout__group-title">${escapeHtml(group.title)}</p>
+          <div class="sokoni-category-flyout__grid">
+            ${(group.subcategories || [])
+              .map((sub) => {
+                const label = sub.label || sub.name || "";
+                const sid = sub.id || sub.slug || "";
+                return `
+              <button type="button" class="sokoni-category-flyout__sub"
+                data-flyout-cat="${escapeHtml(active.id)}" data-flyout-sub="${escapeHtml(sid)}">
+                ${iconHtml(
+                  { image: sub.image, emoji: sub.emoji || active.emoji },
+                  "sokoni-cat-icon--lg"
+                )}
+                <span class="sokoni-category-flyout__sub-label">${escapeHtml(label)}</span>
+              </button>`;
+              })
+              .join("")}
+          </div>
         </div>`;
     }
 
-    el.innerHTML = `
-      <div class="mega-menu-shell" role="dialog" aria-label="Browse categories">
-        <div class="mega-menu-left">${left}</div>
-        <div class="mega-menu-right">${right}</div>
-      </div>`;
+    flyout.innerHTML = body;
 
-    el.querySelectorAll("[data-mega-cat]").forEach((btn) => {
-      if (btn.classList.contains("mega-menu-sub")) return;
-      btn.addEventListener("mouseenter", () => {
-        const id = btn.getAttribute("data-mega-cat");
-        if (id && id !== activeCategoryId) {
-          activeCategoryId = id;
-          render();
-        }
-      });
-      btn.addEventListener("focus", () => {
-        const id = btn.getAttribute("data-mega-cat");
-        if (id && id !== activeCategoryId) {
-          activeCategoryId = id;
-          render();
-        }
-      });
+    flyout.querySelectorAll(".sokoni-category-flyout__sub").forEach((btn) => {
       btn.addEventListener("click", () => {
-        navigate({ category: btn.getAttribute("data-mega-cat") });
-      });
-    });
-
-    el.querySelectorAll(".mega-menu-sub").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const category = btn.getAttribute("data-mega-cat");
-        const subcategory = btn.getAttribute("data-mega-sub");
-        const cat = cats.find((c) => c.id === category);
+        const category = btn.getAttribute("data-flyout-cat");
+        const subcategory = btn.getAttribute("data-flyout-sub");
+        const cat = categories().find((c) => c.id === category);
         const subDef = cat?.subcategories?.find((s) => s.id === subcategory);
         navigate({
           category,
@@ -186,53 +166,60 @@
       });
     });
 
-    el.querySelector("[data-mega-shop-all]")?.addEventListener("click", (e) => {
-      navigate({ category: e.currentTarget.getAttribute("data-mega-shop-all") });
+    flyout.querySelector("[data-flyout-shop-all]")?.addEventListener("click", (e) => {
+      navigate({ category: e.currentTarget.getAttribute("data-flyout-shop-all") });
     });
   }
 
-  function open(preferredCategoryId) {
+  function openFlyout(categoryId) {
     if (!isDesktop()) return false;
-    if (preferredCategoryId) activeCategoryId = preferredCategoryId;
-    ensureRoot();
-    render();
-    root.hidden = false;
-    root.setAttribute("aria-hidden", "false");
-    root.classList.add("is-open");
-    isOpen = true;
-    document.body.classList.add("mega-menu-open");
-    const toggle = document.getElementById("catalog-nav-toggle");
-    toggle?.classList.add("is-open");
-    toggle?.setAttribute("aria-expanded", "true");
-    return true;
-  }
-
-  function close() {
     if (leaveTimer) {
       clearTimeout(leaveTimer);
       leaveTimer = null;
     }
-    if (!root) return;
-    root.classList.remove("is-open");
-    root.hidden = true;
-    root.setAttribute("aria-hidden", "true");
-    isOpen = false;
-    document.body.classList.remove("mega-menu-open");
-    const toggle = document.getElementById("catalog-nav-toggle");
-    // Only clear toggle if drawer is also closed
-    if (!document.body.classList.contains("catalog-nav-open")) {
-      toggle?.classList.remove("is-open");
-      toggle?.setAttribute("aria-expanded", "false");
+    activeCategoryId = categoryId;
+    flyoutOpen = true;
+    renderList();
+    renderFlyout();
+    const flyout = flyoutEl();
+    const rail = railEl();
+    if (flyout) {
+      flyout.hidden = false;
+      flyout.setAttribute("aria-hidden", "false");
+      flyout.classList.add("is-open");
     }
+    rail?.classList.add("has-flyout");
+    return true;
   }
 
-  function toggle() {
-    if (isOpen) close();
-    else open();
+  function closeFlyout() {
+    if (leaveTimer) {
+      clearTimeout(leaveTimer);
+      leaveTimer = null;
+    }
+    flyoutOpen = false;
+    activeCategoryId = null;
+    const flyout = flyoutEl();
+    const rail = railEl();
+    if (flyout) {
+      flyout.classList.remove("is-open");
+      flyout.hidden = true;
+      flyout.setAttribute("aria-hidden", "true");
+      flyout.innerHTML = "";
+    }
+    rail?.classList.remove("has-flyout");
+    renderList();
   }
+
+  function scheduleCloseFlyout() {
+    if (leaveTimer) clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(() => closeFlyout(), 160);
+  }
+
+  let bound = false;
 
   async function init({ navigate } = {}) {
-    onNavigate = navigate || null;
+    if (navigate) onNavigate = navigate;
     await window.SokoniBrowse?.loadMenu?.();
     menuData = window.SokoniBrowse?.getMenu?.() || null;
     if (!menuData) {
@@ -245,28 +232,51 @@
         menuData = null;
       }
     }
-    ensureRoot();
 
-    const toggleBtn = document.getElementById("catalog-nav-toggle");
-    toggleBtn?.addEventListener("mouseenter", () => {
-      if (isDesktop()) open();
-    });
+    renderList();
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && isOpen) close();
-    });
+    if (!bound) {
+      bound = true;
+      const rail = railEl();
+      rail?.addEventListener("mouseleave", () => {
+        if (isDesktop()) scheduleCloseFlyout();
+      });
+      rail?.addEventListener("mouseenter", () => {
+        if (leaveTimer) {
+          clearTimeout(leaveTimer);
+          leaveTimer = null;
+        }
+      });
 
-    window.matchMedia(DESKTOP_MQ).addEventListener("change", (ev) => {
-      if (!ev.matches) close();
-    });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && flyoutOpen) closeFlyout();
+      });
+
+      window.matchMedia(DESKTOP_MQ).addEventListener("change", (ev) => {
+        if (!ev.matches) closeFlyout();
+      });
+    }
   }
 
+  // Public API — keep names used by app.js / catalog-nav.js
   window.SokoniMegaMenu = {
     init,
-    open,
-    close,
-    toggle,
-    isOpen: () => isOpen,
+    open: (id) => openFlyout(id || categories()[0]?.id),
+    close: closeFlyout,
+    toggle: () => {
+      if (flyoutOpen) closeFlyout();
+      else openFlyout(categories()[0]?.id);
+    },
+    isOpen: () => flyoutOpen,
     isDesktop,
   };
+
+  // Mount rail ASAP (don't wait for product catalog)
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      window.SokoniMegaMenu.init();
+    });
+  } else {
+    window.SokoniMegaMenu.init();
+  }
 })();

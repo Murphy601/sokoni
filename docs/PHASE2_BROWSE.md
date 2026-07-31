@@ -79,7 +79,7 @@ After this taxonomy change, **re-run** `npm run db:backfill-browse` so Health & 
 1. **Catalog pause:** When `website/data/catalog-paused.json` has `"paused": true`, the site shows the empty refresh state — **no API or JSON products** on the public storefront.
 2. **When unpaused:** loads from `/api/products` (or JSON fallback).
 3. **WhatsApp bot** always uses the full master catalog + browse taxonomy.
-4. **Desktop:** Browse toggle / hover opens mega menu. **Mobile:** left drawer unchanged.
+4. **Desktop:** permanent category rail beside the hero banner; hover opens subcategory flyout over the banner (Kilimall-style). **Mobile:** left drawer via hamburger (rail hidden).
 
 ## Regenerate browse menu after taxonomy edits
 

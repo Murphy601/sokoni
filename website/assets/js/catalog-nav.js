@@ -303,27 +303,7 @@
   }
 
   function openPanel() {
-    // Desktop: mega-menu flyout (keep drawer for mobile / narrow viewports)
-    if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.open) {
-      // Ensure drawer is closed before showing flyout
-      const panel = document.getElementById("catalog-nav-panel");
-      const backdrop = document.getElementById("catalog-nav-backdrop");
-      isOpen = false;
-      panel?.classList.remove("is-open");
-      panel?.setAttribute("hidden", "");
-      backdrop?.classList.remove("is-open");
-      backdrop?.setAttribute("hidden", "");
-      document.body.classList.remove("catalog-nav-open");
-      if (window.SokoniMegaMenu.open()) {
-        const toggle = document.getElementById("catalog-nav-toggle");
-        toggle?.classList.add("is-open");
-        toggle?.setAttribute("aria-expanded", "true");
-        if (toggle?.querySelector(".catalog-nav-toggle-label")) {
-          toggle.querySelector(".catalog-nav-toggle-label").textContent = "Close";
-        }
-        return;
-      }
-    }
+    // Mobile / narrow: left drawer. Desktop uses embedded category rail (no modal).
     window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
@@ -339,7 +319,6 @@
   }
 
   function closePanel() {
-    window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
     if (!panel) return;
@@ -353,11 +332,6 @@
   }
 
   function togglePanel() {
-    if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.isOpen?.()) {
-      window.SokoniMegaMenu.close();
-      syncToggleUi();
-      return;
-    }
     if (isOpen) closePanel();
     else openPanel();
   }
