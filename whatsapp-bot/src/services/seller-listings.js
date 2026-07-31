@@ -664,7 +664,10 @@ export async function getSellerListingMeta() {
   try {
     const taxPath = path.join(REPO_ROOT, "scripts", "browse-taxonomy.mjs");
     const mod = await import(pathToFileURL(taxPath).href);
-    browseTaxonomy = mod.BROWSE_TAXONOMY || [];
+    const raw = mod.BROWSE_TAXONOMY || [];
+    browseTaxonomy = typeof mod.sellerBrowseTaxonomy === "function"
+      ? mod.sellerBrowseTaxonomy(raw)
+      : raw.filter((c) => !c.navOnly);
   } catch {}
 
   return {

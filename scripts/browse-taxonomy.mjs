@@ -1,6 +1,11 @@
 /**
  * Phase 2 — Depop-style browse taxonomy for Sokoni Mall (Kenya).
  * Maps legacy catalog categories → browse paths for gradual migration.
+ *
+ * Additive Kilimall-gap expansion locked in docs/PHASE0_TAXONOMY_LOCK.md.
+ * Optional `resolvesTo: { browse, sub }` = nav alias (filter uses canonical path).
+ * Optional `navOnly: true` = hide from seller listing pickers (shortcuts only).
+ * Optional `image` = thumbnail path; UI falls back to `emoji`.
  */
 
 export const ITEM_TYPE_FILTERS = [
@@ -46,7 +51,125 @@ export const CURATED_THEMES = [
   { id: "thrift-fits", label: "Thrift Fits" },
 ];
 
-/** Primary browse navigation (Depop-style drawer). */
+/** Optional thumbnail paths (storefront-relative). UI falls back to emoji. */
+const catImage = (id) => `assets/images/categories/${id}.svg`;
+const subImage = (id) => `assets/images/subcats/${id}.svg`;
+
+/** Subcategories that have dedicated placeholder art in Phase 4. */
+const SUBCAT_IMAGE_IDS = new Set([
+  "skincare",
+  "makeup",
+  "haircare",
+  "fragrances",
+  "personal-care",
+  "mens-grooming",
+  "food-staples",
+  "beverages",
+  "household",
+  "car-accessories",
+  "tyres-wheels",
+  "gym-fitness",
+  "football",
+  "cycling",
+  "outdoor",
+  "beauty",
+]);
+
+/** Optional mega-menu column groups (presentation only — flat subs stay canonical). */
+const MEGA_GROUPS = {
+  women: [
+    { title: "Clothing", ids: ["tops", "dresses", "jeans", "outerwear"] },
+    { title: "Accessories", ids: ["shoes", "bags", "jewelry", "beauty"] },
+  ],
+  men: [
+    { title: "Clothing", ids: ["t-shirts", "shirts", "hoodies", "jeans"] },
+    { title: "Accessories", ids: ["sneakers", "caps", "watches"] },
+  ],
+  "health-beauty": [
+    { title: "Face & Skin", ids: ["skincare", "makeup"] },
+    { title: "Hair & Scent", ids: ["haircare", "fragrances"] },
+    { title: "Care", ids: ["personal-care", "mens-grooming"] },
+  ],
+  sports: [
+    { title: "Wear", ids: ["activewear", "trainers"] },
+    { title: "Play", ids: ["equipment", "football", "cycling"] },
+    { title: "Train outdoors", ids: ["gym-fitness", "outdoor"] },
+  ],
+  electronics: [
+    { title: "Mobile & compute", ids: ["phones", "computing"] },
+    { title: "Home entertainment", ids: ["tvs-audio", "gaming"] },
+    { title: "Home power", ids: ["appliances"] },
+  ],
+  supermarket: [
+    { title: "Food & drink", ids: ["food-staples", "beverages"] },
+    { title: "Home care", ids: ["household", "personal-grocery"] },
+  ],
+  automotive: [
+    { title: "Vehicle", ids: ["car-accessories", "tyres-wheels", "motorbike"] },
+    { title: "Care & fluids", ids: ["oils-fluids", "tools-care"] },
+  ],
+};
+
+function withBrowseImages(taxonomy) {
+  return taxonomy.map((cat) => {
+    const subcategories = (cat.subcategories || []).map((sub) => {
+      const image =
+        sub.image ||
+        (SUBCAT_IMAGE_IDS.has(sub.id) ? subImage(sub.id === "beauty" ? "skincare" : sub.id) : undefined);
+      return image ? { ...sub, image } : { ...sub };
+    });
+    const byId = Object.fromEntries(subcategories.map((s) => [s.id, s]));
+    const layout = MEGA_GROUPS[cat.id];
+    const groups = layout
+      ? layout
+          .map((g) => ({
+            title: g.title,
+            subcategories: g.ids.map((id) => byId[id]).filter(Boolean),
+          }))
+          .filter((g) => g.subcategories.length)
+      : cat.groups || undefined;
+
+    return {
+      ...cat,
+      image: cat.image || catImage(cat.id),
+      subcategories,
+      ...(groups ? { groups } : {}),
+    };
+  });
+}
+
+/** Shared electronics sub lists (canonical under `electronics`). */
+const ELECTRONICS_PHONE_SUBS = [
+  { id: "phones", label: "All Phones & Tablets", resolvesTo: { browse: "electronics", sub: "phones" } },
+  { id: "smartphones", label: "Smartphones", resolvesTo: { browse: "electronics", sub: "phones" } },
+  { id: "tablets", label: "Tablets", resolvesTo: { browse: "electronics", sub: "phones" } },
+  { id: "phone-accessories", label: "Phone Accessories", resolvesTo: { browse: "electronics", sub: "phones" } },
+  { id: "power-banks", label: "Power Banks", resolvesTo: { browse: "electronics", sub: "phones" } },
+];
+
+const ELECTRONICS_TV_SUBS = [
+  { id: "tvs-audio", label: "All TVs & Audio", resolvesTo: { browse: "electronics", sub: "tvs-audio" } },
+  { id: "televisions", label: "Televisions", resolvesTo: { browse: "electronics", sub: "tvs-audio" } },
+  { id: "headphones", label: "Headphones", resolvesTo: { browse: "electronics", sub: "tvs-audio" } },
+  { id: "speakers", label: "Speakers", resolvesTo: { browse: "electronics", sub: "tvs-audio" } },
+  { id: "wearables", label: "Wearables", resolvesTo: { browse: "electronics", sub: "tvs-audio" } },
+];
+
+const ELECTRONICS_COMPUTING_SUBS = [
+  { id: "computing", label: "All Computing", resolvesTo: { browse: "electronics", sub: "computing" } },
+  { id: "laptops", label: "Laptops", resolvesTo: { browse: "electronics", sub: "computing" } },
+  { id: "desktops", label: "Desktops", resolvesTo: { browse: "electronics", sub: "computing" } },
+  { id: "accessories", label: "Computer Accessories", resolvesTo: { browse: "electronics", sub: "computing" } },
+];
+
+const ELECTRONICS_APPLIANCE_SUBS = [
+  { id: "appliances", label: "All Appliances", resolvesTo: { browse: "electronics", sub: "appliances" } },
+  { id: "kitchen-appliances", label: "Kitchen Appliances", resolvesTo: { browse: "electronics", sub: "appliances" } },
+  { id: "laundry", label: "Laundry", resolvesTo: { browse: "electronics", sub: "appliances" } },
+  { id: "cooling", label: "Cooling & Fans", resolvesTo: { browse: "electronics", sub: "appliances" } },
+];
+
+/** Primary browse navigation (Depop-style drawer + mega menu). */
 export const BROWSE_TAXONOMY = [
   {
     id: "women",
@@ -60,7 +183,12 @@ export const BROWSE_TAXONOMY = [
       { id: "shoes", label: "Shoes" },
       { id: "bags", label: "Bags & Purses" },
       { id: "jewelry", label: "Jewelry" },
-      { id: "beauty", label: "Beauty" },
+      // Alias after Phase 2 remap — products live under health-beauty/*
+      {
+        id: "beauty",
+        label: "Beauty",
+        resolvesTo: { browse: "health-beauty", sub: null },
+      },
     ],
   },
   {
@@ -89,6 +217,19 @@ export const BROWSE_TAXONOMY = [
     ],
   },
   {
+    id: "health-beauty",
+    label: "Health & Beauty",
+    emoji: "💄",
+    subcategories: [
+      { id: "skincare", label: "Skincare" },
+      { id: "makeup", label: "Makeup" },
+      { id: "haircare", label: "Haircare" },
+      { id: "fragrances", label: "Fragrances" },
+      { id: "personal-care", label: "Personal Care" },
+      { id: "mens-grooming", label: "Men's Grooming" },
+    ],
+  },
+  {
     id: "brands",
     label: "Brands",
     emoji: "✨",
@@ -106,25 +247,43 @@ export const BROWSE_TAXONOMY = [
       { id: "activewear", label: "Activewear" },
       { id: "trainers", label: "Trainers" },
       { id: "equipment", label: "Equipment" },
+      { id: "gym-fitness", label: "Gym & Fitness" },
+      { id: "outdoor", label: "Outdoor" },
+      { id: "football", label: "Football" },
+      { id: "cycling", label: "Cycling" },
     ],
   },
   {
-    id: "trending",
-    label: "Trending in Kenya",
-    emoji: "🔥",
-    subcategories: [
-      { id: "thrift-fits", label: "Thrift Fits" },
-      { id: "official-wear", label: "Official Wear" },
-      { id: "streetwear", label: "Streetwear" },
-      { id: "party-outfits", label: "Party Outfits" },
-      { id: "viral", label: "Viral Bargains" },
-    ],
+    id: "phones",
+    label: "Phones & Accessories",
+    emoji: "📱",
+    navOnly: true,
+    resolvesTo: { browse: "electronics", sub: "phones" },
+    subcategories: ELECTRONICS_PHONE_SUBS,
   },
   {
-    id: "sale",
-    label: "Sale & Hot Deals",
-    emoji: "🏷️",
-    subcategories: PRICE_TIERS.map((t) => ({ id: t.id, label: t.label, priceTier: t.id })),
+    id: "tv-audio",
+    label: "TV & Audio",
+    emoji: "📺",
+    navOnly: true,
+    resolvesTo: { browse: "electronics", sub: "tvs-audio" },
+    subcategories: ELECTRONICS_TV_SUBS,
+  },
+  {
+    id: "computers",
+    label: "Computers & Accessories",
+    emoji: "💻",
+    navOnly: true,
+    resolvesTo: { browse: "electronics", sub: "computing" },
+    subcategories: ELECTRONICS_COMPUTING_SUBS,
+  },
+  {
+    id: "appliances-home",
+    label: "Appliances",
+    emoji: "🔌",
+    navOnly: true,
+    resolvesTo: { browse: "electronics", sub: "appliances" },
+    subcategories: ELECTRONICS_APPLIANCE_SUBS,
   },
   {
     id: "electronics",
@@ -146,12 +305,61 @@ export const BROWSE_TAXONOMY = [
       { id: "kitchen", label: "Kitchen" },
       { id: "bedding", label: "Bedding" },
       { id: "decor", label: "Decor" },
-      { id: "supermarket", label: "Supermarket" },
+      // Alias after Phase 2 remap — products live under supermarket/*
+      {
+        id: "supermarket",
+        label: "Supermarket",
+        resolvesTo: { browse: "supermarket", sub: null },
+      },
     ],
+  },
+  {
+    id: "supermarket",
+    label: "Supermarket",
+    emoji: "🛒",
+    subcategories: [
+      { id: "food-staples", label: "Food Staples" },
+      { id: "beverages", label: "Beverages" },
+      { id: "household", label: "Household" },
+      { id: "personal-grocery", label: "Personal Care Grocery" },
+    ],
+  },
+  {
+    id: "automotive",
+    label: "Automotive",
+    emoji: "🚗",
+    subcategories: [
+      { id: "car-accessories", label: "Car Accessories" },
+      { id: "oils-fluids", label: "Oils & Fluids" },
+      { id: "tyres-wheels", label: "Tyres & Wheels" },
+      { id: "motorbike", label: "Motorbike" },
+      { id: "tools-care", label: "Tools & Care" },
+    ],
+  },
+  {
+    id: "trending",
+    label: "Trending in Kenya",
+    emoji: "🔥",
+    subcategories: [
+      { id: "thrift-fits", label: "Thrift Fits" },
+      { id: "official-wear", label: "Official Wear" },
+      { id: "streetwear", label: "Streetwear" },
+      { id: "party-outfits", label: "Party Outfits" },
+      { id: "viral", label: "Viral Bargains" },
+    ],
+  },
+  {
+    id: "sale",
+    label: "Sale & Hot Deals",
+    emoji: "🏷️",
+    subcategories: PRICE_TIERS.map((t) => ({ id: t.id, label: t.label, priceTier: t.id })),
   },
 ];
 
-/** legacy category[/subcategory] → { browse, sub } */
+/**
+ * legacy category[/subcategory] → { browse, sub }
+ * Phase 2: health-beauty → Health & Beauty top-level; supermarket → Supermarket top-level.
+ */
 export const LEGACY_BROWSE_MAP = {
   fashion: { browse: "women", sub: "tops" },
   "fashion/womens-fashion": { browse: "women", sub: "tops" },
@@ -159,13 +367,13 @@ export const LEGACY_BROWSE_MAP = {
   "fashion/shoes": { browse: "women", sub: "shoes" },
   "fashion/bags": { browse: "women", sub: "bags" },
   "fashion/watches": { browse: "men", sub: "watches" },
-  "health-beauty": { browse: "women", sub: "beauty" },
-  "health-beauty/skincare": { browse: "women", sub: "beauty" },
-  "health-beauty/makeup": { browse: "women", sub: "beauty" },
-  "health-beauty/haircare": { browse: "women", sub: "beauty" },
-  "health-beauty/fragrances": { browse: "women", sub: "beauty" },
-  "health-beauty/perfume-oils": { browse: "women", sub: "beauty" },
-  "health-beauty/personal-care": { browse: "women", sub: "beauty" },
+  "health-beauty": { browse: "health-beauty", sub: "personal-care" },
+  "health-beauty/skincare": { browse: "health-beauty", sub: "skincare" },
+  "health-beauty/makeup": { browse: "health-beauty", sub: "makeup" },
+  "health-beauty/haircare": { browse: "health-beauty", sub: "haircare" },
+  "health-beauty/fragrances": { browse: "health-beauty", sub: "fragrances" },
+  "health-beauty/perfume-oils": { browse: "health-beauty", sub: "fragrances" },
+  "health-beauty/personal-care": { browse: "health-beauty", sub: "personal-care" },
   "phones-tablets": { browse: "electronics", sub: "phones" },
   "phones-tablets/smartphones": { browse: "electronics", sub: "phones" },
   "phones-tablets/tablets": { browse: "electronics", sub: "phones" },
@@ -182,9 +390,20 @@ export const LEGACY_BROWSE_MAP = {
   "home-office": { browse: "home", sub: "decor" },
   "home-office/kitchen-dining": { browse: "home", sub: "kitchen" },
   "home-office/bedding": { browse: "home", sub: "bedding" },
-  supermarket: { browse: "home", sub: "supermarket" },
+  supermarket: { browse: "supermarket", sub: "food-staples" },
+  "supermarket/food-staples": { browse: "supermarket", sub: "food-staples" },
+  "supermarket/beverages": { browse: "supermarket", sub: "beverages" },
+  "supermarket/household": { browse: "supermarket", sub: "household" },
+  "supermarket/personal-grocery": { browse: "supermarket", sub: "personal-grocery" },
   "baby-products": { browse: "kids", sub: "baby-gear" },
   "baby-products/toys": { browse: "kids", sub: "toys" },
+  // Automotive — ready when catalog uses these legacy ids
+  automotive: { browse: "automotive", sub: "car-accessories" },
+  "automotive/car-accessories": { browse: "automotive", sub: "car-accessories" },
+  "automotive/oils-fluids": { browse: "automotive", sub: "oils-fluids" },
+  "automotive/tyres-wheels": { browse: "automotive", sub: "tyres-wheels" },
+  "automotive/motorbike": { browse: "automotive", sub: "motorbike" },
+  "automotive/tools-care": { browse: "automotive", sub: "tools-care" },
 };
 
 export function mapLegacyToBrowse(category, subcategory) {
@@ -195,15 +414,66 @@ export function mapLegacyToBrowse(category, subcategory) {
   );
 }
 
+/** Resolve a nav category/sub (possibly alias) to the product filter path. */
+export function resolveNavFilter(categoryId, subcategoryId, taxonomy = BROWSE_TAXONOMY) {
+  const cat = taxonomy.find((c) => c.id === categoryId);
+  if (!cat) {
+    return { browse: categoryId || null, sub: subcategoryId || null, priceTier: null };
+  }
+
+  const sub = subcategoryId
+    ? (cat.subcategories || []).find((s) => s.id === subcategoryId)
+    : null;
+
+  if (sub?.resolvesTo) {
+    return {
+      browse: sub.resolvesTo.browse,
+      sub: sub.resolvesTo.sub ?? null,
+      priceTier: sub.priceTier || null,
+    };
+  }
+
+  if (sub?.priceTier) {
+    return { browse: cat.id, sub: sub.id, priceTier: sub.priceTier };
+  }
+
+  if (cat.resolvesTo && !subcategoryId) {
+    return {
+      browse: cat.resolvesTo.browse,
+      sub: cat.resolvesTo.sub ?? null,
+      priceTier: null,
+    };
+  }
+
+  if (cat.resolvesTo && subcategoryId && !sub?.resolvesTo) {
+    return {
+      browse: cat.resolvesTo.browse,
+      sub: cat.resolvesTo.sub ?? subcategoryId,
+      priceTier: null,
+    };
+  }
+
+  return {
+    browse: cat.id,
+    sub: subcategoryId || null,
+    priceTier: sub?.priceTier || null,
+  };
+}
+
+/** Taxonomy entries sellers may assign (excludes nav-only shortcuts). */
+export function sellerBrowseTaxonomy(taxonomy = BROWSE_TAXONOMY) {
+  return taxonomy.filter((c) => !c.navOnly);
+}
+
 export function buildBrowseMenuPayload() {
   return {
-    version: 3,
+    version: 4,
     itemTypes: ITEM_TYPE_FILTERS,
     priceTiers: PRICE_TIERS,
     decades: DECADES,
     aesthetics: AESTHETIC_VIBES,
     themes: CURATED_THEMES,
-    categories: BROWSE_TAXONOMY,
+    categories: withBrowseImages(BROWSE_TAXONOMY),
     legacyMap: LEGACY_BROWSE_MAP,
   };
 }

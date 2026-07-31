@@ -236,7 +236,7 @@ async function findSubcategoryRow(rowId) {
     const row = menu.rows.find((r) => r.id === rowId);
     if (row) {
       return {
-        browseCategory: menu.browseCategory,
+        browseCategory: row.browseCategory || menu.browseCategory,
         browseSubCategory: row.browseSubCategory || null,
         priceTier: row.priceTier || null,
         legacyCategory: row.legacyCategory || null,

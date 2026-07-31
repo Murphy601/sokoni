@@ -375,10 +375,15 @@ function filteredStoreProducts() {
   if (activeCategory === "viral") {
     items = items.filter((p) => p.viral || VIRAL_IDS.has(p.id));
   } else if (activeCategory !== "all") {
+    const nav =
+      window.SokoniBrowse?.resolveNavFilter?.(activeCategory, activeSubcategory) || {
+        browse: activeCategory,
+        sub: activeSubcategory,
+      };
     items = items.filter((p) => {
       const path = window.SokoniBrowse?.resolveBrowsePath(p) || {};
-      if (path.browse !== activeCategory) return false;
-      if (activeSubcategory && path.sub !== activeSubcategory) return false;
+      if (path.browse !== nav.browse) return false;
+      if (nav.sub && path.sub !== nav.sub) return false;
       return true;
     });
   }
@@ -1244,17 +1249,23 @@ async function renderProducts() {
       await window.SokoniShopShell.hydrateLikesFromServer(storeProducts.map((p) => p.id));
     }
 
+    const navigateBrowse = (sel) =>
+      setCatalogFilter({
+        category: sel.category,
+        subcategory: sel.subcategory,
+        productId: sel.productId,
+        priceTier: sel.priceTier ?? activePriceTier,
+        scroll: sel.scroll,
+      });
+
+    if (window.SokoniMegaMenu) {
+      await window.SokoniMegaMenu.init({ navigate: navigateBrowse });
+    }
+
     if (window.SokoniCatalogNav) {
       await window.SokoniCatalogNav.init({
         products: storeProducts,
-        navigate: (sel) =>
-          setCatalogFilter({
-            category: sel.category,
-            subcategory: sel.subcategory,
-            productId: sel.productId,
-            priceTier: sel.priceTier ?? activePriceTier,
-            scroll: sel.scroll,
-          }),
+        navigate: navigateBrowse,
       });
     }
 

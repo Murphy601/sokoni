@@ -59,6 +59,56 @@
     return sub?.label || subId;
   }
 
+  /**
+   * Resolve a nav category/sub (including alias tops like Phones → electronics/phones)
+   * to the canonical product filter path.
+   */
+  function resolveNavFilter(categoryId, subcategoryId) {
+    const cats = menu?.categories || [];
+    const cat = cats.find((c) => c.id === categoryId);
+    if (!cat) {
+      return { browse: categoryId || null, sub: subcategoryId || null, priceTier: null };
+    }
+
+    const sub = subcategoryId
+      ? (cat.subcategories || []).find((s) => s.id === subcategoryId)
+      : null;
+
+    if (sub?.resolvesTo) {
+      return {
+        browse: sub.resolvesTo.browse,
+        sub: sub.resolvesTo.sub ?? null,
+        priceTier: sub.priceTier || null,
+      };
+    }
+
+    if (sub?.priceTier) {
+      return { browse: cat.id, sub: sub.id, priceTier: sub.priceTier };
+    }
+
+    if (cat.resolvesTo && !subcategoryId) {
+      return {
+        browse: cat.resolvesTo.browse,
+        sub: cat.resolvesTo.sub ?? null,
+        priceTier: null,
+      };
+    }
+
+    if (cat.resolvesTo && subcategoryId) {
+      return {
+        browse: cat.resolvesTo.browse,
+        sub: cat.resolvesTo.sub ?? subcategoryId,
+        priceTier: null,
+      };
+    }
+
+    return {
+      browse: cat.id,
+      sub: subcategoryId || null,
+      priceTier: sub?.priceTier || null,
+    };
+  }
+
   function priceTierMaxKes(tierId) {
     const tier = menu?.priceTiers?.find((t) => t.id === tierId);
     return tier?.maxKes ?? null;
@@ -69,6 +119,7 @@
     resolveBrowsePath,
     enrichProduct,
     labelForBrowse,
+    resolveNavFilter,
     priceTierMaxKes,
     getMenu: () => menu,
   };

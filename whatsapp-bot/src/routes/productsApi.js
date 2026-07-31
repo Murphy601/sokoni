@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +32,19 @@ const PRICE_TIERS = {
   "under-5000": 5000,
   "under-10000": 10000,
 };
+
+/** @type {{ categories?: Array<Record<string, unknown>> } | null} */
+let cachedBrowseMenu = null;
+
+function getBrowseMenuSync() {
+  if (cachedBrowseMenu) return cachedBrowseMenu;
+  try {
+    cachedBrowseMenu = JSON.parse(readFileSync(BROWSE_MENU_PATH, "utf-8"));
+  } catch {
+    cachedBrowseMenu = { categories: [] };
+  }
+  return cachedBrowseMenu;
+}
 
 /** Public product shape — never expose source cost or supplier URL. */
 function toPublicProduct(p) {
@@ -102,6 +116,27 @@ function resolveBrowseFilters(query) {
 
   if (browseCategory === "sale" && browseSubCategory && PRICE_TIERS[browseSubCategory]) {
     maxPriceKes = PRICE_TIERS[browseSubCategory];
+  }
+
+  // Nav aliases (Phones → electronics/phones) from browse-menu.json
+  try {
+    const menu = getBrowseMenuSync();
+    if (browseCategory && menu?.categories) {
+      const cat = menu.categories.find((c) => c.id === browseCategory);
+      const sub = browseSubCategory
+        ? cat?.subcategories?.find((s) => s.id === browseSubCategory)
+        : null;
+      const resolved =
+        sub?.resolvesTo ||
+        (!browseSubCategory ? cat?.resolvesTo : null) ||
+        (cat?.resolvesTo && sub ? cat.resolvesTo : null);
+      if (resolved?.browse) {
+        browseCategory = resolved.browse;
+        if (resolved.sub != null) browseSubCategory = resolved.sub;
+      }
+    }
+  } catch {
+    /* keep raw filters */
   }
 
   return { browseCategory, browseSubCategory, maxPriceKes };

@@ -20,6 +20,13 @@
       .replace(/"/g, "&quot;");
   }
 
+  function catIconHtml(cat) {
+    if (cat?.image) {
+      return `<span class="catalog-nav-emoji catalog-nav-emoji--img" aria-hidden="true"><img src="${escapeHtml(cat.image)}" alt="" width="22" height="22" loading="lazy" /></span>`;
+    }
+    return `<span class="catalog-nav-emoji" aria-hidden="true">${escapeHtml(cat?.emoji || "🛍️")}</span>`;
+  }
+
   function truncateName(name, max = 42) {
     const n = String(name || "").replace(/\s+/g, " ").trim();
     return n.length <= max ? n : `${n.slice(0, max - 1)}…`;
@@ -57,8 +64,32 @@
     }
   }
 
+  function resolveNav(categoryId, subId) {
+    return (
+      window.SokoniBrowse?.resolveNavFilter?.(categoryId, subId) || {
+        browse: categoryId,
+        sub: subId,
+      }
+    );
+  }
+
+  /** Products under a nav sub — honors resolvesTo (including browse-only aliases). */
+  function productsForSub(categoryId, subId) {
+    const nav = resolveNav(categoryId, subId);
+    if (!nav?.browse) return [];
+    if (nav.sub) return productsByKey.get(productKey(nav.browse, nav.sub)) || [];
+    // sub null → all products in that browse category
+    const out = [];
+    for (const [key, list] of productsByKey.entries()) {
+      if (key === nav.browse || key.startsWith(`${nav.browse}::`)) {
+        out.push(...list);
+      }
+    }
+    return out;
+  }
+
   function countForSub(categoryId, subId) {
-    return productsByKey.get(productKey(categoryId, subId))?.length || 0;
+    return productsForSub(categoryId, subId).length;
   }
 
   function findSubDef(categoryId, subId) {
@@ -102,7 +133,7 @@
       html += `
         <button type="button" class="catalog-nav-item catalog-nav-top ${isActiveCategory(item.id) ? "is-active" : ""}"
           data-nav-type="top" data-category="${item.id}">
-          <span class="catalog-nav-emoji">${item.emoji}</span>
+          ${catIconHtml(item)}
           <span class="catalog-nav-label">${item.label}</span>
         </button>`;
     }
@@ -117,7 +148,7 @@
           <button type="button" class="catalog-nav-item catalog-nav-cat ${catActive && !selection.subcategory ? "is-active" : ""}"
             data-nav-type="category" data-category="${cat.id}" aria-expanded="${catExpanded}">
             <span class="catalog-nav-chevron" aria-hidden="true"></span>
-            <span class="catalog-nav-emoji">${cat.emoji || "🛍️"}</span>
+            ${catIconHtml(cat)}
             <span class="catalog-nav-label">${escapeHtml(cat.label)}</span>
           </button>
           <div class="catalog-nav-children" ${catExpanded ? "" : "hidden"}>
@@ -127,7 +158,7 @@
         const count = countForSub(cat.id, sub.id);
         const subKey = `${cat.id}::${sub.id}`;
         const subExpanded = expandedSubcategories.has(subKey);
-        const products = (productsByKey.get(productKey(cat.id, sub.id)) || []).slice(0, MAX_PRODUCTS_PER_SUB);
+        const products = productsForSub(cat.id, sub.id).slice(0, MAX_PRODUCTS_PER_SUB);
         const more = count - products.length;
 
         html += `
@@ -272,6 +303,28 @@
   }
 
   function openPanel() {
+    // Desktop: mega-menu flyout (keep drawer for mobile / narrow viewports)
+    if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.open) {
+      // Ensure drawer is closed before showing flyout
+      const panel = document.getElementById("catalog-nav-panel");
+      const backdrop = document.getElementById("catalog-nav-backdrop");
+      isOpen = false;
+      panel?.classList.remove("is-open");
+      panel?.setAttribute("hidden", "");
+      backdrop?.classList.remove("is-open");
+      backdrop?.setAttribute("hidden", "");
+      document.body.classList.remove("catalog-nav-open");
+      if (window.SokoniMegaMenu.open()) {
+        const toggle = document.getElementById("catalog-nav-toggle");
+        toggle?.classList.add("is-open");
+        toggle?.setAttribute("aria-expanded", "true");
+        if (toggle?.querySelector(".catalog-nav-toggle-label")) {
+          toggle.querySelector(".catalog-nav-toggle-label").textContent = "Close";
+        }
+        return;
+      }
+    }
+    window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
     if (!panel) return;
@@ -286,6 +339,7 @@
   }
 
   function closePanel() {
+    window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
     if (!panel) return;
@@ -299,6 +353,11 @@
   }
 
   function togglePanel() {
+    if (window.SokoniMegaMenu?.isDesktop?.() && window.SokoniMegaMenu?.isOpen?.()) {
+      window.SokoniMegaMenu.close();
+      syncToggleUi();
+      return;
+    }
     if (isOpen) closePanel();
     else openPanel();
   }

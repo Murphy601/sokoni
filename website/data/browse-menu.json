@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "itemTypes": [
     {
       "id": "all",
@@ -202,7 +202,62 @@
         },
         {
           "id": "beauty",
-          "label": "Beauty"
+          "label": "Beauty",
+          "resolvesTo": {
+            "browse": "health-beauty",
+            "sub": null
+          },
+          "image": "assets/images/subcats/skincare.svg"
+        }
+      ],
+      "image": "assets/images/categories/women.svg",
+      "groups": [
+        {
+          "title": "Clothing",
+          "subcategories": [
+            {
+              "id": "tops",
+              "label": "Tops"
+            },
+            {
+              "id": "dresses",
+              "label": "Dresses"
+            },
+            {
+              "id": "jeans",
+              "label": "Jeans & Denim"
+            },
+            {
+              "id": "outerwear",
+              "label": "Outerwear"
+            }
+          ]
+        },
+        {
+          "title": "Accessories",
+          "subcategories": [
+            {
+              "id": "shoes",
+              "label": "Shoes"
+            },
+            {
+              "id": "bags",
+              "label": "Bags & Purses"
+            },
+            {
+              "id": "jewelry",
+              "label": "Jewelry"
+            },
+            {
+              "id": "beauty",
+              "label": "Beauty",
+              "resolvesTo": {
+                "browse": "health-beauty",
+                "sub": null
+              },
+              "image": "assets/images/subcats/skincare.svg"
+            }
+          ]
         }
       ]
     },
@@ -239,6 +294,47 @@
           "id": "watches",
           "label": "Watches"
         }
+      ],
+      "image": "assets/images/categories/men.svg",
+      "groups": [
+        {
+          "title": "Clothing",
+          "subcategories": [
+            {
+              "id": "t-shirts",
+              "label": "T-Shirts"
+            },
+            {
+              "id": "shirts",
+              "label": "Shirts"
+            },
+            {
+              "id": "hoodies",
+              "label": "Hoodies"
+            },
+            {
+              "id": "jeans",
+              "label": "Jeans"
+            }
+          ]
+        },
+        {
+          "title": "Accessories",
+          "subcategories": [
+            {
+              "id": "sneakers",
+              "label": "Sneakers"
+            },
+            {
+              "id": "caps",
+              "label": "Caps"
+            },
+            {
+              "id": "watches",
+              "label": "Watches"
+            }
+          ]
+        }
       ]
     },
     {
@@ -262,6 +358,92 @@
           "id": "baby-gear",
           "label": "Baby Gear"
         }
+      ],
+      "image": "assets/images/categories/kids.svg"
+    },
+    {
+      "id": "health-beauty",
+      "label": "Health & Beauty",
+      "emoji": "💄",
+      "subcategories": [
+        {
+          "id": "skincare",
+          "label": "Skincare",
+          "image": "assets/images/subcats/skincare.svg"
+        },
+        {
+          "id": "makeup",
+          "label": "Makeup",
+          "image": "assets/images/subcats/makeup.svg"
+        },
+        {
+          "id": "haircare",
+          "label": "Haircare",
+          "image": "assets/images/subcats/haircare.svg"
+        },
+        {
+          "id": "fragrances",
+          "label": "Fragrances",
+          "image": "assets/images/subcats/fragrances.svg"
+        },
+        {
+          "id": "personal-care",
+          "label": "Personal Care",
+          "image": "assets/images/subcats/personal-care.svg"
+        },
+        {
+          "id": "mens-grooming",
+          "label": "Men's Grooming",
+          "image": "assets/images/subcats/mens-grooming.svg"
+        }
+      ],
+      "image": "assets/images/categories/health-beauty.svg",
+      "groups": [
+        {
+          "title": "Face & Skin",
+          "subcategories": [
+            {
+              "id": "skincare",
+              "label": "Skincare",
+              "image": "assets/images/subcats/skincare.svg"
+            },
+            {
+              "id": "makeup",
+              "label": "Makeup",
+              "image": "assets/images/subcats/makeup.svg"
+            }
+          ]
+        },
+        {
+          "title": "Hair & Scent",
+          "subcategories": [
+            {
+              "id": "haircare",
+              "label": "Haircare",
+              "image": "assets/images/subcats/haircare.svg"
+            },
+            {
+              "id": "fragrances",
+              "label": "Fragrances",
+              "image": "assets/images/subcats/fragrances.svg"
+            }
+          ]
+        },
+        {
+          "title": "Care",
+          "subcategories": [
+            {
+              "id": "personal-care",
+              "label": "Personal Care",
+              "image": "assets/images/subcats/personal-care.svg"
+            },
+            {
+              "id": "mens-grooming",
+              "label": "Men's Grooming",
+              "image": "assets/images/subcats/mens-grooming.svg"
+            }
+          ]
+        }
       ]
     },
     {
@@ -281,7 +463,8 @@
           "id": "local-labels",
           "label": "Local Labels"
         }
-      ]
+      ],
+      "image": "assets/images/categories/brands.svg"
     },
     {
       "id": "sports",
@@ -299,6 +482,487 @@
         {
           "id": "equipment",
           "label": "Equipment"
+        },
+        {
+          "id": "gym-fitness",
+          "label": "Gym & Fitness",
+          "image": "assets/images/subcats/gym-fitness.svg"
+        },
+        {
+          "id": "outdoor",
+          "label": "Outdoor",
+          "image": "assets/images/subcats/outdoor.svg"
+        },
+        {
+          "id": "football",
+          "label": "Football",
+          "image": "assets/images/subcats/football.svg"
+        },
+        {
+          "id": "cycling",
+          "label": "Cycling",
+          "image": "assets/images/subcats/cycling.svg"
+        }
+      ],
+      "image": "assets/images/categories/sports.svg",
+      "groups": [
+        {
+          "title": "Wear",
+          "subcategories": [
+            {
+              "id": "activewear",
+              "label": "Activewear"
+            },
+            {
+              "id": "trainers",
+              "label": "Trainers"
+            }
+          ]
+        },
+        {
+          "title": "Play",
+          "subcategories": [
+            {
+              "id": "equipment",
+              "label": "Equipment"
+            },
+            {
+              "id": "football",
+              "label": "Football",
+              "image": "assets/images/subcats/football.svg"
+            },
+            {
+              "id": "cycling",
+              "label": "Cycling",
+              "image": "assets/images/subcats/cycling.svg"
+            }
+          ]
+        },
+        {
+          "title": "Train outdoors",
+          "subcategories": [
+            {
+              "id": "gym-fitness",
+              "label": "Gym & Fitness",
+              "image": "assets/images/subcats/gym-fitness.svg"
+            },
+            {
+              "id": "outdoor",
+              "label": "Outdoor",
+              "image": "assets/images/subcats/outdoor.svg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phones",
+      "label": "Phones & Accessories",
+      "emoji": "📱",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "phones"
+      },
+      "subcategories": [
+        {
+          "id": "phones",
+          "label": "All Phones & Tablets",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "smartphones",
+          "label": "Smartphones",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "tablets",
+          "label": "Tablets",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "phone-accessories",
+          "label": "Phone Accessories",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        },
+        {
+          "id": "power-banks",
+          "label": "Power Banks",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "phones"
+          }
+        }
+      ],
+      "image": "assets/images/categories/phones.svg"
+    },
+    {
+      "id": "tv-audio",
+      "label": "TV & Audio",
+      "emoji": "📺",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "tvs-audio"
+      },
+      "subcategories": [
+        {
+          "id": "tvs-audio",
+          "label": "All TVs & Audio",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "televisions",
+          "label": "Televisions",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "headphones",
+          "label": "Headphones",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "speakers",
+          "label": "Speakers",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        },
+        {
+          "id": "wearables",
+          "label": "Wearables",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "tvs-audio"
+          }
+        }
+      ],
+      "image": "assets/images/categories/tv-audio.svg"
+    },
+    {
+      "id": "computers",
+      "label": "Computers & Accessories",
+      "emoji": "💻",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "computing"
+      },
+      "subcategories": [
+        {
+          "id": "computing",
+          "label": "All Computing",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        },
+        {
+          "id": "laptops",
+          "label": "Laptops",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        },
+        {
+          "id": "desktops",
+          "label": "Desktops",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        },
+        {
+          "id": "accessories",
+          "label": "Computer Accessories",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "computing"
+          }
+        }
+      ],
+      "image": "assets/images/categories/computers.svg"
+    },
+    {
+      "id": "appliances-home",
+      "label": "Appliances",
+      "emoji": "🔌",
+      "navOnly": true,
+      "resolvesTo": {
+        "browse": "electronics",
+        "sub": "appliances"
+      },
+      "subcategories": [
+        {
+          "id": "appliances",
+          "label": "All Appliances",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        },
+        {
+          "id": "kitchen-appliances",
+          "label": "Kitchen Appliances",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        },
+        {
+          "id": "laundry",
+          "label": "Laundry",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        },
+        {
+          "id": "cooling",
+          "label": "Cooling & Fans",
+          "resolvesTo": {
+            "browse": "electronics",
+            "sub": "appliances"
+          }
+        }
+      ],
+      "image": "assets/images/categories/appliances-home.svg"
+    },
+    {
+      "id": "electronics",
+      "label": "Electronics",
+      "emoji": "📱",
+      "subcategories": [
+        {
+          "id": "phones",
+          "label": "Phones & Tablets"
+        },
+        {
+          "id": "tvs-audio",
+          "label": "TVs & Audio"
+        },
+        {
+          "id": "computing",
+          "label": "Computing"
+        },
+        {
+          "id": "gaming",
+          "label": "Gaming"
+        },
+        {
+          "id": "appliances",
+          "label": "Appliances"
+        }
+      ],
+      "image": "assets/images/categories/electronics.svg",
+      "groups": [
+        {
+          "title": "Mobile & compute",
+          "subcategories": [
+            {
+              "id": "phones",
+              "label": "Phones & Tablets"
+            },
+            {
+              "id": "computing",
+              "label": "Computing"
+            }
+          ]
+        },
+        {
+          "title": "Home entertainment",
+          "subcategories": [
+            {
+              "id": "tvs-audio",
+              "label": "TVs & Audio"
+            },
+            {
+              "id": "gaming",
+              "label": "Gaming"
+            }
+          ]
+        },
+        {
+          "title": "Home power",
+          "subcategories": [
+            {
+              "id": "appliances",
+              "label": "Appliances"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "label": "Home & Living",
+      "emoji": "🏠",
+      "subcategories": [
+        {
+          "id": "kitchen",
+          "label": "Kitchen"
+        },
+        {
+          "id": "bedding",
+          "label": "Bedding"
+        },
+        {
+          "id": "decor",
+          "label": "Decor"
+        },
+        {
+          "id": "supermarket",
+          "label": "Supermarket",
+          "resolvesTo": {
+            "browse": "supermarket",
+            "sub": null
+          }
+        }
+      ],
+      "image": "assets/images/categories/home.svg"
+    },
+    {
+      "id": "supermarket",
+      "label": "Supermarket",
+      "emoji": "🛒",
+      "subcategories": [
+        {
+          "id": "food-staples",
+          "label": "Food Staples",
+          "image": "assets/images/subcats/food-staples.svg"
+        },
+        {
+          "id": "beverages",
+          "label": "Beverages",
+          "image": "assets/images/subcats/beverages.svg"
+        },
+        {
+          "id": "household",
+          "label": "Household",
+          "image": "assets/images/subcats/household.svg"
+        },
+        {
+          "id": "personal-grocery",
+          "label": "Personal Care Grocery"
+        }
+      ],
+      "image": "assets/images/categories/supermarket.svg",
+      "groups": [
+        {
+          "title": "Food & drink",
+          "subcategories": [
+            {
+              "id": "food-staples",
+              "label": "Food Staples",
+              "image": "assets/images/subcats/food-staples.svg"
+            },
+            {
+              "id": "beverages",
+              "label": "Beverages",
+              "image": "assets/images/subcats/beverages.svg"
+            }
+          ]
+        },
+        {
+          "title": "Home care",
+          "subcategories": [
+            {
+              "id": "household",
+              "label": "Household",
+              "image": "assets/images/subcats/household.svg"
+            },
+            {
+              "id": "personal-grocery",
+              "label": "Personal Care Grocery"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "automotive",
+      "label": "Automotive",
+      "emoji": "🚗",
+      "subcategories": [
+        {
+          "id": "car-accessories",
+          "label": "Car Accessories",
+          "image": "assets/images/subcats/car-accessories.svg"
+        },
+        {
+          "id": "oils-fluids",
+          "label": "Oils & Fluids"
+        },
+        {
+          "id": "tyres-wheels",
+          "label": "Tyres & Wheels",
+          "image": "assets/images/subcats/tyres-wheels.svg"
+        },
+        {
+          "id": "motorbike",
+          "label": "Motorbike"
+        },
+        {
+          "id": "tools-care",
+          "label": "Tools & Care"
+        }
+      ],
+      "image": "assets/images/categories/automotive.svg",
+      "groups": [
+        {
+          "title": "Vehicle",
+          "subcategories": [
+            {
+              "id": "car-accessories",
+              "label": "Car Accessories",
+              "image": "assets/images/subcats/car-accessories.svg"
+            },
+            {
+              "id": "tyres-wheels",
+              "label": "Tyres & Wheels",
+              "image": "assets/images/subcats/tyres-wheels.svg"
+            },
+            {
+              "id": "motorbike",
+              "label": "Motorbike"
+            }
+          ]
+        },
+        {
+          "title": "Care & fluids",
+          "subcategories": [
+            {
+              "id": "oils-fluids",
+              "label": "Oils & Fluids"
+            },
+            {
+              "id": "tools-care",
+              "label": "Tools & Care"
+            }
+          ]
         }
       ]
     },
@@ -327,7 +991,8 @@
           "id": "viral",
           "label": "Viral Bargains"
         }
-      ]
+      ],
+      "image": "assets/images/categories/trending.svg"
     },
     {
       "id": "sale",
@@ -354,57 +1019,8 @@
           "label": "Under KES 10,000",
           "priceTier": "under-10000"
         }
-      ]
-    },
-    {
-      "id": "electronics",
-      "label": "Electronics",
-      "emoji": "📱",
-      "subcategories": [
-        {
-          "id": "phones",
-          "label": "Phones & Tablets"
-        },
-        {
-          "id": "tvs-audio",
-          "label": "TVs & Audio"
-        },
-        {
-          "id": "computing",
-          "label": "Computing"
-        },
-        {
-          "id": "gaming",
-          "label": "Gaming"
-        },
-        {
-          "id": "appliances",
-          "label": "Appliances"
-        }
-      ]
-    },
-    {
-      "id": "home",
-      "label": "Home & Living",
-      "emoji": "🏠",
-      "subcategories": [
-        {
-          "id": "kitchen",
-          "label": "Kitchen"
-        },
-        {
-          "id": "bedding",
-          "label": "Bedding"
-        },
-        {
-          "id": "decor",
-          "label": "Decor"
-        },
-        {
-          "id": "supermarket",
-          "label": "Supermarket"
-        }
-      ]
+      ],
+      "image": "assets/images/categories/sale.svg"
     }
   ],
   "legacyMap": {
@@ -433,32 +1049,32 @@
       "sub": "watches"
     },
     "health-beauty": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "personal-care"
     },
     "health-beauty/skincare": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "skincare"
     },
     "health-beauty/makeup": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "makeup"
     },
     "health-beauty/haircare": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "haircare"
     },
     "health-beauty/fragrances": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "fragrances"
     },
     "health-beauty/perfume-oils": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "fragrances"
     },
     "health-beauty/personal-care": {
-      "browse": "women",
-      "sub": "beauty"
+      "browse": "health-beauty",
+      "sub": "personal-care"
     },
     "phones-tablets": {
       "browse": "electronics",
@@ -525,8 +1141,24 @@
       "sub": "bedding"
     },
     "supermarket": {
-      "browse": "home",
-      "sub": "supermarket"
+      "browse": "supermarket",
+      "sub": "food-staples"
+    },
+    "supermarket/food-staples": {
+      "browse": "supermarket",
+      "sub": "food-staples"
+    },
+    "supermarket/beverages": {
+      "browse": "supermarket",
+      "sub": "beverages"
+    },
+    "supermarket/household": {
+      "browse": "supermarket",
+      "sub": "household"
+    },
+    "supermarket/personal-grocery": {
+      "browse": "supermarket",
+      "sub": "personal-grocery"
     },
     "baby-products": {
       "browse": "kids",
@@ -535,6 +1167,30 @@
     "baby-products/toys": {
       "browse": "kids",
       "sub": "toys"
+    },
+    "automotive": {
+      "browse": "automotive",
+      "sub": "car-accessories"
+    },
+    "automotive/car-accessories": {
+      "browse": "automotive",
+      "sub": "car-accessories"
+    },
+    "automotive/oils-fluids": {
+      "browse": "automotive",
+      "sub": "oils-fluids"
+    },
+    "automotive/tyres-wheels": {
+      "browse": "automotive",
+      "sub": "tyres-wheels"
+    },
+    "automotive/motorbike": {
+      "browse": "automotive",
+      "sub": "motorbike"
+    },
+    "automotive/tools-care": {
+      "browse": "automotive",
+      "sub": "tools-care"
     }
   }
 }
