@@ -69,7 +69,7 @@ function isPaymentOrSiteInfoQuery(lower) {
 }
 
 function isTaxonomyQuery(lower) {
-  return /\b(categor(y|ies)|subcategor(y|ies)|departments?|sections?|browse menu|what do you (sell|have)|what('s| is) (on |in )?sokoni|aesthetics?|vibes?|price tiers?|shop by|restaurant menu|kenya (food|meals|dishes))\b/i.test(
+  return /\b(categor(y|ies)|subcategor(y|ies)|departments?|sections?|browse menu|what do you (sell|have)|what('s| is) (on |in )?sokoni|aesthetics?|vibes?|price tiers?|shop by|restaurant menu|kenya (food|meals|dishes)|wines?|spirits?|liquor|alcohol|beer aisle)\b/i.test(
     lower
   );
 }

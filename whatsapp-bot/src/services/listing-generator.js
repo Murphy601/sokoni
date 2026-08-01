@@ -24,6 +24,7 @@ export const VALID_CATEGORIES = [
   "supermarket",
   "baby-products",
   "restaurant",
+  "wines-spirits",
 ];
 
 export const VALID_CONDITIONS = [
@@ -47,6 +48,8 @@ const SUBCATEGORY_GUIDE = {
   "baby-products": "diapers, feeding, baby-care, toys",
   restaurant:
     "nyama-choma, ugali plates, pilau, chapati, githeri, stews, chicken, fish, street bites, breakfast, lunch boxes, vegan, healthy bowls, diet meals, juices, desserts, catering",
+  "wines-spirits":
+    "local beer, Kenyan spirits (Kenya Cane), red wine, white wine, sparkling/champagne, whisky, gin, vodka, cognac/brandy, rum, cider/RTDs, liqueurs, mixers, party packs, non-alcoholic",
 };
 
 const CATEGORY_KEYWORDS = [
@@ -60,6 +63,38 @@ const CATEGORY_KEYWORDS = [
   { category: "supermarket", words: ["rice", "flour", "sugar", "oil", "tea", "coffee", "cereal"] },
   { category: "baby-products", words: ["diaper", "pampers", "baby", "stroller", "formula"] },
   { category: "home-office", words: ["chair", "desk", "bed", "mattress", "curtain", "lamp", "furniture"] },
+  {
+    category: "wines-spirits",
+    words: [
+      "wine",
+      "wines",
+      "spirit",
+      "spirits",
+      "liquor",
+      "alcohol",
+      "beer",
+      "tusker",
+      "whitecap",
+      "guinness",
+      "kenya cane",
+      "cane",
+      "whisky",
+      "whiskey",
+      "gin",
+      "vodka",
+      "cognac",
+      "brandy",
+      "rum",
+      "champagne",
+      "prosecco",
+      "cider",
+      "liqueur",
+      "baileys",
+      "mixer",
+      "soda water",
+      "tonic",
+    ],
+  },
   {
     category: "restaurant",
     words: [
@@ -330,6 +365,46 @@ export async function resolveBrowsePath({ category, subcategory, browseCategory,
   if (/\b(dog|cat|pet\s*food|leash|collar)\b/.test(hay)) return { browse: "pets", sub: "pet-food" };
   if (/\b(plant|seedling|garden\s*tool|hose)\b/.test(hay)) return { browse: "garden", sub: "plants" };
   if (/\b(notebook|pen|stationery|textbook)\b/.test(hay)) return { browse: "office", sub: "stationery" };
+  if (/\b(tusker|whitecap|guinness|local\s*beer|kenya\s*beer|\bbeer\b)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "local-beer" };
+  }
+  if (/\b(kenya\s*cane|kenyan\s*spirit|chrome\s*vodka|chrome)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "kenyan-spirits" };
+  }
+  if (/\b(red\s*wine|merlot|cabernet|shiraz)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "red-wine" };
+  }
+  if (/\b(white\s*wine|sauvignon|chardonnay)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "white-wine" };
+  }
+  if (/\b(champagne|prosecco|sparkling\s*wine)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "sparkling-champagne" };
+  }
+  if (/\b(whisky|whiskey|johnnie|jameson|scotch)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "whisky" };
+  }
+  if (/\b(\bgin\b|gordons|tanqueray)\b/.test(hay)) return { browse: "wines-spirits", sub: "gin" };
+  if (/\b(vodka|smirnoff)\b/.test(hay)) return { browse: "wines-spirits", sub: "vodka" };
+  if (/\b(cognac|brandy|hennessy|remy)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "cognac-brandy" };
+  }
+  if (/\b(\brum\b|bacardi|captain\s*morgan)\b/.test(hay)) return { browse: "wines-spirits", sub: "rum" };
+  if (/\b(cider|rtd|ready[- ]to[- ]drink|snapp)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "cider-rtd" };
+  }
+  if (/\b(liqueur|baileys|amarula)\b/.test(hay)) return { browse: "wines-spirits", sub: "liqueurs" };
+  if (/\b(mixer|tonic|soda\s*water|bitter\s*lemon)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "mixers" };
+  }
+  if (/\b(party\s*pack|crate|case\s*of\s*beer|dozen\s*beer)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "party-packs" };
+  }
+  if (/\b(non[- ]?alcoholic|alcohol[- ]free|0%\s*alcohol)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "non-alcoholic" };
+  }
+  if (/\b(\bwine\b|wines|spirits?|liquor|alcohol)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "red-wine" };
+  }
   if (/\b(nyama\s*choma|choma|mbuzi|nyama)\b/.test(hay)) {
     return { browse: "restaurant", sub: "nyama-choma" };
   }
@@ -389,6 +464,8 @@ async function buildListingPrompt(caption = "") {
     `   - Skirts/jumpsuits/sleepwear → women; trousers/shorts/jackets → men.\n` +
     `   - Kenyan meals/food (nyama choma, ugali, pilau, chapati, githeri, street bites, juices) → restaurant + matching sub.\n` +
     `   - Prefer Kenya dishes/diets — not foreign restaurant chains or import cuisine labels.\n` +
+    `   - Beer, wine, whisky, gin, vodka, Kenya Cane, champagne, mixers → wines-spirits + matching sub (Kenya liquor aisle).\n` +
+    `   - Soft drinks alone stay supermarket/beverages; alcohol & bar stock → wines-spirits.\n` +
     `4. category — one of: ${VALID_CATEGORIES.join(", ")}\n` +
     `5. subcategory — short legacy slug (e.g. shoes, mens-fashion, womens-fashion)\n` +
     `6. condition — exactly one of: ${VALID_CONDITIONS.join(", ")}\n` +

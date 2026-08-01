@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "itemTypes": [
     {
       "id": "all",
@@ -1656,6 +1656,206 @@
       ]
     },
     {
+      "id": "wines-spirits",
+      "label": "Wines & Spirits",
+      "emoji": "🍷",
+      "aliases": [
+        "wine",
+        "wines",
+        "spirits",
+        "liquor",
+        "alcohol",
+        "drinks",
+        "bar",
+        "beer",
+        "whisky",
+        "whiskey",
+        "gin",
+        "vodka",
+        "kenya cane"
+      ],
+      "subcategories": [
+        {
+          "id": "local-beer",
+          "label": "Local Beer",
+          "image": "https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&h=600&q=80&sig=261"
+        },
+        {
+          "id": "kenyan-spirits",
+          "label": "Kenyan Spirits",
+          "image": "https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&h=600&q=80&sig=262"
+        },
+        {
+          "id": "red-wine",
+          "label": "Red Wine",
+          "image": "https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?auto=format&fit=crop&w=600&h=600&q=80&sig=263"
+        },
+        {
+          "id": "white-wine",
+          "label": "White Wine",
+          "image": "https://images.unsplash.com/photo-1568213816046-0ee1c42bd559?auto=format&fit=crop&w=600&h=600&q=80&sig=264"
+        },
+        {
+          "id": "sparkling-champagne",
+          "label": "Sparkling & Champagne",
+          "image": "https://images.unsplash.com/photo-1595981267035-7b04ca84a82d?auto=format&fit=crop&w=600&h=600&q=80&sig=265"
+        },
+        {
+          "id": "whisky",
+          "label": "Whisky",
+          "image": "https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&h=600&q=80&sig=266"
+        },
+        {
+          "id": "gin",
+          "label": "Gin",
+          "image": "https://images.unsplash.com/photo-1551538827-9c037cb4f32a?auto=format&fit=crop&w=600&h=600&q=80&sig=267"
+        },
+        {
+          "id": "vodka",
+          "label": "Vodka",
+          "image": "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&w=600&h=600&q=80&sig=268"
+        },
+        {
+          "id": "cognac-brandy",
+          "label": "Cognac & Brandy",
+          "image": "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?auto=format&fit=crop&w=600&h=600&q=80&sig=269"
+        },
+        {
+          "id": "rum",
+          "label": "Rum",
+          "image": "https://images.unsplash.com/photo-1571613316887-6f8d5cbf7ef7?auto=format&fit=crop&w=600&h=600&q=80&sig=270"
+        },
+        {
+          "id": "cider-rtd",
+          "label": "Cider & RTDs",
+          "image": "https://images.unsplash.com/photo-1618885472179-5e474019f2a9?auto=format&fit=crop&w=600&h=600&q=80&sig=271"
+        },
+        {
+          "id": "liqueurs",
+          "label": "Liqueurs",
+          "image": "https://images.unsplash.com/photo-1574096079513-d8259312b785?auto=format&fit=crop&w=600&h=600&q=80&sig=272"
+        },
+        {
+          "id": "mixers",
+          "label": "Mixers",
+          "image": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=600&h=600&q=80&sig=273"
+        },
+        {
+          "id": "party-packs",
+          "label": "Party Packs",
+          "image": "https://images.unsplash.com/photo-1436076863939-06870fe779c2?auto=format&fit=crop&w=600&h=600&q=80&sig=274"
+        },
+        {
+          "id": "non-alcoholic",
+          "label": "Non-Alcoholic",
+          "image": "https://images.unsplash.com/photo-1622597467836-f3285f2131b8?auto=format&fit=crop&w=600&h=600&q=80&sig=275"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=600&h=600&q=80&sig=21",
+      "groups": [
+        {
+          "title": "Local favourites",
+          "subcategories": [
+            {
+              "id": "local-beer",
+              "label": "Local Beer",
+              "image": "https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&h=600&q=80&sig=261"
+            },
+            {
+              "id": "kenyan-spirits",
+              "label": "Kenyan Spirits",
+              "image": "https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&h=600&q=80&sig=262"
+            }
+          ]
+        },
+        {
+          "title": "Wine",
+          "subcategories": [
+            {
+              "id": "red-wine",
+              "label": "Red Wine",
+              "image": "https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?auto=format&fit=crop&w=600&h=600&q=80&sig=263"
+            },
+            {
+              "id": "white-wine",
+              "label": "White Wine",
+              "image": "https://images.unsplash.com/photo-1568213816046-0ee1c42bd559?auto=format&fit=crop&w=600&h=600&q=80&sig=264"
+            },
+            {
+              "id": "sparkling-champagne",
+              "label": "Sparkling & Champagne",
+              "image": "https://images.unsplash.com/photo-1595981267035-7b04ca84a82d?auto=format&fit=crop&w=600&h=600&q=80&sig=265"
+            }
+          ]
+        },
+        {
+          "title": "Spirits",
+          "subcategories": [
+            {
+              "id": "whisky",
+              "label": "Whisky",
+              "image": "https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&h=600&q=80&sig=266"
+            },
+            {
+              "id": "gin",
+              "label": "Gin",
+              "image": "https://images.unsplash.com/photo-1551538827-9c037cb4f32a?auto=format&fit=crop&w=600&h=600&q=80&sig=267"
+            },
+            {
+              "id": "vodka",
+              "label": "Vodka",
+              "image": "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&w=600&h=600&q=80&sig=268"
+            },
+            {
+              "id": "cognac-brandy",
+              "label": "Cognac & Brandy",
+              "image": "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?auto=format&fit=crop&w=600&h=600&q=80&sig=269"
+            },
+            {
+              "id": "rum",
+              "label": "Rum",
+              "image": "https://images.unsplash.com/photo-1571613316887-6f8d5cbf7ef7?auto=format&fit=crop&w=600&h=600&q=80&sig=270"
+            }
+          ]
+        },
+        {
+          "title": "Ready & bar",
+          "subcategories": [
+            {
+              "id": "cider-rtd",
+              "label": "Cider & RTDs",
+              "image": "https://images.unsplash.com/photo-1618885472179-5e474019f2a9?auto=format&fit=crop&w=600&h=600&q=80&sig=271"
+            },
+            {
+              "id": "liqueurs",
+              "label": "Liqueurs",
+              "image": "https://images.unsplash.com/photo-1574096079513-d8259312b785?auto=format&fit=crop&w=600&h=600&q=80&sig=272"
+            },
+            {
+              "id": "mixers",
+              "label": "Mixers",
+              "image": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=600&h=600&q=80&sig=273"
+            },
+            {
+              "id": "party-packs",
+              "label": "Party Packs",
+              "image": "https://images.unsplash.com/photo-1436076863939-06870fe779c2?auto=format&fit=crop&w=600&h=600&q=80&sig=274"
+            }
+          ]
+        },
+        {
+          "title": "Zero proof",
+          "subcategories": [
+            {
+              "id": "non-alcoholic",
+              "label": "Non-Alcoholic",
+              "image": "https://images.unsplash.com/photo-1622597467836-f3285f2131b8?auto=format&fit=crop&w=600&h=600&q=80&sig=275"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "trending",
       "label": "Trending in Kenya",
       "emoji": "🔥",
@@ -2029,6 +2229,118 @@
     "meals": {
       "browse": "restaurant",
       "sub": "lunch-boxes"
+    },
+    "wines-spirits": {
+      "browse": "wines-spirits",
+      "sub": "local-beer"
+    },
+    "wines-spirits/local-beer": {
+      "browse": "wines-spirits",
+      "sub": "local-beer"
+    },
+    "wines-spirits/kenyan-spirits": {
+      "browse": "wines-spirits",
+      "sub": "kenyan-spirits"
+    },
+    "wines-spirits/red-wine": {
+      "browse": "wines-spirits",
+      "sub": "red-wine"
+    },
+    "wines-spirits/white-wine": {
+      "browse": "wines-spirits",
+      "sub": "white-wine"
+    },
+    "wines-spirits/sparkling-champagne": {
+      "browse": "wines-spirits",
+      "sub": "sparkling-champagne"
+    },
+    "wines-spirits/whisky": {
+      "browse": "wines-spirits",
+      "sub": "whisky"
+    },
+    "wines-spirits/gin": {
+      "browse": "wines-spirits",
+      "sub": "gin"
+    },
+    "wines-spirits/vodka": {
+      "browse": "wines-spirits",
+      "sub": "vodka"
+    },
+    "wines-spirits/cognac-brandy": {
+      "browse": "wines-spirits",
+      "sub": "cognac-brandy"
+    },
+    "wines-spirits/rum": {
+      "browse": "wines-spirits",
+      "sub": "rum"
+    },
+    "wines-spirits/cider-rtd": {
+      "browse": "wines-spirits",
+      "sub": "cider-rtd"
+    },
+    "wines-spirits/liqueurs": {
+      "browse": "wines-spirits",
+      "sub": "liqueurs"
+    },
+    "wines-spirits/mixers": {
+      "browse": "wines-spirits",
+      "sub": "mixers"
+    },
+    "wines-spirits/party-packs": {
+      "browse": "wines-spirits",
+      "sub": "party-packs"
+    },
+    "wines-spirits/non-alcoholic": {
+      "browse": "wines-spirits",
+      "sub": "non-alcoholic"
+    },
+    "wine": {
+      "browse": "wines-spirits",
+      "sub": "red-wine"
+    },
+    "spirits": {
+      "browse": "wines-spirits",
+      "sub": "kenyan-spirits"
+    },
+    "liquor": {
+      "browse": "wines-spirits",
+      "sub": "kenyan-spirits"
+    },
+    "alcohol": {
+      "browse": "wines-spirits",
+      "sub": "local-beer"
+    },
+    "beer": {
+      "browse": "wines-spirits",
+      "sub": "local-beer"
+    },
+    "whisky": {
+      "browse": "wines-spirits",
+      "sub": "whisky"
+    },
+    "whiskey": {
+      "browse": "wines-spirits",
+      "sub": "whisky"
+    },
+    "gin": {
+      "browse": "wines-spirits",
+      "sub": "gin"
+    },
+    "vodka": {
+      "browse": "wines-spirits",
+      "sub": "vodka"
+    },
+    "champagne": {
+      "browse": "wines-spirits",
+      "sub": "sparkling-champagne"
+    },
+    "kenya-cane": {
+      "browse": "wines-spirits",
+      "sub": "kenyan-spirits"
+    },
+    "tusker": {
+      "browse": "wines-spirits",
+      "sub": "local-beer"
     }
   }
 }

@@ -42,8 +42,9 @@
 16. Office & Books *(additive)*  
 17. Garden & Outdoor *(additive)*  
 18. Restaurant *(additive — Kenya meals/diets/dishes: nyama choma, ugali, pilau, chapati, githeri, street bites, vegan/diet bowls, juices, catering)*  
-19. Trending in Kenya  
-20. Sale & Hot Deals  
+19. Wines & Spirits *(additive — Kenya liquor aisle: local beer, Kenyan spirits, wine, whisky/gin/vodka, mixers, party packs, non-alcoholic)*  
+20. Trending in Kenya  
+21. Sale & Hot Deals  
 
 **Images:** `scripts/browse-category-images.mjs` → rebuild with `node scripts/build-browse-menu.mjs` (runs URL verify). Kids shoes must use path key `kids/shoes`, never women's heels.
 
