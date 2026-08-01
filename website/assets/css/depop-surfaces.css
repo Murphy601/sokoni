@@ -502,6 +502,37 @@ body.sell-depop-page textarea::placeholder {
   color: #71717a !important;
 }
 
+/* Dashboard section groups — clear visual hierarchy */
+body.sell-depop-page .sell-dash-group__head {
+  padding: 0 0.15rem;
+}
+
+body.sell-depop-page .sell-dash-group__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+}
+
+body.sell-depop-page .sell-dash-group__hint {
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+  color: #71717a;
+}
+
+body.sell-depop-page .sell-dash-collapse > summary {
+  list-style: none;
+}
+
+body.sell-depop-page .sell-dash-collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+body.sell-depop-page .sell-dash-collapse[open] .sell-dash-collapse__chevron {
+  color: #ff2300;
+}
+
 body.sell-depop-page .sell-view-tabs {
   background: #18181b !important;
 }
