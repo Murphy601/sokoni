@@ -730,23 +730,44 @@ function renderCategoryChips() {
   const grid = document.getElementById("category-grid");
   if (!grid) return;
   const menu = window.SokoniBrowse?.getMenu?.();
-  const browseCats = menu?.categories || [];
-  const chip = (id, label, emoji) => {
+  // Skip nav-only aliases (Phones/TV/Computers/Appliances → Electronics).
+  const browseCats = (menu?.categories || []).filter((c) => !c.navOnly);
+  const FALLBACK_IMG =
+    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=200&h=200&q=80";
+  const TOP_CHIPS = [
+    {
+      id: "all",
+      label: "All Products",
+      image:
+        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=200&h=200&q=80&sig=all",
+    },
+    {
+      id: "viral",
+      label: "Viral Bargains",
+      image:
+        "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=200&h=200&q=80&sig=viral",
+    },
+  ];
+
+  const chip = (item) => {
+    const id = item.id;
+    const label = item.label || id;
     const active = activeCategory === id && !activeProductId;
+    const src = item.image || FALLBACK_IMG;
     return `
-    <button type="button" data-cat="${id}"
+    <button type="button" data-cat="${escapeHtml(id)}"
       class="depop-cat-card cat-chip ${active ? "is-active" : ""}">
-      <span class="depop-cat-card__icon" aria-hidden="true">${emoji}</span>
-      <span class="depop-cat-card__label">${label}</span>
+      <span class="depop-cat-card__icon depop-cat-card__icon--img" aria-hidden="true">
+        <img src="${escapeHtml(src)}" alt="" width="56" height="56" loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.onerror=null;this.src='${FALLBACK_IMG}'" />
+      </span>
+      <span class="depop-cat-card__label">${escapeHtml(label)}</span>
     </button>`;
   };
+
   grid.innerHTML =
-    chip("all", "All Products", "🛍️") +
-    chip("viral", "Viral Bargains", "🔥") +
-    browseCats
-      .slice(0, 8)
-      .map((c) => chip(c.id, c.label, c.emoji || "🛍️"))
-      .join("");
+    TOP_CHIPS.map(chip).join("") + browseCats.map((c) => chip(c)).join("");
   if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
