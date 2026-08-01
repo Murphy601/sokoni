@@ -717,7 +717,15 @@ async function maybeAutoGenerate() {
       updateCoverStudioUi();
     }
     fillFormFromDraft();
-    if (sellerInfo?.businessName) showSellerProfile(sellerInfo);
+    // Refresh profile chrome without kicking the seller off the listing wizard.
+    if (sellerInfo?.businessName) showSellerProfile(sellerInfo, { preserveView: true });
+    showSellerView("listing");
+    const detailsIdx = STEPS.indexOf("details");
+    if (detailsIdx >= 0) {
+      stepIndex = detailsIdx;
+      updateStepUi();
+    }
+    el("view-listing")?.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch {
     setStatus("Could not reach Sokoni — check your connection and try again.", true);
     checkApiHealth();
@@ -1775,7 +1783,7 @@ async function loadMyListings() {
   }
 }
 
-function showSellerProfile(profile) {
+function showSellerProfile(profile, opts = {}) {
   sellerProfile = { ...(profile || {}) };
   const knownUserId = Number(sellerProfile.userId || sellerProfile.socialUserId);
   if (Number.isInteger(knownUserId) && knownUserId > 0) {
@@ -1801,7 +1809,10 @@ function showSellerProfile(profile) {
   fillShopEditFormFromSeller(profile);
   void hydrateShopEditFormFromSocial();
   void loadSellerActivity();
-  showSellerView("dashboard");
+  // Login / onboard land on dashboard; listing AI must not yank sellers off the wizard.
+  if (!opts.preserveView) {
+    showSellerView("dashboard");
+  }
 }
 
 function setEditShopStatus(message, isError = false) {
@@ -2644,7 +2655,9 @@ function renderHubGuidesCarousel() {
       if (!guide) return;
       if (guide.action === "bulk") {
         showSellerView("dashboard");
-        el("bulk-draft-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const bulk = el("bulk-draft-studio");
+        if (bulk && "open" in bulk) bulk.open = true;
+        bulk?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else if (guide.action === "orders") {
         el("seller-orders")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else {
@@ -2771,11 +2784,13 @@ function renderSellerHubOverview() {
 function bindSellerHubUi() {
   el("hub-bulk-studio-btn")?.addEventListener("click", () => {
     showSellerView("dashboard");
-    el("bulk-draft-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const bulk = el("bulk-draft-studio");
+    if (bulk && "open" in bulk) bulk.open = true;
+    bulk?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   el("hub-create-drop-btn")?.addEventListener("click", () => showSellerView("listing"));
   el("hub-view-all-drafts-btn")?.addEventListener("click", () => {
-    el("my-listings")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    el("section-my-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   renderHubTrendingCarousel();
   renderHubGuidesCarousel();

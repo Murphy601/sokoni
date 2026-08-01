@@ -135,12 +135,18 @@
         </div>
       </div>
 
-      <section id="seller-shop-edit" class="hidden sell-depop-section p-6 space-y-4">
-        <div>
-          <h2 class="font-bold text-lg">Shop profile</h2>
-          <p class="text-sm text-brand-purple/60 dark:text-white/60">This is what buyers see on your Sokoni shop page.</p>
-        </div>
-        <form id="seller-shop-edit-form" class="grid gap-3 md:grid-cols-2">
+      <details id="seller-shop-edit" class="hidden sell-depop-section sell-dash-collapse p-0">
+        <summary class="sell-dash-collapse__summary px-5 py-4 cursor-pointer list-none">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="depop-label">Settings</p>
+              <h2 class="font-bold text-lg text-white mt-0.5">Shop profile</h2>
+              <p class="text-sm text-zinc-400 mt-0.5">Name, bio, photo — what buyers see on your shop page.</p>
+            </div>
+            <span class="sell-dash-collapse__chevron text-zinc-500 text-sm shrink-0" aria-hidden="true">Edit</span>
+          </div>
+        </summary>
+        <form id="seller-shop-edit-form" class="grid gap-3 md:grid-cols-2 px-5 pb-5">
           <label class="text-sm font-medium md:col-span-1">
             Shop name
             <input id="edit-shop-name" type="text" maxlength="255" class="sell-form-input mt-1" placeholder="e.g. Adiv Thrift" />
@@ -203,36 +209,36 @@
             <p id="edit-shop-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
           </div>
         </form>
-      </section>
+      </details>
 
       <div class="sell-view-tabs" role="tablist" aria-label="Seller views">
         <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">
-          <span>Dashboard</span>
+          <span>Home</span>
           <span id="tab-dashboard-offers-badge" class="sell-tab-badge hidden" aria-live="polite"></span>
         </button>
+        <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List item</button>
         <button type="button" id="tab-withdraw" class="sell-view-tab" role="tab" aria-selected="false">Withdraw</button>
-        <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List new item</button>
       </div>
 
-      <div id="view-dashboard" class="space-y-6">
-        <!-- Selling Hub — Depop matte black / scarlet surfaces -->
-        <section id="seller-hub-overview" class="seller-hub depop-hub depop-surface rounded-3xl p-5 sm:p-6 space-y-6" aria-label="Shop overview">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-5">
+      <div id="view-dashboard" class="space-y-8">
+        <!-- 1. Snapshot -->
+        <section id="seller-hub-overview" class="seller-hub depop-hub depop-surface rounded-3xl p-5 sm:p-6 space-y-5" aria-label="Shop overview">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <div class="flex flex-wrap items-center gap-2 mb-1">
-                <span class="depop-label">Seller Hub</span>
+                <span class="depop-label">Your shop</span>
                 <span class="text-zinc-700" aria-hidden="true">·</span>
                 <span id="hub-shop-handle" class="text-xs text-zinc-400 font-mono">@yourshop</span>
               </div>
-              <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Shop overview</h2>
-              <p class="text-sm text-zinc-400 mt-1">What needs action, what to list next, and how your shop is growing.</p>
+              <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Home</h2>
+              <p class="text-sm text-zinc-400 mt-1">Ship orders, answer offers, list the next item.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <button type="button" id="hub-bulk-studio-btn" class="depop-btn-ghost">
-                Bulk Studio
+                Bulk CSV
               </button>
               <button type="button" id="hub-create-drop-btn" class="depop-btn-accent">
-                + Create new drop
+                + List item
               </button>
             </div>
           </div>
@@ -256,78 +262,23 @@
             <div class="seller-hub-stat seller-hub-stat--success rounded-2xl p-4 sm:p-5 space-y-1.5">
               <p class="text-[11px] font-bold uppercase tracking-wider depop-stat-label">Escrow available</p>
               <p id="hub-stat-escrow" class="text-xl sm:text-2xl font-black font-mono depop-stat-value">—</p>
-              <p class="text-[10px] depop-stat-meta">Releases after delivery confirm</p>
+              <p class="text-[10px] depop-stat-meta">Ready to withdraw</p>
             </div>
-          </div>
-
-          <div class="space-y-3">
-            <div class="flex justify-between items-end gap-3">
-              <div>
-                <h3 class="text-base font-black text-white">Trending search signals</h3>
-                <p class="text-xs text-zinc-400">List items matching these for higher visibility</p>
-              </div>
-              <span class="text-[10px] text-zinc-500 font-mono shrink-0">Updated today</span>
-            </div>
-            <div id="hub-trending-carousel" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
-          </div>
-
-          <div class="space-y-3">
-            <div class="flex justify-between items-end gap-3">
-              <div>
-                <h3 class="text-base font-black text-white">Drafts ready to publish</h3>
-                <p class="text-xs text-zinc-400">CSV imports and saved drafts — add photos, then post</p>
-              </div>
-              <button type="button" id="hub-view-all-drafts-btn" class="text-xs font-bold text-[#FF2300] hover:underline shrink-0">View all</button>
-            </div>
-            <div id="hub-drafts-carousel" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list">
-              <p class="text-sm text-zinc-500 px-1">Loading drafts…</p>
-            </div>
-          </div>
-
-          <div class="space-y-3">
-            <div>
-              <h3 class="text-base font-black text-white">Seller guides</h3>
-              <p class="text-xs text-zinc-400">Merch playbooks to move thrift faster</p>
-            </div>
-            <div id="hub-guides-carousel" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
-          </div>
-
-          <div id="hub-seller-level" class="depop-card p-5 sm:p-6 space-y-4">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div>
-                <p class="depop-label">Seller level</p>
-                <h3 class="text-base font-black mt-1 text-white">Path to Top Seller</h3>
-                <p class="text-xs text-zinc-400 mt-1">20+ live fits · keep ratings high · ship within 48h</p>
-              </div>
-              <p id="hub-level-label" class="text-sm font-bold font-mono text-white">0 / 20 live</p>
-            </div>
-            <div class="h-2 rounded-full depop-hub-progress overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0" id="hub-level-bar-wrap">
-              <div id="hub-level-bar" class="h-full rounded-full transition-all duration-500" style="width:0%"></div>
-            </div>
-            <ul id="hub-level-checklist" class="grid sm:grid-cols-3 gap-2 text-xs text-zinc-400">
-              <li class="rounded-xl border border-zinc-900 px-3 py-2">List 20+ live items</li>
-              <li class="rounded-xl border border-zinc-900 px-3 py-2">Ship orders within 48h</li>
-              <li class="rounded-xl border border-zinc-900 px-3 py-2">Keep buyer ratings strong</li>
-            </ul>
           </div>
         </section>
 
-        <section class="sell-depop-section p-6 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <h2 class="font-bold text-lg text-white">Shop activity</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">New followers and likes on your listings.</p>
-            </div>
-            <button id="load-activity-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+        <!-- 2. Needs action -->
+        <div class="sell-dash-group space-y-4">
+          <div class="sell-dash-group__head">
+            <p class="sell-dash-group__label">Needs action</p>
+            <p class="sell-dash-group__hint">Do these first — buyers are waiting</p>
           </div>
-          <div id="seller-activity" class="space-y-2"></div>
-        </section>
 
         <section class="sell-depop-section p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <div>
               <h2 class="font-bold text-lg text-white">Orders to ship</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">Paid sales — print label and drop at a Sokoni hub.</p>
+              <p class="text-sm text-zinc-400">Paid sales — arrange delivery with the buyer after payment.</p>
             </div>
             <button id="load-orders-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
@@ -337,33 +288,8 @@
         <section class="sell-depop-section p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <h2 class="font-bold text-lg text-white">Rate buyers</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">After delivery, leave a star rating for the buyer (helps the next seller).</p>
-            </div>
-            <button id="load-buyer-reviews-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
-          </div>
-          <div id="seller-buyer-reviews" class="space-y-3"></div>
-          <p id="seller-buyer-reviews-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
-        </section>
-
-        <section class="sell-depop-section p-6 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <p class="depop-label">Resolution</p>
-              <h2 class="font-bold text-lg text-white">Disputes</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">Respond when a buyer opens a ticket. Escrow stays held until admin decides.</p>
-            </div>
-            <button id="load-seller-disputes-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
-          </div>
-          <div id="seller-disputes" class="space-y-3"></div>
-          <p id="seller-disputes-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
-        </section>
-
-        <section class="sell-depop-section p-6 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <h2 class="font-bold text-lg text-white">Offers inbox</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">Buyers can negotiate. Accept to lock checkout for 24 hours.</p>
+              <h2 class="font-bold text-lg text-white">Offers</h2>
+              <p class="text-sm text-zinc-400">Accept, counter, or decline. Accepted offers lock checkout for 24 hours.</p>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
               <button id="offers-quick-chat-btn" type="button" class="sell-offer-quick-btn" disabled>
@@ -440,6 +366,57 @@
 
         <section class="sell-depop-section p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="font-bold text-lg text-white">Disputes</h2>
+              <p class="text-sm text-zinc-400">Respond when a buyer opens a ticket. Escrow stays held until admin decides.</p>
+            </div>
+            <button id="load-seller-disputes-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+          </div>
+          <div id="seller-disputes" class="space-y-3"></div>
+          <p id="seller-disputes-status" class="text-sm text-zinc-400"></p>
+        </section>
+        </div><!-- /needs action -->
+
+        <!-- 3. Listings -->
+        <div class="sell-dash-group space-y-4">
+          <div class="sell-dash-group__head">
+            <p class="sell-dash-group__label">Your listings</p>
+            <p class="sell-dash-group__hint">Drafts and live items</p>
+          </div>
+
+          <section class="sell-depop-section p-6 space-y-3">
+            <div class="flex justify-between items-end gap-3">
+              <div>
+                <h2 class="font-bold text-lg text-white">Drafts ready to finish</h2>
+                <p class="text-sm text-zinc-400">Add photos, then post</p>
+              </div>
+              <button type="button" id="hub-view-all-drafts-btn" class="text-xs font-bold text-[#FF2300] hover:underline shrink-0">View all</button>
+            </div>
+            <div id="hub-drafts-carousel" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list">
+              <p class="text-sm text-zinc-500 px-1">Loading drafts…</p>
+            </div>
+          </section>
+
+          <section id="section-my-listings" class="sell-depop-section p-6 space-y-4">
+            <div class="flex items-center justify-between gap-4">
+              <h2 class="font-bold text-lg text-white">My listings</h2>
+              <button id="load-listings-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+            </div>
+            <p id="bulk-drafts-hint" class="hidden text-sm text-zinc-400">
+              Drafts from CSV need photos — tap <strong>Continue editing</strong>, add pics, then Post.
+            </p>
+            <div id="my-listings" class="space-y-3"></div>
+          </section>
+        </div>
+
+        <!-- 4. Money -->
+        <div class="sell-dash-group space-y-4">
+          <div class="sell-dash-group__head">
+            <p class="sell-dash-group__label">Money</p>
+            <p class="sell-dash-group__hint">Escrow and payouts — withdraw from the Withdraw tab</p>
+          </div>
+        <section class="sell-depop-section p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
             <h2 class="font-bold text-lg text-white">Earnings</h2>
             <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
@@ -459,14 +436,96 @@
           </div>
           <div id="ledger-detail" class="text-sm space-y-2"></div>
         </section>
+        </div>
 
-        <section id="bulk-draft-studio" class="bulk-studio sell-depop-section p-6 space-y-5">
+        <!-- 5. Grow / secondary (collapsed) -->
+        <details class="sell-dash-collapse sell-depop-section p-0">
+          <summary class="sell-dash-collapse__summary px-5 py-4 cursor-pointer list-none">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="sell-dash-group__label">Grow your shop</p>
+                <p class="text-sm text-zinc-400 mt-0.5">Trends, guides, activity, and buyer ratings</p>
+              </div>
+              <span class="sell-dash-collapse__chevron text-zinc-500 text-sm shrink-0" aria-hidden="true">Show</span>
+            </div>
+          </summary>
+          <div class="px-5 pb-5 space-y-5">
+            <div class="space-y-3">
+              <div class="flex justify-between items-end gap-3">
+                <div>
+                  <h3 class="text-base font-bold text-white">Trending searches</h3>
+                  <p class="text-xs text-zinc-400">List items matching these for higher visibility</p>
+                </div>
+                <span class="text-[10px] text-zinc-500 font-mono shrink-0">Updated today</span>
+              </div>
+              <div id="hub-trending-carousel" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <h3 class="text-base font-bold text-white">Seller guides</h3>
+                <p class="text-xs text-zinc-400">Quick tips to sell faster</p>
+              </div>
+              <div id="hub-guides-carousel" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
+            </div>
+            <div id="hub-seller-level" class="rounded-2xl border border-zinc-900 p-4 space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <p class="depop-label">Seller level</p>
+                  <h3 class="text-base font-bold mt-1 text-white">Path to Top Seller</h3>
+                  <p class="text-xs text-zinc-400 mt-1">20+ live fits · keep ratings high · dispatch within 48h</p>
+                </div>
+                <p id="hub-level-label" class="text-sm font-bold font-mono text-white">0 / 20 live</p>
+              </div>
+              <div class="h-2 rounded-full depop-hub-progress overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0" id="hub-level-bar-wrap">
+                <div id="hub-level-bar" class="h-full rounded-full transition-all duration-500" style="width:0%"></div>
+              </div>
+              <ul id="hub-level-checklist" class="grid sm:grid-cols-3 gap-2 text-xs text-zinc-400">
+                <li class="rounded-xl border border-zinc-900 px-3 py-2">List 20+ live items</li>
+                <li class="rounded-xl border border-zinc-900 px-3 py-2">Dispatch orders within 48h</li>
+                <li class="rounded-xl border border-zinc-900 px-3 py-2">Keep buyer ratings strong</li>
+              </ul>
+            </div>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h3 class="text-base font-bold text-white">Shop activity</h3>
+                  <p class="text-xs text-zinc-400">New followers and likes</p>
+                </div>
+                <button id="load-activity-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+              </div>
+              <div id="seller-activity" class="space-y-2"></div>
+            </div>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h3 class="text-base font-bold text-white">Rate buyers</h3>
+                  <p class="text-xs text-zinc-400">After delivery, leave a star rating</p>
+                </div>
+                <button id="load-buyer-reviews-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+              </div>
+              <div id="seller-buyer-reviews" class="space-y-3"></div>
+              <p id="seller-buyer-reviews-status" class="text-sm text-zinc-400"></p>
+            </div>
+          </div>
+        </details>
+
+        <!-- 6. Bulk CSV (collapsed) -->
+        <details id="bulk-draft-studio" class="bulk-studio sell-dash-collapse sell-depop-section p-0">
+          <summary class="sell-dash-collapse__summary px-5 py-4 cursor-pointer list-none">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="depop-label">Tools</p>
+                <h2 class="font-bold text-lg text-white mt-0.5">Bulk CSV drafts</h2>
+                <p class="text-sm text-zinc-400 mt-0.5">Import up to 50 rows — add photos later, then post</p>
+              </div>
+              <span class="sell-dash-collapse__chevron text-zinc-500 text-sm shrink-0" aria-hidden="true">Open</span>
+            </div>
+          </summary>
+          <div class="px-5 pb-5 space-y-5">
           <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <p class="depop-label">Seller Hub · Bulk Draft Studio</p>
-              <h2 class="font-display text-2xl font-bold mt-1">Manage item drops</h2>
-              <p class="text-sm text-brand-purple/65 dark:text-white/65 mt-1 max-w-xl">
-                Download a clean spreadsheet, tweak rows here, then create drafts. Photos come after — up to 8 per item.
+              <p class="text-sm text-zinc-400 max-w-xl">
+                Download a spreadsheet, tweak rows, then create drafts. Photos come after — up to 8 per item.
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -564,18 +623,8 @@
           </div>
 
           <p id="bulk-csv-status" class="text-sm text-brand-purple/60 dark:text-white/65" role="status"></p>
-        </section>
-
-        <section class="sell-depop-section p-6 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <h2 class="font-bold text-lg text-white">My listings</h2>
-            <button id="load-listings-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
-          <p id="bulk-drafts-hint" class="hidden text-sm text-brand-purple/65 dark:text-white/70">
-            Drafts from CSV need photos — tap <strong>Continue editing</strong>, add pics, then Post.
-          </p>
-          <div id="my-listings" class="space-y-3"></div>
-        </section>
+        </details>
       </div>
 
       <div id="view-withdraw" class="hidden space-y-6">
