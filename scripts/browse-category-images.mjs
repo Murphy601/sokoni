@@ -27,6 +27,7 @@ export const CATEGORY_IMAGES = {
   office: u("photo-1497366216548-37526070297c", 16),
   garden: u("photo-1416879595882-3373a0480b5b", 17),
   restaurant: u("photo-1517248135467-4c7edcad34c4", 18),
+  "wines-spirits": u("photo-1510812431401-41d2bd2722f3", 21),
   trending: u("photo-1558171813-4c088753af8f", 19),
   sale: u("photo-1607083206869-4c7672e72a8a", 20),
 };
@@ -177,6 +178,23 @@ export const SUBCATEGORY_IMAGES = {
   "fresh-juices": u("photo-1613478223719-2ab802602423", 234),
   desserts: u("photo-1565958011703-44f9829ba187", 235),
   "catering-platters": u("photo-1555244162-803834f70033", 236),
+
+  // Wines & Spirits — Kenya liquor aisle (local beer/spirits + common bar stock)
+  "local-beer": u("photo-1608270586620-248524c67de9", 261),
+  "kenyan-spirits": u("photo-1527281400683-1aae777175f8", 262),
+  "red-wine": u("photo-1506377247377-2a5b3b417ebb", 263),
+  "white-wine": u("photo-1568213816046-0ee1c42bd559", 264),
+  "sparkling-champagne": u("photo-1595981267035-7b04ca84a82d", 265),
+  whisky: u("photo-1527281400683-1aae777175f8", 266),
+  gin: u("photo-1551538827-9c037cb4f32a", 267),
+  vodka: u("photo-1607623814075-e51df1bdc82f", 268),
+  "cognac-brandy": u("photo-1605276374104-dee2a0ed3cd6", 269),
+  rum: u("photo-1571613316887-6f8d5cbf7ef7", 270),
+  "cider-rtd": u("photo-1618885472179-5e474019f2a9", 271),
+  liqueurs: u("photo-1574096079513-d8259312b785", 272),
+  mixers: u("photo-1556679343-c7306c1976bc", 273),
+  "party-packs": u("photo-1436076863939-06870fe779c2", 274),
+  "non-alcoholic": u("photo-1622597467836-f3285f2131b8", 275),
 
   // Trending / sale
   "thrift-fits": u("photo-1558769132-cb1aea458c5e", 241),
