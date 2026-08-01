@@ -78,10 +78,10 @@
         if (b.itemKes != null || b.sellerNetKes != null) {
           rows.push(`<li>Item (seller receives) · ${formatKes(b.itemKes ?? b.sellerNetKes)}</li>`);
         }
-        if (b.shippingKes != null) {
-          rows.push(
-            `<li>Shipping · ${b.freeShipping || !b.shippingKes ? "Free" : formatKes(b.shippingKes)}</li>`
-          );
+        if (b.shippingKes != null && Number(b.shippingKes) > 0 && !b.freeShipping) {
+          rows.push(`<li>Shipping · ${formatKes(b.shippingKes)}</li>`);
+        } else {
+          rows.push(`<li>Delivery · arranged by seller after payment</li>`);
         }
         if (b.platformFeeKes != null) {
           rows.push(`<li>Sokoni fee (10%) · ${formatKes(b.platformFeeKes)}</li>`);
@@ -91,7 +91,7 @@
         }
         breakdownNode.innerHTML = rows.join("");
       }
-      setOfferStatus("Enter delivery details, then pay the full amount on M-Pesa. Funds stay in escrow until delivery.");
+      setOfferStatus("Enter your drop-off address, then pay on M-Pesa. Delivery is arranged directly by the seller after payment.");
       const phoneInput = document.getElementById("offer-phone");
       if (phoneInput && session?.phone && !phoneInput.value) {
         phoneInput.value = session.phone;

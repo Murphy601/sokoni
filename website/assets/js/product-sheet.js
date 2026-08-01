@@ -172,16 +172,15 @@
     return Math.round(amount);
   }
 
-  function resolveShippingKes(product) {
-    if (product?.freeShipping === true) return 0;
-    const ship = Math.round(Number(product?.shippingKes ?? product?.shippingKsh ?? 0) || 0);
-    return ship > 0 ? Math.max(300, ship) : 0;
+  /** Platform no longer charges shipping — sellers arrange dispatch after payment. */
+  function resolveShippingKes(_product) {
+    return 0;
   }
 
   /** Mirror bot computeOfferFeeBreakdown — offer amount is buyer all-in into escrow. */
-  function computeOfferEscrowBreakdown(buyerTotalKes, shippingKes) {
+  function computeOfferEscrowBreakdown(buyerTotalKes, shippingKes = 0) {
     const agreed = Math.round(Number(buyerTotalKes) || 0);
-    const shipping = Math.round(Number(shippingKes) || 0) > 0 ? Math.max(300, Math.round(Number(shippingKes))) : 0;
+    const shipping = 0;
     if (!Number.isFinite(agreed) || agreed < 1) {
       return { error: "invalid_offer_amount", message: "Enter a valid offer amount in KES." };
     }
@@ -192,39 +191,31 @@
     const sellerNetKes = subtotalKes - shipping;
     if (sellerNetKes < 1) {
       return {
-        error: "offer_too_low_for_shipping",
-        message:
-          shipping > 0
-            ? `Offer must be at least KES ${minBuyerTotalKes.toLocaleString()} to cover shipping (KES ${shipping.toLocaleString()}) and Sokoni's 10% fee.`
-            : `Offer must be at least KES ${minBuyerTotalKes.toLocaleString()} after Sokoni's 10% fee.`,
+        error: "offer_too_low",
+        message: `Offer must be at least KES ${minBuyerTotalKes.toLocaleString()} after Sokoni's 10% fee.`,
         minBuyerTotalKes,
-        shippingKes: shipping,
+        shippingKes: 0,
       };
     }
     const platformFeeKes = agreed - subtotalKes;
     return {
       itemKes: sellerNetKes,
       sellerNetKes,
-      shippingKes: shipping,
+      shippingKes: 0,
       platformFeeKes,
       totalKes: agreed,
-      freeShipping: shipping === 0,
+      freeShipping: true,
       minBuyerTotalKes,
     };
   }
 
   function formatOfferBreakdownLine(breakdown) {
     if (!breakdown || breakdown.error) return "";
-    const ship =
-      breakdown.freeShipping || !breakdown.shippingKes
-        ? "shipping free"
-        : `shipping KES ${Number(breakdown.shippingKes).toLocaleString()}`;
-    return `You pay KES ${Number(breakdown.totalKes).toLocaleString()} into escrow · seller gets KES ${Number(breakdown.sellerNetKes).toLocaleString()} (${ship} + Sokoni fee KES ${Number(breakdown.platformFeeKes).toLocaleString()})`;
+    return `You pay KES ${Number(breakdown.totalKes).toLocaleString()} into escrow · seller gets KES ${Number(breakdown.sellerNetKes).toLocaleString()} (Sokoni fee KES ${Number(breakdown.platformFeeKes).toLocaleString()}) · seller handles dispatch`;
   }
 
-  function minOfferKes(product) {
-    const shipping = resolveShippingKes(product);
-    const subtotal = 1 + shipping;
+  function minOfferKes(_product) {
+    const subtotal = 1;
     return subtotal + Math.round(subtotal * 0.1);
   }
 
@@ -270,7 +261,7 @@
       <button type="button" id="product-sheet-offer-toggle" class="product-sheet-save">💸 Make an offer</button>
       <form id="product-sheet-offer-form" class="product-sheet-offer-form" hidden>
         ${offerAuthBlock()}
-        <label for="product-sheet-offer-amount" class="product-sheet-offer-label">Your total to pay (KES) — includes shipping + Sokoni fee</label>
+        <label for="product-sheet-offer-amount" class="product-sheet-offer-label">Your total to pay (KES) — item + Sokoni fee (seller handles dispatch)</label>
         <div class="product-sheet-offer-row">
           <input
             id="product-sheet-offer-amount"
@@ -360,6 +351,7 @@
       </div>
       <div class="product-sheet-meta">
         <p class="product-sheet-price">${escapeHtml(formatPrice(product))}</p>
+        <p class="product-sheet-dispatch text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">Seller handles dispatch (direct delivery)</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
         <p class="product-sheet-tags">${escapeHtml([browseLabel(product), secondhand, condition].filter(Boolean).join(" · "))}</p>
         ${

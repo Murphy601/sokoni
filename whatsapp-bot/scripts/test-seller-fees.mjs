@@ -40,11 +40,13 @@ assert("large tier above medium", getShippingTier("large").minKes >= 550 && getS
 assert("meetup not a selectable delivery method", !DELIVERY_METHODS.some((d) => d.id === "meetup"));
 
 const yogurt = applyAiShippingSuggestion({ name: "Delamere Premium Yogurt" });
-assert("yogurt weight class small", yogurt.estimatedWeightClass === "small");
-assert("yogurt shipping typical 300", yogurt.shippingKes === 300);
+assert("AI no longer suggests weight class", yogurt.estimatedWeightClass == null);
+assert("AI shipping always 0", yogurt.shippingKes === 0);
+assert("AI free shipping", yogurt.freeShipping === true);
+assert("AI delivery seller_express", yogurt.deliveryMethod === "seller_express");
 
 const shoes = applyAiShippingSuggestion({ name: "Women leather shoes", estimatedWeightClass: "medium" });
-assert("shoes medium fee 450", shoes.shippingKes === 450);
+assert("AI ignores weight class for fee", shoes.shippingKes === 0);
 
 assert("mpesa fee free under 100", mpesaTransactionFeeKes(80) === 0);
 assert("mpesa fee band 101-500 is 5", mpesaTransactionFeeKes(495) === 5);

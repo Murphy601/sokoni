@@ -24,18 +24,22 @@ export const DELIVERY_METHODS = [
 ];
 
 export function normalizeDeliveryMethod(raw) {
-  const key = String(raw || "hub")
+  const key = String(raw || "seller_express")
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
-  if (key === "seller_express" || key === "express" || key === "seller_delivery" || key === "self") {
+  if (key === "seller_express" || key === "express" || key === "seller_delivery" || key === "self" || !key) {
     return "seller_express";
   }
   // Meetup removed as a seller option — legacy meetup orders still recognised for escrow.
   if (key === "meetup" || key === "meet" || key === "in_person" || key === "pickup_meetup") {
     return "meetup";
   }
-  return "hub";
+  // Legacy hub listings still recognised for escrow; new publishes default to seller_express.
+  if (key === "hub" || key === "sokoni_hub" || key === "drop_off") {
+    return "hub";
+  }
+  return "seller_express";
 }
 
 export function isSellerHandledDelivery(method) {
@@ -150,34 +154,18 @@ export function inferWeightClass(name = "") {
   return best.id;
 }
 
-/** Apply AI weight/shipping suggestion — respects seller free-shipping toggle. */
-export function applyAiShippingSuggestion(draft = {}) {
-  if (draft.freeShipping === true) {
-    return {
-      estimatedWeightClass: draft.estimatedWeightClass || inferWeightClass(draft.name),
-      suggestedShippingFeeKsh: 0,
-      shippingKes: 0,
-      freeShipping: true,
-      shippingTierLabel: "Free shipping (seller covers delivery)",
-    };
-  }
-
-  const weightClass =
-    String(draft.estimatedWeightClass || draft.weightClass || "").toLowerCase() ||
-    inferWeightClass(draft.name);
-  const tier = getShippingTier(weightClass);
-  const raw =
-    draft.suggestedShippingFeeKsh ??
-    draft.shippingKes ??
-    draft.shippingFeeKes ??
-    tier.typicalKes;
-  const shippingKes = clampShippingKes(raw, tier.id);
+/**
+ * Platform no longer calculates shipping — sellers arrange dispatch with buyers.
+ * Always zero platform shipping (kept for API compatibility).
+ */
+export function applyAiShippingSuggestion(_draft = {}) {
   return {
-    estimatedWeightClass: tier.id,
-    suggestedShippingFeeKsh: shippingKes,
-    shippingKes,
-    freeShipping: false,
-    shippingTierLabel: `${tier.label} (${tier.weightNote})`,
+    estimatedWeightClass: null,
+    suggestedShippingFeeKsh: 0,
+    shippingKes: 0,
+    freeShipping: true,
+    shippingTierLabel: "Seller handles dispatch (no platform shipping)",
+    deliveryMethod: "seller_express",
   };
 }
 
@@ -436,15 +424,13 @@ function totalsFromSellerNet(product, sellerNet) {
     };
   }
 
-  const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
-  const shippingRaw =
-    product.shippingKes ??
-    product.shippingFeeKes ??
-    (isSellerHandledDelivery(deliveryMethod) ? 0 : getShippingTier(weightClass).typicalKes);
-  const shippingKes = isSellerHandledDelivery(deliveryMethod)
-    ? Math.max(0, Math.round(Number(shippingRaw) || 0))
-    : clampShippingKes(shippingRaw, weightClass);
-  const fees = computeFeeBreakdown(sellerNet, shippingKes, { deliveryMethod });
+  // Do not invent shipping from weight tiers — platform no longer calculates dispatch fees.
+  const shippingRaw = product.shippingKes ?? product.shippingFeeKes ?? 0;
+  const shippingKes = Math.max(0, Math.round(Number(shippingRaw) || 0));
+  const fees = computeFeeBreakdown(sellerNet, shippingKes, {
+    freeShipping: shippingKes === 0,
+    deliveryMethod,
+  });
   const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
   return {
     itemKes: fees.itemKes,
@@ -457,7 +443,7 @@ function totalsFromSellerNet(product, sellerNet) {
     transactionFeeKes: fees.transactionFeeKes,
     sellerNetKes: fees.sellerNetKes,
     sellerPayoutKes: fees.sellerPayoutKes,
-    freeShipping: false,
+    freeShipping: fees.freeShipping,
     deliveryMethod: fees.deliveryMethod,
     shippingRecipient: fees.shippingRecipient,
   };
@@ -486,12 +472,10 @@ export function computeProductTotals(product = {}) {
       shippingRecipient: isSellerHandledDelivery(deliveryMethod) ? "seller" : "platform",
     };
   }
-  const weightClass = product.estimatedWeightClass || inferWeightClass(product.name);
-  const shippingRaw =
-    product.shippingKes ??
-    product.shippingFeeKes ??
-    getShippingTier(weightClass).typicalKes;
-  const fees = computeFeeBreakdownLegacy(itemKes, clampShippingKes(shippingRaw, weightClass));
+  const shippingRaw = product.shippingKes ?? product.shippingFeeKes ?? 0;
+  const fees = computeFeeBreakdownLegacy(itemKes, Math.max(0, Math.round(Number(shippingRaw) || 0)), {
+    freeShipping: !shippingRaw,
+  });
   return {
     itemKes: fees.itemKes,
     shippingKes: fees.shippingKes,
@@ -499,9 +483,9 @@ export function computeProductTotals(product = {}) {
     platformFeeKes: fees.platformFeeKes,
     sellerNetKes: fees.sellerNetKes,
     sellerPayoutKes: fees.sellerNetKes,
-    freeShipping: false,
-    deliveryMethod: "hub",
-    shippingRecipient: "platform",
+    freeShipping: fees.freeShipping,
+    deliveryMethod,
+    shippingRecipient: isSellerHandledDelivery(deliveryMethod) ? "seller" : "platform",
   };
 }
 

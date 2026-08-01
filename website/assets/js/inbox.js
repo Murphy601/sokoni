@@ -346,11 +346,7 @@ function offerStatusClass(status) {
 function offerEscrowSummary(offer) {
   const b = offer?.breakdown;
   if (!b || b.totalKes == null || b.sellerNetKes == null) return "";
-  const ship =
-    b.freeShipping || !b.shippingKes
-      ? "shipping free"
-      : `shipping ${formatKes(b.shippingKes)}`;
-  return `<p class="text-[11px] text-zinc-400 mt-1">Buyer pays ${escapeHtml(formatKes(b.totalKes))} into escrow · seller gets ${escapeHtml(formatKes(b.sellerNetKes))} (${escapeHtml(ship)} + fee ${escapeHtml(formatKes(b.platformFeeKes))})</p>`;
+  return `<p class="text-[11px] text-zinc-400 mt-1">Buyer pays ${escapeHtml(formatKes(b.totalKes))} into escrow · seller gets ${escapeHtml(formatKes(b.sellerNetKes))} (fee ${escapeHtml(formatKes(b.platformFeeKes))}) · seller handles dispatch</p>`;
 }
 
 function offerCard(offer) {
@@ -555,8 +551,7 @@ async function respondToOffer(offerId, action, button) {
       const ok = window.confirm(
         `Buyer pays ${formatKes(b.totalKes)} into escrow.\n` +
           `You receive ${formatKes(b.sellerNetKes)} after delivery` +
-          ` (shipping ${b.freeShipping || !b.shippingKes ? "free" : formatKes(b.shippingKes)},` +
-          ` Sokoni fee ${formatKes(b.platformFeeKes)}).\n\nAccept this offer?`
+          ` (Sokoni fee ${formatKes(b.platformFeeKes)}; you arrange dispatch).\n\nAccept this offer?`
       );
       if (!ok) return;
     }

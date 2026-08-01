@@ -13,13 +13,9 @@ import { sendText } from "./whatsapp.js";
 import { invalidateProductCache } from "./catalog.js";
 import { clearCatalogPauseCache } from "./catalog-guard.js";
 import {
-  SHIPPING_TIERS,
   PLATFORM_FEE_RATE,
-  MIN_SHIPPING_KES,
   validateShippingKes,
   computeFeeBreakdown,
-  normalizeDeliveryMethod,
-  deliveryMethodMeta,
 } from "./shipping-tiers.js";
 import {
   enrichManualDraft,
@@ -240,12 +236,12 @@ async function buildProduct(supplier, enriched, media, productId) {
   const brands = normalizeBrands(enriched);
   const tags = normalizeTags(enriched.tags);
   const sellerNet = Math.round(Number(enriched.sellerNetKes ?? enriched.priceKes ?? enriched.sourcePriceKes) || 0);
-  const deliveryMethod = normalizeDeliveryMethod(enriched.deliveryMethod);
-  const fees = computeFeeBreakdown(sellerNet, enriched.shippingKes, {
-    freeShipping: enriched.freeShipping,
+  // Platform shipping calc retired — sellers arrange delivery with buyers after payment.
+  const deliveryMethod = "seller_express";
+  const fees = computeFeeBreakdown(sellerNet, 0, {
+    freeShipping: true,
     deliveryMethod,
   });
-  const methodMeta = deliveryMethodMeta(fees.deliveryMethod);
 
   const product = {
     id: productId,
@@ -274,13 +270,10 @@ async function buildProduct(supplier, enriched, media, productId) {
     condition: enriched.condition,
     isSecondhand: enriched.isSecondhand,
     location: enriched.location || supplier.city || undefined,
-    shippingKes: fees.shippingKes,
-    freeShipping: Boolean(fees.freeShipping),
-    estimatedWeightClass: enriched.estimatedWeightClass,
-    shippingNote:
-      enriched.shippingNote ||
-      methodMeta.label ||
-      (supplier.delivers ? "Seller delivery" : "Hub / pickup coordination"),
+    shippingKes: 0,
+    freeShipping: true,
+    estimatedWeightClass: enriched.estimatedWeightClass || null,
+    shippingNote: enriched.shippingNote || "Seller handles dispatch (direct delivery)",
     rating: 4.5,
     reviews: 0,
     source: supplier.businessName,
@@ -515,18 +508,15 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
   if (!enriched.name || (!enriched.priceKes && !enriched.sourcePriceKes)) {
     return { error: "missing_fields", message: "Title and price are required." };
   }
-  enriched.deliveryMethod = normalizeDeliveryMethod(draft.deliveryMethod || enriched.deliveryMethod);
-  // Meetup is no longer offered — coerce legacy drafts to hub.
-  if (enriched.deliveryMethod === "meetup") {
-    enriched.deliveryMethod = "hub";
-  }
-  const shippingCheck = validateShippingKes(enriched.shippingKes, {
-    freeShipping: Boolean(enriched.freeShipping),
-    deliveryMethod: enriched.deliveryMethod,
+  // Sellers arrange delivery themselves — never charge platform shipping on publish.
+  enriched.deliveryMethod = "seller_express";
+  enriched.shippingKes = 0;
+  enriched.freeShipping = true;
+  const shippingCheck = validateShippingKes(0, {
+    freeShipping: true,
+    deliveryMethod: "seller_express",
   });
   if (!shippingCheck.ok) return shippingCheck;
-  enriched.shippingKes = shippingCheck.shippingKes;
-  enriched.freeShipping = shippingCheck.freeShipping;
 
   const requestedDraftId = String(draftId || "").trim();
   const linkedDraft = requestedDraftId ? store.drafts[requestedDraftId] : null;
@@ -676,9 +666,10 @@ export async function getSellerListingMeta() {
     maxTags: MAX_TAGS,
     maxBrands: MAX_BRANDS,
     browseTaxonomy,
-    shippingTiers: SHIPPING_TIERS,
+    shippingTiers: [],
     platformFeeRate: PLATFORM_FEE_RATE,
-    minShippingKes: MIN_SHIPPING_KES,
+    minShippingKes: 0,
+    sellerHandlesDispatch: true,
     eras: ["vintage", "80s", "90s", "y2k", "streetwear", "clean-girl", "cyberpunk", "goth-punk", "90s-thrift", "minimalist", "handmade"],
     visionModel: config.catalog.visionModel,
     visionProvider: "openrouter",
