@@ -457,7 +457,7 @@ export async function sendProductDisambiguation(to, products) {
   const { formatListNumber, formatKes, CATALOG_PAGE_SIZE } = await import("./list-format.js");
   const picks = products.slice(0, CATALOG_PAGE_SIZE);
   const lines = picks.map(
-    (p, i) => `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · pay on delivery`
+    (p, i) => `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · 100% prepaid`
   );
   setMenuState(to, {
     type: "product_pick",
@@ -643,23 +643,7 @@ export async function handleProductRouter(customerKey, text) {
     if (allMatch) return sendPerfumeSizePicker(customerKey, allMatch);
   }
 
-  const result = await resolveProductQuery(text);
-  switch (result.action) {
-    case "exact":
-      return showProductActions(customerKey, result.product.id);
-    case "confirm":
-      if (result.kind === "perfume" || result.scentFamily) {
-        return sendScentConfirm(customerKey, result.scentFamily, result.sizeMl);
-      }
-      return sendProductConfirm(customerKey, result.product);
-    case "disambiguate":
-      if (result.kind === "perfume" || result.matches) {
-        return sendScentDisambiguation(customerKey, result.matches, result.sizeMl);
-      }
-      return sendProductDisambiguation(customerKey, result.products);
-    case "browse_perfumes":
-      return sendPerfumeScentList(customerKey, { page: 0, rowId: "sub_women_perfume-oils" });
-    default:
-      return false;
-  }
+  // Fresh free-text discovery is handled by Sokoni Plug (Phase 7 AI + tools).
+  // This router only continues in-progress catalog menus (confirm/pick/size/pages).
+  return false;
 }

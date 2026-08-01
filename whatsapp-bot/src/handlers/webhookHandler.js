@@ -20,7 +20,7 @@ import {
   clearHumanHandoff,
   setCustomerMeta,
 } from "../services/session.js";
-import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
+import { findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
 import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
 import { extractWahaProductMessage } from "../services/whatsapp.js";
@@ -28,11 +28,10 @@ import { config } from "../config.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
-import { handleProductRouter, resolveProductQuery, handleCatalogPagination } from "../services/product-router.js";
+import { handleProductRouter, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
-import { normalizeShopperQuery } from "../services/shopper-language.js";
 import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
 import { handleSellerWalletMessage } from "../services/seller-wallet.js";
 import { handleSupplierOnboarding, isInSupplierOnboarding, trySupplierContinueFromRef } from "../services/supplier-onboarding.js";
@@ -183,32 +182,22 @@ export function parseWahaMessage(body) {
   };
 }
 
-async function tryProductSearch(customerKey, text) {
-  if (isCasualGreeting(text)) return false;
-
-  const routed = await resolveProductQuery(text);
-  if (routed.action !== "none") return false;
-
-  const searchText = normalizeShopperQuery(text);
-  const products = await searchProducts({
-    keywords: searchText,
-    fulfillment: "store",
-    scope: "local",
-    limit: 4,
+/**
+ * After Sokoni Plug replies, attach a numbered picker so *1* / *2* still orders.
+ * Hydrates full catalog rows from product ids returned by tools.
+ */
+async function sendPlugProductPicker(customerKey, products) {
+  if (!products?.length) return;
+  const { getProductById } = await import("../services/catalog.js");
+  const full = [];
+  for (const p of products.slice(0, 4)) {
+    const row = p?.id ? await getProductById(p.id) : null;
+    if (row) full.push(row);
+  }
+  if (!full.length) return;
+  await sendNumberedProductList(customerKey, full, {
+    title: "Pick a number to view & order:",
   });
-  if (products.length === 0) return false;
-
-  const isProductIntent =
-    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(searchText) ||
-    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix|simu|perfume|mafuta|sauti|spika/i.test(
-      searchText
-    ) ||
-    /nataka|nipee|nipe|chini ya|bei/i.test(String(text || "").toLowerCase());
-
-  if (!isProductIntent && products.length > 1) return false;
-
-  await sendNumberedProductList(customerKey, products, { title: "Here's what I found:" });
-  return true;
 }
 
 function isProductMenuChoice(text) {
@@ -528,17 +517,21 @@ export async function handleIncomingMessage(
     return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
   }
 
-  if (await tryProductSearch(customerKey, combinedText)) return;
-
+  // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
   try {
-    const reply = await runAiAgent(customerKey, combinedText, phone);
-    if (!reply) {
+    const agent = await runAiAgent(customerKey, combinedText, phone);
+    if (agent.handoff) return;
+    if (!agent.reply) {
       return sendText(
         customerKey,
         "Samahani, sikupata ulichomaanisha. Type *menu* to browse, or tell me what you're looking for."
       );
     }
-    return sendText(customerKey, reply);
+    await sendText(customerKey, agent.reply);
+    if (agent.products?.length) {
+      await sendPlugProductPicker(customerKey, agent.products);
+    }
+    return;
   } catch (err) {
     console.error("Unexpected reply error:", err.message);
     return sendText(customerKey, "Something went wrong. Type *menu* to browse products.");
