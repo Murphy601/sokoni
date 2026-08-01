@@ -36,9 +36,9 @@
     const src = item?.image;
     if (src) {
       return `<span class="sokoni-cat-icon ${sizeClass}" aria-hidden="true">
-        <img src="${escapeHtml(src)}" alt="" width="56" height="56" loading="lazy"
+        <img src="${escapeHtml(src)}" alt="" width="96" height="96" loading="lazy"
           referrerpolicy="no-referrer"
-          onerror="this.onerror=null;this.classList.add('is-broken');this.src='https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=200&h=200&q=80';" />
+          onerror="this.onerror=null;this.classList.add('is-broken');this.src='https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&h=400&q=80';" />
       </span>`;
     }
     // Last resort only — every cat/sub should have a web image in browse-menu.json

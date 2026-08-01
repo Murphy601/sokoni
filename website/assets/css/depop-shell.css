@@ -236,12 +236,13 @@ body.has-depop-shell .depop-marketing-extra {
 
 .depop-cat-strip {
   display: flex;
+  align-items: center;
   gap: 1.25rem;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 0.5rem 1rem 0.625rem;
+  padding: 0.65rem 1rem 0.75rem;
   border-top: 1px solid var(--depop-border);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--depop-muted);
   -webkit-overflow-scrolling: touch;
