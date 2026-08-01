@@ -1259,7 +1259,10 @@ async function renderProducts() {
       });
 
     if (window.SokoniMegaMenu) {
-      await window.SokoniMegaMenu.init({ navigate: navigateBrowse });
+      await window.SokoniMegaMenu.init({
+        navigate: navigateBrowse,
+        products: storeProducts,
+      });
     }
 
     if (window.SokoniCatalogNav) {

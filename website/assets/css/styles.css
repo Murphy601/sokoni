@@ -847,8 +847,13 @@ html.dark .browse-chip.is-active {
 .sokoni-cat-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: transform 0.2s ease;
+}
+
+/* Live product photos should fill the tile like Kilimall */
+.sokoni-cat-icon--photo img {
+  object-fit: cover;
 }
 
 .sokoni-category-flyout__sub:hover .sokoni-cat-icon img {

@@ -51,29 +51,9 @@ export const CURATED_THEMES = [
   { id: "thrift-fits", label: "Thrift Fits" },
 ];
 
-/** Optional thumbnail paths (storefront-relative). UI falls back to emoji. */
+/** Optional thumbnail paths (storefront-relative). Mega-menu may override with live product photos. */
 const catImage = (id) => `assets/images/categories/${id}.svg`;
 const subImage = (id) => `assets/images/subcats/${id}.svg`;
-
-/** Subcategories that have dedicated placeholder art in Phase 4. */
-const SUBCAT_IMAGE_IDS = new Set([
-  "skincare",
-  "makeup",
-  "haircare",
-  "fragrances",
-  "personal-care",
-  "mens-grooming",
-  "food-staples",
-  "beverages",
-  "household",
-  "car-accessories",
-  "tyres-wheels",
-  "gym-fitness",
-  "football",
-  "cycling",
-  "outdoor",
-  "beauty",
-]);
 
 /** Optional mega-menu column groups (presentation only — flat subs stay canonical). */
 const MEGA_GROUPS = {
@@ -112,12 +92,10 @@ const MEGA_GROUPS = {
 
 function withBrowseImages(taxonomy) {
   return taxonomy.map((cat) => {
-    const subcategories = (cat.subcategories || []).map((sub) => {
-      const image =
-        sub.image ||
-        (SUBCAT_IMAGE_IDS.has(sub.id) ? subImage(sub.id === "beauty" ? "skincare" : sub.id) : undefined);
-      return image ? { ...sub, image } : { ...sub };
-    });
+    const subcategories = (cat.subcategories || []).map((sub) => ({
+      ...sub,
+      image: sub.image || subImage(sub.id),
+    }));
     const byId = Object.fromEntries(subcategories.map((s) => [s.id, s]));
     const layout = MEGA_GROUPS[cat.id];
     const groups = layout
