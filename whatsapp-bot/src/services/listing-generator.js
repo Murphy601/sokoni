@@ -23,6 +23,7 @@ export const VALID_CATEGORIES = [
   "gaming",
   "supermarket",
   "baby-products",
+  "restaurant",
 ];
 
 export const VALID_CONDITIONS = [
@@ -44,6 +45,8 @@ const SUBCATEGORY_GUIDE = {
   gaming: "consoles, gaming-accessories",
   supermarket: "groceries, beverages, snacks, household",
   "baby-products": "diapers, feeding, baby-care, toys",
+  restaurant:
+    "nyama-choma, ugali plates, pilau, chapati, githeri, stews, chicken, fish, street bites, breakfast, lunch boxes, vegan, healthy bowls, diet meals, juices, desserts, catering",
 };
 
 const CATEGORY_KEYWORDS = [
@@ -57,6 +60,37 @@ const CATEGORY_KEYWORDS = [
   { category: "supermarket", words: ["rice", "flour", "sugar", "oil", "tea", "coffee", "cereal"] },
   { category: "baby-products", words: ["diaper", "pampers", "baby", "stroller", "formula"] },
   { category: "home-office", words: ["chair", "desk", "bed", "mattress", "curtain", "lamp", "furniture"] },
+  {
+    category: "restaurant",
+    words: [
+      "nyama",
+      "choma",
+      "ugali",
+      "sukuma",
+      "githeri",
+      "pilau",
+      "biryani",
+      "chapati",
+      "mandazi",
+      "mahamri",
+      "mutura",
+      "smokie",
+      "viazi",
+      "matumbo",
+      "tilapia",
+      "samosa",
+      "meal",
+      "dish",
+      "stew",
+      "plate",
+      "catering",
+      "juice",
+      "vegan",
+      "lunch",
+      "breakfast",
+      "dinner",
+    ],
+  },
 ];
 
 let taxonomyModule = null;
@@ -296,6 +330,27 @@ export async function resolveBrowsePath({ category, subcategory, browseCategory,
   if (/\b(dog|cat|pet\s*food|leash|collar)\b/.test(hay)) return { browse: "pets", sub: "pet-food" };
   if (/\b(plant|seedling|garden\s*tool|hose)\b/.test(hay)) return { browse: "garden", sub: "plants" };
   if (/\b(notebook|pen|stationery|textbook)\b/.test(hay)) return { browse: "office", sub: "stationery" };
+  if (/\b(nyama\s*choma|choma|mbuzi|nyama)\b/.test(hay)) {
+    return { browse: "restaurant", sub: "nyama-choma" };
+  }
+  if (/\b(ugali|sukuma)\b/.test(hay)) return { browse: "restaurant", sub: "ugali-plates" };
+  if (/\b(pilau|biryani)\b/.test(hay)) return { browse: "restaurant", sub: "pilau-biryani" };
+  if (/\b(chapati|mahamri|mandazi)\b/.test(hay)) return { browse: "restaurant", sub: "chapati-meals" };
+  if (/\b(githeri|matumbo|stew|soup)\b/.test(hay)) return { browse: "restaurant", sub: "githeri-stews" };
+  if (/\b(tilapia|fish|samaki|seafood)\b/.test(hay)) return { browse: "restaurant", sub: "fish-seafood" };
+  if (/\b(mutura|smokie|viazi|street\s*food|kibanda)\b/.test(hay)) {
+    return { browse: "restaurant", sub: "street-bites" };
+  }
+  if (/\b(vegan|plant[- ]based)\b/.test(hay)) return { browse: "restaurant", sub: "vegan-plant" };
+  if (/\b(diet|keto|low[- ]carb|diabetic)\b/.test(hay)) return { browse: "restaurant", sub: "diet-meals" };
+  if (/\b(juice|smoothie|uji)\b/.test(hay)) return { browse: "restaurant", sub: "fresh-juices" };
+  if (/\b(catering|platter|buffet)\b/.test(hay)) return { browse: "restaurant", sub: "catering-platters" };
+  if (/\b(breakfast|brunch)\b/.test(hay)) return { browse: "restaurant", sub: "breakfast" };
+  if (/\b(lunch\s*box|meal\s*prep)\b/.test(hay)) return { browse: "restaurant", sub: "lunch-boxes" };
+  if (/\b(dessert|cake|sweet)\b/.test(hay)) return { browse: "restaurant", sub: "desserts" };
+  if (/\b(chicken|kuku)\b/.test(hay) && /\b(meal|dish|plate|fried|stew)\b/.test(hay)) {
+    return { browse: "restaurant", sub: "chicken-dishes" };
+  }
   if (isValidBrowsePath(tax, mapped.browse, mapped.sub)) return mapped;
   return { browse: "trending", sub: "streetwear" };
 }
@@ -332,6 +387,8 @@ async function buildListingPrompt(caption = "") {
     `   - Cameras → electronics / cameras; plugs/smart bulbs → electronics / smart-home.\n` +
     `   - Pet food/collars → pets; notebooks/pens → office; plants/tools → garden.\n` +
     `   - Skirts/jumpsuits/sleepwear → women; trousers/shorts/jackets → men.\n` +
+    `   - Kenyan meals/food (nyama choma, ugali, pilau, chapati, githeri, street bites, juices) → restaurant + matching sub.\n` +
+    `   - Prefer Kenya dishes/diets — not foreign restaurant chains or import cuisine labels.\n` +
     `4. category — one of: ${VALID_CATEGORIES.join(", ")}\n` +
     `5. subcategory — short legacy slug (e.g. shoes, mens-fashion, womens-fashion)\n` +
     `6. condition — exactly one of: ${VALID_CONDITIONS.join(", ")}\n` +

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "itemTypes": [
     {
       "id": "all",
@@ -1452,6 +1452,210 @@
       ]
     },
     {
+      "id": "restaurant",
+      "label": "Restaurant",
+      "emoji": "🍽️",
+      "aliases": [
+        "food",
+        "meals",
+        "eats",
+        "dishes",
+        "kibanda",
+        "hotel food",
+        "kenya food"
+      ],
+      "subcategories": [
+        {
+          "id": "nyama-choma",
+          "label": "Nyama Choma",
+          "image": "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&h=600&q=80&sig=221"
+        },
+        {
+          "id": "ugali-plates",
+          "label": "Ugali Plates",
+          "image": "https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=600&h=600&q=80&sig=222"
+        },
+        {
+          "id": "pilau-biryani",
+          "label": "Pilau & Biryani",
+          "image": "https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format&fit=crop&w=600&h=600&q=80&sig=223"
+        },
+        {
+          "id": "chapati-meals",
+          "label": "Chapati Meals",
+          "image": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&h=600&q=80&sig=224"
+        },
+        {
+          "id": "githeri-stews",
+          "label": "Githeri & Stews",
+          "image": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&h=600&q=80&sig=225"
+        },
+        {
+          "id": "chicken-dishes",
+          "label": "Chicken Dishes",
+          "image": "https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=600&h=600&q=80&sig=226"
+        },
+        {
+          "id": "fish-seafood",
+          "label": "Fish & Seafood",
+          "image": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&h=600&q=80&sig=227"
+        },
+        {
+          "id": "street-bites",
+          "label": "Street Bites",
+          "image": "https://images.unsplash.com/photo-1529042410759-befb1204b468?auto=format&fit=crop&w=600&h=600&q=80&sig=228"
+        },
+        {
+          "id": "breakfast",
+          "label": "Breakfast",
+          "image": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?auto=format&fit=crop&w=600&h=600&q=80&sig=229"
+        },
+        {
+          "id": "lunch-boxes",
+          "label": "Lunch Boxes",
+          "image": "https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?auto=format&fit=crop&w=600&h=600&q=80&sig=230"
+        },
+        {
+          "id": "vegan-plant",
+          "label": "Vegan & Plant",
+          "image": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&h=600&q=80&sig=231"
+        },
+        {
+          "id": "healthy-bowls",
+          "label": "Healthy Bowls",
+          "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=600&q=80&sig=232"
+        },
+        {
+          "id": "diet-meals",
+          "label": "Diet Meals",
+          "image": "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=600&h=600&q=80&sig=233"
+        },
+        {
+          "id": "fresh-juices",
+          "label": "Fresh Juices",
+          "image": "https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=600&h=600&q=80&sig=234"
+        },
+        {
+          "id": "desserts",
+          "label": "Desserts",
+          "image": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=600&h=600&q=80&sig=235"
+        },
+        {
+          "id": "catering-platters",
+          "label": "Catering Platters",
+          "image": "https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&h=600&q=80&sig=236"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&h=600&q=80&sig=18",
+      "groups": [
+        {
+          "title": "Kenyan classics",
+          "subcategories": [
+            {
+              "id": "nyama-choma",
+              "label": "Nyama Choma",
+              "image": "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&h=600&q=80&sig=221"
+            },
+            {
+              "id": "ugali-plates",
+              "label": "Ugali Plates",
+              "image": "https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=600&h=600&q=80&sig=222"
+            },
+            {
+              "id": "pilau-biryani",
+              "label": "Pilau & Biryani",
+              "image": "https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format&fit=crop&w=600&h=600&q=80&sig=223"
+            },
+            {
+              "id": "chapati-meals",
+              "label": "Chapati Meals",
+              "image": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&h=600&q=80&sig=224"
+            },
+            {
+              "id": "githeri-stews",
+              "label": "Githeri & Stews",
+              "image": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&h=600&q=80&sig=225"
+            }
+          ]
+        },
+        {
+          "title": "Proteins",
+          "subcategories": [
+            {
+              "id": "chicken-dishes",
+              "label": "Chicken Dishes",
+              "image": "https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=600&h=600&q=80&sig=226"
+            },
+            {
+              "id": "fish-seafood",
+              "label": "Fish & Seafood",
+              "image": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&h=600&q=80&sig=227"
+            }
+          ]
+        },
+        {
+          "title": "Street & quick",
+          "subcategories": [
+            {
+              "id": "street-bites",
+              "label": "Street Bites",
+              "image": "https://images.unsplash.com/photo-1529042410759-befb1204b468?auto=format&fit=crop&w=600&h=600&q=80&sig=228"
+            },
+            {
+              "id": "breakfast",
+              "label": "Breakfast",
+              "image": "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?auto=format&fit=crop&w=600&h=600&q=80&sig=229"
+            },
+            {
+              "id": "lunch-boxes",
+              "label": "Lunch Boxes",
+              "image": "https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?auto=format&fit=crop&w=600&h=600&q=80&sig=230"
+            }
+          ]
+        },
+        {
+          "title": "Diets & wellness",
+          "subcategories": [
+            {
+              "id": "vegan-plant",
+              "label": "Vegan & Plant",
+              "image": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&h=600&q=80&sig=231"
+            },
+            {
+              "id": "healthy-bowls",
+              "label": "Healthy Bowls",
+              "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=600&q=80&sig=232"
+            },
+            {
+              "id": "diet-meals",
+              "label": "Diet Meals",
+              "image": "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=600&h=600&q=80&sig=233"
+            }
+          ]
+        },
+        {
+          "title": "Drinks & more",
+          "subcategories": [
+            {
+              "id": "fresh-juices",
+              "label": "Fresh Juices",
+              "image": "https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=600&h=600&q=80&sig=234"
+            },
+            {
+              "id": "desserts",
+              "label": "Desserts",
+              "image": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=600&h=600&q=80&sig=235"
+            },
+            {
+              "id": "catering-platters",
+              "label": "Catering Platters",
+              "image": "https://images.unsplash.com/photo-1555244162-803834f70033?auto=format&fit=crop&w=600&h=600&q=80&sig=236"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "trending",
       "label": "Trending in Kenya",
       "emoji": "🔥",
@@ -1459,30 +1663,30 @@
         {
           "id": "thrift-fits",
           "label": "Thrift Fits",
-          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=201"
+          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=241"
         },
         {
           "id": "official-wear",
           "label": "Official Wear",
-          "image": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&h=600&q=80&sig=202"
+          "image": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&h=600&q=80&sig=242"
         },
         {
           "id": "streetwear",
           "label": "Streetwear",
-          "image": "https://images.unsplash.com/photo-1523398002811-999ca8dec234?auto=format&fit=crop&w=600&h=600&q=80&sig=203"
+          "image": "https://images.unsplash.com/photo-1523398002811-999ca8dec234?auto=format&fit=crop&w=600&h=600&q=80&sig=243"
         },
         {
           "id": "party-outfits",
           "label": "Party Outfits",
-          "image": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&h=600&q=80&sig=204"
+          "image": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&h=600&q=80&sig=244"
         },
         {
           "id": "viral",
           "label": "Viral Bargains",
-          "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&h=600&q=80&sig=205"
+          "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&h=600&q=80&sig=245"
         }
       ],
-      "image": "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=600&h=600&q=80&sig=18"
+      "image": "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=600&h=600&q=80&sig=19"
     },
     {
       "id": "sale",
@@ -1493,28 +1697,28 @@
           "id": "under-1000",
           "label": "Under KES 1,000",
           "priceTier": "under-1000",
-          "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=211"
+          "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=251"
         },
         {
           "id": "under-2500",
           "label": "Under KES 2,500",
           "priceTier": "under-2500",
-          "image": "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&h=600&q=80&sig=212"
+          "image": "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&h=600&q=80&sig=252"
         },
         {
           "id": "under-5000",
           "label": "Under KES 5,000",
           "priceTier": "under-5000",
-          "image": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&h=600&q=80&sig=213"
+          "image": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&h=600&q=80&sig=253"
         },
         {
           "id": "under-10000",
           "label": "Under KES 10,000",
           "priceTier": "under-10000",
-          "image": "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=600&h=600&q=80&sig=214"
+          "image": "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=600&h=600&q=80&sig=254"
         }
       ],
-      "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=19"
+      "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=20"
     }
   ],
   "legacyMap": {
@@ -1749,6 +1953,82 @@
     "home-office/lighting": {
       "browse": "home",
       "sub": "lighting"
+    },
+    "restaurant": {
+      "browse": "restaurant",
+      "sub": "ugali-plates"
+    },
+    "restaurant/nyama-choma": {
+      "browse": "restaurant",
+      "sub": "nyama-choma"
+    },
+    "restaurant/ugali-plates": {
+      "browse": "restaurant",
+      "sub": "ugali-plates"
+    },
+    "restaurant/pilau-biryani": {
+      "browse": "restaurant",
+      "sub": "pilau-biryani"
+    },
+    "restaurant/chapati-meals": {
+      "browse": "restaurant",
+      "sub": "chapati-meals"
+    },
+    "restaurant/githeri-stews": {
+      "browse": "restaurant",
+      "sub": "githeri-stews"
+    },
+    "restaurant/chicken-dishes": {
+      "browse": "restaurant",
+      "sub": "chicken-dishes"
+    },
+    "restaurant/fish-seafood": {
+      "browse": "restaurant",
+      "sub": "fish-seafood"
+    },
+    "restaurant/street-bites": {
+      "browse": "restaurant",
+      "sub": "street-bites"
+    },
+    "restaurant/breakfast": {
+      "browse": "restaurant",
+      "sub": "breakfast"
+    },
+    "restaurant/lunch-boxes": {
+      "browse": "restaurant",
+      "sub": "lunch-boxes"
+    },
+    "restaurant/vegan-plant": {
+      "browse": "restaurant",
+      "sub": "vegan-plant"
+    },
+    "restaurant/healthy-bowls": {
+      "browse": "restaurant",
+      "sub": "healthy-bowls"
+    },
+    "restaurant/diet-meals": {
+      "browse": "restaurant",
+      "sub": "diet-meals"
+    },
+    "restaurant/fresh-juices": {
+      "browse": "restaurant",
+      "sub": "fresh-juices"
+    },
+    "restaurant/desserts": {
+      "browse": "restaurant",
+      "sub": "desserts"
+    },
+    "restaurant/catering-platters": {
+      "browse": "restaurant",
+      "sub": "catering-platters"
+    },
+    "food": {
+      "browse": "restaurant",
+      "sub": "ugali-plates"
+    },
+    "meals": {
+      "browse": "restaurant",
+      "sub": "lunch-boxes"
     }
   }
 }

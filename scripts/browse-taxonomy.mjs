@@ -106,6 +106,16 @@ const MEGA_GROUPS = {
   garden: [
     { title: "Outdoors", ids: ["plants", "garden-tools", "outdoor-living"] },
   ],
+  restaurant: [
+    {
+      title: "Kenyan classics",
+      ids: ["nyama-choma", "ugali-plates", "pilau-biryani", "chapati-meals", "githeri-stews"],
+    },
+    { title: "Proteins", ids: ["chicken-dishes", "fish-seafood"] },
+    { title: "Street & quick", ids: ["street-bites", "breakfast", "lunch-boxes"] },
+    { title: "Diets & wellness", ids: ["vegan-plant", "healthy-bowls", "diet-meals"] },
+    { title: "Drinks & more", ids: ["fresh-juices", "desserts", "catering-platters"] },
+  ],
 };
 
 function withBrowseImages(taxonomy) {
@@ -388,6 +398,30 @@ export const BROWSE_TAXONOMY = [
     ],
   },
   {
+    id: "restaurant",
+    label: "Restaurant",
+    emoji: "🍽️",
+    aliases: ["food", "meals", "eats", "dishes", "kibanda", "hotel food", "kenya food"],
+    subcategories: [
+      { id: "nyama-choma", label: "Nyama Choma" },
+      { id: "ugali-plates", label: "Ugali Plates" },
+      { id: "pilau-biryani", label: "Pilau & Biryani" },
+      { id: "chapati-meals", label: "Chapati Meals" },
+      { id: "githeri-stews", label: "Githeri & Stews" },
+      { id: "chicken-dishes", label: "Chicken Dishes" },
+      { id: "fish-seafood", label: "Fish & Seafood" },
+      { id: "street-bites", label: "Street Bites" },
+      { id: "breakfast", label: "Breakfast" },
+      { id: "lunch-boxes", label: "Lunch Boxes" },
+      { id: "vegan-plant", label: "Vegan & Plant" },
+      { id: "healthy-bowls", label: "Healthy Bowls" },
+      { id: "diet-meals", label: "Diet Meals" },
+      { id: "fresh-juices", label: "Fresh Juices" },
+      { id: "desserts", label: "Desserts" },
+      { id: "catering-platters", label: "Catering Platters" },
+    ],
+  },
+  {
     id: "trending",
     label: "Trending in Kenya",
     emoji: "🔥",
@@ -471,6 +505,25 @@ export const LEGACY_BROWSE_MAP = {
   "electronics/smart-home": { browse: "electronics", sub: "smart-home" },
   "home-office/furniture": { browse: "home", sub: "furniture" },
   "home-office/lighting": { browse: "home", sub: "lighting" },
+  restaurant: { browse: "restaurant", sub: "ugali-plates" },
+  "restaurant/nyama-choma": { browse: "restaurant", sub: "nyama-choma" },
+  "restaurant/ugali-plates": { browse: "restaurant", sub: "ugali-plates" },
+  "restaurant/pilau-biryani": { browse: "restaurant", sub: "pilau-biryani" },
+  "restaurant/chapati-meals": { browse: "restaurant", sub: "chapati-meals" },
+  "restaurant/githeri-stews": { browse: "restaurant", sub: "githeri-stews" },
+  "restaurant/chicken-dishes": { browse: "restaurant", sub: "chicken-dishes" },
+  "restaurant/fish-seafood": { browse: "restaurant", sub: "fish-seafood" },
+  "restaurant/street-bites": { browse: "restaurant", sub: "street-bites" },
+  "restaurant/breakfast": { browse: "restaurant", sub: "breakfast" },
+  "restaurant/lunch-boxes": { browse: "restaurant", sub: "lunch-boxes" },
+  "restaurant/vegan-plant": { browse: "restaurant", sub: "vegan-plant" },
+  "restaurant/healthy-bowls": { browse: "restaurant", sub: "healthy-bowls" },
+  "restaurant/diet-meals": { browse: "restaurant", sub: "diet-meals" },
+  "restaurant/fresh-juices": { browse: "restaurant", sub: "fresh-juices" },
+  "restaurant/desserts": { browse: "restaurant", sub: "desserts" },
+  "restaurant/catering-platters": { browse: "restaurant", sub: "catering-platters" },
+  food: { browse: "restaurant", sub: "ugali-plates" },
+  meals: { browse: "restaurant", sub: "lunch-boxes" },
 };
 
 export function mapLegacyToBrowse(category, subcategory) {
@@ -534,7 +587,7 @@ export function sellerBrowseTaxonomy(taxonomy = BROWSE_TAXONOMY) {
 
 export function buildBrowseMenuPayload() {
   return {
-    version: 5,
+    version: 6,
     itemTypes: ITEM_TYPE_FILTERS,
     priceTiers: PRICE_TIERS,
     decades: DECADES,

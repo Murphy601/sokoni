@@ -26,8 +26,9 @@ export const CATEGORY_IMAGES = {
   pets: u("photo-1548199973-03cce0bbc87b", 15),
   office: u("photo-1497366216548-37526070297c", 16),
   garden: u("photo-1416879595882-3373a0480b5b", 17),
-  trending: u("photo-1558171813-4c088753af8f", 18),
-  sale: u("photo-1607083206869-4c7672e72a8a", 19),
+  restaurant: u("photo-1517248135467-4c7edcad34c4", 18),
+  trending: u("photo-1558171813-4c088753af8f", 19),
+  sale: u("photo-1607083206869-4c7672e72a8a", 20),
 };
 
 /**
@@ -159,16 +160,34 @@ export const SUBCATEGORY_IMAGES = {
   "garden-tools": u("photo-1416879595882-3373a0480b5b", 192),
   "outdoor-living": u("photo-1478131143081-80f7f84ca84d", 193),
 
+  // Restaurant — Kenya meals / diets / dishes (local vibes, not foreign chains)
+  "nyama-choma": u("photo-1555939594-58d7cb561ad1", 221),
+  "ugali-plates": u("photo-1596797038530-2c107229654b", 222),
+  "pilau-biryani": u("photo-1589302168068-964664d93dc0", 223),
+  "chapati-meals": u("photo-1601050690597-df0568f70950", 224),
+  "githeri-stews": u("photo-1547592166-23ac45744acd", 225),
+  "chicken-dishes": u("photo-1603133872878-684f208fb84b", 226),
+  "fish-seafood": u("photo-1519708227418-c8fd9a32b7a2", 227),
+  "street-bites": u("photo-1529042410759-befb1204b468", 228),
+  breakfast: u("photo-1482049016688-2d3e1b311543", 229),
+  "lunch-boxes": u("photo-1476224203421-9ac39bcb3327", 230),
+  "vegan-plant": u("photo-1512621776951-a57141f2eefd", 231),
+  "healthy-bowls": u("photo-1546069901-ba9599a7e63c", 232),
+  "diet-meals": u("photo-1490645935967-10de6ba17061", 233),
+  "fresh-juices": u("photo-1613478223719-2ab802602423", 234),
+  desserts: u("photo-1565958011703-44f9829ba187", 235),
+  "catering-platters": u("photo-1555244162-803834f70033", 236),
+
   // Trending / sale
-  "thrift-fits": u("photo-1558769132-cb1aea458c5e", 201),
-  "official-wear": u("photo-1507679799987-c73779587ccf", 202),
-  streetwear: u("photo-1523398002811-999ca8dec234", 203),
-  "party-outfits": u("photo-1515886657613-9f3515b0c78f", 204),
-  viral: u("photo-1483985988355-763728e1935b", 205),
-  "under-1000": u("photo-1607083206869-4c7672e72a8a", 211),
-  "under-2500": u("photo-1607082348824-0a96f2a4b9da", 212),
-  "under-5000": u("photo-1556742049-0cfed4f6a45d", 213),
-  "under-10000": u("photo-1472851294608-062f824d29cc", 214),
+  "thrift-fits": u("photo-1558769132-cb1aea458c5e", 241),
+  "official-wear": u("photo-1507679799987-c73779587ccf", 242),
+  streetwear: u("photo-1523398002811-999ca8dec234", 243),
+  "party-outfits": u("photo-1515886657613-9f3515b0c78f", 244),
+  viral: u("photo-1483985988355-763728e1935b", 245),
+  "under-1000": u("photo-1607083206869-4c7672e72a8a", 251),
+  "under-2500": u("photo-1607082348824-0a96f2a4b9da", 252),
+  "under-5000": u("photo-1556742049-0cfed4f6a45d", 253),
+  "under-10000": u("photo-1472851294608-062f824d29cc", 254),
 };
 
 export function categoryImageUrl(id) {
