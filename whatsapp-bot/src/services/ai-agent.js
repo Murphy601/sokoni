@@ -67,22 +67,41 @@ function offlineReply(toolResults, channel) {
         `\n\nType an order number for details.`
       );
     }
-    if (r.tool === "search_products" && r.products?.length) {
+    if ((r.tool === "search_products" || r.tool === "browse_products") && r.products?.length) {
+      const aisle = r.label || r.browseLabel || "";
       const lines = r.products.slice(0, 3).map(formatProductLine);
       return (
-        `Here's what I found:\n\n${lines.join("\n")}\n\n` +
+        `${aisle ? `In *${aisle}* — ` : ""}Here's what I found:\n\n${lines.join("\n")}\n\n` +
         (channel === "web"
           ? `Tap *Order on WhatsApp* on any item, or message us on WhatsApp to buy.`
           : `Reply *1* to order, or *menu* to browse.`)
       );
     }
+    if (r.tool === "browse_taxonomy" && r.categories?.length) {
+      const top = r.categories
+        .filter((c) => !c.navOnly)
+        .slice(0, 8)
+        .map((c) => `${c.emoji || "•"} ${c.label}`)
+        .join("\n");
+      return (
+        `Sokoni Mall aisles:\n\n${top}\n\n` +
+        (channel === "web"
+          ? `Ask for a category (e.g. "women dresses") or browse sokonimall.com.`
+          : `Type a category or *menu* to browse.`)
+      );
+    }
     if (r.tool === "store_info") {
-      return `💳 Sokoni is *100% prepaid* — pay upfront via M-Pesa, funds held in escrow until delivery. No COD on local items.`;
+      const till = r.till ? ` Till *${r.till}*` : "";
+      return (
+        `💳 Sokoni is *100% prepaid* — pay upfront via M-Pesa${till}, funds held in escrow until delivery. No COD.\n` +
+        `${r.deliveryNote || ""}\n` +
+        (channel === "web" ? `Track orders at /track.html · Ask more anytime here.` : `_Type *menu* or ask how it works._`)
+      );
     }
   }
   return channel === "web"
-    ? "Tell me what you're looking for (e.g. party outfit under KES 3,000) or paste an SK-#### order number to track."
-    : "Type *menu* to browse, tell me what you need, or send your *SK-####* to track an order.";
+    ? "Tell me what you're looking for (e.g. party outfit under KES 3,000), ask what categories we have, or paste an SK-#### order number to track."
+    : "Type *menu* to browse, ask for a category, tell me what you need, or send your *SK-####* to track an order.";
 }
 
 async function callLLM(messages) {
@@ -155,7 +174,15 @@ export async function runAgentTurn({
 
     let reply = await callLLM(messages);
 
-    if (!reply && toolResults.some((r) => r.tool === "search_products" && r.products?.length)) {
+    if (
+      !reply &&
+      toolResults.some(
+        (r) =>
+          ((r.tool === "search_products" || r.tool === "browse_products") && r.products?.length) ||
+          r.tool === "browse_taxonomy" ||
+          r.tool === "store_info"
+      )
+    ) {
       reply = offlineReply(toolResults, channel);
     }
 
@@ -164,7 +191,9 @@ export async function runAgentTurn({
     }
 
     const products =
-      toolResults.find((r) => r.tool === "search_products" && r.products)?.products || [];
+      toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
+      toolResults.find((r) => r.tool === "search_products" && r.products)?.products ||
+      [];
 
     return {
       reply: reply || offlineReply(toolResults, channel),
@@ -185,7 +214,15 @@ export function agentMeta() {
     phase: 7,
     name: "Sokoni Plug",
     channels: ["whatsapp", "web"],
-    tools: ["search_products", "get_product", "track_order", "list_orders", "store_info"],
+    tools: [
+      "search_products",
+      "browse_products",
+      "browse_taxonomy",
+      "get_product",
+      "track_order",
+      "list_orders",
+      "store_info",
+    ],
     endpoints: {
       chat: "/api/agent/chat",
       meta: "/api/agent/meta",
