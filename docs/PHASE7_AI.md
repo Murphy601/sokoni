@@ -19,7 +19,7 @@ User message (web or WhatsApp)
 
 | Channel | Entry | Session |
 |---------|-------|---------|
-| WhatsApp | Free-text → `runAiAgent()` | In-memory by chat ID |
+| WhatsApp | Free-text → `runAiAgent()` (Sokoni Plug). Product-router only continues in-progress menus; no keyword short-circuit before Plug. | In-memory by chat ID |
 | Web | [ask.html](../website/ask.html) → `POST /api/agent/chat` | `sessionId` in sessionStorage |
 
 ## Tools

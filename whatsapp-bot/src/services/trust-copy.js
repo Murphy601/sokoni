@@ -59,8 +59,8 @@ export function offerLine(extra = "") {
 
 export function welcomeMessage() {
   return (
-    `Habari! Welcome to *Sokoni Mall AI* 🤖🇰🇪\n` +
-    `Your smart shopping assistant for local deals across Kenya.\n\n` +
+    `Habari! Welcome to *Sokoni Plug* 🤖🇰🇪\n` +
+    `Your shopping assistant for Sokoni Mall — categories, deals, prepaid escrow & tracking.\n\n` +
     `${founderLedSafetyBlock()}\n\n` +
     `What are you shopping for today? (English, Kiswahili, or Sheng 👇)\n` +
     `Reply with a number from the menu below, or type what you need.`
