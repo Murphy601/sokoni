@@ -7,10 +7,11 @@ import {
   deleteSellerDraft,
   listSellerListings,
   getSellerListingMeta,
+  refreshStudioHealth,
   bulkImportSellerDraftsFromCsv,
   getBulkListingCsvTemplate,
 } from "../services/seller-listings.js";
-import { previewStudioClean } from "../services/listing-studio.js";
+import { previewStudioClean, generateStudioClip } from "../services/listing-studio.js";
 import { sellerSessionFromReq } from "../services/seller-verification.js";
 
 const router = Router();
@@ -35,6 +36,7 @@ router.post("/generate", async (req, res) => {
     mimeType = "image/jpeg",
     caption = "",
     skipStudio = false,
+    wantClip = false,
     sellerNetKes,
     priceKes,
   } = req.body || {};
@@ -57,11 +59,17 @@ router.post("/generate", async (req, res) => {
 
   try {
     const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
-    const result = await generateSellerListingDraft(buffer, mimeType, effectiveCaption, { skipStudio });
+    const result = await generateSellerListingDraft(buffer, mimeType, effectiveCaption, {
+      skipStudio,
+      wantClip: Boolean(wantClip),
+    });
     res.json({
       draft: result.draft,
       studioApplied: result.studioApplied,
       cleanImageBase64: result.cleanImageBase64,
+      provider: result.provider,
+      clipStatus: result.clipStatus,
+      clipBase64: result.clipBase64,
       seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {
@@ -71,7 +79,7 @@ router.post("/generate", async (req, res) => {
 
 /** POST /api/seller/listings/studio — background removal only (no AI draft) */
 router.post("/studio", async (req, res) => {
-  const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
+  const { phone, imageBase64, mimeType = "image/jpeg", wantClip = false } = req.body || {};
   const sessionToken = sellerSessionFromReq(req);
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) {
@@ -82,16 +90,48 @@ router.post("/studio", async (req, res) => {
   }
   try {
     const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
-    const result = await previewStudioClean(buffer, mimeType);
+    const result = await previewStudioClean(buffer, mimeType, { wantClip: Boolean(wantClip) });
     res.json({
       studioApplied: result.studioApplied,
       cleanImageBase64: result.cleanImageBase64,
       reason: result.reason,
       message: result.message,
+      provider: result.provider,
+      clipStatus: result.clipStatus,
+      clipBase64: result.clipBase64,
+      clipMessage: result.clipMessage,
       seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {
     res.status(422).json({ error: "studio_failed", message: err.message });
+  }
+});
+
+/** POST /api/seller/listings/studio/clip — Ken Burns MP4 from cover still (optional; never blocks listing) */
+router.post("/studio/clip", async (req, res) => {
+  const { phone, imageBase64, mimeType = "image/png" } = req.body || {};
+  const sessionToken = sellerSessionFromReq(req);
+  const check = await requireApprovedSeller(phone, sessionToken);
+  if (check.error) {
+    return res.status(sessionAuthStatus(check)).json({ error: check.error, message: check.message });
+  }
+  if (!imageBase64) {
+    return res.status(400).json({ error: "missing_image", message: "Add a cover or cleaned photo first." });
+  }
+  try {
+    const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
+    const result = await generateStudioClip(buffer, mimeType);
+    res.json({
+      ...result,
+      seller: { id: check.supplier.id, businessName: check.supplier.businessName },
+    });
+  } catch (err) {
+    res.status(422).json({
+      error: "clip_failed",
+      message: err.message || "Could not make clip — post the photo anyway.",
+      clipStatus: "failed",
+      clipBase64: null,
+    });
   }
 });
 
@@ -220,6 +260,12 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/meta", async (_req, res) => {
+  // Soft rembg health ping (cached) — never fails the meta response.
+  try {
+    await refreshStudioHealth();
+  } catch {
+    /* ignore */
+  }
   res.json(await getSellerListingMeta());
 });
 

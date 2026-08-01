@@ -704,8 +704,20 @@
               <input type="checkbox" id="studio-prefer-clean" checked />
               Use cleaned cover when posting
             </label>
+            <label class="sell-studio-toggle" id="studio-want-clip-wrap" hidden>
+              <input type="checkbox" id="studio-want-clip" />
+              Also make a short 5s clip
+            </label>
+            <button type="button" id="studio-clip-btn" class="sell-btn-ghost" hidden disabled>Make short clip</button>
           </div>
           <p id="studio-status" class="sell-tag-hint"></p>
+          <div id="studio-clip-preview-wrap" class="hidden mt-2">
+            <video id="studio-clip-preview" class="w-full max-w-xs rounded-lg" controls playsinline muted></video>
+            <label class="sell-studio-toggle mt-2">
+              <input type="checkbox" id="studio-prefer-clip" checked />
+              Use this clip as listing video when posting
+            </label>
+          </div>
         </div>
         <label class="block text-sm font-medium">
           Your price (KES) — what you receive

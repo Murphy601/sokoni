@@ -92,11 +92,15 @@ let meta = { conditions: Object.keys(CONDITION_LABELS), maxPhotos: DEFAULT_MAX_P
 let draft = {};
 let photoFiles = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
 let photoPreviews = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
-/** Cleaned cover data URL from Photoroom (cover slot only). */
+/** Cleaned cover data URL from studio (cover slot only). */
 let coverCleanBase64 = null;
 /** Prefer cleaned cover for preview + publish when available. */
 let preferCleanCover = true;
 let studioUiEnabled = false;
+let studioClipUiEnabled = false;
+/** Optional Ken Burns clip from cover (data URL). */
+let coverClipBase64 = null;
+let preferStudioClip = true;
 let videoFile = null;
 let videoPreview = null;
 let sellerInfo = null;
@@ -500,6 +504,9 @@ function bindMediaSlots() {
       if (i === 0) {
         coverCleanBase64 = null;
         preferCleanCover = true;
+        coverClipBase64 = null;
+        preferStudioClip = true;
+        el("studio-clip-preview-wrap")?.classList.add("hidden");
         const prefer = el("studio-prefer-clean");
         if (prefer) prefer.checked = true;
         updateCoverStudioUi();
@@ -535,6 +542,10 @@ function bindMediaSlots() {
     preferCleanCover = Boolean(ev.target.checked);
     refreshCoverPreview();
   });
+  el("studio-clip-btn")?.addEventListener("click", () => generateCoverClip());
+  el("studio-prefer-clip")?.addEventListener("change", (ev) => {
+    preferStudioClip = Boolean(ev.target.checked);
+  });
 }
 
 function updateCoverStudioUi() {
@@ -542,12 +553,21 @@ function updateCoverStudioUi() {
   const badge = el("media-slot-0")?.querySelector(".sell-studio-badge");
   const status = el("studio-status");
   const previewBtn = el("studio-preview-btn");
+  const clipBtn = el("studio-clip-btn");
+  const wantClipWrap = el("studio-want-clip-wrap");
   if (controls) {
     const show = studioUiEnabled;
     controls.hidden = !show;
     controls.classList.toggle("hidden", !show);
   }
   if (previewBtn) previewBtn.disabled = !photoFiles[0];
+  if (wantClipWrap) {
+    wantClipWrap.hidden = !studioClipUiEnabled;
+  }
+  if (clipBtn) {
+    clipBtn.hidden = !studioClipUiEnabled;
+    clipBtn.disabled = !(coverCleanBase64 || photoFiles[0]);
+  }
   const showingClean = Boolean(coverCleanBase64 && preferCleanCover);
   el("media-slot-0")?.classList.toggle("has-studio", showingClean);
   if (badge) badge.hidden = !showingClean;
@@ -556,6 +576,20 @@ function updateCoverStudioUi() {
         ? "Preview cleans the cover only — AI draft waits until you add your price."
         : "Add a cover photo to try background cleanup.";
   }
+}
+
+function applyCoverClipResult(clipBase64, message) {
+  if (!clipBase64) return;
+  coverClipBase64 = clipBase64;
+  preferStudioClip = true;
+  const prefer = el("studio-prefer-clip");
+  if (prefer) prefer.checked = true;
+  const wrap = el("studio-clip-preview-wrap");
+  const vid = el("studio-clip-preview");
+  if (vid) vid.src = clipBase64;
+  wrap?.classList.remove("hidden");
+  const status = el("studio-status");
+  if (status) status.textContent = message || "Short clip ready.";
 }
 
 function refreshCoverPreview() {
@@ -615,10 +649,18 @@ async function previewStudioClean() {
   try {
     const compressed = await compressImageFile(photoFiles[0]);
     const imageBase64 = await readFileAsDataUrl(compressed);
+    const wantClip = Boolean(studioClipUiEnabled && el("studio-want-clip")?.checked);
     const res = await fetch(`${LISTINGS_API}/studio`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(jsonAuthBody({ phone, imageBase64, mimeType: compressed.type || "image/jpeg" })),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          imageBase64,
+          mimeType: compressed.type || "image/jpeg",
+          wantClip,
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
@@ -634,6 +676,9 @@ async function previewStudioClean() {
     const data = parsed.data;
     if (data.studioApplied && data.cleanImageBase64) {
       applyCoverStudioResult(data.cleanImageBase64, data.message);
+      if (data.clipStatus === "ready" && data.clipBase64) {
+        applyCoverClipResult(data.clipBase64, data.clipMessage || data.message);
+      }
       setStatus(data.message || "Background cleaned — review before posting.");
     } else {
       const msg = data.message || "Could not clean background — keep your original photo.";
@@ -645,6 +690,52 @@ async function previewStudioClean() {
     checkApiHealth();
   } finally {
     if (btn) btn.disabled = !photoFiles[0];
+  }
+}
+
+async function generateCoverClip() {
+  if (!sellerProfile) {
+    setStatus("Finish seller setup first.", true);
+    return;
+  }
+  const phone = apiPhone();
+  if (!phone) return;
+  const source = coverCleanBase64 || (photoFiles[0] ? await readFileAsDataUrl(await compressImageFile(photoFiles[0])) : null);
+  if (!source) {
+    setStatus("Add a cover photo first.", true);
+    return;
+  }
+  const btn = el("studio-clip-btn");
+  if (btn) btn.disabled = true;
+  setStatus("Making a short clip…");
+  try {
+    const res = await fetch(`${LISTINGS_API}/studio/clip`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          imageBase64: source,
+          mimeType: coverCleanBase64 ? "image/png" : "image/jpeg",
+        })
+      ),
+    });
+    const parsed = await parseApiResponse(res);
+    if (parsed.status === 401) {
+      handleSessionExpired(parsed.data);
+      return;
+    }
+    const data = parsed.data || {};
+    if (parsed.ok && data.clipStatus === "ready" && data.clipBase64) {
+      applyCoverClipResult(data.clipBase64, data.message);
+      setStatus(data.message || "Short clip ready.");
+    } else {
+      setStatus(data.message || "Could not make clip — you can still post the photo.", true);
+    }
+  } catch {
+    setStatus("Could not reach Sokoni — check your connection and try again.", true);
+  } finally {
+    if (btn) btn.disabled = !(coverCleanBase64 || photoFiles[0]);
   }
 }
 
@@ -962,9 +1053,20 @@ function clearPhotoSlots() {
   }
   coverCleanBase64 = null;
   preferCleanCover = true;
+  coverClipBase64 = null;
+  preferStudioClip = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
+  el("studio-clip-preview-wrap")?.classList.add("hidden");
+  const clipVid = el("studio-clip-preview");
+  if (clipVid) clipVid.removeAttribute("src");
   updateCoverStudioUi();
+}
+
+async function resolvePublishVideoBase64() {
+  if (videoFile) return readFileAsDataUrl(videoFile);
+  if (preferStudioClip && coverClipBase64) return coverClipBase64;
+  return null;
 }
 
 function setPhotoSlotPreview(index, file, previewUrl) {
@@ -1086,8 +1188,7 @@ async function onPublish() {
 
   try {
     const images = await collectImagesBase64();
-    let videoBase64 = null;
-    if (videoFile) videoBase64 = await readFileAsDataUrl(videoFile);
+    const videoBase64 = await resolvePublishVideoBase64();
 
     const res = await fetch(`${LISTINGS_API}/publish`, {
       method: "POST",
@@ -1151,8 +1252,7 @@ async function onSaveDraft() {
   setStatus(activeDraftId ? "Updating draft…" : "Saving draft…");
   try {
     const images = await collectImagesBase64();
-    let videoBase64 = null;
-    if (videoFile) videoBase64 = await readFileAsDataUrl(videoFile);
+    const videoBase64 = await resolvePublishVideoBase64();
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
@@ -1223,6 +1323,7 @@ function renderListingAiStatus(metaData) {
   const visionOn = Boolean(metaData.visionModel || metaData.visionProvider);
   const geminiOn = Boolean(metaData.geminiVisionEnabled);
   studioUiEnabled = Boolean(metaData.studioEnabled);
+  studioClipUiEnabled = Boolean(metaData.studioClipEnabled);
   const parts = [];
   if (visionOn) {
     parts.push("AI can draft from your cover photo");
@@ -1231,6 +1332,8 @@ function renderListingAiStatus(metaData) {
     parts.push("Photo AI offline — use a caption or fill details manually");
   }
   if (studioUiEnabled) parts.push("background cleanup available — preview below");
+  if (studioClipUiEnabled) parts.push("short clip optional");
+  updateCoverStudioUi();
   parts.push("price = what you receive; buyers pay price + Sokoni fee; you arrange delivery");
   node.textContent = parts.join(" · ") + ".";
   updateCoverStudioUi();

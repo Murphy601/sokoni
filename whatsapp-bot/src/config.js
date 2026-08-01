@@ -140,6 +140,30 @@ export const config = {
   buyerAuth: {
     mode: (process.env.BUYER_AUTH_MODE || "soft").trim().toLowerCase(),
   },
+  /**
+   * Seller photo studio (rembg / Photoroom cleanup + optional ffmpeg clip).
+   * Never required for bot boot — unset/off = original photos only.
+   */
+  studio: {
+    /** auto | rembg | photoroom | off */
+    provider: (process.env.STUDIO_PROVIDER || "auto").trim().toLowerCase(),
+    rembgUrl: (process.env.REMBG_URL || "").replace(/\/$/, ""),
+    photoroomApiKey: process.env.PHOTOROOM_API_KEY || "",
+    /** If Photoroom fails, try rembg when REMBG_URL is set (Phase 6). */
+    fallbackRembg: process.env.STUDIO_FALLBACK_REMBG === "true",
+    clipEnabled: process.env.STUDIO_CLIP_ENABLED === "true",
+    clipSeconds: Number(process.env.STUDIO_CLIP_SECONDS) || 5,
+    clipSize: process.env.STUDIO_CLIP_SIZE || "1080x1080",
+    ffmpegPath: process.env.FFMPEG_PATH || "ffmpeg",
+    concurrency: Number(process.env.STUDIO_CONCURRENCY) || 1,
+    maxBytes: Number(process.env.STUDIO_MAX_BYTES) || 12 * 1024 * 1024,
+    jobWaitMs: Number(process.env.STUDIO_JOB_WAIT_MS) || 55_000,
+    jobTtlMs: Number(process.env.STUDIO_JOB_TTL_MS) || 15 * 60_000,
+    maxJobs: Number(process.env.STUDIO_MAX_JOBS) || 40,
+    providerTimeoutMs: Number(process.env.STUDIO_PROVIDER_TIMEOUT_MS) || 55_000,
+    clipTimeoutMs: Number(process.env.STUDIO_CLIP_TIMEOUT_MS) || 45_000,
+    healthTimeoutMs: Number(process.env.STUDIO_HEALTH_TIMEOUT_MS) || 2500,
+  },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

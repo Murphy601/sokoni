@@ -22,7 +22,12 @@ import {
   applyListingFieldsToProduct,
   VALID_CONDITIONS,
 } from "./listing-generator.js";
-import { isStudioConfigured, processListingWithStudio } from "./listing-studio.js";
+import {
+  isStudioConfigured,
+  processListingWithStudio,
+  getStudioMeta,
+  pingRembgHealth,
+} from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, summarizeModeration } from "./listing-moderation.js";
@@ -677,8 +682,19 @@ export async function getSellerListingMeta() {
     dbEnabled: dbProductsAvailable(),
     instantPublish: true,
     studioEnabled: isStudioConfigured(),
+    ...getStudioMeta(),
     note: "Set up your shop (phone + M-Pesa), then list. Listings go live instantly; moderation runs after publish.",
   };
+}
+
+/** Refresh rembg health cache (non-blocking for callers that await). */
+export async function refreshStudioHealth() {
+  try {
+    await pingRembgHealth();
+  } catch {
+    /* ignore */
+  }
+  return getStudioMeta();
 }
 
 export { listFlaggedListings, takedownListing, restoreListing, VALID_CONDITIONS, computeFeeBreakdown };
