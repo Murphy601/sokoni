@@ -2805,7 +2805,7 @@ function renderSellerOrders(orders) {
 
   const active = hubOrdersToShip(hubCache.orders);
   if (!active.length) {
-    wrap.innerHTML = `<p class="text-sm text-zinc-500">No active orders — when someone buys, it shows here with your drop-off label.</p>`;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">No active orders — when someone buys, it shows here so you can arrange dispatch.</p>`;
     return;
   }
 
