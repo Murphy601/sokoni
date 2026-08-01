@@ -72,15 +72,21 @@ export async function pingRembgHealth() {
   }
   const now = Date.now();
   if (now - rembgHealthCache.at < 30_000) return rembgHealthCache.ok;
-  try {
-    const res = await fetch(`${base}/health`, {
-      signal: AbortSignal.timeout(Number(studioCfg().healthTimeoutMs) || 2500),
-    });
-    rembgHealthCache = { at: now, ok: res.ok };
-  } catch {
-    rembgHealthCache = { at: now, ok: false };
+  const timeout = Number(studioCfg().healthTimeoutMs) || 2500;
+  // Our media-worker exposes /health; prebuilt danielgatis/rembg exposes /docs (and /api).
+  for (const path of ["/health", "/docs", "/api"]) {
+    try {
+      const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(timeout) });
+      if (res.ok || res.status === 405) {
+        rembgHealthCache = { at: now, ok: true };
+        return true;
+      }
+    } catch {
+      /* try next */
+    }
   }
-  return rembgHealthCache.ok;
+  rembgHealthCache = { at: now, ok: false };
+  return false;
 }
 
 async function removeViaPhotoroom(buffer, mimeType) {
