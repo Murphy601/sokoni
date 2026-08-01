@@ -24,22 +24,27 @@
 
 ## Target top-level order (browse)
 
-1. Women  
-2. Men  
-3. Kids  
-4. Health & Beauty *(new)*  
+1. Women *(expanded: skirts, jumpsuits, activewear, sleepwear, sunglasses)*  
+2. Men *(expanded: trousers, shorts, jackets, bags)*  
+3. Kids *(expanded: school-wear, accessories; shoes image is kids-scoped)*  
+4. Health & Beauty *(+ nail-care, bath-body)*  
 5. Brands  
-6. Sports *(expanded subs)*  
-7. Phones & Accessories *(new top-level alias → electronics/phones)*  
-8. TV & Audio *(new → electronics/tvs-audio)*  
-9. Computers & Accessories *(new → electronics/computing)*  
-10. Appliances *(new → electronics/appliances)*  
-11. Electronics *(keep — all existing subs incl. Gaming)*  
-12. Home & Living *(keep kitchen/bedding/decor; supermarket sub stays as alias)*  
-13. Supermarket *(new top-level)*  
-14. Automotive *(new)*  
-15. Trending in Kenya  
-16. Sale & Hot Deals  
+6. Sports *(+ basketball, swimming, running)*  
+7. Phones & Accessories *(nav alias → electronics/phones)*  
+8. TV & Audio *(nav → electronics/tvs-audio)*  
+9. Computers & Accessories *(nav → electronics/computing)*  
+10. Appliances *(nav → electronics/appliances)*  
+11. Electronics *(+ cameras, smart-home)*  
+12. Home & Living *(+ furniture, lighting, storage)*  
+13. Supermarket  
+14. Automotive  
+15. Pets *(additive)*  
+16. Office & Books *(additive)*  
+17. Garden & Outdoor *(additive)*  
+18. Trending in Kenya  
+19. Sale & Hot Deals  
+
+**Images:** `scripts/browse-category-images.mjs` → rebuild with `node scripts/build-browse-menu.mjs` (runs URL verify). Kids shoes must use path key `kids/shoes`, never women's heels.
 
 ## New / expanded subcategory IDs
 

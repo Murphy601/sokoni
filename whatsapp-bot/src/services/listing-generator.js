@@ -274,23 +274,45 @@ export async function resolveBrowsePath({ category, subcategory, browseCategory,
     if (isValidBrowsePath(tax, browse, sub)) return { browse, sub };
     return { browse: "men", sub: "t-shirts" };
   }
-  if (/kid|baby|child/.test(hay)) {
-    const sub = mapped.sub === "shoes" ? "shoes" : "clothing";
-    return { browse: "kids", sub };
+  if (/kid|baby|child|toddler|infant/.test(hay)) {
+    if (/\bshoe|sneaker|boot|sandal|trainer\b/.test(hay)) return { browse: "kids", sub: "shoes" };
+    if (/\btoy|lego|doll|puzzle\b/.test(hay)) return { browse: "kids", sub: "toys" };
+    if (/\bbaby|stroller|pram|cot\b/.test(hay)) return { browse: "kids", sub: "baby-gear" };
+    if (/\bschool|uniform\b/.test(hay)) return { browse: "kids", sub: "school-wear" };
+    return { browse: "kids", sub: "clothing" };
   }
+  if (/\b(tv|television|smart\s*tv)\b/.test(hay)) return { browse: "electronics", sub: "tvs-audio" };
+  if (/\b(console|playstation|xbox|nintendo|controller|gaming)\b/.test(hay)) {
+    return { browse: "electronics", sub: "gaming" };
+  }
+  if (/\b(power\s*bank|phone\s*case|charger|earbud|airpod|phone\s*accessor)\b/.test(hay)) {
+    return { browse: "electronics", sub: "phones" };
+  }
+  if (/\b(laptop|notebook\s*pc|macbook)\b/.test(hay)) return { browse: "electronics", sub: "computing" };
+  if (/\b(camera|dslr|mirrorless)\b/.test(hay)) return { browse: "electronics", sub: "cameras" };
+  if (/\b(fridge|freezer|fan|air\s*con|ac\s*unit|washing\s*machine|blender)\b/.test(hay)) {
+    return { browse: "electronics", sub: "appliances" };
+  }
+  if (/\b(dog|cat|pet\s*food|leash|collar)\b/.test(hay)) return { browse: "pets", sub: "pet-food" };
+  if (/\b(plant|seedling|garden\s*tool|hose)\b/.test(hay)) return { browse: "garden", sub: "plants" };
+  if (/\b(notebook|pen|stationery|textbook)\b/.test(hay)) return { browse: "office", sub: "stationery" };
   if (isValidBrowsePath(tax, mapped.browse, mapped.sub)) return mapped;
   return { browse: "trending", sub: "streetwear" };
 }
 
 async function buildListingPrompt(caption = "") {
   const tax = await getTaxonomy();
-  const browseLines = tax.BROWSE_TAXONOMY.map(
-    (c) => `- ${c.id}: ${c.subcategories.map((s) => s.id).join(", ")}`
-  ).join("\n");
+  const sellerTax =
+    typeof tax.sellerBrowseTaxonomy === "function"
+      ? tax.sellerBrowseTaxonomy()
+      : tax.BROWSE_TAXONOMY.filter((c) => !c.navOnly);
+  const browseLines = sellerTax
+    .map((c) => `- ${c.id}: ${(c.subcategories || []).map((s) => s.id).join(", ")}`)
+    .join("\n");
   const capHints = caption ? parseCaptionHints(caption) : null;
 
   return (
-    `You are a thrift marketplace listing assistant for Sokoni (Kenya).\n` +
+    `You are a Sokoni Mall listing assistant (Kenya) — fashion thrift AND local brand-new goods.\n` +
     `Look ONLY at what is visible in the product photo. Do NOT invent brands, sizes, colours, or details you cannot see.\n` +
     `If something is unclear, use null — never guess.\n\n` +
     `Reply with ONLY a JSON object (no markdown fences).\n\n` +
@@ -301,6 +323,15 @@ async function buildListingPrompt(caption = "") {
       ? `   Caption already has the price: use ${capHints.cost} exactly. Ignore any sticker that differs.\n`
       : `   Use a readable price sticker/tag if present; otherwise 0.\n`) +
     `3. browseCategory + browseSubCategory — MUST be ids from BROWSE PATHS below (not free text, not "fashion").\n` +
+    `   Matching tips:\n` +
+    `   - Kids footwear → kids / shoes (never women/shoes heels).\n` +
+    `   - Phone chargers, cases, cables → electronics / phones (caption may say accessories).\n` +
+    `   - Power banks → electronics / phones.\n` +
+    `   - TVs → electronics / tvs-audio; consoles/controllers → electronics / gaming.\n` +
+    `   - Fans, AC, fridge cooling → electronics / appliances.\n` +
+    `   - Cameras → electronics / cameras; plugs/smart bulbs → electronics / smart-home.\n` +
+    `   - Pet food/collars → pets; notebooks/pens → office; plants/tools → garden.\n` +
+    `   - Skirts/jumpsuits/sleepwear → women; trousers/shorts/jackets → men.\n` +
     `4. category — one of: ${VALID_CATEGORIES.join(", ")}\n` +
     `5. subcategory — short legacy slug (e.g. shoes, mens-fashion, womens-fashion)\n` +
     `6. condition — exactly one of: ${VALID_CONDITIONS.join(", ")}\n` +
