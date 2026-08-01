@@ -1,7 +1,7 @@
 /**
  * Embedded homepage category rail (Kilimall-style).
  * Desktop: permanent sidebar beside the hero; hover opens subcategory flyout over the banner.
- * Thumbnails prefer a live product photo for that browse path; fall back to static icon.
+ * Thumbnails use public web URLs from browse-menu.json — never catalog product photos.
  * Mobile: rail hidden — use catalog-nav drawer (hamburger).
  */
 (function () {
@@ -11,10 +11,6 @@
   let flyoutOpen = false;
   let onNavigate = null;
   let leaveTimer = null;
-  /** @type {Map<string, string>} key = browse::sub → product imageUrl */
-  let productThumbs = new Map();
-  /** @type {Map<string, string>} key = browse → first product image in category */
-  let categoryThumbs = new Map();
 
   function escapeHtml(str) {
     return String(str)
@@ -36,51 +32,17 @@
     return categories().find((c) => c.id === activeCategoryId) || null;
   }
 
-  function productImage(product) {
-    if (!product) return null;
-    const raw = product.imageUrl || (Array.isArray(product.images) ? product.images[0] : null);
-    return raw || null;
-  }
-
-  function thumbKey(browse, sub) {
-    return `${browse || ""}::${sub || ""}`;
-  }
-
-  /** Resolve nav cat/sub to the canonical product browse path (handles aliases). */
-  function canonicalPath(categoryId, subcategoryId) {
-    return (
-      window.SokoniBrowse?.resolveNavFilter?.(categoryId, subcategoryId) || {
-        browse: categoryId,
-        sub: subcategoryId,
-      }
-    );
-  }
-
-  function resolveThumb(categoryId, subcategoryId) {
-    const nav = canonicalPath(categoryId, subcategoryId);
-    if (subcategoryId) {
-      const exact = productThumbs.get(thumbKey(nav.browse, nav.sub));
-      if (exact) return exact;
-      // Alias subs that collapse to one canonical sub still match above.
-      const byNavSub = productThumbs.get(thumbKey(nav.browse, subcategoryId));
-      if (byNavSub) return byNavSub;
-    }
-    if (nav.browse) {
-      const catOnly = categoryThumbs.get(nav.browse);
-      if (catOnly) return catOnly;
-    }
-    return null;
-  }
-
-  function iconHtml(item, sizeClass, categoryId, subcategoryId) {
-    const live = resolveThumb(categoryId, subcategoryId);
-    const src = live || item?.image;
+  function iconHtml(item, sizeClass) {
+    const src = item?.image;
     if (src) {
-      return `<span class="sokoni-cat-icon ${sizeClass}${live ? " sokoni-cat-icon--photo" : ""}" aria-hidden="true">
-        <img src="${escapeHtml(src)}" alt="" width="56" height="56" loading="lazy" />
+      return `<span class="sokoni-cat-icon ${sizeClass}" aria-hidden="true">
+        <img src="${escapeHtml(src)}" alt="" width="56" height="56" loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.onerror=null;this.classList.add('is-broken');this.src='https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=200&h=200&q=80';" />
       </span>`;
     }
-    return `<span class="sokoni-cat-emoji ${sizeClass}" aria-hidden="true">${escapeHtml(item?.emoji || "🛍️")}</span>`;
+    // Last resort only — every cat/sub should have a web image in browse-menu.json
+    return `<span class="sokoni-cat-icon ${sizeClass} sokoni-cat-icon--empty" aria-hidden="true"></span>`;
   }
 
   function railEl() {
@@ -123,7 +85,7 @@
         return `
         <button type="button" class="sokoni-category-rail__item ${active ? "is-active" : ""}"
           data-rail-cat="${escapeHtml(cat.id)}" aria-expanded="${active ? "true" : "false"}">
-          ${iconHtml(cat, "sokoni-cat-icon--sm", cat.id, null)}
+          ${iconHtml(cat, "sokoni-cat-icon--sm")}
           <span class="sokoni-category-rail__label">${escapeHtml(cat.label)}</span>
           <span class="sokoni-category-rail__chevron" aria-hidden="true">›</span>
         </button>`;
@@ -176,12 +138,7 @@
                 return `
               <button type="button" class="sokoni-category-flyout__sub"
                 data-flyout-cat="${escapeHtml(active.id)}" data-flyout-sub="${escapeHtml(sid)}">
-                ${iconHtml(
-                  { image: sub.image, emoji: sub.emoji || active.emoji },
-                  "sokoni-cat-icon--lg",
-                  active.id,
-                  sid
-                )}
+                ${iconHtml(sub, "sokoni-cat-icon--lg")}
                 <span class="sokoni-category-flyout__sub-label">${escapeHtml(label)}</span>
               </button>`;
               })
@@ -256,35 +213,9 @@
     leaveTimer = setTimeout(() => closeFlyout(), 160);
   }
 
-  /**
-   * Prefer real listing photos so each category/sub shows a matching product.
-   * Call after the storefront catalog loads.
-   */
-  function setProducts(products) {
-    productThumbs = new Map();
-    categoryThumbs = new Map();
-    const list = Array.isArray(products) ? products : [];
-
-    for (const p of list) {
-      const img = productImage(p);
-      if (!img) continue;
-      const path = window.SokoniBrowse?.resolveBrowsePath?.(p) || {
-        browse: p.browseCategory || p.category,
-        sub: p.browseSubCategory || p.subcategory,
-      };
-      if (!path.browse) continue;
-      const key = thumbKey(path.browse, path.sub);
-      if (!productThumbs.has(key)) productThumbs.set(key, img);
-      if (!categoryThumbs.has(path.browse)) categoryThumbs.set(path.browse, img);
-    }
-
-    renderList();
-    if (flyoutOpen) renderFlyout();
-  }
-
   let bound = false;
 
-  async function init({ navigate, products } = {}) {
+  async function init({ navigate } = {}) {
     if (navigate) onNavigate = navigate;
     await window.SokoniBrowse?.loadMenu?.();
     menuData = window.SokoniBrowse?.getMenu?.() || null;
@@ -299,8 +230,7 @@
       }
     }
 
-    if (products) setProducts(products);
-    else renderList();
+    renderList();
 
     if (!bound) {
       bound = true;
@@ -327,7 +257,6 @@
 
   window.SokoniMegaMenu = {
     init,
-    setProducts,
     open: (id) => openFlyout(id || categories()[0]?.id),
     close: closeFlyout,
     toggle: () => {

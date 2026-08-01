@@ -816,48 +816,50 @@ html.dark .browse-chip.is-active {
   overflow: hidden;
 }
 
-.sokoni-cat-icon,
-.sokoni-cat-emoji {
+/* Light tile + object-contain — Kilimall-style product thumb in dark menu */
+.sokoni-cat-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 0.45rem;
-  background: #18181b;
-  border: 1px solid #27272a;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.sokoni-cat-icon--sm,
-.sokoni-cat-emoji.sokoni-cat-icon--sm {
-  width: 1.75rem;
-  height: 1.75rem;
-  font-size: 0.95rem;
+.sokoni-cat-icon--sm {
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0.12rem;
 }
 
-.sokoni-cat-icon--lg,
-.sokoni-cat-emoji.sokoni-cat-icon--lg {
-  width: 3.25rem;
-  height: 3.25rem;
-  font-size: 1.45rem;
-  border-radius: 0.7rem;
+.sokoni-cat-icon--lg {
+  width: 3.4rem;
+  height: 3.4rem;
+  padding: 0.3rem;
+  border-radius: 0.75rem;
   margin-bottom: 0.05rem;
+}
+
+.sokoni-cat-icon--empty {
+  background: #27272a;
 }
 
 .sokoni-cat-icon img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: 0.3rem;
   transition: transform 0.2s ease;
 }
 
-/* Live product photos should fill the tile like Kilimall */
-.sokoni-cat-icon--photo img {
-  object-fit: cover;
+.sokoni-category-flyout__sub .sokoni-cat-icon img {
+  object-fit: contain;
 }
 
 .sokoni-category-flyout__sub:hover .sokoni-cat-icon img {
-  transform: scale(1.08);
+  transform: scale(1.06);
 }
 
 @media (prefers-reduced-motion: reduce) {
