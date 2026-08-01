@@ -59,27 +59,35 @@ export const CURATED_THEMES = [
 /** Optional mega-menu column groups (presentation only — flat subs stay canonical). */
 const MEGA_GROUPS = {
   women: [
-    { title: "Clothing", ids: ["tops", "dresses", "jeans", "outerwear"] },
-    { title: "Accessories", ids: ["shoes", "bags", "jewelry", "beauty"] },
+    { title: "Clothing", ids: ["tops", "dresses", "skirts", "jumpsuits", "jeans", "outerwear", "activewear", "sleepwear"] },
+    { title: "Accessories", ids: ["shoes", "bags", "jewelry", "sunglasses", "beauty"] },
   ],
   men: [
-    { title: "Clothing", ids: ["t-shirts", "shirts", "hoodies", "jeans"] },
-    { title: "Accessories", ids: ["sneakers", "caps", "watches"] },
+    { title: "Clothing", ids: ["t-shirts", "shirts", "hoodies", "trousers", "shorts", "jeans", "jackets"] },
+    { title: "Accessories", ids: ["sneakers", "caps", "watches", "bags"] },
+  ],
+  kids: [
+    { title: "Wear", ids: ["clothing", "school-wear", "shoes"] },
+    { title: "Play & care", ids: ["toys", "baby-gear", "kids-accessories"] },
   ],
   "health-beauty": [
-    { title: "Face & Skin", ids: ["skincare", "makeup"] },
+    { title: "Face & Skin", ids: ["skincare", "makeup", "nail-care"] },
     { title: "Hair & Scent", ids: ["haircare", "fragrances"] },
-    { title: "Care", ids: ["personal-care", "mens-grooming"] },
+    { title: "Care", ids: ["personal-care", "bath-body", "mens-grooming"] },
   ],
   sports: [
     { title: "Wear", ids: ["activewear", "trainers"] },
-    { title: "Play", ids: ["equipment", "football", "cycling"] },
-    { title: "Train outdoors", ids: ["gym-fitness", "outdoor"] },
+    { title: "Play", ids: ["equipment", "football", "basketball", "cycling", "swimming"] },
+    { title: "Train outdoors", ids: ["gym-fitness", "running", "outdoor"] },
   ],
   electronics: [
-    { title: "Mobile & compute", ids: ["phones", "computing"] },
-    { title: "Home entertainment", ids: ["tvs-audio", "gaming"] },
+    { title: "Mobile & compute", ids: ["phones", "computing", "cameras"] },
+    { title: "Home entertainment", ids: ["tvs-audio", "gaming", "smart-home"] },
     { title: "Home power", ids: ["appliances"] },
+  ],
+  home: [
+    { title: "Rooms", ids: ["kitchen", "bedding", "decor", "furniture"] },
+    { title: "Utilities", ids: ["lighting", "storage"] },
   ],
   supermarket: [
     { title: "Food & drink", ids: ["food-staples", "beverages"] },
@@ -89,13 +97,26 @@ const MEGA_GROUPS = {
     { title: "Vehicle", ids: ["car-accessories", "tyres-wheels", "motorbike"] },
     { title: "Care & fluids", ids: ["oils-fluids", "tools-care"] },
   ],
+  pets: [
+    { title: "Pets", ids: ["pet-food", "pet-accessories", "pet-care"] },
+  ],
+  office: [
+    { title: "Work", ids: ["stationery", "books", "desk-tech"] },
+  ],
+  garden: [
+    { title: "Outdoors", ids: ["plants", "garden-tools", "outdoor-living"] },
+  ],
 };
 
 function withBrowseImages(taxonomy) {
   return taxonomy.map((cat) => {
     const subcategories = (cat.subcategories || []).map((sub) => ({
       ...sub,
-      image: sub.image || subcategoryImageUrl(sub.id) || categoryImageUrl(cat.id),
+      image:
+        sub.image ||
+        subcategoryImageUrl(sub.id, cat.id) ||
+        subcategoryImageUrl(sub.id) ||
+        categoryImageUrl(cat.id),
     }));
     const byId = Object.fromEntries(subcategories.map((s) => [s.id, s]));
     const layout = MEGA_GROUPS[cat.id];
@@ -157,11 +178,16 @@ export const BROWSE_TAXONOMY = [
     subcategories: [
       { id: "tops", label: "Tops" },
       { id: "dresses", label: "Dresses" },
+      { id: "skirts", label: "Skirts" },
+      { id: "jumpsuits", label: "Jumpsuits & Sets" },
       { id: "jeans", label: "Jeans & Denim" },
       { id: "outerwear", label: "Outerwear" },
+      { id: "activewear", label: "Activewear" },
+      { id: "sleepwear", label: "Sleepwear" },
       { id: "shoes", label: "Shoes" },
       { id: "bags", label: "Bags & Purses" },
       { id: "jewelry", label: "Jewelry" },
+      { id: "sunglasses", label: "Sunglasses" },
       // Alias after Phase 2 remap — products live under health-beauty/*
       {
         id: "beauty",
@@ -178,10 +204,14 @@ export const BROWSE_TAXONOMY = [
       { id: "t-shirts", label: "T-Shirts" },
       { id: "shirts", label: "Shirts" },
       { id: "hoodies", label: "Hoodies" },
+      { id: "trousers", label: "Trousers" },
+      { id: "shorts", label: "Shorts" },
       { id: "jeans", label: "Jeans" },
+      { id: "jackets", label: "Jackets" },
       { id: "sneakers", label: "Sneakers" },
       { id: "caps", label: "Caps" },
       { id: "watches", label: "Watches" },
+      { id: "bags", label: "Bags & Backpacks" },
     ],
   },
   {
@@ -190,9 +220,11 @@ export const BROWSE_TAXONOMY = [
     emoji: "👶",
     subcategories: [
       { id: "clothing", label: "Clothing" },
+      { id: "school-wear", label: "School Wear" },
       { id: "shoes", label: "Shoes" },
       { id: "toys", label: "Toys" },
       { id: "baby-gear", label: "Baby Gear" },
+      { id: "kids-accessories", label: "Accessories" },
     ],
   },
   {
@@ -202,9 +234,11 @@ export const BROWSE_TAXONOMY = [
     subcategories: [
       { id: "skincare", label: "Skincare" },
       { id: "makeup", label: "Makeup" },
+      { id: "nail-care", label: "Nail Care" },
       { id: "haircare", label: "Haircare" },
       { id: "fragrances", label: "Fragrances" },
       { id: "personal-care", label: "Personal Care" },
+      { id: "bath-body", label: "Bath & Body" },
       { id: "mens-grooming", label: "Men's Grooming" },
     ],
   },
@@ -229,7 +263,10 @@ export const BROWSE_TAXONOMY = [
       { id: "gym-fitness", label: "Gym & Fitness" },
       { id: "outdoor", label: "Outdoor" },
       { id: "football", label: "Football" },
+      { id: "basketball", label: "Basketball" },
       { id: "cycling", label: "Cycling" },
+      { id: "swimming", label: "Swimming" },
+      { id: "running", label: "Running" },
     ],
   },
   {
@@ -273,6 +310,8 @@ export const BROWSE_TAXONOMY = [
       { id: "tvs-audio", label: "TVs & Audio" },
       { id: "computing", label: "Computing" },
       { id: "gaming", label: "Gaming" },
+      { id: "cameras", label: "Cameras" },
+      { id: "smart-home", label: "Smart Home" },
       { id: "appliances", label: "Appliances" },
     ],
   },
@@ -284,6 +323,9 @@ export const BROWSE_TAXONOMY = [
       { id: "kitchen", label: "Kitchen" },
       { id: "bedding", label: "Bedding" },
       { id: "decor", label: "Decor" },
+      { id: "furniture", label: "Furniture" },
+      { id: "lighting", label: "Lighting" },
+      { id: "storage", label: "Storage" },
       // Alias after Phase 2 remap — products live under supermarket/*
       {
         id: "supermarket",
@@ -313,6 +355,36 @@ export const BROWSE_TAXONOMY = [
       { id: "tyres-wheels", label: "Tyres & Wheels" },
       { id: "motorbike", label: "Motorbike" },
       { id: "tools-care", label: "Tools & Care" },
+    ],
+  },
+  {
+    id: "pets",
+    label: "Pets",
+    emoji: "🐾",
+    subcategories: [
+      { id: "pet-food", label: "Pet Food" },
+      { id: "pet-accessories", label: "Accessories" },
+      { id: "pet-care", label: "Pet Care" },
+    ],
+  },
+  {
+    id: "office",
+    label: "Office & Books",
+    emoji: "📚",
+    subcategories: [
+      { id: "stationery", label: "Stationery" },
+      { id: "books", label: "Books" },
+      { id: "desk-tech", label: "Desk Tech" },
+    ],
+  },
+  {
+    id: "garden",
+    label: "Garden & Outdoor",
+    emoji: "🌿",
+    subcategories: [
+      { id: "plants", label: "Plants" },
+      { id: "garden-tools", label: "Garden Tools" },
+      { id: "outdoor-living", label: "Outdoor Living" },
     ],
   },
   {
@@ -383,6 +455,22 @@ export const LEGACY_BROWSE_MAP = {
   "automotive/tyres-wheels": { browse: "automotive", sub: "tyres-wheels" },
   "automotive/motorbike": { browse: "automotive", sub: "motorbike" },
   "automotive/tools-care": { browse: "automotive", sub: "tools-care" },
+  pets: { browse: "pets", sub: "pet-food" },
+  "pets/pet-food": { browse: "pets", sub: "pet-food" },
+  "pets/pet-accessories": { browse: "pets", sub: "pet-accessories" },
+  "pets/pet-care": { browse: "pets", sub: "pet-care" },
+  office: { browse: "office", sub: "stationery" },
+  "office/stationery": { browse: "office", sub: "stationery" },
+  "office/books": { browse: "office", sub: "books" },
+  "office/desk-tech": { browse: "office", sub: "desk-tech" },
+  garden: { browse: "garden", sub: "plants" },
+  "garden/plants": { browse: "garden", sub: "plants" },
+  "garden/garden-tools": { browse: "garden", sub: "garden-tools" },
+  "garden/outdoor-living": { browse: "garden", sub: "outdoor-living" },
+  "electronics/cameras": { browse: "electronics", sub: "cameras" },
+  "electronics/smart-home": { browse: "electronics", sub: "smart-home" },
+  "home-office/furniture": { browse: "home", sub: "furniture" },
+  "home-office/lighting": { browse: "home", sub: "lighting" },
 };
 
 export function mapLegacyToBrowse(category, subcategory) {
@@ -446,7 +534,7 @@ export function sellerBrowseTaxonomy(taxonomy = BROWSE_TAXONOMY) {
 
 export function buildBrowseMenuPayload() {
   return {
-    version: 4,
+    version: 5,
     itemTypes: ITEM_TYPE_FILTERS,
     priceTiers: PRICE_TIERS,
     decades: DECADES,

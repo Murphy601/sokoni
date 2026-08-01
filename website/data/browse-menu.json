@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "itemTypes": [
     {
       "id": "all",
@@ -175,12 +175,22 @@
         {
           "id": "tops",
           "label": "Tops",
-          "image": "https://images.unsplash.com/photo-1434389677669-e08fc14fa1ad?auto=format&fit=crop&w=600&h=600&q=80&sig=21"
+          "image": "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&h=600&q=80&sig=21"
         },
         {
           "id": "dresses",
           "label": "Dresses",
           "image": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=600&h=600&q=80&sig=22"
+        },
+        {
+          "id": "skirts",
+          "label": "Skirts",
+          "image": "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=600&h=600&q=80&sig=25"
+        },
+        {
+          "id": "jumpsuits",
+          "label": "Jumpsuits & Sets",
+          "image": "https://images.unsplash.com/photo-1617019114583-affb34d1b3cd?auto=format&fit=crop&w=600&h=600&q=80&sig=26"
         },
         {
           "id": "jeans",
@@ -193,19 +203,34 @@
           "image": "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&h=600&q=80&sig=24"
         },
         {
+          "id": "activewear",
+          "label": "Activewear",
+          "image": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&h=600&q=80&sig=27"
+        },
+        {
+          "id": "sleepwear",
+          "label": "Sleepwear",
+          "image": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&h=600&q=80&sig=28"
+        },
+        {
           "id": "shoes",
           "label": "Shoes",
-          "image": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=600&h=600&q=80&sig=25"
+          "image": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=600&h=600&q=80&sig=29"
         },
         {
           "id": "bags",
           "label": "Bags & Purses",
-          "image": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&h=600&q=80&sig=26"
+          "image": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&h=600&q=80&sig=30"
         },
         {
           "id": "jewelry",
           "label": "Jewelry",
-          "image": "https://images.unsplash.com/photo-1515562144-7f65c6291f66?auto=format&fit=crop&w=600&h=600&q=80&sig=27"
+          "image": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=600&h=600&q=80&sig=31"
+        },
+        {
+          "id": "sunglasses",
+          "label": "Sunglasses",
+          "image": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=600&h=600&q=80&sig=32"
         },
         {
           "id": "beauty",
@@ -214,7 +239,7 @@
             "browse": "health-beauty",
             "sub": null
           },
-          "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&h=600&q=80&sig=28"
+          "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&h=600&q=80&sig=33"
         }
       ],
       "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&h=600&q=80&sig=1",
@@ -225,12 +250,22 @@
             {
               "id": "tops",
               "label": "Tops",
-              "image": "https://images.unsplash.com/photo-1434389677669-e08fc14fa1ad?auto=format&fit=crop&w=600&h=600&q=80&sig=21"
+              "image": "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&h=600&q=80&sig=21"
             },
             {
               "id": "dresses",
               "label": "Dresses",
               "image": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=600&h=600&q=80&sig=22"
+            },
+            {
+              "id": "skirts",
+              "label": "Skirts",
+              "image": "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=600&h=600&q=80&sig=25"
+            },
+            {
+              "id": "jumpsuits",
+              "label": "Jumpsuits & Sets",
+              "image": "https://images.unsplash.com/photo-1617019114583-affb34d1b3cd?auto=format&fit=crop&w=600&h=600&q=80&sig=26"
             },
             {
               "id": "jeans",
@@ -241,6 +276,16 @@
               "id": "outerwear",
               "label": "Outerwear",
               "image": "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&h=600&q=80&sig=24"
+            },
+            {
+              "id": "activewear",
+              "label": "Activewear",
+              "image": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&h=600&q=80&sig=27"
+            },
+            {
+              "id": "sleepwear",
+              "label": "Sleepwear",
+              "image": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&h=600&q=80&sig=28"
             }
           ]
         },
@@ -250,17 +295,22 @@
             {
               "id": "shoes",
               "label": "Shoes",
-              "image": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=600&h=600&q=80&sig=25"
+              "image": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=600&h=600&q=80&sig=29"
             },
             {
               "id": "bags",
               "label": "Bags & Purses",
-              "image": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&h=600&q=80&sig=26"
+              "image": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&h=600&q=80&sig=30"
             },
             {
               "id": "jewelry",
               "label": "Jewelry",
-              "image": "https://images.unsplash.com/photo-1515562144-7f65c6291f66?auto=format&fit=crop&w=600&h=600&q=80&sig=27"
+              "image": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=600&h=600&q=80&sig=31"
+            },
+            {
+              "id": "sunglasses",
+              "label": "Sunglasses",
+              "image": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=600&h=600&q=80&sig=32"
             },
             {
               "id": "beauty",
@@ -269,7 +319,7 @@
                 "browse": "health-beauty",
                 "sub": null
               },
-              "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&h=600&q=80&sig=28"
+              "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&h=600&q=80&sig=33"
             }
           ]
         }
@@ -283,17 +333,27 @@
         {
           "id": "t-shirts",
           "label": "T-Shirts",
-          "image": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=600&h=600&q=80&sig=31"
+          "image": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=600&h=600&q=80&sig=41"
         },
         {
           "id": "shirts",
           "label": "Shirts",
-          "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=600&h=600&q=80&sig=32"
+          "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=600&h=600&q=80&sig=42"
         },
         {
           "id": "hoodies",
           "label": "Hoodies",
-          "image": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=600&h=600&q=80&sig=33"
+          "image": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=600&h=600&q=80&sig=43"
+        },
+        {
+          "id": "trousers",
+          "label": "Trousers",
+          "image": "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=600&h=600&q=80&sig=44"
+        },
+        {
+          "id": "shorts",
+          "label": "Shorts",
+          "image": "https://images.unsplash.com/photo-1591195853828-11db59a44f6b?auto=format&fit=crop&w=600&h=600&q=80&sig=45"
         },
         {
           "id": "jeans",
@@ -301,19 +361,29 @@
           "image": "https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=600&h=600&q=80&sig=23"
         },
         {
+          "id": "jackets",
+          "label": "Jackets",
+          "image": "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&h=600&q=80&sig=46"
+        },
+        {
           "id": "sneakers",
           "label": "Sneakers",
-          "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&h=600&q=80&sig=34"
+          "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&h=600&q=80&sig=47"
         },
         {
           "id": "caps",
           "label": "Caps",
-          "image": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=600&h=600&q=80&sig=35"
+          "image": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=600&h=600&q=80&sig=48"
         },
         {
           "id": "watches",
           "label": "Watches",
-          "image": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&h=600&q=80&sig=36"
+          "image": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&h=600&q=80&sig=49"
+        },
+        {
+          "id": "bags",
+          "label": "Bags & Backpacks",
+          "image": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&h=600&q=80&sig=50"
         }
       ],
       "image": "https://images.unsplash.com/photo-1490578474895-699cd4e2cf59?auto=format&fit=crop&w=600&h=600&q=80&sig=2",
@@ -324,22 +394,37 @@
             {
               "id": "t-shirts",
               "label": "T-Shirts",
-              "image": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=600&h=600&q=80&sig=31"
+              "image": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=600&h=600&q=80&sig=41"
             },
             {
               "id": "shirts",
               "label": "Shirts",
-              "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=600&h=600&q=80&sig=32"
+              "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=600&h=600&q=80&sig=42"
             },
             {
               "id": "hoodies",
               "label": "Hoodies",
-              "image": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=600&h=600&q=80&sig=33"
+              "image": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=600&h=600&q=80&sig=43"
+            },
+            {
+              "id": "trousers",
+              "label": "Trousers",
+              "image": "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=600&h=600&q=80&sig=44"
+            },
+            {
+              "id": "shorts",
+              "label": "Shorts",
+              "image": "https://images.unsplash.com/photo-1591195853828-11db59a44f6b?auto=format&fit=crop&w=600&h=600&q=80&sig=45"
             },
             {
               "id": "jeans",
               "label": "Jeans",
               "image": "https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=600&h=600&q=80&sig=23"
+            },
+            {
+              "id": "jackets",
+              "label": "Jackets",
+              "image": "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&h=600&q=80&sig=46"
             }
           ]
         },
@@ -349,17 +434,22 @@
             {
               "id": "sneakers",
               "label": "Sneakers",
-              "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&h=600&q=80&sig=34"
+              "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&h=600&q=80&sig=47"
             },
             {
               "id": "caps",
               "label": "Caps",
-              "image": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=600&h=600&q=80&sig=35"
+              "image": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=600&h=600&q=80&sig=48"
             },
             {
               "id": "watches",
               "label": "Watches",
-              "image": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&h=600&q=80&sig=36"
+              "image": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&h=600&q=80&sig=49"
+            },
+            {
+              "id": "bags",
+              "label": "Bags & Backpacks",
+              "image": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&h=600&q=80&sig=50"
             }
           ]
         }
@@ -373,25 +463,77 @@
         {
           "id": "clothing",
           "label": "Clothing",
-          "image": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=600&h=600&q=80&sig=41"
+          "image": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=600&h=600&q=80&sig=61"
+        },
+        {
+          "id": "school-wear",
+          "label": "School Wear",
+          "image": "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=600&h=600&q=80&sig=63"
         },
         {
           "id": "shoes",
           "label": "Shoes",
-          "image": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=600&h=600&q=80&sig=25"
+          "image": "https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&w=600&h=600&q=80&sig=62"
         },
         {
           "id": "toys",
           "label": "Toys",
-          "image": "https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&w=600&h=600&q=80&sig=42"
+          "image": "https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&w=600&h=600&q=80&sig=64"
         },
         {
           "id": "baby-gear",
           "label": "Baby Gear",
-          "image": "https://images.unsplash.com/photo-1522771930-78848d9293e8?auto=format&fit=crop&w=600&h=600&q=80&sig=43"
+          "image": "https://images.unsplash.com/photo-1522771930-78848d9293e8?auto=format&fit=crop&w=600&h=600&q=80&sig=65"
+        },
+        {
+          "id": "kids-accessories",
+          "label": "Accessories",
+          "image": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=600&h=600&q=80&sig=66"
         }
       ],
-      "image": "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=600&h=600&q=80&sig=3"
+      "image": "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=600&h=600&q=80&sig=3",
+      "groups": [
+        {
+          "title": "Wear",
+          "subcategories": [
+            {
+              "id": "clothing",
+              "label": "Clothing",
+              "image": "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=600&h=600&q=80&sig=61"
+            },
+            {
+              "id": "school-wear",
+              "label": "School Wear",
+              "image": "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=600&h=600&q=80&sig=63"
+            },
+            {
+              "id": "shoes",
+              "label": "Shoes",
+              "image": "https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&w=600&h=600&q=80&sig=62"
+            }
+          ]
+        },
+        {
+          "title": "Play & care",
+          "subcategories": [
+            {
+              "id": "toys",
+              "label": "Toys",
+              "image": "https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&w=600&h=600&q=80&sig=64"
+            },
+            {
+              "id": "baby-gear",
+              "label": "Baby Gear",
+              "image": "https://images.unsplash.com/photo-1522771930-78848d9293e8?auto=format&fit=crop&w=600&h=600&q=80&sig=65"
+            },
+            {
+              "id": "kids-accessories",
+              "label": "Accessories",
+              "image": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=600&h=600&q=80&sig=66"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "health-beauty",
@@ -401,32 +543,42 @@
         {
           "id": "skincare",
           "label": "Skincare",
-          "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=600&h=600&q=80&sig=51"
+          "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=600&h=600&q=80&sig=71"
         },
         {
           "id": "makeup",
           "label": "Makeup",
-          "image": "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=600&h=600&q=80&sig=52"
+          "image": "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=600&h=600&q=80&sig=72"
+        },
+        {
+          "id": "nail-care",
+          "label": "Nail Care",
+          "image": "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=600&h=600&q=80&sig=77"
         },
         {
           "id": "haircare",
           "label": "Haircare",
-          "image": "https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=600&h=600&q=80&sig=53"
+          "image": "https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=600&h=600&q=80&sig=73"
         },
         {
           "id": "fragrances",
           "label": "Fragrances",
-          "image": "https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=600&h=600&q=80&sig=54"
+          "image": "https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=600&h=600&q=80&sig=74"
         },
         {
           "id": "personal-care",
           "label": "Personal Care",
-          "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&h=600&q=80&sig=55"
+          "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&h=600&q=80&sig=75"
+        },
+        {
+          "id": "bath-body",
+          "label": "Bath & Body",
+          "image": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&h=600&q=80&sig=78"
         },
         {
           "id": "mens-grooming",
           "label": "Men's Grooming",
-          "image": "https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=600&h=600&q=80&sig=56"
+          "image": "https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=600&h=600&q=80&sig=76"
         }
       ],
       "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&h=600&q=80&sig=4",
@@ -437,12 +589,17 @@
             {
               "id": "skincare",
               "label": "Skincare",
-              "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=600&h=600&q=80&sig=51"
+              "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=600&h=600&q=80&sig=71"
             },
             {
               "id": "makeup",
               "label": "Makeup",
-              "image": "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=600&h=600&q=80&sig=52"
+              "image": "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=600&h=600&q=80&sig=72"
+            },
+            {
+              "id": "nail-care",
+              "label": "Nail Care",
+              "image": "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=600&h=600&q=80&sig=77"
             }
           ]
         },
@@ -452,12 +609,12 @@
             {
               "id": "haircare",
               "label": "Haircare",
-              "image": "https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=600&h=600&q=80&sig=53"
+              "image": "https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=600&h=600&q=80&sig=73"
             },
             {
               "id": "fragrances",
               "label": "Fragrances",
-              "image": "https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=600&h=600&q=80&sig=54"
+              "image": "https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=600&h=600&q=80&sig=74"
             }
           ]
         },
@@ -467,12 +624,17 @@
             {
               "id": "personal-care",
               "label": "Personal Care",
-              "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&h=600&q=80&sig=55"
+              "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&h=600&q=80&sig=75"
+            },
+            {
+              "id": "bath-body",
+              "label": "Bath & Body",
+              "image": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&h=600&q=80&sig=78"
             },
             {
               "id": "mens-grooming",
               "label": "Men's Grooming",
-              "image": "https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=600&h=600&q=80&sig=56"
+              "image": "https://images.unsplash.com/photo-1621607512214-68297480165e?auto=format&fit=crop&w=600&h=600&q=80&sig=76"
             }
           ]
         }
@@ -486,17 +648,17 @@
         {
           "id": "sportswear",
           "label": "Sportswear",
-          "image": "https://images.unsplash.com/photo-1556906781-9a412961c28c?auto=format&fit=crop&w=600&h=600&q=80&sig=61"
+          "image": "https://images.unsplash.com/photo-1556906781-9a412961c28c?auto=format&fit=crop&w=600&h=600&q=80&sig=81"
         },
         {
           "id": "designer",
           "label": "Designer",
-          "image": "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&h=600&q=80&sig=62"
+          "image": "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&h=600&q=80&sig=82"
         },
         {
           "id": "local-labels",
           "label": "Local Labels",
-          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=63"
+          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=83"
         }
       ],
       "image": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&h=600&q=80&sig=5"
@@ -509,37 +671,52 @@
         {
           "id": "activewear",
           "label": "Activewear",
-          "image": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&h=600&q=80&sig=71"
+          "image": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&h=600&q=80&sig=27"
         },
         {
           "id": "trainers",
           "label": "Trainers",
-          "image": "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?auto=format&fit=crop&w=600&h=600&q=80&sig=72"
+          "image": "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?auto=format&fit=crop&w=600&h=600&q=80&sig=91"
         },
         {
           "id": "equipment",
           "label": "Equipment",
-          "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&h=600&q=80&sig=73"
+          "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&h=600&q=80&sig=92"
         },
         {
           "id": "gym-fitness",
           "label": "Gym & Fitness",
-          "image": "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=600&h=600&q=80&sig=74"
+          "image": "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=600&h=600&q=80&sig=93"
         },
         {
           "id": "outdoor",
           "label": "Outdoor",
-          "image": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=600&h=600&q=80&sig=75"
+          "image": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=600&h=600&q=80&sig=94"
         },
         {
           "id": "football",
           "label": "Football",
-          "image": "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=600&h=600&q=80&sig=76"
+          "image": "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=600&h=600&q=80&sig=95"
+        },
+        {
+          "id": "basketball",
+          "label": "Basketball",
+          "image": "https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=600&h=600&q=80&sig=99"
         },
         {
           "id": "cycling",
           "label": "Cycling",
-          "image": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?auto=format&fit=crop&w=600&h=600&q=80&sig=77"
+          "image": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?auto=format&fit=crop&w=600&h=600&q=80&sig=96"
+        },
+        {
+          "id": "swimming",
+          "label": "Swimming",
+          "image": "https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=600&h=600&q=80&sig=97"
+        },
+        {
+          "id": "running",
+          "label": "Running",
+          "image": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&h=600&q=80&sig=98"
         }
       ],
       "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&h=600&q=80&sig=6",
@@ -550,12 +727,12 @@
             {
               "id": "activewear",
               "label": "Activewear",
-              "image": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&h=600&q=80&sig=71"
+              "image": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&h=600&q=80&sig=27"
             },
             {
               "id": "trainers",
               "label": "Trainers",
-              "image": "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?auto=format&fit=crop&w=600&h=600&q=80&sig=72"
+              "image": "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?auto=format&fit=crop&w=600&h=600&q=80&sig=91"
             }
           ]
         },
@@ -565,17 +742,27 @@
             {
               "id": "equipment",
               "label": "Equipment",
-              "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&h=600&q=80&sig=73"
+              "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=600&h=600&q=80&sig=92"
             },
             {
               "id": "football",
               "label": "Football",
-              "image": "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=600&h=600&q=80&sig=76"
+              "image": "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=600&h=600&q=80&sig=95"
+            },
+            {
+              "id": "basketball",
+              "label": "Basketball",
+              "image": "https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=600&h=600&q=80&sig=99"
             },
             {
               "id": "cycling",
               "label": "Cycling",
-              "image": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?auto=format&fit=crop&w=600&h=600&q=80&sig=77"
+              "image": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?auto=format&fit=crop&w=600&h=600&q=80&sig=96"
+            },
+            {
+              "id": "swimming",
+              "label": "Swimming",
+              "image": "https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=600&h=600&q=80&sig=97"
             }
           ]
         },
@@ -585,12 +772,17 @@
             {
               "id": "gym-fitness",
               "label": "Gym & Fitness",
-              "image": "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=600&h=600&q=80&sig=74"
+              "image": "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=600&h=600&q=80&sig=93"
+            },
+            {
+              "id": "running",
+              "label": "Running",
+              "image": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&h=600&q=80&sig=98"
             },
             {
               "id": "outdoor",
               "label": "Outdoor",
-              "image": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=600&h=600&q=80&sig=75"
+              "image": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=600&h=600&q=80&sig=94"
             }
           ]
         }
@@ -613,7 +805,7 @@
             "browse": "electronics",
             "sub": "phones"
           },
-          "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=81"
+          "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=111"
         },
         {
           "id": "smartphones",
@@ -622,7 +814,7 @@
             "browse": "electronics",
             "sub": "phones"
           },
-          "image": "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=600&h=600&q=80&sig=82"
+          "image": "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=600&h=600&q=80&sig=112"
         },
         {
           "id": "tablets",
@@ -631,7 +823,7 @@
             "browse": "electronics",
             "sub": "phones"
           },
-          "image": "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=600&h=600&q=80&sig=83"
+          "image": "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=600&h=600&q=80&sig=113"
         },
         {
           "id": "phone-accessories",
@@ -640,7 +832,7 @@
             "browse": "electronics",
             "sub": "phones"
           },
-          "image": "https://images.unsplash.com/photo-1601784557598-882e6a5d8b8c?auto=format&fit=crop&w=600&h=600&q=80&sig=84"
+          "image": "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=600&h=600&q=80&sig=114"
         },
         {
           "id": "power-banks",
@@ -649,7 +841,7 @@
             "browse": "electronics",
             "sub": "phones"
           },
-          "image": "https://images.unsplash.com/photo-1609091839311-b3d5ba94ee71?auto=format&fit=crop&w=600&h=600&q=80&sig=85"
+          "image": "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=600&h=600&q=80&sig=115"
         }
       ],
       "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=7"
@@ -671,7 +863,7 @@
             "browse": "electronics",
             "sub": "tvs-audio"
           },
-          "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=86"
+          "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=116"
         },
         {
           "id": "televisions",
@@ -680,7 +872,7 @@
             "browse": "electronics",
             "sub": "tvs-audio"
           },
-          "image": "https://images.unsplash.com/photo-1593784991095-a22291aea9d0?auto=format&fit=crop&w=600&h=600&q=80&sig=87"
+          "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=117"
         },
         {
           "id": "headphones",
@@ -689,7 +881,7 @@
             "browse": "electronics",
             "sub": "tvs-audio"
           },
-          "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&h=600&q=80&sig=88"
+          "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&h=600&q=80&sig=118"
         },
         {
           "id": "speakers",
@@ -698,7 +890,7 @@
             "browse": "electronics",
             "sub": "tvs-audio"
           },
-          "image": "https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&w=600&h=600&q=80&sig=89"
+          "image": "https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&w=600&h=600&q=80&sig=119"
         },
         {
           "id": "wearables",
@@ -707,7 +899,7 @@
             "browse": "electronics",
             "sub": "tvs-audio"
           },
-          "image": "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=600&h=600&q=80&sig=90"
+          "image": "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=600&h=600&q=80&sig=120"
         }
       ],
       "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=8"
@@ -729,7 +921,7 @@
             "browse": "electronics",
             "sub": "computing"
           },
-          "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=91"
+          "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=121"
         },
         {
           "id": "laptops",
@@ -738,7 +930,7 @@
             "browse": "electronics",
             "sub": "computing"
           },
-          "image": "https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?auto=format&fit=crop&w=600&h=600&q=80&sig=92"
+          "image": "https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?auto=format&fit=crop&w=600&h=600&q=80&sig=122"
         },
         {
           "id": "desktops",
@@ -747,7 +939,7 @@
             "browse": "electronics",
             "sub": "computing"
           },
-          "image": "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=600&h=600&q=80&sig=93"
+          "image": "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=600&h=600&q=80&sig=123"
         },
         {
           "id": "accessories",
@@ -756,7 +948,7 @@
             "browse": "electronics",
             "sub": "computing"
           },
-          "image": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&h=600&q=80&sig=94"
+          "image": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&h=600&q=80&sig=124"
         }
       ],
       "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=9"
@@ -778,7 +970,7 @@
             "browse": "electronics",
             "sub": "appliances"
           },
-          "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=95"
+          "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=128"
         },
         {
           "id": "kitchen-appliances",
@@ -787,7 +979,7 @@
             "browse": "electronics",
             "sub": "appliances"
           },
-          "image": "https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?auto=format&fit=crop&w=600&h=600&q=80&sig=96"
+          "image": "https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?auto=format&fit=crop&w=600&h=600&q=80&sig=129"
         },
         {
           "id": "laundry",
@@ -796,7 +988,7 @@
             "browse": "electronics",
             "sub": "appliances"
           },
-          "image": "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=600&h=600&q=80&sig=97"
+          "image": "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=600&h=600&q=80&sig=130"
         },
         {
           "id": "cooling",
@@ -805,7 +997,7 @@
             "browse": "electronics",
             "sub": "appliances"
           },
-          "image": "https://images.unsplash.com/photo-1585771724689-4f3fad0b0f3d?auto=format&fit=crop&w=600&h=600&q=80&sig=98"
+          "image": "https://images.unsplash.com/photo-1574269909862-7e1d70bb8078?auto=format&fit=crop&w=600&h=600&q=80&sig=131"
         }
       ],
       "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=10"
@@ -818,27 +1010,37 @@
         {
           "id": "phones",
           "label": "Phones & Tablets",
-          "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=81"
+          "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=111"
         },
         {
           "id": "tvs-audio",
           "label": "TVs & Audio",
-          "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=86"
+          "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=116"
         },
         {
           "id": "computing",
           "label": "Computing",
-          "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=91"
+          "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=121"
         },
         {
           "id": "gaming",
           "label": "Gaming",
-          "image": "https://images.unsplash.com/photo-1606144042614-b2417e99c0e3?auto=format&fit=crop&w=600&h=600&q=80&sig=99"
+          "image": "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?auto=format&fit=crop&w=600&h=600&q=80&sig=125"
+        },
+        {
+          "id": "cameras",
+          "label": "Cameras",
+          "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=600&h=600&q=80&sig=126"
+        },
+        {
+          "id": "smart-home",
+          "label": "Smart Home",
+          "image": "https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=600&h=600&q=80&sig=127"
         },
         {
           "id": "appliances",
           "label": "Appliances",
-          "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=95"
+          "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=128"
         }
       ],
       "image": "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&h=600&q=80&sig=11",
@@ -849,12 +1051,17 @@
             {
               "id": "phones",
               "label": "Phones & Tablets",
-              "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=81"
+              "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&h=600&q=80&sig=111"
             },
             {
               "id": "computing",
               "label": "Computing",
-              "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=91"
+              "image": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=600&h=600&q=80&sig=121"
+            },
+            {
+              "id": "cameras",
+              "label": "Cameras",
+              "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=600&h=600&q=80&sig=126"
             }
           ]
         },
@@ -864,12 +1071,17 @@
             {
               "id": "tvs-audio",
               "label": "TVs & Audio",
-              "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=86"
+              "image": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&h=600&q=80&sig=116"
             },
             {
               "id": "gaming",
               "label": "Gaming",
-              "image": "https://images.unsplash.com/photo-1606144042614-b2417e99c0e3?auto=format&fit=crop&w=600&h=600&q=80&sig=99"
+              "image": "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?auto=format&fit=crop&w=600&h=600&q=80&sig=125"
+            },
+            {
+              "id": "smart-home",
+              "label": "Smart Home",
+              "image": "https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=600&h=600&q=80&sig=127"
             }
           ]
         },
@@ -879,7 +1091,7 @@
             {
               "id": "appliances",
               "label": "Appliances",
-              "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=95"
+              "image": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=600&h=600&q=80&sig=128"
             }
           ]
         }
@@ -893,17 +1105,32 @@
         {
           "id": "kitchen",
           "label": "Kitchen",
-          "image": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=600&h=600&q=80&sig=101"
+          "image": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=600&h=600&q=80&sig=141"
         },
         {
           "id": "bedding",
           "label": "Bedding",
-          "image": "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=600&h=600&q=80&sig=102"
+          "image": "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=600&h=600&q=80&sig=142"
         },
         {
           "id": "decor",
           "label": "Decor",
-          "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&h=600&q=80&sig=103"
+          "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&h=600&q=80&sig=143"
+        },
+        {
+          "id": "furniture",
+          "label": "Furniture",
+          "image": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=600&h=600&q=80&sig=144"
+        },
+        {
+          "id": "lighting",
+          "label": "Lighting",
+          "image": "https://images.unsplash.com/photo-1524484485831-a92ffc0de03f?auto=format&fit=crop&w=600&h=600&q=80&sig=145"
+        },
+        {
+          "id": "storage",
+          "label": "Storage",
+          "image": "https://images.unsplash.com/photo-1595428774223-ef52624120d2?auto=format&fit=crop&w=600&h=600&q=80&sig=146"
         },
         {
           "id": "supermarket",
@@ -912,10 +1139,52 @@
             "browse": "supermarket",
             "sub": null
           },
-          "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&h=600&q=80&sig=104"
+          "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&h=600&q=80&sig=147"
         }
       ],
-      "image": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=600&h=600&q=80&sig=12"
+      "image": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=600&h=600&q=80&sig=12",
+      "groups": [
+        {
+          "title": "Rooms",
+          "subcategories": [
+            {
+              "id": "kitchen",
+              "label": "Kitchen",
+              "image": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=600&h=600&q=80&sig=141"
+            },
+            {
+              "id": "bedding",
+              "label": "Bedding",
+              "image": "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=600&h=600&q=80&sig=142"
+            },
+            {
+              "id": "decor",
+              "label": "Decor",
+              "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&h=600&q=80&sig=143"
+            },
+            {
+              "id": "furniture",
+              "label": "Furniture",
+              "image": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=600&h=600&q=80&sig=144"
+            }
+          ]
+        },
+        {
+          "title": "Utilities",
+          "subcategories": [
+            {
+              "id": "lighting",
+              "label": "Lighting",
+              "image": "https://images.unsplash.com/photo-1524484485831-a92ffc0de03f?auto=format&fit=crop&w=600&h=600&q=80&sig=145"
+            },
+            {
+              "id": "storage",
+              "label": "Storage",
+              "image": "https://images.unsplash.com/photo-1595428774223-ef52624120d2?auto=format&fit=crop&w=600&h=600&q=80&sig=146"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "supermarket",
@@ -925,22 +1194,22 @@
         {
           "id": "food-staples",
           "label": "Food Staples",
-          "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&h=600&q=80&sig=105"
+          "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&h=600&q=80&sig=148"
         },
         {
           "id": "beverages",
           "label": "Beverages",
-          "image": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&h=600&q=80&sig=106"
+          "image": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&h=600&q=80&sig=149"
         },
         {
           "id": "household",
           "label": "Household",
-          "image": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=600&h=600&q=80&sig=107"
+          "image": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=600&h=600&q=80&sig=150"
         },
         {
           "id": "personal-grocery",
           "label": "Personal Care Grocery",
-          "image": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=600&h=600&q=80&sig=108"
+          "image": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=600&h=600&q=80&sig=151"
         }
       ],
       "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&h=600&q=80&sig=13",
@@ -951,12 +1220,12 @@
             {
               "id": "food-staples",
               "label": "Food Staples",
-              "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&h=600&q=80&sig=105"
+              "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&h=600&q=80&sig=148"
             },
             {
               "id": "beverages",
               "label": "Beverages",
-              "image": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&h=600&q=80&sig=106"
+              "image": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&h=600&q=80&sig=149"
             }
           ]
         },
@@ -966,12 +1235,12 @@
             {
               "id": "household",
               "label": "Household",
-              "image": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=600&h=600&q=80&sig=107"
+              "image": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=600&h=600&q=80&sig=150"
             },
             {
               "id": "personal-grocery",
               "label": "Personal Care Grocery",
-              "image": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=600&h=600&q=80&sig=108"
+              "image": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=600&h=600&q=80&sig=151"
             }
           ]
         }
@@ -985,27 +1254,27 @@
         {
           "id": "car-accessories",
           "label": "Car Accessories",
-          "image": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=600&h=600&q=80&sig=111"
+          "image": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=600&h=600&q=80&sig=161"
         },
         {
           "id": "oils-fluids",
           "label": "Oils & Fluids",
-          "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=600&h=600&q=80&sig=112"
+          "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=600&h=600&q=80&sig=162"
         },
         {
           "id": "tyres-wheels",
           "label": "Tyres & Wheels",
-          "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=600&h=600&q=80&sig=113"
+          "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=600&h=600&q=80&sig=163"
         },
         {
           "id": "motorbike",
           "label": "Motorbike",
-          "image": "https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=600&h=600&q=80&sig=114"
+          "image": "https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=600&h=600&q=80&sig=164"
         },
         {
           "id": "tools-care",
           "label": "Tools & Care",
-          "image": "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=600&h=600&q=80&sig=115"
+          "image": "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=600&h=600&q=80&sig=165"
         }
       ],
       "image": "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=600&h=600&q=80&sig=14",
@@ -1016,17 +1285,17 @@
             {
               "id": "car-accessories",
               "label": "Car Accessories",
-              "image": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=600&h=600&q=80&sig=111"
+              "image": "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=600&h=600&q=80&sig=161"
             },
             {
               "id": "tyres-wheels",
               "label": "Tyres & Wheels",
-              "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=600&h=600&q=80&sig=113"
+              "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=600&h=600&q=80&sig=163"
             },
             {
               "id": "motorbike",
               "label": "Motorbike",
-              "image": "https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=600&h=600&q=80&sig=114"
+              "image": "https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=600&h=600&q=80&sig=164"
             }
           ]
         },
@@ -1036,12 +1305,147 @@
             {
               "id": "oils-fluids",
               "label": "Oils & Fluids",
-              "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=600&h=600&q=80&sig=112"
+              "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=600&h=600&q=80&sig=162"
             },
             {
               "id": "tools-care",
               "label": "Tools & Care",
-              "image": "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=600&h=600&q=80&sig=115"
+              "image": "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=600&h=600&q=80&sig=165"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pets",
+      "label": "Pets",
+      "emoji": "🐾",
+      "subcategories": [
+        {
+          "id": "pet-food",
+          "label": "Pet Food",
+          "image": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&h=600&q=80&sig=171"
+        },
+        {
+          "id": "pet-accessories",
+          "label": "Accessories",
+          "image": "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=600&h=600&q=80&sig=172"
+        },
+        {
+          "id": "pet-care",
+          "label": "Pet Care",
+          "image": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&h=600&q=80&sig=173"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&h=600&q=80&sig=15",
+      "groups": [
+        {
+          "title": "Pets",
+          "subcategories": [
+            {
+              "id": "pet-food",
+              "label": "Pet Food",
+              "image": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&h=600&q=80&sig=171"
+            },
+            {
+              "id": "pet-accessories",
+              "label": "Accessories",
+              "image": "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=600&h=600&q=80&sig=172"
+            },
+            {
+              "id": "pet-care",
+              "label": "Pet Care",
+              "image": "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&h=600&q=80&sig=173"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "office",
+      "label": "Office & Books",
+      "emoji": "📚",
+      "subcategories": [
+        {
+          "id": "stationery",
+          "label": "Stationery",
+          "image": "https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&w=600&h=600&q=80&sig=181"
+        },
+        {
+          "id": "books",
+          "label": "Books",
+          "image": "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&w=600&h=600&q=80&sig=182"
+        },
+        {
+          "id": "desk-tech",
+          "label": "Desk Tech",
+          "image": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&h=600&q=80&sig=183"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=600&h=600&q=80&sig=16",
+      "groups": [
+        {
+          "title": "Work",
+          "subcategories": [
+            {
+              "id": "stationery",
+              "label": "Stationery",
+              "image": "https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&w=600&h=600&q=80&sig=181"
+            },
+            {
+              "id": "books",
+              "label": "Books",
+              "image": "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&w=600&h=600&q=80&sig=182"
+            },
+            {
+              "id": "desk-tech",
+              "label": "Desk Tech",
+              "image": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&h=600&q=80&sig=183"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "garden",
+      "label": "Garden & Outdoor",
+      "emoji": "🌿",
+      "subcategories": [
+        {
+          "id": "plants",
+          "label": "Plants",
+          "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=191"
+        },
+        {
+          "id": "garden-tools",
+          "label": "Garden Tools",
+          "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=192"
+        },
+        {
+          "id": "outdoor-living",
+          "label": "Outdoor Living",
+          "image": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=600&h=600&q=80&sig=193"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=17",
+      "groups": [
+        {
+          "title": "Outdoors",
+          "subcategories": [
+            {
+              "id": "plants",
+              "label": "Plants",
+              "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=191"
+            },
+            {
+              "id": "garden-tools",
+              "label": "Garden Tools",
+              "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=192"
+            },
+            {
+              "id": "outdoor-living",
+              "label": "Outdoor Living",
+              "image": "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=600&h=600&q=80&sig=193"
             }
           ]
         }
@@ -1055,30 +1459,30 @@
         {
           "id": "thrift-fits",
           "label": "Thrift Fits",
-          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=121"
+          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=201"
         },
         {
           "id": "official-wear",
           "label": "Official Wear",
-          "image": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&h=600&q=80&sig=122"
+          "image": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=600&h=600&q=80&sig=202"
         },
         {
           "id": "streetwear",
           "label": "Streetwear",
-          "image": "https://images.unsplash.com/photo-1523398002811-999ca8dec234?auto=format&fit=crop&w=600&h=600&q=80&sig=123"
+          "image": "https://images.unsplash.com/photo-1523398002811-999ca8dec234?auto=format&fit=crop&w=600&h=600&q=80&sig=203"
         },
         {
           "id": "party-outfits",
           "label": "Party Outfits",
-          "image": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&h=600&q=80&sig=124"
+          "image": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&h=600&q=80&sig=204"
         },
         {
           "id": "viral",
           "label": "Viral Bargains",
-          "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&h=600&q=80&sig=125"
+          "image": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&h=600&q=80&sig=205"
         }
       ],
-      "image": "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=600&h=600&q=80&sig=15"
+      "image": "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=600&h=600&q=80&sig=18"
     },
     {
       "id": "sale",
@@ -1089,28 +1493,28 @@
           "id": "under-1000",
           "label": "Under KES 1,000",
           "priceTier": "under-1000",
-          "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=131"
+          "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=211"
         },
         {
           "id": "under-2500",
           "label": "Under KES 2,500",
           "priceTier": "under-2500",
-          "image": "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&h=600&q=80&sig=132"
+          "image": "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&h=600&q=80&sig=212"
         },
         {
           "id": "under-5000",
           "label": "Under KES 5,000",
           "priceTier": "under-5000",
-          "image": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&h=600&q=80&sig=133"
+          "image": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&h=600&q=80&sig=213"
         },
         {
           "id": "under-10000",
           "label": "Under KES 10,000",
           "priceTier": "under-10000",
-          "image": "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=600&h=600&q=80&sig=134"
+          "image": "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=600&h=600&q=80&sig=214"
         }
       ],
-      "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=16"
+      "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&h=600&q=80&sig=19"
     }
   ],
   "legacyMap": {
@@ -1281,6 +1685,70 @@
     "automotive/tools-care": {
       "browse": "automotive",
       "sub": "tools-care"
+    },
+    "pets": {
+      "browse": "pets",
+      "sub": "pet-food"
+    },
+    "pets/pet-food": {
+      "browse": "pets",
+      "sub": "pet-food"
+    },
+    "pets/pet-accessories": {
+      "browse": "pets",
+      "sub": "pet-accessories"
+    },
+    "pets/pet-care": {
+      "browse": "pets",
+      "sub": "pet-care"
+    },
+    "office": {
+      "browse": "office",
+      "sub": "stationery"
+    },
+    "office/stationery": {
+      "browse": "office",
+      "sub": "stationery"
+    },
+    "office/books": {
+      "browse": "office",
+      "sub": "books"
+    },
+    "office/desk-tech": {
+      "browse": "office",
+      "sub": "desk-tech"
+    },
+    "garden": {
+      "browse": "garden",
+      "sub": "plants"
+    },
+    "garden/plants": {
+      "browse": "garden",
+      "sub": "plants"
+    },
+    "garden/garden-tools": {
+      "browse": "garden",
+      "sub": "garden-tools"
+    },
+    "garden/outdoor-living": {
+      "browse": "garden",
+      "sub": "outdoor-living"
+    },
+    "electronics/cameras": {
+      "browse": "electronics",
+      "sub": "cameras"
+    },
+    "electronics/smart-home": {
+      "browse": "electronics",
+      "sub": "smart-home"
+    },
+    "home-office/furniture": {
+      "browse": "home",
+      "sub": "furniture"
+    },
+    "home-office/lighting": {
+      "browse": "home",
+      "sub": "lighting"
     }
   }
 }
