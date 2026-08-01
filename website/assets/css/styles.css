@@ -128,25 +128,28 @@ h1, h3, .font-display {
   font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Depop category grid cards — image-led tiles */
+/* Browse category tiles — full-bleed photo, label on the image */
 .depop-cat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  display: block;
   aspect-ratio: 1 / 1;
-  padding: 0.85rem 0.65rem 0.75rem;
+  padding: 0;
+  overflow: hidden;
   background: #18181b;
   border: 1px solid #27272a;
   border-radius: 0.85rem;
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .depop-cat-card:hover {
   border-color: #52525b;
+}
+
+.depop-cat-card:hover .depop-cat-card__icon--img img {
+  transform: scale(1.04);
 }
 
 .depop-cat-card.is-active {
@@ -157,66 +160,57 @@ h1, h3, .font-display {
 .depop-cat-card__icon {
   font-size: 2rem;
   line-height: 1;
-  margin-bottom: 0.45rem;
 }
 
 .depop-cat-card__icon--img {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 4.75rem;
-  height: 4.75rem;
-  padding: 0.28rem;
-  border-radius: 0.85rem;
-  background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: #18181b;
   overflow: hidden;
   font-size: 0;
-  margin-bottom: 0.45rem;
 }
 
 .depop-cat-card__icon--img img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 0.55rem;
+  border-radius: 0;
+  transition: transform 0.2s ease;
 }
 
 .depop-cat-card__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 2.25rem 0.55rem 0.7rem;
   font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.02em;
   color: #fff;
   line-height: 1.25;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 55%, transparent 100%);
 }
 
 @media (min-width: 768px) {
   .depop-cat-card {
-    aspect-ratio: auto;
-    min-height: 9.5rem;
-    padding: 1.15rem 1rem 1rem;
-  }
-
-  .depop-cat-card__icon {
-    font-size: 2.25rem;
-    margin-bottom: 0.55rem;
-  }
-
-  .depop-cat-card__icon--img {
-    width: 6rem;
-    height: 6rem;
-    padding: 0.35rem;
-    border-radius: 1rem;
-    margin-bottom: 0.55rem;
-  }
-
-  .depop-cat-card__icon--img img {
-    border-radius: 0.65rem;
+    min-height: 0;
   }
 
   .depop-cat-card__label {
     font-size: 0.875rem;
+    padding: 2.5rem 0.65rem 0.8rem;
   }
 }
 
@@ -827,41 +821,56 @@ html.dark .browse-chip.is-active {
   gap: 0.65rem;
 }
 
+/* Subcategory tiles — photo fills the whole box */
 .sokoni-category-flyout__sub {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.85rem 0.5rem 0.75rem;
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid #27272a;
   border-radius: 0.85rem;
   background: #121214;
-  color: #d4d4d8;
+  color: #ffffff;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
 .sokoni-category-flyout__sub:hover,
 .sokoni-category-flyout__sub:focus-visible {
-  border-color: rgba(37, 211, 102, 0.45);
-  background: #18181b;
+  border-color: rgba(37, 211, 102, 0.55);
   transform: translateY(-1px);
   outline: none;
   color: #ffffff;
 }
 
+.sokoni-category-flyout__sub:hover .sokoni-cat-icon img,
+.sokoni-category-flyout__sub:focus-visible .sokoni-cat-icon img {
+  transform: scale(1.05);
+}
+
 .sokoni-category-flyout__sub-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 1.85rem 0.4rem 0.55rem;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.25;
   text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.4) 60%, transparent 100%);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Light tile + object-contain — Kilimall-style product thumb in dark menu */
+/* Rail list thumbs stay compact; flyout --lg fills its tile */
 .sokoni-cat-icon {
   display: inline-flex;
   align-items: center;
@@ -879,12 +888,16 @@ html.dark .browse-chip.is-active {
   padding: 0.18rem;
 }
 
-.sokoni-cat-icon--lg {
-  width: 5.25rem;
-  height: 5.25rem;
-  padding: 0.4rem;
-  border-radius: 0.9rem;
-  margin-bottom: 0.05rem;
+.sokoni-category-flyout__sub .sokoni-cat-icon--lg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: #18181b;
 }
 
 .sokoni-cat-icon--empty {
@@ -900,18 +913,22 @@ html.dark .browse-chip.is-active {
 }
 
 .sokoni-category-flyout__sub .sokoni-cat-icon img {
-  object-fit: contain;
-}
-
-.sokoni-category-flyout__sub:hover .sokoni-cat-icon img {
-  transform: scale(1.06);
+  object-fit: cover;
+  border-radius: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sokoni-category-flyout,
   .sokoni-category-flyout__sub,
-  .sokoni-cat-icon img {
+  .depop-cat-card,
+  .sokoni-cat-icon img,
+  .depop-cat-card__icon--img img {
     transition: none;
+  }
+
+  .depop-cat-card:hover .depop-cat-card__icon--img img,
+  .sokoni-category-flyout__sub:hover .sokoni-cat-icon img {
+    transform: none;
   }
 }
 
