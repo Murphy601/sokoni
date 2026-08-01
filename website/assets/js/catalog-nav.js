@@ -22,7 +22,7 @@
 
   function catIconHtml(cat) {
     if (cat?.image) {
-      return `<span class="catalog-nav-emoji catalog-nav-emoji--img" aria-hidden="true"><img src="${escapeHtml(cat.image)}" alt="" width="22" height="22" loading="lazy" referrerpolicy="no-referrer" /></span>`;
+      return `<span class="catalog-nav-emoji catalog-nav-emoji--img" aria-hidden="true"><img src="${escapeHtml(cat.image)}" alt="" width="40" height="40" loading="lazy" referrerpolicy="no-referrer" /></span>`;
     }
     return `<span class="catalog-nav-emoji" aria-hidden="true">${escapeHtml(cat?.emoji || "🛍️")}</span>`;
   }
