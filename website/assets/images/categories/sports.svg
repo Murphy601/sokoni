@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="sports">
-  <rect width="128" height="128" rx="28" fill="#E8FFF2"/>
-  <circle cx="96" cy="28" r="18" fill="#25D366" opacity="0.35"/>
-  <text x="64" y="76" text-anchor="middle" font-size="48" font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif">⚽</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Sports">
+  <rect width="128" height="128" rx="28" fill="#F0F0F0"/>
+  <circle cx="98" cy="26" r="16" fill="#25D366" opacity="0.4"/>
+  <text x="64" y="78" text-anchor="middle" font-family="DM Sans, Arial, sans-serif" font-size="42" font-weight="700" fill="#27272A">S</text>
 </svg>

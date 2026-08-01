@@ -174,31 +174,38 @@
       "subcategories": [
         {
           "id": "tops",
-          "label": "Tops"
+          "label": "Tops",
+          "image": "assets/images/subcats/tops.svg"
         },
         {
           "id": "dresses",
-          "label": "Dresses"
+          "label": "Dresses",
+          "image": "assets/images/subcats/dresses.svg"
         },
         {
           "id": "jeans",
-          "label": "Jeans & Denim"
+          "label": "Jeans & Denim",
+          "image": "assets/images/subcats/jeans.svg"
         },
         {
           "id": "outerwear",
-          "label": "Outerwear"
+          "label": "Outerwear",
+          "image": "assets/images/subcats/outerwear.svg"
         },
         {
           "id": "shoes",
-          "label": "Shoes"
+          "label": "Shoes",
+          "image": "assets/images/subcats/shoes.svg"
         },
         {
           "id": "bags",
-          "label": "Bags & Purses"
+          "label": "Bags & Purses",
+          "image": "assets/images/subcats/bags.svg"
         },
         {
           "id": "jewelry",
-          "label": "Jewelry"
+          "label": "Jewelry",
+          "image": "assets/images/subcats/jewelry.svg"
         },
         {
           "id": "beauty",
@@ -207,7 +214,7 @@
             "browse": "health-beauty",
             "sub": null
           },
-          "image": "assets/images/subcats/skincare.svg"
+          "image": "assets/images/subcats/beauty.svg"
         }
       ],
       "image": "assets/images/categories/women.svg",
@@ -217,19 +224,23 @@
           "subcategories": [
             {
               "id": "tops",
-              "label": "Tops"
+              "label": "Tops",
+              "image": "assets/images/subcats/tops.svg"
             },
             {
               "id": "dresses",
-              "label": "Dresses"
+              "label": "Dresses",
+              "image": "assets/images/subcats/dresses.svg"
             },
             {
               "id": "jeans",
-              "label": "Jeans & Denim"
+              "label": "Jeans & Denim",
+              "image": "assets/images/subcats/jeans.svg"
             },
             {
               "id": "outerwear",
-              "label": "Outerwear"
+              "label": "Outerwear",
+              "image": "assets/images/subcats/outerwear.svg"
             }
           ]
         },
@@ -238,15 +249,18 @@
           "subcategories": [
             {
               "id": "shoes",
-              "label": "Shoes"
+              "label": "Shoes",
+              "image": "assets/images/subcats/shoes.svg"
             },
             {
               "id": "bags",
-              "label": "Bags & Purses"
+              "label": "Bags & Purses",
+              "image": "assets/images/subcats/bags.svg"
             },
             {
               "id": "jewelry",
-              "label": "Jewelry"
+              "label": "Jewelry",
+              "image": "assets/images/subcats/jewelry.svg"
             },
             {
               "id": "beauty",
@@ -255,7 +269,7 @@
                 "browse": "health-beauty",
                 "sub": null
               },
-              "image": "assets/images/subcats/skincare.svg"
+              "image": "assets/images/subcats/beauty.svg"
             }
           ]
         }
@@ -268,31 +282,38 @@
       "subcategories": [
         {
           "id": "t-shirts",
-          "label": "T-Shirts"
+          "label": "T-Shirts",
+          "image": "assets/images/subcats/t-shirts.svg"
         },
         {
           "id": "shirts",
-          "label": "Shirts"
+          "label": "Shirts",
+          "image": "assets/images/subcats/shirts.svg"
         },
         {
           "id": "hoodies",
-          "label": "Hoodies"
+          "label": "Hoodies",
+          "image": "assets/images/subcats/hoodies.svg"
         },
         {
           "id": "jeans",
-          "label": "Jeans"
+          "label": "Jeans",
+          "image": "assets/images/subcats/jeans.svg"
         },
         {
           "id": "sneakers",
-          "label": "Sneakers"
+          "label": "Sneakers",
+          "image": "assets/images/subcats/sneakers.svg"
         },
         {
           "id": "caps",
-          "label": "Caps"
+          "label": "Caps",
+          "image": "assets/images/subcats/caps.svg"
         },
         {
           "id": "watches",
-          "label": "Watches"
+          "label": "Watches",
+          "image": "assets/images/subcats/watches.svg"
         }
       ],
       "image": "assets/images/categories/men.svg",
@@ -302,19 +323,23 @@
           "subcategories": [
             {
               "id": "t-shirts",
-              "label": "T-Shirts"
+              "label": "T-Shirts",
+              "image": "assets/images/subcats/t-shirts.svg"
             },
             {
               "id": "shirts",
-              "label": "Shirts"
+              "label": "Shirts",
+              "image": "assets/images/subcats/shirts.svg"
             },
             {
               "id": "hoodies",
-              "label": "Hoodies"
+              "label": "Hoodies",
+              "image": "assets/images/subcats/hoodies.svg"
             },
             {
               "id": "jeans",
-              "label": "Jeans"
+              "label": "Jeans",
+              "image": "assets/images/subcats/jeans.svg"
             }
           ]
         },
@@ -323,15 +348,18 @@
           "subcategories": [
             {
               "id": "sneakers",
-              "label": "Sneakers"
+              "label": "Sneakers",
+              "image": "assets/images/subcats/sneakers.svg"
             },
             {
               "id": "caps",
-              "label": "Caps"
+              "label": "Caps",
+              "image": "assets/images/subcats/caps.svg"
             },
             {
               "id": "watches",
-              "label": "Watches"
+              "label": "Watches",
+              "image": "assets/images/subcats/watches.svg"
             }
           ]
         }
@@ -344,19 +372,23 @@
       "subcategories": [
         {
           "id": "clothing",
-          "label": "Clothing"
+          "label": "Clothing",
+          "image": "assets/images/subcats/clothing.svg"
         },
         {
           "id": "shoes",
-          "label": "Shoes"
+          "label": "Shoes",
+          "image": "assets/images/subcats/shoes.svg"
         },
         {
           "id": "toys",
-          "label": "Toys"
+          "label": "Toys",
+          "image": "assets/images/subcats/toys.svg"
         },
         {
           "id": "baby-gear",
-          "label": "Baby Gear"
+          "label": "Baby Gear",
+          "image": "assets/images/subcats/baby-gear.svg"
         }
       ],
       "image": "assets/images/categories/kids.svg"
@@ -453,15 +485,18 @@
       "subcategories": [
         {
           "id": "sportswear",
-          "label": "Sportswear"
+          "label": "Sportswear",
+          "image": "assets/images/subcats/sportswear.svg"
         },
         {
           "id": "designer",
-          "label": "Designer"
+          "label": "Designer",
+          "image": "assets/images/subcats/designer.svg"
         },
         {
           "id": "local-labels",
-          "label": "Local Labels"
+          "label": "Local Labels",
+          "image": "assets/images/subcats/local-labels.svg"
         }
       ],
       "image": "assets/images/categories/brands.svg"
@@ -473,15 +508,18 @@
       "subcategories": [
         {
           "id": "activewear",
-          "label": "Activewear"
+          "label": "Activewear",
+          "image": "assets/images/subcats/activewear.svg"
         },
         {
           "id": "trainers",
-          "label": "Trainers"
+          "label": "Trainers",
+          "image": "assets/images/subcats/trainers.svg"
         },
         {
           "id": "equipment",
-          "label": "Equipment"
+          "label": "Equipment",
+          "image": "assets/images/subcats/equipment.svg"
         },
         {
           "id": "gym-fitness",
@@ -511,11 +549,13 @@
           "subcategories": [
             {
               "id": "activewear",
-              "label": "Activewear"
+              "label": "Activewear",
+              "image": "assets/images/subcats/activewear.svg"
             },
             {
               "id": "trainers",
-              "label": "Trainers"
+              "label": "Trainers",
+              "image": "assets/images/subcats/trainers.svg"
             }
           ]
         },
@@ -524,7 +564,8 @@
           "subcategories": [
             {
               "id": "equipment",
-              "label": "Equipment"
+              "label": "Equipment",
+              "image": "assets/images/subcats/equipment.svg"
             },
             {
               "id": "football",
@@ -571,7 +612,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "phones"
-          }
+          },
+          "image": "assets/images/subcats/phones.svg"
         },
         {
           "id": "smartphones",
@@ -579,7 +621,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "phones"
-          }
+          },
+          "image": "assets/images/subcats/smartphones.svg"
         },
         {
           "id": "tablets",
@@ -587,7 +630,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "phones"
-          }
+          },
+          "image": "assets/images/subcats/tablets.svg"
         },
         {
           "id": "phone-accessories",
@@ -595,7 +639,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "phones"
-          }
+          },
+          "image": "assets/images/subcats/phone-accessories.svg"
         },
         {
           "id": "power-banks",
@@ -603,7 +648,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "phones"
-          }
+          },
+          "image": "assets/images/subcats/power-banks.svg"
         }
       ],
       "image": "assets/images/categories/phones.svg"
@@ -624,7 +670,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "tvs-audio"
-          }
+          },
+          "image": "assets/images/subcats/tvs-audio.svg"
         },
         {
           "id": "televisions",
@@ -632,7 +679,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "tvs-audio"
-          }
+          },
+          "image": "assets/images/subcats/televisions.svg"
         },
         {
           "id": "headphones",
@@ -640,7 +688,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "tvs-audio"
-          }
+          },
+          "image": "assets/images/subcats/headphones.svg"
         },
         {
           "id": "speakers",
@@ -648,7 +697,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "tvs-audio"
-          }
+          },
+          "image": "assets/images/subcats/speakers.svg"
         },
         {
           "id": "wearables",
@@ -656,7 +706,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "tvs-audio"
-          }
+          },
+          "image": "assets/images/subcats/wearables.svg"
         }
       ],
       "image": "assets/images/categories/tv-audio.svg"
@@ -677,7 +728,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "computing"
-          }
+          },
+          "image": "assets/images/subcats/computing.svg"
         },
         {
           "id": "laptops",
@@ -685,7 +737,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "computing"
-          }
+          },
+          "image": "assets/images/subcats/laptops.svg"
         },
         {
           "id": "desktops",
@@ -693,7 +746,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "computing"
-          }
+          },
+          "image": "assets/images/subcats/desktops.svg"
         },
         {
           "id": "accessories",
@@ -701,7 +755,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "computing"
-          }
+          },
+          "image": "assets/images/subcats/accessories.svg"
         }
       ],
       "image": "assets/images/categories/computers.svg"
@@ -722,7 +777,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "appliances"
-          }
+          },
+          "image": "assets/images/subcats/appliances.svg"
         },
         {
           "id": "kitchen-appliances",
@@ -730,7 +786,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "appliances"
-          }
+          },
+          "image": "assets/images/subcats/kitchen-appliances.svg"
         },
         {
           "id": "laundry",
@@ -738,7 +795,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "appliances"
-          }
+          },
+          "image": "assets/images/subcats/laundry.svg"
         },
         {
           "id": "cooling",
@@ -746,7 +804,8 @@
           "resolvesTo": {
             "browse": "electronics",
             "sub": "appliances"
-          }
+          },
+          "image": "assets/images/subcats/cooling.svg"
         }
       ],
       "image": "assets/images/categories/appliances-home.svg"
@@ -758,23 +817,28 @@
       "subcategories": [
         {
           "id": "phones",
-          "label": "Phones & Tablets"
+          "label": "Phones & Tablets",
+          "image": "assets/images/subcats/phones.svg"
         },
         {
           "id": "tvs-audio",
-          "label": "TVs & Audio"
+          "label": "TVs & Audio",
+          "image": "assets/images/subcats/tvs-audio.svg"
         },
         {
           "id": "computing",
-          "label": "Computing"
+          "label": "Computing",
+          "image": "assets/images/subcats/computing.svg"
         },
         {
           "id": "gaming",
-          "label": "Gaming"
+          "label": "Gaming",
+          "image": "assets/images/subcats/gaming.svg"
         },
         {
           "id": "appliances",
-          "label": "Appliances"
+          "label": "Appliances",
+          "image": "assets/images/subcats/appliances.svg"
         }
       ],
       "image": "assets/images/categories/electronics.svg",
@@ -784,11 +848,13 @@
           "subcategories": [
             {
               "id": "phones",
-              "label": "Phones & Tablets"
+              "label": "Phones & Tablets",
+              "image": "assets/images/subcats/phones.svg"
             },
             {
               "id": "computing",
-              "label": "Computing"
+              "label": "Computing",
+              "image": "assets/images/subcats/computing.svg"
             }
           ]
         },
@@ -797,11 +863,13 @@
           "subcategories": [
             {
               "id": "tvs-audio",
-              "label": "TVs & Audio"
+              "label": "TVs & Audio",
+              "image": "assets/images/subcats/tvs-audio.svg"
             },
             {
               "id": "gaming",
-              "label": "Gaming"
+              "label": "Gaming",
+              "image": "assets/images/subcats/gaming.svg"
             }
           ]
         },
@@ -810,7 +878,8 @@
           "subcategories": [
             {
               "id": "appliances",
-              "label": "Appliances"
+              "label": "Appliances",
+              "image": "assets/images/subcats/appliances.svg"
             }
           ]
         }
@@ -823,15 +892,18 @@
       "subcategories": [
         {
           "id": "kitchen",
-          "label": "Kitchen"
+          "label": "Kitchen",
+          "image": "assets/images/subcats/kitchen.svg"
         },
         {
           "id": "bedding",
-          "label": "Bedding"
+          "label": "Bedding",
+          "image": "assets/images/subcats/bedding.svg"
         },
         {
           "id": "decor",
-          "label": "Decor"
+          "label": "Decor",
+          "image": "assets/images/subcats/decor.svg"
         },
         {
           "id": "supermarket",
@@ -839,7 +911,8 @@
           "resolvesTo": {
             "browse": "supermarket",
             "sub": null
-          }
+          },
+          "image": "assets/images/subcats/supermarket.svg"
         }
       ],
       "image": "assets/images/categories/home.svg"
@@ -866,7 +939,8 @@
         },
         {
           "id": "personal-grocery",
-          "label": "Personal Care Grocery"
+          "label": "Personal Care Grocery",
+          "image": "assets/images/subcats/personal-grocery.svg"
         }
       ],
       "image": "assets/images/categories/supermarket.svg",
@@ -896,7 +970,8 @@
             },
             {
               "id": "personal-grocery",
-              "label": "Personal Care Grocery"
+              "label": "Personal Care Grocery",
+              "image": "assets/images/subcats/personal-grocery.svg"
             }
           ]
         }
@@ -914,7 +989,8 @@
         },
         {
           "id": "oils-fluids",
-          "label": "Oils & Fluids"
+          "label": "Oils & Fluids",
+          "image": "assets/images/subcats/oils-fluids.svg"
         },
         {
           "id": "tyres-wheels",
@@ -923,11 +999,13 @@
         },
         {
           "id": "motorbike",
-          "label": "Motorbike"
+          "label": "Motorbike",
+          "image": "assets/images/subcats/motorbike.svg"
         },
         {
           "id": "tools-care",
-          "label": "Tools & Care"
+          "label": "Tools & Care",
+          "image": "assets/images/subcats/tools-care.svg"
         }
       ],
       "image": "assets/images/categories/automotive.svg",
@@ -947,7 +1025,8 @@
             },
             {
               "id": "motorbike",
-              "label": "Motorbike"
+              "label": "Motorbike",
+              "image": "assets/images/subcats/motorbike.svg"
             }
           ]
         },
@@ -956,11 +1035,13 @@
           "subcategories": [
             {
               "id": "oils-fluids",
-              "label": "Oils & Fluids"
+              "label": "Oils & Fluids",
+              "image": "assets/images/subcats/oils-fluids.svg"
             },
             {
               "id": "tools-care",
-              "label": "Tools & Care"
+              "label": "Tools & Care",
+              "image": "assets/images/subcats/tools-care.svg"
             }
           ]
         }
@@ -973,23 +1054,28 @@
       "subcategories": [
         {
           "id": "thrift-fits",
-          "label": "Thrift Fits"
+          "label": "Thrift Fits",
+          "image": "assets/images/subcats/thrift-fits.svg"
         },
         {
           "id": "official-wear",
-          "label": "Official Wear"
+          "label": "Official Wear",
+          "image": "assets/images/subcats/official-wear.svg"
         },
         {
           "id": "streetwear",
-          "label": "Streetwear"
+          "label": "Streetwear",
+          "image": "assets/images/subcats/streetwear.svg"
         },
         {
           "id": "party-outfits",
-          "label": "Party Outfits"
+          "label": "Party Outfits",
+          "image": "assets/images/subcats/party-outfits.svg"
         },
         {
           "id": "viral",
-          "label": "Viral Bargains"
+          "label": "Viral Bargains",
+          "image": "assets/images/subcats/viral.svg"
         }
       ],
       "image": "assets/images/categories/trending.svg"
@@ -1002,22 +1088,26 @@
         {
           "id": "under-1000",
           "label": "Under KES 1,000",
-          "priceTier": "under-1000"
+          "priceTier": "under-1000",
+          "image": "assets/images/subcats/under-1000.svg"
         },
         {
           "id": "under-2500",
           "label": "Under KES 2,500",
-          "priceTier": "under-2500"
+          "priceTier": "under-2500",
+          "image": "assets/images/subcats/under-2500.svg"
         },
         {
           "id": "under-5000",
           "label": "Under KES 5,000",
-          "priceTier": "under-5000"
+          "priceTier": "under-5000",
+          "image": "assets/images/subcats/under-5000.svg"
         },
         {
           "id": "under-10000",
           "label": "Under KES 10,000",
-          "priceTier": "under-10000"
+          "priceTier": "under-10000",
+          "image": "assets/images/subcats/under-10000.svg"
         }
       ],
       "image": "assets/images/categories/sale.svg"
