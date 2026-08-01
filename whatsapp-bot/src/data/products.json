@@ -34,11 +34,11 @@
       "assets/images/products/sm-tlom7-001-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785165724325,
+    "publishedAt": 1785545700245,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785165724325
+    "refreshedAt": 1785545700245
   },
   {
     "id": "hb-tlom7-001",
@@ -176,7 +176,61 @@
       "assets/images/products/hb-tlom7-002-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785400148901,
+    "publishedAt": 1785545704019,
+    "moderation": {
+      "status": "pending_scan"
+    },
+    "refreshedAt": 1785545704019
+  },
+  {
+    "id": "hb-tlom7-003",
+    "name": "Sedoso Massage Oil",
+    "category": "health-beauty",
+    "subcategory": "personal-care",
+    "browseCategory": "health-beauty",
+    "browseSubCategory": "personal-care",
+    "sellerNetKes": 200,
+    "sourcePriceKes": 200,
+    "priceKes": 225,
+    "platformFeeKes": 20,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 200,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A clear bottle of Sedoso Massage Oil, labeled as all-natural, plant-based, and paraben-free. The label indicates it is Sweet Almond oil.",
+    "brand": "Sedoso",
+    "color": "clear",
+    "size": "",
+    "era": "",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "location": "Kenol",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": "small",
+    "shippingNote": "Seller express",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "💄",
+    "tags": [
+      "all-natural",
+      "plant-based",
+      "paraben-free"
+    ],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/hb-tlom7-003.jpg",
+    "images": [
+      "assets/images/products/hb-tlom7-003.jpg"
+    ],
+    "videoUrl": null,
+    "publishedAt": 1785545955395,
     "moderation": {
       "status": "pending_scan"
     }

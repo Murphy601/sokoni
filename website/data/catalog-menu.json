@@ -5,7 +5,12 @@
       "id": "health-beauty",
       "label": "Health & Beauty",
       "emoji": "💄",
-      "subcategories": []
+      "subcategories": [
+        {
+          "id": "personal-care",
+          "label": "Personal Care"
+        }
+      ]
     },
     {
       "id": "fashion",
