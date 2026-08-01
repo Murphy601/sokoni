@@ -116,9 +116,9 @@ Manual:
 2. Open `/admin-seller-listings.html?token=…` → restore / keep removed
 3. With `PHOTOROOM_API_KEY` set: cover upload → Preview clean background → toggle original vs cleaned → post uses the choice
 
-## Media studio roadmap (rembg + ffmpeg)
+## Media studio (rembg + ffmpeg)
 
-Photoroom remains optional today. Self-hosted cleanup + short clips are planned **without changing seller listing behaviour until each phase ships**. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md) (Phase 0 locked).
+Optional cover cleanup + short Ken Burns clips. Defaults off until `REMBG_URL` / `PHOTOROOM_API_KEY` / `STUDIO_CLIP_ENABLED` are set. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
 
 ## Next: Phase 5.1
 
