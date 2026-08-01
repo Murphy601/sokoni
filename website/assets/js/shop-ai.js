@@ -8,6 +8,7 @@
   const form = document.getElementById("ask-form");
   const input = document.getElementById("ask-input");
   const log = document.getElementById("chat-log");
+  const suggestions = document.getElementById("ask-suggestions");
   let sessionId = sessionStorage.getItem("sokoni-ai-session") || "";
 
   function bubble(text, role) {
@@ -33,8 +34,12 @@
     products.slice(0, 3).forEach((p) => {
       const card = document.createElement("div");
       card.className = "ask-product-card";
+      const aisle =
+        p.browseCategory
+          ? `<span class="text-zinc-500 text-xs">${p.browseCategory}${p.browseSubCategory ? ` · ${p.browseSubCategory}` : ""}</span><br>`
+          : "";
       const waText = encodeURIComponent(`Hi Sokoni, I want ${p.name} (${p.id})`);
-      card.innerHTML = `<div><strong class="text-white">${p.name}</strong><br><span class="text-zinc-400">KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}</span></div>`;
+      card.innerHTML = `<div>${aisle}<strong class="text-white">${p.name}</strong><br><span class="text-zinc-400">KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}</span></div>`;
       const a = document.createElement("a");
       a.href = `https://wa.me/${WHATSAPP}?text=${waText}`;
       a.target = "_blank";
@@ -53,6 +58,7 @@
     bubble(text, "user");
     input.value = "";
     input.disabled = true;
+    if (suggestions) suggestions.hidden = true;
 
     try {
       const res = await fetch(`${API}/chat`, {
@@ -85,11 +91,21 @@
     sendMessage(text);
   });
 
+  suggestions?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-ask]");
+    if (!btn) return;
+    const text = btn.getAttribute("data-ask");
+    if (text) sendMessage(text);
+  });
+
   const q = new URLSearchParams(window.location.search).get("q");
   if (q) {
     input.value = q;
     sendMessage(q);
   } else {
-    bubble("Poa! 👋 Unatafuta nini? Try: \"dress under 5000\" or \"SK-1042\" to track.", "assistant");
+    bubble(
+      "Poa! 👋 I can walk Sokoni Mall with you — categories & subs, live deals, prepaid/escrow, delivery, or track SK-####. Try a chip below or type what you need.",
+      "assistant"
+    );
   }
 })();

@@ -920,6 +920,26 @@ body.sell-depop-page .sell-activity-pill--like {
   background: var(--depop-bg);
 }
 
+.depop-surface-page .ask-suggest {
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #0a0a0a;
+  color: #e4e4e7;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.depop-surface-page .ask-suggest:hover,
+.depop-surface-page .ask-suggest:focus-visible {
+  border-color: #ff2300;
+  color: #fff;
+  outline: none;
+}
+
 .depop-surface-page .ask-bubble {
   max-width: 85%;
   padding: 0.75rem 1rem;

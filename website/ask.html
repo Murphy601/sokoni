@@ -27,9 +27,17 @@
   <main class="depop-main-content flex-1 max-w-2xl mx-auto w-full px-5 py-8 flex flex-col">
     <p class="depop-label mb-2">Sokoni Plug</p>
     <h1 class="text-3xl font-black tracking-tight text-white mb-2">Ask Sokoni</h1>
-    <p class="text-zinc-400 text-sm mb-6">
-      Discover items from the live catalog, check prepaid/escrow info, or track <strong class="text-zinc-200">SK-####</strong> orders. Checkout stays on WhatsApp.
+    <p class="text-zinc-400 text-sm mb-4">
+      Ask about categories, find live catalog deals, check prepaid/escrow &amp; delivery, or track <strong class="text-zinc-200">SK-####</strong> orders. Checkout stays on WhatsApp.
     </p>
+
+    <div id="ask-suggestions" class="flex flex-wrap gap-2 mb-6" aria-label="Suggested questions">
+      <button type="button" class="ask-suggest" data-ask="What categories do you have?">Categories</button>
+      <button type="button" class="ask-suggest" data-ask="Show me women dresses">Women dresses</button>
+      <button type="button" class="ask-suggest" data-ask="Electronics under 10000">Electronics under 10k</button>
+      <button type="button" class="ask-suggest" data-ask="How does Sokoni prepaid escrow work?">Prepaid &amp; escrow</button>
+      <button type="button" class="ask-suggest" data-ask="How does delivery work?">Delivery</button>
+    </div>
 
     <div id="chat-log" class="ask-chat-log flex-1 space-y-4 mb-6 min-h-[240px] overflow-y-auto p-4"></div>
 
