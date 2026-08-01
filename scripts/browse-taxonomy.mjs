@@ -5,8 +5,13 @@
  * Additive Kilimall-gap expansion locked in docs/PHASE0_TAXONOMY_LOCK.md.
  * Optional `resolvesTo: { browse, sub }` = nav alias (filter uses canonical path).
  * Optional `navOnly: true` = hide from seller listing pickers (shortcuts only).
- * Optional `image` = thumbnail path; UI falls back to `emoji`.
+ * `image` = public web thumbnail (Unsplash) — never catalog product photos.
  */
+
+import {
+  categoryImageUrl,
+  subcategoryImageUrl,
+} from "./browse-category-images.mjs";
 
 export const ITEM_TYPE_FILTERS = [
   { id: "all", label: "All Items" },
@@ -51,10 +56,6 @@ export const CURATED_THEMES = [
   { id: "thrift-fits", label: "Thrift Fits" },
 ];
 
-/** Optional thumbnail paths (storefront-relative). Mega-menu may override with live product photos. */
-const catImage = (id) => `assets/images/categories/${id}.svg`;
-const subImage = (id) => `assets/images/subcats/${id}.svg`;
-
 /** Optional mega-menu column groups (presentation only — flat subs stay canonical). */
 const MEGA_GROUPS = {
   women: [
@@ -94,7 +95,7 @@ function withBrowseImages(taxonomy) {
   return taxonomy.map((cat) => {
     const subcategories = (cat.subcategories || []).map((sub) => ({
       ...sub,
-      image: sub.image || subImage(sub.id),
+      image: sub.image || subcategoryImageUrl(sub.id) || categoryImageUrl(cat.id),
     }));
     const byId = Object.fromEntries(subcategories.map((s) => [s.id, s]));
     const layout = MEGA_GROUPS[cat.id];
@@ -109,7 +110,7 @@ function withBrowseImages(taxonomy) {
 
     return {
       ...cat,
-      image: cat.image || catImage(cat.id),
+      image: cat.image || categoryImageUrl(cat.id),
       subcategories,
       ...(groups ? { groups } : {}),
     };
