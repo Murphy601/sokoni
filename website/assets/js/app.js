@@ -194,7 +194,7 @@ function formatPrice(product) {
 }
 
 function formatShippingLine(_product) {
-  return "";
+  return "Seller handles dispatch";
 }
 
 function formatBuyerTotal(product) {

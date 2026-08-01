@@ -303,38 +303,23 @@ function isFreeShipping() {
 }
 
 function selectedDeliveryMethod() {
-  const checked = document.querySelector('input[name="draft-delivery-method"]:checked');
-  const raw = String(checked?.value || draft.deliveryMethod || "hub");
-  // Meetup removed — never treat it as a selectable method.
-  if (raw === "meetup" || raw === "meet" || raw === "in_person") return "hub";
-  return raw === "seller_express" ? "seller_express" : "hub";
+  // Platform no longer offers hub shipping calc — sellers arrange dispatch themselves.
+  return "seller_express";
 }
 
-function isSellerHandledDelivery(method = selectedDeliveryMethod()) {
-  return method === "seller_express";
+function isSellerHandledDelivery() {
+  return true;
 }
 
-function computeFeeBreakdown(
-  sellerNetKes,
-  shippingKes,
-  freeShipping = isFreeShipping(),
-  deliveryMethod = selectedDeliveryMethod()
-) {
+function computeFeeBreakdown(sellerNetKes) {
   const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
-  const method = String(deliveryMethod || "hub") === "seller_express" ? "seller_express" : "hub";
-  const shipRaw = Math.round(Number(shippingKes) || 0);
-
-  let shipping;
-  if (freeShipping || shipRaw === 0) shipping = 0;
-  else if (method === "seller_express") shipping = Math.max(0, shipRaw);
-  else shipping = Math.max(MIN_SHIPPING_KES, shipRaw || MIN_SHIPPING_KES);
-
-  const subtotal = sellerNet + shipping;
+  // No platform shipping — buyer pays item + Sokoni 10% + M-Pesa only.
+  const shipping = 0;
+  const subtotal = sellerNet;
   const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE);
   const chargeBeforeTxn = subtotal + platformFee;
   const transactionFeeKes = mpesaTransactionFeeKes(chargeBeforeTxn);
   const buyerTotal = chargeBeforeTxn + transactionFeeKes;
-  const sellerHandled = method === "seller_express";
 
   return {
     sellerNetKes: sellerNet,
@@ -346,73 +331,29 @@ function computeFeeBreakdown(
     platformFeeRate: PLATFORM_FEE_RATE,
     transactionFeeKes,
     chargeBeforeTxnKes: chargeBeforeTxn,
-    freeShipping: shipping === 0,
-    deliveryMethod: method,
-    shippingRecipient: sellerHandled ? "seller" : "platform",
-    sellerPayoutKes: sellerHandled ? sellerNet + shipping : sellerNet,
+    freeShipping: true,
+    deliveryMethod: "seller_express",
+    shippingRecipient: "seller",
+    sellerPayoutKes: sellerNet,
   };
 }
 
 function syncShippingFromWeightClass() {
-  if (isFreeShipping() || isSellerHandledDelivery()) return;
-  const tier = getShippingTier(el("draft-weight-class")?.value);
-  if (!tier || !el("draft-shipping")) return;
-  el("draft-shipping").value = String(tier.typicalKes);
+  if (el("draft-shipping")) el("draft-shipping").value = "0";
+  if (el("draft-free-shipping")) el("draft-free-shipping").checked = true;
 }
 
-function updateAiWeightNote(classId) {
-  const note = el("ai-weight-note");
-  const label = el("ai-weight-label");
-  if (!note || !label) return;
-  if (isSellerHandledDelivery()) {
-    note.classList.add("hidden");
-    return;
-  }
-  if (classId && draft.estimatedWeightClass) {
-    label.textContent = getShippingTierLabel(classId);
-    note.classList.remove("hidden");
-  } else {
-    note.classList.add("hidden");
-  }
+function updateAiWeightNote() {
+  el("ai-weight-note")?.classList.add("hidden");
 }
 
 function updateShippingFieldState() {
-  const method = selectedDeliveryMethod();
-  const free = isFreeShipping();
-  const shipInput = el("draft-shipping");
-  const weightSelect = el("draft-weight-class");
-  const freeBox = el("draft-free-shipping");
-  const shipHint = el("draft-shipping-hint");
-  const freeLabel = el("draft-free-shipping-label");
+  if (el("draft-shipping")) el("draft-shipping").value = "0";
+  if (el("draft-free-shipping")) el("draft-free-shipping").checked = true;
   const priceHint = el("draft-price-hint");
-
-  if (weightSelect) {
-    weightSelect.closest("label")?.classList.toggle("hidden", isSellerHandledDelivery(method));
-  }
-  if (el("shipping-tier-hint")) {
-    el("shipping-tier-hint").classList.toggle("hidden", isSellerHandledDelivery(method));
-  }
-
-  if (shipInput) {
-    shipInput.disabled = free;
-    if (free) shipInput.value = "0";
-  }
-  if (weightSelect) weightSelect.disabled = free || isSellerHandledDelivery(method);
-  if (freeBox) freeBox.disabled = false;
-  if (shipHint) {
-    shipHint.textContent = isSellerHandledDelivery(method)
-      ? "Your flat delivery fee — you keep this in full on payout."
-      : "AI suggests a fee from the tier above (min KES 300) — you can edit before posting.";
-  }
-  if (freeLabel) {
-    freeLabel.textContent = isSellerHandledDelivery(method)
-      ? "Cover delivery yourself (buyer still pays your price + 10% Sokoni + M-Pesa fee)"
-      : "Offer free shipping (you cover delivery — buyer pays your price + 10% Sokoni + M-Pesa fee)";
-  }
   if (priceHint) {
-    priceHint.textContent = isSellerHandledDelivery(method)
-      ? "What you receive for the item. You also keep the delivery fee. Buyer pays item + delivery + 10% Sokoni + variable M-Pesa fee."
-      : "What you receive for the item. Buyer pays item + shipping + 10% Sokoni + variable M-Pesa fee (hub shipping stays with Sokoni for courier).";
+    priceHint.textContent =
+      "What you receive for the item. Buyer pays item + 10% Sokoni + M-Pesa fee. You arrange delivery with the buyer after payment.";
   }
 }
 
@@ -426,31 +367,21 @@ function renderFeeBreakdown(fees, prefix = "fee") {
     const node = el(`${prefix}-${id}`);
     if (node) node.textContent = formatKes(val);
   };
-  const sellerHandled = fees.shippingRecipient === "seller";
   const txn = fees.transactionFeeKes ?? 0;
 
   if (prefix === "fee") {
     setFeeLabel("fee-item-label", "You receive (item)");
-    setFeeLabel(
-      "fee-shipping-label",
-      sellerHandled ? "Delivery fee (you keep)" : "Shipping (hub logistics)"
-    );
     setFeeLabel("fee-platform-label", "Sokoni fee (10%)");
     setFeeLabel("fee-txn-label", "M-Pesa fee (varies by amount)");
     setFeeLabel("fee-net-label", "Your total payout");
   } else if (prefix === "review-fee") {
     setFeeLabel("review-fee-item-label", "You receive (item)");
-    setFeeLabel(
-      "review-fee-shipping-label",
-      sellerHandled ? "Delivery fee (you keep)" : "Shipping"
-    );
     setFeeLabel("review-fee-platform-label", "Sokoni fee (10%)");
     setFeeLabel("review-fee-txn-label", "M-Pesa fee (varies by amount)");
     setFeeLabel("review-fee-net-label", "Your total payout");
   }
 
   set("item", fees.sellerNetKes);
-  set("shipping", fees.shippingKes);
   set("buyer", fees.buyerTotalKes);
   const platformNode = el(`${prefix}-platform`);
   if (platformNode) platformNode.textContent = formatKes(fees.platformFeeKes);
@@ -461,18 +392,10 @@ function renderFeeBreakdown(fees, prefix = "fee") {
 
 function updateFeeBreakdown() {
   updateShippingFieldState();
-  const fees = computeFeeBreakdown(
-    el("draft-price")?.value,
-    el("draft-shipping")?.value,
-    isFreeShipping(),
-    selectedDeliveryMethod()
-  );
+  const fees = computeFeeBreakdown(el("draft-price")?.value);
   renderFeeBreakdown(fees, "fee");
   renderFeeBreakdown(fees, "review-fee");
-  const classId = el("draft-weight-class")?.value || draft.estimatedWeightClass;
-  const hint = el("shipping-tier-hint");
-  if (hint && classId && !isSellerHandledDelivery()) hint.textContent = getShippingTierLabel(classId);
-  updateAiWeightNote(classId);
+  updateAiWeightNote();
 }
 
 function retailFromSupply(supply) {
@@ -507,7 +430,7 @@ const HUB_SELLER_GUIDES = [
   },
   {
     title: "Price pre-loved for fast sales",
-    blurb: "Start with what you want to receive (seller-net). Shipping starts at KES 300.",
+    blurb: "Set what you want to receive (seller-net). Buyers pay that + Sokoni fee — you arrange delivery yourself.",
     action: "list",
   },
   {
@@ -516,8 +439,8 @@ const HUB_SELLER_GUIDES = [
     action: "bulk",
   },
   {
-    title: "Ship within 48 hours",
-    blurb: "Print the SK drop tag, hand over at a hub — escrow releases after delivery.",
+    title: "Dispatch within 48 hours",
+    blurb: "After payment, contact the buyer and send the item — escrow releases after delivery.",
     action: "orders",
   },
 ];
@@ -863,16 +786,12 @@ function fillFormFromDraft() {
   el("draft-brand2").value = draft.secondaryBrand || "";
   el("draft-price").value = draft.sellerNetKes ?? draft.priceKes ?? draft.sourcePriceKes ?? "";
   if (el("media-price")) el("media-price").value = el("draft-price").value;
-  const method = draft.deliveryMethod === "seller_express" ? "seller_express" : "hub";
   document.querySelectorAll('input[name="draft-delivery-method"]').forEach((input) => {
-    input.checked = input.value === method;
+    input.checked = input.value === "seller_express";
   });
-  populateWeightClassSelect(draft.estimatedWeightClass || "small");
-  el("draft-shipping").value =
-    draft.freeShipping
-      ? 0
-      : draft.shippingKes ?? draft.suggestedShippingFeeKsh ?? getShippingTier(draft.estimatedWeightClass)?.typicalKes ?? MIN_SHIPPING_KES;
-  if (el("draft-free-shipping")) el("draft-free-shipping").checked = Boolean(draft.freeShipping);
+  populateWeightClassSelect("small");
+  if (el("draft-shipping")) el("draft-shipping").value = "0";
+  if (el("draft-free-shipping")) el("draft-free-shipping").checked = true;
   el("draft-color").value = draft.color && !isPlaceholderLabel(draft.color) ? draft.color : "";
   el("draft-size").value = draft.size && !isPlaceholderLabel(draft.size) ? draft.size : "";
   if (el("draft-pit-to-pit")) {
@@ -942,8 +861,7 @@ function collectDraft() {
     .slice(0, meta.maxTags || 5);
 
   const net = Math.round(Number(el("draft-price")?.value || el("media-price")?.value || 0));
-  const deliveryMethod = selectedDeliveryMethod();
-  const fees = computeFeeBreakdown(net, el("draft-shipping")?.value, isFreeShipping(), deliveryMethod);
+  const fees = computeFeeBreakdown(net);
   return {
     ...draft,
     name: el("draft-name").value.trim(),
@@ -954,12 +872,12 @@ function collectDraft() {
     sellerNetKes: net,
     priceKes: net,
     sourcePriceKes: net,
-    deliveryMethod: fees.deliveryMethod,
-    shippingRecipient: fees.shippingRecipient,
+    deliveryMethod: "seller_express",
+    shippingRecipient: "seller",
     sellerPayoutKes: fees.sellerPayoutKes,
-    estimatedWeightClass: el("draft-weight-class")?.value || draft.estimatedWeightClass || "small",
-    freeShipping: fees.freeShipping || isFreeShipping(),
-    shippingKes: fees.shippingKes,
+    estimatedWeightClass: "small",
+    freeShipping: true,
+    shippingKes: 0,
     category: el("draft-category").value,
     browseCategory: el("draft-browse-cat")?.value,
     browseSubCategory: el("draft-browse-sub")?.value,
@@ -977,13 +895,12 @@ function collectDraft() {
 
 function fillReview() {
   const d = collectDraft();
-  const fees = computeFeeBreakdown(d.sellerNetKes ?? d.priceKes, d.shippingKes, d.freeShipping, d.deliveryMethod);
-  const methodLabel = d.deliveryMethod === "seller_express" ? "Seller express" : "Sokoni hub";
+  const fees = computeFeeBreakdown(d.sellerNetKes ?? d.priceKes);
   el("review-summary").innerHTML = `
     <p class="font-semibold text-lg">${d.name || "—"}</p>
     <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-2">${d.description || "—"}</p>
     <p class="text-sm mt-3">${d.browseCategory || ""} → ${d.browseSubCategory || ""} · ${CONDITION_LABELS[d.condition] || d.condition}${d.size ? ` · Size ${d.size}` : ""}</p>
-    <p class="text-xs mt-2 text-brand-purple/60 dark:text-white/60">Delivery: ${methodLabel}</p>
+    <p class="text-xs mt-2 text-brand-purple/60 dark:text-white/60">Delivery: you arrange dispatch with the buyer after payment</p>
     ${
       d.pitToPitIn || d.lengthIn || d.waistIn
         ? `<p class="text-xs mt-2 text-brand-purple/60 dark:text-white/60">Flat: ${[
@@ -1149,8 +1066,8 @@ async function onPublish() {
     return;
   }
   const d = collectDraft();
-  if (!d.freeShipping && d.shippingKes < MIN_SHIPPING_KES) {
-    setStatus(`Shipping fee is required (minimum KES ${MIN_SHIPPING_KES}), or tick Offer free shipping.`, true);
+  if (!d.sellerNetKes || d.sellerNetKes < 10) {
+    setStatus("Enter a valid item price (KES).", true);
     goStep(-(stepIndex - STEPS.indexOf("pricing")));
     return;
   }
@@ -1306,7 +1223,7 @@ function renderListingAiStatus(metaData) {
     parts.push("Photo AI offline — use a caption or fill details manually");
   }
   if (studioUiEnabled) parts.push("background cleanup available — preview below");
-  parts.push("price = what you receive; buyers pay shipping + fee (prepaid)");
+  parts.push("price = what you receive; buyers pay price + Sokoni fee; you arrange delivery");
   node.textContent = parts.join(" · ") + ".";
   updateCoverStudioUi();
 }
@@ -4176,14 +4093,10 @@ function renderSellerOffers(offers = [], emptyMessage = "No buyer offers yet. Ne
       const breakdown = offer?.breakdown;
       const escrowLine =
         breakdown?.sellerNetKes != null
-          ? `<p class="text-xs text-zinc-400 mt-1">Buyer pays ${escapeHtml(formatKes(breakdown.totalKes))} into escrow → you receive <strong>${escapeHtml(formatKes(breakdown.sellerNetKes))}</strong> after delivery (${
-              breakdown.freeShipping || !breakdown.shippingKes
-                ? "shipping free"
-                : `shipping ${escapeHtml(formatKes(breakdown.shippingKes))}`
-            }, Sokoni fee ${escapeHtml(formatKes(breakdown.platformFeeKes))})</p>`
+          ? `<p class="text-xs text-zinc-400 mt-1">Buyer pays ${escapeHtml(formatKes(breakdown.totalKes))} into escrow → you receive <strong>${escapeHtml(formatKes(breakdown.sellerNetKes))}</strong> after delivery (Sokoni fee ${escapeHtml(formatKes(breakdown.platformFeeKes))}). You arrange dispatch.</p>`
           : offer?.breakdownError?.message
             ? `<p class="text-xs text-amber-700 dark:text-amber-300 mt-1">${escapeHtml(offer.breakdownError.message)}</p>`
-            : `<p class="text-xs text-zinc-400 dark:text-white/55 mt-1">Offer is buyer all-in (shipping + Sokoni fee come out before your payout).</p>`;
+            : `<p class="text-xs text-zinc-400 dark:text-white/55 mt-1">Offer is buyer all-in (Sokoni fee comes out before your payout). You arrange delivery.</p>`;
       const canRespond = Number.isInteger(id) && id > 0 && status === "pending";
       const sellerUserId = currentSellerSocialUserId();
       const buyerUserId = offerBuyerUserId(offer);
@@ -4380,8 +4293,7 @@ async function respondToSellerOffer(button) {
       const ok = window.confirm(
         `Buyer pays ${formatKes(b.totalKes)} into escrow.\n` +
           `You receive ${formatKes(b.sellerNetKes)} after delivery` +
-          ` (shipping ${b.freeShipping || !b.shippingKes ? "free" : formatKes(b.shippingKes)},` +
-          ` Sokoni fee ${formatKes(b.platformFeeKes)}).\n\nAccept this offer?`
+          ` (Sokoni fee ${formatKes(b.platformFeeKes)}; you arrange dispatch).\n\nAccept this offer?`
       );
       if (!ok) return;
     } else if (offer?.breakdownError?.message) {
@@ -5253,22 +5165,6 @@ function init() {
       void maybeAutoGenerate();
     }
   });
-  el("draft-shipping")?.addEventListener("input", updateFeeBreakdown);
-  document.querySelectorAll('input[name="draft-delivery-method"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      if (input.value === "seller_express" && (!el("draft-shipping")?.value || el("draft-shipping").value === "0")) {
-        el("draft-shipping").value = "250";
-      }
-      updateFeeBreakdown();
-    });
-  });
-  el("draft-weight-class")?.addEventListener("change", () => {
-    draft.estimatedWeightClass = el("draft-weight-class")?.value;
-    syncShippingFromWeightClass();
-    updateFeeBreakdown();
-  });
-  el("draft-free-shipping")?.addEventListener("change", updateFeeBreakdown);
-
   loadMeta().then(async () => {
     checkApiHealth();
     const hadSession = loadSessionFromStorage();

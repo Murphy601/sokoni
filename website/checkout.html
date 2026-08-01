@@ -32,7 +32,7 @@
   <main class="max-w-lg mx-auto px-5 py-10">
     <p class="depop-label mb-2">Checkout</p>
     <h1 class="text-3xl font-black tracking-tight text-white mb-2">Pay your order</h1>
-    <p class="text-sm text-zinc-400 mb-2">Pay on Sokoni — funds held in escrow until delivery. Accepted offers check out at the <strong class="text-zinc-200">agreed price</strong>.</p>
+    <p class="text-sm text-zinc-400 mb-2">Pay the item price on Sokoni — funds held in escrow until you receive it. Delivery is arranged directly by the seller. Accepted offers check out at the <strong class="text-zinc-200">agreed price</strong>.</p>
     <p id="checkout-readiness" class="text-xs text-zinc-500 mb-8">Checking M-Pesa options…</p>
 
     <div id="offer-checkout-panel" class="hidden depop-card p-6 space-y-4 mb-8">
@@ -67,8 +67,9 @@
           <input id="offer-name" type="text" required autocomplete="name" class="sell-form-input" placeholder="Jane Wanjiru" />
         </label>
         <label class="block text-sm font-medium text-zinc-300">
-          Delivery location
+          Drop-off address / landmark
           <input id="offer-location" type="text" required autocomplete="street-address" class="sell-form-input" placeholder="Umoja 1 near the market" />
+          <span class="mt-1 block text-xs text-zinc-500">Seller uses this to arrange delivery after you pay — no shipping fee added at checkout.</span>
         </label>
         <label class="block text-sm font-medium text-zinc-300">
           M-Pesa / rider phone

@@ -23,7 +23,7 @@
       badge: "Zero listing fees",
       headline: "Turn your closet into cash.",
       subtext:
-        "List brand new or pre-loved in minutes. Buyers pay upfront — you drop off with an SK label and get paid after delivery.",
+        "List brand new or pre-loved in minutes. Buyers pay the item upfront — you arrange dispatch directly and get paid after delivery.",
       primaryCtaText: "Start selling",
       primaryCtaLink: "suppliers/list.html",
       secondaryCtaText: "How selling works",
@@ -31,12 +31,25 @@
       bleedClass: "depop-hero-bleed--sellers",
     },
     {
+      id: "dispatch",
+      tag: "Direct dispatch",
+      badge: "Seller delivered",
+      headline: "Sellers send products straight to you.",
+      subtext:
+        "No shipping line at checkout. After you pay, the seller coordinates delivery to your drop-off address or landmark.",
+      primaryCtaText: "Shop latest finds",
+      primaryCtaLink: "#deals",
+      secondaryCtaText: "Start selling",
+      secondaryCtaLink: "suppliers/list.html",
+      bleedClass: "depop-hero-bleed--pickup",
+    },
+    {
       id: "escrow",
       tag: "Prepaid escrow",
       badge: "Guaranteed until delivery",
       headline: "Shop with peace of mind.",
       subtext:
-        "Your M-Pesa stays in Sokoni escrow until the parcel lands. Track every order with SK-####.",
+        "Your M-Pesa stays in Sokoni escrow until you receive the order from the seller. Track every order with SK-####.",
       primaryCtaText: "How escrow works",
       primaryCtaLink: "faq.html",
       secondaryCtaText: "Track an order",
@@ -69,19 +82,6 @@
       secondaryCtaText: "How Sokoni works",
       secondaryCtaLink: "#how-it-works",
       bleedClass: "depop-hero-bleed--offers",
-    },
-    {
-      id: "pickup",
-      tag: "Drop-off & pickup",
-      badge: "Countrywide hubs",
-      headline: "Shipping that fits Kenya.",
-      subtext:
-        "Sellers drop parcels at Sokoni hubs or pickup partners. Buyers track every step with SK-####.",
-      primaryCtaText: "Pickup points",
-      primaryCtaLink: "pickup-points.html",
-      secondaryCtaText: "Become a station",
-      secondaryCtaLink: "pickup-points/apply.html",
-      bleedClass: "depop-hero-bleed--pickup",
     },
   ];
 

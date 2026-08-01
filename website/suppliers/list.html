@@ -151,7 +151,7 @@
           </label>
           <label class="text-sm font-medium md:col-span-2">
             Bio
-            <textarea id="edit-shop-bio" rows="3" maxlength="1000" class="sell-form-input mt-1" placeholder="What you sell, sizes, shipping notes…"></textarea>
+            <textarea id="edit-shop-bio" rows="3" maxlength="1000" class="sell-form-input mt-1" placeholder="What you sell, sizes, how you dispatch…"></textarea>
           </label>
           <label class="text-sm font-medium md:col-span-1">
             Location
@@ -246,7 +246,7 @@
             <div class="seller-hub-stat seller-hub-stat--accent rounded-2xl p-4 sm:p-5 space-y-1.5">
               <p class="text-[11px] font-bold uppercase tracking-wider depop-stat-label">Orders to ship</p>
               <p id="hub-stat-orders" class="text-xl sm:text-2xl font-black font-mono depop-stat-value">—</p>
-              <p class="text-[10px] depop-stat-meta">Needs hub drop-off or express</p>
+              <p class="text-[10px] depop-stat-meta">Needs seller dispatch</p>
             </div>
             <div class="seller-hub-stat rounded-2xl p-4 sm:p-5 space-y-1.5">
               <p class="text-[11px] font-bold uppercase tracking-wider depop-stat-label">Active listings</p>
@@ -490,7 +490,7 @@
             <div>
               <p class="depop-label">Seller-net pricing</p>
               <p class="text-sm text-brand-purple/70 dark:text-white/70 mt-0.5">
-                <strong>price_kes</strong> is what you receive. Buyers pay shipping + 10% Sokoni fee at checkout.
+                <strong>price_kes</strong> is what you receive. Buyers pay your price + 10% Sokoni fee; you arrange delivery yourself.
               </p>
             </div>
             <div class="flex flex-wrap gap-2 text-[11px] text-brand-purple/60 dark:text-white/55">
@@ -526,7 +526,7 @@
             <textarea
               id="bulk-csv-paste"
               rows="3"
-              placeholder="title,price_kes,category,subcategory,size,condition,color,brand,shipping_kes,vibe_tags,description…"
+              placeholder="title,price_kes,category,subcategory,size,condition,color,brand,vibe_tags,description…"
               class="mt-1 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white dark:bg-brand-purple px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"></textarea>
           </label>
           <div class="flex flex-wrap gap-2">
@@ -661,7 +661,7 @@
         <label class="block text-sm font-medium">
           Your price (KES) — what you receive
           <input id="media-price" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 2500" class="sell-form-input" />
-          <span class="sell-tag-hint">Add this before AI drafts from the cover. Buyers pay shipping + 10% Sokoni fee on top.</span>
+          <span class="sell-tag-hint">Add this before AI drafts from the cover. Buyers pay your price + 10% Sokoni fee; you handle dispatch.</span>
         </label>
         <label class="block text-sm font-medium">
           Caption hint for AI (optional)
@@ -766,60 +766,27 @@
         </label>
       </section>
 
-      <!-- Step 4: Pricing -->
+      <!-- Step 4: Pricing (seller handles dispatch — no platform shipping calc) -->
       <section id="panel-pricing" class="sell-panel sell-depop-section p-6 space-y-4">
-        <h2 class="font-bold text-lg">Pricing & shipping</h2>
-        <p id="ai-weight-note" class="hidden text-sm rounded-xl bg-brand-green/10 border border-brand-green/20 px-4 py-3 text-brand-purple/80 dark:text-white/80">
-          <strong>AI detected:</strong> <span id="ai-weight-label">—</span>
+        <h2 class="font-bold text-lg">Pricing</h2>
+        <p class="text-sm rounded-xl bg-brand-green/10 border border-brand-green/20 px-4 py-3 text-brand-purple/80 dark:text-white/80">
+          <strong>You handle dispatch.</strong> Arrange delivery with the buyer after they pay — Sokoni does not add shipping at checkout.
         </p>
         <label class="block text-sm font-medium">
           Your price — what you receive for the item (KES) *
           <input id="draft-price" type="number" min="10" class="sell-form-input" />
-          <span id="draft-price-hint" class="sell-tag-hint">This is your item payout. Shipping and platform fee depend on delivery method below.</span>
+          <span id="draft-price-hint" class="sell-tag-hint">Buyer pays this price + 10% Sokoni fee + M-Pesa fee. Delivery is arranged by you separately.</span>
         </label>
 
-        <fieldset class="space-y-2">
-          <legend class="text-sm font-medium">How will the buyer get this?</legend>
-          <p class="text-xs text-brand-purple/55 dark:text-white/55">Seller express: you keep the delivery fee. Hub: Sokoni handles courier.</p>
-          <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Delivery method">
-            <label class="sell-delivery-option">
-              <input type="radio" name="draft-delivery-method" value="hub" class="sr-only" checked />
-              <span class="sell-delivery-card">
-                <span class="font-bold text-sm">Sokoni hub</span>
-                <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">Drop at nearest hub — we courier</span>
-              </span>
-            </label>
-            <label class="sell-delivery-option">
-              <input type="radio" name="draft-delivery-method" value="seller_express" class="sr-only" />
-              <span class="sell-delivery-card">
-                <span class="font-bold text-sm">Seller express</span>
-                <span class="text-[11px] text-brand-purple/60 dark:text-white/55 mt-1 block">You dispatch — keep your delivery fee</span>
-              </span>
-            </label>
-          </div>
-        </fieldset>
-
-        <div id="hub-shipping-fields" class="space-y-4">
-          <label class="block text-sm font-medium">
-            Estimated size / weight (from photo)
-            <select id="draft-weight-class" class="sell-form-input"></select>
-            <span id="shipping-tier-hint" class="sell-tag-hint"></span>
-          </label>
-          <label class="block text-sm font-medium">
-            Shipping fee (KES)
-            <input id="draft-shipping" type="number" min="0" class="sell-form-input" />
-            <span id="draft-shipping-hint" class="sell-tag-hint">AI suggests a fee from the tier above (min KES 300) — you can edit before posting.</span>
-          </label>
-          <label class="flex items-center gap-2 text-sm font-medium">
-            <input id="draft-free-shipping" type="checkbox" class="rounded border-brand-purple/30" />
-            <span id="draft-free-shipping-label">Offer free shipping (you cover delivery — buyer pays your price + platform fee only)</span>
-          </label>
-        </div>
+        <!-- Hidden defaults for API compatibility (seller-handled, no platform shipping) -->
+        <input type="radio" name="draft-delivery-method" value="seller_express" class="sr-only" checked tabindex="-1" aria-hidden="true" />
+        <input id="draft-shipping" type="hidden" value="0" />
+        <input id="draft-free-shipping" type="checkbox" class="sr-only" checked tabindex="-1" aria-hidden="true" />
+        <select id="draft-weight-class" class="sr-only" tabindex="-1" aria-hidden="true"><option value="small" selected>small</option></select>
 
         <table id="fee-breakdown-pricing" class="sell-fee-table" aria-label="Fee breakdown">
           <tbody>
             <tr><th scope="row" id="fee-item-label">You receive (item)</th><td id="fee-item">—</td></tr>
-            <tr><th scope="row" id="fee-shipping-label">Shipping</th><td id="fee-shipping">—</td></tr>
             <tr><th scope="row" id="fee-platform-label">Sokoni fee (10%)</th><td id="fee-platform">—</td></tr>
             <tr><th scope="row" id="fee-txn-label">M-Pesa fee (varies by amount)</th><td id="fee-txn">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="fee-buyer">—</td></tr>
@@ -830,7 +797,7 @@
           Dispatch from (city)
           <input id="draft-location" placeholder="Nairobi, Mombasa…" class="sell-form-input" />
         </label>
-        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — buyer pays upfront via M-Pesa. Sokoni holds funds in escrow until delivery.</p>
+        <p class="text-xs text-brand-purple/50 dark:text-white/50">100% prepaid — buyer pays the item via M-Pesa. You arrange delivery directly after payment.</p>
       </section>
 
       <!-- Step 5: Review -->
@@ -840,7 +807,6 @@
         <table id="fee-breakdown-review" class="sell-fee-table" aria-label="Fee breakdown">
           <tbody>
             <tr><th scope="row" id="review-fee-item-label">Item (you receive)</th><td id="review-fee-item">—</td></tr>
-            <tr><th scope="row" id="review-fee-shipping-label">Shipping</th><td id="review-fee-shipping">—</td></tr>
             <tr><th scope="row" id="review-fee-platform-label">Sokoni fee (10%)</th><td id="review-fee-platform">—</td></tr>
             <tr><th scope="row" id="review-fee-txn-label">M-Pesa fee (varies by amount)</th><td id="review-fee-txn">—</td></tr>
             <tr class="sell-fee-total"><th scope="row">Buyer pays</th><td id="review-fee-buyer">—</td></tr>

@@ -6,7 +6,7 @@ import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
-import { applyAiShippingSuggestion, shippingTierPromptBlock, computeFeeBreakdown } from "./shipping-tiers.js";
+import { applyAiShippingSuggestion, computeFeeBreakdown } from "./shipping-tiers.js";
 import { geminiVisionAvailable, geminiVisionListingJson } from "./gemini-vision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -311,14 +311,12 @@ async function buildListingPrompt(caption = "") {
     `10. size — size label if visible on tag/item (e.g. "M", "UK 9", "32W/32L"), else null\n` +
     `11. tags — array of up to 5 short vibe tags from the photo (e.g. ["vintage","denim","90s"]), else []\n` +
     `12. description — 1–2 factual sentences about the item in the photo (no marketing fluff)\n` +
-    `13. estimatedWeightClass — small | medium | large from apparent size\n` +
-    `14. suggestedShippingFeeKsh — integer from SHIPPING TIER TABLE (minimum 300 KES; never below 300)\n` +
-    `15. Optional flat measurements in inches if garment is laid flat and measurable: pitToPitIn, lengthIn, waistIn (numbers or null)\n\n` +
-    `SHIPPING TIER TABLE:\n${shippingTierPromptBlock()}\n\n` +
+    `13. Optional flat measurements in inches if garment is laid flat and measurable: pitToPitIn, lengthIn, waistIn (numbers or null)\n` +
+    `Do NOT suggest shipping fees or weight classes — sellers arrange delivery themselves.\n\n` +
     `BROWSE PATHS (browseCategory / browseSubCategory — pick ONLY from this list):\n${browseLines}\n\n` +
     (caption ? `Seller caption (hints only): "${caption}"\n\n` : "") +
     `Example JSON:\n` +
-    `{"name":"Navy Nike Hoodie","sellerNetKes":2500,"category":"fashion","subcategory":"mens-fashion","browseCategory":"men","browseSubCategory":"hoodies","condition":"gently_used","isSecondhand":true,"brand":"Nike","color":"navy","size":"L","tags":["vintage","streetwear","90s"],"description":"Navy Nike pullover hoodie with visible swoosh. Light wear at cuffs.","estimatedWeightClass":"medium","suggestedShippingFeeKsh":450,"pitToPitIn":22,"lengthIn":28,"waistIn":null}`
+    `{"name":"Navy Nike Hoodie","sellerNetKes":2500,"category":"fashion","subcategory":"mens-fashion","browseCategory":"men","browseSubCategory":"hoodies","condition":"gently_used","isSecondhand":true,"brand":"Nike","color":"navy","size":"L","tags":["vintage","streetwear","90s"],"description":"Navy Nike pullover hoodie with visible swoosh. Light wear at cuffs.","pitToPitIn":22,"lengthIn":28,"waistIn":null}`
   );
 }
 
