@@ -22,6 +22,25 @@
     return el("admin-token")?.value?.trim() || localStorage.getItem(TOKEN_KEY) || "";
   }
 
+  function adminHeaders(extra = {}) {
+    const t = token();
+    return {
+      ...(t ? { "X-Admin-Token": t } : {}),
+      ...extra,
+    };
+  }
+
+  function stripTokenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("token")) return;
+    params.delete("token");
+    const q = params.toString();
+    const next = `${window.location.pathname}${q ? `?${q}` : ""}${window.location.hash || ""}`;
+    try {
+      history.replaceState({}, "", next);
+    } catch {}
+  }
+
   function setStatus(message, isError = false) {
     const node = el("admin-status");
     if (!node) return;
@@ -42,7 +61,8 @@
     if (list) list.innerHTML = "";
     try {
       const res = await fetch(
-        `${DISPUTES_API}/admin/list?token=${encodeURIComponent(t)}&status=${encodeURIComponent(status)}`
+        `${DISPUTES_API}/admin/list?status=${encodeURIComponent(status)}`,
+        { headers: adminHeaders() }
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -77,14 +97,14 @@
           </article>`
           )
           .join("");
-        bindCards(list, t);
+        bindCards(list);
       }
     } catch {
       setStatus("Network error.", true);
     }
   }
 
-  function bindCards(list, t) {
+  function bindCards(list) {
     list.querySelectorAll("[data-open-detail]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const card = btn.closest("[data-id]");
@@ -94,7 +114,9 @@
         detail.classList.remove("hidden");
         detail.textContent = "Loading…";
         try {
-          const res = await fetch(`${DISPUTES_API}/${encodeURIComponent(id)}?token=${encodeURIComponent(t)}`);
+          const res = await fetch(`${DISPUTES_API}/${encodeURIComponent(id)}`, {
+            headers: adminHeaders(),
+          });
           const data = await res.json().catch(() => ({}));
           detail.textContent = JSON.stringify(data, null, 2);
         } catch {
@@ -110,14 +132,11 @@
         const notes = window.prompt(`Admin notes for ${resolution}:`, "") || "";
         setStatus(`Resolving #${id}…`);
         try {
-          const res = await fetch(
-            `${DISPUTES_API}/admin/${encodeURIComponent(id)}/resolve?token=${encodeURIComponent(t)}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ resolution, notes }),
-            }
-          );
+          const res = await fetch(`${DISPUTES_API}/admin/${encodeURIComponent(id)}/resolve`, {
+            method: "POST",
+            headers: adminHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ resolution, notes }),
+          });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
             setStatus(data.message || data.error || "Resolve failed.", true);
@@ -138,6 +157,10 @@
     const params = new URLSearchParams(window.location.search);
     if (params.get("token") && el("admin-token")) {
       el("admin-token").value = params.get("token");
+      try {
+        localStorage.setItem(TOKEN_KEY, params.get("token"));
+      } catch {}
+      stripTokenFromUrl();
     }
     el("load-open-btn")?.addEventListener("click", () => loadList("open"));
     el("load-all-btn")?.addEventListener("click", () => loadList("all"));

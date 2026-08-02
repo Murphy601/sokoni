@@ -38,6 +38,17 @@
     }
   }
 
+  function stripTokenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("token")) return;
+    params.delete("token");
+    const q = params.toString();
+    const next = `${window.location.pathname}${q ? `?${q}` : ""}${window.location.hash || ""}`;
+    try {
+      history.replaceState({}, "", next);
+    } catch {}
+  }
+
   function hydrateTokenFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const token = String(params.get("token") || "").trim();
@@ -46,11 +57,20 @@
       try {
         localStorage.setItem(TOKEN_KEY, token);
       } catch {}
+      stripTokenFromUrl();
     } else if (el("admin-token")) {
       try {
         el("admin-token").value = localStorage.getItem(TOKEN_KEY) || "";
       } catch {}
     }
+  }
+
+  function adminHeaders(extra = {}) {
+    const token = readToken();
+    return {
+      ...(token ? { "X-Admin-Token": token } : {}),
+      ...extra,
+    };
   }
 
   function formatWhen(ts) {
@@ -104,7 +124,9 @@
     setStatus("Loading flagged listings…");
     list.innerHTML = "";
     try {
-      const res = await fetch(`${ADMIN_API}/seller-listings/flagged?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`${ADMIN_API}/seller-listings/flagged`, {
+        headers: adminHeaders(),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setStatus(data.message || data.error || "Could not load flagged listings.", true);
@@ -129,14 +151,11 @@
     if (!token || !id) return;
     setStatus(`${action === "restore" ? "Restoring" : "Updating"} ${id}…`);
     try {
-      const res = await fetch(
-        `${ADMIN_API}/seller-listings/${encodeURIComponent(id)}/${action}?token=${encodeURIComponent(token)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(action === "takedown" ? { reason: reason || "" } : {}),
-        }
-      );
+      const res = await fetch(`${ADMIN_API}/seller-listings/${encodeURIComponent(id)}/${action}`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(action === "takedown" ? { reason: reason || "" } : {}),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setStatus(data.message || data.error || `Could not ${action} ${id}.`, true);

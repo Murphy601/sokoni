@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { config } from "../config.js";
 import {
   getOpsStatus,
   pauseCatalog,
@@ -12,26 +11,11 @@ import {
   updatePlatformFlags,
 } from "../services/catalog-ops.js";
 import { getWahaSessionStatus } from "../services/waha-session.js";
+import { requireAdminToken } from "../lib/admin-auth.js";
 
 const router = Router();
 
-function isAdminTokenValid(token) {
-  const expected =
-    process.env.ADMIN_SETUP_TOKEN ||
-    process.env.SUPPLIER_ADMIN_TOKEN ||
-    config.tiktok.setupToken ||
-    "";
-  return expected && token === expected;
-}
-
-function requireToken(req, res, next) {
-  if (!isAdminTokenValid(req.query.token)) {
-    return res.status(403).json({ error: "forbidden" });
-  }
-  next();
-}
-
-router.use(requireToken);
+router.use(requireAdminToken);
 
 router.get("/status", async (_req, res) => {
   res.json({ status: await getOpsStatus() });

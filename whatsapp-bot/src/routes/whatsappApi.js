@@ -1,22 +1,17 @@
 import { Router } from "express";
-import { config } from "../config.js";
 import { sendText, sendImage } from "../services/whatsapp.js";
+import { adminTokenFromReq, isAdminTokenValid } from "../lib/admin-auth.js";
 
 const router = Router();
 
 function isTokenValid(token) {
-  const expected =
-    process.env.ADMIN_SETUP_TOKEN ||
-    process.env.SUPPLIER_ADMIN_TOKEN ||
-    process.env.WHATSAPP_SEND_TOKEN ||
-    config.tiktok?.setupToken ||
-    "";
-  return expected && token === expected;
+  if (isAdminTokenValid(token)) return true;
+  const sendToken = process.env.WHATSAPP_SEND_TOKEN || "";
+  return Boolean(sendToken && token && token === sendToken);
 }
 
 function requireToken(req, res, next) {
-  const token = req.query.token || req.headers["x-sokoni-token"];
-  if (!isTokenValid(token)) {
+  if (!isTokenValid(adminTokenFromReq(req))) {
     return res.status(403).json({ error: "forbidden" });
   }
   next();

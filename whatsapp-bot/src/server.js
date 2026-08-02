@@ -34,8 +34,19 @@ import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
+import {
+  corsAllowlist,
+  attachRawBody,
+  requireWahaWebhookAuth,
+  apiLimiter,
+  authLimiter,
+  adminLimiter,
+  webhookLimiter,
+} from "./middleware/security.js";
 
 const app = express();
+/** Behind nginx / Cloudflare — needed for express-rate-limit client IP. */
+app.set("trust proxy", 1);
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -50,26 +61,8 @@ function resolveBuildId() {
 
 const BUILD_ID = resolveBuildId();
 
-const SITE_ORIGINS = new Set([
-  config.publicSiteUrl,
-  "https://sokonimall.com",
-  "https://www.sokonimall.com",
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
-]);
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && SITE_ORIGINS.has(origin.replace(/\/$/, ""))) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Seller-Session, X-Buyer-Session, X-Admin-Token");
-  }
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
-
-app.use(express.json({ limit: "25mb" }));
+app.use(corsAllowlist);
+app.use(express.json({ limit: "25mb", verify: attachRawBody }));
 
 app.get("/", (_req, res) => {
   res.json({
@@ -162,6 +155,12 @@ app.use(
   })
 );
 
+app.use("/api/", apiLimiter);
+app.use("/api/seller/onboard", authLimiter);
+app.use("/api/buyer/auth", authLimiter);
+app.use("/api/agent", authLimiter);
+app.use("/admin/", adminLimiter);
+
 /** Public reviews for website + WhatsApp-collected feedback. */
 app.get("/api/reviews", (_req, res) => {
   res.json({ reviews: listReviews(30) });
@@ -206,8 +205,8 @@ app.use("/admin/pickup-points", adminPickupPointsRouter);
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */
 app.use("/admin/tiktok", tiktokOAuthRouter);
 
-/** WAHA posts inbound message events here. */
-app.post("/webhook", async (req, res) => {
+/** WAHA posts inbound message events here — HMAC when WEBHOOK_HMAC_KEY is set. */
+app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) => {
   res.sendStatus(200);
   try {
     const events = Array.isArray(req.body) ? req.body : [req.body];
