@@ -88,7 +88,7 @@ create_session() {
         \"webhooks\": [$hook]
       }
     }" \
-    "$WAHA_URL/api/sessions" | head -c 600
+    "$WAHA_URL/api/sessions" | redact_session_json
   echo ""
 }
 
