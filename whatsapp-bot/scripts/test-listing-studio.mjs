@@ -9,6 +9,8 @@ import {
   resolveClipTransformFromOriginal,
   removeBackground,
   previewStudioClean,
+  prepareListingShowcaseMedia,
+  cloudinaryPublicIdFromUrl,
   getStudioMeta,
 } from "../src/services/listing-studio.js";
 
@@ -100,11 +102,18 @@ async function main() {
 
   let uploadCount = 0;
   let uploadedIds = [];
+  let sawEagerAsyncFalse = false;
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
     const method = String(init.method || "GET").toUpperCase();
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       uploadCount += 1;
+      const body = init.body;
+      if (body && typeof body.get === "function") {
+        if (body.get("eager") && String(body.get("eager_async")) === "false") {
+          sawEagerAsyncFalse = true;
+        }
+      }
       const id =
         uploadCount === 1 ? "sokoni-studio/listing_x" : "sokoni-studio/cutout_y";
       uploadedIds.push(id);
@@ -158,6 +167,9 @@ async function main() {
     if (uploadCount !== 2) {
       throw new Error(`expected listing upload + cutout upload, got ${uploadCount}`);
     }
+    if (!sawEagerAsyncFalse) {
+      throw new Error("upload must send eager_async=false with background_removal eager");
+    }
     if (!/cutout_/i.test(withClip.clipUrl) && !/cutout_y/i.test(withClip.clipUrl)) {
       throw new Error(`clip must be from cutout asset: ${withClip.clipUrl}`);
     }
@@ -175,6 +187,86 @@ async function main() {
       preview.clipVideoBase64
     ) {
       throw new Error(`preview must be CDN URLs only: ${JSON.stringify(preview)}`);
+    }
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+
+  // Public id parse + multi-photo showcase reel
+  const parsed = cloudinaryPublicIdFromUrl(
+    "https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/v123/sokoni-studio/cutout_abc.png"
+  );
+  if (parsed !== "sokoni-studio/cutout_abc") {
+    throw new Error(`public id parse failed: ${parsed}`);
+  }
+
+  clearStudioEnv();
+  process.env.CLOUDINARY_CLOUD_NAME = "demo";
+  process.env.CLOUDINARY_API_KEY = "key";
+  process.env.CLOUDINARY_API_SECRET = "secret";
+  process.env.CLOUDINARY_DELETE_AFTER = "false";
+  process.env.STUDIO_CLIP_ENABLED = "true";
+  let multiCalled = false;
+  let reelUploadIds = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    const method = String(init.method || "GET").toUpperCase();
+    if (u.includes("/image/multi") && u.includes("api.cloudinary.com")) {
+      multiCalled = true;
+      const body = init.body;
+      if (body?.get && String(body.get("format")) !== "mp4") {
+        throw new Error("multi must request mp4");
+      }
+      return new Response(
+        JSON.stringify({
+          public_id: "sokoni-studio/reel_demo",
+          secure_url: "https://res.cloudinary.com/demo/image/multi/dl_2000/sokoni-studio/reel_demo.mp4",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
+      const body = init.body;
+      const pid = body?.get?.("public_id") || `slide_${reelUploadIds.length}`;
+      const folder = body?.get?.("folder") || "sokoni-studio";
+      const full = `${folder}/${pid}`;
+      reelUploadIds.push(full);
+      // listing_* uploads are raw; reel_* / cutout_* are durable slides
+      return new Response(
+        JSON.stringify({
+          public_id: full,
+          secure_url: `https://res.cloudinary.com/demo/image/upload/${full}`,
+          eager: body?.get?.("eager")
+            ? [{ secure_url: `https://res.cloudinary.com/demo/image/upload/${body.get("eager")}/${full}` }]
+            : undefined,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (method === "HEAD") return new Response(null, { status: 200 });
+    if (u.includes("res.cloudinary.com")) {
+      if (u.includes(".mp4") || u.includes("f_mp4") || u.includes("/multi/")) {
+        return new Response(fakeMp4, { status: 200 });
+      }
+      return new Response(cleanPng, { status: 200 });
+    }
+    return new Response("nope", { status: 500 });
+  };
+  try {
+    const cutA = "https://res.cloudinary.com/demo/image/upload/sokoni-studio/cutout_a";
+    const cutB = "https://res.cloudinary.com/demo/image/upload/sokoni-studio/cutout_b";
+    const cutC = "https://res.cloudinary.com/demo/image/upload/sokoni-studio/cutout_c";
+    const reel = await prepareListingShowcaseMedia([cutA, cutB, cutC], {
+      productKey: "seller1",
+    });
+    if (!reel?.imageUrls?.length || reel.imageUrls.length !== 3) {
+      throw new Error(`reel images expected 3: ${JSON.stringify(reel)}`);
+    }
+    if (!multiCalled || !reel.videoUrl || reel.videoKind !== "preview") {
+      throw new Error(`multi reel missing: ${JSON.stringify(reel)} multi=${multiCalled}`);
+    }
+    if (!/reel_/i.test(reel.imageUrls[0]) && !reelUploadIds.some((id) => /reel_/i.test(id))) {
+      throw new Error(`ordered reel slides missing: ${reelUploadIds.join(",")}`);
     }
   } finally {
     globalThis.fetch = origFetch;
@@ -337,7 +429,7 @@ async function main() {
   }
 
   if (!listConfiguredProviders().length && false) throw new Error("unreachable");
-  console.log("OK: cutout-based studio clips + CDN-only preview");
+  console.log("OK: eager_async cutouts + multi-photo showcase reel + CDN-only preview");
 }
 
 main()

@@ -38,10 +38,14 @@ export function catalogImageBotUrl(product) {
  */
 export function resolveStorefrontImageUrl(product) {
   if (!product) return null;
+
+  const raw = product.imageUrl || (Array.isArray(product.images) ? product.images[0] : null);
+  // Prefer durable CDN URLs saved at publish (no on-the-fly Cloudinary transforms).
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+
   const bot = catalogImageBotUrl(product);
   if (bot) return bot;
 
-  const raw = product.imageUrl || (Array.isArray(product.images) ? product.images[0] : null);
   if (!raw) {
     // Last resort: point at bot path even if file probe missed (e.g. race right after write).
     if (product.id && config.botPublicUrl) {
@@ -49,7 +53,6 @@ export function resolveStorefrontImageUrl(product) {
     }
     return null;
   }
-  if (/^https?:\/\//i.test(raw)) return raw;
   if (/^(assets\/images\/products\/|catalog-images\/)/i.test(String(raw).replace(/^\//, ""))) {
     const base = String(raw).replace(/^\//, "").replace(/^assets\/images\/products\//i, "");
     if (config.botPublicUrl) {
@@ -96,13 +99,16 @@ export function catalogVideoFileForProduct(product) {
  */
 export function resolveStorefrontVideoUrl(product) {
   if (!product) return null;
+  const raw = product.videoUrl;
+  // Prefer absolute CDN reel/clip URLs saved at publish (static delivery).
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+
   if (product.id && config.botPublicUrl) {
     const onDisk = catalogVideoFileForProduct(product);
     if (onDisk) {
       return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.mp4`;
     }
   }
-  const raw = product.videoUrl;
   if (!raw) {
     if (product.id && config.botPublicUrl) {
       // Race right after publish — point at bot path even if probe missed.
@@ -113,7 +119,6 @@ export function resolveStorefrontVideoUrl(product) {
     }
     return null;
   }
-  if (/^https?:\/\//i.test(String(raw))) return String(raw);
   if (/^(assets\/images\/products\/|catalog-images\/)/i.test(String(raw).replace(/^\//, ""))) {
     const base = String(raw).replace(/^\//, "").replace(/^assets\/images\/products\//i, "");
     if (config.botPublicUrl) {

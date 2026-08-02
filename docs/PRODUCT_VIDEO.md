@@ -6,13 +6,14 @@ Short clips raise trust on pre-loved / streetwear listings. They must stay light
 
 | Kind | Length | Source | Where it plays |
 |------|--------|--------|----------------|
-| **`preview`** | 3–5s, muted loop | Cloudinary zoompan from cleaned cutout | Grid hover / ▶ tap; PDP fallback |
+| **`preview`** | 3–5s (1 photo) or ~2s×N (multi-photo reel) | Cloudinary zoompan **or** multi slideshow from cleaned cutouts | Grid hover / ▶ tap; PDP fallback |
 | **`seller`** | 15–30s, max 15MB | Phone upload by seller | Product detail page (controls + muted autoplay) |
 
 Product fields:
 
-- `videoUrl` — relative `assets/images/products/{id}.mp4` (or absolute CDN)
+- `videoUrl` — absolute Cloudinary CDN URL preferred (transform once); else relative `assets/images/products/{id}.mp4`
 - `videoKind` — `"preview"` | `"seller"`
+- `imageUrl` / `images` — cleaned cutout CDN URLs when studio ran (static delivery)
 
 Public catalog (`toPublicProduct` + `build-site-catalog`) exposes both. Bot serves files at `/catalog-images/{id}.mp4`.
 
@@ -26,11 +27,11 @@ Public catalog (`toPublicProduct` + `build-site-catalog`) exposes both. Bot serv
 
 ## Seller flow
 
-1. Optional phone video → validated client-side (≤30s, ≤15MB) → `videoKind: "seller"`.
-2. Else optional studio clip from cleaned PNG → `videoKind: "preview"`.
-3. Publish stores `{id}.mp4` next to cover JPEGs.
+1. Optional phone video → validated client-side (≤30s, ≤15MB) → `videoKind: "seller"` (skips AI reel).
+2. Else studio: clean backgrounds once → **1 photo** zoompan clip, or **2–8 photos** one Cloudinary multi reel → `videoKind: "preview"`.
+3. Publish saves CDN `videoUrl` + cleaned `imageUrl`s in the catalog; caches a local cover JPEG for WhatsApp.
 
-Studio clips are already Cloudinary-compressed (`q_auto:eco`, `w_720`, ~4s). Raw seller uploads are size-capped; full Cloudinary re-encode of 15–30s uploads can be added later without changing the public fields.
+Studio / reel videos are Cloudinary-compressed (`q_auto:eco`, `w_720`). Raw seller uploads are size-capped.
 
 ## Limits (meta + server)
 
