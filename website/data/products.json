@@ -168,5 +168,35 @@
     "isSecondhand": true,
     "color": "green",
     "description": "A single green flip flop with a textured sole is visible on a dark rug next to a tiled floor. A black cable runs across the rug."
+  },
+  {
+    "id": "fa-tlom7-004",
+    "name": "Green Flip Flop",
+    "category": "fashion",
+    "priceKes": 115,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1785646824/sokoni-studio/reel_1785646810_01.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646824/sokoni-studio/reel_1785646810_01.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646838/sokoni-studio/reel_1785646810_02.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646853/sokoni-studio/reel_1785646810_03.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646867/sokoni-studio/reel_1785646810_04.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/multi/dl_2000/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264/v1785646868/4e59206a3091b22c9805bb214bca8f8f.mp4",
+    "videoKind": "preview",
+    "subcategory": "womens-fashion",
+    "browseCategory": "women",
+    "browseSubCategory": "shoes",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "color": "green",
+    "description": "A single green flip flop with a textured sole is visible on a dark rug next to a tiled floor. A black cable runs across the rug."
   }
 ]

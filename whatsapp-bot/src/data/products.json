@@ -335,5 +335,57 @@
     "moderation": {
       "status": "pending_scan"
     }
+  },
+  {
+    "id": "fa-tlom7-004",
+    "name": "Green Flip Flop",
+    "category": "fashion",
+    "subcategory": "womens-fashion",
+    "browseCategory": "women",
+    "browseSubCategory": "shoes",
+    "sellerNetKes": 100,
+    "sourcePriceKes": 100,
+    "priceKes": 115,
+    "platformFeeKes": 10,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 100,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A single green flip flop with a textured sole is visible on a dark rug next to a tiled floor. A black cable runs across the rug.",
+    "color": "green",
+    "size": "10",
+    "era": "",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "location": "Kenol",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1785646824/sokoni-studio/reel_1785646810_01.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646824/sokoni-studio/reel_1785646810_01.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646838/sokoni-studio/reel_1785646810_02.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646853/sokoni-studio/reel_1785646810_03.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785646867/sokoni-studio/reel_1785646810_04.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/multi/dl_2000/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264/v1785646868/4e59206a3091b22c9805bb214bca8f8f.mp4",
+    "videoKind": "preview",
+    "publishedAt": 1785646869342,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]
