@@ -133,6 +133,8 @@ function okResult(buffer, provider, extras = {}) {
     cleanUrl: extras.cleanUrl || null,
     /** Durable Cloudinary public_id for the cutout (for multi-reel tagging). */
     cleanPublicId: extras.cleanPublicId || null,
+    /** True when cleanUrl points at a base asset that is already a transparent PNG. */
+    baked: extras.baked === true,
     clipBuffer: extras.clipBuffer || null,
     clipUrl: extras.clipUrl || null,
     clipMimeType: hasClip ? extras.clipMimeType || "video/mp4" : null,
@@ -438,7 +440,11 @@ async function waitCloudinaryCleanPng(url, opts = {}) {
  * `file` may be a Buffer or a remote HTTPS URL (Cloudinary fetches it — no bot RAM).
  * @returns {Promise<{ ok: true, publicId: string, uploaded: object, cloud: string, apiKey: string, apiSecret: string } | { ok: false, authFailed?: boolean, status: number, errText: string }>}
  */
-async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, filename, tags, overwrite }) {
+async function cloudinaryUploadImage(
+  file,
+  mimeType,
+  { publicId, folder, eager, filename, tags, overwrite, invalidate }
+) {
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const apiKey = env("CLOUDINARY_API_KEY");
   const apiSecret = env("CLOUDINARY_API_SECRET");
@@ -451,6 +457,7 @@ async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, 
   }
   if (tags) signParams.tags = tags;
   if (overwrite) signParams.overwrite = "true";
+  if (invalidate) signParams.invalidate = "true";
   const signature = cloudinarySign(signParams, apiSecret);
 
   const form = new FormData();
@@ -474,6 +481,7 @@ async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, 
   }
   if (tags) form.append("tags", tags);
   if (overwrite) form.append("overwrite", "true");
+  if (invalidate) form.append("invalidate", "true");
 
   const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, {
     method: "POST",
@@ -564,6 +572,7 @@ async function storeCleanPngBufferAndClip(cleanPng, opts = {}) {
     publicId,
     folder,
     overwrite: Boolean(opts.publicId),
+    invalidate: Boolean(opts.publicId),
     eager,
     filename: "clean.png",
     tags: opts.tags,
@@ -667,8 +676,9 @@ async function maybeAttachProductClip(result) {
 }
 
 /**
- * Upload → AI clean derived → download PNG bytes → overwrite asset with clean PNG → zoompan.
- * Video transforms cannot apply e_background_removal, so the base asset must already be clean.
+ * Upload original to a TEMP id → AI clean → download PNG bytes with alpha →
+ * upload ONLY those bytes to the final cutout/reel id (never store the original there).
+ * Video / multi cannot apply e_background_removal, so the final base asset must be the cutout.
  *
  * @param {Buffer} buffer
  * @param {string} mimeType
@@ -678,29 +688,32 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
   const stamp = Math.floor(Date.now() / 1000);
-  const publicId =
-    opts.cutoutPublicId || `cutout_${stamp}_${crypto.randomBytes(4).toString("hex")}`;
+  const hex = crypto.randomBytes(4).toString("hex");
+  // Final asset is clean-only. Original lands on a short-lived tmp_* id (never tagged for multi).
+  const finalId =
+    opts.cutoutPublicId || `cutout_${stamp}_${hex}`;
+  const tempId = `tmp_${stamp}_${hex}`;
   const eagerClean = `${bgRemovalEffect()}/f_png`;
 
   const up = await cloudinaryUploadImage(buffer, mimeType, {
-    publicId,
+    publicId: tempId,
     folder,
     eager: eagerClean,
     filename: "listing.jpg",
-    tags: opts.tags,
+    // Do NOT put reel tags on the dirty original — multi-by-tag would merge originals.
   });
   if (!up.ok) {
     if (up.authFailed) return failResult(buffer, mimeType, "auth_failed", "cloudinary");
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
 
-  const id = up.publicId;
+  const tempPublicId = up.publicId;
   const eagerUrl = up.uploaded.eager?.[0]?.secure_url || up.uploaded.eager?.[0]?.url || "";
   // Only trust eager URL if it is the bg-removal PNG (not a later zoompan eager).
   const derivedUrl =
     /e_background_removal/i.test(eagerUrl) && /(f_png|\.png)/i.test(eagerUrl)
       ? eagerUrl
-      : cleanedPngUrl(cloud, id);
+      : cleanedPngUrl(cloud, tempPublicId);
 
   const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 14;
   const cleanReady = await waitCloudinaryCleanPng(derivedUrl, {
@@ -710,10 +723,11 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
   });
   if (!cleanReady) {
     console.warn("[listing-studio] Cloudinary bg-removal never produced alpha PNG");
+    void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
 
-  // Pull the verified clean PNG and overwrite cutout_* so the base asset is transparent.
+  // Pull the verified clean PNG — require real alpha before baking into the final asset.
   let cleanBuf = await fetchCloudinaryDerived(derivedUrl, {
     label: "bg-removal-download",
     timeoutMs: 120_000,
@@ -721,46 +735,62 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
   });
   if (!cleanBuf?.length || !isPngBuffer(cleanBuf)) {
     console.warn("[listing-studio] clean PNG download failed or not a PNG");
+    void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
   if (!pngHasAlpha(cleanBuf)) {
+    // Do not bake an opaque PNG into reel_* — multi would show the original photo.
     console.warn(
-      "[listing-studio] clean PNG has no detectable alpha — baking anyway (Cloudinary encoding varies)"
+      "[listing-studio] clean PNG has no alpha — refusing bake; using derived URL for image only"
     );
+    void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
+    return okResult(null, "cloudinary", {
+      cleanUrl: derivedUrl,
+      cleanPublicId: tempPublicId,
+      baked: false,
+    });
   }
   if (cleanBuf.length > 12 * 1024 * 1024) {
     console.warn("[listing-studio] clean PNG too large to bake on 1GB VM:", cleanBuf.length);
+    void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
 
   const wantClip =
     opts.wantClip !== undefined ? opts.wantClip : env("STUDIO_CLIP_ENABLED") !== "false";
   const clipTrans = resolveClipTransform();
+  // Final id receives ONLY transparent PNG bytes (+ reel tags). Original never lives here.
   const baked = await cloudinaryUploadImage(cleanBuf, "image/png", {
-    publicId,
+    publicId: finalId,
     folder,
     overwrite: true,
+    invalidate: true,
     eager: wantClip ? `${clipTrans}/f_mp4` : undefined,
     filename: "clean.png",
     tags: opts.tags,
   });
   cleanBuf = null;
 
+  // Drop temp original so it cannot be picked up by mistake.
+  void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
+
   if (!baked.ok) {
-    console.warn("[listing-studio] bake clean PNG overwrite failed — using derived URL only");
+    console.warn("[listing-studio] bake clean PNG upload failed — using derived URL only");
     return okResult(null, "cloudinary", {
       cleanUrl: derivedUrl,
-      cleanPublicId: id,
+      cleanPublicId: tempPublicId,
+      baked: false,
     });
   }
 
+  const id = baked.publicId;
   const cleanUrl =
     baked.uploaded.secure_url ||
     baked.uploaded.url ||
     `https://res.cloudinary.com/${cloud}/image/upload/${id}`;
 
   if (!wantClip) {
-    return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id });
+    return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id, baked: true });
   }
 
   // Zoompan on baked clean asset — do NOT put e_background_removal in the MP4 chain.
@@ -770,13 +800,14 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
     bakedClipUrl(cloud, id);
   if (/e_background_removal/i.test(String(clipUrl))) {
     console.warn("[listing-studio] refusing video URL that still uses bg-removal transform");
-    return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id });
+    return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id, baked: true });
   }
 
   const clip = await finalizeClipUrl(clipUrl);
   return okResult(null, "cloudinary", {
     cleanUrl,
     cleanPublicId: id,
+    baked: true,
     clipUrl: clip?.clipUrl || null,
     clipBuffer: clip?.clipBuffer || null,
     clipMimeType: "video/mp4",
@@ -807,18 +838,18 @@ function resolveReelTransform() {
 }
 
 /**
- * Prefer base delivery URLs for multi (baked clean PNGs). Strip transform chains so
- * Cloudinary does not re-fetch originals through e_background_removal URLs.
+ * URL safe to feed into Cloudinary multi as a frame.
+ * - Baked cutout base URL (transparent PNG already stored), or
+ * - Derived URL that still includes e_background_removal (image fetch applies AI).
+ * Never strip bg-removal transforms down to the original base — that merges dirty photos.
  */
-function cloudinaryBaseDeliveryUrl(url) {
+function multiFrameUrl(url, { baked = false } = {}) {
   const raw = String(url || "").trim().split("?")[0];
   if (!/^https?:\/\//i.test(raw)) return null;
-  const cloud = env("CLOUDINARY_CLOUD_NAME");
-  const pid = cloudinaryPublicIdFromUrl(raw);
-  if (cloud && pid) {
-    return `https://res.cloudinary.com/${cloud}/image/upload/${pid}`;
-  }
-  return raw;
+  if (/e_background_removal/i.test(raw)) return raw;
+  if (baked) return raw;
+  // Unknown base URL — refuse (likely the uncleaned original).
+  return null;
 }
 
 /**
@@ -832,10 +863,16 @@ async function cloudinaryMultiByUrls(urls, opts = {}) {
   const apiSecret = env("CLOUDINARY_API_SECRET");
   const format = opts.format || "mp4";
   const transformation = opts.transformation || resolveReelTransform();
+  const bakedFlags = opts.bakedFlags || [];
   const list = (urls || [])
-    .map((u) => cloudinaryBaseDeliveryUrl(u) || String(u || "").trim())
-    .filter((u) => /^https?:\/\//i.test(u));
-  if (list.length < 2) return null;
+    .map((u, i) => multiFrameUrl(u, { baked: bakedFlags[i] === true }))
+    .filter(Boolean);
+  if (list.length < 2) {
+    console.warn(
+      "[listing-studio] multi(urls) skipped — need ≥2 clean frame URLs (baked or bg-removal derived)"
+    );
+    return null;
+  }
 
   const timestamp = Math.floor(Date.now() / 1000);
   // Sign like the official SDK: array values joined with commas.
@@ -900,11 +937,18 @@ async function cloudinaryMultiByTag(tag, opts = {}) {
   return res.json().catch(() => null);
 }
 
-/** Prefer ordered urls[]; fall back to shared tag. */
+/**
+ * Prefer ordered urls[] of baked/derived-clean frames; fall back to tag only when
+ * every slide was baked onto a clean-only reel_* asset (tags never touch originals).
+ */
 async function cloudinaryMultiReel(imageUrls, reelTag, opts = {}) {
   const byUrls = await cloudinaryMultiByUrls(imageUrls, opts);
   if (byUrls?.secure_url || byUrls?.url) return byUrls;
-  if (reelTag) {
+  const allBaked =
+    Array.isArray(opts.bakedFlags) &&
+    opts.bakedFlags.length >= 2 &&
+    opts.bakedFlags.every(Boolean);
+  if (reelTag && allBaked) {
     const byTag = await cloudinaryMultiByTag(reelTag, opts);
     if (byTag?.secure_url || byTag?.url) return byTag;
   }
@@ -931,6 +975,7 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
     return {
       cleanUrl: cleaned.cleanUrl,
       cleanPublicId: cleaned.cleanPublicId,
+      baked: cleaned.baked === true,
       clipUrl: cleaned.clipUrl || null,
       clipBuffer: cleaned.clipBuffer || null,
     };
@@ -957,6 +1002,7 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
         return {
           cleanUrl: source.split("?")[0],
           cleanPublicId: pid,
+          baked: true,
           clipUrl,
           clipBuffer,
         };
@@ -978,13 +1024,24 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
       attempts: 5,
     });
     if (!cleanBuf?.length || !isPngBuffer(cleanBuf)) return null;
+    if (!pngHasAlpha(cleanBuf)) {
+      // Keep derived URL for display; do not store opaque bytes as a "cutout".
+      return {
+        cleanUrl: derived,
+        cleanPublicId: pid,
+        baked: false,
+        clipUrl: null,
+        clipBuffer: null,
+      };
+    }
     const stored = await storeCleanPngBufferAndClip(cleanBuf, {
       publicId: opts.publicId,
       tags: opts.tags,
       wantClip: opts.wantClip === true,
     });
     cleanBuf = null;
-    return stored;
+    if (!stored) return null;
+    return { ...stored, baked: true };
   }
 
   if (typeof source === "string" && /^https?:\/\//i.test(source)) {
@@ -1045,6 +1102,7 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
   }
 
   const imageUrls = cutouts.map((c) => c.cleanUrl);
+  const bakedFlags = cutouts.map((c) => c.baked === true);
 
   // Single photo: reuse existing clip only if it targets a baked asset (no bg-removal in MP4 chain).
   if (cutouts.length === 1) {
@@ -1061,11 +1119,12 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
     };
   }
 
-  // 2–8 photos → one multi MP4 from baked clean URLs (order preserved).
-  // Do not put e_background_removal in multi transforms (video context ignores it).
+  // 2–8 photos → one multi MP4 from baked cutouts (or bg-removal derived URLs).
+  // Never pass dirty original base URLs — multi would merge uncleaned photos.
   const multi = await cloudinaryMultiReel(imageUrls, reelTag, {
     format: "mp4",
     transformation: resolveReelTransform(),
+    bakedFlags,
   });
   let videoUrl = multi?.secure_url || multi?.url || null;
   let error = null;
