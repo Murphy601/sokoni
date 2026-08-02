@@ -7,14 +7,15 @@
  *   - remote      — POST→PNG microservice (Modal/Render rembg)
  *
  * Transform once, cache forever (Cloudinary path):
- *   1. Upload durable cutout_* with eager e_background_removal/f_png + eager_async=false
- *   2. Wait until the cleaned PNG actually has an alpha channel (AI finished)
- *   3. Build MP4 with e_background_removal chained BEFORE zoompan (never zoompan the raw)
- *   4. 2–8 photos → Cloudinary multi from cleaned derived URLs → one MP4 reel
- *   5. Save those warmed CDN URLs in the catalog
+ *   1. Upload cutout_* with eager e_background_removal/f_png + eager_async=false
+ *   2. Wait until cleaned PNG has alpha, then DOWNLOAD those PNG bytes
+ *   3. Overwrite cutout_* with the clean PNG buffer (base asset is now transparent)
+ *   4. Zoompan MP4 on that baked asset (video transforms cannot apply e_background_removal)
+ *   5. 2–8 photos → Cloudinary multi from baked clean URLs → one MP4 reel
+ *   6. Save those CDN URLs in the catalog
  *
- * Do NOT re-upload a transformed Cloudinary URL as a new asset — Cloudinary’s
- * fetch often pulls the original bytes, so clips keep the background.
+ * Why bake bytes? (a) URL→upload fetch often re-pulls the original photo.
+ * (b) Cloudinary ignores e_background_removal inside MP4 transformation chains.
  *
  * Studio API returns CDN URLs only (cleanImageUrl + clipVideoUrl) so the 1GB
  * bot does not JSON-encode multi‑MB PNG/MP4 (that was taking Sokoni down).
@@ -233,10 +234,10 @@ function cleanedPngUrl(cloud, publicId) {
   return `https://res.cloudinary.com/${cloud}/image/upload/${bgRemovalEffect()}/f_png/${publicId}`;
 }
 
-/** Clip URL: background removal MUST come before pad/shadow/zoompan. */
-function cleanedClipUrl(cloud, publicId) {
+/** Clip URL for an already-baked clean PNG asset (no bg-removal in the video chain). */
+function bakedClipUrl(cloud, publicId) {
   const motion = resolveClipTransform();
-  return `https://res.cloudinary.com/${cloud}/image/upload/${bgRemovalEffect()}/${motion}/f_mp4/${publicId}.mp4`;
+  return `https://res.cloudinary.com/${cloud}/image/upload/${motion}/f_mp4/${publicId}.mp4`;
 }
 
 /** FormData-safe binary part (Node Buffer → Blob). */
@@ -425,7 +426,7 @@ async function waitCloudinaryCleanPng(url, opts = {}) {
  * `file` may be a Buffer or a remote HTTPS URL (Cloudinary fetches it — no bot RAM).
  * @returns {Promise<{ ok: true, publicId: string, uploaded: object, cloud: string, apiKey: string, apiSecret: string } | { ok: false, authFailed?: boolean, status: number, errText: string }>}
  */
-async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, filename, tags }) {
+async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, filename, tags, overwrite }) {
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const apiKey = env("CLOUDINARY_API_KEY");
   const apiSecret = env("CLOUDINARY_API_SECRET");
@@ -437,6 +438,7 @@ async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, 
     signParams.eager_async = "false";
   }
   if (tags) signParams.tags = tags;
+  if (overwrite) signParams.overwrite = "true";
   const signature = cloudinarySign(signParams, apiSecret);
 
   const form = new FormData();
@@ -459,6 +461,7 @@ async function cloudinaryUploadImage(file, mimeType, { publicId, folder, eager, 
     form.append("eager_async", "false");
   }
   if (tags) form.append("tags", tags);
+  if (overwrite) form.append("overwrite", "true");
 
   const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, {
     method: "POST",
@@ -651,8 +654,8 @@ async function maybeAttachProductClip(result) {
 }
 
 /**
- * Upload durable cutout_* → wait for AI clean (alpha PNG) → clip with bg-removal chained first.
- * Never re-uploads a transformed URL (that race served originals into clips).
+ * Upload → AI clean derived → download PNG bytes → overwrite asset with clean PNG → zoompan.
+ * Video transforms cannot apply e_background_removal, so the base asset must already be clean.
  *
  * @param {Buffer} buffer
  * @param {string} mimeType
@@ -666,7 +669,6 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
     opts.cutoutPublicId || `cutout_${stamp}_${crypto.randomBytes(4).toString("hex")}`;
   const eagerClean = `${bgRemovalEffect()}/f_png`;
 
-  // eager_async=false signed in cloudinaryUploadImage — ask Cloudinary to bake clean PNG.
   const up = await cloudinaryUploadImage(buffer, mimeType, {
     publicId,
     folder,
@@ -680,15 +682,15 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
   }
 
   const id = up.publicId;
-  // Durable asset — do not schedule destroy (CDN URLs are saved on the product).
-  const cleanUrl =
-    up.uploaded.eager?.[0]?.secure_url ||
-    up.uploaded.eager?.[0]?.url ||
-    cleanedPngUrl(cloud, id);
+  const eagerUrl = up.uploaded.eager?.[0]?.secure_url || up.uploaded.eager?.[0]?.url || "";
+  // Only trust eager URL if it is the bg-removal PNG (not a later zoompan eager).
+  const derivedUrl =
+    /e_background_removal/i.test(eagerUrl) && /(f_png|\.png)/i.test(eagerUrl)
+      ? eagerUrl
+      : cleanedPngUrl(cloud, id);
 
   const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 14;
-  // Require real transparency — not merely HTTP 200 on a still-dirty derived.
-  const cleanReady = await waitCloudinaryCleanPng(cleanUrl, {
+  const cleanReady = await waitCloudinaryCleanPng(derivedUrl, {
     label: "bg-removal",
     timeoutMs: 150_000,
     attempts: derivedAttempts,
@@ -698,19 +700,58 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
 
+  // Pull the verified clean PNG and overwrite cutout_* so the base asset is transparent.
+  let cleanBuf = await fetchCloudinaryDerived(derivedUrl, {
+    label: "bg-removal-download",
+    timeoutMs: 120_000,
+    attempts: Math.min(6, derivedAttempts),
+  });
+  if (!cleanBuf?.length || !pngHasAlpha(cleanBuf)) {
+    console.warn("[listing-studio] clean PNG download failed or has no alpha");
+    return failResult(buffer, mimeType, "api_failed", "cloudinary");
+  }
+  if (cleanBuf.length > 12 * 1024 * 1024) {
+    console.warn("[listing-studio] clean PNG too large to bake on 1GB VM:", cleanBuf.length);
+    return failResult(buffer, mimeType, "api_failed", "cloudinary");
+  }
+
   const wantClip =
     opts.wantClip !== undefined ? opts.wantClip : env("STUDIO_CLIP_ENABLED") !== "false";
-  if (!wantClip) {
+  const clipTrans = resolveClipTransform();
+  const baked = await cloudinaryUploadImage(cleanBuf, "image/png", {
+    publicId,
+    folder,
+    overwrite: true,
+    eager: wantClip ? `${clipTrans}/f_mp4` : undefined,
+    filename: "clean.png",
+    tags: opts.tags,
+  });
+  cleanBuf = null;
+
+  if (!baked.ok) {
+    console.warn("[listing-studio] bake clean PNG overwrite failed — using derived URL only");
     return okResult(null, "cloudinary", {
-      cleanUrl,
+      cleanUrl: derivedUrl,
       cleanPublicId: id,
     });
   }
 
-  // Motion clip MUST include e_background_removal before zoompan.
-  const clipUrl = cleanedClipUrl(cloud, id);
-  if (!/e_background_removal/i.test(clipUrl)) {
-    console.warn("[listing-studio] clip URL missing background_removal — refusing dirty clip");
+  const cleanUrl =
+    baked.uploaded.secure_url ||
+    baked.uploaded.url ||
+    `https://res.cloudinary.com/${cloud}/image/upload/${id}`;
+
+  if (!wantClip) {
+    return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id });
+  }
+
+  // Zoompan on baked clean asset — do NOT put e_background_removal in the MP4 chain.
+  const clipUrl =
+    baked.uploaded.eager?.[0]?.secure_url ||
+    baked.uploaded.eager?.[0]?.url ||
+    bakedClipUrl(cloud, id);
+  if (/e_background_removal/i.test(String(clipUrl))) {
+    console.warn("[listing-studio] refusing video URL that still uses bg-removal transform");
     return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id });
   }
 
@@ -790,7 +831,7 @@ async function cloudinaryMultiByUrls(urls, opts = {}) {
 }
 
 /**
- * Ensure a cleaned CDN PNG URL for one listing photo.
+ * Ensure a baked clean CDN PNG (+ optional clip) for one listing photo.
  * @param {string|Buffer} source — HTTPS URL or image buffer
  * @param {string} [mimeType]
  * @param {{ publicId?: string, tags?: string, wantClip?: boolean }} [opts]
@@ -798,29 +839,6 @@ async function cloudinaryMultiByUrls(urls, opts = {}) {
 export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = {}) {
   if (!isCloudinaryConfigured()) return null;
   const cloud = env("CLOUDINARY_CLOUD_NAME");
-
-  if (typeof source === "string" && isCloudinaryDeliveryUrl(source)) {
-    const pid = cloudinaryPublicIdFromUrl(source);
-    if (pid) {
-      // Always serve through e_background_removal — even for older dirty cutout_ assets.
-      const cleanUrl = /e_background_removal/i.test(source)
-        ? source.split("?")[0]
-        : cleanedPngUrl(cloud, pid);
-      const ready = await waitCloudinaryCleanPng(cleanUrl, {
-        label: "ensure-clean",
-        attempts: Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 12,
-      });
-      if (!ready) return null;
-      let clipUrl = null;
-      let clipBuffer = null;
-      if (opts.wantClip) {
-        const clip = await finalizeClipUrl(cleanedClipUrl(cloud, pid));
-        clipUrl = clip?.clipUrl || null;
-        clipBuffer = clip?.clipBuffer || null;
-      }
-      return { cleanUrl, cleanPublicId: pid, clipUrl, clipBuffer };
-    }
-  }
 
   if (Buffer.isBuffer(source)) {
     const cleaned = await removeBackgroundCloudinary(source, mimeType, {
@@ -837,40 +855,64 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
     };
   }
 
-  if (typeof source === "string" && /^https?:\/\//i.test(source)) {
-    // Non-Cloudinary remote: upload bytes path via Cloudinary fetch of the *raw* URL
-    // (no transform in the source URL), then same clean+clip pipeline.
-    const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
-    const stamp = Math.floor(Date.now() / 1000);
-    const publicId =
-      opts.publicId || `cutout_${stamp}_${crypto.randomBytes(4).toString("hex")}`;
-    const eagerClean = `${bgRemovalEffect()}/f_png`;
-    const up = await cloudinaryUploadImage(source, mimeType, {
-      publicId,
-      folder,
-      eager: eagerClean,
-      filename: "listing.jpg",
-      tags: opts.tags,
-    });
-    if (!up.ok) return null;
-    const id = up.publicId;
-    const cleanUrl =
-      up.uploaded.eager?.[0]?.secure_url ||
-      up.uploaded.eager?.[0]?.url ||
-      cleanedPngUrl(cloud, id);
-    const ready = await waitCloudinaryCleanPng(cleanUrl, {
-      label: "bg-removal",
-      attempts: Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 14,
-    });
-    if (!ready) return null;
-    let clipUrl = null;
-    let clipBuffer = null;
-    if (opts.wantClip) {
-      const clip = await finalizeClipUrl(cleanedClipUrl(cloud, id));
-      clipUrl = clip?.clipUrl || null;
-      clipBuffer = clip?.clipBuffer || null;
+  if (typeof source === "string" && isCloudinaryDeliveryUrl(source)) {
+    const pid = cloudinaryPublicIdFromUrl(source);
+    if (!pid) return null;
+
+    // Already a baked clean asset URL (no bg-removal transform) — verify alpha then clip.
+    if (!/e_background_removal/i.test(source)) {
+      const ready = await waitCloudinaryCleanPng(source.split("?")[0], {
+        label: "ensure-baked",
+        attempts: 4,
+      });
+      if (ready) {
+        let clipUrl = null;
+        let clipBuffer = null;
+        if (opts.wantClip) {
+          const clip = await finalizeClipUrl(bakedClipUrl(cloud, pid));
+          clipUrl = clip?.clipUrl || null;
+          clipBuffer = clip?.clipBuffer || null;
+        }
+        return {
+          cleanUrl: source.split("?")[0],
+          cleanPublicId: pid,
+          clipUrl,
+          clipBuffer,
+        };
+      }
     }
-    return { cleanUrl, cleanPublicId: id, clipUrl, clipBuffer };
+
+    // Derived clean URL or dirty base — download PNG bytes and bake into opts.publicId / new cutout.
+    const derived = /e_background_removal/i.test(source)
+      ? source.split("?")[0]
+      : cleanedPngUrl(cloud, pid);
+    const alphaOk = await waitCloudinaryCleanPng(derived, {
+      label: "ensure-clean",
+      attempts: Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 12,
+    });
+    if (!alphaOk) return null;
+    let cleanBuf = await fetchCloudinaryDerived(derived, {
+      label: "ensure-download",
+      timeoutMs: 120_000,
+      attempts: 5,
+    });
+    if (!cleanBuf?.length || !pngHasAlpha(cleanBuf)) return null;
+    const stored = await storeCleanPngBufferAndClip(cleanBuf, {
+      publicId: opts.publicId,
+      tags: opts.tags,
+      wantClip: opts.wantClip === true,
+    });
+    cleanBuf = null;
+    return stored;
+  }
+
+  if (typeof source === "string" && /^https?:\/\//i.test(source)) {
+    // Raw remote URL — download bytes here, then full Cloudinary bake pipeline.
+    const res = await fetch(source, { signal: AbortSignal.timeout(90_000) });
+    if (!res.ok) return null;
+    const raw = Buffer.from(await res.arrayBuffer());
+    if (!raw.length) return null;
+    return ensureCleanCutout(raw, mimeType || res.headers.get("content-type") || "image/jpeg", opts);
   }
 
   return null;
@@ -918,11 +960,11 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
 
   const imageUrls = cutouts.map((c) => c.cleanUrl);
 
-  // Single photo: prefer existing studio clip only if it already chains bg-removal.
+  // Single photo: reuse existing clip only if it targets a baked asset (no bg-removal in MP4 chain).
   if (cutouts.length === 1) {
     const existing = String(opts.existingClipUrl || "");
     const videoUrl =
-      (existing && /e_background_removal/i.test(existing) ? existing : null) ||
+      (existing && !/e_background_removal/i.test(existing) ? existing : null) ||
       cutouts[0].clipUrl ||
       null;
     return {
