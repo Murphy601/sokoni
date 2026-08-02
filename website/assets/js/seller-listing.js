@@ -1292,6 +1292,65 @@ async function deleteDraft(draftId) {
   }
 }
 
+let publishInFlight = false;
+
+function showPublishSuccess(data) {
+  el("success-box")?.classList.remove("hidden");
+  el("success-ref").textContent = data.productId || "";
+  el("success-status").textContent =
+    data.message ||
+    (data.status === "hidden_pending_review"
+      ? "Posted but hidden pending review — check My listings for the reason, or wait for WhatsApp."
+      : "Your listing is live on Sokoni now.");
+  el("wizard-root")?.classList.add("hidden");
+  localStorage.removeItem(DRAFT_KEY);
+  activeDraftId = null;
+}
+
+/** After a dropped proxy socket, check My listings for a matching fresh post. */
+async function recoverPublishFromListings(draft) {
+  const phone = apiPhone();
+  if (!phone || !draft?.name) return null;
+  try {
+    const res = await fetch(
+      `${LISTINGS_API}?phone=${encodeURIComponent(phone)}`,
+      { headers: sellerAuthHeaders() }
+    );
+    const parsed = await parseApiResponse(res);
+    if (!parsed.ok) return null;
+    const items = parsed.data?.listings || [];
+    const list = Array.isArray(items) ? items : [];
+    const name = String(draft.name || "").trim().toLowerCase();
+    const net = Math.round(Number(draft.sellerNetKes || draft.priceKes) || 0);
+    const cutoff = Date.now() - 10 * 60_000;
+    for (const item of list) {
+      const pName = String(item.draft?.name || item.name || "").trim().toLowerCase();
+      const pNet = Math.round(
+        Number(item.draft?.sellerNetKes || item.draft?.priceKes || item.sellerNetKes || 0) || 0
+      );
+      const createdRaw = item.createdAt || item.postedAt || 0;
+      const created = Number(createdRaw) || Date.parse(createdRaw) || 0;
+      if (
+        pName === name &&
+        (!net || !pNet || Math.abs(pNet - net) < 1) &&
+        (!created || created >= cutoff)
+      ) {
+        return {
+          productId: item.productId || item.id,
+          status: item.status === "hidden" ? "hidden_pending_review" : "live",
+          message: "Listing already went live — not posting again.",
+          duplicate: true,
+          videoUrl: item.videoUrl || null,
+          videoKind: item.videoKind || null,
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 async function onPublish() {
   const phone = apiPhone();
   if (!phone) {
@@ -1300,6 +1359,10 @@ async function onPublish() {
   }
   if (!sellerProfile) {
     setStatus("Finish seller setup first.", true);
+    return;
+  }
+  if (publishInFlight) {
+    setStatus("Still posting — wait for confirmation before tapping again.");
     return;
   }
   if (!photoFiles[0] && !activeDraftId) {
@@ -1316,7 +1379,12 @@ async function onPublish() {
 
   savePhone();
   setStatus("Posting listing…");
+  publishInFlight = true;
   el("post-btn").disabled = true;
+  const clientPublishId =
+    sessionStorage.getItem("sokoni_publish_id") ||
+    `pub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  sessionStorage.setItem("sokoni_publish_id", clientPublishId);
 
   try {
     const media = await collectPublishPayload();
@@ -1338,6 +1406,7 @@ async function onPublish() {
           videoUrl: media.videoUrl,
           videoKind: media.videoKind,
           draftId: activeDraftId || undefined,
+          clientPublishId,
         })
       ),
     });
@@ -1354,24 +1423,30 @@ async function onPublish() {
       setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Post failed.", true);
       return;
     }
-    const data = parsed.data;
-
-    el("success-box")?.classList.remove("hidden");
-    el("success-ref").textContent = data.productId || "";
-    el("success-status").textContent =
-      data.message ||
-      (data.status === "hidden_pending_review"
-        ? "Posted but hidden pending review — check My listings for the reason, or wait for WhatsApp."
-        : "Your listing is live on Sokoni now.");
-    el("wizard-root")?.classList.add("hidden");
-    localStorage.removeItem(DRAFT_KEY);
-    activeDraftId = null;
+    sessionStorage.removeItem("sokoni_publish_id");
+    showPublishSuccess(parsed.data);
     await loadMyListings();
   } catch (err) {
     console.warn("[sell] publish failed:", err);
-    setStatus("Network error — try again. If you just cleaned the photo, wait a few seconds and post again.", true);
+    setStatus("Connection dropped — checking if your listing already went live…");
+    const recovered = await recoverPublishFromListings(d);
+    if (recovered?.productId) {
+      sessionStorage.removeItem("sokoni_publish_id");
+      showPublishSuccess(recovered);
+      await loadMyListings();
+      setStatus("Listing was already live — not posted again.");
+      return;
+    }
+    setStatus(
+      "Connection dropped while posting. Check WhatsApp / My listings before tapping Post again — it may already be live.",
+      true
+    );
   } finally {
-    el("post-btn").disabled = false;
+    publishInFlight = false;
+    // Keep Post disabled briefly so a double-tap after a drop cannot spam.
+    setTimeout(() => {
+      if (!publishInFlight) el("post-btn").disabled = false;
+    }, 4000);
   }
 }
 
