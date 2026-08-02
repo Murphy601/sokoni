@@ -1059,12 +1059,21 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
     const pid = cloudinaryPublicIdFromUrl(source);
     if (!pid) return null;
 
-    // Already a baked clean asset URL (no bg-removal transform) — verify alpha then clip.
+    // Already a final studio asset (cream JPEG cutout / reel slide) — do not re-run bg-removal.
+    // Cream flatten produces JPEG (no alpha); requiring PNG alpha here was dropping reels on publish.
     if (!/e_background_removal/i.test(source)) {
-      const ready = await waitCloudinaryCleanPng(source.split("?")[0], {
-        label: "ensure-baked",
-        attempts: 4,
-      });
+      const baseUrl = source.split("?")[0];
+      const looksFinal =
+        /\.(jpe?g)(\?|$)/i.test(baseUrl) ||
+        /\/f_jpg\b/i.test(source) ||
+        /\/(cutout_|reel_|alpha_)/i.test(`/${pid}`);
+      let ready = looksFinal;
+      if (!ready) {
+        ready = await waitCloudinaryCleanPng(baseUrl, {
+          label: "ensure-baked",
+          attempts: 4,
+        });
+      }
       if (ready) {
         let clipUrl = null;
         let clipBuffer = null;
@@ -1074,7 +1083,7 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
           clipBuffer = clip?.clipBuffer || null;
         }
         return {
-          cleanUrl: source.split("?")[0],
+          cleanUrl: baseUrl,
           cleanPublicId: pid,
           baked: true,
           clipUrl,

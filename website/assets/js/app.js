@@ -711,8 +711,7 @@ function renderDepopCard(product) {
     ? `<video class="depop-card-clip" src="${escapeHtml(videoSrc)}"${
         src ? ` poster="${escapeHtml(src)}"` : ""
       } muted loop playsinline preload="metadata" aria-hidden="true"></video>
-        <span class="depop-card-clip-badge" aria-hidden="true">Clip</span>
-        <button type="button" class="depop-card-clip-btn" data-clip-toggle="1" aria-label="Play short clip">▶</button>`
+        <button type="button" class="depop-card-clip-btn" data-clip-toggle="1" aria-label="Play short video">▶</button>`
     : "";
   const handle = sellerHandle(product);
   const shopLink = sellerShopLink(product);
@@ -721,7 +720,7 @@ function renderDepopCard(product) {
   return `
     <article class="depop-card${videoSrc ? " has-clip" : ""}" data-product-id="${id}"${
       videoSrc ? ' data-has-clip="1"' : ""
-    } tabindex="0" role="button" aria-label="${name}${videoSrc ? ", has clip" : ""}, ${escapeHtml(formatPrice(product))}">
+    } tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
       <div class="depop-card-image-wrap"${videoSrc ? ' data-has-clip="1"' : ""}>
         ${imageInner}
         ${clipInner}

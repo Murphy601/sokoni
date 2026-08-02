@@ -194,27 +194,6 @@ html.dark .depop-card-image-wrap {
   opacity: 0;
 }
 
-.depop-card-clip-badge {
-  position: absolute;
-  left: 0.4rem;
-  bottom: 0.4rem;
-  z-index: 4;
-  padding: 0.2rem 0.45rem;
-  border-radius: 0.35rem;
-  background: rgba(27, 16, 53, 0.78);
-  color: #fff8f0;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.depop-card.is-clip-playing .depop-card-clip-badge {
-  background: rgba(37, 211, 102, 0.92);
-  color: #1b1035;
-}
-
 .depop-card-clip-btn {
   position: absolute;
   bottom: 0.35rem;
@@ -248,8 +227,7 @@ html.dark .depop-card-image-wrap {
 
 @media (prefers-reduced-motion: reduce) {
   .depop-card-clip,
-  .depop-card-clip-btn,
-  .depop-card-clip-badge {
+  .depop-card-clip-btn {
     display: none;
   }
 }
