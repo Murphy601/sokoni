@@ -238,7 +238,7 @@ async function main() {
   process.env.CLOUDINARY_DELETE_AFTER = "false";
   process.env.STUDIO_CLIP_ENABLED = "true";
   let multiCalled = false;
-  let multiUrls = "";
+  let multiUrlList = [];
   let bakeUploads = 0;
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
@@ -246,12 +246,16 @@ async function main() {
     if (u.includes("/image/multi") && u.includes("api.cloudinary.com")) {
       multiCalled = true;
       const body = init.body;
-      multiUrls = body?.get?.("urls") || "";
+      // Cloudinary REST expects repeated urls[] — not a pipe-separated urls field.
+      multiUrlList = typeof body?.getAll === "function" ? body.getAll("urls[]") : [];
       if (body?.get && String(body.get("format")) !== "mp4") {
         throw new Error("multi must request mp4");
       }
-      if (!String(multiUrls).includes("|")) {
-        throw new Error(`multi urls must be pipe-separated ordered list: ${multiUrls}`);
+      if (multiUrlList.length < 2) {
+        throw new Error(`multi must send urls[] array, got: ${JSON.stringify(multiUrlList)} urls=${body?.get?.("urls")}`);
+      }
+      if (multiUrlList.some((x) => /e_background_removal/i.test(String(x)))) {
+        throw new Error(`multi urls must be base delivery URLs, got transforms: ${multiUrlList[0]}`);
       }
       return new Response(
         JSON.stringify({
@@ -494,8 +498,86 @@ async function main() {
     globalThis.fetch = origFetch;
   }
 
+  // Multi-photo previewStudioClean builds one reel (what sellers hit from Preview).
+  clearStudioEnv();
+  process.env.CLOUDINARY_CLOUD_NAME = "demo";
+  process.env.CLOUDINARY_API_KEY = "key";
+  process.env.CLOUDINARY_API_SECRET = "secret";
+  process.env.CLOUDINARY_DELETE_AFTER = "false";
+  process.env.STUDIO_CLIP_ENABLED = "true";
+  process.env.STUDIO_PROVIDER = "cloudinary";
+  let previewMultiCalled = false;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    const method = String(init.method || "GET").toUpperCase();
+    if (u.includes("/image/multi") && u.includes("api.cloudinary.com")) {
+      previewMultiCalled = true;
+      const body = init.body;
+      const urls = typeof body?.getAll === "function" ? body.getAll("urls[]") : [];
+      if (urls.length < 2 && !body?.get?.("tag")) {
+        throw new Error("preview multi needs urls[] or tag");
+      }
+      return new Response(
+        JSON.stringify({
+          secure_url: "https://res.cloudinary.com/demo/image/multi/v1/reel_preview.mp4",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
+      const body = init.body;
+      const pid = body?.get?.("public_id") || "cutout_x";
+      const folder = body?.get?.("folder") || "sokoni-studio";
+      const full = `${folder}/${pid}`;
+      const eager = body?.get?.("eager") || "";
+      const payload = {
+        public_id: full,
+        secure_url: `https://res.cloudinary.com/demo/image/upload/${full}.png`,
+      };
+      if (String(eager).includes("background_removal")) {
+        payload.eager = [
+          {
+            secure_url: `https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/${full}.png`,
+          },
+        ];
+      } else if (String(eager).includes("mp4") || String(eager).includes("zoompan")) {
+        payload.eager = [
+          { secure_url: `https://res.cloudinary.com/demo/image/upload/e_zoompan/f_mp4/${full}.mp4` },
+        ];
+      }
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (method === "HEAD") return new Response(null, { status: 200 });
+    if (u.includes("res.cloudinary.com")) {
+      if (u.includes(".mp4") || u.includes("f_mp4") || u.includes("/multi/")) {
+        return new Response(fakeMp4, { status: 200 });
+      }
+      // Range / GET for alpha wait — return RGBA PNG
+      return new Response(cleanPng, {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      });
+    }
+    return new Response("nope", { status: 500 });
+  };
+  try {
+    const multiPreview = await previewStudioClean([tiny, tiny], "image/jpeg");
+    if (!multiPreview.studioApplied || !multiPreview.clipApplied || !multiPreview.clipVideoUrl) {
+      throw new Error(`multi preview missing reel: ${JSON.stringify(multiPreview)}`);
+    }
+    if (!Array.isArray(multiPreview.imageUrls) || multiPreview.imageUrls.length < 2) {
+      throw new Error(`multi preview imageUrls: ${JSON.stringify(multiPreview.imageUrls)}`);
+    }
+    if (!previewMultiCalled) throw new Error("multi preview never called Cloudinary multi");
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+
   if (!listConfiguredProviders().length && false) throw new Error("unreachable");
-  console.log("OK: baked clean PNG clips + multi urls reel + CDN-only preview");
+  console.log("OK: baked clean PNG clips + multi urls[] reel + multi preview + CDN-only preview");
 }
 
 main()

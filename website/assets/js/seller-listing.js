@@ -577,12 +577,16 @@ function refreshStudioClipPreview() {
     vid.src = videoPreview;
     return;
   }
-  if (preferStudioClip && studioClipBase64) {
+  const clipSrc =
+    (preferStudioClip && studioClipUrl) ||
+    (preferStudioClip && studioClipBase64) ||
+    null;
+  if (clipSrc) {
     wrap.classList.remove("hidden");
-    vid.src = studioClipBase64;
+    vid.src = clipSrc;
     return;
   }
-  if (!videoFile && !studioClipBase64) {
+  if (!videoFile && !studioClipBase64 && !studioClipUrl) {
     wrap.classList.add("hidden");
     vid.removeAttribute("src");
   }
@@ -599,20 +603,27 @@ function updateCoverStudioUi() {
     controls.hidden = !show;
     controls.classList.toggle("hidden", !show);
   }
+  const photoCount = photoFiles.filter(Boolean).length;
   if (previewBtn) {
     previewBtn.disabled = !photoFiles[0];
-    previewBtn.textContent = studioClipUiEnabled
-      ? "Preview clean + product clip"
-      : "Preview clean background";
+    if (!studioClipUiEnabled) {
+      previewBtn.textContent = "Preview clean background";
+    } else if (photoCount > 1) {
+      previewBtn.textContent = `Preview clean + ${photoCount}-photo reel`;
+    } else {
+      previewBtn.textContent = "Preview clean + product clip";
+    }
   }
   if (clipToggle) clipToggle.hidden = !studioClipUiEnabled;
-  const showingClean = Boolean(coverCleanBase64 && preferCleanCover);
+  const showingClean = Boolean((coverCleanBase64 || coverCleanUrl) && preferCleanCover);
   el("media-slot-0")?.classList.toggle("has-studio", showingClean);
   if (badge) badge.hidden = !showingClean;
-  if (status && !coverCleanBase64 && studioUiEnabled) {
+  if (status && !coverCleanBase64 && !coverCleanUrl && studioUiEnabled) {
     status.textContent = photoFiles[0]
       ? studioClipUiEnabled
-        ? "Preview cleans the cover and builds a short product clip — AI draft waits for your price."
+        ? photoCount > 1
+          ? `Preview cleans all ${photoCount} photos and builds one showcase reel.`
+          : "Preview cleans the cover and builds a short product clip — AI draft waits for your price."
         : "Preview cleans the cover only — AI draft waits until you add your price."
       : "Add a cover photo to try background cleanup.";
   }
@@ -629,9 +640,11 @@ function refreshCoverPreview() {
     slot.insertBefore(img, slot.firstChild);
   }
   const src =
-    coverCleanBase64 && preferCleanCover
+    preferCleanCover && coverCleanBase64
       ? coverCleanBase64
-      : photoPreviews[0];
+      : preferCleanCover && coverCleanUrl
+        ? coverCleanUrl
+        : photoPreviews[0];
   if (src) img.src = src;
   slot.classList.add("has-media");
   updateCoverStudioUi();
@@ -688,15 +701,21 @@ async function ingestCleanCover(cleanImageUrl, cleanImageBase64 = null) {
 async function collectPublishPayload() {
   const imageUrls = [];
   const images = [];
+  const studioUrls = Array.isArray(window.__sokoniCleanImageUrls)
+    ? window.__sokoniCleanImageUrls.filter((u) => /^https?:\/\//i.test(String(u)))
+    : [];
 
-  if (preferCleanCover && coverCleanUrl) {
+  if (preferCleanCover && studioUrls.length) {
+    imageUrls.push(...studioUrls);
+  } else if (preferCleanCover && coverCleanUrl) {
     imageUrls.push(coverCleanUrl);
   }
 
   for (let i = 0; i < photoFiles.length; i += 1) {
     const file = photoFiles[i];
     if (!file) continue;
-    // Cover already sent as CDN URL
+    // Photos already sent as CDN URLs from studio reel/clean
+    if (imageUrls.length && i < imageUrls.length) continue;
     if (i === 0 && imageUrls.length) continue;
     if (i === 0 && preferCleanCover && coverCleanBase64 && String(coverCleanBase64).startsWith("data:")) {
       images.push(coverCleanBase64);
@@ -754,10 +773,10 @@ async function assertVideoDuration(file, maxSeconds) {
   }
 }
 
-/** @returns {"seller"|"preview"|null} */
+  /** @returns {"seller"|"preview"|null} */
 function resolveListingVideoKind() {
   if (videoFile) return "seller";
-  if (preferStudioClip && studioClipBase64) return "preview";
+  if (preferStudioClip && (studioClipUrl || studioClipBase64)) return "preview";
   return null;
 }
 
@@ -794,17 +813,34 @@ async function previewStudioClean() {
 
   const btn = el("studio-preview-btn");
   if (btn) btn.disabled = true;
-  setStatus(studioClipUiEnabled ? "Cleaning cover + building clip…" : "Cleaning cover background…");
+  const filled = photoFiles.filter(Boolean);
+  setStatus(
+    studioClipUiEnabled
+      ? filled.length > 1
+        ? `Cleaning ${filled.length} photos + building one reel…`
+        : "Cleaning cover + building clip…"
+      : "Cleaning cover background…"
+  );
   const status = el("studio-status");
   if (status) status.textContent = "Working…";
 
   try {
-    const compressed = await compressImageFile(photoFiles[0]);
-    const imageBase64 = await readFileAsDataUrl(compressed);
+    const imagesBase64 = [];
+    for (const file of filled.slice(0, 8)) {
+      const compressed = await compressImageFile(file);
+      imagesBase64.push(await readFileAsDataUrl(compressed));
+    }
     const res = await fetch(`${LISTINGS_API}/studio`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(jsonAuthBody({ phone, imageBase64, mimeType: compressed.type || "image/jpeg" })),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          imageBase64: imagesBase64[0],
+          imagesBase64,
+          mimeType: "image/jpeg",
+        })
+      ),
     });
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
@@ -826,6 +862,11 @@ async function previewStudioClean() {
         data.clipApplied ? data.clipVideoUrl : null,
         data.cleanImageUrl
       );
+      // Cache all cleaned CDN URLs so publish can send the full reel set.
+      if (Array.isArray(data.imageUrls) && data.imageUrls.length) {
+        coverCleanUrl = data.imageUrls[0];
+        window.__sokoniCleanImageUrls = data.imageUrls.slice();
+      }
       setStatus(data.message || "Background cleaned — review before posting.");
     } else {
       const msg = data.message || "Could not clean background — keep your original photo.";

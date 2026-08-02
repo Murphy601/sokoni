@@ -750,10 +750,21 @@ export async function publishSellerListing({
         if (showcase?.videoUrl) {
           publishVideo = showcase.videoUrl;
           publishVideoKind = showcase.videoKind || "preview";
+          console.log("[seller-listings] showcase reel ready", {
+            slides: showcase.slideCount || showcase.imageUrls.length,
+            reelTag: showcase.reelTag || null,
+            error: showcase.error || null,
+            videoUrl: String(publishVideo).slice(0, 96),
+          });
+        } else {
+          console.warn("[seller-listings] showcase produced no videoUrl", {
+            slides: showcase?.slideCount || showcase?.imageUrls?.length || 0,
+            error: showcase?.error || null,
+          });
         }
       }
     } catch (err) {
-      console.warn("[seller-listings] showcase reel skipped:", err.message);
+      console.warn("[seller-listings] showcase reel failed:", err.message);
     }
   }
 
