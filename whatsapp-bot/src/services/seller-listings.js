@@ -397,14 +397,17 @@ function findRecentClientPublish(clientPublishId) {
  * @returns {"full"|"images"|false}
  */
 function studioReadyCdnLevel(publishImages, publishVideo, publishVideoKind) {
-  if (publishVideoKind === "seller") return "full";
+  const hasHttpsVideo = /^https?:\/\//i.test(String(publishVideo || ""));
+  const hasDataVideo = /^data:/i.test(String(publishVideo || ""));
+  // Only treat as "full" when a seller/preview video payload is actually present.
+  if (publishVideoKind === "seller" && (hasHttpsVideo || hasDataVideo)) return "full";
   const list = (publishImages || []).map((u) => String(u || "").trim()).filter(Boolean);
   if (!list.length) return false;
   const allCdn = list.every(
     (u) => /^https?:\/\//i.test(u) && /res\.cloudinary\.com/i.test(u)
   );
   if (!allCdn) return false;
-  if (publishVideoKind === "preview" && /^https?:\/\//i.test(String(publishVideo || ""))) {
+  if (publishVideoKind === "preview" && hasHttpsVideo) {
     return "full";
   }
   // Clean CDN stills from Preview, but reel URL missing — skip full re-clean.
@@ -764,6 +767,10 @@ export async function publishSellerListing({
     videoKind === "seller" || videoKind === "preview"
       ? videoKind
       : linkedDraft?.videoKind || null;
+  // Draft may say videoKind=seller with no bytes — clear so we can attach a Preview reel.
+  if (publishVideoKind === "seller" && !publishVideo) {
+    publishVideoKind = null;
+  }
   if (!publishImages.length && linkedDraft) {
     const stored = await loadStoredMediaAsBase64(linkedDraft);
     publishImages = stored.images;
@@ -863,12 +870,7 @@ export async function publishSellerListing({
   }
 
   // Last resort: CDN stills present but still no video (client omitted reel URL).
-  if (
-    !publishVideo &&
-    publishVideoKind !== "seller" &&
-    isCloudinaryConfigured() &&
-    isStudioClipEnabled()
-  ) {
+  if (!publishVideo && isCloudinaryConfigured() && isStudioClipEnabled()) {
     const CDN = publishImages.filter(
       (u) => /^https?:\/\//i.test(String(u)) && /res\.cloudinary\.com/i.test(String(u))
     );

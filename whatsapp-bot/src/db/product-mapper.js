@@ -111,6 +111,15 @@ export function rowToCatalogProduct(row, imageUrls = []) {
 
     imageUrl,
     images,
+    // CDN reels live in legacy_json only (no products.video_url column / local mp4 for studio clips).
+    videoUrl:
+      typeof legacy.videoUrl === "string" && legacy.videoUrl.trim()
+        ? legacy.videoUrl.trim()
+        : undefined,
+    videoKind:
+      legacy.videoKind === "seller" || legacy.videoKind === "preview"
+        ? legacy.videoKind
+        : undefined,
     imageKey: row.image_key || undefined,
     imageHash: row.image_hash || undefined,
     uploadMessageId: row.upload_message_id || undefined,
