@@ -697,12 +697,16 @@
           <div id="media-slot-7" class="sell-media-slot sell-media-slot-optional"><span class="sell-slot-label">+ Photo</span><input type="file" accept="image/*" id="photo-slot-7" /></div>
         </div>
         <div id="studio-controls" class="sell-studio-controls hidden" hidden>
-          <p class="text-sm text-brand-purple/70 dark:text-white/70">Messy bedroom shot? Clean the cover background before you post.</p>
+          <p class="text-sm text-brand-purple/70 dark:text-white/70">Messy bedroom shot? Clean the cover — Cloudinary can also build a short product clip.</p>
           <div class="sell-studio-actions">
             <button type="button" id="studio-preview-btn" class="sell-btn-ghost">Preview clean background</button>
             <label class="sell-studio-toggle">
               <input type="checkbox" id="studio-prefer-clean" checked />
               Use cleaned cover when posting
+            </label>
+            <label class="sell-studio-toggle" hidden>
+              <input type="checkbox" id="studio-prefer-clip" checked />
+              Use generated clip as listing video
             </label>
           </div>
           <p id="studio-status" class="sell-tag-hint"></p>
