@@ -11,7 +11,7 @@
  *   2. Wait until cleaned PNG has alpha, then DOWNLOAD those PNG bytes
  *   3. Overwrite cutout_* with the clean PNG buffer (base asset is now transparent)
  *   4. Zoompan MP4 on that baked asset (video transforms cannot apply e_background_removal)
- *   5. 2–8 photos → Cloudinary multi from baked clean URLs → one MP4 reel
+ *   5. 2–8 photos → Cloudinary multi via urls[] (tag fallback) → one MP4 reel
  *   6. Save those CDN URLs in the catalog
  *
  * Why bake bytes? (a) URL→upload fetch often re-pulls the original photo.
@@ -382,11 +382,12 @@ async function waitCloudinaryCleanPng(url, opts = {}) {
     Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) ||
     12;
   const label = opts.label || "bg-removal-alpha";
+  let pngOkHits = 0;
 
   for (let i = 0; i < attempts; i += 1) {
     try {
       const res = await fetch(url, {
-        headers: { Range: "bytes=0-64" },
+        headers: { Range: "bytes=0-512" },
         signal: AbortSignal.timeout(Math.min(timeoutMs, 45_000)),
       });
       if (res.status === 420 || res.status === 423) {
@@ -408,6 +409,17 @@ async function waitCloudinaryCleanPng(url, opts = {}) {
         /* ignore */
       }
       if (pngHasAlpha(buf)) return true;
+      // Range responses sometimes omit tRNS; two successful PNGs from the
+      // bg-removal URL after 423 clears is enough to proceed to full download.
+      if (isPngBuffer(buf)) {
+        pngOkHits += 1;
+        if (pngOkHits >= 2) {
+          console.warn(
+            `[listing-studio] Cloudinary ${label} PNG ready (alpha not in header — baking anyway)`
+          );
+          return true;
+        }
+      }
       console.warn(
         `[listing-studio] Cloudinary ${label} PNG has no alpha yet — retry ${i + 1}/${attempts}`
       );
@@ -551,6 +563,7 @@ async function storeCleanPngBufferAndClip(cleanPng, opts = {}) {
   const up = await cloudinaryUploadImage(cleanPng, "image/png", {
     publicId,
     folder,
+    overwrite: Boolean(opts.publicId),
     eager,
     filename: "clean.png",
     tags: opts.tags,
@@ -706,9 +719,14 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
     timeoutMs: 120_000,
     attempts: Math.min(6, derivedAttempts),
   });
-  if (!cleanBuf?.length || !pngHasAlpha(cleanBuf)) {
-    console.warn("[listing-studio] clean PNG download failed or has no alpha");
+  if (!cleanBuf?.length || !isPngBuffer(cleanBuf)) {
+    console.warn("[listing-studio] clean PNG download failed or not a PNG");
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
+  }
+  if (!pngHasAlpha(cleanBuf)) {
+    console.warn(
+      "[listing-studio] clean PNG has no detectable alpha — baking anyway (Cloudinary encoding varies)"
+    );
   }
   if (cleanBuf.length > 12 * 1024 * 1024) {
     console.warn("[listing-studio] clean PNG too large to bake on 1GB VM:", cleanBuf.length);
@@ -789,10 +807,24 @@ function resolveReelTransform() {
 }
 
 /**
- * Cloudinary Multi API — one MP4 from ordered cleaned image URLs (already bg-removed).
- * Prefer `urls` over tags so slide order matches the seller’s upload order.
- * @param {string[]} urls
- * @param {{ format?: string, transformation?: string }} [opts]
+ * Prefer base delivery URLs for multi (baked clean PNGs). Strip transform chains so
+ * Cloudinary does not re-fetch originals through e_background_removal URLs.
+ */
+function cloudinaryBaseDeliveryUrl(url) {
+  const raw = String(url || "").trim().split("?")[0];
+  if (!/^https?:\/\//i.test(raw)) return null;
+  const cloud = env("CLOUDINARY_CLOUD_NAME");
+  const pid = cloudinaryPublicIdFromUrl(raw);
+  if (cloud && pid) {
+    return `https://res.cloudinary.com/${cloud}/image/upload/${pid}`;
+  }
+  return raw;
+}
+
+/**
+ * Cloudinary Multi API — one MP4 from ordered cleaned image URLs.
+ * REST requires repeated `urls[]` fields (not a pipe-separated `urls` string).
+ * Signature joins the array with commas (Cloudinary SDK convention).
  */
 async function cloudinaryMultiByUrls(urls, opts = {}) {
   const cloud = env("CLOUDINARY_CLOUD_NAME");
@@ -800,17 +832,18 @@ async function cloudinaryMultiByUrls(urls, opts = {}) {
   const apiSecret = env("CLOUDINARY_API_SECRET");
   const format = opts.format || "mp4";
   const transformation = opts.transformation || resolveReelTransform();
-  const list = (urls || []).filter((u) => /^https?:\/\//i.test(String(u)));
+  const list = (urls || [])
+    .map((u) => cloudinaryBaseDeliveryUrl(u) || String(u || "").trim())
+    .filter((u) => /^https?:\/\//i.test(u));
   if (list.length < 2) return null;
 
   const timestamp = Math.floor(Date.now() / 1000);
-  // Cloudinary signs multi urls as a pipe-separated list.
-  const urlsParam = list.join("|");
-  const signParams = { urls: urlsParam, timestamp, format, transformation };
+  // Sign like the official SDK: array values joined with commas.
+  const signParams = { urls: list.join(","), timestamp, format, transformation };
   const signature = cloudinarySign(signParams, apiSecret);
 
   const form = new FormData();
-  form.append("urls", urlsParam);
+  for (const u of list) form.append("urls[]", u);
   form.append("timestamp", String(timestamp));
   form.append("api_key", apiKey);
   form.append("signature", signature);
@@ -824,10 +857,58 @@ async function cloudinaryMultiByUrls(urls, opts = {}) {
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    console.warn("[listing-studio] Cloudinary multi failed:", res.status, errText.slice(0, 240));
+    console.warn("[listing-studio] Cloudinary multi(urls) failed:", res.status, errText.slice(0, 240));
     return null;
   }
   return res.json().catch(() => null);
+}
+
+/**
+ * Cloudinary Multi API — one MP4 from assets sharing a tag (ordered by public_id).
+ * Fallback when urls[] is rejected; reel_XX_01 / _02 public_ids keep slide order.
+ */
+async function cloudinaryMultiByTag(tag, opts = {}) {
+  const cloud = env("CLOUDINARY_CLOUD_NAME");
+  const apiKey = env("CLOUDINARY_API_KEY");
+  const apiSecret = env("CLOUDINARY_API_SECRET");
+  const format = opts.format || "mp4";
+  const transformation = opts.transformation || resolveReelTransform();
+  if (!tag) return null;
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signParams = { tag, timestamp, format, transformation };
+  const signature = cloudinarySign(signParams, apiSecret);
+
+  const form = new FormData();
+  form.append("tag", tag);
+  form.append("timestamp", String(timestamp));
+  form.append("api_key", apiKey);
+  form.append("signature", signature);
+  form.append("format", format);
+  form.append("transformation", transformation);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/multi`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.warn("[listing-studio] Cloudinary multi(tag) failed:", res.status, errText.slice(0, 240));
+    return null;
+  }
+  return res.json().catch(() => null);
+}
+
+/** Prefer ordered urls[]; fall back to shared tag. */
+async function cloudinaryMultiReel(imageUrls, reelTag, opts = {}) {
+  const byUrls = await cloudinaryMultiByUrls(imageUrls, opts);
+  if (byUrls?.secure_url || byUrls?.url) return byUrls;
+  if (reelTag) {
+    const byTag = await cloudinaryMultiByTag(reelTag, opts);
+    if (byTag?.secure_url || byTag?.url) return byTag;
+  }
+  return byUrls || null;
 }
 
 /**
@@ -896,7 +977,7 @@ export async function ensureCleanCutout(source, mimeType = "image/jpeg", opts = 
       timeoutMs: 120_000,
       attempts: 5,
     });
-    if (!cleanBuf?.length || !pngHasAlpha(cleanBuf)) return null;
+    if (!cleanBuf?.length || !isPngBuffer(cleanBuf)) return null;
     const stored = await storeCleanPngBufferAndClip(cleanBuf, {
       publicId: opts.publicId,
       tags: opts.tags,
@@ -935,6 +1016,7 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
   if (!list.length) return null;
 
   const stamp = Math.floor(Date.now() / 1000);
+  const reelTag = `reel_${stamp}_${crypto.randomBytes(3).toString("hex")}`;
   const cutouts = [];
   const wantClipSingle = list.length === 1 && env("STUDIO_CLIP_ENABLED") !== "false";
 
@@ -948,15 +1030,19 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
     }
     if (!source) continue;
 
+    // Ordered public_ids so Cloudinary multi(tag) keeps seller photo order.
     const slideId = `reel_${stamp}_${String(i + 1).padStart(2, "0")}`;
     const cut = await ensureCleanCutout(source, mime, {
       publicId: slideId,
+      tags: reelTag,
       wantClip: wantClipSingle,
     });
     if (cut?.cleanUrl) cutouts.push(cut);
   }
 
-  if (!cutouts.length) return null;
+  if (!cutouts.length) {
+    return { imageUrls: [], videoUrl: null, videoKind: null, error: "clean_failed" };
+  }
 
   const imageUrls = cutouts.map((c) => c.cleanUrl);
 
@@ -971,16 +1057,18 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
       imageUrls,
       videoUrl,
       videoKind: videoUrl ? "preview" : null,
+      error: videoUrl ? null : "clip_failed",
     };
   }
 
-  // 2–8 photos → one multi MP4 from cleaned derived URLs (order preserved).
+  // 2–8 photos → one multi MP4 from baked clean URLs (order preserved).
   // Do not put e_background_removal in multi transforms (video context ignores it).
-  const multi = await cloudinaryMultiByUrls(imageUrls, {
+  const multi = await cloudinaryMultiReel(imageUrls, reelTag, {
     format: "mp4",
     transformation: resolveReelTransform(),
   });
   let videoUrl = multi?.secure_url || multi?.url || null;
+  let error = null;
 
   if (videoUrl) {
     const ready = await waitCloudinaryDerivedReady(videoUrl, {
@@ -989,17 +1077,30 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
       attempts: Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 12,
     });
     if (!ready) {
-      console.warn("[listing-studio] showcase reel not ready — falling back to first clip");
-      videoUrl = cutouts[0].clipUrl || null;
+      // Still return the URL — Cloudinary often finishes shortly after; buyers hit CDN later.
+      console.warn("[listing-studio] showcase reel not confirmed ready yet — keeping URL", videoUrl.slice(0, 96));
+      error = "reel_pending";
     }
   } else {
-    videoUrl = cutouts[0].clipUrl || null;
+    error = "multi_failed";
+    console.warn("[listing-studio] Cloudinary multi returned no URL", { reelTag, slides: imageUrls.length });
+  }
+
+  // Soft fallback: first slide zoompan if multi failed (still better than nothing).
+  if (!videoUrl && cutouts[0].cleanPublicId) {
+    const cloud = env("CLOUDINARY_CLOUD_NAME");
+    const fallback = await finalizeClipUrl(bakedClipUrl(cloud, cutouts[0].cleanPublicId));
+    videoUrl = fallback?.clipUrl || cutouts[0].clipUrl || null;
   }
 
   return {
     imageUrls,
     videoUrl,
     videoKind: videoUrl ? "preview" : null,
+    // Keep reel_pending when URL exists but CDN not confirmed; clear multi_failed if fallback clip worked.
+    error: videoUrl ? (error === "multi_failed" ? null : error) : error || "reel_failed",
+    reelTag,
+    slideCount: cutouts.length,
   };
 }
 
@@ -1185,12 +1286,70 @@ async function fetchCleanForVision(cleaned) {
 
 /**
  * Format studio preview response for seller API (no draft generation).
+ * Pass one buffer, or an array of buffers (2–8) to build a single showcase reel.
  * Default: CDN URLs only — never embed multi‑MB PNG/MP4 base64 (crashes 1GB VMs).
- * @param {Buffer} buffer
- * @param {string} mimeType
+ * @param {Buffer|Buffer[]} bufferOrList
+ * @param {string} [mimeType]
  */
-export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
-  const cleaned = await removeBackground(buffer, mimeType);
+export async function previewStudioClean(bufferOrList, mimeType = "image/jpeg") {
+  const list = (Array.isArray(bufferOrList) ? bufferOrList : [bufferOrList])
+    .filter((b) => Buffer.isBuffer(b) && b.length)
+    .slice(0, 8);
+
+  if (!list.length) {
+    return {
+      studioApplied: false,
+      cleanImageBase64: null,
+      cleanImageUrl: null,
+      clipVideoBase64: null,
+      clipVideoUrl: null,
+      clipApplied: false,
+      imageUrls: [],
+      reason: "missing_image",
+      provider: null,
+      message: "Add a cover photo first.",
+    };
+  }
+
+  // Multi-photo: clean all + one Cloudinary multi reel (what sellers expect from Preview).
+  if (list.length > 1 && isCloudinaryConfigured() && isStudioClipEnabled()) {
+    try {
+      const showcase = await prepareListingShowcaseMedia(list, {});
+      if (showcase?.imageUrls?.length && showcase.videoUrl) {
+        return {
+          studioApplied: true,
+          cleanImageBase64: null,
+          cleanImageUrl: showcase.imageUrls[0],
+          clipVideoBase64: null,
+          clipVideoUrl: showcase.videoUrl,
+          clipApplied: true,
+          imageUrls: showcase.imageUrls,
+          reason: null,
+          provider: "cloudinary",
+          message: `Cleaned ${showcase.imageUrls.length} photos + one ${showcase.imageUrls.length * 2}s showcase reel — use the toggles below.`,
+        };
+      }
+      if (showcase?.imageUrls?.length) {
+        return {
+          studioApplied: true,
+          cleanImageBase64: null,
+          cleanImageUrl: showcase.imageUrls[0],
+          clipVideoBase64: null,
+          clipVideoUrl: null,
+          clipApplied: false,
+          imageUrls: showcase.imageUrls,
+          reason: showcase.error || "reel_failed",
+          provider: "cloudinary",
+          message:
+            "Photos cleaned, but the showcase reel failed — you can still post with cleaned covers.",
+        };
+      }
+    } catch (err) {
+      console.warn("[listing-studio] multi preview failed:", err.message);
+    }
+  }
+
+  const cleaned = await removeBackground(list[0], mimeType);
   if (!cleaned.studioApplied) {
     const messages = {
       not_configured: "Background cleanup is not configured on this bot.",
@@ -1208,6 +1367,7 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
       clipVideoBase64: null,
       clipVideoUrl: null,
       clipApplied: false,
+      imageUrls: [],
       reason: cleaned.reason || "api_failed",
       provider: cleaned.provider || null,
       message: messages[cleaned.reason] || messages.api_failed,
@@ -1238,6 +1398,7 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
     clipVideoBase64,
     clipVideoUrl,
     clipApplied,
+    imageUrls: cleanUrl ? [cleanUrl] : [],
     reason: null,
     provider: cleaned.provider || null,
     message,

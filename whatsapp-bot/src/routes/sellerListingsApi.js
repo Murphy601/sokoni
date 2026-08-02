@@ -78,24 +78,34 @@ router.post("/generate", async (req, res) => {
   }
 });
 
-/** POST /api/seller/listings/studio — cloud BG cleanup (+ clip from cleaned cutout) */
+/** POST /api/seller/listings/studio — cloud BG cleanup (+ single clip or multi-photo reel) */
 router.post("/studio", async (req, res) => {
-  const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
+  const { phone, imageBase64, imagesBase64, mimeType = "image/jpeg" } = req.body || {};
   const sessionToken = sellerSessionFromReq(req);
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) {
     return res.status(sessionAuthStatus(check)).json({ error: check.error, message: check.message });
   }
-  if (!imageBase64) {
+
+  const rawList = Array.isArray(imagesBase64) && imagesBase64.length
+    ? imagesBase64.filter(Boolean).slice(0, 8)
+    : imageBase64
+      ? [imageBase64]
+      : [];
+  if (!rawList.length) {
     return res.status(400).json({ error: "missing_image", message: "Add a cover photo first." });
   }
+
   try {
-    const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
+    const buffers = rawList.map((raw) =>
+      Buffer.from(String(raw).replace(/^data:[^;]+;base64,/, ""), "base64")
+    );
     // Drop huge request payload from memory before Cloudinary work (1GB VM).
     if (req.body) {
       req.body.imageBase64 = undefined;
+      req.body.imagesBase64 = undefined;
     }
-    const result = await previewStudioClean(buffer, mimeType);
+    const result = await previewStudioClean(buffers.length === 1 ? buffers[0] : buffers, mimeType);
     res.json({
       studioApplied: result.studioApplied,
       cleanImageUrl: result.cleanImageUrl || null,
@@ -103,6 +113,7 @@ router.post("/studio", async (req, res) => {
       clipApplied: Boolean(result.clipApplied),
       clipVideoUrl: result.clipVideoUrl || null,
       clipVideoBase64: result.clipVideoBase64 || null,
+      imageUrls: Array.isArray(result.imageUrls) ? result.imageUrls : [],
       reason: result.reason,
       message: result.message,
       provider: result.provider || null,
