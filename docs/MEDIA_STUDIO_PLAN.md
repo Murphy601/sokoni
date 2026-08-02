@@ -14,10 +14,15 @@
 
 **Clip always starts from the cleaned cutout**, never zoompan on the raw phone shot.
 
+**Transform once, serve static CDN URLs** — never request Cloudinary bg-removal / zoompan on every page view. Final `cleanImageUrl` + `videoUrl` are saved in the catalog.
+
 Cloudinary flow (memory-safe on the 1GB bot):
-1. Upload original → wait for `e_background_removal` (HEAD only)
-2. **Re-upload that cleaned derived URL** as a new `cutout_*` asset (Cloudinary fetches it — bot never holds the PNG)
-3. Build MP4 with pad/shadow/zoompan **on the cutout asset only**
+1. Upload original with eager `e_background_removal/f_png` and **`eager_async=false`** (wait for AI clean before continuing)
+2. Poll HEAD until the cleaned derived is ready (423 retries)
+3. **Re-upload that cleaned derived URL** as a durable `cutout_*` / ordered `reel_*` asset (never auto-deleted)
+4. **1 photo:** pad/shadow/zoompan MP4 on the cutout  
+   **2–8 photos (on publish):** Cloudinary **multi** API → one showcase MP4 (~2s/slide)
+5. Persist absolute CDN URLs on the product (`imageUrl` / `images` / `videoUrl`)
 
 Studio API returns **`cleanImageUrl` + `clipVideoUrl`** (CDN). No multi‑MB base64. The sell page caches both in the browser. PM2 uses `--max-memory-restart 450M` so a spike restarts the bot instead of taking Sokoni down.
 
@@ -58,18 +63,23 @@ Optional Cloudinary tweaks:
 # CLOUDINARY_BG_EFFECT=e_background_removal
 # Clip runs on the cleaned cutout only (do not include e_background_removal):
 # CLOUDINARY_CLIP_TRANS=c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_5;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264
+# Only temp listing_* uploads are deleted; cutout_/reel_ stay for CDN:
 # CLOUDINARY_DELETE_AFTER=true
 # CLOUDINARY_DELETE_MS=180000
+# Multi-photo showcase reel (publish):
+# CLOUDINARY_REEL_DELAY_MS=2000
+# CLOUDINARY_REEL_TRANS=dl_2000/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264
 # STUDIO_CLIP_INLINE=true   # embed data:video in JSON (heavy — tests only)
 ```
 
 ## Seller flow
 
 1. Seller adds cover photo → **Preview clean + product clip** (when Cloudinary is configured for clips).
-2. Bot cleans the cover (Cloudinary / HF / Photoroom), then uploads the **cleaned PNG** to Cloudinary and builds a ~5s MP4 (pad + shadow + zoompan).
-3. Response includes `clipVideoUrl` (CDN). The browser previews it and caches bytes for publish.
+2. Bot cleans the cover with **eager_async=false**, stores a durable cutout, builds a ~4s zoompan MP4.
+3. Response includes `cleanImageUrl` + `clipVideoUrl` (CDN). Browser caches those URLs.
 4. Seller toggles **Use cleaned cover** / **Use generated clip as listing video**.
-5. Publish sends cleaned cover + clip as `videoBase64` (from the browser cache).
+5. Publish sends CDN `imageUrls` / `videoUrl` (not multi‑MB base64).
+6. If **2–8 photos** and no seller phone video → bot cleans extras, builds **one multi-photo reel**, saves that MP4 URL + clean image URLs in the catalog.
 
 ## API
 

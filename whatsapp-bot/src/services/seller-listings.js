@@ -25,7 +25,10 @@ import {
 } from "./listing-generator.js";
 import {
   isStudioConfigured,
+  isStudioClipEnabled,
+  isCloudinaryConfigured,
   processListingWithStudio,
+  prepareListingShowcaseMedia,
   getStudioMeta,
 } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
@@ -207,8 +210,11 @@ function normalizeBrands(draft) {
 }
 
 /**
- * Persist listing media. Each image/video source may be a data-URL **or** an allowlisted HTTPS URL
- * (Cloudinary studio cutout/clip) so the browser never posts multi‑MB JSON through nginx.
+ * Persist listing media. Prefer durable Cloudinary CDN URLs in the catalog
+ * (transform once on upload — never re-request bg-removal/zoompan per page view).
+ * Still write a local cover JPEG for WhatsApp /catalog-images when possible.
+ *
+ * Each image/video source may be a data-URL **or** an allowlisted HTTPS URL.
  * @param {string} productId
  * @param {string[]} imageSources
  * @param {string|null} videoSource
@@ -221,12 +227,39 @@ async function saveMediaFiles(productId, imageSources = [], videoSource = null, 
   const limited = imageSources.slice(0, MAX_PHOTOS);
   try {
     for (let i = 0; i < limited.length; i += 1) {
-      const buffer = await resolveMediaBuffer(limited[i], {
+      const src = String(limited[i] || "").trim();
+      if (!src) continue;
+      const ext = i === 0 ? "" : `-${i + 1}`;
+
+      // Keep absolute CDN URLs in the product record (static delivery).
+      if (/^https?:\/\//i.test(src) && isAllowedRemoteMediaUrl(src)) {
+        images.push(src);
+        // Cover only: also cache a small local JPEG for WhatsApp catalog push.
+        if (i === 0) {
+          try {
+            let fetchUrl = src;
+            if (/res\.cloudinary\.com/i.test(src) && !/\/f_jpg/i.test(src)) {
+              fetchUrl = src.replace("/upload/", "/upload/c_limit,w_1200,q_auto,f_jpg/");
+            }
+            const buffer = await resolveMediaBuffer(fetchUrl, {
+              maxBytes: MAX_VIDEO_BYTES,
+              label: "image",
+            });
+            if (buffer?.length) {
+              await writeFile(path.join(IMAGES_DIR, `${productId}.jpg`), buffer);
+            }
+          } catch (err) {
+            console.warn("[seller-listings] local cover cache skipped:", err.message);
+          }
+        }
+        continue;
+      }
+
+      const buffer = await resolveMediaBuffer(src, {
         maxBytes: MAX_VIDEO_BYTES,
         label: "image",
       });
       if (!buffer?.length) continue;
-      const ext = i === 0 ? "" : `-${i + 1}`;
       const rel = `assets/images/products/${productId}${ext}.jpg`;
       await writeFile(path.join(IMAGES_DIR, `${productId}${ext}.jpg`), buffer);
       images.push(rel);
@@ -235,18 +268,24 @@ async function saveMediaFiles(productId, imageSources = [], videoSource = null, 
     let videoUrl = null;
     let savedVideoKind = null;
     if (videoSource) {
-      const buffer = await resolveMediaBuffer(videoSource, {
-        maxBytes: MAX_VIDEO_BYTES,
-        label: "video",
-      });
-      if (buffer?.length) {
-        const rel = `assets/images/products/${productId}.mp4`;
-        await writeFile(path.join(IMAGES_DIR, `${productId}.mp4`), buffer);
-        videoUrl = rel;
+      const src = String(videoSource || "").trim();
+      // Studio / multi-reel CDN MP4 — store the URL; do not pull multi‑MB into the 1GB bot.
+      if (/^https?:\/\//i.test(src) && isAllowedRemoteMediaUrl(src)) {
+        videoUrl = src;
         savedVideoKind =
-          videoKind === "seller" || videoKind === "preview"
-            ? videoKind
-            : "seller";
+          videoKind === "seller" || videoKind === "preview" ? videoKind : "preview";
+      } else {
+        const buffer = await resolveMediaBuffer(src, {
+          maxBytes: MAX_VIDEO_BYTES,
+          label: "video",
+        });
+        if (buffer?.length) {
+          const rel = `assets/images/products/${productId}.mp4`;
+          await writeFile(path.join(IMAGES_DIR, `${productId}.mp4`), buffer);
+          videoUrl = rel;
+          savedVideoKind =
+            videoKind === "seller" || videoKind === "preview" ? videoKind : "seller";
+        }
       }
     }
 
@@ -659,7 +698,8 @@ export async function publishSellerListing({
   // Prefer short CDN URLs (studio cutout/clip) over multi‑MB data-URLs — avoids nginx 413.
   const urlList = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
   const dataList = Array.isArray(images) ? images.filter(Boolean) : [];
-  let publishImages = urlList[0] ? [urlList[0], ...dataList] : dataList;
+  // Preserve photo order: CDN covers first, then remaining data-URLs (extras).
+  let publishImages = [...urlList, ...dataList.filter((d) => !urlList.includes(d))];
   let publishVideo = videoUrl || videoBase64 || null;
   let publishVideoKind =
     videoKind === "seller" || videoKind === "preview"
@@ -675,6 +715,46 @@ export async function publishSellerListing({
   }
   if (!publishImages.length) {
     return { error: "missing_image", message: "Add at least one product photo." };
+  }
+
+  // Transform once: clean all photos + build one showcase reel; save CDN URLs in catalog.
+  // Skip when seller uploaded their own phone video.
+  if (
+    publishVideoKind !== "seller" &&
+    isCloudinaryConfigured() &&
+    isStudioClipEnabled()
+  ) {
+    try {
+      const sources = [];
+      for (const src of publishImages.slice(0, MAX_PHOTOS)) {
+        const raw = String(src || "").trim();
+        if (!raw) continue;
+        if (/^https?:\/\//i.test(raw)) {
+          sources.push(raw);
+        } else if (/^data:/i.test(raw)) {
+          const buf = decodeBase64(raw);
+          if (buf?.length) sources.push(buf);
+        }
+      }
+      if (sources.length) {
+        const showcase = await prepareListingShowcaseMedia(sources, {
+          existingClipUrl:
+            publishVideoKind === "preview" && /^https?:\/\//i.test(String(publishVideo || ""))
+              ? publishVideo
+              : null,
+          productKey: check.supplier.id,
+        });
+        if (showcase?.imageUrls?.length) {
+          publishImages = showcase.imageUrls;
+        }
+        if (showcase?.videoUrl) {
+          publishVideo = showcase.videoUrl;
+          publishVideoKind = showcase.videoKind || "preview";
+        }
+      }
+    } catch (err) {
+      console.warn("[seller-listings] showcase reel skipped:", err.message);
+    }
   }
 
   const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
