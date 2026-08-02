@@ -16,14 +16,15 @@
 
 **Transform once, serve static CDN URLs** — never request Cloudinary bg-removal / zoompan on every page view. Final `cleanImageUrl` + `videoUrl` are saved in the catalog.
 
-Cloudinary flow (memory-safe on the 1GB bot):
-1. Upload a durable `cutout_*` / `reel_*` with eager `e_background_removal/f_png` and **`eager_async=false`**
-2. Poll until the cleaned PNG has a real **alpha channel** (HEAD 200 is not enough — AI can still be pending)
-3. **1 photo:** MP4 URL chains `e_background_removal` *before* pad/shadow/zoompan (never zoompan the raw photo)
-4. **2–8 photos (on publish):** Cloudinary **multi** from those cleaned PNG URLs → one showcase MP4 (~2s/slide)
-5. Persist the warmed CDN URLs on the product (`imageUrl` / `images` / `videoUrl`)
+Cloudinary flow (memory-safe on the 1GB bot — one PNG at a time):
+1. Upload `cutout_*` with eager `e_background_removal/f_png` and **`eager_async=false`**
+2. Poll until the cleaned PNG has a real **alpha channel**
+3. **Download that PNG and overwrite** `cutout_*` with the clean bytes (base asset is now transparent)
+4. **1 photo:** zoompan MP4 on the baked asset (video transforms **cannot** apply `e_background_removal`)
+5. **2–8 photos (on publish):** Cloudinary **multi** from baked clean URLs → one showcase MP4 (~2s/slide)
+6. Persist those CDN URLs on the product
 
-Do **not** re-upload a transformed Cloudinary URL as a new asset — Cloudinary’s fetch often pulls the original bytes, so clips keep the background.
+Do **not** put `e_background_removal` in an MP4 URL — Cloudinary ignores it for video. Do **not** re-upload a transformed URL without downloading bytes first (fetch often returns the original).
 
 Studio API returns **`cleanImageUrl` + `clipVideoUrl`** (CDN). No multi‑MB base64. The sell page caches both in the browser. PM2 uses `--max-memory-restart 450M` so a spike restarts the bot instead of taking Sokoni down.
 
