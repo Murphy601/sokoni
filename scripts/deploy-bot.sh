@@ -180,7 +180,13 @@ fi
 if pm2 describe "$NAME" >/dev/null 2>&1; then
   pm2 delete "$NAME" || true
 fi
-pm2 start src/server.js --name "$NAME" --cwd "$BOT_DIR" --update-env
+# Cap heap + auto-restart before a studio OOM takes the whole 1GB VM down.
+pm2 start src/server.js \
+  --name "$NAME" \
+  --cwd "$BOT_DIR" \
+  --update-env \
+  --max-memory-restart 450M \
+  --node-args="--max-old-space-size=384"
 pm2 save
 
 echo "==> Waiting for bot health (up to 30s)..."

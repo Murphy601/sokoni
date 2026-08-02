@@ -61,7 +61,8 @@ router.post("/generate", async (req, res) => {
     res.json({
       draft: result.draft,
       studioApplied: result.studioApplied,
-      cleanImageBase64: result.cleanImageBase64,
+      cleanImageUrl: result.cleanImageUrl || null,
+      cleanImageBase64: result.cleanImageBase64 || null,
       clipApplied: Boolean(result.clipApplied),
       clipVideoUrl: result.clipVideoUrl || null,
       clipVideoBase64: result.clipVideoBase64 || null,
@@ -77,7 +78,7 @@ router.post("/generate", async (req, res) => {
   }
 });
 
-/** POST /api/seller/listings/studio — cloud BG cleanup (+ Cloudinary zoompan clip when enabled) */
+/** POST /api/seller/listings/studio — cloud BG cleanup (+ clip from cleaned cutout) */
 router.post("/studio", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
   const sessionToken = sellerSessionFromReq(req);
@@ -90,10 +91,15 @@ router.post("/studio", async (req, res) => {
   }
   try {
     const buffer = Buffer.from(String(imageBase64).replace(/^data:[^;]+;base64,/, ""), "base64");
+    // Drop huge request payload from memory before Cloudinary work (1GB VM).
+    if (req.body) {
+      req.body.imageBase64 = undefined;
+    }
     const result = await previewStudioClean(buffer, mimeType);
     res.json({
       studioApplied: result.studioApplied,
-      cleanImageBase64: result.cleanImageBase64,
+      cleanImageUrl: result.cleanImageUrl || null,
+      cleanImageBase64: result.cleanImageBase64 || null,
       clipApplied: Boolean(result.clipApplied),
       clipVideoUrl: result.clipVideoUrl || null,
       clipVideoBase64: result.clipVideoBase64 || null,
