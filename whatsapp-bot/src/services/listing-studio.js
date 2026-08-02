@@ -236,6 +236,12 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
   if (!uploadRes.ok) {
     const errText = await uploadRes.text().catch(() => "");
     console.warn("[listing-studio] Cloudinary upload failed:", uploadRes.status, errText.slice(0, 200));
+    if (
+      uploadRes.status === 401 ||
+      /api_secret mismatch|invalid signature|unauthorized/i.test(errText)
+    ) {
+      return failResult(buffer, mimeType, "auth_failed", "cloudinary");
+    }
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
 
@@ -447,6 +453,8 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
     const messages = {
       not_configured: "Background cleanup is not configured on this bot.",
       missing_image: "Add a cover photo first.",
+      auth_failed:
+        "Cloudinary API secret doesn’t match — open Cloudinary → Settings → API Keys, copy the API secret again into whatsapp-bot/.env, then redeploy.",
       api_failed: "Background cleanup failed — keep your original photo.",
       empty_result: "Background cleanup returned an empty image — keep your original.",
       api_error: "Background cleanup unavailable right now — keep your original photo.",

@@ -79,6 +79,14 @@ Failures keep the original cover. Clip failure is soft — clean image still ret
 
 **Cloudinary note:** first `e_background_removal` / zoompan request can return **423** while the derived file builds. The bot retries automatically (and prefers eager transforms on upload).
 
+**Credentials check** (on the VM):
+
+```bash
+cd ~/sokoni/whatsapp-bot && npm run verify:cloudinary
+```
+
+If you see `api_secret mismatch`, re-copy the API secret from Cloudinary Console → Settings → API Keys (reveal), update `CLOUDINARY_API_SECRET` in `.env`, redeploy.
+
 ## Why not rembg/ffmpeg on the VM?
 
 Those pull **2–4GB+** disk/RAM. Cloudinary (or HF for images only) keeps the bot lightweight.
