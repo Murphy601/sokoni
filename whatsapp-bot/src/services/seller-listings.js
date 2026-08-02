@@ -391,16 +391,23 @@ function findRecentClientPublish(clientPublishId) {
 }
 
 /**
- * Preview already produced CDN clean images + reel — do not re-run Cloudinary on publish
- * (that was timing out nginx ~60s and causing "network error" + duplicate posts).
+ * Preview already produced CDN clean images (+ optional reel) — do not re-run Cloudinary
+ * on publish (that was timing out nginx ~60s and dropping the product video).
+ * @returns {"full"|"images"|false}
  */
-function hasStudioReadyCdnMedia(publishImages, publishVideo, publishVideoKind) {
-  if (publishVideoKind === "seller") return true;
-  if (publishVideoKind !== "preview") return false;
-  if (!/^https?:\/\//i.test(String(publishVideo || ""))) return false;
+function studioReadyCdnLevel(publishImages, publishVideo, publishVideoKind) {
+  if (publishVideoKind === "seller") return "full";
   const list = (publishImages || []).map((u) => String(u || "").trim()).filter(Boolean);
   if (!list.length) return false;
-  return list.every((u) => /^https?:\/\//i.test(u));
+  const allCdn = list.every(
+    (u) => /^https?:\/\//i.test(u) && /res\.cloudinary\.com/i.test(u)
+  );
+  if (!allCdn) return false;
+  if (publishVideoKind === "preview" && /^https?:\/\//i.test(String(publishVideo || ""))) {
+    return "full";
+  }
+  // Clean CDN stills from Preview, but reel URL missing — skip full re-clean.
+  return "images";
 }
 
 function linkSupplierProduct(supplier, productId) {
@@ -768,14 +775,37 @@ export async function publishSellerListing({
     return { error: "missing_image", message: "Add at least one product photo." };
   }
 
-  // Transform once: clean photos + showcase reel. Prefer CDN URLs from Preview —
-  // re-running Cloudinary here regularly exceeded nginx's ~60s proxy timeout.
-  if (hasStudioReadyCdnMedia(publishImages, publishVideo, publishVideoKind)) {
+  // Prefer CDN URLs from Preview — re-running Cloudinary on publish drops the reel
+  // and exceeds nginx timeouts.
+  const studioReady = studioReadyCdnLevel(publishImages, publishVideo, publishVideoKind);
+  if (studioReady === "full") {
     console.log("[seller-listings] using Preview CDN media — skip showcase rebuild", {
       images: publishImages.length,
       videoKind: publishVideoKind,
       videoUrl: String(publishVideo || "").slice(0, 96),
     });
+  } else if (studioReady === "images") {
+    // Stills ready; keep any client reel URL, else build a quick zoompan from cover only.
+    console.log("[seller-listings] Preview CDN stills — skip full showcase", {
+      images: publishImages.length,
+      hasVideo: Boolean(publishVideo),
+    });
+    if (!publishVideo && isCloudinaryConfigured() && isStudioClipEnabled()) {
+      try {
+        const showcase = await prepareListingShowcaseMedia([publishImages[0]], {
+          productKey: check.supplier.id,
+        });
+        if (showcase?.videoUrl) {
+          publishVideo = showcase.videoUrl;
+          publishVideoKind = "preview";
+        }
+        // Keep original multi stills — do not replace with single-slide imageUrls.
+      } catch (err) {
+        console.warn("[seller-listings] cover clip attach failed:", err.message);
+      }
+    } else if (publishVideo && !publishVideoKind) {
+      publishVideoKind = "preview";
+    }
   } else if (
     publishVideoKind !== "seller" &&
     isCloudinaryConfigured() &&
@@ -794,11 +824,10 @@ export async function publishSellerListing({
         }
       }
       if (sources.length) {
+        const existingVideo =
+          /^https?:\/\//i.test(String(publishVideo || "")) ? publishVideo : null;
         const showcase = await prepareListingShowcaseMedia(sources, {
-          existingClipUrl:
-            publishVideoKind === "preview" && /^https?:\/\//i.test(String(publishVideo || ""))
-              ? publishVideo
-              : null,
+          existingClipUrl: existingVideo,
           productKey: check.supplier.id,
         });
         if (showcase?.imageUrls?.length) {
@@ -813,6 +842,11 @@ export async function publishSellerListing({
             error: showcase.error || null,
             videoUrl: String(publishVideo).slice(0, 96),
           });
+        } else if (existingVideo) {
+          // Never drop a Preview reel if multi rebuild failed.
+          publishVideo = existingVideo;
+          publishVideoKind = publishVideoKind || "preview";
+          console.warn("[seller-listings] showcase missed video — keeping Preview reel URL");
         } else {
           console.warn("[seller-listings] showcase produced no videoUrl", {
             slides: showcase?.slideCount || showcase?.imageUrls?.length || 0,

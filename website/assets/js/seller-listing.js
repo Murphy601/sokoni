@@ -511,9 +511,15 @@ function bindMediaSlots() {
         coverCleanUrl = null;
         studioClipBase64 = null;
         studioClipUrl = null;
+        window.__sokoniCleanImageUrls = [];
         preferCleanCover = true;
         const prefer = el("studio-prefer-clean");
         if (prefer) prefer.checked = true;
+        try {
+          sessionStorage.removeItem(STUDIO_MEDIA_KEY);
+        } catch {
+          /* ignore */
+        }
         updateCoverStudioUi();
       }
       const slot = el(`media-slot-${i}`);
@@ -666,6 +672,51 @@ async function cacheRemoteAsDataUrl(url) {
   return readFileAsDataUrl(blob);
 }
 
+const STUDIO_MEDIA_KEY = "sokoni_studio_media";
+
+function persistStudioMedia() {
+  try {
+    const urls = Array.isArray(window.__sokoniCleanImageUrls)
+      ? window.__sokoniCleanImageUrls.filter((u) => /^https?:\/\//i.test(String(u)))
+      : [];
+    sessionStorage.setItem(
+      STUDIO_MEDIA_KEY,
+      JSON.stringify({
+        imageUrls: urls,
+        coverCleanUrl: coverCleanUrl || null,
+        studioClipUrl: studioClipUrl || null,
+        preferCleanCover,
+        preferStudioClip,
+      })
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function restoreStudioMedia() {
+  try {
+    const raw = sessionStorage.getItem(STUDIO_MEDIA_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.imageUrls) && data.imageUrls.length) {
+      window.__sokoniCleanImageUrls = data.imageUrls.slice();
+    }
+    if (data.coverCleanUrl && /^https?:\/\//i.test(data.coverCleanUrl)) {
+      coverCleanUrl = data.coverCleanUrl;
+      coverCleanBase64 = coverCleanBase64 || data.coverCleanUrl;
+    }
+    if (data.studioClipUrl && /^https?:\/\//i.test(data.studioClipUrl)) {
+      studioClipUrl = data.studioClipUrl;
+      studioClipBase64 = studioClipBase64 || data.studioClipUrl;
+    }
+    if (typeof data.preferCleanCover === "boolean") preferCleanCover = data.preferCleanCover;
+    if (typeof data.preferStudioClip === "boolean") preferStudioClip = data.preferStudioClip;
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Accept studio clip as CDN URL and/or data URL. Preview uses URL immediately;
  * we cache a data URL in the browser so publish doesn't re-hit Cloudinary / the bot.
@@ -674,12 +725,14 @@ async function ingestStudioClip(clipVideoUrl, clipVideoBase64 = null) {
   const src = clipVideoBase64 || clipVideoUrl;
   if (!src) return false;
   if (clipVideoUrl && /^https?:\/\//i.test(clipVideoUrl)) studioClipUrl = clipVideoUrl;
+  else if (/^https?:\/\//i.test(String(src))) studioClipUrl = String(src);
   studioClipBase64 = src;
   if (!videoFile) {
     preferStudioClip = true;
     const preferClip = el("studio-prefer-clip");
     if (preferClip) preferClip.checked = true;
   }
+  persistStudioMedia();
   refreshStudioClipPreview();
   // Preview can use the CDN URL directly in <video src> — no need to base64-cache for publish.
   return true;
@@ -693,12 +746,14 @@ async function ingestCleanCover(cleanImageUrl, cleanImageBase64 = null) {
   preferCleanCover = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
+  persistStudioMedia();
   refreshCoverPreview();
   return true;
 }
 
 /** Build a small publish payload — CDN URLs for studio media, compressed JPEGs for extras. */
 async function collectPublishPayload() {
+  restoreStudioMedia();
   const imageUrls = [];
   const images = [];
   const studioUrls = Array.isArray(window.__sokoniCleanImageUrls)
@@ -731,12 +786,19 @@ async function collectPublishPayload() {
   if (videoFile) {
     videoBase64 = await readFileAsDataUrl(videoFile);
     videoKind = "seller";
-  } else if (preferStudioClip && studioClipUrl) {
-    videoUrl = studioClipUrl;
-    videoKind = "preview";
-  } else if (preferStudioClip && studioClipBase64 && String(studioClipBase64).startsWith("data:")) {
-    videoBase64 = studioClipBase64;
-    videoKind = "preview";
+  } else {
+    // Always attach Preview reel when we have it (don't depend on a toggle that can reset).
+    const clipHttps =
+      (studioClipUrl && /^https?:\/\//i.test(studioClipUrl) && studioClipUrl) ||
+      (studioClipBase64 && /^https?:\/\//i.test(String(studioClipBase64)) && String(studioClipBase64)) ||
+      null;
+    if (clipHttps) {
+      videoUrl = clipHttps;
+      videoKind = "preview";
+    } else if (preferStudioClip && studioClipBase64 && String(studioClipBase64).startsWith("data:")) {
+      videoBase64 = studioClipBase64;
+      videoKind = "preview";
+    }
   }
 
   return { imageUrls, images, videoUrl, videoBase64, videoKind };
@@ -867,6 +929,7 @@ async function previewStudioClean() {
         coverCleanUrl = data.imageUrls[0];
         window.__sokoniCleanImageUrls = data.imageUrls.slice();
       }
+      persistStudioMedia();
       setStatus(data.message || "Background cleaned — review before posting.");
     } else {
       const msg = data.message || "Could not clean background — keep your original photo.";
@@ -1338,7 +1401,7 @@ async function recoverPublishFromListings(draft) {
         return {
           productId: item.productId || item.id,
           status: item.status === "hidden" ? "hidden_pending_review" : "live",
-          message: "Listing already went live — not posting again.",
+          message: "Your listing is live on Sokoni now.",
           duplicate: true,
           videoUrl: item.videoUrl || null,
           videoKind: item.videoKind || null,
@@ -1349,6 +1412,31 @@ async function recoverPublishFromListings(draft) {
     /* ignore */
   }
   return null;
+}
+
+async function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function postListingRequest(media, clientPublishId, draft) {
+  const res = await fetch(`${LISTINGS_API}/publish`, {
+    method: "POST",
+    headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(
+      jsonAuthBody({
+        phone: apiPhone(),
+        draft,
+        images: media.images,
+        imageUrls: media.imageUrls,
+        videoBase64: media.videoBase64,
+        videoUrl: media.videoUrl,
+        videoKind: media.videoKind,
+        draftId: activeDraftId || undefined,
+        clientPublishId,
+      })
+    ),
+  });
+  return parseApiResponse(res);
 }
 
 async function onPublish() {
@@ -1362,7 +1450,7 @@ async function onPublish() {
     return;
   }
   if (publishInFlight) {
-    setStatus("Still posting — wait for confirmation before tapping again.");
+    setStatus("Still posting — hang tight…");
     return;
   }
   if (!photoFiles[0] && !activeDraftId) {
@@ -1386,67 +1474,72 @@ async function onPublish() {
     `pub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   sessionStorage.setItem("sokoni_publish_id", clientPublishId);
 
+  const finishOk = async (data) => {
+    sessionStorage.removeItem("sokoni_publish_id");
+    try {
+      sessionStorage.removeItem(STUDIO_MEDIA_KEY);
+    } catch {
+      /* ignore */
+    }
+    showPublishSuccess(data);
+    await loadMyListings();
+    setStatus(data.message || "Your listing is live on Sokoni now.");
+  };
+
   try {
     const media = await collectPublishPayload();
     if (!media.imageUrls.length && !media.images.length && !activeDraftId) {
       setStatus("Add at least one photo.", true);
       return;
     }
+    if (!media.videoUrl && !media.videoBase64 && !videoFile && studioClipUiEnabled) {
+      console.warn("[sell] posting without studio reel URL — Preview may not have finished");
+    }
 
-    const res = await fetch(`${LISTINGS_API}/publish`, {
-      method: "POST",
-      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(
-        jsonAuthBody({
-          phone,
-          draft: collectDraft(),
-          images: media.images,
-          imageUrls: media.imageUrls,
-          videoBase64: media.videoBase64,
-          videoUrl: media.videoUrl,
-          videoKind: media.videoKind,
-          draftId: activeDraftId || undefined,
-          clientPublishId,
-        })
-      ),
-    });
-    const parsed = await parseApiResponse(res);
+    let parsed = await postListingRequest(media, clientPublishId, collectDraft());
     if (parsed.status === 401) {
       handleSessionExpired(parsed.data);
       return;
     }
     if (parsed.status === 413) {
-      setStatus("Photos/video are too large for upload — try fewer photos or a shorter clip.", true);
+      setStatus("Photos/video are too large for upload — try fewer photos or a shorter video.", true);
       return;
     }
     if (!parsed.ok) {
       setStatus(parsed.data?.message || parsed.data?.error || parsed.message || "Post failed.", true);
       return;
     }
-    sessionStorage.removeItem("sokoni_publish_id");
-    showPublishSuccess(parsed.data);
-    await loadMyListings();
+    await finishOk(parsed.data);
   } catch (err) {
-    console.warn("[sell] publish failed:", err);
-    setStatus("Connection dropped — checking if your listing already went live…");
-    const recovered = await recoverPublishFromListings(d);
-    if (recovered?.productId) {
-      sessionStorage.removeItem("sokoni_publish_id");
-      showPublishSuccess(recovered);
-      await loadMyListings();
-      setStatus("Listing was already live — not posted again.");
-      return;
+    console.warn("[sell] publish socket dropped:", err);
+    // Same clientPublishId → server returns the existing listing if it already saved.
+    setStatus("Confirming your listing…");
+    try {
+      await sleepMs(1500);
+      const media = await collectPublishPayload();
+      const retry = await postListingRequest(media, clientPublishId, d);
+      if (retry.ok && retry.data?.productId) {
+        await finishOk(retry.data);
+        return;
+      }
+    } catch {
+      /* keep polling listings */
     }
-    setStatus(
-      "Connection dropped while posting. Check WhatsApp / My listings before tapping Post again — it may already be live.",
-      true
-    );
+    for (let i = 0; i < 4; i += 1) {
+      await sleepMs(1200 + i * 400);
+      const recovered = await recoverPublishFromListings(d);
+      if (recovered?.productId) {
+        await finishOk(recovered);
+        return;
+      }
+    }
+    // Soft message — never red "connection dropped" when WA may already have fired.
+    setStatus("Post sent — open My listings (or WhatsApp) to confirm. Don’t tap Post again.");
   } finally {
     publishInFlight = false;
-    // Keep Post disabled briefly so a double-tap after a drop cannot spam.
     setTimeout(() => {
       if (!publishInFlight) el("post-btn").disabled = false;
-    }, 4000);
+    }, 5000);
   }
 }
 
@@ -5466,10 +5559,16 @@ function init() {
   const saved = localStorage.getItem(PHONE_KEY);
   if (saved && el("seller-phone")) el("seller-phone").value = saved;
 
+  restoreStudioMedia();
   bindMediaSlots();
   bindLedgerTabs();
   bindOfferFilterButtons();
   updateStepUi();
+  if (studioClipUrl || coverCleanUrl) {
+    refreshStudioClipPreview();
+    refreshCoverPreview();
+    updateCoverStudioUi();
+  }
 
   el("tab-dashboard")?.addEventListener("click", () => showSellerView("dashboard"));
   el("tab-withdraw")?.addEventListener("click", () => showSellerView("withdraw"));
