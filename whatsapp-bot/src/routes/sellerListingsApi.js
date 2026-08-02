@@ -115,7 +115,17 @@ router.post("/studio", async (req, res) => {
 
 /** POST /api/seller/listings/publish — instant live (Depop-style) */
 router.post("/publish", async (req, res) => {
-  const { phone, draft, images, imageBase64, videoBase64, videoKind, draftId } = req.body || {};
+  const {
+    phone,
+    draft,
+    images,
+    imageBase64,
+    imageUrls,
+    videoBase64,
+    videoUrl,
+    videoKind,
+    draftId,
+  } = req.body || {};
   const imageList = Array.isArray(images)
     ? images
     : imageBase64
@@ -125,7 +135,9 @@ router.post("/publish", async (req, res) => {
     phone,
     draft,
     images: imageList,
+    imageUrls: Array.isArray(imageUrls) ? imageUrls : [],
     videoBase64,
+    videoUrl: videoUrl || null,
     videoKind,
     draftId,
     sessionToken: sellerSessionFromReq(req),
@@ -141,13 +153,25 @@ router.post("/publish", async (req, res) => {
 
 /** POST /api/seller/listings/draft — save / update draft for later */
 router.post("/draft", async (req, res) => {
-  const { phone, draft, images, imageBase64, videoBase64, videoKind, draftId } = req.body || {};
+  const {
+    phone,
+    draft,
+    images,
+    imageBase64,
+    imageUrls,
+    videoBase64,
+    videoUrl,
+    videoKind,
+    draftId,
+  } = req.body || {};
   const imageList = Array.isArray(images) ? images : imageBase64 ? [imageBase64] : [];
   const result = await saveSellerDraft({
     phone,
     draft,
     images: imageList,
+    imageUrls: Array.isArray(imageUrls) ? imageUrls : [],
     videoBase64,
+    videoUrl: videoUrl || null,
     videoKind,
     draftId,
     sessionToken: sellerSessionFromReq(req),

@@ -98,6 +98,67 @@ function decodeBase64(dataUrl) {
   return Buffer.from(String(dataUrl).replace(/^data:[^;]+;base64,/, ""), "base64");
 }
 
+/** Allow seller publish to pull studio CDN assets without stuffing them through nginx (413). */
+function isAllowedRemoteMediaUrl(url) {
+  try {
+    const u = new URL(String(url));
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    const host = u.hostname.toLowerCase();
+    return (
+      host === "res.cloudinary.com" ||
+      host.endsWith(".cloudinary.com") ||
+      host === "bot.sokonimall.com" ||
+      host === "localhost" ||
+      host === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve a data-URL or allowlisted HTTPS URL to a Buffer.
+ * @param {string|null|undefined} source
+ * @param {{ maxBytes?: number, label?: string }} [opts]
+ */
+async function resolveMediaBuffer(source, opts = {}) {
+  const maxBytes = opts.maxBytes || MAX_VIDEO_BYTES;
+  const label = opts.label || "media";
+  const raw = String(source || "").trim();
+  if (!raw) return null;
+
+  if (/^data:/i.test(raw)) {
+    const buf = decodeBase64(raw);
+    if (buf.length > maxBytes) {
+      const err = new Error(`${label}_too_large`);
+      err.code = "media_too_large";
+      throw err;
+    }
+    return buf.length ? buf : null;
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    if (!isAllowedRemoteMediaUrl(raw)) {
+      console.warn("[seller-listings] blocked remote media host:", raw.slice(0, 120));
+      return null;
+    }
+    const res = await fetch(raw, { signal: AbortSignal.timeout(90_000) });
+    if (!res.ok) {
+      console.warn("[seller-listings] remote media fetch failed:", res.status, raw.slice(0, 120));
+      return null;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > maxBytes) {
+      const err = new Error(`${label}_too_large`);
+      err.code = "media_too_large";
+      throw err;
+    }
+    return buf.length ? buf : null;
+  }
+
+  return null;
+}
+
 async function loadStore() {
   if (loaded) return;
   loaded = true;
@@ -146,56 +207,68 @@ function normalizeBrands(draft) {
 }
 
 /**
+ * Persist listing media. Each image/video source may be a data-URL **or** an allowlisted HTTPS URL
+ * (Cloudinary studio cutout/clip) so the browser never posts multi‑MB JSON through nginx.
  * @param {string} productId
- * @param {string[]} imagesBase64
- * @param {string|null} videoBase64
+ * @param {string[]} imageSources
+ * @param {string|null} videoSource
  * @param {"seller"|"preview"|null} [videoKind]
  */
-async function saveMediaFiles(productId, imagesBase64 = [], videoBase64 = null, videoKind = null) {
+async function saveMediaFiles(productId, imageSources = [], videoSource = null, videoKind = null) {
   if (!existsSync(IMAGES_DIR)) await mkdir(IMAGES_DIR, { recursive: true });
 
   const images = [];
-  const limited = imagesBase64.slice(0, MAX_PHOTOS);
-  for (let i = 0; i < limited.length; i += 1) {
-    const buffer = decodeBase64(limited[i]);
-    if (!buffer.length) continue;
-    const ext = i === 0 ? "" : `-${i + 1}`;
-    const rel = `assets/images/products/${productId}${ext}.jpg`;
-    await writeFile(path.join(IMAGES_DIR, `${productId}${ext}.jpg`), buffer);
-    images.push(rel);
-  }
+  const limited = imageSources.slice(0, MAX_PHOTOS);
+  try {
+    for (let i = 0; i < limited.length; i += 1) {
+      const buffer = await resolveMediaBuffer(limited[i], {
+        maxBytes: MAX_VIDEO_BYTES,
+        label: "image",
+      });
+      if (!buffer?.length) continue;
+      const ext = i === 0 ? "" : `-${i + 1}`;
+      const rel = `assets/images/products/${productId}${ext}.jpg`;
+      await writeFile(path.join(IMAGES_DIR, `${productId}${ext}.jpg`), buffer);
+      images.push(rel);
+    }
 
-  let videoUrl = null;
-  let savedVideoKind = null;
-  if (videoBase64) {
-    const buffer = decodeBase64(videoBase64);
-    if (buffer.length > MAX_VIDEO_BYTES) {
+    let videoUrl = null;
+    let savedVideoKind = null;
+    if (videoSource) {
+      const buffer = await resolveMediaBuffer(videoSource, {
+        maxBytes: MAX_VIDEO_BYTES,
+        label: "video",
+      });
+      if (buffer?.length) {
+        const rel = `assets/images/products/${productId}.mp4`;
+        await writeFile(path.join(IMAGES_DIR, `${productId}.mp4`), buffer);
+        videoUrl = rel;
+        savedVideoKind =
+          videoKind === "seller" || videoKind === "preview"
+            ? videoKind
+            : "seller";
+      }
+    }
+
+    return {
+      imageUrl: images[0] || null,
+      images,
+      videoUrl,
+      videoKind: videoUrl ? savedVideoKind : null,
+    };
+  } catch (err) {
+    if (err?.code === "media_too_large" || /_too_large$/.test(String(err?.message || ""))) {
       return {
         imageUrl: images[0] || null,
         images,
         videoUrl: null,
         videoKind: null,
         error: "video_too_large",
-        message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
+        message: `Media must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
       };
     }
-    if (buffer.length) {
-      const rel = `assets/images/products/${productId}.mp4`;
-      await writeFile(path.join(IMAGES_DIR, `${productId}.mp4`), buffer);
-      videoUrl = rel;
-      savedVideoKind =
-        videoKind === "seller" || videoKind === "preview"
-          ? videoKind
-          : "seller";
-    }
+    throw err;
   }
-
-  return {
-    imageUrl: images[0] || null,
-    images,
-    videoUrl,
-    videoKind: videoUrl ? savedVideoKind : null,
-  };
 }
 
 function nextProductId(products, category, sellerId) {
@@ -374,7 +447,9 @@ export async function saveSellerDraft({
   phone,
   draft,
   images = [],
+  imageUrls = [],
   videoBase64 = null,
+  videoUrl = null,
   videoKind = null,
   draftId = null,
   sessionToken,
@@ -403,12 +478,17 @@ export async function saveSellerDraft({
     id = `DR-${new Date().getFullYear()}-${String(store.seq).padStart(4, "0")}`;
   }
 
+  const urlList = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
+  const dataList = Array.isArray(images) ? images.filter(Boolean) : [];
+  const mediaSources = urlList[0] ? [urlList[0], ...dataList] : dataList;
+  const mediaVideo = videoUrl || videoBase64 || null;
+
   let media = {};
-  if (images.length) {
+  if (mediaSources.length) {
     media = await saveMediaFiles(
       `draft-${id}`,
-      images,
-      videoBase64,
+      mediaSources,
+      mediaVideo,
       videoKind === "seller" || videoKind === "preview" ? videoKind : null
     );
     if (media.error === "video_too_large") {
@@ -545,7 +625,9 @@ export async function publishSellerListing({
   phone,
   draft,
   images = [],
+  imageUrls = [],
   videoBase64 = null,
+  videoUrl = null,
   videoKind = null,
   draftId = null,
   sessionToken,
@@ -574,8 +656,11 @@ export async function publishSellerListing({
     return { error: "not_found", message: "Draft not found." };
   }
 
-  let publishImages = Array.isArray(images) ? images.filter(Boolean) : [];
-  let publishVideo = videoBase64 || null;
+  // Prefer short CDN URLs (studio cutout/clip) over multi‑MB data-URLs — avoids nginx 413.
+  const urlList = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
+  const dataList = Array.isArray(images) ? images.filter(Boolean) : [];
+  let publishImages = urlList[0] ? [urlList[0], ...dataList] : dataList;
+  let publishVideo = videoUrl || videoBase64 || null;
   let publishVideoKind =
     videoKind === "seller" || videoKind === "preview"
       ? videoKind
