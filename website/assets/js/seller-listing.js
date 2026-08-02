@@ -107,6 +107,8 @@ let preferStudioClip = true;
 let studioUiEnabled = false;
 let studioClipUiEnabled = false;
 let videoFile = null;
+/** HTTPS URL from POST /upload-video — publish uses this instead of raw videoBase64. */
+let stagedSellerVideoUrl = null;
 let videoPreview = null;
 let sellerInfo = null;
 /** Server draft id (DR-YYYY-####) when editing a saved draft. */
@@ -554,6 +556,7 @@ function bindMediaSlots() {
       return;
     }
     videoFile = file;
+    stagedSellerVideoUrl = null;
     preferStudioClip = false;
     const preferClip = el("studio-prefer-clip");
     if (preferClip) preferClip.checked = false;
@@ -784,8 +787,13 @@ async function collectPublishPayload() {
   let videoBase64 = null;
   let videoKind = null;
   if (videoFile) {
-    videoBase64 = await readFileAsDataUrl(videoFile);
     videoKind = "seller";
+    // Prefer already-staged bot URL (retry-safe). Never put multi‑MB base64 in /publish.
+    if (stagedSellerVideoUrl && /^https?:\/\//i.test(stagedSellerVideoUrl)) {
+      videoUrl = stagedSellerVideoUrl;
+    } else {
+      videoBase64 = await readFileAsDataUrl(videoFile);
+    }
   } else {
     // Always attach Preview reel when we have it (don't depend on a toggle that can reset).
     const clipHttps =
@@ -1439,6 +1447,29 @@ async function postListingRequest(media, clientPublishId, draft) {
   return parseApiResponse(res);
 }
 
+/**
+ * Upload seller phone video first so /publish stays small (avoids nginx 413 / timeouts
+ * that left sellers with a fake “Post sent” and no listing).
+ */
+async function stageSellerVideoUpload(file) {
+  if (!file) return { ok: false, message: "Choose a video first." };
+  const maxBytes = Number(meta.maxVideoBytes) || 15 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    return {
+      ok: false,
+      status: 413,
+      message: `Video must be ${Math.round(maxBytes / (1024 * 1024))}MB or smaller.`,
+    };
+  }
+  const videoBase64 = await readFileAsDataUrl(file);
+  const res = await fetch(`${LISTINGS_API}/upload-video`, {
+    method: "POST",
+    headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(jsonAuthBody({ phone: apiPhone(), videoBase64 })),
+  });
+  return parseApiResponse(res);
+}
+
 async function onPublish() {
   const phone = apiPhone();
   if (!phone) {
@@ -1476,6 +1507,7 @@ async function onPublish() {
 
   const finishOk = async (data) => {
     sessionStorage.removeItem("sokoni_publish_id");
+    stagedSellerVideoUrl = null;
     try {
       sessionStorage.removeItem(STUDIO_MEDIA_KEY);
     } catch {
@@ -1486,6 +1518,7 @@ async function onPublish() {
     setStatus(data.message || "Your listing is live on Sokoni now.");
   };
 
+  const usedOwnVideo = Boolean(videoFile);
   try {
     const media = await collectPublishPayload();
     if (!media.imageUrls.length && !media.images.length && !activeDraftId) {
@@ -1494,6 +1527,39 @@ async function onPublish() {
     }
     if (!media.videoUrl && !media.videoBase64 && !videoFile && studioClipUiEnabled) {
       console.warn("[sell] posting without studio reel URL — Preview may not have finished");
+    }
+
+    // Own phone video: stage alone first (large base64). Publish then sends only the short URL.
+    if (videoFile && media.videoBase64 && !media.videoUrl) {
+      setStatus("Uploading your video…");
+      const staged = await stageSellerVideoUpload(videoFile);
+      if (staged.status === 401) {
+        handleSessionExpired(staged.data);
+        return;
+      }
+      if (staged.status === 413) {
+        setStatus(
+          staged.data?.message ||
+            staged.message ||
+            "Video is too large — trim to under 15MB or about 15 seconds, then try again.",
+          true
+        );
+        return;
+      }
+      if (!staged.ok || !staged.data?.videoUrl) {
+        setStatus(
+          staged.data?.message ||
+            staged.message ||
+            "Could not upload your video — check your connection and try again.",
+          true
+        );
+        return;
+      }
+      stagedSellerVideoUrl = staged.data.videoUrl;
+      media.videoUrl = stagedSellerVideoUrl;
+      media.videoBase64 = null;
+      media.videoKind = "seller";
+      setStatus("Posting listing…");
     }
 
     let parsed = await postListingRequest(media, clientPublishId, collectDraft());
@@ -1517,6 +1583,18 @@ async function onPublish() {
     try {
       await sleepMs(1500);
       const media = await collectPublishPayload();
+      // Never re-send raw videoBase64 on retry — it is what usually drops the socket.
+      if (videoFile) {
+        media.videoBase64 = null;
+        if (!media.videoUrl) {
+          setStatus("Uploading your video…");
+          const staged = await stageSellerVideoUpload(videoFile);
+          if (staged.ok && staged.data?.videoUrl) {
+            media.videoUrl = staged.data.videoUrl;
+            media.videoKind = "seller";
+          }
+        }
+      }
       const retry = await postListingRequest(media, clientPublishId, d);
       if (retry.ok && retry.data?.productId) {
         await finishOk(retry.data);
@@ -1533,8 +1611,18 @@ async function onPublish() {
         return;
       }
     }
-    // Soft message — never red "connection dropped" when WA may already have fired.
-    setStatus("Post sent — open My listings (or WhatsApp) to confirm. Don’t tap Post again.");
+    // Honest failure — do not claim “Post sent” when My listings has nothing.
+    if (usedOwnVideo) {
+      setStatus(
+        "Post didn’t finish — your video upload may have timed out. Trim to ~15s / under 10MB, or post with the Preview reel instead.",
+        true
+      );
+    } else {
+      setStatus(
+        "Couldn’t confirm the listing. Open My listings — if it’s not there, tap Post again.",
+        true
+      );
+    }
   } finally {
     publishInFlight = false;
     setTimeout(() => {

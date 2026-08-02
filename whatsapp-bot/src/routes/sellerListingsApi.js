@@ -7,6 +7,7 @@ import {
   deleteSellerDraft,
   listSellerListings,
   getSellerListingMeta,
+  stageSellerVideo,
   bulkImportSellerDraftsFromCsv,
   getBulkListingCsvTemplate,
 } from "../services/seller-listings.js";
@@ -122,6 +123,32 @@ router.post("/studio", async (req, res) => {
   } catch (err) {
     res.status(422).json({ error: "studio_failed", message: err.message });
   }
+});
+
+/**
+ * POST /api/seller/listings/upload-video — stage seller phone clip before publish.
+ * Keeps the large base64 out of /publish so nginx/timeouts don't fake-fail the listing.
+ */
+router.post("/upload-video", async (req, res) => {
+  const { phone, videoBase64 } = req.body || {};
+  const result = await stageSellerVideo({
+    phone,
+    videoBase64,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (
+    result.error === "session_required" ||
+    result.error === "session_invalid" ||
+    result.error === "session_expired"
+  ) {
+    return res.status(401).json(result);
+  }
+  if (result.error === "not_onboarded" || result.error === "not_approved") {
+    return res.status(403).json(result);
+  }
+  if (result.error === "video_too_large") return res.status(413).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.status(201).json(result);
 });
 
 /** POST /api/seller/listings/publish — instant live (Depop-style) */

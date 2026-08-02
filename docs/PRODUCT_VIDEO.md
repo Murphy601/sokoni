@@ -27,9 +27,9 @@ Public catalog (`toPublicProduct` + `build-site-catalog`) exposes both. Bot serv
 
 ## Seller flow
 
-1. Optional phone video → validated client-side (≤30s, ≤15MB) → `videoKind: "seller"` (skips AI reel).
+1. Optional phone video → validated client-side (≤30s, ≤15MB) → `POST /api/seller/listings/upload-video` stages `stage_*.mp4` on the bot → publish sends only that short `videoUrl` with `videoKind: "seller"` (skips AI reel). Never put multi‑MB `videoBase64` in `/publish` (that caused nginx timeouts and a fake “Post sent” with no listing).
 2. Else studio: clean backgrounds once → **1 photo** zoompan clip, or **2–8 photos** one Cloudinary multi reel → `videoKind: "preview"`.
-3. Publish saves CDN `videoUrl` + cleaned `imageUrl`s in the catalog; caches a local cover JPEG for WhatsApp.
+3. Publish saves CDN `videoUrl` (preview) or local `/catalog-images/{id}.mp4` (seller) + cleaned `imageUrl`s; caches a local cover JPEG for WhatsApp.
 
 Studio / reel videos are Cloudinary-compressed (`q_auto:eco`, `w_720`). Raw seller uploads are size-capped.
 
@@ -37,7 +37,7 @@ Studio / reel videos are Cloudinary-compressed (`q_auto:eco`, `w_720`). Raw sell
 
 - `maxVideoSeconds`: 30  
 - `maxVideoBytes`: 15 × 1024 × 1024  
-- JSON body limit remains 25mb (base64 headroom)
+- JSON body limit remains 25mb (base64 headroom for `/upload-video` alone)
 
 ## Related
 

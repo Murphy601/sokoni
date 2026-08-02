@@ -2,7 +2,7 @@
  * Phase 4 — Depop-style seller listings: photo → details → post → live instantly.
  * Post-publish moderation runs after go-live (flag/hide, not pre-approval).
  */
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -270,8 +270,12 @@ async function saveMediaFiles(productId, imageSources = [], videoSource = null, 
     let savedVideoKind = null;
     if (videoSource) {
       const src = String(videoSource || "").trim();
-      // Studio / multi-reel CDN MP4 — store the URL; do not pull multi‑MB into the 1GB bot.
-      if (/^https?:\/\//i.test(src) && isAllowedRemoteMediaUrl(src)) {
+      const isHttps = /^https?:\/\//i.test(src) && isAllowedRemoteMediaUrl(src);
+      // Pre-uploaded seller clips live on our bot as stage_*.mp4 — rename under product id.
+      const isBotStaging =
+        isHttps && /\/catalog-images\/stage_[a-z0-9_-]+\.mp4(?:$|\?)/i.test(src);
+      if (isHttps && !isBotStaging) {
+        // Studio / multi-reel CDN MP4 — store the URL; do not pull multi‑MB into the 1GB bot.
         videoUrl = src;
         savedVideoKind =
           videoKind === "seller" || videoKind === "preview" ? videoKind : "preview";
@@ -286,6 +290,17 @@ async function saveMediaFiles(productId, imageSources = [], videoSource = null, 
           videoUrl = rel;
           savedVideoKind =
             videoKind === "seller" || videoKind === "preview" ? videoKind : "seller";
+          // Drop staging file after copy (best-effort).
+          if (isBotStaging) {
+            try {
+              const stageName = path.basename(new URL(src).pathname);
+              if (/^stage_/i.test(stageName)) {
+                await unlink(path.join(IMAGES_DIR, stageName)).catch(() => {});
+              }
+            } catch {
+              /* ignore */
+            }
+          }
         }
       }
     }
@@ -1036,6 +1051,55 @@ export async function listSellerListings(phone, sessionToken) {
   } catch {}
 
   return { drafts, listings: live };
+}
+
+/**
+ * Pre-upload a seller phone video so /publish stays under nginx body/time limits.
+ * Returns a durable bot /catalog-images/stage_*.mp4 URL for the publish payload.
+ */
+export async function stageSellerVideo({ phone, videoBase64, sessionToken }) {
+  const check = await requireApprovedSeller(phone, sessionToken);
+  if (check.error) return check;
+  const raw = String(videoBase64 || "").trim();
+  if (!raw) {
+    return { error: "missing_video", message: "Choose a video clip first." };
+  }
+  let buffer;
+  try {
+    buffer = await resolveMediaBuffer(raw, { maxBytes: MAX_VIDEO_BYTES, label: "video" });
+  } catch (err) {
+    if (err?.code === "media_too_large" || /_too_large$/.test(String(err?.message || ""))) {
+      return {
+        error: "video_too_large",
+        message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
+      };
+    }
+    throw err;
+  }
+  if (!buffer?.length) {
+    return { error: "missing_video", message: "Could not read that video — try another MP4." };
+  }
+
+  if (!existsSync(IMAGES_DIR)) await mkdir(IMAGES_DIR, { recursive: true });
+  const sellerSlug = String(check.supplier.id || "seller")
+    .slice(-8)
+    .replace(/[^a-z0-9]/gi, "") || "seller";
+  const file = `stage_${sellerSlug}_${Date.now().toString(36)}.mp4`;
+  await writeFile(path.join(IMAGES_DIR, file), buffer);
+  const base = String(config.botPublicUrl || "https://bot.sokonimall.com").replace(/\/$/, "");
+  const videoUrl = `${base}/catalog-images/${file}`;
+  console.log("[seller-listings] staged seller video", {
+    bytes: buffer.length,
+    file,
+    seller: check.supplier.id,
+  });
+  return {
+    ok: true,
+    videoUrl,
+    videoKind: "seller",
+    bytes: buffer.length,
+    message: "Video uploaded — tap Post listing.",
+  };
 }
 
 export async function getSellerListingMeta() {
