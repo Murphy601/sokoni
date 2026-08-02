@@ -1,21 +1,31 @@
 #!/usr/bin/env bash
 # Run on the GCP VM (sokoni-bot) after SSH login.
+#
+# IMPORTANT: git checkout replaces this path on disk. Bash reading the repo file
+# then hits EOF and exits right after "Reset branch" with no error. Always run
+# the body from a /tmp snapshot (see wrapper below).
 set -euo pipefail
 
-# git checkout replaces this file while bash is still reading it → silent EOF exit
-# right after "Reset branch". Re-exec from a temp copy first so deploy can finish.
+# __DEPLOY_WRAPPER__
 if [ "${SOKONI_DEPLOY_REEXEC:-}" != "1" ]; then
-  _deploy_self="${BASH_SOURCE[0]:-$0}"
-  _deploy_tmp="$(mktemp /tmp/sokoni-deploy-bot.XXXXXX.sh)"
-  cp "$_deploy_self" "$_deploy_tmp"
-  chmod 700 "$_deploy_tmp"
-  SOKONI_DEPLOY_REEXEC=1 SOKONI_DEPLOY_TMP="$_deploy_tmp" exec bash "$_deploy_tmp" "$@"
+  _self="${BASH_SOURCE[0]:-$0}"
+  _tmp="$(mktemp /tmp/sokoni-deploy.XXXXXX)"
+  # Strip the wrapper; only the body runs from /tmp (safe across git checkout).
+  if ! awk '/^# __DEPLOY_BODY__$/ {p=1; next} p' "$_self" > "$_tmp" || [ ! -s "$_tmp" ]; then
+    echo "ERROR: could not extract deploy body from $_self" >&2
+    rm -f "$_tmp"
+    exit 1
+  fi
+  chmod 700 "$_tmp"
+  echo "==> Deploy snapshot: $_tmp" >&2
+  exec env SOKONI_DEPLOY_REEXEC=1 SOKONI_DEPLOY_TMP="$_tmp" bash "$_tmp" "$@"
 fi
 if [ -n "${SOKONI_DEPLOY_TMP:-}" ]; then
   # shellcheck disable=SC2064
   trap 'rm -f "$SOKONI_DEPLOY_TMP" 2>/dev/null || true' EXIT
 fi
 
+# __DEPLOY_BODY__
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
 BOT_DIR="$REPO/whatsapp-bot"
 NAME="${PM2_NAME:-sokoni-bot}"
