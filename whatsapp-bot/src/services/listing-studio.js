@@ -9,13 +9,15 @@
  * Transform once, cache forever (Cloudinary path):
  *   1. Upload cutout_* with eager e_background_removal/f_png + eager_async=false
  *   2. Wait until cleaned PNG has alpha, then DOWNLOAD those PNG bytes
- *   3. Overwrite cutout_* with the clean PNG buffer (base asset is now transparent)
- *   4. Zoompan MP4 on that baked asset (video transforms cannot apply e_background_removal)
- *   5. 2–8 photos → Cloudinary multi via urls[] (tag fallback) → one MP4 reel
+ *   3. Flatten transparent cutout onto cream (FFF8F0) — MP4 has no alpha channel
+ *   4. Store opaque cream JPEG as cutout_ or reel_ asset (tagged for multi)
+ *   5. Zoompan / multi on that cream asset (never e_background_removal in video chains)
  *   6. Save those CDN URLs in the catalog
  *
- * Why bake bytes? (a) URL→upload fetch often re-pulls the original photo.
- * (b) Cloudinary ignores e_background_removal inside MP4 transformation chains.
+ * Why bake + flatten? (a) URL→upload fetch often re-pulls the original photo.
+ * (b) Cloudinary ignores e_background_removal inside MP4 chains.
+ * (c) MP4 cannot keep PNG transparency — without cream flatten, RGB under alpha
+ *     shows the original background in the reel.
  *
  * Studio API returns CDN URLs only (cleanImageUrl + clipVideoUrl) so the 1GB
  * bot does not JSON-encode multi‑MB PNG/MP4 (that was taking Sokoni down).
@@ -32,10 +34,13 @@ const PHOTOROOM_SEGMENT = "https://sdk.photoroom.com/v1/segment";
 
 const ALL_PROVIDERS = ["cloudinary", "huggingface", "photoroom", "remote"];
 
-/** Photoroom-like clip from a transparent cutout — no background_removal here. */
+/** Cream pad under cutouts — MP4 has no alpha, so frames must be flattened onto this. */
+const CREAM_BG = "FFF8F0";
+
+/** Photoroom-like clip from a cutout flattened onto cream — no background_removal here. */
 /** 3–5s teaser for grid hover — longer makes a still look stretched. */
 const DEFAULT_CLIP_TRANS =
-  "c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264";
+  `c_pad,w_1080,h_1080,b_rgb:${CREAM_BG}/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264`;
 
 function env(name) {
   return String(process.env[name] || "").trim();
@@ -236,10 +241,15 @@ function cleanedPngUrl(cloud, publicId) {
   return `https://res.cloudinary.com/${cloud}/image/upload/${bgRemovalEffect()}/f_png/${publicId}`;
 }
 
-/** Clip URL for an already-baked clean PNG asset (no bg-removal in the video chain). */
+/** Clip URL for a cream-flattened cutout (no bg-removal in the video chain). */
 function bakedClipUrl(cloud, publicId) {
   const motion = resolveClipTransform();
   return `https://res.cloudinary.com/${cloud}/image/upload/${motion}/f_mp4/${publicId}.mp4`;
+}
+
+/** Delivery URL: transparent cutout composited onto Sokoni cream (opaque — safe for MP4/multi). */
+function creamFlattenUrl(cloud, publicId) {
+  return `https://res.cloudinary.com/${cloud}/image/upload/b_rgb:${CREAM_BG}/f_jpg/q_auto/${publicId}`;
 }
 
 /** FormData-safe binary part (Node Buffer → Blob). */
@@ -560,23 +570,42 @@ async function storeCleanPngBufferAndClip(cleanPng, opts = {}) {
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
   const stamp = Math.floor(Date.now() / 1000);
+  const hex = crypto.randomBytes(4).toString("hex");
   const publicId =
-    opts.publicId || `cutout_${stamp}_${crypto.randomBytes(4).toString("hex")}`;
+    opts.publicId || `cutout_${stamp}_${hex}`;
   const wantClip =
     opts.wantClip !== undefined ? opts.wantClip : env("STUDIO_CLIP_ENABLED") !== "false";
   const clipTrans = resolveClipTransform();
-  // Buffer is already cleaned — zoompan only (no second bg-removal).
-  const eager = wantClip ? `${clipTrans}/f_mp4` : undefined;
 
-  const up = await cloudinaryUploadImage(cleanPng, "image/png", {
+  // Stage alpha PNG, flatten onto cream, store opaque JPEG (MP4-safe).
+  const stageId = `alpha_${stamp}_${hex}`;
+  const staged = await cloudinaryUploadImage(cleanPng, "image/png", {
+    publicId: stageId,
+    folder,
+    overwrite: true,
+    filename: "clean.png",
+  });
+  if (!staged.ok) return null;
+
+  let flatBuf = await fetchCloudinaryDerived(creamFlattenUrl(cloud, staged.publicId), {
+    label: "cream-flatten-store",
+    timeoutMs: 90_000,
+    attempts: 6,
+  });
+  void cloudinaryDestroy(staged.publicId, cloud, staged.apiKey, staged.apiSecret).catch(() => {});
+  if (!flatBuf?.length) return null;
+
+  const eager = wantClip ? `${clipTrans}/f_mp4` : undefined;
+  const up = await cloudinaryUploadImage(flatBuf, "image/jpeg", {
     publicId,
     folder,
     overwrite: Boolean(opts.publicId),
     invalidate: Boolean(opts.publicId),
     eager,
-    filename: "clean.png",
+    filename: "clean.jpg",
     tags: opts.tags,
   });
+  flatBuf = null;
   if (!up.ok) return null;
 
   const id = up.publicId;
@@ -586,7 +615,7 @@ async function storeCleanPngBufferAndClip(cleanPng, opts = {}) {
     `https://res.cloudinary.com/${cloud}/image/upload/${id}`;
 
   if (!wantClip) {
-    return { cleanUrl, cleanPublicId: id, clipUrl: null, clipBuffer: null };
+    return { cleanUrl, cleanPublicId: id, clipUrl: null, clipBuffer: null, baked: true };
   }
 
   const clipUrl =
@@ -595,10 +624,11 @@ async function storeCleanPngBufferAndClip(cleanPng, opts = {}) {
     `https://res.cloudinary.com/${cloud}/image/upload/${clipTrans}/f_mp4/${id}.mp4`;
 
   const clip = await finalizeClipUrl(clipUrl);
-  if (!clip) return { cleanUrl, cleanPublicId: id, clipUrl: null, clipBuffer: null };
+  if (!clip) return { cleanUrl, cleanPublicId: id, clipUrl: null, clipBuffer: null, baked: true };
   return {
     cleanUrl,
     cleanPublicId: id,
+    baked: true,
     clipUrl: clip.clipUrl,
     clipBuffer: clip.clipBuffer,
   };
@@ -756,26 +786,63 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
     return failResult(buffer, mimeType, "api_failed", "cloudinary");
   }
 
+  // Stage transparent cutout under a staging id so we can flatten cream onto finalId.
+  const stageId = `alpha_${stamp}_${hex}`;
+  const staged = await cloudinaryUploadImage(cleanBuf, "image/png", {
+    publicId: stageId,
+    folder,
+    overwrite: true,
+    filename: "clean.png",
+  });
+  cleanBuf = null;
+  if (!staged.ok) {
+    console.warn("[listing-studio] staging transparent PNG failed — using derived URL only");
+    void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
+    return okResult(null, "cloudinary", {
+      cleanUrl: derivedUrl,
+      cleanPublicId: tempPublicId,
+      baked: false,
+    });
+  }
+
+  // MP4 has no alpha — flatten cutout onto cream so multi/zoompan cannot show original RGB.
+  const flatUrl = creamFlattenUrl(cloud, staged.publicId);
+  let flatBuf = await fetchCloudinaryDerived(flatUrl, {
+    label: "cream-flatten",
+    timeoutMs: 90_000,
+    attempts: Math.min(6, derivedAttempts),
+  });
+  if (!flatBuf?.length) {
+    console.warn("[listing-studio] cream flatten download failed — using derived URL only");
+    void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
+    void cloudinaryDestroy(staged.publicId, cloud, staged.apiKey, staged.apiSecret).catch(() => {});
+    return okResult(null, "cloudinary", {
+      cleanUrl: derivedUrl,
+      cleanPublicId: tempPublicId,
+      baked: false,
+    });
+  }
+
   const wantClip =
     opts.wantClip !== undefined ? opts.wantClip : env("STUDIO_CLIP_ENABLED") !== "false";
   const clipTrans = resolveClipTransform();
-  // Final id receives ONLY transparent PNG bytes (+ reel tags). Original never lives here.
-  const baked = await cloudinaryUploadImage(cleanBuf, "image/png", {
+  // Final id = opaque cream-backed cutout (+ reel tags). Safe for stills, multi, and MP4.
+  const baked = await cloudinaryUploadImage(flatBuf, "image/jpeg", {
     publicId: finalId,
     folder,
     overwrite: true,
     invalidate: true,
     eager: wantClip ? `${clipTrans}/f_mp4` : undefined,
-    filename: "clean.png",
+    filename: "clean.jpg",
     tags: opts.tags,
   });
-  cleanBuf = null;
+  flatBuf = null;
 
-  // Drop temp original so it cannot be picked up by mistake.
   void cloudinaryDestroy(tempPublicId, cloud, up.apiKey, up.apiSecret).catch(() => {});
+  void cloudinaryDestroy(staged.publicId, cloud, staged.apiKey, staged.apiSecret).catch(() => {});
 
   if (!baked.ok) {
-    console.warn("[listing-studio] bake clean PNG upload failed — using derived URL only");
+    console.warn("[listing-studio] bake cream cutout failed — using derived URL only");
     return okResult(null, "cloudinary", {
       cleanUrl: derivedUrl,
       cleanPublicId: tempPublicId,
@@ -793,7 +860,7 @@ async function removeBackgroundCloudinary(buffer, mimeType, opts = {}) {
     return okResult(null, "cloudinary", { cleanUrl, cleanPublicId: id, baked: true });
   }
 
-  // Zoompan on baked clean asset — do NOT put e_background_removal in the MP4 chain.
+  // Zoompan on cream-flattened asset — do NOT put e_background_removal in the MP4 chain.
   const clipUrl =
     baked.uploaded.eager?.[0]?.secure_url ||
     baked.uploaded.eager?.[0]?.url ||
@@ -834,7 +901,7 @@ function resolveReelTransform() {
   const delayMs = Number(env("CLOUDINARY_REEL_DELAY_MS")) || 2000;
   const custom = env("CLOUDINARY_REEL_TRANS");
   if (custom) return custom.includes("dl_") ? custom : `dl_${delayMs}/${custom}`;
-  return `dl_${delayMs}/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264`;
+  return `dl_${delayMs}/w_720,h_720,c_pad,b_rgb:${CREAM_BG}/q_auto:eco,vc_h264`;
 }
 
 /**
@@ -846,8 +913,15 @@ function resolveReelTransform() {
 function multiFrameUrl(url, { baked = false } = {}) {
   const raw = String(url || "").trim().split("?")[0];
   if (!/^https?:\/\//i.test(raw)) return null;
-  if (/e_background_removal/i.test(raw)) return raw;
+  // Cream-flattened JPEG base — safe for MP4.
   if (baked) return raw;
+  // Derived bg-removal URL: force cream under alpha before multi fetches the frame.
+  if (/e_background_removal/i.test(raw)) {
+    if (/b_rgb:/i.test(raw)) return raw;
+    return raw
+      .replace(/e_background_removal/i, `e_background_removal/b_rgb:${CREAM_BG}`)
+      .replace(/\/f_png\b/i, "/f_jpg");
+  }
   // Unknown base URL — refuse (likely the uncleaned original).
   return null;
 }
