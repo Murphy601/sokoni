@@ -10,6 +10,28 @@ export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
 source "$SCRIPT_DIR/lib/waha-common.sh"
 WEBHOOK_URL="${BOT_WEBHOOK_URL:-http://host.docker.internal:3001/webhook}"
 SESSION="${WAHA_SESSION}"
+# Shared with bot WEBHOOK_HMAC_KEY — WAHA signs raw body (X-Webhook-Hmac / sha512).
+if [[ -z "${WEBHOOK_HMAC_KEY:-}" && -z "${WAHA_WEBHOOK_HMAC_KEY:-}" && -f "$REPO/whatsapp-bot/.env" ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  # Only pull the HMAC key line(s) — avoid sourcing unrelated secrets into this shell unnecessarily.
+  WEBHOOK_HMAC_KEY="$(grep -E '^(WEBHOOK_HMAC_KEY|WAHA_WEBHOOK_HMAC_KEY)=' "$REPO/whatsapp-bot/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)"
+  set +a
+fi
+WEBHOOK_HMAC_KEY="${WEBHOOK_HMAC_KEY:-${WAHA_WEBHOOK_HMAC_KEY:-}}"
+
+# JSON fragment for webhooks[] entry (url + events + optional hmac).
+webhook_config_json() {
+  python3 -c "
+import json, os
+url = os.environ.get('WEBHOOK_URL', '')
+key = (os.environ.get('WEBHOOK_HMAC_KEY') or '').strip()
+entry = {'url': url, 'events': ['message.any']}
+if key:
+  entry['hmac'] = {'key': key}
+print(json.dumps(entry))
+" 
+}
 
 json_field() {
   local json="$1" field="$2"
@@ -49,6 +71,13 @@ wait_waha() {
 
 create_session() {
   echo "==> Creating WAHA session '$SESSION' (NOWEB store + webhook → $WEBHOOK_URL)"
+  if [[ -n "$WEBHOOK_HMAC_KEY" ]]; then
+    echo "==> Webhook HMAC enabled (WEBHOOK_HMAC_KEY)"
+  else
+    echo "==> WARN: WEBHOOK_HMAC_KEY unset — bot /webhook will accept unsigned POSTs"
+  fi
+  local hook
+  hook="$(WEBHOOK_URL="$WEBHOOK_URL" WEBHOOK_HMAC_KEY="$WEBHOOK_HMAC_KEY" webhook_config_json)"
   curl -sf -X POST \
     -H "X-Api-Key: $WAHA_KEY" \
     -H "Content-Type: application/json" \
@@ -56,7 +85,7 @@ create_session() {
       \"name\": \"$SESSION\",
       \"config\": {
         \"noweb\": { \"store\": { \"enabled\": true, \"fullSync\": false } },
-        \"webhooks\": [{ \"url\": \"$WEBHOOK_URL\", \"events\": [\"message.any\"] }]
+        \"webhooks\": [$hook]
       }
     }" \
     "$WAHA_URL/api/sessions" | head -c 600
@@ -65,13 +94,20 @@ create_session() {
 
 apply_session_config() {
   echo "==> Applying NOWEB store + webhook → $WEBHOOK_URL"
+  if [[ -n "$WEBHOOK_HMAC_KEY" ]]; then
+    echo "==> Webhook HMAC enabled (WEBHOOK_HMAC_KEY)"
+  else
+    echo "==> WARN: WEBHOOK_HMAC_KEY unset — bot /webhook will accept unsigned POSTs"
+  fi
+  local hook
+  hook="$(WEBHOOK_URL="$WEBHOOK_URL" WEBHOOK_HMAC_KEY="$WEBHOOK_HMAC_KEY" webhook_config_json)"
   curl -sf -X PUT \
     -H "X-Api-Key: $WAHA_KEY" \
     -H "Content-Type: application/json" \
     -d "{
       \"config\": {
         \"noweb\": { \"store\": { \"enabled\": true, \"fullSync\": false } },
-        \"webhooks\": [{ \"url\": \"$WEBHOOK_URL\", \"events\": [\"message.any\"] }]
+        \"webhooks\": [$hook]
       }
     }" \
     "$WAHA_URL/api/sessions/$SESSION" >/dev/null

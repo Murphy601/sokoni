@@ -14,17 +14,9 @@ import {
   resolveAuthenticatedBuyerSocialContext,
 } from "../services/buyer-social-auth.js";
 import { config } from "../config.js";
+import { adminTokenFromReq, isAdminTokenValid } from "../lib/admin-auth.js";
 
 const router = Router();
-
-function isAdminTokenValid(token) {
-  const expected =
-    process.env.ADMIN_SETUP_TOKEN ||
-    process.env.SUPPLIER_ADMIN_TOKEN ||
-    config.tiktok.setupToken ||
-    "";
-  return expected && token === expected;
-}
 
 function disputeErrorStatus(error) {
   if (error === "database_not_configured") return 503;
@@ -111,7 +103,7 @@ router.get("/seller", async (req, res) => {
 
 /** GET /api/disputes/admin/list?token= — must be before /:id */
 router.get("/admin/list", async (req, res) => {
-  if (!isAdminTokenValid(req.query.token || req.headers["x-admin-token"])) {
+  if (!isAdminTokenValid(adminTokenFromReq(req))) {
     return res.status(403).json({ error: "forbidden" });
   }
   try {
@@ -128,7 +120,7 @@ router.get("/admin/list", async (req, res) => {
 
 /** POST /api/disputes/admin/:id/resolve?token= */
 router.post("/admin/:id/resolve", async (req, res) => {
-  if (!isAdminTokenValid(req.query.token || req.body?.token || req.headers["x-admin-token"])) {
+  if (!isAdminTokenValid(adminTokenFromReq(req))) {
     return res.status(403).json({ error: "forbidden" });
   }
   try {
@@ -154,7 +146,7 @@ router.get("/:id", async (req, res) => {
     const result = await getDisputeById(req.params.id);
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
 
-    const adminOk = isAdminTokenValid(req.query.token || req.headers["x-admin-token"]);
+    const adminOk = isAdminTokenValid(adminTokenFromReq(req));
     if (!adminOk) {
       let allowed = false;
       try {
