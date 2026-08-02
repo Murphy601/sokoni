@@ -92,12 +92,16 @@ let meta = { conditions: Object.keys(CONDITION_LABELS), maxPhotos: DEFAULT_MAX_P
 let draft = {};
 let photoFiles = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
 let photoPreviews = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
-/** Cleaned cover data URL from studio (cover slot only). */
+/** Cleaned cover preview (data URL or CDN URL). */
 let coverCleanBase64 = null;
+/** Studio cleaned cover CDN URL — prefer this on publish (avoids nginx 413). */
+let coverCleanUrl = null;
 /** Prefer cleaned cover for preview + publish when available. */
 let preferCleanCover = true;
-/** Cloudinary zoompan clip (data URL) when studio returns one. */
+/** Studio clip preview (data URL or CDN URL). */
 let studioClipBase64 = null;
+/** Studio clip CDN URL — prefer this on publish (avoids nginx 413). */
+let studioClipUrl = null;
 /** Prefer studio clip as listing video when no manual upload. */
 let preferStudioClip = true;
 let studioUiEnabled = false;
@@ -504,6 +508,9 @@ function bindMediaSlots() {
       photoPreviews[i] = URL.createObjectURL(file);
       if (i === 0) {
         coverCleanBase64 = null;
+        coverCleanUrl = null;
+        studioClipBase64 = null;
+        studioClipUrl = null;
         preferCleanCover = true;
         const prefer = el("studio-prefer-clean");
         if (prefer) prefer.checked = true;
@@ -653,6 +660,7 @@ async function cacheRemoteAsDataUrl(url) {
 async function ingestStudioClip(clipVideoUrl, clipVideoBase64 = null) {
   const src = clipVideoBase64 || clipVideoUrl;
   if (!src) return false;
+  if (clipVideoUrl && /^https?:\/\//i.test(clipVideoUrl)) studioClipUrl = clipVideoUrl;
   studioClipBase64 = src;
   if (!videoFile) {
     preferStudioClip = true;
@@ -660,36 +668,59 @@ async function ingestStudioClip(clipVideoUrl, clipVideoBase64 = null) {
     if (preferClip) preferClip.checked = true;
   }
   refreshStudioClipPreview();
-  if (clipVideoBase64 || !clipVideoUrl || String(src).startsWith("data:")) {
-    return true;
-  }
-  try {
-    studioClipBase64 = await cacheRemoteAsDataUrl(clipVideoUrl);
-    refreshStudioClipPreview();
-  } catch {
-    // Keep CDN URL for preview; publish may still work if the URL is live.
-  }
+  // Preview can use the CDN URL directly in <video src> — no need to base64-cache for publish.
   return true;
 }
 
 async function ingestCleanCover(cleanImageUrl, cleanImageBase64 = null) {
   const src = cleanImageBase64 || cleanImageUrl;
   if (!src) return false;
+  if (cleanImageUrl && /^https?:\/\//i.test(cleanImageUrl)) coverCleanUrl = cleanImageUrl;
   coverCleanBase64 = src;
   preferCleanCover = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
   refreshCoverPreview();
-  if (cleanImageBase64 || !cleanImageUrl || String(src).startsWith("data:")) {
-    return true;
-  }
-  try {
-    coverCleanBase64 = await cacheRemoteAsDataUrl(cleanImageUrl);
-    refreshCoverPreview();
-  } catch {
-    /* CDN URL still works for preview */
-  }
   return true;
+}
+
+/** Build a small publish payload — CDN URLs for studio media, compressed JPEGs for extras. */
+async function collectPublishPayload() {
+  const imageUrls = [];
+  const images = [];
+
+  if (preferCleanCover && coverCleanUrl) {
+    imageUrls.push(coverCleanUrl);
+  }
+
+  for (let i = 0; i < photoFiles.length; i += 1) {
+    const file = photoFiles[i];
+    if (!file) continue;
+    // Cover already sent as CDN URL
+    if (i === 0 && imageUrls.length) continue;
+    if (i === 0 && preferCleanCover && coverCleanBase64 && String(coverCleanBase64).startsWith("data:")) {
+      images.push(coverCleanBase64);
+      continue;
+    }
+    const compressed = await compressImageFile(file);
+    images.push(await readFileAsDataUrl(compressed));
+  }
+
+  let videoUrl = null;
+  let videoBase64 = null;
+  let videoKind = null;
+  if (videoFile) {
+    videoBase64 = await readFileAsDataUrl(videoFile);
+    videoKind = "seller";
+  } else if (preferStudioClip && studioClipUrl) {
+    videoUrl = studioClipUrl;
+    videoKind = "preview";
+  } else if (preferStudioClip && studioClipBase64 && String(studioClipBase64).startsWith("data:")) {
+    videoBase64 = studioClipBase64;
+    videoKind = "preview";
+  }
+
+  return { imageUrls, images, videoUrl, videoBase64, videoKind };
 }
 
 function applyCoverStudioResult(
@@ -1139,6 +1170,9 @@ function clearPhotoSlots() {
     if (input) input.value = "";
   }
   coverCleanBase64 = null;
+  coverCleanUrl = null;
+  studioClipBase64 = null;
+  studioClipUrl = null;
   preferCleanCover = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
@@ -1263,9 +1297,11 @@ async function onPublish() {
   el("post-btn").disabled = true;
 
   try {
-    const images = await collectImagesBase64();
-    let videoBase64 = await resolveListingVideoBase64();
-    const videoKind = videoBase64 ? resolveListingVideoKind() : null;
+    const media = await collectPublishPayload();
+    if (!media.imageUrls.length && !media.images.length && !activeDraftId) {
+      setStatus("Add at least one photo.", true);
+      return;
+    }
 
     const res = await fetch(`${LISTINGS_API}/publish`, {
       method: "POST",
@@ -1274,9 +1310,11 @@ async function onPublish() {
         jsonAuthBody({
           phone,
           draft: collectDraft(),
-          images,
-          videoBase64,
-          videoKind,
+          images: media.images,
+          imageUrls: media.imageUrls,
+          videoBase64: media.videoBase64,
+          videoUrl: media.videoUrl,
+          videoKind: media.videoKind,
           draftId: activeDraftId || undefined,
         })
       ),
@@ -1284,6 +1322,10 @@ async function onPublish() {
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
       handleSessionExpired(parsed.data);
+      return;
+    }
+    if (parsed.status === 413) {
+      setStatus("Photos/video are too large for upload — try fewer photos or a shorter clip.", true);
       return;
     }
     if (!parsed.ok) {
@@ -1303,8 +1345,9 @@ async function onPublish() {
     localStorage.removeItem(DRAFT_KEY);
     activeDraftId = null;
     await loadMyListings();
-  } catch {
-    setStatus("Network error — try again.", true);
+  } catch (err) {
+    console.warn("[sell] publish failed:", err);
+    setStatus("Network error — try again. If you just cleaned the photo, wait a few seconds and post again.", true);
   } finally {
     el("post-btn").disabled = false;
   }
@@ -1329,9 +1372,7 @@ async function onSaveDraft() {
   savePhone();
   setStatus(activeDraftId ? "Updating draft…" : "Saving draft…");
   try {
-    const images = await collectImagesBase64();
-    let videoBase64 = await resolveListingVideoBase64();
-    const videoKind = videoBase64 ? resolveListingVideoKind() : null;
+    const media = await collectPublishPayload();
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
@@ -1339,9 +1380,11 @@ async function onSaveDraft() {
         jsonAuthBody({
           phone,
           draft: d,
-          images,
-          videoBase64,
-          videoKind,
+          images: media.images,
+          imageUrls: media.imageUrls,
+          videoBase64: media.videoBase64,
+          videoUrl: media.videoUrl,
+          videoKind: media.videoKind,
           draftId: activeDraftId || undefined,
         })
       ),
@@ -1349,6 +1392,10 @@ async function onSaveDraft() {
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
       handleSessionExpired(parsed.data);
+      return;
+    }
+    if (parsed.status === 413) {
+      setStatus("Photos/video are too large to save — try fewer photos or a shorter clip.", true);
       return;
     }
     if (!parsed.ok) {
@@ -2391,6 +2438,14 @@ async function parseApiResponse(res) {
   try {
     return { ok: res.ok, status: res.status, data: JSON.parse(text) };
   } catch {
+    if (res.status === 413) {
+      return {
+        ok: false,
+        status: 413,
+        data: null,
+        message: "Upload too large — use the cleaned CDN preview (re-run clean) or fewer/smaller photos.",
+      };
+    }
     const serverDown = res.status === 502 || res.status === 503 || res.status === 504;
     return {
       ok: false,
