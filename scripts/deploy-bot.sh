@@ -130,23 +130,16 @@ if [ -f "$ENV_FILE" ]; then
   echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
   echo "==> Vision: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
   echo "==> Vision fallbacks: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
-  # Always ensure a non-empty GEMINI_API_KEY (rotate later). Actions override wins when set.
-  DEFAULT_GEMINI_API_KEY="AQ.Ab8RN6JKsaorEvw8bvKc277LHDh3lL3HMWNbPhrz_LJxDKkhKQ"
+  # GEMINI_API_KEY — never commit a real key. Prefer GitHub Actions secret → SOKONI_GEMINI_API_KEY,
+  # or a key already present in the VM .env. Do not seed placeholders into production.
   CURRENT_GEMINI="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
   if [ -n "${SOKONI_GEMINI_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$SOKONI_GEMINI_API_KEY"
-    echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY"
-  elif [ -z "$CURRENT_GEMINI" ]; then
-    set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$DEFAULT_GEMINI_API_KEY"
-    echo "==> Seeded GEMINI_API_KEY into $ENV_FILE (was empty/missing — rotate when ready)"
-  else
+    echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY (CI/ops inject)"
+  elif [ -n "$CURRENT_GEMINI" ]; then
     echo "==> Gemini vision: GEMINI_API_KEY present (${#CURRENT_GEMINI} chars)"
-  fi
-  # Hard verify — never leave deploy without a key when we have a default.
-  VERIFY_GEMINI="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$VERIFY_GEMINI" ]; then
-    echo "GEMINI_API_KEY=$DEFAULT_GEMINI_API_KEY" >> "$ENV_FILE"
-    echo "==> Appended GEMINI_API_KEY (set_env_kv missed — forced append)"
+  else
+    echo "WARN: GEMINI_API_KEY unset — seller photo drafts use OpenRouter vision only. Set GEMINI_API_KEY in whatsapp-bot/.env or Actions secret GEMINI_API_KEY."
   fi
 else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
