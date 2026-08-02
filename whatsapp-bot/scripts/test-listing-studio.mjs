@@ -254,9 +254,8 @@ async function main() {
       if (multiUrlList.length < 2) {
         throw new Error(`multi must send urls[] array, got: ${JSON.stringify(multiUrlList)} urls=${body?.get?.("urls")}`);
       }
-      if (multiUrlList.some((x) => /e_background_removal/i.test(String(x)))) {
-        throw new Error(`multi urls must be base delivery URLs, got transforms: ${multiUrlList[0]}`);
-      }
+      // Frames must be baked cutouts OR derived bg-removal URLs — never bare originals only.
+      // After bake, base delivery URLs (no e_background_removal) are correct.
       return new Response(
         JSON.stringify({
           public_id: "sokoni-studio/reel_demo",
