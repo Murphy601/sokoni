@@ -68,7 +68,7 @@ GET /api/seller/listings/meta
   → visionModel, visionProvider, geminiVisionEnabled, studioEnabled, shippingTiers, …
 ```
 
-AI keys are **optional** for listing: caption/manual fill still works. Photo vision needs `OPENAI_API_KEY` (and optionally `GEMINI_API_KEY`). Background cleanup needs any cloud studio provider (`CLOUDINARY_*`, `HUGGINGFACE_API_KEY`, or `PHOTOROOM_API_KEY`) — see [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
+AI keys are **optional** for listing: caption/manual fill still works. Photo→draft order: **OpenRouter** (`OPENAI_API_KEY` + `CATALOG_VISION_*`) → **NVIDIA NIM** (`NVIDIA_API_KEY`, random free VLMs) → **Gemini** (`GEMINI_API_KEY`) → caption stub. Background cleanup needs any cloud studio provider (`CLOUDINARY_*`, `HUGGINGFACE_API_KEY`, or `PHOTOROOM_API_KEY`) — see [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
 
 When studio is enabled, sellers can **Preview clean background** on the cover, toggle **Use cleaned cover when posting**, and the publish payload uses the cleaned image when the toggle is on.
 

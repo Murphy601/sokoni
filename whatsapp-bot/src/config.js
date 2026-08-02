@@ -28,7 +28,7 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
-  /** Optional Google Gemini direct API — fallback for seller photos only (not WhatsApp chat). */
+  /** Optional Google Gemini direct API — listing-photo fallback (not WhatsApp chat). */
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
     visionModel: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
@@ -36,6 +36,19 @@ export const config = {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+  },
+  /**
+   * NVIDIA NIM (build.nvidia.com) — OpenAI-compatible VLMs for listing drafts.
+   * Used only as fallback after OpenRouter catalog vision fails / runs out of tokens.
+   */
+  nvidia: {
+    apiKey: process.env.NVIDIA_API_KEY || "",
+    baseUrl: (process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/$/, ""),
+    visionModels: (process.env.NVIDIA_VISION_MODELS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    maxAttempts: Number(process.env.NVIDIA_VISION_MAX_ATTEMPTS) || 4,
   },
   /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
   catalog: {

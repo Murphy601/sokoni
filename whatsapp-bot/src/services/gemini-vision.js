@@ -1,6 +1,6 @@
 /**
  * Google Gemini vision — direct API (backend only, key from GEMINI_API_KEY).
- * Used for seller listing photo → JSON draft; OpenRouter remains fallback.
+ * Listing-photo fallback after OpenRouter / NVIDIA NIM (see listing-generator.js).
  */
 import { config } from "../config.js";
 
