@@ -821,12 +821,25 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
     }
   }
 
-  throw (
-    lastError ||
-    new Error(
-      "Could not read that photo clearly — check the image is sharp, add your price, and fill details manually if needed."
-    )
-  );
+  throw new Error(friendlyListingVisionError(lastError));
+}
+
+/** Never leak raw Gemini/NVIDIA/OpenRouter auth payloads to the sell page. */
+export function friendlyListingVisionError(err) {
+  const msg = String(err?.message || "");
+  if (/401|invalid authentication|UNAUTH|API_KEY_INVALID|PERMISSION_DENIED/i.test(msg)) {
+    return "AI draft unavailable right now — keep your price, fill the details, or try again in a minute.";
+  }
+  if (/429|rate limit|quota|insufficient/i.test(msg)) {
+    return "AI is busy right now — wait a moment and try again, or fill details manually.";
+  }
+  if (/Gemini|NVIDIA|openrouter|Vision model|no JSON/i.test(msg)) {
+    return "Could not read that photo clearly — check the image is sharp, add your price, and fill details manually if needed.";
+  }
+  if (!msg) {
+    return "Could not read that photo clearly — check the image is sharp, add your price, and fill details manually if needed.";
+  }
+  return msg.length > 160 ? `${msg.slice(0, 160)}…` : msg;
 }
 
 /** Build a draft from WhatsApp-style caption only (no photo). */
