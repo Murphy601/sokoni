@@ -283,5 +283,57 @@
     "moderation": {
       "status": "pending_scan"
     }
+  },
+  {
+    "id": "fa-tlom7-003",
+    "name": "Green Flip Flop",
+    "category": "fashion",
+    "subcategory": "womens-fashion",
+    "browseCategory": "women",
+    "browseSubCategory": "shoes",
+    "sellerNetKes": 220,
+    "sourcePriceKes": 220,
+    "priceKes": 247,
+    "platformFeeKes": 22,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 220,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A single green flip flop with a textured sole is visible on a dark surface next to a tiled floor.",
+    "color": "green",
+    "size": "",
+    "era": "",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "location": "Kenol",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1785650353/sokoni-studio/reel_1785650349_01.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785650353/sokoni-studio/reel_1785650349_01.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785650358/sokoni-studio/reel_1785650349_02.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785650361/sokoni-studio/reel_1785650349_03.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785650364/sokoni-studio/reel_1785650349_04.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/multi/dl_2000/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264/v1785650365/ba8809093a12ac2a30e662eafefcf695.mp4",
+    "videoKind": "preview",
+    "publishedAt": 1785650383051,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]
