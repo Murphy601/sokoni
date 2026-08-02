@@ -1030,6 +1030,59 @@ async function cloudinaryMultiReel(imageUrls, reelTag, opts = {}) {
 }
 
 /**
+ * Build a product video URL from already-cleaned Cloudinary stills (cream JPEGs).
+ * Does not re-run background removal. Used when Preview cleaned photos but the
+ * reel URL never reached publish (the common "images only" failure mode).
+ *
+ * @param {string[]} imageUrls
+ * @returns {Promise<{ videoUrl: string, videoKind: "preview" }|null>}
+ */
+export async function attachVideoFromCleanImageUrls(imageUrls) {
+  if (!isCloudinaryConfigured() || isStudioClipEnabled() === false) return null;
+  const cloud = env("CLOUDINARY_CLOUD_NAME");
+  const list = (imageUrls || [])
+    .map((u) => String(u || "").trim().split("?")[0])
+    .filter((u) => /^https?:\/\//i.test(u) && /res\.cloudinary\.com/i.test(u))
+    .slice(0, 8);
+  if (!list.length) return null;
+
+  if (list.length === 1) {
+    const pid = cloudinaryPublicIdFromUrl(list[0]);
+    if (!pid) return null;
+    const videoUrl = bakedClipUrl(cloud, pid);
+    // Soft wait — keep the URL even if CDN is still warming.
+    await waitCloudinaryDerivedReady(videoUrl, {
+      label: "attach-clip",
+      timeoutMs: 45_000,
+      attempts: 4,
+    }).catch(() => false);
+    return { videoUrl, videoKind: "preview" };
+  }
+
+  const multi = await cloudinaryMultiByUrls(list, {
+    format: "mp4",
+    transformation: resolveReelTransform(),
+    bakedFlags: list.map(() => true),
+  });
+  let videoUrl = multi?.secure_url || multi?.url || null;
+  if (videoUrl) {
+    await waitCloudinaryDerivedReady(videoUrl, {
+      label: "attach-reel",
+      timeoutMs: 60_000,
+      attempts: 5,
+    }).catch(() => false);
+    return { videoUrl, videoKind: "preview" };
+  }
+
+  // Multi failed — still ship a single-photo zoompan so the listing isn't stills-only.
+  const pid = cloudinaryPublicIdFromUrl(list[0]);
+  if (!pid) return null;
+  videoUrl = bakedClipUrl(cloud, pid);
+  console.warn("[listing-studio] multi attach failed — using cover zoompan", pid);
+  return { videoUrl, videoKind: "preview" };
+}
+
+/**
  * Ensure a baked clean CDN PNG (+ optional clip) for one listing photo.
  * @param {string|Buffer} source — HTTPS URL or image buffer
  * @param {string} [mimeType]
@@ -1472,6 +1525,22 @@ export async function previewStudioClean(bufferOrList, mimeType = "image/jpeg") 
         };
       }
       if (showcase?.imageUrls?.length) {
+        // Second chance: build reel/zoompan from the cleaned CDN stills (no re-clean).
+        const attached = await attachVideoFromCleanImageUrls(showcase.imageUrls);
+        if (attached?.videoUrl) {
+          return {
+            studioApplied: true,
+            cleanImageBase64: null,
+            cleanImageUrl: showcase.imageUrls[0],
+            clipVideoBase64: null,
+            clipVideoUrl: attached.videoUrl,
+            clipApplied: true,
+            imageUrls: showcase.imageUrls,
+            reason: null,
+            provider: "cloudinary",
+            message: `Cleaned ${showcase.imageUrls.length} photos + product video — use the toggles below.`,
+          };
+        }
         return {
           studioApplied: true,
           cleanImageBase64: null,
@@ -1483,7 +1552,7 @@ export async function previewStudioClean(bufferOrList, mimeType = "image/jpeg") 
           reason: showcase.error || "reel_failed",
           provider: "cloudinary",
           message:
-            "Photos cleaned, but the showcase reel failed — you can still post with cleaned covers.",
+            "Photos cleaned, but the product video failed — try Preview again before posting.",
         };
       }
     } catch (err) {
@@ -1516,7 +1585,7 @@ export async function previewStudioClean(bufferOrList, mimeType = "image/jpeg") 
     };
   }
 
-  const { clipApplied, clipVideoUrl, clipVideoBase64 } = formatClipPayload(cleaned);
+  let { clipApplied, clipVideoUrl, clipVideoBase64 } = formatClipPayload(cleaned);
   const { cleanImageUrl, cleanImageBase64 } = formatCleanImagePayload(cleaned);
 
   // Fallback: if we only have a buffer (e.g. Photoroom without Cloudinary store), inline once.
@@ -1524,6 +1593,20 @@ export async function previewStudioClean(bufferOrList, mimeType = "image/jpeg") 
   let cleanUrl = cleanImageUrl;
   if (!cleanUrl && !cleanB64 && cleaned.buffer?.length) {
     cleanB64 = `data:image/png;base64,${cleaned.buffer.toString("base64")}`;
+  }
+
+  // Eager clip may still be warming — derive zoompan URL from the cream cutout anyway.
+  if (!clipApplied && cleanUrl && isStudioClipEnabled()) {
+    try {
+      const attached = await attachVideoFromCleanImageUrls([cleanUrl]);
+      if (attached?.videoUrl) {
+        clipVideoUrl = attached.videoUrl;
+        clipVideoBase64 = null;
+        clipApplied = true;
+      }
+    } catch (err) {
+      console.warn("[listing-studio] single preview reel attach failed:", err?.message || err);
+    }
   }
 
   let message = "Background cleaned — toggle below to switch back to the original.";
