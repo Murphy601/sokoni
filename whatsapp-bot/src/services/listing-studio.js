@@ -27,8 +27,9 @@ const PHOTOROOM_SEGMENT = "https://sdk.photoroom.com/v1/segment";
 const ALL_PROVIDERS = ["cloudinary", "huggingface", "photoroom", "remote"];
 
 /** Photoroom-like clip from a transparent cutout — no background_removal here. */
+/** 3–5s teaser for grid hover — longer makes a still look stretched. */
 const DEFAULT_CLIP_TRANS =
-  "c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_5;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264";
+  "c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264";
 
 function env(name) {
   return String(process.env[name] || "").trim();

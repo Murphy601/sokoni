@@ -12,9 +12,11 @@
 | **Photoroom** | Yes — Segment API | Via Cloudinary when configured (clip from Photoroom PNG) |
 | **Remote** | Yes — POST→PNG microservice | Via Cloudinary when configured |
 
-**Clip always starts from the cleaned photo**, not the raw phone shot — same idea as Photoroom product videos (studio pad, soft shadow, motion).
+**Clip always starts from the cleaned photo**, not the raw phone shot — same idea as Photoroom product videos (studio pad, soft shadow, motion). Default length is **~4s** (`du_4`) so grid teasers stay snappy.
 
 API responses prefer a **CDN `clipVideoUrl`** (no multi‑MB base64 through the bot). The sell page caches the clip in the browser for publish. That keeps the 1GB VM from OOM / “Can’t reach Sokoni” after studio.
+
+Storefront playback rules (hover/tap, never autoplay the whole grid) live in [PRODUCT_VIDEO.md](./PRODUCT_VIDEO.md).
 
 ## Enable
 

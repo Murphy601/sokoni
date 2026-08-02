@@ -72,6 +72,10 @@ function toPublic(product) {
       inStock: product.inStock !== false,
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
       ...(product.images?.length ? { images: product.images } : {}),
+      ...(product.videoUrl ? { videoUrl: product.videoUrl } : {}),
+      ...(product.videoKind === "seller" || product.videoKind === "preview"
+        ? { videoKind: product.videoKind }
+        : {}),
       ...(product.subcategory ? { subcategory: product.subcategory } : {}),
       ...(product.browseCategory ? { browseCategory: product.browseCategory } : {}),
       ...(product.browseSubCategory ? { browseSubCategory: product.browseSubCategory } : {}),

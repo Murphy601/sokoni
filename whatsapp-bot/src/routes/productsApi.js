@@ -16,7 +16,7 @@ import {
 } from "../db/repositories/products.js";
 import { toggleProductLike, listLikedProductIds } from "../db/repositories/social.js";
 import { CONDITION_LABELS } from "../db/product-mapper.js";
-import { resolveStorefrontImageUrl } from "../lib/catalog-images.js";
+import { resolveStorefrontImageUrl, resolveStorefrontVideoUrl } from "../lib/catalog-images.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
@@ -91,6 +91,8 @@ function toPublicProduct(p) {
           return resolveStorefrontImageUrl({ id: p.id, imageUrl: img }) || img;
         })
       : p.images,
+    videoUrl: resolveStorefrontVideoUrl(p) || undefined,
+    videoKind: p.videoKind === "seller" || p.videoKind === "preview" ? p.videoKind : undefined,
     estDeliveryDays: p.estDeliveryDays,
     volumeMl: p.volumeMl,
   };

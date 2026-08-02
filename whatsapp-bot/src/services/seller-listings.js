@@ -52,6 +52,10 @@ const COMMIT_SCRIPT = path.join(REPO_ROOT, "scripts", "commit-catalog.mjs");
 export const MAX_PHOTOS = 8;
 export const MAX_TAGS = 5;
 export const MAX_BRANDS = 2;
+/** Real seller showcase videos — keep Kenya mobile feeds light. */
+export const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
+/** Client-enforced; server trusts size. AI previews stay 3–5s separately. */
+export const MAX_VIDEO_SECONDS = 30;
 
 const CATEGORY_PREFIX = {
   "phones-tablets": "pt",
@@ -141,7 +145,13 @@ function normalizeBrands(draft) {
   return brands.filter(Boolean).slice(0, MAX_BRANDS);
 }
 
-async function saveMediaFiles(productId, imagesBase64 = [], videoBase64 = null) {
+/**
+ * @param {string} productId
+ * @param {string[]} imagesBase64
+ * @param {string|null} videoBase64
+ * @param {"seller"|"preview"|null} [videoKind]
+ */
+async function saveMediaFiles(productId, imagesBase64 = [], videoBase64 = null, videoKind = null) {
   if (!existsSync(IMAGES_DIR)) await mkdir(IMAGES_DIR, { recursive: true });
 
   const images = [];
@@ -156,12 +166,27 @@ async function saveMediaFiles(productId, imagesBase64 = [], videoBase64 = null) 
   }
 
   let videoUrl = null;
+  let savedVideoKind = null;
   if (videoBase64) {
     const buffer = decodeBase64(videoBase64);
+    if (buffer.length > MAX_VIDEO_BYTES) {
+      return {
+        imageUrl: images[0] || null,
+        images,
+        videoUrl: null,
+        videoKind: null,
+        error: "video_too_large",
+        message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
+      };
+    }
     if (buffer.length) {
       const rel = `assets/images/products/${productId}.mp4`;
       await writeFile(path.join(IMAGES_DIR, `${productId}.mp4`), buffer);
       videoUrl = rel;
+      savedVideoKind =
+        videoKind === "seller" || videoKind === "preview"
+          ? videoKind
+          : "seller";
     }
   }
 
@@ -169,6 +194,7 @@ async function saveMediaFiles(productId, imagesBase64 = [], videoBase64 = null) 
     imageUrl: images[0] || null,
     images,
     videoUrl,
+    videoKind: videoUrl ? savedVideoKind : null,
   };
 }
 
@@ -298,6 +324,7 @@ async function buildProduct(supplier, enriched, media, productId) {
     imageUrl: media.imageUrl,
     images: media.images,
     videoUrl: media.videoUrl,
+    videoKind: media.videoKind || undefined,
     publishedAt: Date.now(),
     moderation: { status: "pending_scan" },
   };
@@ -348,6 +375,7 @@ export async function saveSellerDraft({
   draft,
   images = [],
   videoBase64 = null,
+  videoKind = null,
   draftId = null,
   sessionToken,
 }) {
@@ -377,12 +405,21 @@ export async function saveSellerDraft({
 
   let media = {};
   if (images.length) {
-    media = await saveMediaFiles(`draft-${id}`, images, videoBase64);
+    media = await saveMediaFiles(
+      `draft-${id}`,
+      images,
+      videoBase64,
+      videoKind === "seller" || videoKind === "preview" ? videoKind : null
+    );
+    if (media.error === "video_too_large") {
+      return { error: media.error, message: media.message };
+    }
   } else if (existing) {
     media = {
       imageUrl: existing.imageUrl || null,
       images: existing.images || [],
       videoUrl: existing.videoUrl || null,
+      videoKind: existing.videoKind || null,
     };
   }
 
@@ -504,7 +541,15 @@ export async function deleteSellerDraft({ phone, draftId, sessionToken }) {
 }
 
 /** Post listing — live instantly (Depop-style). */
-export async function publishSellerListing({ phone, draft, images = [], videoBase64 = null, draftId = null, sessionToken }) {
+export async function publishSellerListing({
+  phone,
+  draft,
+  images = [],
+  videoBase64 = null,
+  videoKind = null,
+  draftId = null,
+  sessionToken,
+}) {
   await loadStore();
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
@@ -531,10 +576,17 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
 
   let publishImages = Array.isArray(images) ? images.filter(Boolean) : [];
   let publishVideo = videoBase64 || null;
+  let publishVideoKind =
+    videoKind === "seller" || videoKind === "preview"
+      ? videoKind
+      : linkedDraft?.videoKind || null;
   if (!publishImages.length && linkedDraft) {
     const stored = await loadStoredMediaAsBase64(linkedDraft);
     publishImages = stored.images;
-    if (!publishVideo) publishVideo = stored.videoBase64;
+    if (!publishVideo) {
+      publishVideo = stored.videoBase64;
+      if (!publishVideoKind) publishVideoKind = linkedDraft.videoKind || "seller";
+    }
   }
   if (!publishImages.length) {
     return { error: "missing_image", message: "Add at least one product photo." };
@@ -542,7 +594,10 @@ export async function publishSellerListing({ phone, draft, images = [], videoBas
 
   const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
   const productId = nextProductId(master, enriched.category, check.supplier.id);
-  const media = await saveMediaFiles(productId, publishImages, publishVideo);
+  const media = await saveMediaFiles(productId, publishImages, publishVideo, publishVideoKind);
+  if (media.error === "video_too_large") {
+    return { error: media.error, message: media.message };
+  }
   if (!media.imageUrl || !(media.images || []).length) {
     return {
       error: "image_save_failed",
@@ -668,6 +723,8 @@ export async function getSellerListingMeta() {
   return {
     conditions: VALID_CONDITIONS,
     maxPhotos: MAX_PHOTOS,
+    maxVideoBytes: MAX_VIDEO_BYTES,
+    maxVideoSeconds: MAX_VIDEO_SECONDS,
     maxTags: MAX_TAGS,
     maxBrands: MAX_BRANDS,
     browseTaxonomy,

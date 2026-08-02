@@ -550,11 +550,14 @@ function runSearch(query) {
 
 // ---------- Render helpers ----------
 
+function catalogBotOrigin() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001"
+    : "https://bot.sokonimall.com";
+}
+
 function resolveProductImage(product) {
-  const botOrigin =
-    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-      ? "http://localhost:3001"
-      : "https://bot.sokonimall.com";
+  const botOrigin = catalogBotOrigin();
   const raw = product?.imageUrl || (Array.isArray(product?.images) ? product.images[0] : null);
   if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
   if (product?.id) return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
@@ -563,6 +566,63 @@ function resolveProductImage(product) {
     if (file) return `${botOrigin}/catalog-images/${encodeURIComponent(file.split("/").pop())}`;
   }
   return null;
+}
+
+/** Seller showcase or AI preview clip — never autoplay every card. */
+function resolveProductVideo(product) {
+  const botOrigin = catalogBotOrigin();
+  const raw = product?.videoUrl;
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+  if (raw) {
+    const file = String(raw)
+      .replace(/^\/?assets\/images\/products\//i, "")
+      .replace(/^\/?catalog-images\//i, "");
+    if (file) return `${botOrigin}/catalog-images/${encodeURIComponent(file.split("/").pop())}`;
+  }
+  if (product?.id && (product.videoKind === "seller" || product.videoKind === "preview")) {
+    return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.mp4`;
+  }
+  return null;
+}
+
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+}
+
+function canHoverClipPreview() {
+  return Boolean(
+    window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches && !prefersReducedMotion()
+  );
+}
+
+let activeClipCard = null;
+
+function stopCardClip(card) {
+  if (!card) return;
+  const vid = card.querySelector("video.depop-card-clip");
+  if (vid) {
+    try {
+      vid.pause();
+      vid.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }
+  card.classList.remove("is-clip-playing");
+  if (activeClipCard === card) activeClipCard = null;
+}
+
+function playCardClip(card) {
+  if (!card || prefersReducedMotion()) return;
+  const vid = card.querySelector("video.depop-card-clip");
+  if (!vid?.src) return;
+  if (activeClipCard && activeClipCard !== card) stopCardClip(activeClipCard);
+  activeClipCard = card;
+  card.classList.add("is-clip-playing");
+  const playPromise = vid.play();
+  if (playPromise?.catch) {
+    playPromise.catch(() => stopCardClip(card));
+  }
 }
 
 function productImageBlock(product) {
@@ -643,17 +703,27 @@ function renderDepopCard(product) {
   const name = escapeHtml(product.name || "Product");
   const id = escapeHtml(product.id || "");
   const src = resolveProductImage(product);
+  const videoSrc = resolveProductVideo(product);
   const imageInner = src
-    ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'depop-card-placeholder',textContent:'Photo soon'}))" />`
+    ? `<img class="depop-card-still" src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'depop-card-placeholder',textContent:'Photo soon'}))" />`
     : `<span class="depop-card-placeholder">Photo soon</span>`;
+  const clipInner = videoSrc
+    ? `<video class="depop-card-clip" src="${escapeHtml(videoSrc)}"${
+        src ? ` poster="${escapeHtml(src)}"` : ""
+      } muted loop playsinline preload="none" aria-hidden="true"></video>
+        <button type="button" class="depop-card-clip-btn" data-clip-toggle="1" aria-label="Play short clip">▶</button>`
+    : "";
   const handle = sellerHandle(product);
   const shopLink = sellerShopLink(product);
   const saved = window.SokoniShopShell?.isHearted?.(product.id) ?? window.SokoniShopShell?.isInBag?.(product.id);
 
   return `
-    <article class="depop-card" data-product-id="${id}" tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
-      <div class="depop-card-image-wrap">
+    <article class="depop-card${videoSrc ? " has-clip" : ""}" data-product-id="${id}"${
+      videoSrc ? ' data-has-clip="1"' : ""
+    } tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
+      <div class="depop-card-image-wrap"${videoSrc ? ' data-has-clip="1"' : ""}>
         ${imageInner}
+        ${clipInner}
         ${conditionBadgeHtml(product)}
         <button type="button" class="depop-card-heart${saved ? " is-saved" : ""}" data-save-id="${id}" aria-label="${saved ? "Remove from saved" : "Save item"}">${saved ? "♥" : "♡"}</button>
         <span class="depop-card-badge">PREPAID</span>
@@ -931,16 +1001,41 @@ function bindStoreGridClicks() {
       heart.setAttribute("aria-label", saved ? "Remove from saved" : "Save item");
       return;
     }
+    const clipBtn = e.target.closest("[data-clip-toggle]");
+    if (clipBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const card = clipBtn.closest(".depop-card[data-has-clip]");
+      if (!card) return;
+      if (card.classList.contains("is-clip-playing")) stopCardClip(card);
+      else playCardClip(card);
+      return;
+    }
     if (e.target.closest("[data-shop-link]")) return;
     const card = e.target.closest(".depop-card[data-product-id]");
     if (!card) return;
+    stopCardClip(card);
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
     if (p) window.SokoniProductSheet?.open(p);
+  });
+  grid.addEventListener("pointerover", (e) => {
+    if (!canHoverClipPreview()) return;
+    const card = e.target.closest(".depop-card[data-has-clip]");
+    if (!card || !e.target.closest(".depop-card-image-wrap")) return;
+    playCardClip(card);
+  });
+  grid.addEventListener("pointerout", (e) => {
+    if (!canHoverClipPreview()) return;
+    const card = e.target.closest(".depop-card[data-has-clip]");
+    if (!card) return;
+    const next = e.relatedTarget;
+    if (next && card.contains(next)) return;
+    stopCardClip(card);
   });
   grid.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     const card = e.target.closest(".depop-card[data-product-id]");
-    if (!card || e.target.closest(".depop-card-heart") || e.target.closest("[data-shop-link]")) return;
+    if (!card || e.target.closest(".depop-card-heart") || e.target.closest("[data-shop-link]") || e.target.closest("[data-clip-toggle]")) return;
     e.preventDefault();
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
     if (p) window.SokoniProductSheet?.open(p);
@@ -1328,6 +1423,7 @@ window.SokoniApp = {
   formatShippingLine,
   formatBuyerTotal,
   resolveProductImage,
+  resolveProductVideo,
   runSearch,
   setCatalogFilter,
   renderDepopCard,

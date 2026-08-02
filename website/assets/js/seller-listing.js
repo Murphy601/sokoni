@@ -524,9 +524,22 @@ function bindMediaSlots() {
     });
   }
 
-  el("video-input")?.addEventListener("change", (ev) => {
+  el("video-input")?.addEventListener("change", async (ev) => {
     const file = ev.target.files?.[0];
     if (!file) return;
+    const maxBytes = Number(meta.maxVideoBytes) || 15 * 1024 * 1024;
+    const maxSeconds = Number(meta.maxVideoSeconds) || 30;
+    if (file.size > maxBytes) {
+      setStatus(`Video must be ${Math.round(maxBytes / (1024 * 1024))}MB or smaller.`, true);
+      ev.target.value = "";
+      return;
+    }
+    const durationOk = await assertVideoDuration(file, maxSeconds);
+    if (!durationOk) {
+      setStatus(`Keep seller videos to ${maxSeconds} seconds or less (15–30s is ideal).`, true);
+      ev.target.value = "";
+      return;
+    }
     videoFile = file;
     preferStudioClip = false;
     const preferClip = el("studio-prefer-clip");
@@ -534,6 +547,7 @@ function bindMediaSlots() {
     if (videoPreview && String(videoPreview).startsWith("blob:")) URL.revokeObjectURL(videoPreview);
     videoPreview = URL.createObjectURL(file);
     refreshStudioClipPreview();
+    setStatus(`Video ready (${Math.round(file.size / 1024)}KB) — shows on the product page.`);
   });
 
   el("studio-preview-btn")?.addEventListener("click", () => previewStudioClean());
@@ -662,6 +676,30 @@ function applyCoverStudioResult(cleanImageBase64, message, clipVideoBase64 = nul
   refreshCoverPreview();
   const status = el("studio-status");
   if (status) status.textContent = message || "Background cleaned.";
+}
+
+async function assertVideoDuration(file, maxSeconds) {
+  const url = URL.createObjectURL(file);
+  try {
+    const dur = await new Promise((resolve) => {
+      const vid = document.createElement("video");
+      vid.preload = "metadata";
+      vid.onloadedmetadata = () => resolve(Number(vid.duration) || 0);
+      vid.onerror = () => resolve(0);
+      vid.src = url;
+    });
+    if (!dur || !Number.isFinite(dur)) return true; // can't read — let server size check handle it
+    return dur <= maxSeconds + 0.35;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** @returns {"seller"|"preview"|null} */
+function resolveListingVideoKind() {
+  if (videoFile) return "seller";
+  if (preferStudioClip && studioClipBase64) return "preview";
+  return null;
 }
 
 async function resolveListingVideoBase64() {
@@ -1189,6 +1227,7 @@ async function onPublish() {
   try {
     const images = await collectImagesBase64();
     let videoBase64 = await resolveListingVideoBase64();
+    const videoKind = videoBase64 ? resolveListingVideoKind() : null;
 
     const res = await fetch(`${LISTINGS_API}/publish`, {
       method: "POST",
@@ -1199,6 +1238,7 @@ async function onPublish() {
           draft: collectDraft(),
           images,
           videoBase64,
+          videoKind,
           draftId: activeDraftId || undefined,
         })
       ),
@@ -1253,6 +1293,7 @@ async function onSaveDraft() {
   try {
     const images = await collectImagesBase64();
     let videoBase64 = await resolveListingVideoBase64();
+    const videoKind = videoBase64 ? resolveListingVideoKind() : null;
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
@@ -1262,6 +1303,7 @@ async function onSaveDraft() {
           draft: d,
           images,
           videoBase64,
+          videoKind,
           draftId: activeDraftId || undefined,
         })
       ),

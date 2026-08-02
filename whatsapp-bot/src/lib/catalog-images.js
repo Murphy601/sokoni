@@ -82,3 +82,43 @@ export async function readCatalogImageBase64(product) {
   const buf = await readFile(filePath);
   return buf.toString("base64");
 }
+
+/** True when a catalog video file exists on disk for this product id. */
+export function catalogVideoFileForProduct(product) {
+  if (!product?.id) return null;
+  const filePath = path.join(CATALOG_IMAGES_DIR, `${product.id}.mp4`);
+  return existsSync(filePath) ? filePath : null;
+}
+
+/**
+ * Public storefront video URL (seller clip or AI preview).
+ * Prefer bot /catalog-images/{id}.mp4 when present; else absolute videoUrl.
+ */
+export function resolveStorefrontVideoUrl(product) {
+  if (!product) return null;
+  if (product.id && config.botPublicUrl) {
+    const onDisk = catalogVideoFileForProduct(product);
+    if (onDisk) {
+      return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.mp4`;
+    }
+  }
+  const raw = product.videoUrl;
+  if (!raw) {
+    if (product.id && config.botPublicUrl) {
+      // Race right after publish — point at bot path even if probe missed.
+      const guess = path.join(CATALOG_IMAGES_DIR, `${product.id}.mp4`);
+      if (existsSync(guess)) {
+        return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.mp4`;
+      }
+    }
+    return null;
+  }
+  if (/^https?:\/\//i.test(String(raw))) return String(raw);
+  if (/^(assets\/images\/products\/|catalog-images\/)/i.test(String(raw).replace(/^\//, ""))) {
+    const base = String(raw).replace(/^\//, "").replace(/^assets\/images\/products\//i, "");
+    if (config.botPublicUrl) {
+      return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(base.split("/").pop())}`;
+    }
+  }
+  return `${config.publicSiteUrl}/${String(raw).replace(/^\//, "")}`;
+}
