@@ -107,6 +107,14 @@ app.get("/health", async (_req, res) => {
     /* keep defaults */
   }
 
+  let studioClipEnabled = false;
+  try {
+    const { isStudioClipEnabled } = await import("./services/listing-studio.js");
+    studioClipEnabled = isStudioClipEnabled();
+  } catch {
+    studioClipEnabled = false;
+  }
+
   res.json({
     status: "ok",
     build: BUILD_ID,
@@ -118,6 +126,7 @@ app.get("/health", async (_req, res) => {
     feedPhase: feed.phase,
     opsPhase: ops.phase,
     catalogPaused: ops.catalog.paused,
+    studioClipEnabled,
     wahaConfigured: wahaHealth.wahaConfigured,
     wahaReachable: wahaHealth.wahaReachable,
     wahaLinked: wahaHealth.wahaLinked,

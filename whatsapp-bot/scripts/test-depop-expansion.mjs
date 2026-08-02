@@ -69,6 +69,39 @@ assert("rowToCatalogProduct restores pitToPitIn", catalog.pitToPitIn === 20.5);
 assert("rowToCatalogProduct restores lengthIn", catalog.lengthIn === 27);
 assert("rowToCatalogProduct restores waistIn", catalog.waistIn === 30);
 
+const withClip = rowToCatalogProduct({
+  id: "fa-clip-1",
+  title: "Clip tee",
+  category: "fashion",
+  condition: "like_new",
+  is_secondhand: true,
+  price_kes: 900,
+  in_stock: true,
+  is_sold: false,
+  primary_image_url: "https://res.cloudinary.com/demo/image/upload/sokoni-studio/reel_1_01.jpg",
+  legacy_json: {
+    videoUrl: "https://res.cloudinary.com/demo/image/upload/e_zoompan/f_mp4/sokoni-studio/reel_1_01.mp4",
+    videoKind: "preview",
+  },
+});
+assert(
+  "rowToCatalogProduct restores videoUrl from legacy_json",
+  withClip.videoUrl ===
+    "https://res.cloudinary.com/demo/image/upload/e_zoompan/f_mp4/sokoni-studio/reel_1_01.mp4"
+);
+assert("rowToCatalogProduct restores videoKind from legacy_json", withClip.videoKind === "preview");
+
+assert(
+  "storefront derives zoompan from Cloudinary reel still when videoUrl missing",
+  /f_mp4\/sokoni-studio\/reel_1_01\.mp4$/i.test(
+    resolveStorefrontVideoUrl({
+      id: "fa-clip-2",
+      imageUrl: "https://res.cloudinary.com/demo/image/upload/v1/sokoni-studio/reel_1_01.jpg",
+      images: ["https://res.cloudinary.com/demo/image/upload/v1/sokoni-studio/reel_1_01.jpg"],
+    }) || ""
+  )
+);
+
 function normalizeSocialUrl(value, { platforms = [] } = {}) {
   if (value === undefined) return undefined;
   if (value == null) return null;

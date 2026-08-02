@@ -93,6 +93,60 @@ export function catalogVideoFileForProduct(product) {
   return existsSync(filePath) ? filePath : null;
 }
 
+const CREAM_BG = "FFF8F0";
+const DEFAULT_CLIP_TRANS =
+  `c_pad,w_1080,h_1080,b_rgb:${CREAM_BG}/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264`;
+
+/** Public id from a Cloudinary delivery URL (strips transforms + version). */
+function cloudinaryPublicIdFromUrl(url) {
+  const raw = String(url || "").trim();
+  const m = raw.match(/res\.cloudinary\.com\/[^/]+\/(?:image|video)\/upload\/(.+)$/i);
+  if (!m) return null;
+  const parts = m[1].replace(/^\/+/, "").split("/");
+  while (parts.length > 1) {
+    const head = parts[0];
+    if (
+      /^v\d+$/i.test(head) ||
+      /[,=]/.test(head) ||
+      /^(c_|w_|h_|e_|b_|g_|q_|f_|fl_|dpr_|ar_|a_|r_|l_|u_|t_|dl_)/i.test(head)
+    ) {
+      parts.shift();
+      continue;
+    }
+    break;
+  }
+  if (parts.length && /^v\d+$/i.test(parts[0])) parts.shift();
+  const id = parts.join("/").replace(/\.[a-z0-9]+$/i, "");
+  return id || null;
+}
+
+/**
+ * When legacy videoUrl was dropped / never saved, still show a zoompan from a
+ * cream Cloudinary cutout still (cover). Matches studio DEFAULT_CLIP_TRANS.
+ */
+function deriveCloudinaryClipFromStills(product) {
+  const stills = [
+    ...(Array.isArray(product.images) ? product.images : []),
+    product.imageUrl,
+  ]
+    .map((u) => String(u || "").trim())
+    .filter((u) => /^https?:\/\//i.test(u) && /res\.cloudinary\.com/i.test(u) && !/\.(mp4|webm|mov)(?:$|\?)/i.test(u));
+  if (!stills.length) return null;
+  const cloudMatch = stills[0].match(/res\.cloudinary\.com\/([^/]+)\//i);
+  const cloud = cloudMatch?.[1];
+  const publicId = cloudinaryPublicIdFromUrl(stills[0]);
+  if (!cloud || !publicId) return null;
+  // Prefer cutout_/reel_ baked assets — never invent clips from random CDN photos.
+  if (!/\/(cutout_|reel_|alpha_)/i.test(`/${publicId}`)) return null;
+  let motion = String(process.env.CLOUDINARY_CLIP_TRANS || DEFAULT_CLIP_TRANS).trim();
+  motion = motion
+    .replace(/(^|\/)e_background_removal(\/|$)/gi, "$1")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^\/|\/$/g, "");
+  if (!motion) motion = DEFAULT_CLIP_TRANS;
+  return `https://res.cloudinary.com/${cloud}/image/upload/${motion}/f_mp4/${publicId}.mp4`;
+}
+
 /**
  * Public storefront video URL (seller clip or AI preview).
  * Prefer bot /catalog-images/{id}.mp4 when present; else absolute videoUrl.
@@ -117,7 +171,8 @@ export function resolveStorefrontVideoUrl(product) {
         return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.mp4`;
       }
     }
-    return null;
+    // Studio CDN stills without a saved videoUrl (DB mapper historically dropped it).
+    return deriveCloudinaryClipFromStills(product);
   }
   if (/^(assets\/images\/products\/|catalog-images\/)/i.test(String(raw).replace(/^\//, ""))) {
     const base = String(raw).replace(/^\//, "").replace(/^assets\/images\/products\//i, "");
