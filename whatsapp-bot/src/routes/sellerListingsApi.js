@@ -62,6 +62,9 @@ router.post("/generate", async (req, res) => {
       draft: result.draft,
       studioApplied: result.studioApplied,
       cleanImageBase64: result.cleanImageBase64,
+      clipApplied: Boolean(result.clipApplied),
+      clipVideoBase64: result.clipVideoBase64 || null,
+      studioProvider: result.studioProvider || null,
       seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {
@@ -69,7 +72,7 @@ router.post("/generate", async (req, res) => {
   }
 });
 
-/** POST /api/seller/listings/studio — Photoroom background removal only (no AI draft) */
+/** POST /api/seller/listings/studio — cloud BG cleanup (+ Cloudinary zoompan clip when enabled) */
 router.post("/studio", async (req, res) => {
   const { phone, imageBase64, mimeType = "image/jpeg" } = req.body || {};
   const sessionToken = sellerSessionFromReq(req);
@@ -86,8 +89,11 @@ router.post("/studio", async (req, res) => {
     res.json({
       studioApplied: result.studioApplied,
       cleanImageBase64: result.cleanImageBase64,
+      clipApplied: Boolean(result.clipApplied),
+      clipVideoBase64: result.clipVideoBase64 || null,
       reason: result.reason,
       message: result.message,
+      provider: result.provider || null,
       seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {

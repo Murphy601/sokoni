@@ -92,11 +92,16 @@ let meta = { conditions: Object.keys(CONDITION_LABELS), maxPhotos: DEFAULT_MAX_P
 let draft = {};
 let photoFiles = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
 let photoPreviews = Array.from({ length: DEFAULT_MAX_PHOTOS }, () => null);
-/** Cleaned cover data URL from Photoroom (cover slot only). */
+/** Cleaned cover data URL from studio (cover slot only). */
 let coverCleanBase64 = null;
 /** Prefer cleaned cover for preview + publish when available. */
 let preferCleanCover = true;
+/** Cloudinary zoompan clip (data URL) when studio returns one. */
+let studioClipBase64 = null;
+/** Prefer studio clip as listing video when no manual upload. */
+let preferStudioClip = true;
 let studioUiEnabled = false;
+let studioClipUiEnabled = false;
 let videoFile = null;
 let videoPreview = null;
 let sellerInfo = null;
@@ -523,11 +528,12 @@ function bindMediaSlots() {
     const file = ev.target.files?.[0];
     if (!file) return;
     videoFile = file;
-    if (videoPreview) URL.revokeObjectURL(videoPreview);
+    preferStudioClip = false;
+    const preferClip = el("studio-prefer-clip");
+    if (preferClip) preferClip.checked = false;
+    if (videoPreview && String(videoPreview).startsWith("blob:")) URL.revokeObjectURL(videoPreview);
     videoPreview = URL.createObjectURL(file);
-    const wrap = el("video-preview-wrap");
-    wrap?.classList.remove("hidden");
-    el("video-preview").src = videoPreview;
+    refreshStudioClipPreview();
   });
 
   el("studio-preview-btn")?.addEventListener("click", () => previewStudioClean());
@@ -535,6 +541,30 @@ function bindMediaSlots() {
     preferCleanCover = Boolean(ev.target.checked);
     refreshCoverPreview();
   });
+  el("studio-prefer-clip")?.addEventListener("change", (ev) => {
+    preferStudioClip = Boolean(ev.target.checked);
+    refreshStudioClipPreview();
+  });
+}
+
+function refreshStudioClipPreview() {
+  const wrap = el("video-preview-wrap");
+  const vid = el("video-preview");
+  if (!wrap || !vid) return;
+  if (videoFile && videoPreview) {
+    wrap.classList.remove("hidden");
+    vid.src = videoPreview;
+    return;
+  }
+  if (preferStudioClip && studioClipBase64) {
+    wrap.classList.remove("hidden");
+    vid.src = studioClipBase64;
+    return;
+  }
+  if (!videoFile && !studioClipBase64) {
+    wrap.classList.add("hidden");
+    vid.removeAttribute("src");
+  }
 }
 
 function updateCoverStudioUi() {
@@ -542,19 +572,28 @@ function updateCoverStudioUi() {
   const badge = el("media-slot-0")?.querySelector(".sell-studio-badge");
   const status = el("studio-status");
   const previewBtn = el("studio-preview-btn");
+  const clipToggle = el("studio-prefer-clip")?.closest("label");
   if (controls) {
     const show = studioUiEnabled;
     controls.hidden = !show;
     controls.classList.toggle("hidden", !show);
   }
-  if (previewBtn) previewBtn.disabled = !photoFiles[0];
+  if (previewBtn) {
+    previewBtn.disabled = !photoFiles[0];
+    previewBtn.textContent = studioClipUiEnabled
+      ? "Preview clean + product clip"
+      : "Preview clean background";
+  }
+  if (clipToggle) clipToggle.hidden = !studioClipUiEnabled;
   const showingClean = Boolean(coverCleanBase64 && preferCleanCover);
   el("media-slot-0")?.classList.toggle("has-studio", showingClean);
   if (badge) badge.hidden = !showingClean;
   if (status && !coverCleanBase64 && studioUiEnabled) {
-      status.textContent = photoFiles[0]
-        ? "Preview cleans the cover only — AI draft waits until you add your price."
-        : "Add a cover photo to try background cleanup.";
+    status.textContent = photoFiles[0]
+      ? studioClipUiEnabled
+        ? "Preview cleans the cover and builds a short product clip — AI draft waits for your price."
+        : "Preview cleans the cover only — AI draft waits until you add your price."
+      : "Add a cover photo to try background cleanup.";
   }
 }
 
@@ -583,15 +622,30 @@ function refreshCoverPreview() {
   }
 }
 
-function applyCoverStudioResult(cleanImageBase64, message) {
+function applyCoverStudioResult(cleanImageBase64, message, clipVideoBase64 = null) {
   if (!cleanImageBase64) return;
   coverCleanBase64 = cleanImageBase64;
   preferCleanCover = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
+  if (clipVideoBase64) {
+    studioClipBase64 = clipVideoBase64;
+    if (!videoFile) {
+      preferStudioClip = true;
+      const preferClip = el("studio-prefer-clip");
+      if (preferClip) preferClip.checked = true;
+    }
+    refreshStudioClipPreview();
+  }
   refreshCoverPreview();
   const status = el("studio-status");
   if (status) status.textContent = message || "Background cleaned.";
+}
+
+async function resolveListingVideoBase64() {
+  if (videoFile) return readFileAsDataUrl(videoFile);
+  if (preferStudioClip && studioClipBase64) return studioClipBase64;
+  return null;
 }
 
 async function previewStudioClean() {
@@ -608,7 +662,7 @@ async function previewStudioClean() {
 
   const btn = el("studio-preview-btn");
   if (btn) btn.disabled = true;
-  setStatus("Cleaning cover background…");
+  setStatus(studioClipUiEnabled ? "Cleaning cover + building clip…" : "Cleaning cover background…");
   const status = el("studio-status");
   if (status) status.textContent = "Working…";
 
@@ -633,7 +687,11 @@ async function previewStudioClean() {
     }
     const data = parsed.data;
     if (data.studioApplied && data.cleanImageBase64) {
-      applyCoverStudioResult(data.cleanImageBase64, data.message);
+      applyCoverStudioResult(
+        data.cleanImageBase64,
+        data.message,
+        data.clipApplied ? data.clipVideoBase64 : null
+      );
       setStatus(data.message || "Background cleaned — review before posting.");
     } else {
       const msg = data.message || "Could not clean background — keep your original photo.";
@@ -1086,8 +1144,7 @@ async function onPublish() {
 
   try {
     const images = await collectImagesBase64();
-    let videoBase64 = null;
-    if (videoFile) videoBase64 = await readFileAsDataUrl(videoFile);
+    let videoBase64 = await resolveListingVideoBase64();
 
     const res = await fetch(`${LISTINGS_API}/publish`, {
       method: "POST",
@@ -1151,8 +1208,7 @@ async function onSaveDraft() {
   setStatus(activeDraftId ? "Updating draft…" : "Saving draft…");
   try {
     const images = await collectImagesBase64();
-    let videoBase64 = null;
-    if (videoFile) videoBase64 = await readFileAsDataUrl(videoFile);
+    let videoBase64 = await resolveListingVideoBase64();
     const res = await fetch(`${LISTINGS_API}/draft`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
@@ -1215,6 +1271,7 @@ function renderListingAiStatus(metaData) {
   if (!node) return;
   if (!metaData) {
     studioUiEnabled = false;
+    studioClipUiEnabled = false;
     node.textContent =
       "Could not check AI status. You can still list manually — add a caption like “130 ksh women sandals” or fill the form yourself.";
     updateCoverStudioUi();
@@ -1223,6 +1280,7 @@ function renderListingAiStatus(metaData) {
   const visionOn = Boolean(metaData.visionModel || metaData.visionProvider);
   const geminiOn = Boolean(metaData.geminiVisionEnabled);
   studioUiEnabled = Boolean(metaData.studioEnabled);
+  studioClipUiEnabled = Boolean(metaData.studioClipEnabled);
   const parts = [];
   if (visionOn) {
     parts.push("AI can draft from your cover photo");
@@ -1230,7 +1288,13 @@ function renderListingAiStatus(metaData) {
   } else {
     parts.push("Photo AI offline — use a caption or fill details manually");
   }
-  if (studioUiEnabled) parts.push("background cleanup available — preview below");
+  if (studioUiEnabled) {
+    parts.push(
+      studioClipUiEnabled
+        ? "Cloudinary cleanup + short product clip — preview below"
+        : "background cleanup available — preview below"
+    );
+  }
   parts.push("price = what you receive; buyers pay price + Sokoni fee; you arrange delivery");
   node.textContent = parts.join(" · ") + ".";
   updateCoverStudioUi();

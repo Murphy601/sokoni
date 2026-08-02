@@ -53,8 +53,8 @@ POST /api/seller/listings/generate
 
 POST /api/seller/listings/studio
   { phone, imageBase64, mimeType? }
-  → { studioApplied, cleanImageBase64?, reason?, message }
-  (background removal only — does not run AI draft)
+  → { studioApplied, cleanImageBase64?, clipApplied?, clipVideoBase64?, provider?, reason?, message }
+  (cloud BG cleanup; Cloudinary may also return a short zoompan MP4 — no AI draft)
 
 POST /api/seller/listings/publish
   { phone, draft, images[], videoBase64?, draftId? }
@@ -114,11 +114,12 @@ curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.to
 Manual:
 1. Seller dashboard → My listings shows reason + hint when status is `hidden`
 2. Open `/admin-seller-listings.html?token=…` → restore / keep removed
-3. With studio configured (Cloudinary / HF / Photoroom): cover upload → Preview clean background → toggle original vs cleaned → post uses the choice
+3. With Cloudinary: cover upload → Preview clean + product clip → toggles for cleaned cover / generated clip → post
+4. With HF/Photoroom only: clean cover (no clip)
 
-## Media studio (cloud BG removal)
+## Media studio (cloud cleanup + clips)
 
-Optional cover background cleanup via Cloudinary, Hugging Face, or Photoroom — **not** self-hosted rembg. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
+Cloudinary does cleanup **and** short product clips. Hugging Face / Photoroom are image-only fallbacks. No rembg/ffmpeg on the VM. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
 
 ## Next: Phase 5.1
 

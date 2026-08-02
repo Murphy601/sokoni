@@ -1,16 +1,17 @@
 /**
- * AI Photo Studio — cloud background removal before listing generation.
+ * AI Photo Studio — cloud background removal (+ optional short product clip).
  * Providers (zero disk/RAM on the bot VM):
- *   - cloudinary  (upload + e_background_removal delivery)
- *   - huggingface (remote Inference / router URL)
- *   - photoroom   (Photoroom Segment API)
- *   - remote      (any POST URL that returns a PNG — Modal/Render rembg, etc.)
+ *   - cloudinary  — clean PNG via e_background_removal + optional MP4 via e_zoompan
+ *   - huggingface — image cleanup only (RMBG / Inference)
+ *   - photoroom   — image cleanup only (Segment API)
+ *   - remote      — POST→PNG microservice (Modal/Render rembg)
  *
- * STUDIO_PROVIDER=auto (default) tries configured providers in free-first order:
+ * STUDIO_PROVIDER=auto (default) tries configured providers free-first:
  *   cloudinary → huggingface → photoroom → remote
  * Pin with STUDIO_PROVIDER=cloudinary|huggingface|photoroom|remote|off
  * Optional STUDIO_FALLBACK=<provider> tried if the primary fails.
  *
+ * Clips: Cloudinary only (STUDIO_CLIP_ENABLED≠false). HF/Photoroom never produce video.
  * Failures always keep the original image. Bot boot never depends on studio.
  */
 import crypto from "node:crypto";
@@ -87,6 +88,13 @@ export function resolveProviderOrder() {
   return configured;
 }
 
+/** Short Ken Burns clips — Cloudinary zoompan only (not HF/Photoroom). */
+export function isStudioClipEnabled() {
+  if (env("STUDIO_CLIP_ENABLED") === "false") return false;
+  const order = resolveProviderOrder();
+  return order.includes("cloudinary") && isCloudinaryConfigured();
+}
+
 export function getStudioMeta() {
   const providers = listConfiguredProviders();
   const order = resolveProviderOrder();
@@ -95,15 +103,31 @@ export function getStudioMeta() {
     studioProvider: order[0] || "none",
     studioProviders: providers,
     studioProviderOrder: order,
+    studioClipEnabled: isStudioClipEnabled(),
   };
 }
 
-function okResult(buffer, provider) {
-  return { buffer, mimeType: "image/png", studioApplied: true, provider };
+function okResult(buffer, provider, extras = {}) {
+  return {
+    buffer,
+    mimeType: "image/png",
+    studioApplied: true,
+    provider,
+    clipBuffer: extras.clipBuffer || null,
+    clipMimeType: extras.clipBuffer ? extras.clipMimeType || "video/mp4" : null,
+  };
 }
 
 function failResult(buffer, mimeType, reason, provider = null) {
-  return { buffer, mimeType, studioApplied: false, reason, provider };
+  return {
+    buffer,
+    mimeType,
+    studioApplied: false,
+    reason,
+    provider,
+    clipBuffer: null,
+    clipMimeType: null,
+  };
 }
 
 /** Cloudinary signed upload signature (sha1). */
@@ -117,7 +141,8 @@ function cloudinarySign(params, apiSecret) {
 }
 
 /**
- * Upload original → fetch delivery URL with e_background_removal → optional destroy.
+ * Upload once → clean PNG (+ optional zoompan MP4) → optional destroy.
+ * Clip is best-effort: clean image still returns if zoompan fails.
  * @param {Buffer} buffer
  * @param {string} mimeType
  */
@@ -154,9 +179,16 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
 
   const uploaded = await uploadRes.json().catch(() => ({}));
   const id = uploaded.public_id || `${folder}/${publicId}`;
-  // On-the-fly BG removal (billed as transformation — works without legacy add-on).
-  const effect = env("CLOUDINARY_BG_EFFECT") || "e_background_removal";
-  const cleanUrl = `https://res.cloudinary.com/${cloud}/image/upload/${effect}/f_png/${id}`;
+  // On-the-fly BG removal (transformation billing — works without legacy add-on).
+  const bgEffect = env("CLOUDINARY_BG_EFFECT") || "e_background_removal";
+  const cleanUrl = `https://res.cloudinary.com/${cloud}/image/upload/${bgEffect}/f_png/${id}`;
+  // Image→MP4 Ken Burns. Cream fill so transparent cutouts read well in video.
+  // Override full chain with CLOUDINARY_CLIP_TRANS if needed.
+  const clipTrans =
+    env("CLOUDINARY_CLIP_TRANS") ||
+    `${bgEffect}/b_rgb:FFF8F0/e_zoompan:mode_ztc;maxzoom_1.25;du_5;fps_25`;
+  const clipUrl = `https://res.cloudinary.com/${cloud}/image/upload/${clipTrans}/f_mp4/${id}.mp4`;
+  const wantClip = env("STUDIO_CLIP_ENABLED") !== "false";
 
   try {
     const cleanRes = await fetch(cleanUrl, { signal: AbortSignal.timeout(90_000) });
@@ -167,7 +199,26 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
     }
     const clean = Buffer.from(await cleanRes.arrayBuffer());
     if (!clean.length) return failResult(buffer, mimeType, "empty_result", "cloudinary");
-    return okResult(clean, "cloudinary");
+
+    let clipBuffer = null;
+    if (wantClip) {
+      try {
+        const clipRes = await fetch(clipUrl, { signal: AbortSignal.timeout(120_000) });
+        if (clipRes.ok) {
+          const clip = Buffer.from(await clipRes.arrayBuffer());
+          // MP4 typically starts with ftyp box near the start — reject tiny/empty.
+          if (clip.length > 256) clipBuffer = clip;
+          else console.warn("[listing-studio] Cloudinary clip too small — skipping");
+        } else {
+          const errText = await clipRes.text().catch(() => "");
+          console.warn("[listing-studio] Cloudinary clip failed:", clipRes.status, errText.slice(0, 200));
+        }
+      } catch (err) {
+        console.warn("[listing-studio] Cloudinary clip error:", err.message);
+      }
+    }
+
+    return okResult(clean, "cloudinary", { clipBuffer, clipMimeType: "video/mp4" });
   } finally {
     if (env("CLOUDINARY_DELETE_AFTER") !== "false") {
       void cloudinaryDestroy(id, cloud, apiKey, apiSecret).catch((err) =>
@@ -346,17 +397,37 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
     return {
       studioApplied: false,
       cleanImageBase64: null,
+      clipVideoBase64: null,
+      clipApplied: false,
       reason: cleaned.reason || "api_failed",
       provider: cleaned.provider || null,
       message: messages[cleaned.reason] || messages.api_failed,
     };
   }
+
+  const clipApplied = Boolean(cleaned.clipBuffer?.length);
+  const clipVideoBase64 = clipApplied
+    ? `data:${cleaned.clipMimeType || "video/mp4"};base64,${cleaned.clipBuffer.toString("base64")}`
+    : null;
+
+  let message = "Background cleaned — toggle below to switch back to the original.";
+  if (clipApplied) {
+    message =
+      cleaned.provider === "cloudinary"
+        ? "Background cleaned + 5s product clip ready — use the toggles below."
+        : message;
+  } else if (cleaned.provider === "cloudinary" && isStudioClipEnabled()) {
+    message = "Background cleaned — product clip unavailable this time; cover is ready.";
+  }
+
   return {
     studioApplied: true,
     cleanImageBase64: `data:image/png;base64,${cleaned.buffer.toString("base64")}`,
+    clipVideoBase64,
+    clipApplied,
     reason: null,
     provider: cleaned.provider || null,
-    message: "Background cleaned — toggle below to switch back to the original.",
+    message,
   };
 }
 
@@ -372,6 +443,8 @@ export async function processListingWithStudio(buffer, mimeType, caption = "", o
   let workMime = mimeType;
   let studioApplied = false;
   let studioProvider = null;
+  let clipVideoBase64 = null;
+  let clipApplied = false;
 
   if (!opts.skipStudio) {
     const cleaned = await removeBackground(buffer, mimeType);
@@ -379,6 +452,10 @@ export async function processListingWithStudio(buffer, mimeType, caption = "", o
     workMime = cleaned.mimeType;
     studioApplied = cleaned.studioApplied;
     studioProvider = cleaned.provider || null;
+    clipApplied = Boolean(cleaned.clipBuffer?.length);
+    clipVideoBase64 = clipApplied
+      ? `data:${cleaned.clipMimeType || "video/mp4"};base64,${cleaned.clipBuffer.toString("base64")}`
+      : null;
   }
 
   const draft = await generateListingFromImage(workBuffer, workMime, caption);
@@ -390,5 +467,7 @@ export async function processListingWithStudio(buffer, mimeType, caption = "", o
     cleanImageBase64: studioApplied
       ? `data:image/png;base64,${workBuffer.toString("base64")}`
       : null,
+    clipApplied,
+    clipVideoBase64,
   };
 }
