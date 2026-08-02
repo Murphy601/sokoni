@@ -41,6 +41,15 @@
     return null;
   }
 
+  function resolveVideo(product) {
+    if (window.SokoniApp?.resolveProductVideo) {
+      return window.SokoniApp.resolveProductVideo(product);
+    }
+    const raw = product?.videoUrl;
+    if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+    return null;
+  }
+
   function waLink(message) {
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
   }
@@ -299,6 +308,7 @@
   function galleryHtml(product) {
     const urls = [];
     const primary = resolveImage(product);
+    const videoSrc = resolveVideo(product);
     if (primary) urls.push(primary);
     if (Array.isArray(product.images)) {
       for (const img of product.images) {
@@ -310,24 +320,51 @@
         if (urls.length >= 8) break;
       }
     }
-    if (!urls.length) {
+    if (!urls.length && !videoSrc) {
       return `<div class="product-sheet-image product-sheet-image--empty">Photo coming soon</div>`;
     }
-    const main = `<img src="${escapeHtml(urls[0])}" alt="${escapeHtml(
-      product.name
-    )}" class="product-sheet-image" data-sheet-main-image />`;
-    if (urls.length === 1) return main;
-    const thumbs = urls
-      .map(
-        (url, i) =>
-          `<button type="button" class="product-sheet-thumb ${
-            i === 0 ? "is-active" : ""
-          }" data-sheet-thumb="${escapeHtml(url)}" aria-label="Photo ${i + 1}">
+
+    const poster = primary || urls[0] || "";
+    const isSellerClip = product.videoKind === "seller";
+    let main;
+    if (videoSrc) {
+      // Seller showcase: controls + muted autoplay. AI preview: muted loop like a GIF.
+      main = `<video
+        class="product-sheet-video"
+        src="${escapeHtml(videoSrc)}"
+        ${poster ? `poster="${escapeHtml(poster)}"` : ""}
+        ${isSellerClip ? "controls" : ""}
+        muted
+        loop
+        playsinline
+        autoplay
+        data-sheet-main-video
+      ></video>`;
+    } else {
+      main = `<img src="${escapeHtml(urls[0])}" alt="${escapeHtml(
+        product.name
+      )}" class="product-sheet-image" data-sheet-main-image />`;
+    }
+
+    const thumbBits = [];
+    if (videoSrc) {
+      thumbBits.push(`<button type="button" class="product-sheet-thumb is-active" data-sheet-media="video" data-sheet-thumb="${escapeHtml(
+        videoSrc
+      )}" data-sheet-poster="${escapeHtml(poster)}" aria-label="Video">
+            ${poster ? `<img src="${escapeHtml(poster)}" alt="" />` : `<span class="product-sheet-thumb-label">▶</span>`}
+          </button>`);
+    }
+    urls.forEach((url, i) => {
+      const active = !videoSrc && i === 0 ? " is-active" : "";
+      thumbBits.push(`<button type="button" class="product-sheet-thumb${active}" data-sheet-media="image" data-sheet-thumb="${escapeHtml(
+        url
+      )}" aria-label="Photo ${i + 1}">
             <img src="${escapeHtml(url)}" alt="" />
-          </button>`
-      )
-      .join("");
-    return `${main}<div class="product-sheet-thumbs">${thumbs}</div>`;
+          </button>`);
+    });
+    if (thumbBits.length <= 1 && !videoSrc) return main;
+    if (thumbBits.length <= 1) return main;
+    return `${main}<div class="product-sheet-thumbs">${thumbBits.join("")}</div>`;
   }
 
   function productShareUrl(product) {
@@ -679,6 +716,14 @@
   }
 
   function close() {
+    const vid = document.querySelector("[data-sheet-main-video]");
+    if (vid) {
+      try {
+        vid.pause();
+      } catch {
+        /* ignore */
+      }
+    }
     document.getElementById("product-sheet")?.classList.remove("is-open");
     document.getElementById("product-sheet")?.setAttribute("hidden", "");
     document.body.classList.remove("sheet-open");
@@ -692,9 +737,50 @@
     document.getElementById("product-sheet-body")?.addEventListener("click", (e) => {
       const thumb = e.target.closest("[data-sheet-thumb]");
       if (thumb) {
-        const main = document.querySelector("[data-sheet-main-image]");
+        const gallery = thumb.closest(".product-sheet-gallery");
         const url = thumb.getAttribute("data-sheet-thumb");
-        if (main && url) main.src = url;
+        const media = thumb.getAttribute("data-sheet-media") || "image";
+        const poster = thumb.getAttribute("data-sheet-poster") || "";
+        if (gallery && url) {
+          const existingVideo = gallery.querySelector("[data-sheet-main-video]");
+          const existingImage = gallery.querySelector("[data-sheet-main-image]");
+          if (media === "video") {
+            if (existingImage) existingImage.remove();
+            let vid = existingVideo;
+            if (!vid) {
+              vid = document.createElement("video");
+              vid.className = "product-sheet-video";
+              vid.setAttribute("data-sheet-main-video", "");
+              vid.muted = true;
+              vid.loop = true;
+              vid.playsInline = true;
+              vid.autoplay = true;
+              if (currentProduct?.videoKind === "seller") vid.controls = true;
+              gallery.insertBefore(vid, gallery.firstChild);
+            }
+            if (poster) vid.poster = poster;
+            vid.src = url;
+            void vid.play?.().catch?.(() => {});
+          } else {
+            if (existingVideo) {
+              try {
+                existingVideo.pause();
+              } catch {
+                /* ignore */
+              }
+              existingVideo.remove();
+            }
+            let img = existingImage;
+            if (!img) {
+              img = document.createElement("img");
+              img.className = "product-sheet-image";
+              img.setAttribute("data-sheet-main-image", "");
+              img.alt = currentProduct?.name || "";
+              gallery.insertBefore(img, gallery.firstChild);
+            }
+            img.src = url;
+          }
+        }
         document.querySelectorAll("[data-sheet-thumb]").forEach((node) => {
           node.classList.toggle("is-active", node === thumb);
         });

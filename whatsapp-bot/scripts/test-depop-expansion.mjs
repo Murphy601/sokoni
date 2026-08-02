@@ -3,9 +3,10 @@
  * Unit checks for Depop expansion helpers (no live DB required).
  * Run: node scripts/test-depop-expansion.mjs
  */
-import { MAX_PHOTOS } from "../src/services/seller-listings.js";
+import { MAX_PHOTOS, MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS } from "../src/services/seller-listings.js";
 import { feedMeta } from "../src/services/feed-ranking.js";
 import { jsonToDbProduct, rowToCatalogProduct } from "../src/db/product-mapper.js";
+import { resolveStorefrontVideoUrl } from "../src/lib/catalog-images.js";
 
 let failed = 0;
 
@@ -19,6 +20,15 @@ function assert(label, cond) {
 }
 
 assert("MAX_PHOTOS is 8", MAX_PHOTOS === 8);
+assert("MAX_VIDEO_SECONDS is 30", MAX_VIDEO_SECONDS === 30);
+assert("MAX_VIDEO_BYTES is 15MB", MAX_VIDEO_BYTES === 15 * 1024 * 1024);
+assert(
+  "absolute videoUrl passes through",
+  resolveStorefrontVideoUrl({
+    id: "fa-demo-1",
+    videoUrl: "https://cdn.example/clip.mp4",
+  }) === "https://cdn.example/clip.mp4"
+);
 
 const meta = feedMeta();
 assert("feed meta exposes following mode", Array.isArray(meta.modes) && meta.modes.includes("following"));
