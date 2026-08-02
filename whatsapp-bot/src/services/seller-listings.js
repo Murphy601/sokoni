@@ -29,6 +29,7 @@ import {
   isCloudinaryConfigured,
   processListingWithStudio,
   prepareListingShowcaseMedia,
+  attachVideoFromCleanImageUrls,
   getStudioMeta,
 } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
@@ -785,26 +786,28 @@ export async function publishSellerListing({
       videoUrl: String(publishVideo || "").slice(0, 96),
     });
   } else if (studioReady === "images") {
-    // Stills ready; keep any client reel URL, else build a quick zoompan from cover only.
+    // Stills ready; keep any client reel URL, else build video from those CDN stills.
     console.log("[seller-listings] Preview CDN stills — skip full showcase", {
       images: publishImages.length,
       hasVideo: Boolean(publishVideo),
     });
+    if (publishVideo && !publishVideoKind) {
+      publishVideoKind = "preview";
+    }
     if (!publishVideo && isCloudinaryConfigured() && isStudioClipEnabled()) {
       try {
-        const showcase = await prepareListingShowcaseMedia([publishImages[0]], {
-          productKey: check.supplier.id,
-        });
-        if (showcase?.videoUrl) {
-          publishVideo = showcase.videoUrl;
-          publishVideoKind = "preview";
+        const attached = await attachVideoFromCleanImageUrls(publishImages);
+        if (attached?.videoUrl) {
+          publishVideo = attached.videoUrl;
+          publishVideoKind = attached.videoKind || "preview";
+          console.log("[seller-listings] attached video from clean CDN stills", {
+            slides: publishImages.length,
+            videoUrl: String(publishVideo).slice(0, 96),
+          });
         }
-        // Keep original multi stills — do not replace with single-slide imageUrls.
       } catch (err) {
-        console.warn("[seller-listings] cover clip attach failed:", err.message);
+        console.warn("[seller-listings] attach video from stills failed:", err.message);
       }
-    } else if (publishVideo && !publishVideoKind) {
-      publishVideoKind = "preview";
     }
   } else if (
     publishVideoKind !== "seller" &&
@@ -859,9 +862,48 @@ export async function publishSellerListing({
     }
   }
 
+  // Last resort: CDN stills present but still no video (client omitted reel URL).
+  if (
+    !publishVideo &&
+    publishVideoKind !== "seller" &&
+    isCloudinaryConfigured() &&
+    isStudioClipEnabled()
+  ) {
+    const CDN = publishImages.filter(
+      (u) => /^https?:\/\//i.test(String(u)) && /res\.cloudinary\.com/i.test(String(u))
+    );
+    if (CDN.length) {
+      try {
+        const attached = await attachVideoFromCleanImageUrls(CDN);
+        if (attached?.videoUrl) {
+          publishVideo = attached.videoUrl;
+          publishVideoKind = "preview";
+          console.log("[seller-listings] last-resort video attach", {
+            slides: CDN.length,
+            videoUrl: String(publishVideo).slice(0, 96),
+          });
+        }
+      } catch (err) {
+        console.warn("[seller-listings] last-resort video attach failed:", err.message);
+      }
+    }
+  }
+
   const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
   const productId = nextProductId(master, enriched.category, check.supplier.id);
   const media = await saveMediaFiles(productId, publishImages, publishVideo, publishVideoKind);
+  // Never lose a Cloudinary reel URL — saveMediaFiles may skip if host checks fail mid-write.
+  if (!media.videoUrl && publishVideo && isAllowedRemoteMediaUrl(publishVideo)) {
+    console.warn("[seller-listings] saveMediaFiles dropped videoUrl — keeping CDN reel", {
+      in: String(publishVideo).slice(0, 96),
+      kind: publishVideoKind,
+    });
+    media.videoUrl = String(publishVideo).trim();
+    media.videoKind =
+      publishVideoKind === "seller" || publishVideoKind === "preview"
+        ? publishVideoKind
+        : "preview";
+  }
   if (media.error === "video_too_large") {
     return { error: media.error, message: media.message };
   }

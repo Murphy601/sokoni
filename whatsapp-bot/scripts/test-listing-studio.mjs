@@ -10,6 +10,7 @@ import {
   removeBackground,
   previewStudioClean,
   prepareListingShowcaseMedia,
+  attachVideoFromCleanImageUrls,
   cloudinaryPublicIdFromUrl,
   pngHasAlpha,
   getStudioMeta,
@@ -390,8 +391,53 @@ async function main() {
   };
   try {
     const soft = await previewStudioClean(tiny, "image/jpeg");
-    if (!soft.studioApplied || soft.clipApplied || !soft.cleanImageUrl) {
-      throw new Error(`clip soft-fail expected clean URL only: ${JSON.stringify(soft)}`);
+    // Eager MP4 may fail, but Preview still attaches a derived zoompan URL from the cream cutout.
+    if (!soft.studioApplied || !soft.cleanImageUrl) {
+      throw new Error(`clip soft-fail expected clean URL: ${JSON.stringify(soft)}`);
+    }
+    if (!soft.clipApplied || !soft.clipVideoUrl || !/f_mp4|\.mp4/i.test(soft.clipVideoUrl)) {
+      throw new Error(`clip soft-fail should still attach derived mp4 URL: ${JSON.stringify(soft)}`);
+    }
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+
+  // attachVideoFromCleanImageUrls — zoompan / multi from cream CDN stills (no re-clean)
+  clearStudioEnv();
+  process.env.CLOUDINARY_CLOUD_NAME = "demo";
+  process.env.CLOUDINARY_API_KEY = "key";
+  process.env.CLOUDINARY_API_SECRET = "secret";
+  process.env.STUDIO_CLIP_ENABLED = "true";
+  let attachMulti = false;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes("/image/multi") && u.includes("api.cloudinary.com")) {
+      attachMulti = true;
+      return new Response(
+        JSON.stringify({
+          secure_url: "https://res.cloudinary.com/demo/image/multi/dl_2000/sokoni-studio/attach.mp4",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (u.includes("f_mp4") || u.includes(".mp4")) {
+      return new Response("ok", { status: 200, headers: { "Content-Type": "video/mp4" } });
+    }
+    return new Response("nope", { status: 500 });
+  };
+  try {
+    const one = await attachVideoFromCleanImageUrls([
+      "https://res.cloudinary.com/demo/image/upload/v1/sokoni-studio/cutout_one.jpg",
+    ]);
+    if (!one?.videoUrl || one.videoKind !== "preview" || !/f_mp4/i.test(one.videoUrl)) {
+      throw new Error(`attach single failed: ${JSON.stringify(one)}`);
+    }
+    const many = await attachVideoFromCleanImageUrls([
+      "https://res.cloudinary.com/demo/image/upload/v1/sokoni-studio/reel_a.jpg",
+      "https://res.cloudinary.com/demo/image/upload/v1/sokoni-studio/reel_b.jpg",
+    ]);
+    if (!attachMulti || !many?.videoUrl || !/attach\.mp4/i.test(many.videoUrl)) {
+      throw new Error(`attach multi failed: ${JSON.stringify(many)} multi=${attachMulti}`);
     }
   } finally {
     globalThis.fetch = origFetch;
