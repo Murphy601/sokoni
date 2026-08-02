@@ -16,7 +16,12 @@
       "id": "fashion",
       "label": "Fashion",
       "emoji": "👗",
-      "subcategories": []
+      "subcategories": [
+        {
+          "id": "womens-fashion",
+          "label": "Women's Fashion"
+        }
+      ]
     },
     {
       "id": "supermarket",

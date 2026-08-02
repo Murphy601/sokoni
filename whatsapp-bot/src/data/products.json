@@ -234,5 +234,54 @@
     "moderation": {
       "status": "pending_scan"
     }
+  },
+  {
+    "id": "fa-tlom7-002",
+    "name": "Yellow and Green Flip Flop",
+    "category": "fashion",
+    "subcategory": "womens-fashion",
+    "browseCategory": "women",
+    "browseSubCategory": "shoes",
+    "sellerNetKes": 250,
+    "sourcePriceKes": 250,
+    "priceKes": 280,
+    "platformFeeKes": 25,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 250,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A single yellow and green flip flop is shown against a white background. The sole has a textured pattern.",
+    "color": "yellow",
+    "size": "",
+    "era": "",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "location": "Kenol",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "assets/images/products/fa-tlom7-002.jpg",
+    "images": [
+      "assets/images/products/fa-tlom7-002.jpg"
+    ],
+    "videoUrl": "assets/images/products/fa-tlom7-002.mp4",
+    "videoKind": "preview",
+    "publishedAt": 1785640659809,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]
