@@ -87,7 +87,8 @@ export async function geminiGenerateListingJson(opts) {
     },
   };
 
-  const res = await fetch(url, {
+  // Prefer header auth; fall back to ?key= for some AI Studio keys.
+  let res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -96,10 +97,21 @@ export async function geminiGenerateListingJson(opts) {
     body: JSON.stringify(body),
   });
 
+  if (res.status === 401 || res.status === 403) {
+    res = await fetch(`${url}?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    const short = errText.slice(0, 280).replace(/\s+/g, " ");
-    if (res.status === 429) throw new Error(`Gemini rate limit — try again in a moment (${short})`);
+    const short = errText.slice(0, 180).replace(/\s+/g, " ");
+    if (res.status === 429) throw new Error("Gemini rate limit — try again in a moment");
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Gemini authentication failed — check GEMINI_API_KEY on the bot");
+    }
     throw new Error(`Gemini ${res.status}: ${short || res.statusText}`);
   }
 

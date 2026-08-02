@@ -68,7 +68,11 @@ router.post("/generate", async (req, res) => {
       seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {
-    res.status(422).json({ error: "generation_failed", message: err.message });
+    const { friendlyListingVisionError } = await import("../services/listing-generator.js");
+    res.status(422).json({
+      error: "generation_failed",
+      message: friendlyListingVisionError(err),
+    });
   }
 });
 

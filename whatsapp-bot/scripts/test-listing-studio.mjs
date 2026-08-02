@@ -129,7 +129,7 @@ async function main() {
       });
     }
     if (u.includes("f_mp4") || u.includes(".mp4")) {
-      return new Response("clip-fail", { status: 420 });
+      return new Response("clip-fail", { status: 500 });
     }
     if (u.includes("e_background_removal") || u.includes("f_png")) {
       return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
@@ -144,6 +144,40 @@ async function main() {
     }
   } finally {
     globalThis.fetch = origFetch;
+  }
+
+  // 423 pending then success (Cloudinary derived still generating)
+  clearStudioEnv();
+  process.env.CLOUDINARY_CLOUD_NAME = "demo";
+  process.env.CLOUDINARY_API_KEY = "key";
+  process.env.CLOUDINARY_API_SECRET = "secret";
+  process.env.CLOUDINARY_DELETE_AFTER = "false";
+  process.env.STUDIO_CLIP_ENABLED = "false";
+  process.env.CLOUDINARY_DERIVED_ATTEMPTS = "3";
+  let pngHits = 0;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("api.cloudinary.com")) {
+      return new Response(JSON.stringify({ public_id: "sokoni-studio/pending" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (u.includes("e_background_removal") || u.includes("f_png")) {
+      pngHits += 1;
+      if (pngHits < 2) return new Response("pending", { status: 423 });
+      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
+    }
+    return new Response("nope", { status: 500 });
+  };
+  try {
+    const pending = await removeBackground(tiny, "image/jpeg");
+    if (!pending.studioApplied || pngHits < 2) {
+      throw new Error(`423 retry failed: applied=${pending.studioApplied} hits=${pngHits}`);
+    }
+  } finally {
+    globalThis.fetch = origFetch;
+    delete process.env.CLOUDINARY_DERIVED_ATTEMPTS;
   }
 
   // HF fallback after Cloudinary BG fail — no clip

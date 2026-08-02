@@ -77,6 +77,8 @@ Hugging Face / Photoroom only fill the clean-cover path.
 
 Failures keep the original cover. Clip failure is soft — clean image still returns. Bot boots without studio keys.
 
+**Cloudinary note:** first `e_background_removal` / zoompan request can return **423** while the derived file builds. The bot retries automatically (and prefers eager transforms on upload).
+
 ## Why not rembg/ffmpeg on the VM?
 
 Those pull **2–4GB+** disk/RAM. Cloudinary (or HF for images only) keeps the bot lightweight.
