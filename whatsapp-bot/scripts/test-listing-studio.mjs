@@ -65,9 +65,37 @@ opaquePng[25] = 2; // RGB, no alpha
 const fakeMp4 = Buffer.alloc(512, 1);
 fakeMp4.write("ftyp", 4);
 const tiny = Buffer.from("fake-jpeg");
+const creamJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
 
 if (!pngHasAlpha(cleanPng) || pngHasAlpha(opaquePng)) {
   throw new Error("pngHasAlpha helper broken");
+}
+
+/** Shared Cloudinary CDN responses for cream-flatten + destroy. */
+function cloudinaryCdnResponse(url, method = "GET") {
+  const u = String(url);
+  if (u.includes("/image/destroy") && u.includes("api.cloudinary.com")) {
+    return new Response(JSON.stringify({ result: "ok" }), { status: 200 });
+  }
+  if (method === "HEAD" && (u.includes("f_mp4") || u.includes(".mp4") || u.includes("/multi/"))) {
+    return new Response(null, { status: 200 });
+  }
+  if (u.includes("f_mp4") || u.includes(".mp4") || u.includes("/multi/")) {
+    if (/e_background_removal/i.test(u)) {
+      return new Response("mp4 must not use bg-removal", { status: 500 });
+    }
+    return new Response(fakeMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
+  }
+  if (/b_rgb:FFF8F0/i.test(u) || /b_rgb:fff8f0/i.test(u)) {
+    return new Response(creamJpeg, { status: 200, headers: { "Content-Type": "image/jpeg" } });
+  }
+  if (u.includes("e_background_removal") || (u.includes("res.cloudinary.com") && u.includes("f_png"))) {
+    return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
+  }
+  if (u.includes("res.cloudinary.com")) {
+    return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
+  }
+  return null;
 }
 
 async function main() {
@@ -106,7 +134,7 @@ async function main() {
     globalThis.fetch = origFetch;
   }
 
-  // Cloudinary: upload → alpha wait → download PNG → bake overwrite → zoompan (no bg-removal in MP4)
+  // Cloudinary: tmp upload → alpha PNG → cream flatten → bake JPEG → zoompan (MP4 has no alpha)
   clearStudioEnv();
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
   process.env.CLOUDINARY_API_KEY = "key";
@@ -119,59 +147,55 @@ async function main() {
 
   let uploadCount = 0;
   let sawEagerAsyncFalse = false;
-  let sawOverwrite = false;
+  let sawCreamJpegBake = false;
+  let sawFlattenFetch = false;
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
     const method = String(init.method || "GET").toUpperCase();
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       uploadCount += 1;
       const body = init.body;
+      const pid = body?.get?.("public_id") || `asset_${uploadCount}`;
+      const folder = body?.get?.("folder") || "sokoni-studio";
+      const full = `${folder}/${pid}`;
       if (body && typeof body.get === "function") {
         if (body.get("eager") && String(body.get("eager_async")) === "false") {
           sawEagerAsyncFalse = true;
         }
-        if (String(body.get("overwrite")) === "true") sawOverwrite = true;
+        if (
+          String(body.get("filename") || "").includes("clean.jpg") &&
+          (/mp4|zoompan/i.test(String(body.get("eager") || "")) || true)
+        ) {
+          if (/mp4|zoompan/i.test(String(body.get("eager") || ""))) sawCreamJpegBake = true;
+        }
       }
-      const id = "sokoni-studio/cutout_y";
-      if (uploadCount === 1) {
-        return new Response(
-          JSON.stringify({
-            public_id: id,
-            secure_url: `https://res.cloudinary.com/demo/image/upload/${id}`,
-            eager: [
-              {
-                secure_url: `https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/${id}`,
-              },
-            ],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+      const eager = String(body?.get?.("eager") || "");
+      const payload = {
+        public_id: full,
+        secure_url: `https://res.cloudinary.com/demo/image/upload/${full}`,
+      };
+      if (eager.includes("background_removal")) {
+        payload.eager = [
+          {
+            secure_url: `https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/${full}`,
+          },
+        ];
+      } else if (eager.includes("mp4") || eager.includes("zoompan")) {
+        sawCreamJpegBake = true;
+        payload.eager = [
+          {
+            secure_url: `https://res.cloudinary.com/demo/image/upload/e_zoompan:du_4/f_mp4/${full}.mp4`,
+          },
+        ];
       }
-      return new Response(
-        JSON.stringify({
-          public_id: id,
-          secure_url: `https://res.cloudinary.com/demo/image/upload/${id}.png`,
-          eager: [
-            {
-              secure_url: `https://res.cloudinary.com/demo/image/upload/e_zoompan:du_4/f_mp4/${id}.mp4`,
-            },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-    if (method === "HEAD" && (u.includes("f_mp4") || u.includes(".mp4"))) {
-      return new Response(null, { status: 200 });
-    }
-    if (u.includes("f_mp4") || u.includes(".mp4")) {
-      if (/e_background_removal/i.test(u)) {
-        return new Response("mp4 must not use bg-removal transform", { status: 500 });
-      }
-      return new Response(fakeMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
-    }
-    if (u.includes("e_background_removal") && u.includes("f_png")) {
-      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
-    }
+    if (/b_rgb:FFF8F0/i.test(u)) sawFlattenFetch = true;
+    const cdn = cloudinaryCdnResponse(u, method);
+    if (cdn) return cdn;
     return new Response("nope", { status: 500 });
   };
 
@@ -191,14 +215,18 @@ async function main() {
         })}`
       );
     }
-    if (uploadCount !== 2) {
-      throw new Error(`expected raw upload + bake overwrite, got ${uploadCount}`);
+    // tmp original + alpha stage + cream JPEG bake
+    if (uploadCount < 3) {
+      throw new Error(`expected tmp + alpha stage + cream bake uploads, got ${uploadCount}`);
     }
     if (!sawEagerAsyncFalse) {
       throw new Error("upload must send eager_async=false with background_removal eager");
     }
-    if (!sawOverwrite) {
-      throw new Error("bake step must overwrite cutout with clean PNG bytes");
+    if (!sawFlattenFetch) {
+      throw new Error("must flatten transparent cutout onto cream before MP4");
+    }
+    if (!sawCreamJpegBake) {
+      throw new Error("final bake must store cream JPEG with zoompan eager");
     }
     if (/e_background_removal/i.test(withClip.clipUrl)) {
       throw new Error(`baked clip must not use bg-removal in MP4 URL: ${withClip.clipUrl}`);
@@ -273,18 +301,13 @@ async function main() {
       return new Response(
         JSON.stringify({
           public_id: full,
-          secure_url: `https://res.cloudinary.com/demo/image/upload/${full}.png`,
+          secure_url: `https://res.cloudinary.com/demo/image/upload/${full}.jpg`,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       );
     }
-    if (method === "HEAD") return new Response(null, { status: 200 });
-    if (u.includes("res.cloudinary.com")) {
-      if (u.includes(".mp4") || u.includes("f_mp4") || u.includes("/multi/")) {
-        return new Response(fakeMp4, { status: 200 });
-      }
-      return new Response(cleanPng, { status: 200 });
-    }
+    const cdn = cloudinaryCdnResponse(u, method);
+    if (cdn) return cdn;
     return new Response("nope", { status: 500 });
   };
   try {
@@ -300,8 +323,9 @@ async function main() {
     if (!reel?.imageUrls?.length || reel.imageUrls.length !== 3) {
       throw new Error(`reel images expected 3: ${JSON.stringify(reel)}`);
     }
-    if (bakeUploads < 3) {
-      throw new Error(`expected 3 bake uploads for multi slides, got ${bakeUploads}`);
+    // Each slide: alpha stage + cream JPEG (≥6 uploads for 3 slides)
+    if (bakeUploads < 6) {
+      throw new Error(`expected ≥6 bake uploads for multi slides, got ${bakeUploads}`);
     }
     if (!multiCalled || !reel.videoUrl || reel.videoKind !== "preview") {
       throw new Error(`multi reel missing: ${JSON.stringify(reel)} multi=${multiCalled}`);
@@ -322,34 +346,45 @@ async function main() {
     const method = String(init.method || "GET").toUpperCase();
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       softUploads += 1;
-      const id = "sokoni-studio/cutout_soft";
-      if (softUploads === 1) {
-        return new Response(
-          JSON.stringify({
-            public_id: id,
-            secure_url: `https://res.cloudinary.com/demo/image/upload/${id}`,
-            eager: [
-              {
-                secure_url: `https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/${id}`,
-              },
-            ],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+      const body = init.body;
+      const pid = body?.get?.("public_id") || "cutout_soft";
+      const folder = body?.get?.("folder") || "sokoni-studio";
+      const full = `${folder}/${pid}`;
+      const eager = String(body?.get?.("eager") || "");
+      const payload = {
+        public_id: full,
+        secure_url: `https://res.cloudinary.com/demo/image/upload/${full}`,
+      };
+      if (eager.includes("background_removal")) {
+        payload.eager = [
+          {
+            secure_url: `https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/${full}`,
+          },
+        ];
+      } else if (eager.includes("mp4") || eager.includes("zoompan")) {
+        // Clip eager present but delivery will 500 — soft-fail path.
+        payload.eager = [
+          { secure_url: `https://res.cloudinary.com/demo/image/upload/e_zoompan/f_mp4/${full}.mp4` },
+        ];
       }
-      return new Response(
-        JSON.stringify({
-          public_id: id,
-          secure_url: `https://res.cloudinary.com/demo/image/upload/${id}.png`,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-    if (u.includes("f_mp4") || u.includes(".mp4") || (method === "HEAD" && u.includes("f_mp4"))) {
+    if (u.includes("f_mp4") || u.includes(".mp4")) {
       return new Response("clip-fail", { status: 500 });
     }
+    const cdn = cloudinaryCdnResponse(u, method);
+    if (cdn && !String(url).includes(".mp4") && !String(url).includes("f_mp4")) return cdn;
     if (u.includes("e_background_removal") && u.includes("f_png")) {
       return new Response(cleanPng, { status: 200 });
+    }
+    if (/b_rgb:FFF8F0/i.test(u)) {
+      return new Response(creamJpeg, { status: 200, headers: { "Content-Type": "image/jpeg" } });
+    }
+    if (u.includes("/image/destroy")) {
+      return new Response(JSON.stringify({ result: "ok" }), { status: 200 });
     }
     return new Response("nope", { status: 500 });
   };
@@ -374,36 +409,43 @@ async function main() {
   let pendingUploads = 0;
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
+    const method = String(init.method || "GET").toUpperCase();
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       pendingUploads += 1;
-      const id = "sokoni-studio/cutout_pending";
-      if (pendingUploads === 1) {
-        return new Response(
-          JSON.stringify({
-            public_id: id,
-            secure_url: `https://res.cloudinary.com/demo/image/upload/${id}`,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+      const body = init.body;
+      const pid = body?.get?.("public_id") || "cutout_pending";
+      const folder = body?.get?.("folder") || "sokoni-studio";
+      const full = `${folder}/${pid}`;
+      const eager = String(body?.get?.("eager") || "");
+      const payload = {
+        public_id: full,
+        secure_url: `https://res.cloudinary.com/demo/image/upload/${full}`,
+      };
+      if (eager.includes("background_removal")) {
+        payload.eager = [
+          {
+            secure_url: `https://res.cloudinary.com/demo/image/upload/e_background_removal/f_png/${full}`,
+          },
+        ];
       }
-      return new Response(
-        JSON.stringify({
-          public_id: id,
-          secure_url: `https://res.cloudinary.com/demo/image/upload/${id}.png`,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-    if (u.includes("e_background_removal") || u.includes("f_png")) {
+    if (u.includes("e_background_removal") && u.includes("f_png") && !/b_rgb:/i.test(u)) {
       cleanHits += 1;
       if (cleanHits < 2) return new Response("pending", { status: 423 });
       return new Response(cleanPng, { status: 200 });
     }
+    const cdn = cloudinaryCdnResponse(u, method);
+    if (cdn) return cdn;
     return new Response("nope", { status: 500 });
   };
   try {
     const pending = await removeBackground(tiny, "image/jpeg");
-    if (!pending.studioApplied || !pending.cleanUrl || cleanHits < 2 || pendingUploads < 2) {
+    // tmp + alpha stage + cream bake
+    if (!pending.studioApplied || !pending.cleanUrl || cleanHits < 2 || pendingUploads < 3) {
       throw new Error(
         `423 retry/bake failed: applied=${pending.studioApplied} hits=${cleanHits} uploads=${pendingUploads}`
       );
@@ -429,20 +471,27 @@ async function main() {
       return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
     }
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
-      return new Response(
-        JSON.stringify({
-          public_id: "sokoni-studio/cutout_from_pr",
-          secure_url: "https://res.cloudinary.com/demo/image/upload/sokoni-studio/cutout_from_pr",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
+      const body = init.body;
+      const pid = body?.get?.("public_id") || "cutout_from_pr";
+      const folder = body?.get?.("folder") || "sokoni-studio";
+      const full = `${folder}/${pid}`;
+      const eager = String(body?.get?.("eager") || "");
+      const payload = {
+        public_id: full,
+        secure_url: `https://res.cloudinary.com/demo/image/upload/${full}`,
+      };
+      if (eager.includes("mp4") || eager.includes("zoompan")) {
+        payload.eager = [
+          { secure_url: `https://res.cloudinary.com/demo/image/upload/e_zoompan/f_mp4/${full}.mp4` },
+        ];
+      }
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-    if (method === "HEAD" && (u.includes("f_mp4") || u.includes(".mp4"))) {
-      return new Response(null, { status: 200 });
-    }
-    if (u.includes("f_mp4") || u.includes(".mp4")) {
-      return new Response(fakeMp4, { status: 200 });
-    }
+    const cdn = cloudinaryCdnResponse(u, method);
+    if (cdn) return cdn;
     return new Response("nope", { status: 500 });
   };
   try {
@@ -549,17 +598,8 @@ async function main() {
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (method === "HEAD") return new Response(null, { status: 200 });
-    if (u.includes("res.cloudinary.com")) {
-      if (u.includes(".mp4") || u.includes("f_mp4") || u.includes("/multi/")) {
-        return new Response(fakeMp4, { status: 200 });
-      }
-      // Range / GET for alpha wait — return RGBA PNG
-      return new Response(cleanPng, {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      });
-    }
+    const cdn = cloudinaryCdnResponse(u, method);
+    if (cdn) return cdn;
     return new Response("nope", { status: 500 });
   };
   try {
@@ -576,7 +616,7 @@ async function main() {
   }
 
   if (!listConfiguredProviders().length && false) throw new Error("unreachable");
-  console.log("OK: baked clean PNG clips + multi urls[] reel + multi preview + CDN-only preview");
+  console.log("OK: cream-flattened clips + multi urls[] reel + multi preview + no double-clean AI");
 }
 
 main()

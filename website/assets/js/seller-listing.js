@@ -900,7 +900,7 @@ async function maybeAutoGenerate() {
   try {
     const compressed = await compressImageFile(photoFiles[0]);
     const imageBase64 = await readFileAsDataUrl(compressed);
-    const skipStudio = !studioUiEnabled || !preferCleanCover;
+    // Studio cleanup is Preview-only — never clean again during AI draft (avoids double work).
     const caption = el("photo-caption")?.value.trim() || "";
     const res = await fetch(`${LISTINGS_API}/generate`, {
       method: "POST",
@@ -912,7 +912,7 @@ async function maybeAutoGenerate() {
           mimeType: compressed.type || "image/jpeg",
           caption,
           sellerNetKes: priceKes,
-          skipStudio,
+          skipStudio: true,
         })
       ),
     });
@@ -939,35 +939,16 @@ async function maybeAutoGenerate() {
       draft.sourcePriceKes = priceKes;
     }
     sellerInfo = data.seller;
-    if (data.studioApplied && (data.cleanImageBase64 || data.cleanImageUrl)) {
-      applyCoverStudioResult(
-        data.cleanImageBase64,
-        data.clipApplied
-          ? "AI cleaned background + product clip + draft — review each step."
-          : "AI cleaned background + filled draft — review each step.",
-        data.clipApplied ? data.clipVideoBase64 : null,
-        data.clipApplied ? data.clipVideoUrl : null,
-        data.cleanImageUrl
-      );
-      setStatus(
-        data.clipApplied
-          ? "AI cleaned background + product clip + draft — review each step."
-          : "AI cleaned background + filled draft — review each step."
-      );
-    } else {
-      setStatus(data.message || "AI filled a draft — review each step before posting.");
-      updateCoverStudioUi();
-    }
     fillFormFromDraft();
-    // Refresh profile chrome without kicking the seller off the listing wizard.
+    // Stay on the current step — no auto-advance / no scroll jump while the seller is working.
     if (sellerInfo?.businessName) showSellerProfile(sellerInfo, { preserveView: true });
-    showSellerView("listing");
-    const detailsIdx = STEPS.indexOf("details");
-    if (detailsIdx >= 0) {
-      stepIndex = detailsIdx;
-      updateStepUi();
-    }
-    el("view-listing")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    updateCoverStudioUi();
+    setStatus(
+      data.message ||
+        (studioUiEnabled
+          ? "AI filled a draft — use Preview for clean photos/reel, then review before posting."
+          : "AI filled a draft — review each step before posting.")
+    );
   } catch {
     setStatus("Could not reach Sokoni — check your connection and try again.", true);
     checkApiHealth();
