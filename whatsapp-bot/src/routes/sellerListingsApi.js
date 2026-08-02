@@ -136,6 +136,7 @@ router.post("/publish", async (req, res) => {
     videoUrl,
     videoKind,
     draftId,
+    clientPublishId,
   } = req.body || {};
   const imageList = Array.isArray(images)
     ? images
@@ -151,6 +152,7 @@ router.post("/publish", async (req, res) => {
     videoUrl: videoUrl || null,
     videoKind,
     draftId,
+    clientPublishId: clientPublishId || null,
     sessionToken: sellerSessionFromReq(req),
   });
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {

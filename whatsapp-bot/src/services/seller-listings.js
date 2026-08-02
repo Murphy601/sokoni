@@ -364,6 +364,45 @@ async function maybeAutoPushCatalog() {
   }
 }
 
+/** In-memory dedupe so a retried publish (after proxy timeout) does not create a second listing. */
+const recentClientPublishIds = new Map();
+
+function rememberClientPublish(clientPublishId, productId) {
+  const key = String(clientPublishId || "").trim();
+  if (!key || !productId) return;
+  recentClientPublishIds.set(key, { productId, at: Date.now() });
+  // Drop entries older than 30 minutes
+  const cutoff = Date.now() - 30 * 60_000;
+  for (const [k, v] of recentClientPublishIds) {
+    if (v.at < cutoff) recentClientPublishIds.delete(k);
+  }
+}
+
+function findRecentClientPublish(clientPublishId) {
+  const key = String(clientPublishId || "").trim();
+  if (!key) return null;
+  const hit = recentClientPublishIds.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > 30 * 60_000) {
+    recentClientPublishIds.delete(key);
+    return null;
+  }
+  return hit;
+}
+
+/**
+ * Preview already produced CDN clean images + reel — do not re-run Cloudinary on publish
+ * (that was timing out nginx ~60s and causing "network error" + duplicate posts).
+ */
+function hasStudioReadyCdnMedia(publishImages, publishVideo, publishVideoKind) {
+  if (publishVideoKind === "seller") return true;
+  if (publishVideoKind !== "preview") return false;
+  if (!/^https?:\/\//i.test(String(publishVideo || ""))) return false;
+  const list = (publishImages || []).map((u) => String(u || "").trim()).filter(Boolean);
+  if (!list.length) return false;
+  return list.every((u) => /^https?:\/\//i.test(u));
+}
+
 function linkSupplierProduct(supplier, productId) {
   supplier.productIds = [...(supplier.productIds || []), productId];
   const suppliersFile = path.join(DATA_DIR, "suppliers.json");
@@ -669,11 +708,23 @@ export async function publishSellerListing({
   videoUrl = null,
   videoKind = null,
   draftId = null,
+  clientPublishId = null,
   sessionToken,
 }) {
   await loadStore();
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
+
+  const prior = findRecentClientPublish(clientPublishId);
+  if (prior?.productId) {
+    console.log("[seller-listings] duplicate publish token — returning existing", prior.productId);
+    return {
+      productId: prior.productId,
+      status: "live",
+      duplicate: true,
+      message: "Listing already posted — not creating another copy.",
+    };
+  }
 
   const enriched = await enrichManualDraft(draft);
   if (!enriched.name || (!enriched.priceKes && !enriched.sourcePriceKes)) {
@@ -717,9 +768,15 @@ export async function publishSellerListing({
     return { error: "missing_image", message: "Add at least one product photo." };
   }
 
-  // Transform once: clean all photos + build one showcase reel; save CDN URLs in catalog.
-  // Skip when seller uploaded their own phone video.
-  if (
+  // Transform once: clean photos + showcase reel. Prefer CDN URLs from Preview —
+  // re-running Cloudinary here regularly exceeded nginx's ~60s proxy timeout.
+  if (hasStudioReadyCdnMedia(publishImages, publishVideo, publishVideoKind)) {
+    console.log("[seller-listings] using Preview CDN media — skip showcase rebuild", {
+      images: publishImages.length,
+      videoKind: publishVideoKind,
+      videoUrl: String(publishVideo || "").slice(0, 96),
+    });
+  } else if (
     publishVideoKind !== "seller" &&
     isCloudinaryConfigured() &&
     isStudioClipEnabled()
@@ -812,33 +869,49 @@ export async function publishSellerListing({
 
   await unpauseCatalogIfNeeded();
   await rebuildPublicCatalog();
-  await maybeAutoPushCatalog();
 
   const sellerPhone = normalizePhone(phone);
+  // Local scan is fast — keep it in-request. Git push + WhatsApp often exceed proxy timeouts.
   const mod = await runPostPublishModeration(product, { sellerPhone });
 
   if (mod.moderation?.passed === false) {
     await rebuildPublicCatalog();
-    await maybeAutoPushCatalog();
   }
 
-  if (mod.moderation?.passed !== false) {
-    try {
-      await sendText(
-        `${sellerPhone}@c.us`,
-        `✅ *Listing live*\n*${product.name}*\n🆔 \`${productId}\`\n` +
-          `Live on Sokoni — buyer pays KES ${product.priceKes?.toLocaleString()}, you receive KES ${product.sellerNetKes?.toLocaleString()}.`
-      );
-    } catch {}
-  }
+  const liveProduct = mod.product || product;
+  const status = mod.moderation?.passed === false ? "hidden_pending_review" : "live";
+  rememberClientPublish(clientPublishId, productId);
+
+  // Background: push static catalog + WhatsApp — return 201 before nginx cuts the socket.
+  setImmediate(() => {
+    void (async () => {
+      try {
+        await maybeAutoPushCatalog();
+      } catch (err) {
+        console.warn("[seller-listings] background catalog push:", err?.message || err);
+      }
+      if (status !== "live") return;
+      try {
+        await sendText(
+          `${sellerPhone}@c.us`,
+          `✅ *Listing live*\n*${liveProduct.name}*\n🆔 \`${productId}\`\n` +
+            `Live on Sokoni — buyer pays KES ${liveProduct.priceKes?.toLocaleString()}, you receive KES ${liveProduct.sellerNetKes?.toLocaleString()}.`
+        );
+      } catch (err) {
+        console.warn("[seller-listings] background WA notify:", err?.message || err);
+      }
+    })();
+  });
 
   return {
     productId,
-    product: mod.product || product,
-    status: mod.moderation?.passed === false ? "hidden_pending_review" : "live",
+    product: liveProduct,
+    status,
     moderation: mod.moderation,
+    videoUrl: liveProduct.videoUrl || null,
+    videoKind: liveProduct.videoKind || null,
     message:
-      mod.moderation?.passed === false
+      status === "hidden_pending_review"
         ? "Listing posted but hidden pending review — we'll WhatsApp you."
         : "Listing is live on Sokoni.",
   };
@@ -874,6 +947,8 @@ export async function listSellerListings(phone, sessionToken) {
           },
           imageUrl: p.imageUrl,
           images: p.images,
+          videoUrl: p.videoUrl || null,
+          videoKind: p.videoKind || null,
           moderation: p.moderation,
           moderationSummary,
           createdAt: p.publishedAt || null,
