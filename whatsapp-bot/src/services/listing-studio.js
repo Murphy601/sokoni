@@ -1,17 +1,22 @@
 /**
  * AI Photo Studio — cloud background removal (+ optional short product clip).
  * Providers (zero disk/RAM on the bot VM):
- *   - cloudinary  — clean PNG via e_background_removal + optional MP4 via e_zoompan
+ *   - cloudinary  — clean PNG via e_background_removal
  *   - huggingface — image cleanup only (RMBG / Inference)
  *   - photoroom   — image cleanup only (Segment API)
  *   - remote      — POST→PNG microservice (Modal/Render rembg)
+ *
+ * Product clips: always built from the *cleaned* cutout (second Cloudinary upload),
+ * never from the raw phone photo. Default motion: pad + soft shadow + zoompan
+ * (Photoroom-style product spin/zoom feel). HF/Photoroom clean → Cloudinary clip when configured.
  *
  * STUDIO_PROVIDER=auto (default) tries configured providers free-first:
  *   cloudinary → huggingface → photoroom → remote
  * Pin with STUDIO_PROVIDER=cloudinary|huggingface|photoroom|remote|off
  * Optional STUDIO_FALLBACK=<provider> tried if the primary fails.
  *
- * Clips: Cloudinary only (STUDIO_CLIP_ENABLED≠false). HF/Photoroom never produce video.
+ * Clips return a CDN URL by default (avoids huge base64 JSON / OOM on 1GB VMs).
+ * Set STUDIO_CLIP_INLINE=true to also embed data:video base64 (tests / special cases).
  * Failures always keep the original image. Bot boot never depends on studio.
  */
 import crypto from "node:crypto";
@@ -20,6 +25,10 @@ import { generateListingFromImage } from "./listing-generator.js";
 const PHOTOROOM_SEGMENT = "https://sdk.photoroom.com/v1/segment";
 
 const ALL_PROVIDERS = ["cloudinary", "huggingface", "photoroom", "remote"];
+
+/** Photoroom-like clip from a transparent cutout — no background_removal here. */
+const DEFAULT_CLIP_TRANS =
+  "c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_5;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264";
 
 function env(name) {
   return String(process.env[name] || "").trim();
@@ -88,11 +97,10 @@ export function resolveProviderOrder() {
   return configured;
 }
 
-/** Short Ken Burns clips — Cloudinary zoompan only (not HF/Photoroom). */
+/** Short Ken Burns clips — Cloudinary zoompan on the cleaned cutout. */
 export function isStudioClipEnabled() {
   if (env("STUDIO_CLIP_ENABLED") === "false") return false;
-  const order = resolveProviderOrder();
-  return order.includes("cloudinary") && isCloudinaryConfigured();
+  return isCloudinaryConfigured();
 }
 
 export function getStudioMeta() {
@@ -108,13 +116,15 @@ export function getStudioMeta() {
 }
 
 function okResult(buffer, provider, extras = {}) {
+  const hasClip = Boolean(extras.clipBuffer?.length || extras.clipUrl);
   return {
     buffer,
     mimeType: "image/png",
     studioApplied: true,
     provider,
     clipBuffer: extras.clipBuffer || null,
-    clipMimeType: extras.clipBuffer ? extras.clipMimeType || "video/mp4" : null,
+    clipUrl: extras.clipUrl || null,
+    clipMimeType: hasClip ? extras.clipMimeType || "video/mp4" : null,
   };
 }
 
@@ -126,6 +136,7 @@ function failResult(buffer, mimeType, reason, provider = null) {
     reason,
     provider,
     clipBuffer: null,
+    clipUrl: null,
     clipMimeType: null,
   };
 }
@@ -143,6 +154,22 @@ function cloudinarySign(params, apiSecret) {
 /** Sleep helper for Cloudinary 423 (derived still generating). */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Clip transform applied to the cleaned cutout only.
+ * Strips legacy e_background_removal from CLOUDINARY_CLIP_TRANS (old one-shot chains).
+ */
+export function resolveClipTransform() {
+  let t =
+    env("CLOUDINARY_CLIP_TRANS") ||
+    DEFAULT_CLIP_TRANS;
+  t = t
+    .replace(/(^|\/)e_background_removal(\/|$)/gi, "$1")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^\/|\/$/g, "");
+  if (!t) t = DEFAULT_CLIP_TRANS;
+  return t;
 }
 
 /**
@@ -194,38 +221,97 @@ async function fetchCloudinaryDerived(url, opts = {}) {
 }
 
 /**
- * Upload once → clean PNG (+ optional zoompan MP4) → optional destroy.
- * Uses eager transforms when possible; delivery URLs retry on 423.
- * Clip is best-effort: clean image still returns if zoompan fails.
- * @param {Buffer} buffer
- * @param {string} mimeType
+ * Wait until a derived URL is ready without keeping the body in RAM (1GB VM safe).
  */
-async function removeBackgroundCloudinary(buffer, mimeType) {
+async function waitCloudinaryDerivedReady(url, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 120_000;
+  const attempts =
+    opts.attempts ||
+    Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) ||
+    8;
+  const label = opts.label || "derived";
+
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const head = await fetch(url, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(Math.min(timeoutMs, 30_000)),
+      });
+      if (head.ok) return true;
+      if (head.status !== 420 && head.status !== 423 && head.status !== 405) {
+        // Fall through to GET for CDNs that dislike HEAD
+      } else if (head.status === 420 || head.status === 423) {
+        console.warn(
+          `[listing-studio] Cloudinary ${label} pending (${head.status}) — retry ${i + 1}/${attempts}`
+        );
+        await sleep(1500 + i * 500);
+        continue;
+      }
+    } catch {
+      // HEAD unsupported / network — try GET
+    }
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (res.ok) {
+      try {
+        await res.body?.cancel?.();
+      } catch {
+        /* ignore */
+      }
+      return true;
+    }
+    if (res.status !== 420 && res.status !== 423) {
+      const lastText = await res.text().catch(() => "");
+      console.warn(
+        `[listing-studio] Cloudinary ${label} failed:`,
+        res.status,
+        lastText.slice(0, 200)
+      );
+      return false;
+    }
+    console.warn(
+      `[listing-studio] Cloudinary ${label} pending (${res.status}) — retry ${i + 1}/${attempts}`
+    );
+    await sleep(1500 + i * 500);
+  }
+  return false;
+}
+
+function scheduleCloudinaryDestroy(publicId, cloud, apiKey, apiSecret) {
+  if (env("CLOUDINARY_DELETE_AFTER") === "false") return;
+  const ms = Number(env("CLOUDINARY_DELETE_MS")) || 180_000;
+  setTimeout(() => {
+    void cloudinaryDestroy(publicId, cloud, apiKey, apiSecret).catch((err) =>
+      console.warn("[listing-studio] Cloudinary destroy:", err.message)
+    );
+  }, ms);
+}
+
+/**
+ * Signed image upload with optional eager transforms.
+ * @returns {Promise<{ ok: true, publicId: string, uploaded: object } | { ok: false, authFailed?: boolean, status: number, errText: string }>}
+ */
+async function cloudinaryUploadImage(buffer, mimeType, { publicId, folder, eager, filename }) {
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const apiKey = env("CLOUDINARY_API_KEY");
   const apiSecret = env("CLOUDINARY_API_SECRET");
-  const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
   const timestamp = Math.floor(Date.now() / 1000);
-  const publicId = `listing_${timestamp}_${crypto.randomBytes(4).toString("hex")}`;
-  const wantClip = env("STUDIO_CLIP_ENABLED") !== "false";
-  const bgEffect = env("CLOUDINARY_BG_EFFECT") || "e_background_removal";
-  const clipTrans =
-    env("CLOUDINARY_CLIP_TRANS") ||
-    `${bgEffect}/b_rgb:FFF8F0/e_zoompan:mode_ztc;maxzoom_1.25;du_5;fps_25`;
-  const eagerClean = `${bgEffect}/f_png`;
-  const eager = wantClip ? `${eagerClean}|${clipTrans}/f_mp4` : eagerClean;
-
-  const signParams = { eager, folder, public_id: publicId, timestamp };
+  const signParams = { folder, public_id: publicId, timestamp };
+  if (eager) signParams.eager = eager;
   const signature = cloudinarySign(signParams, apiSecret);
 
   const form = new FormData();
-  form.append("file", new Blob([buffer], { type: mimeType || "image/jpeg" }), "listing.jpg");
+  form.append(
+    "file",
+    new Blob([buffer], { type: mimeType || "image/jpeg" }),
+    filename || "listing.jpg"
+  );
   form.append("api_key", apiKey);
   form.append("timestamp", String(timestamp));
   form.append("signature", signature);
   form.append("folder", folder);
   form.append("public_id", publicId);
-  form.append("eager", eager);
+  if (eager) form.append("eager", eager);
 
   const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, {
     method: "POST",
@@ -236,25 +322,133 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
   if (!uploadRes.ok) {
     const errText = await uploadRes.text().catch(() => "");
     console.warn("[listing-studio] Cloudinary upload failed:", uploadRes.status, errText.slice(0, 200));
-    if (
+    const authFailed =
       uploadRes.status === 401 ||
-      /api_secret mismatch|invalid signature|unauthorized/i.test(errText)
-    ) {
-      return failResult(buffer, mimeType, "auth_failed", "cloudinary");
-    }
-    return failResult(buffer, mimeType, "api_failed", "cloudinary");
+      /api_secret mismatch|invalid signature|unauthorized/i.test(errText);
+    return { ok: false, authFailed, status: uploadRes.status, errText };
   }
 
   const uploaded = await uploadRes.json().catch(() => ({}));
-  const id = uploaded.public_id || `${folder}/${publicId}`;
-  const cleanUrl =
-    uploaded.eager?.[0]?.secure_url ||
-    uploaded.eager?.[0]?.url ||
-    `https://res.cloudinary.com/${cloud}/image/upload/${eagerClean}/${id}`;
+  return {
+    ok: true,
+    publicId: uploaded.public_id || `${folder}/${publicId}`,
+    uploaded,
+    cloud,
+    apiKey,
+    apiSecret,
+  };
+}
+
+/**
+ * Build a short product MP4 from an already-cleaned cutout PNG.
+ * @param {Buffer} cleanPng
+ * @returns {Promise<{ clipUrl: string, clipBuffer: Buffer|null }|null>}
+ */
+async function renderProductClipFromClean(cleanPng) {
+  if (!cleanPng?.length || !isCloudinaryConfigured()) return null;
+  if (env("STUDIO_CLIP_ENABLED") === "false") return null;
+
+  const cloud = env("CLOUDINARY_CLOUD_NAME");
+  const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
+  const stamp = Math.floor(Date.now() / 1000);
+  const publicId = `clip_${stamp}_${crypto.randomBytes(4).toString("hex")}`;
+  const clipTrans = resolveClipTransform();
+  const eager = `${clipTrans}/f_mp4`;
+
+  const up = await cloudinaryUploadImage(cleanPng, "image/png", {
+    publicId,
+    folder,
+    eager,
+    filename: "clean.png",
+  });
+  if (!up.ok) return null;
+
+  const id = up.publicId;
   const clipUrl =
-    uploaded.eager?.[1]?.secure_url ||
-    uploaded.eager?.[1]?.url ||
-    `https://res.cloudinary.com/${cloud}/image/upload/${clipTrans}/f_mp4/${id}.mp4`;
+    up.uploaded.eager?.[0]?.secure_url ||
+    up.uploaded.eager?.[0]?.url ||
+    `https://res.cloudinary.com/${cloud}/image/upload/${eager}/${id}.mp4`;
+
+  scheduleCloudinaryDestroy(id, cloud, up.apiKey, up.apiSecret);
+
+  const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 10;
+  const inline = env("STUDIO_CLIP_INLINE") === "true";
+
+  if (inline) {
+    const clipBuffer = await fetchCloudinaryDerived(clipUrl, {
+      label: "clip",
+      timeoutMs: 120_000,
+      attempts: Math.max(4, Math.min(derivedAttempts, 8)),
+    });
+    if (!clipBuffer || clipBuffer.length <= 256) {
+      console.warn("[listing-studio] Cloudinary clip too small / missing — skipping");
+      return null;
+    }
+    return { clipUrl, clipBuffer };
+  }
+
+  const ready = await waitCloudinaryDerivedReady(clipUrl, {
+    label: "clip",
+    timeoutMs: 120_000,
+    attempts: Math.max(4, Math.min(derivedAttempts, 8)),
+  });
+  if (!ready) {
+    console.warn("[listing-studio] Cloudinary clip not ready — skipping");
+    return null;
+  }
+  return { clipUrl, clipBuffer: null };
+}
+
+/**
+ * After any provider cleans the cover, optionally render a Cloudinary clip from that PNG.
+ */
+async function maybeAttachProductClip(result) {
+  if (!result?.studioApplied) return result;
+  if (result.clipUrl || result.clipBuffer?.length) return result;
+  if (!isStudioClipEnabled()) return result;
+  try {
+    const clip = await renderProductClipFromClean(result.buffer);
+    if (!clip?.clipUrl && !clip?.clipBuffer?.length) return result;
+    return okResult(result.buffer, result.provider, {
+      clipUrl: clip.clipUrl || null,
+      clipBuffer: clip.clipBuffer || null,
+      clipMimeType: "video/mp4",
+    });
+  } catch (err) {
+    console.warn("[listing-studio] clip from clean failed:", err.message);
+    return result;
+  }
+}
+
+/**
+ * Upload original → clean PNG only (clip is a second pass on the cutout).
+ * @param {Buffer} buffer
+ * @param {string} mimeType
+ */
+async function removeBackgroundCloudinary(buffer, mimeType) {
+  const cloud = env("CLOUDINARY_CLOUD_NAME");
+  const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const publicId = `listing_${timestamp}_${crypto.randomBytes(4).toString("hex")}`;
+  const bgEffect = env("CLOUDINARY_BG_EFFECT") || "e_background_removal";
+  const eagerClean = `${bgEffect}/f_png`;
+
+  const up = await cloudinaryUploadImage(buffer, mimeType, {
+    publicId,
+    folder,
+    eager: eagerClean,
+    filename: "listing.jpg",
+  });
+  if (!up.ok) {
+    if (up.authFailed) return failResult(buffer, mimeType, "auth_failed", "cloudinary");
+    return failResult(buffer, mimeType, "api_failed", "cloudinary");
+  }
+
+  const id = up.publicId;
+  const cleanUrl =
+    up.uploaded.eager?.[0]?.secure_url ||
+    up.uploaded.eager?.[0]?.url ||
+    `https://res.cloudinary.com/${cloud}/image/upload/${eagerClean}/${id}`;
 
   try {
     const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 10;
@@ -264,30 +458,9 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
       attempts: derivedAttempts,
     });
     if (!clean?.length) return failResult(buffer, mimeType, "api_failed", "cloudinary");
-
-    let clipBuffer = null;
-    if (wantClip) {
-      clipBuffer = await fetchCloudinaryDerived(clipUrl, {
-        label: "clip",
-        timeoutMs: 120_000,
-        attempts: Math.max(4, Math.min(derivedAttempts, 8)),
-      });
-      if (clipBuffer && clipBuffer.length <= 256) {
-        console.warn("[listing-studio] Cloudinary clip too small — skipping");
-        clipBuffer = null;
-      }
-    }
-
-    return okResult(clean, "cloudinary", { clipBuffer, clipMimeType: "video/mp4" });
+    return okResult(clean, "cloudinary");
   } finally {
-    // Keep asset briefly so CDN can finish serving derived versions, then delete.
-    if (env("CLOUDINARY_DELETE_AFTER") !== "false") {
-      setTimeout(() => {
-        void cloudinaryDestroy(id, cloud, apiKey, apiSecret).catch((err) =>
-          console.warn("[listing-studio] Cloudinary destroy:", err.message)
-        );
-      }, 15_000);
-    }
+    scheduleCloudinaryDestroy(id, cloud, up.apiKey, up.apiSecret);
   }
 }
 
@@ -411,6 +584,7 @@ const PROVIDER_FN = {
 
 /**
  * Background removal only (no AI draft). Tries provider chain; keeps original on failure.
+ * When clips are enabled, builds the MP4 from the cleaned cutout via Cloudinary.
  * @param {Buffer} buffer
  * @param {string} mimeType
  * @returns {Promise<{ buffer: Buffer, mimeType: string, studioApplied: boolean, reason?: string, provider?: string|null }>}
@@ -430,7 +604,9 @@ export async function removeBackground(buffer, mimeType = "image/jpeg") {
     if (!fn) continue;
     try {
       const result = await fn(buffer, mimeType);
-      if (result.studioApplied) return result;
+      if (result.studioApplied) {
+        return maybeAttachProductClip(result);
+      }
       lastReason = result.reason || lastReason;
       console.warn(`[listing-studio] ${provider} skipped (${result.reason}) — trying next`);
     } catch (err) {
@@ -440,6 +616,18 @@ export async function removeBackground(buffer, mimeType = "image/jpeg") {
   }
 
   return failResult(buffer, mimeType, lastReason);
+}
+
+function formatClipPayload(cleaned) {
+  const clipUrl = cleaned.clipUrl || null;
+  const hasBuffer = Boolean(cleaned.clipBuffer?.length);
+  const clipApplied = Boolean(clipUrl || hasBuffer);
+  const inline = env("STUDIO_CLIP_INLINE") === "true";
+  let clipVideoBase64 = null;
+  if (inline && hasBuffer) {
+    clipVideoBase64 = `data:${cleaned.clipMimeType || "video/mp4"};base64,${cleaned.clipBuffer.toString("base64")}`;
+  }
+  return { clipApplied, clipVideoUrl: clipUrl, clipVideoBase64 };
 }
 
 /**
@@ -463,6 +651,7 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
       studioApplied: false,
       cleanImageBase64: null,
       clipVideoBase64: null,
+      clipVideoUrl: null,
       clipApplied: false,
       reason: cleaned.reason || "api_failed",
       provider: cleaned.provider || null,
@@ -470,18 +659,12 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
     };
   }
 
-  const clipApplied = Boolean(cleaned.clipBuffer?.length);
-  const clipVideoBase64 = clipApplied
-    ? `data:${cleaned.clipMimeType || "video/mp4"};base64,${cleaned.clipBuffer.toString("base64")}`
-    : null;
+  const { clipApplied, clipVideoUrl, clipVideoBase64 } = formatClipPayload(cleaned);
 
   let message = "Background cleaned — toggle below to switch back to the original.";
   if (clipApplied) {
-    message =
-      cleaned.provider === "cloudinary"
-        ? "Background cleaned + 5s product clip ready — use the toggles below."
-        : message;
-  } else if (cleaned.provider === "cloudinary" && isStudioClipEnabled()) {
+    message = "Background cleaned + product clip from your cutout — use the toggles below.";
+  } else if (isStudioClipEnabled()) {
     message = "Background cleaned — product clip unavailable this time; cover is ready.";
   }
 
@@ -489,6 +672,7 @@ export async function previewStudioClean(buffer, mimeType = "image/jpeg") {
     studioApplied: true,
     cleanImageBase64: `data:image/png;base64,${cleaned.buffer.toString("base64")}`,
     clipVideoBase64,
+    clipVideoUrl,
     clipApplied,
     reason: null,
     provider: cleaned.provider || null,
@@ -509,6 +693,7 @@ export async function processListingWithStudio(buffer, mimeType, caption = "", o
   let studioApplied = false;
   let studioProvider = null;
   let clipVideoBase64 = null;
+  let clipVideoUrl = null;
   let clipApplied = false;
 
   if (!opts.skipStudio) {
@@ -517,10 +702,10 @@ export async function processListingWithStudio(buffer, mimeType, caption = "", o
     workMime = cleaned.mimeType;
     studioApplied = cleaned.studioApplied;
     studioProvider = cleaned.provider || null;
-    clipApplied = Boolean(cleaned.clipBuffer?.length);
-    clipVideoBase64 = clipApplied
-      ? `data:${cleaned.clipMimeType || "video/mp4"};base64,${cleaned.clipBuffer.toString("base64")}`
-      : null;
+    const clip = formatClipPayload(cleaned);
+    clipApplied = clip.clipApplied;
+    clipVideoBase64 = clip.clipVideoBase64;
+    clipVideoUrl = clip.clipVideoUrl;
   }
 
   const draft = await generateListingFromImage(workBuffer, workMime, caption);
@@ -534,5 +719,6 @@ export async function processListingWithStudio(buffer, mimeType, caption = "", o
       : null,
     clipApplied,
     clipVideoBase64,
+    clipVideoUrl,
   };
 }

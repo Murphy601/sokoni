@@ -622,21 +622,43 @@ function refreshCoverPreview() {
   }
 }
 
-function applyCoverStudioResult(cleanImageBase64, message, clipVideoBase64 = null) {
+/**
+ * Accept studio clip as CDN URL and/or data URL. Preview uses URL immediately;
+ * we cache a data URL in the browser so publish doesn't re-hit Cloudinary / the bot.
+ */
+async function ingestStudioClip(clipVideoUrl, clipVideoBase64 = null) {
+  const src = clipVideoBase64 || clipVideoUrl;
+  if (!src) return false;
+  studioClipBase64 = src;
+  if (!videoFile) {
+    preferStudioClip = true;
+    const preferClip = el("studio-prefer-clip");
+    if (preferClip) preferClip.checked = true;
+  }
+  refreshStudioClipPreview();
+  if (clipVideoBase64 || !clipVideoUrl || String(src).startsWith("data:")) {
+    return true;
+  }
+  try {
+    const res = await fetch(clipVideoUrl);
+    if (!res.ok) return true;
+    const blob = await res.blob();
+    if (!blob || blob.size < 256) return true;
+    studioClipBase64 = await readFileAsDataUrl(blob);
+    refreshStudioClipPreview();
+  } catch {
+    // Keep CDN URL for preview; publish may still work if the URL is live.
+  }
+  return true;
+}
+
+function applyCoverStudioResult(cleanImageBase64, message, clipVideoBase64 = null, clipVideoUrl = null) {
   if (!cleanImageBase64) return;
   coverCleanBase64 = cleanImageBase64;
   preferCleanCover = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
-  if (clipVideoBase64) {
-    studioClipBase64 = clipVideoBase64;
-    if (!videoFile) {
-      preferStudioClip = true;
-      const preferClip = el("studio-prefer-clip");
-      if (preferClip) preferClip.checked = true;
-    }
-    refreshStudioClipPreview();
-  }
+  void ingestStudioClip(clipVideoUrl, clipVideoBase64);
   refreshCoverPreview();
   const status = el("studio-status");
   if (status) status.textContent = message || "Background cleaned.";
@@ -644,7 +666,20 @@ function applyCoverStudioResult(cleanImageBase64, message, clipVideoBase64 = nul
 
 async function resolveListingVideoBase64() {
   if (videoFile) return readFileAsDataUrl(videoFile);
-  if (preferStudioClip && studioClipBase64) return studioClipBase64;
+  if (preferStudioClip && studioClipBase64) {
+    if (String(studioClipBase64).startsWith("data:")) return studioClipBase64;
+    // CDN URL still in memory — fetch once for publish payload.
+    try {
+      const res = await fetch(studioClipBase64);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!blob?.size) return null;
+      studioClipBase64 = await readFileAsDataUrl(blob);
+      return studioClipBase64;
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
@@ -690,7 +725,8 @@ async function previewStudioClean() {
       applyCoverStudioResult(
         data.cleanImageBase64,
         data.message,
-        data.clipApplied ? data.clipVideoBase64 : null
+        data.clipApplied ? data.clipVideoBase64 : null,
+        data.clipApplied ? data.clipVideoUrl : null
       );
       setStatus(data.message || "Background cleaned — review before posting.");
     } else {
@@ -767,9 +803,17 @@ async function maybeAutoGenerate() {
     if (data.studioApplied && data.cleanImageBase64) {
       applyCoverStudioResult(
         data.cleanImageBase64,
-        "AI cleaned background + filled draft — review each step."
+        data.clipApplied
+          ? "AI cleaned background + product clip + draft — review each step."
+          : "AI cleaned background + filled draft — review each step.",
+        data.clipApplied ? data.clipVideoBase64 : null,
+        data.clipApplied ? data.clipVideoUrl : null
       );
-      setStatus("AI cleaned background + filled draft — review each step.");
+      setStatus(
+        data.clipApplied
+          ? "AI cleaned background + product clip + draft — review each step."
+          : "AI cleaned background + filled draft — review each step."
+      );
     } else {
       setStatus(data.message || "AI filled a draft — review each step before posting.");
       updateCoverStudioUi();
