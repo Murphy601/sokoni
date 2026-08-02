@@ -59,7 +59,7 @@ Reply with `1`, `2`, etc. for menu choices (not buttons).
 | `CATALOG_VISION_FALLBACKS` | Optional vision model fallbacks |
 | `GEMINI_API_KEY` | Optional Google Gemini vision fallback for listings |
 | `GEMINI_VISION_MODEL` | Gemini vision model (default: `gemini-2.5-flash`) |
-| `PHOTOROOM_API_KEY` | Optional background cleanup for listing photos |
+| `CLOUDINARY_*` / `HUGGINGFACE_API_KEY` / `PHOTOROOM_API_KEY` | Optional cloud background cleanup (see `docs/MEDIA_STUDIO_PLAN.md`) |
 | `CATALOG_AUTO_PUSH` | `true` to git-push catalog rebuild after publish |
 
 ### AI model choice (English / Kiswahili / Sheng)

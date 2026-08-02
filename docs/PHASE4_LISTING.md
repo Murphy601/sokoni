@@ -68,7 +68,7 @@ GET /api/seller/listings/meta
   → visionModel, visionProvider, geminiVisionEnabled, studioEnabled, shippingTiers, …
 ```
 
-AI keys are **optional** for listing: caption/manual fill still works. Photo vision needs `OPENAI_API_KEY` (and optionally `GEMINI_API_KEY`). Background cleanup needs `PHOTOROOM_API_KEY` (`studioEnabled` on meta).
+AI keys are **optional** for listing: caption/manual fill still works. Photo vision needs `OPENAI_API_KEY` (and optionally `GEMINI_API_KEY`). Background cleanup needs any cloud studio provider (`CLOUDINARY_*`, `HUGGINGFACE_API_KEY`, or `PHOTOROOM_API_KEY`) — see [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
 
 When studio is enabled, sellers can **Preview clean background** on the cover, toggle **Use cleaned cover when posting**, and the publish payload uses the cleaned image when the toggle is on.
 
@@ -114,11 +114,11 @@ curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.to
 Manual:
 1. Seller dashboard → My listings shows reason + hint when status is `hidden`
 2. Open `/admin-seller-listings.html?token=…` → restore / keep removed
-3. With `PHOTOROOM_API_KEY` set: cover upload → Preview clean background → toggle original vs cleaned → post uses the choice
+3. With studio configured (Cloudinary / HF / Photoroom): cover upload → Preview clean background → toggle original vs cleaned → post uses the choice
 
-## Media studio (Photoroom)
+## Media studio (cloud BG removal)
 
-Optional cover background cleanup via Photoroom when `PHOTOROOM_API_KEY` is set. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
+Optional cover background cleanup via Cloudinary, Hugging Face, or Photoroom — **not** self-hosted rembg. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
 
 ## Next: Phase 5.1
 
