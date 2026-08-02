@@ -6,6 +6,7 @@ import {
   listConfiguredProviders,
   resolveProviderOrder,
   resolveClipTransform,
+  resolveClipTransformFromOriginal,
   removeBackground,
   previewStudioClean,
   getStudioMeta,
@@ -70,6 +71,10 @@ async function main() {
   if (!/e_shadow|zoompan|c_pad/i.test(resolveClipTransform())) {
     throw new Error(`default clip transform unexpected: ${resolveClipTransform()}`);
   }
+  const fromOriginal = resolveClipTransformFromOriginal();
+  if (!/^e_background_removal\//i.test(fromOriginal) || !/zoompan/i.test(fromOriginal)) {
+    throw new Error(`clip from original must chain bg-removal first: ${fromOriginal}`);
+  }
 
   // Photoroom — image only (no Cloudinary → no clip)
   process.env.PHOTOROOM_API_KEY = "test-key";
@@ -86,7 +91,7 @@ async function main() {
     globalThis.fetch = origFetch;
   }
 
-  // Cloudinary clean + clip-from-clean (URL, no inline base64)
+  // Cloudinary clean + clip chained AFTER bg-removal (same asset, not raw zoompan)
   clearStudioEnv();
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
   process.env.CLOUDINARY_API_KEY = "key";
@@ -103,19 +108,24 @@ async function main() {
     const method = String(init.method || "GET").toUpperCase();
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       uploadCount += 1;
-      const id = uploadCount === 1 ? "sokoni-studio/listing_x" : "sokoni-studio/clip_y";
-      return new Response(JSON.stringify({ public_id: id }), {
+      return new Response(JSON.stringify({ public_id: "sokoni-studio/listing_x" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
     }
     if (method === "HEAD" && (u.includes("f_mp4") || u.includes(".mp4"))) {
+      if (!/e_background_removal/i.test(u)) {
+        return new Response("raw zoompan refused", { status: 500 });
+      }
       return new Response(null, { status: 200 });
     }
     if (u.includes("f_png") || (u.includes("e_background_removal") && !u.includes("f_mp4"))) {
       return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
     }
     if (u.includes("f_mp4") || u.includes(".mp4")) {
+      if (!/e_background_removal/i.test(u)) {
+        return new Response("raw zoompan refused", { status: 500 });
+      }
       return new Response(fakeMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
     }
     return new Response("nope", { status: 500 });
@@ -136,11 +146,11 @@ async function main() {
         })}`
       );
     }
-    if (uploadCount < 2) {
-      throw new Error(`expected clean upload + clip upload, got ${uploadCount}`);
+    if (uploadCount !== 1) {
+      throw new Error(`expected one Cloudinary upload with eager clean+clip, got ${uploadCount}`);
     }
-    if (/e_background_removal/i.test(withClip.clipUrl)) {
-      throw new Error(`clip URL must not re-run bg removal: ${withClip.clipUrl}`);
+    if (!/e_background_removal/i.test(withClip.clipUrl)) {
+      throw new Error(`clip URL must chain bg-removal before motion: ${withClip.clipUrl}`);
     }
 
     const preview = await previewStudioClean(tiny, "image/jpeg");
@@ -168,16 +178,18 @@ async function main() {
     const u = String(url);
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       uploadCount += 1;
-      return new Response(JSON.stringify({ public_id: `sokoni-studio/z${uploadCount}` }), {
+      return new Response(JSON.stringify({ public_id: "sokoni-studio/z1" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (u.includes("e_background_removal") || (u.includes("f_png") && !u.includes("f_mp4"))) {
-      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
-    }
+    // MP4 first — clip URLs also contain e_background_removal
     if (u.includes("f_mp4") || u.includes(".mp4")) {
+      if (!/e_background_removal/i.test(u)) return new Response("raw", { status: 500 });
       return new Response(fakeMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
+    }
+    if (u.includes("e_background_removal") || u.includes("f_png")) {
+      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
     }
     return new Response("nope", { status: 500 });
   };

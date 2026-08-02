@@ -12,7 +12,7 @@
 | **Photoroom** | Yes — Segment API | Via Cloudinary when configured (clip from Photoroom PNG) |
 | **Remote** | Yes — POST→PNG microservice | Via Cloudinary when configured |
 
-**Clip always starts from the cleaned photo**, not the raw phone shot — same idea as Photoroom product videos (studio pad, soft shadow, motion). Default length is **~4s** (`du_4`) so grid teasers stay snappy.
+**Clip always starts from the cleaned cutout**, never zoompan on the raw phone shot. Cloudinary chains `e_background_removal` → pad/shadow/zoompan on the same upload. Photoroom/HF clean PNGs are re-uploaded as cutouts (motion only). Default length is **~4s** (`du_4`).
 
 API responses prefer a **CDN `clipVideoUrl`** (no multi‑MB base64 through the bot). The sell page caches the clip in the browser for publish. That keeps the 1GB VM from OOM / “Can’t reach Sokoni” after studio.
 

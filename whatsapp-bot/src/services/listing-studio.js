@@ -6,9 +6,9 @@
  *   - photoroom   — image cleanup only (Segment API)
  *   - remote      — POST→PNG microservice (Modal/Render rembg)
  *
- * Product clips: always built from the *cleaned* cutout (second Cloudinary upload),
- * never from the raw phone photo. Default motion: pad + soft shadow + zoompan
- * (Photoroom-style product spin/zoom feel). HF/Photoroom clean → Cloudinary clip when configured.
+ * Product clips: always from the cleaned cutout — Cloudinary chains
+ * e_background_removal → pad/shadow/zoompan (never zoompan the raw photo).
+ * HF/Photoroom clean PNGs → re-upload cutout + motion only.
  *
  * STUDIO_PROVIDER=auto (default) tries configured providers free-first:
  *   cloudinary → huggingface → photoroom → remote
@@ -158,8 +158,8 @@ function sleep(ms) {
 }
 
 /**
- * Clip transform applied to the cleaned cutout only.
- * Strips legacy e_background_removal from CLOUDINARY_CLIP_TRANS (old one-shot chains).
+ * Motion/pad/shadow segment only (no bg removal).
+ * Strips legacy e_background_removal from CLOUDINARY_CLIP_TRANS.
  */
 export function resolveClipTransform() {
   let t =
@@ -171,6 +171,33 @@ export function resolveClipTransform() {
     .replace(/^\/|\/$/g, "");
   if (!t) t = DEFAULT_CLIP_TRANS;
   return t;
+}
+
+/**
+ * Full Cloudinary clip chain from an *original* upload:
+ * background removal first, then pad/shadow/zoompan — never zoompan the raw photo.
+ */
+export function resolveClipTransformFromOriginal() {
+  const bgEffect = env("CLOUDINARY_BG_EFFECT") || "e_background_removal";
+  const motion = resolveClipTransform();
+  return `${bgEffect}/${motion}`;
+}
+
+function isPngBuffer(buf) {
+  return Boolean(
+    buf &&
+      buf.length >= 8 &&
+      buf[0] === 0x89 &&
+      buf[1] === 0x50 &&
+      buf[2] === 0x4e &&
+      buf[3] === 0x47
+  );
+}
+
+/** FormData-safe binary part (Node Buffer → Blob). */
+function binaryBlob(buffer, mimeType, filename) {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  return new Blob([bytes], { type: mimeType || "application/octet-stream" });
 }
 
 /**
@@ -304,7 +331,7 @@ async function cloudinaryUploadImage(buffer, mimeType, { publicId, folder, eager
   const form = new FormData();
   form.append(
     "file",
-    new Blob([buffer], { type: mimeType || "image/jpeg" }),
+    binaryBlob(buffer, mimeType || "image/jpeg", filename || "listing.jpg"),
     filename || "listing.jpg"
   );
   form.append("api_key", apiKey);
@@ -341,18 +368,59 @@ async function cloudinaryUploadImage(buffer, mimeType, { publicId, folder, eager
 }
 
 /**
- * Build a short product MP4 from an already-cleaned cutout PNG.
+ * Wait for a clip derived URL; optionally download bytes when STUDIO_CLIP_INLINE=true.
+ * @returns {Promise<{ clipUrl: string, clipBuffer: Buffer|null }|null>}
+ */
+async function finalizeClipUrl(clipUrl) {
+  if (!clipUrl) return null;
+  const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 10;
+  const inline = env("STUDIO_CLIP_INLINE") === "true";
+  const attempts = Math.max(4, Math.min(derivedAttempts, 8));
+
+  if (inline) {
+    const clipBuffer = await fetchCloudinaryDerived(clipUrl, {
+      label: "clip",
+      timeoutMs: 120_000,
+      attempts,
+    });
+    if (!clipBuffer || clipBuffer.length <= 256) {
+      console.warn("[listing-studio] Cloudinary clip too small / missing — skipping");
+      return null;
+    }
+    return { clipUrl, clipBuffer };
+  }
+
+  const ready = await waitCloudinaryDerivedReady(clipUrl, {
+    label: "clip",
+    timeoutMs: 120_000,
+    attempts,
+  });
+  if (!ready) {
+    console.warn("[listing-studio] Cloudinary clip not ready — skipping");
+    return null;
+  }
+  return { clipUrl, clipBuffer: null };
+}
+
+/**
+ * Build a short product MP4 from an already-cleaned cutout PNG (Photoroom/HF/remote).
+ * Never applies zoompan to a raw phone photo — refuses non-PNG buffers.
  * @param {Buffer} cleanPng
  * @returns {Promise<{ clipUrl: string, clipBuffer: Buffer|null }|null>}
  */
 async function renderProductClipFromClean(cleanPng) {
   if (!cleanPng?.length || !isCloudinaryConfigured()) return null;
   if (env("STUDIO_CLIP_ENABLED") === "false") return null;
+  if (!isPngBuffer(cleanPng)) {
+    console.warn("[listing-studio] refusing clip — source is not a cleaned PNG cutout");
+    return null;
+  }
 
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const folder = env("CLOUDINARY_FOLDER") || "sokoni-studio";
   const stamp = Math.floor(Date.now() / 1000);
   const publicId = `clip_${stamp}_${crypto.randomBytes(4).toString("hex")}`;
+  // Cutout already has transparency — motion only, no second bg-removal.
   const clipTrans = resolveClipTransform();
   const eager = `${clipTrans}/f_mp4`;
 
@@ -371,42 +439,19 @@ async function renderProductClipFromClean(cleanPng) {
     `https://res.cloudinary.com/${cloud}/image/upload/${eager}/${id}.mp4`;
 
   scheduleCloudinaryDestroy(id, cloud, up.apiKey, up.apiSecret);
-
-  const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 10;
-  const inline = env("STUDIO_CLIP_INLINE") === "true";
-
-  if (inline) {
-    const clipBuffer = await fetchCloudinaryDerived(clipUrl, {
-      label: "clip",
-      timeoutMs: 120_000,
-      attempts: Math.max(4, Math.min(derivedAttempts, 8)),
-    });
-    if (!clipBuffer || clipBuffer.length <= 256) {
-      console.warn("[listing-studio] Cloudinary clip too small / missing — skipping");
-      return null;
-    }
-    return { clipUrl, clipBuffer };
-  }
-
-  const ready = await waitCloudinaryDerivedReady(clipUrl, {
-    label: "clip",
-    timeoutMs: 120_000,
-    attempts: Math.max(4, Math.min(derivedAttempts, 8)),
-  });
-  if (!ready) {
-    console.warn("[listing-studio] Cloudinary clip not ready — skipping");
-    return null;
-  }
-  return { clipUrl, clipBuffer: null };
+  return finalizeClipUrl(clipUrl);
 }
 
 /**
- * After any provider cleans the cover, optionally render a Cloudinary clip from that PNG.
+ * After non-Cloudinary cleanup, render a clip from the cleaned PNG cutout.
+ * Cloudinary path attaches the clip itself (bg-removal → zoompan chain).
  */
 async function maybeAttachProductClip(result) {
   if (!result?.studioApplied) return result;
   if (result.clipUrl || result.clipBuffer?.length) return result;
   if (!isStudioClipEnabled()) return result;
+  // Cloudinary already chained clip from the cleaned derived image.
+  if (result.provider === "cloudinary") return result;
   try {
     const clip = await renderProductClipFromClean(result.buffer);
     if (!clip?.clipUrl && !clip?.clipBuffer?.length) return result;
@@ -422,7 +467,8 @@ async function maybeAttachProductClip(result) {
 }
 
 /**
- * Upload original → clean PNG only (clip is a second pass on the cutout).
+ * Upload original once → cleaned PNG + clip chained AFTER background removal.
+ * Clip transform is never applied to the raw photo alone.
  * @param {Buffer} buffer
  * @param {string} mimeType
  */
@@ -432,12 +478,16 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
   const timestamp = Math.floor(Date.now() / 1000);
   const publicId = `listing_${timestamp}_${crypto.randomBytes(4).toString("hex")}`;
   const bgEffect = env("CLOUDINARY_BG_EFFECT") || "e_background_removal";
+  const wantClip = env("STUDIO_CLIP_ENABLED") !== "false";
   const eagerClean = `${bgEffect}/f_png`;
+  // Preview clip = cutout first, then pad/shadow/zoompan (not zoompan on original).
+  const eagerClip = `${resolveClipTransformFromOriginal()}/f_mp4`;
+  const eager = wantClip ? `${eagerClean}|${eagerClip}` : eagerClean;
 
   const up = await cloudinaryUploadImage(buffer, mimeType, {
     publicId,
     folder,
-    eager: eagerClean,
+    eager,
     filename: "listing.jpg",
   });
   if (!up.ok) {
@@ -450,6 +500,10 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
     up.uploaded.eager?.[0]?.secure_url ||
     up.uploaded.eager?.[0]?.url ||
     `https://res.cloudinary.com/${cloud}/image/upload/${eagerClean}/${id}`;
+  // Always use an explicit bg-removal → motion chain (never zoompan the raw upload).
+  const clipUrl = wantClip
+    ? `https://res.cloudinary.com/${cloud}/image/upload/${eagerClip}/${id}.mp4`
+    : null;
 
   try {
     const derivedAttempts = Number(env("CLOUDINARY_DERIVED_ATTEMPTS")) || 10;
@@ -459,7 +513,22 @@ async function removeBackgroundCloudinary(buffer, mimeType) {
       attempts: derivedAttempts,
     });
     if (!clean?.length) return failResult(buffer, mimeType, "api_failed", "cloudinary");
-    return okResult(clean, "cloudinary");
+
+    let clipExtras = {};
+    if (wantClip && clipUrl && /e_background_removal/i.test(clipUrl)) {
+      const clip = await finalizeClipUrl(clipUrl);
+      if (clip) {
+        clipExtras = {
+          clipUrl: clip.clipUrl,
+          clipBuffer: clip.clipBuffer,
+          clipMimeType: "video/mp4",
+        };
+      }
+    } else if (wantClip) {
+      console.warn("[listing-studio] refusing clip URL without background_removal");
+    }
+
+    return okResult(clean, "cloudinary", clipExtras);
   } finally {
     scheduleCloudinaryDestroy(id, cloud, up.apiKey, up.apiSecret);
   }
