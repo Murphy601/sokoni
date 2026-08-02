@@ -283,5 +283,57 @@
     "moderation": {
       "status": "pending_scan"
     }
+  },
+  {
+    "id": "fa-tlom7-003",
+    "name": "Green Flip Flop",
+    "category": "fashion",
+    "subcategory": "womens-fashion",
+    "browseCategory": "women",
+    "browseSubCategory": "shoes",
+    "sellerNetKes": 70,
+    "sourcePriceKes": 70,
+    "priceKes": 77,
+    "platformFeeKes": 7,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 70,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A single green flip flop is shown on a dark surface next to a tiled floor. The flip flop has a textured sole.",
+    "color": "green",
+    "size": "",
+    "era": "",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "location": "Kenol",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "👗",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1785649490/sokoni-studio/reel_1785649487_01.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785649490/sokoni-studio/reel_1785649487_01.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785649494/sokoni-studio/reel_1785649487_02.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785649498/sokoni-studio/reel_1785649487_03.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785649502/sokoni-studio/reel_1785649487_04.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/multi/dl_2000/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264/v1785649503/fce7d76fff05af93391d80111778e16c.mp4",
+    "videoKind": "preview",
+    "publishedAt": 1785649544133,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]
