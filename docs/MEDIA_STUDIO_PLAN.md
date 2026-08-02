@@ -12,9 +12,14 @@
 | **Photoroom** | Yes — Segment API | Via Cloudinary when configured (clip from Photoroom PNG) |
 | **Remote** | Yes — POST→PNG microservice | Via Cloudinary when configured |
 
-**Clip always starts from the cleaned cutout**, never zoompan on the raw phone shot. Cloudinary chains `e_background_removal` → pad/shadow/zoompan on the same upload. Photoroom/HF clean PNGs are re-uploaded as cutouts (motion only). Default length is **~4s** (`du_4`).
+**Clip always starts from the cleaned cutout**, never zoompan on the raw phone shot.
 
-API responses prefer a **CDN `clipVideoUrl`** (no multi‑MB base64 through the bot). The sell page caches the clip in the browser for publish. That keeps the 1GB VM from OOM / “Can’t reach Sokoni” after studio.
+Cloudinary flow (memory-safe on the 1GB bot):
+1. Upload original → wait for `e_background_removal` (HEAD only)
+2. **Re-upload that cleaned derived URL** as a new `cutout_*` asset (Cloudinary fetches it — bot never holds the PNG)
+3. Build MP4 with pad/shadow/zoompan **on the cutout asset only**
+
+Studio API returns **`cleanImageUrl` + `clipVideoUrl`** (CDN). No multi‑MB base64. The sell page caches both in the browser. PM2 uses `--max-memory-restart 450M` so a spike restarts the bot instead of taking Sokoni down.
 
 Storefront playback rules (hover/tap, never autoplay the whole grid) live in [PRODUCT_VIDEO.md](./PRODUCT_VIDEO.md).
 

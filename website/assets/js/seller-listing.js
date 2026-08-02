@@ -636,6 +636,16 @@ function refreshCoverPreview() {
   }
 }
 
+/** Cache a CDN asset as a data URL in the browser (keeps multi‑MB off the bot). */
+async function cacheRemoteAsDataUrl(url) {
+  if (!url || String(url).startsWith("data:")) return url || null;
+  const res = await fetch(url);
+  if (!res.ok) return url;
+  const blob = await res.blob();
+  if (!blob || blob.size < 32) return url;
+  return readFileAsDataUrl(blob);
+}
+
 /**
  * Accept studio clip as CDN URL and/or data URL. Preview uses URL immediately;
  * we cache a data URL in the browser so publish doesn't re-hit Cloudinary / the bot.
@@ -654,11 +664,7 @@ async function ingestStudioClip(clipVideoUrl, clipVideoBase64 = null) {
     return true;
   }
   try {
-    const res = await fetch(clipVideoUrl);
-    if (!res.ok) return true;
-    const blob = await res.blob();
-    if (!blob || blob.size < 256) return true;
-    studioClipBase64 = await readFileAsDataUrl(blob);
+    studioClipBase64 = await cacheRemoteAsDataUrl(clipVideoUrl);
     refreshStudioClipPreview();
   } catch {
     // Keep CDN URL for preview; publish may still work if the URL is live.
@@ -666,14 +672,36 @@ async function ingestStudioClip(clipVideoUrl, clipVideoBase64 = null) {
   return true;
 }
 
-function applyCoverStudioResult(cleanImageBase64, message, clipVideoBase64 = null, clipVideoUrl = null) {
-  if (!cleanImageBase64) return;
-  coverCleanBase64 = cleanImageBase64;
+async function ingestCleanCover(cleanImageUrl, cleanImageBase64 = null) {
+  const src = cleanImageBase64 || cleanImageUrl;
+  if (!src) return false;
+  coverCleanBase64 = src;
   preferCleanCover = true;
   const prefer = el("studio-prefer-clean");
   if (prefer) prefer.checked = true;
-  void ingestStudioClip(clipVideoUrl, clipVideoBase64);
   refreshCoverPreview();
+  if (cleanImageBase64 || !cleanImageUrl || String(src).startsWith("data:")) {
+    return true;
+  }
+  try {
+    coverCleanBase64 = await cacheRemoteAsDataUrl(cleanImageUrl);
+    refreshCoverPreview();
+  } catch {
+    /* CDN URL still works for preview */
+  }
+  return true;
+}
+
+function applyCoverStudioResult(
+  cleanImageBase64,
+  message,
+  clipVideoBase64 = null,
+  clipVideoUrl = null,
+  cleanImageUrl = null
+) {
+  if (!cleanImageBase64 && !cleanImageUrl) return;
+  void ingestCleanCover(cleanImageUrl, cleanImageBase64);
+  void ingestStudioClip(clipVideoUrl, clipVideoBase64);
   const status = el("studio-status");
   if (status) status.textContent = message || "Background cleaned.";
 }
@@ -759,12 +787,13 @@ async function previewStudioClean() {
       return;
     }
     const data = parsed.data;
-    if (data.studioApplied && data.cleanImageBase64) {
+    if (data.studioApplied && (data.cleanImageBase64 || data.cleanImageUrl)) {
       applyCoverStudioResult(
         data.cleanImageBase64,
         data.message,
         data.clipApplied ? data.clipVideoBase64 : null,
-        data.clipApplied ? data.clipVideoUrl : null
+        data.clipApplied ? data.clipVideoUrl : null,
+        data.cleanImageUrl
       );
       setStatus(data.message || "Background cleaned — review before posting.");
     } else {
@@ -838,14 +867,15 @@ async function maybeAutoGenerate() {
       draft.sourcePriceKes = priceKes;
     }
     sellerInfo = data.seller;
-    if (data.studioApplied && data.cleanImageBase64) {
+    if (data.studioApplied && (data.cleanImageBase64 || data.cleanImageUrl)) {
       applyCoverStudioResult(
         data.cleanImageBase64,
         data.clipApplied
           ? "AI cleaned background + product clip + draft — review each step."
           : "AI cleaned background + filled draft — review each step.",
         data.clipApplied ? data.clipVideoBase64 : null,
-        data.clipApplied ? data.clipVideoUrl : null
+        data.clipApplied ? data.clipVideoUrl : null,
+        data.cleanImageUrl
       );
       setStatus(
         data.clipApplied
@@ -1070,7 +1100,15 @@ async function collectImagesBase64() {
     const file = photoFiles[i];
     if (!file) continue;
     if (i === 0 && preferCleanCover && coverCleanBase64) {
-      images.push(coverCleanBase64);
+      if (String(coverCleanBase64).startsWith("data:")) {
+        images.push(coverCleanBase64);
+      } else {
+        try {
+          images.push(await cacheRemoteAsDataUrl(coverCleanBase64));
+        } catch {
+          images.push(await readFileAsDataUrl(await compressImageFile(photoFiles[0])));
+        }
+      }
       continue;
     }
     const compressed = await compressImageFile(file);

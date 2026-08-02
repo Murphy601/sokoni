@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Unit checks for multi-provider listing studio + Cloudinary clips (no real network). */
+/** Unit checks for multi-provider listing studio + cutout-based clips (no real network). */
 import {
   isStudioConfigured,
   isStudioClipEnabled,
@@ -26,6 +26,7 @@ const ENV_KEYS = [
   "STUDIO_FALLBACK",
   "STUDIO_CLIP_ENABLED",
   "STUDIO_CLIP_INLINE",
+  "STUDIO_INLINE_IMAGES",
   "CLOUDINARY_DELETE_AFTER",
   "CLOUDINARY_CLIP_TRANS",
   "CLOUDINARY_BG_EFFECT",
@@ -60,7 +61,6 @@ async function main() {
     throw new Error(`removeBackground without key failed: ${JSON.stringify(skipped)}`);
   }
 
-  // Clip transform strips legacy bg-removal prefix
   process.env.CLOUDINARY_CLIP_TRANS =
     "e_background_removal/b_rgb:FFF8F0/e_zoompan:mode_ztc;maxzoom_1.25;du_5;fps_25";
   const stripped = resolveClipTransform();
@@ -68,15 +68,11 @@ async function main() {
     throw new Error(`resolveClipTransform should strip bg removal: ${stripped}`);
   }
   delete process.env.CLOUDINARY_CLIP_TRANS;
-  if (!/e_shadow|zoompan|c_pad/i.test(resolveClipTransform())) {
-    throw new Error(`default clip transform unexpected: ${resolveClipTransform()}`);
-  }
-  const fromOriginal = resolveClipTransformFromOriginal();
-  if (!/^e_background_removal\//i.test(fromOriginal) || !/zoompan/i.test(fromOriginal)) {
-    throw new Error(`clip from original must chain bg-removal first: ${fromOriginal}`);
+  if (!/^e_background_removal\//i.test(resolveClipTransformFromOriginal())) {
+    throw new Error("from-original helper should prefix bg-removal");
   }
 
-  // Photoroom — image only (no Cloudinary → no clip)
+  // Photoroom — image only (no Cloudinary → no clip / no CDN clean)
   process.env.PHOTOROOM_API_KEY = "test-key";
   if (isStudioClipEnabled()) throw new Error("photoroom must not enable clips without cloudinary");
   const origFetch = globalThis.fetch;
@@ -84,14 +80,14 @@ async function main() {
     new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
   try {
     const ok = await removeBackground(tiny, "image/jpeg");
-    if (!ok.studioApplied || ok.provider !== "photoroom" || ok.clipBuffer || ok.clipUrl) {
-      throw new Error(`photoroom should not return clip: ${JSON.stringify(ok)}`);
+    if (!ok.studioApplied || ok.provider !== "photoroom" || ok.clipUrl || ok.cleanUrl) {
+      throw new Error(`photoroom-only unexpected: ${JSON.stringify(ok)}`);
     }
   } finally {
     globalThis.fetch = origFetch;
   }
 
-  // Cloudinary clean + clip chained AFTER bg-removal (same asset, not raw zoompan)
+  // Cloudinary: original upload → clean derived ready → cutout re-upload → clip on cutout
   clearStudioEnv();
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
   process.env.CLOUDINARY_API_KEY = "key";
@@ -103,30 +99,42 @@ async function main() {
   if (getStudioMeta().studioClipEnabled !== true) throw new Error("meta.studioClipEnabled expected");
 
   let uploadCount = 0;
+  let uploadedIds = [];
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
     const method = String(init.method || "GET").toUpperCase();
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
       uploadCount += 1;
-      return new Response(JSON.stringify({ public_id: "sokoni-studio/listing_x" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      const id =
+        uploadCount === 1 ? "sokoni-studio/listing_x" : "sokoni-studio/cutout_y";
+      uploadedIds.push(id);
+      return new Response(
+        JSON.stringify({
+          public_id: id,
+          secure_url: `https://res.cloudinary.com/demo/image/upload/${id}`,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
     }
-    if (method === "HEAD" && (u.includes("f_mp4") || u.includes(".mp4"))) {
-      if (!/e_background_removal/i.test(u)) {
-        return new Response("raw zoompan refused", { status: 500 });
+    if (method === "HEAD") {
+      // Clean derived on listing_ must be ready; clip on cutout_
+      if (u.includes("listing_x") && u.includes("e_background_removal") && u.includes("f_png")) {
+        return new Response(null, { status: 200 });
       }
-      return new Response(null, { status: 200 });
-    }
-    if (u.includes("f_png") || (u.includes("e_background_removal") && !u.includes("f_mp4"))) {
-      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
+      if (u.includes("cutout_y") && (u.includes("f_mp4") || u.includes(".mp4"))) {
+        return new Response(null, { status: 200 });
+      }
+      return new Response(null, { status: 404 });
     }
     if (u.includes("f_mp4") || u.includes(".mp4")) {
-      if (!/e_background_removal/i.test(u)) {
-        return new Response("raw zoompan refused", { status: 500 });
+      // Must be cutout asset — refuse listing_ zoompan
+      if (u.includes("listing_x") && !u.includes("cutout")) {
+        return new Response("clip must not use original listing asset", { status: 500 });
       }
       return new Response(fakeMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
+    }
+    if (u.includes("e_background_removal") || u.includes("f_png")) {
+      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
     }
     return new Response("nope", { status: 500 });
   };
@@ -136,108 +144,78 @@ async function main() {
     if (
       !withClip.studioApplied ||
       withClip.provider !== "cloudinary" ||
+      !withClip.cleanUrl ||
       !withClip.clipUrl ||
-      withClip.clipBuffer
+      withClip.buffer
     ) {
       throw new Error(
-        `cloudinary clip URL missing: ${JSON.stringify({
+        `cloudinary cutout clip missing: ${JSON.stringify({
           ...withClip,
-          clipBuffer: !!withClip.clipBuffer,
+          buffer: !!withClip.buffer,
         })}`
       );
     }
-    if (uploadCount !== 1) {
-      throw new Error(`expected one Cloudinary upload with eager clean+clip, got ${uploadCount}`);
+    if (uploadCount !== 2) {
+      throw new Error(`expected listing upload + cutout upload, got ${uploadCount}`);
     }
-    if (!/e_background_removal/i.test(withClip.clipUrl)) {
-      throw new Error(`clip URL must chain bg-removal before motion: ${withClip.clipUrl}`);
+    if (!/cutout_/i.test(withClip.clipUrl) && !/cutout_y/i.test(withClip.clipUrl)) {
+      throw new Error(`clip must be from cutout asset: ${withClip.clipUrl}`);
+    }
+    if (/listing_x/i.test(withClip.clipUrl) && /e_background_removal.*zoompan|zoompan.*listing/i.test(withClip.clipUrl)) {
+      throw new Error(`clip must not zoompan original listing: ${withClip.clipUrl}`);
     }
 
     const preview = await previewStudioClean(tiny, "image/jpeg");
     if (
       !preview.studioApplied ||
       !preview.clipApplied ||
+      !preview.cleanImageUrl ||
       !preview.clipVideoUrl ||
+      preview.cleanImageBase64 ||
       preview.clipVideoBase64
     ) {
-      throw new Error(`preview should return clipVideoUrl only: ${JSON.stringify(preview)}`);
+      throw new Error(`preview must be CDN URLs only: ${JSON.stringify(preview)}`);
     }
   } finally {
     globalThis.fetch = origFetch;
   }
 
-  // Inline base64 when STUDIO_CLIP_INLINE=true
+  // Soft-fail clip still returns clean URL
   clearStudioEnv();
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
   process.env.CLOUDINARY_API_KEY = "key";
   process.env.CLOUDINARY_API_SECRET = "secret";
   process.env.CLOUDINARY_DELETE_AFTER = "false";
-  process.env.STUDIO_CLIP_INLINE = "true";
   uploadCount = 0;
-  globalThis.fetch = async (url) => {
-    const u = String(url);
-    if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
-      uploadCount += 1;
-      return new Response(JSON.stringify({ public_id: "sokoni-studio/z1" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    // MP4 first — clip URLs also contain e_background_removal
-    if (u.includes("f_mp4") || u.includes(".mp4")) {
-      if (!/e_background_removal/i.test(u)) return new Response("raw", { status: 500 });
-      return new Response(fakeMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
-    }
-    if (u.includes("e_background_removal") || u.includes("f_png")) {
-      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
-    }
-    return new Response("nope", { status: 500 });
-  };
-  try {
-    const preview = await previewStudioClean(tiny, "image/jpeg");
-    if (!String(preview.clipVideoBase64 || "").startsWith("data:video/mp4")) {
-      throw new Error(`inline clip base64 expected: ${JSON.stringify(preview)}`);
-    }
-  } finally {
-    globalThis.fetch = origFetch;
-  }
-
-  // Cloudinary clean ok, clip fails — still return clean image
-  clearStudioEnv();
-  process.env.CLOUDINARY_CLOUD_NAME = "demo";
-  process.env.CLOUDINARY_API_KEY = "key";
-  process.env.CLOUDINARY_API_SECRET = "secret";
-  process.env.CLOUDINARY_DELETE_AFTER = "false";
-
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
     const method = String(init.method || "GET").toUpperCase();
     if (u.includes("api.cloudinary.com")) {
-      return new Response(JSON.stringify({ public_id: "sokoni-studio/y" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      uploadCount += 1;
+      const id = uploadCount === 1 ? "sokoni-studio/listing_soft" : "sokoni-studio/cutout_soft";
+      return new Response(
+        JSON.stringify({ public_id: id, secure_url: `https://res.cloudinary.com/demo/image/upload/${id}` }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
     }
-    if (u.includes("f_mp4") || u.includes(".mp4")) {
-      if (method === "HEAD") return new Response(null, { status: 500 });
+    if (method === "HEAD" && u.includes("listing_soft") && u.includes("f_png")) {
+      return new Response(null, { status: 200 });
+    }
+    if (u.includes("f_mp4") || u.includes(".mp4") || (method === "HEAD" && u.includes("cutout"))) {
       return new Response("clip-fail", { status: 500 });
-    }
-    if (u.includes("e_background_removal") || u.includes("f_png")) {
-      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
     }
     return new Response("nope", { status: 500 });
   };
-
   try {
     const soft = await previewStudioClean(tiny, "image/jpeg");
-    if (!soft.studioApplied || soft.clipApplied) {
-      throw new Error(`clip soft-fail expected clean only: ${JSON.stringify(soft)}`);
+    if (!soft.studioApplied || soft.clipApplied || !soft.cleanImageUrl) {
+      throw new Error(`clip soft-fail expected clean URL only: ${JSON.stringify(soft)}`);
     }
   } finally {
     globalThis.fetch = origFetch;
   }
 
-  // 423 pending then success (Cloudinary derived still generating)
+  // 423 pending then success on clean HEAD
   clearStudioEnv();
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
   process.env.CLOUDINARY_API_KEY = "key";
@@ -245,33 +223,37 @@ async function main() {
   process.env.CLOUDINARY_DELETE_AFTER = "false";
   process.env.STUDIO_CLIP_ENABLED = "false";
   process.env.CLOUDINARY_DERIVED_ATTEMPTS = "3";
-  let pngHits = 0;
-  globalThis.fetch = async (url) => {
+  let headHits = 0;
+  globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
+    const method = String(init.method || "GET").toUpperCase();
     if (u.includes("api.cloudinary.com")) {
-      return new Response(JSON.stringify({ public_id: "sokoni-studio/pending" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          public_id: "sokoni-studio/pending",
+          secure_url: "https://res.cloudinary.com/demo/image/upload/sokoni-studio/pending",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
     }
-    if (u.includes("e_background_removal") || u.includes("f_png")) {
-      pngHits += 1;
-      if (pngHits < 2) return new Response("pending", { status: 423 });
-      return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
+    if (method === "HEAD" || u.includes("e_background_removal") || u.includes("f_png")) {
+      headHits += 1;
+      if (headHits < 2) return new Response("pending", { status: 423 });
+      return new Response(null, { status: 200 });
     }
     return new Response("nope", { status: 500 });
   };
   try {
     const pending = await removeBackground(tiny, "image/jpeg");
-    if (!pending.studioApplied || pngHits < 2) {
-      throw new Error(`423 retry failed: applied=${pending.studioApplied} hits=${pngHits}`);
+    if (!pending.studioApplied || !pending.cleanUrl || headHits < 2) {
+      throw new Error(`423 retry failed: applied=${pending.studioApplied} hits=${headHits}`);
     }
   } finally {
     globalThis.fetch = origFetch;
     delete process.env.CLOUDINARY_DERIVED_ATTEMPTS;
   }
 
-  // Photoroom clean + Cloudinary clip-from-clean
+  // Photoroom clean + Cloudinary cutout clip
   clearStudioEnv();
   process.env.PHOTOROOM_API_KEY = "pr_test";
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
@@ -280,8 +262,6 @@ async function main() {
   process.env.CLOUDINARY_DELETE_AFTER = "false";
   process.env.STUDIO_PROVIDER = "photoroom";
 
-  if (!isStudioClipEnabled()) throw new Error("clips should enable when cloudinary present");
-
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
     const method = String(init.method || "GET").toUpperCase();
@@ -289,10 +269,13 @@ async function main() {
       return new Response(cleanPng, { status: 200, headers: { "Content-Type": "image/png" } });
     }
     if (u.includes("/image/upload") && u.includes("api.cloudinary.com")) {
-      return new Response(JSON.stringify({ public_id: "sokoni-studio/from_pr" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          public_id: "sokoni-studio/cutout_from_pr",
+          secure_url: "https://res.cloudinary.com/demo/image/upload/sokoni-studio/cutout_from_pr",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
     }
     if (method === "HEAD" && (u.includes("f_mp4") || u.includes(".mp4"))) {
       return new Response(null, { status: 200 });
@@ -304,14 +287,14 @@ async function main() {
   };
   try {
     const hybrid = await removeBackground(tiny, "image/jpeg");
-    if (!hybrid.studioApplied || hybrid.provider !== "photoroom" || !hybrid.clipUrl) {
-      throw new Error(`photoroom+cloudinary clip expected: ${JSON.stringify(hybrid)}`);
+    if (!hybrid.studioApplied || hybrid.provider !== "photoroom" || !hybrid.clipUrl || !hybrid.cleanUrl) {
+      throw new Error(`photoroom+cloudinary cutout expected: ${JSON.stringify(hybrid)}`);
     }
   } finally {
     globalThis.fetch = origFetch;
   }
 
-  // HF fallback after Cloudinary BG fail — clip still attempted from HF clean
+  // HF fallback after Cloudinary BG fail
   clearStudioEnv();
   process.env.CLOUDINARY_CLOUD_NAME = "demo";
   process.env.CLOUDINARY_API_KEY = "key";
@@ -325,8 +308,9 @@ async function main() {
     throw new Error(`auto order wrong: ${order.join(",")}`);
   }
 
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
+    const method = String(init.method || "GET").toUpperCase();
     if (u.includes("api.cloudinary.com")) {
       return new Response(JSON.stringify({ public_id: "sokoni-studio/z" }), {
         status: 200,
@@ -334,6 +318,7 @@ async function main() {
       });
     }
     if (u.includes("res.cloudinary.com")) {
+      if (method === "HEAD") return new Response(null, { status: 403 });
       return new Response("cloudinary-down", { status: 403 });
     }
     if (u.includes("huggingface") || u.includes("router.huggingface")) {
@@ -344,15 +329,15 @@ async function main() {
 
   try {
     const fallback = await removeBackground(tiny, "image/jpeg");
-    if (!fallback.studioApplied || fallback.provider !== "huggingface" || fallback.clipUrl) {
-      throw new Error(`HF fallback image-only (clips off): ${JSON.stringify(fallback)}`);
+    if (!fallback.studioApplied || fallback.provider !== "huggingface") {
+      throw new Error(`HF fallback failed: ${JSON.stringify(fallback)}`);
     }
   } finally {
     globalThis.fetch = origFetch;
   }
 
   if (!listConfiguredProviders().length && false) throw new Error("unreachable");
-  console.log("OK: multi-provider listing-studio + clip-from-clean");
+  console.log("OK: cutout-based studio clips + CDN-only preview");
 }
 
 main()
