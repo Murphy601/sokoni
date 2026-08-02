@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
 import { applyAiShippingSuggestion, computeFeeBreakdown } from "./shipping-tiers.js";
 import { geminiVisionAvailable, geminiVisionListingJson } from "./gemini-vision.js";
+import { nvidiaVisionAvailable, nvidiaVisionListingJson } from "./nvidia-vision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TAXONOMY_PATH = path.join(__dirname, "..", "..", "..", "scripts", "browse-taxonomy.mjs");
@@ -683,7 +684,7 @@ export async function formatListingBrowseLabel(product) {
 
 /**
  * Generate a listing draft from a product photo.
- * Prefers Gemini (when configured), then OpenRouter multimodal models.
+ * Order: OpenRouter (primary) → NVIDIA NIM (random free VLMs) → Gemini → caption stub.
  * @param {Buffer} buffer
  * @param {string} mimetype
  * @param {string} [caption]
@@ -691,30 +692,6 @@ export async function formatListingBrowseLabel(product) {
 export async function generateListingFromImage(buffer, mimetype, caption = "") {
   const prompt = await buildListingPrompt(caption);
   let lastError = null;
-
-  // Gemini first when available — stronger vision than free OpenRouter fallbacks.
-  if (geminiVisionAvailable()) {
-    try {
-      const { parsed, model } = await geminiVisionListingJson({
-        prompt,
-        imageBuffer: buffer,
-        mimeType: mimetype,
-      });
-      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(String(parsed.error));
-      await finalizeListingDraft(parsed, caption);
-      console.log(
-        `[listing-generator] ok via gemini/${model}:`,
-        parsed.name,
-        parsed.sourcePriceKes,
-        parsed.browseCategory,
-        parsed.browseSubCategory
-      );
-      return parsed;
-    } catch (err) {
-      lastError = err;
-      console.warn("[listing-generator] Gemini vision failed:", err.message);
-    }
-  }
 
   const client = getVisionClient();
   if (client) {
@@ -769,6 +746,57 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
     }
   } else if (!lastError) {
     lastError = new Error("OPENAI_API_KEY not set — OpenRouter vision unavailable");
+  }
+
+  // NVIDIA NIM — free VLMs when OpenRouter is rate-limited / out of tokens.
+  if (nvidiaVisionAvailable()) {
+    try {
+      const { parsed, model } = await nvidiaVisionListingJson({
+        prompt,
+        imageBuffer: buffer,
+        mimeType: mimetype,
+      });
+      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(String(parsed.error));
+      if (parsed.sellerNetKes != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0)) {
+        parsed.sourcePriceKes = parsed.sellerNetKes;
+      }
+      await finalizeListingDraft(parsed, caption);
+      console.log(
+        `[listing-generator] ok via nvidia/${model}:`,
+        parsed.name,
+        parsed.sourcePriceKes,
+        parsed.browseCategory,
+        parsed.browseSubCategory
+      );
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      console.warn("[listing-generator] NVIDIA vision failed:", err.message);
+    }
+  }
+
+  // Gemini direct API — second fallback (generous free tier).
+  if (geminiVisionAvailable()) {
+    try {
+      const { parsed, model } = await geminiVisionListingJson({
+        prompt,
+        imageBuffer: buffer,
+        mimeType: mimetype,
+      });
+      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(String(parsed.error));
+      await finalizeListingDraft(parsed, caption);
+      console.log(
+        `[listing-generator] ok via gemini/${model}:`,
+        parsed.name,
+        parsed.sourcePriceKes,
+        parsed.browseCategory,
+        parsed.browseSubCategory
+      );
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      console.warn("[listing-generator] Gemini vision failed:", err.message);
+    }
   }
 
   const capCost = parseCost(caption);

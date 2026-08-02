@@ -17,6 +17,7 @@
     "test:listing-studio": "node scripts/test-listing-studio.mjs",
     "test:daraja-checkout": "node scripts/test-daraja-checkout.mjs",
     "test:gemini": "node scripts/test-gemini-vision.mjs",
+    "test:nvidia": "node scripts/test-nvidia-vision.mjs",
     "test:buyer-auth": "node scripts/test-buyer-social-auth.mjs",
     "test:social-routing": "node scripts/test-social-auth-routing.mjs",
     "test:seller-social-profile": "node scripts/test-seller-social-profile.mjs",

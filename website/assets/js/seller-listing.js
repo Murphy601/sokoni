@@ -1278,12 +1278,14 @@ function renderListingAiStatus(metaData) {
     return;
   }
   const visionOn = Boolean(metaData.visionModel || metaData.visionProvider);
+  const nvidiaOn = Boolean(metaData.nvidiaVisionEnabled);
   const geminiOn = Boolean(metaData.geminiVisionEnabled);
   studioUiEnabled = Boolean(metaData.studioEnabled);
   studioClipUiEnabled = Boolean(metaData.studioClipEnabled);
   const parts = [];
   if (visionOn) {
     parts.push("AI can draft from your cover photo");
+    if (nvidiaOn) parts.push("NVIDIA fallback on");
     if (geminiOn) parts.push("Gemini fallback on");
   } else {
     parts.push("Photo AI offline — use a caption or fill details manually");

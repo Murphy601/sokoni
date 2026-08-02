@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
 import { geminiVisionAvailable } from "./gemini-vision.js";
+import { nvidiaVisionAvailable } from "./nvidia-vision.js";
 import { sendText } from "./whatsapp.js";
 import { invalidateProductCache } from "./catalog.js";
 import { clearCatalogPauseCache } from "./catalog-guard.js";
@@ -677,7 +678,14 @@ export async function getSellerListingMeta() {
     eras: ["vintage", "80s", "90s", "y2k", "streetwear", "clean-girl", "cyberpunk", "goth-punk", "90s-thrift", "minimalist", "handmade"],
     visionModel: config.catalog.visionModel,
     visionProvider: "openrouter",
+    nvidiaVisionEnabled: nvidiaVisionAvailable(),
     geminiVisionEnabled: geminiVisionAvailable(),
+    listingVisionOrder: ["openrouter", "nvidia", "gemini"].filter((id) => {
+      if (id === "openrouter") return Boolean(config.openai.apiKey);
+      if (id === "nvidia") return nvidiaVisionAvailable();
+      if (id === "gemini") return geminiVisionAvailable();
+      return false;
+    }),
     dbEnabled: dbProductsAvailable(),
     instantPublish: true,
     studioEnabled: isStudioConfigured(),
