@@ -53,8 +53,8 @@ POST /api/seller/listings/generate
 
 POST /api/seller/listings/studio
   { phone, imageBase64, mimeType? }
-  → { studioApplied, cleanImageBase64?, clipApplied?, clipVideoBase64?, provider?, reason?, message }
-  (cloud BG cleanup; Cloudinary may also return a short zoompan MP4 — no AI draft)
+  → { studioApplied, cleanImageBase64?, clipApplied?, clipVideoUrl?, clipVideoBase64?, provider?, reason?, message }
+  (cloud BG cleanup; clip built from cleaned cutout via Cloudinary CDN URL — no AI draft)
 
 POST /api/seller/listings/publish
   { phone, draft, images[], videoBase64?, draftId? }

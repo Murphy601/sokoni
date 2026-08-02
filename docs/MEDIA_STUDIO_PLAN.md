@@ -7,12 +7,14 @@
 
 | Provider | Clean PNG | Short product clip (MP4) |
 |----------|-----------|---------------------------|
-| **Cloudinary** | Yes — `e_background_removal` | Yes — `e_zoompan` image→MP4 (~5s) |
-| **Hugging Face** | Yes — RMBG / Inference | No |
-| **Photoroom** | Yes — Segment API | No |
-| **Remote** | Yes — POST→PNG | No (unless your microservice returns video separately) |
+| **Cloudinary** | Yes — `e_background_removal` | Yes — second pass on the **cleaned cutout** (`c_pad` + `e_shadow` + `e_zoompan` → MP4) |
+| **Hugging Face** | Yes — RMBG / Inference | Via Cloudinary when configured (clip from HF PNG) |
+| **Photoroom** | Yes — Segment API | Via Cloudinary when configured (clip from Photoroom PNG) |
+| **Remote** | Yes — POST→PNG microservice | Via Cloudinary when configured |
 
-**Cloudinary is the single best tool** for Sokoni: one upload → cleaned cover + Ken Burns clip, no disk on the VM.
+**Clip always starts from the cleaned photo**, not the raw phone shot — same idea as Photoroom product videos (studio pad, soft shadow, motion).
+
+API responses prefer a **CDN `clipVideoUrl`** (no multi‑MB base64 through the bot). The sell page caches the clip in the browser for publish. That keeps the 1GB VM from OOM / “Can’t reach Sokoni” after studio.
 
 ## Enable
 
@@ -47,32 +49,32 @@ Optional Cloudinary tweaks:
 ```env
 # CLOUDINARY_FOLDER=sokoni-studio
 # CLOUDINARY_BG_EFFECT=e_background_removal
-# CLOUDINARY_CLIP_TRANS=e_background_removal/b_rgb:FFF8F0/e_zoompan:mode_ztc;maxzoom_1.25;du_5;fps_25
+# Clip runs on the cleaned cutout only (do not include e_background_removal):
+# CLOUDINARY_CLIP_TRANS=c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_5;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264
 # CLOUDINARY_DELETE_AFTER=true
+# CLOUDINARY_DELETE_MS=180000
+# STUDIO_CLIP_INLINE=true   # embed data:video in JSON (heavy — tests only)
 ```
 
 ## Seller flow
 
-1. Seller adds cover photo → **Preview clean + product clip** (when Cloudinary is configured).
-2. Bot uploads once to Cloudinary, fetches:
-   - cleaned PNG (`e_background_removal`)
-   - ~5s MP4 (`e_zoompan` with cream fill)
-3. Seller toggles **Use cleaned cover** / **Use generated clip as listing video**.
-4. Publish sends cleaned cover + clip as `videoBase64` when selected.
-
-Hugging Face / Photoroom only fill the clean-cover path.
+1. Seller adds cover photo → **Preview clean + product clip** (when Cloudinary is configured for clips).
+2. Bot cleans the cover (Cloudinary / HF / Photoroom), then uploads the **cleaned PNG** to Cloudinary and builds a ~5s MP4 (pad + shadow + zoompan).
+3. Response includes `clipVideoUrl` (CDN). The browser previews it and caches bytes for publish.
+4. Seller toggles **Use cleaned cover** / **Use generated clip as listing video**.
+5. Publish sends cleaned cover + clip as `videoBase64` (from the browser cache).
 
 ## API
 
-- `POST /api/seller/listings/studio` → `{ studioApplied, cleanImageBase64?, clipApplied, clipVideoBase64?, provider?, message }`
+- `POST /api/seller/listings/studio` → `{ studioApplied, cleanImageBase64?, clipApplied, clipVideoUrl?, clipVideoBase64?, provider?, message }`
 - `GET /api/seller/listings/meta` → `studioEnabled`, `studioClipEnabled`, `studioProvider`, `studioProviders[]`
 
 ## Code
 
 | Path | Role |
 |------|------|
-| `whatsapp-bot/src/services/listing-studio.js` | Provider chain + Cloudinary clip |
-| `website/assets/js/seller-listing.js` | Cover + clip toggles |
+| `whatsapp-bot/src/services/listing-studio.js` | Provider chain + clip-from-clean |
+| `website/assets/js/seller-listing.js` | Cover + clip toggles; CDN → browser cache |
 | `website/suppliers/list.html` | Studio controls |
 
 Failures keep the original cover. Clip failure is soft — clean image still returns. Bot boots without studio keys.
