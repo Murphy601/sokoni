@@ -33,6 +33,40 @@ print(json.dumps(entry))
 " 
 }
 
+# Never print webhook HMAC keys (or API keys) in deploy logs.
+redact_session_json() {
+  python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+  d = json.loads(raw)
+except Exception:
+  print(raw[:500])
+  raise SystemExit(0)
+cfg = d.get('config') if isinstance(d, dict) else None
+hooks = (cfg or {}).get('webhooks') if isinstance(cfg, dict) else None
+if isinstance(hooks, list):
+  for h in hooks:
+    if isinstance(h, dict) and isinstance(h.get('hmac'), dict) and h['hmac'].get('key'):
+      h['hmac']['key'] = '[redacted]'
+# Compact summary — enough to confirm webhook/HMAC without dumping secrets.
+out = {
+  'name': d.get('name') if isinstance(d, dict) else None,
+  'status': d.get('status') if isinstance(d, dict) else None,
+  'me': (d.get('me') or {}).get('id') if isinstance(d, dict) else None,
+  'webhooks': [
+    {
+      'url': h.get('url'),
+      'events': h.get('events'),
+      'hmac': bool((h.get('hmac') or {}).get('key')),
+    }
+    for h in (hooks or []) if isinstance(h, dict)
+  ],
+}
+print(json.dumps(out, separators=(',', ':')))
+"
+}
+
 json_field() {
   local json="$1" field="$2"
   printf '%s' "$json" | python3 -c "import sys,json
@@ -202,7 +236,7 @@ if [ "${RESET_WAHA_SESSION:-}" = "1" ]; then
   sleep 2
   echo "==> Reset complete (status=$(session_status)). Pairing required — do not wait for WORKING."
   echo "==> Final session:"
-  curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | head -c 500
+  curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | redact_session_json
   echo ""
   exit 0
 fi
@@ -245,7 +279,7 @@ WAHA_SESSION_OK=0
 wait_session_working && WAHA_SESSION_OK=1 || WAHA_SESSION_OK=0
 
 echo "==> Final session:"
-curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | head -c 500
+curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | redact_session_json
 echo ""
 
 if [ "$WAHA_SESSION_OK" -ne 1 ]; then
