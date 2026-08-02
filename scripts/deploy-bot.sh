@@ -2,6 +2,20 @@
 # Run on the GCP VM (sokoni-bot) after SSH login.
 set -euo pipefail
 
+# git checkout replaces this file while bash is still reading it → silent EOF exit
+# right after "Reset branch". Re-exec from a temp copy first so deploy can finish.
+if [ "${SOKONI_DEPLOY_REEXEC:-}" != "1" ]; then
+  _deploy_self="${BASH_SOURCE[0]:-$0}"
+  _deploy_tmp="$(mktemp /tmp/sokoni-deploy-bot.XXXXXX.sh)"
+  cp "$_deploy_self" "$_deploy_tmp"
+  chmod 700 "$_deploy_tmp"
+  SOKONI_DEPLOY_REEXEC=1 SOKONI_DEPLOY_TMP="$_deploy_tmp" exec bash "$_deploy_tmp" "$@"
+fi
+if [ -n "${SOKONI_DEPLOY_TMP:-}" ]; then
+  # shellcheck disable=SC2064
+  trap 'rm -f "$SOKONI_DEPLOY_TMP" 2>/dev/null || true' EXIT
+fi
+
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
 BOT_DIR="$REPO/whatsapp-bot"
 NAME="${PM2_NAME:-sokoni-bot}"
@@ -47,7 +61,7 @@ if ! git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"; then
   echo "ERROR: could not checkout origin/${DEPLOY_REF}"
   exit 1
 fi
-echo "==> Git at: $(git log -1 --oneline) (branch $(git branch --show-current))"
+echo "==> Git at: $(git log -1 --oneline) (branch $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown))"
 
 if [ "$STASHED" = "1" ]; then
   echo "==> Keeping deploy stash (not auto-popped onto main) — restore later with: git stash list"
@@ -98,8 +112,19 @@ set_env_kv() {
   fi
 }
 
+# Read env values without tripping set -e/pipefail when a key is missing.
+env_get() {
+  local file="$1" key="$2"
+  grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" 2>/dev/null \
+    | tail -1 \
+    | sed -E 's/^[^=]+=//' \
+    | tr -d "\"'" \
+    | tr -d '[:space:]' \
+    || true
+}
+
 if [ -f "$ENV_FILE" ]; then
-  CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
+  CURRENT_MODEL="$(env_get "$ENV_FILE" OPENAI_MODEL)"
   FREE_MODEL="openrouter/free"
   FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free"
   # Seller photos only — WhatsApp chat stays on FREE_MODEL above.
@@ -111,28 +136,28 @@ if [ -f "$ENV_FILE" ]; then
     echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
     set_env_kv "$ENV_FILE" "OPENAI_MODEL" "$FREE_MODEL"
   fi
-  CURRENT_FALLBACKS="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  CURRENT_FALLBACKS="$(env_get "$ENV_FILE" OPENAI_MODEL_FALLBACKS)"
   if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b|llama-3\.2-3b|qwen/qwen3-coder'; then
     set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "$FREE_FALLBACKS"
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
-  CURRENT_VISION="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  CURRENT_VISION="$(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"
   # Migrate away from image-gen / free-chat models as the photo primary (krea stays in FALLBACKS).
   if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE '^(krea/|openrouter/free$)|gemini-2\.0-flash-exp|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_MODEL" "$PHOTO_VISION_MODEL"
     echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (was: ${CURRENT_VISION:-unset}; seller photos only; chat stays ${FREE_MODEL})"
   fi
-  CURRENT_VISION_FB="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  CURRENT_VISION_FB="$(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
   if [ -z "$CURRENT_VISION_FB" ] || ! echo "$CURRENT_VISION_FB" | grep -q 'krea/krea-2-medium-turbo' || echo "$CURRENT_VISION_FB" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|nvidia/nemotron'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_FALLBACKS" "$PHOTO_VISION_FALLBACKS"
     echo "==> Set CATALOG_VISION_FALLBACKS → ${PHOTO_VISION_FALLBACKS}"
   fi
-  echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
-  echo "==> Vision: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
-  echo "==> Vision fallbacks: $(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
+  echo "==> AI model: $(env_get "$ENV_FILE" OPENAI_MODEL)"
+  echo "==> Vision: $(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"
+  echo "==> Vision fallbacks: $(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
   # Always ensure a non-empty GEMINI_API_KEY (rotate later). Actions override wins when set.
   DEFAULT_GEMINI_API_KEY="AQ.Ab8RN6JKsaorEvw8bvKc277LHDh3lL3HMWNbPhrz_LJxDKkhKQ"
-  CURRENT_GEMINI="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  CURRENT_GEMINI="$(env_get "$ENV_FILE" GEMINI_API_KEY)"
   if [ -n "${SOKONI_GEMINI_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$SOKONI_GEMINI_API_KEY"
     echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY"
@@ -143,7 +168,7 @@ if [ -f "$ENV_FILE" ]; then
     echo "==> Gemini vision: GEMINI_API_KEY present (${#CURRENT_GEMINI} chars)"
   fi
   # Hard verify — never leave deploy without a key when we have a default.
-  VERIFY_GEMINI="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
+  VERIFY_GEMINI="$(env_get "$ENV_FILE" GEMINI_API_KEY)"
   if [ -z "$VERIFY_GEMINI" ]; then
     echo "GEMINI_API_KEY=$DEFAULT_GEMINI_API_KEY" >> "$ENV_FILE"
     echo "==> Appended GEMINI_API_KEY (set_env_kv missed — forced append)"
