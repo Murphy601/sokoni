@@ -138,5 +138,35 @@
     "isSecondhand": false,
     "color": "yellow",
     "description": "A single yellow and green flip flop is shown against a white background. The sole has a textured pattern."
+  },
+  {
+    "id": "fa-tlom7-003",
+    "name": "Light Green Flip Flop",
+    "category": "fashion",
+    "priceKes": 170,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "👗",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1785648881/sokoni-studio/reel_1785648877_01.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785648881/sokoni-studio/reel_1785648877_01.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785648884/sokoni-studio/reel_1785648877_02.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785648888/sokoni-studio/reel_1785648877_03.jpg",
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785648891/sokoni-studio/reel_1785648877_04.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/multi/dl_2000/w_720,h_720,c_pad,b_rgb:FFF8F0/q_auto:eco,vc_h264/v1785648892/26d4866b5f1ac84cf27857befbb2cd72.mp4",
+    "videoKind": "preview",
+    "subcategory": "womens-fashion",
+    "browseCategory": "women",
+    "browseSubCategory": "shoes",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "color": "light green",
+    "description": "A single light green flip flop with a textured sole is shown on a dark surface. The item appears to be used."
   }
 ]
