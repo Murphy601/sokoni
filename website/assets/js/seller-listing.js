@@ -549,6 +549,15 @@ function bindMediaSlots() {
       ev.target.value = "";
       return;
     }
+    // Soft guidance — heavy clips still fail on Kenya mobile even under the hard 15MB cap.
+    if (file.size > 8 * 1024 * 1024) {
+      setStatus(
+        `Video is ${Math.round(file.size / (1024 * 1024))}MB — trim to under 8MB (~15s) so Post can finish on mobile.`,
+        true
+      );
+      ev.target.value = "";
+      return;
+    }
     const durationOk = await assertVideoDuration(file, maxSeconds);
     if (!durationOk) {
       setStatus(`Keep seller videos to ${maxSeconds} seconds or less (15–30s is ideal).`, true);
@@ -1448,12 +1457,14 @@ async function postListingRequest(media, clientPublishId, draft) {
 }
 
 /**
- * Upload seller phone video first so /publish stays small (avoids nginx 413 / timeouts
- * that left sellers with a fake “Post sent” and no listing).
+ * Upload seller phone video as raw bytes (not JSON base64) so mobile posts survive.
+ * Falls back to legacy JSON /upload-video only if binary fails hard.
  */
 async function stageSellerVideoUpload(file) {
   if (!file) return { ok: false, message: "Choose a video first." };
   const maxBytes = Number(meta.maxVideoBytes) || 15 * 1024 * 1024;
+  // Soft cap for Kenya mobile — 15MB base64 (~20MB JSON) routinely times out.
+  const softCap = Math.min(maxBytes, 8 * 1024 * 1024);
   if (file.size > maxBytes) {
     return {
       ok: false,
@@ -1461,13 +1472,90 @@ async function stageSellerVideoUpload(file) {
       message: `Video must be ${Math.round(maxBytes / (1024 * 1024))}MB or smaller.`,
     };
   }
-  const videoBase64 = await readFileAsDataUrl(file);
-  const res = await fetch(`${LISTINGS_API}/upload-video`, {
-    method: "POST",
-    headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(jsonAuthBody({ phone: apiPhone(), videoBase64 })),
-  });
-  return parseApiResponse(res);
+  if (file.size > softCap) {
+    return {
+      ok: false,
+      status: 413,
+      message:
+        "That clip is too heavy for mobile upload — trim to about 15 seconds or under 8MB, then try again.",
+    };
+  }
+
+  const phone = apiPhone();
+  const params = new URLSearchParams({ phone: normalizePhoneInput(phone) });
+  const token = getSessionToken();
+  if (token) params.set("sessionToken", token);
+  const url = `${LISTINGS_API}/upload-video-bin?${params}`;
+
+  try {
+    const staged = await new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.timeout = 180_000;
+      xhr.responseType = "text";
+      xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+      xhr.upload.onprogress = (ev) => {
+        if (!ev.lengthComputable || ev.total <= 0) return;
+        const pct = Math.min(99, Math.round((ev.loaded / ev.total) * 100));
+        setStatus(`Uploading your video… ${pct}%`);
+      };
+      xhr.onload = () => {
+        let data = null;
+        try {
+          data = JSON.parse(xhr.responseText || "{}");
+        } catch {
+          data = null;
+        }
+        resolve({
+          ok: xhr.status >= 200 && xhr.status < 300,
+          status: xhr.status,
+          data,
+          message:
+            data?.message ||
+            (xhr.status === 413
+              ? "Video is too large — trim it and try again."
+              : "Could not upload your video."),
+        });
+      };
+      xhr.onerror = () =>
+        resolve({
+          ok: false,
+          status: 0,
+          data: null,
+          message: "Video upload dropped — check your connection and try again.",
+        });
+      xhr.ontimeout = () =>
+        resolve({
+          ok: false,
+          status: 0,
+          data: null,
+          message: "Video upload timed out — trim to under 8MB / ~15s and try again.",
+        });
+      xhr.send(file);
+    });
+    if (staged.ok || staged.status === 401 || staged.status === 413) return staged;
+  } catch (err) {
+    console.warn("[sell] binary video upload failed:", err);
+  }
+
+  // Legacy JSON base64 path (desktop / small clips only).
+  try {
+    setStatus("Uploading your video…");
+    const videoBase64 = await readFileAsDataUrl(file);
+    const res = await fetch(`${LISTINGS_API}/upload-video`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, videoBase64 })),
+    });
+    return parseApiResponse(res);
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      message: err?.message || "Could not upload your video — try a shorter clip.",
+    };
+  }
 }
 
 async function onPublish() {

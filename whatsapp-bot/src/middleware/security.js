@@ -20,7 +20,7 @@ export function corsAllowlist(req, res, next) {
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
       res.setHeader(
         "Access-Control-Allow-Headers",
-        "Content-Type, X-Seller-Session, X-Buyer-Session, X-Admin-Token, X-Sokoni-Token"
+        "Content-Type, X-Seller-Session, X-Seller-Phone, X-Buyer-Session, X-Admin-Token, X-Sokoni-Token"
       );
       res.setHeader("Vary", "Origin");
     } else if (req.method === "OPTIONS") {
