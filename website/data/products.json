@@ -138,5 +138,32 @@
     "isSecondhand": false,
     "color": "yellow",
     "description": "A single yellow and green flip flop is shown against a white background. The sole has a textured pattern."
+  },
+  {
+    "id": "ho-tlom7-001",
+    "name": "Black and Purple Tumbler",
+    "category": "home-office",
+    "priceKes": 225,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🏠",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1785766538/sokoni-studio/cutout_1785766533_a0f17ccf.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1785766538/sokoni-studio/cutout_1785766533_a0f17ccf.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/upload/c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264/f_mp4/v1785766538/sokoni-studio/cutout_1785766533_a0f17ccf.mp4",
+    "videoKind": "preview",
+    "subcategory": "kitchen",
+    "browseCategory": "home",
+    "browseSubCategory": "kitchen",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "color": "black",
+    "description": "A black tumbler with a purple lid and a purple silicone band. The word 'SEN' is visible on the side of the tumbler in purple lettering."
   }
 ]
