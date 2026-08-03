@@ -1055,26 +1055,38 @@ export async function listSellerListings(phone, sessionToken) {
 
 /**
  * Pre-upload a seller phone video so /publish stays under nginx body/time limits.
+ * Accepts a Buffer (binary upload) or data-URL / base64 string (legacy JSON path).
  * Returns a durable bot /catalog-images/stage_*.mp4 URL for the publish payload.
  */
-export async function stageSellerVideo({ phone, videoBase64, sessionToken }) {
+export async function stageSellerVideo({ phone, videoBase64 = null, videoBuffer = null, sessionToken }) {
   const check = await requireApprovedSeller(phone, sessionToken);
   if (check.error) return check;
-  const raw = String(videoBase64 || "").trim();
-  if (!raw) {
-    return { error: "missing_video", message: "Choose a video clip first." };
-  }
-  let buffer;
-  try {
-    buffer = await resolveMediaBuffer(raw, { maxBytes: MAX_VIDEO_BYTES, label: "video" });
-  } catch (err) {
-    if (err?.code === "media_too_large" || /_too_large$/.test(String(err?.message || ""))) {
+
+  let buffer = null;
+  if (Buffer.isBuffer(videoBuffer) && videoBuffer.length) {
+    if (videoBuffer.length > MAX_VIDEO_BYTES) {
       return {
         error: "video_too_large",
         message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
       };
     }
-    throw err;
+    buffer = videoBuffer;
+  } else {
+    const raw = String(videoBase64 || "").trim();
+    if (!raw) {
+      return { error: "missing_video", message: "Choose a video clip first." };
+    }
+    try {
+      buffer = await resolveMediaBuffer(raw, { maxBytes: MAX_VIDEO_BYTES, label: "video" });
+    } catch (err) {
+      if (err?.code === "media_too_large" || /_too_large$/.test(String(err?.message || ""))) {
+        return {
+          error: "video_too_large",
+          message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
+        };
+      }
+      throw err;
+    }
   }
   if (!buffer?.length) {
     return { error: "missing_video", message: "Could not read that video — try another MP4." };

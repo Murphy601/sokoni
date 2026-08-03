@@ -16,6 +16,7 @@ import { listReviews, addReview } from "./services/reviews.js";
 import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
+import { stageSellerVideo } from "./services/seller-listings.js";
 import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
 import socialApiRouter from "./routes/socialApi.js";
 import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
@@ -62,6 +63,49 @@ function resolveBuildId() {
 const BUILD_ID = resolveBuildId();
 
 app.use(corsAllowlist);
+
+/**
+ * Binary seller-video staging — must run BEFORE express.json so the MP4 body
+ * is not chewed by the JSON parser (and so we avoid 33% base64 bloat on mobile).
+ * Auth: phone + sessionToken query params (same pattern as other seller GETs).
+ */
+app.post(
+  "/api/seller/listings/upload-video-bin",
+  express.raw({
+    type: () => true,
+    limit: "16mb",
+  }),
+  async (req, res) => {
+    try {
+      const phone = String(req.query.phone || req.headers["x-seller-phone"] || "").trim();
+      const sessionToken = String(
+        req.query.sessionToken || req.headers["x-seller-session"] || ""
+      ).trim();
+      const videoBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+      const result = await stageSellerVideo({ phone, videoBuffer, sessionToken });
+      if (
+        result.error === "session_required" ||
+        result.error === "session_invalid" ||
+        result.error === "session_expired"
+      ) {
+        return res.status(401).json(result);
+      }
+      if (result.error === "not_onboarded" || result.error === "not_approved") {
+        return res.status(403).json(result);
+      }
+      if (result.error === "video_too_large") return res.status(413).json(result);
+      if (result.error === "invalid_phone" || result.error === "missing_video") {
+        return res.status(400).json(result);
+      }
+      if (result.error) return res.status(400).json(result);
+      return res.status(201).json(result);
+    } catch (err) {
+      console.warn("[upload-video-bin]", err?.message || err);
+      return res.status(500).json({ error: "upload_failed", message: "Video upload failed — try again." });
+    }
+  }
+);
+
 app.use(express.json({ limit: "25mb", verify: attachRawBody }));
 
 app.get("/", (_req, res) => {
