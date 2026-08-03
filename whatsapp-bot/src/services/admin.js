@@ -56,7 +56,13 @@ import {
   handleFlagsCommand,
   handleDbOpsCommand,
 } from "./platform-admin.js";
-import { getSettlementSummary, markPayoutPaid } from "./settlements.js";
+import {
+  getSettlementSummary,
+  listOwedPayouts,
+  listScheduledPayouts,
+  markPayoutPaid,
+  processDuePayouts,
+} from "./settlements.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 
 function digitsOnly(value) {
@@ -476,14 +482,21 @@ async function handleStatusCommand(adminChatId, args) {
       console.warn("[admin] onOrderDelivered retry failed:", err.message);
     }
     const fresh = getOrder(order.id) || order;
+    const sett = listScheduledPayouts(50)
+      .concat(listOwedPayouts(50))
+      .find((e) => e.orderId === fresh.id);
+    const amountLine = sett
+      ? `Seller amount: *KES ${Number(sett.payoutAmountKes || 0).toLocaleString()}* → ${sett.supplierPhone || "seller"}\n`
+      : "";
     return sendText(
       adminChatId,
       `ℹ️ *${fresh.id}* already delivered.\n` +
-        `Escrow: ${fresh.escrowStatus || "—"}\n` +
-        `Payout: ${fresh.payoutStatus || "—"}\n` +
-        (fresh.payoutStatus === "scheduled" || fresh.escrowStatus === "released"
-          ? `Seller payout is scheduled. Check #payouts.`
-          : `If payout is still blank, check for an open dispute or run #payconfirm first.`)
+        `Escrow flag: ${fresh.escrowStatus || "—"} _(not M-Pesa — money stays on your till)_\n` +
+        `Payout book: ${fresh.payoutStatus || "—"}\n` +
+        amountLine +
+        (sett
+          ? `Send that from your till to the seller, then *#paid ${fresh.id}*.\nCheck *#payouts* for the full list.`
+          : `No settlement row yet — check dispute hold, or missing seller price on the order.`)
     );
   }
 
@@ -518,12 +531,16 @@ async function handleStatusCommand(adminChatId, args) {
       escrowLine = `\n⚠️ Escrow release error: ${err.message}`;
     }
     const fresh = getOrder(result.order.id) || result.order;
+    const sett = listScheduledPayouts(50)
+      .concat(listOwedPayouts(50))
+      .find((e) => e.orderId === fresh.id);
     escrowLine =
-      `\nEscrow: ${fresh.escrowStatus || "—"}\n` +
-      `Payout: ${fresh.payoutStatus || "—"}\n` +
-      (fresh.payoutStatus === "scheduled" || fresh.escrowStatus === "released"
-        ? `Seller payout scheduled (≈3 business days). Check #payouts.`
-        : `Escrow did not schedule — check dispute hold or logs.`);
+      `\nEscrow flag: ${fresh.escrowStatus || "—"} _(money still on your till)_\n` +
+      `Payout book: ${fresh.payoutStatus || "—"}\n` +
+      (sett
+        ? `Seller: KES ${Number(sett.payoutAmountKes || 0).toLocaleString()} → ${sett.supplierPhone || "—"}\n` +
+          `Hold ≈3 business days, then send from till + *#paid ${fresh.id}*. See *#payouts*.`
+        : `No settlement row — check dispute hold or missing seller price.`);
   }
   return sendText(
     adminChatId,
@@ -864,11 +881,20 @@ async function handleAssignPickupCommand(adminChatId, args) {
 async function handlePaidCommand(adminChatId, orderId) {
   if (!orderId) return sendText(adminChatId, "Usage: #paid SK-1042");
   const entry = markPayoutPaid(orderId);
-  if (!entry) return sendText(adminChatId, `⚠️ No owed payout for *${orderId}*.`);
+  if (!entry) {
+    return sendText(
+      adminChatId,
+      `⚠️ No payout row for *${orderId}*.\n` +
+        `Run *#status ${String(orderId).toUpperCase()} delivered* first (creates the settlement), ` +
+        `send M-Pesa from your till to the seller, then *#paid* again.\n` +
+        `Check *#payouts*.`
+    );
+  }
   updateOrderMeta(orderId, { payoutStatus: "paid" });
   return sendText(
     adminChatId,
-    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.`
+    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.\n` +
+      `_This only updates Sokoni books — confirm the M-Pesa left your till._`
   );
 }
 
