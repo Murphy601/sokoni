@@ -147,8 +147,11 @@ export function checkoutMeta() {
     escrow: true,
     autoConfirm: isDarajaConfigured(),
     paymentMethods: isDarajaConfigured() ? ["mpesa_stk"] : ["manual_till"],
-    till: config.store.mpesaTill || null,
+    till: config.mpesa.partyB || config.store.mpesaTill || null,
     tillName: config.store.mpesaTillName || null,
+    shortcode: config.mpesa.shortcode || null,
+    partyB: config.mpesa.partyB || null,
+    transactionType: config.mpesa.transactionType || null,
     callbackUrl: config.mpesa.callbackUrl || null,
     note: isDarajaConfigured()
       ? "Daraja STK auto-confirms payment via webhook — no admin #payconfirm needed."
