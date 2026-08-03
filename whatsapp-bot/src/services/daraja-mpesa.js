@@ -55,13 +55,27 @@ async function getAccessToken() {
   if (tokenCache.token && Date.now() < tokenCache.expiresAt - 60_000) {
     return tokenCache.token;
   }
-  const auth = Buffer.from(`${config.mpesa.consumerKey}:${config.mpesa.consumerSecret}`).toString("base64");
-  const res = await fetch(`${baseUrl()}/oauth/v1/generate?grant_type=client_credentials`, {
+  const key = String(config.mpesa.consumerKey || "").trim();
+  const secret = String(config.mpesa.consumerSecret || "").trim();
+  const auth = Buffer.from(`${key}:${secret}`, "utf8").toString("base64");
+  const url = `${baseUrl()}/oauth/v1/generate?grant_type=client_credentials`;
+  const res = await fetch(url, {
+    method: "GET",
     headers: { Authorization: `Basic ${auth}` },
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`Daraja OAuth failed (${res.status}): ${errText.slice(0, 200)}`);
+    console.warn("[daraja] OAuth failed", {
+      status: res.status,
+      env: config.mpesa.env,
+      host: baseUrl(),
+      keyLen: key.length,
+      secretLen: secret.length,
+      body: errText.slice(0, 240),
+    });
+    throw new Error(
+      `Daraja OAuth failed (${res.status}): ${errText.slice(0, 200) || "check MPESA_CONSUMER_KEY/SECRET + MPESA_ENV"}`
+    );
   }
   const data = await res.json();
   if (!data.access_token) throw new Error("Daraja OAuth: no access_token");

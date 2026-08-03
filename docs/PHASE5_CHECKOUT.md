@@ -45,10 +45,10 @@ MPESA_PASSKEY=
 MPESA_SHORTCODE=
 MPESA_ENV=sandbox
 MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline
-MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/mpesa-callback
+MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
 
-Register the callback URL in the [Safaricom Daraja portal](https://developer.safaricom.co.ke/).
+Register the callback URL in the [Safaricom Daraja portal](https://developer.safaricom.co.ke/). Prefer `/daraja/callback` — URLs containing `mpesa` are often rejected. Trim keys/secrets (no quotes/spaces) and match `MPESA_ENV=production` to production Consumer Key/Secret.
 
 **Manual fallback** (Daraja unset): customer pays till + replies `paid` → admin `#payconfirm`. Web checkout shows till details when `GET /api/checkout/meta` reports `darajaConfigured: false`.
 
