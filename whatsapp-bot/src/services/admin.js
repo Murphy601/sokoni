@@ -605,20 +605,64 @@ async function handleFulfillCommand(adminChatId, args) {
 }
 
 async function handlePayoutsCommand(adminChatId) {
-  const summary = getSettlementSummary();
-  if (summary.count === 0) {
-    return sendText(adminChatId, "💰 No supplier payouts owed right now.");
+  // Promote any scheduled holds whose 3 business days elapsed.
+  try {
+    processDuePayouts();
+  } catch (err) {
+    console.warn("[admin] processDuePayouts:", err.message);
   }
-  const lines = summary.entries.slice(0, 10).map(
+  const summary = getSettlementSummary();
+  const scheduled = listScheduledPayouts(15);
+  const owed = summary.entries || [];
+
+  if (owed.length === 0 && scheduled.length === 0) {
+    return sendText(
+      adminChatId,
+      "💰 No supplier payouts on the books.\n\n" +
+        "_Escrow “released” on an order only flags accounting — money stays on your till until you send it. " +
+        "After #status … delivered, a row should appear here as *scheduled* (3 business days) then *owed*._"
+    );
+  }
+
+  const fmtWhen = (ms) => {
+    if (!ms) return "—";
+    try {
+      return new Date(ms).toLocaleString("en-KE", { timeZone: "Africa/Nairobi", dateStyle: "medium" });
+    } catch {
+      return "—";
+    }
+  };
+
+  const owedLines = owed.slice(0, 10).map(
     (e) =>
       `*${e.orderId}* · ${e.supplierName}\n` +
-      `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
-      `#paid ${e.orderId} when sent`
+      `Pay *now*: KES ${Number(e.payoutAmountKes || 0).toLocaleString()} · ${e.productName}\n` +
+      `Phone: ${e.supplierPhone || "—"}\n` +
+      `#paid ${e.orderId} after you send M-Pesa`
   );
-  return sendText(
-    adminChatId,
-    `💰 *Owed to suppliers:* KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+  const schedLines = scheduled.slice(0, 10).map(
+    (e) =>
+      `*${e.orderId}* · ${e.supplierName}\n` +
+      `Hold: KES ${Number(e.payoutAmountKes || 0).toLocaleString()} · due ${fmtWhen(e.payoutEligibleAt)}\n` +
+      `${e.productName}`
   );
+
+  let msg = "💰 *Supplier payouts*\n\n";
+  if (owed.length) {
+    msg +=
+      `*Owed now:* KES ${summary.totalOwedKes.toLocaleString()} (${owed.length})\n` +
+      `_Send from your till, then #paid SK-####_\n\n${owedLines.join("\n\n")}\n\n`;
+  } else {
+    msg += "*Owed now:* none\n\n";
+  }
+  if (scheduled.length) {
+    msg +=
+      `*Scheduled (escrow hold):* KES ${summary.totalScheduledKes.toLocaleString()} (${scheduled.length})\n` +
+      `${schedLines.join("\n\n")}\n\n`;
+  }
+  msg +=
+    "_Auto B2C payout is not live yet — transfer manually from Till/Paybill to the seller, then mark #paid._";
+  return sendText(adminChatId, msg.trim());
 }
 
 async function handlePaymentsCommand(adminChatId) {
