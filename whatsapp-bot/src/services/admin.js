@@ -446,7 +446,7 @@ async function handleStatusCommand(adminChatId, args) {
   if (!orderId || !statusInput) {
     return sendText(
       adminChatId,
-      `Usage: #status SK-1042 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
+      `Usage: #status SK-1042 delivered\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
     );
   }
   const order = getOrder(orderId);
@@ -461,9 +461,32 @@ async function handleStatusCommand(adminChatId, args) {
   ) {
     return sendText(
       adminChatId,
-      `⚠️ *${order.id}* — payment not confirmed. Run #payconfirm ${order.id} first.`
+      `⚠️ *${order.id}* — payment not confirmed (status: ${order.customerPaymentStatus || "unpaid"}).\n\n` +
+        `1) Verify M-Pesa on till\n` +
+        `2) Send *#payconfirm ${order.id}*\n` +
+        `3) Then *#status ${order.id} delivered*`
     );
   }
+
+  // Already delivered — still (re)run escrow release if payout never scheduled.
+  if (next === "delivered" && order.status === "delivered") {
+    try {
+      await onOrderDelivered(order);
+    } catch (err) {
+      console.warn("[admin] onOrderDelivered retry failed:", err.message);
+    }
+    const fresh = getOrder(order.id) || order;
+    return sendText(
+      adminChatId,
+      `ℹ️ *${fresh.id}* already delivered.\n` +
+        `Escrow: ${fresh.escrowStatus || "—"}\n` +
+        `Payout: ${fresh.payoutStatus || "—"}\n` +
+        (fresh.payoutStatus === "scheduled" || fresh.escrowStatus === "released"
+          ? `Seller payout is scheduled. Check #payouts.`
+          : `If payout is still blank, check for an open dispute or run #payconfirm first.`)
+    );
+  }
+
   const result = updateOrderStatus(orderId, statusInput);
   if (!result) {
     return sendText(adminChatId, `⚠️ Order *${orderId}* not found. Try #orders.`);
@@ -478,17 +501,33 @@ async function handleStatusCommand(adminChatId, args) {
     );
   }
   await notifyCustomerOfStatus(result.order);
+  let escrowLine = "";
   if (result.status === "delivered") {
-    advanceShipmentStatus(result.order.id, "delivered", { actor: "admin_status", note: "#status delivered" });
-    onOrderDelivered(getOrder(result.order.id) || result.order);
+    try {
+      advanceShipmentStatus(result.order.id, "delivered", {
+        actor: "admin_status",
+        note: "#status delivered",
+      });
+    } catch (err) {
+      console.warn("[admin] advanceShipmentStatus:", err.message);
+    }
+    try {
+      await onOrderDelivered(getOrder(result.order.id) || result.order);
+    } catch (err) {
+      console.warn("[admin] onOrderDelivered failed:", err.message);
+      escrowLine = `\n⚠️ Escrow release error: ${err.message}`;
+    }
+    const fresh = getOrder(result.order.id) || result.order;
+    escrowLine =
+      `\nEscrow: ${fresh.escrowStatus || "—"}\n` +
+      `Payout: ${fresh.payoutStatus || "—"}\n` +
+      (fresh.payoutStatus === "scheduled" || fresh.escrowStatus === "released"
+        ? `Seller payout scheduled (≈3 business days). Check #payouts.`
+        : `Escrow did not schedule — check dispute hold or logs.`);
   }
-  const payoutNote =
-    result.status === "delivered" && result.order.sourcePriceKes
-      ? `\nSeller payout scheduled (2–3 business days). Check #payouts.`
-      : "";
   return sendText(
     adminChatId,
-    `✅ *${result.order.id}* → ${statusLabel(result.status)}\nCustomer notified.${payoutNote}`
+    `✅ *${result.order.id}* → ${statusLabel(result.status)}\nCustomer notified.${escrowLine}`
   );
 }
 
