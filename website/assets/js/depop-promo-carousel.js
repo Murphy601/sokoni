@@ -43,6 +43,66 @@
       secondaryText: "Start selling thrift",
       secondaryHref: "suppliers/list.html",
     },
+    {
+      image: "assets/images/marketing/escrow-mpesa-security.jpg",
+      alt: "Smartphone showing a green digital security shield for M-Pesa escrow",
+      kicker: "Prepaid escrow · Buyer protection",
+      title: "Shop with peace of mind.",
+      sub:
+        "Your M-Pesa stays in Sokoni escrow until you receive the order. Track every purchase with SK-####.",
+      primaryText: "How escrow works",
+      primaryHref: "faq.html",
+      secondaryText: "Track an order",
+      secondaryHref: "track.html",
+    },
+    {
+      image: "assets/images/marketing/category-vintage-denim.jpg",
+      alt: "Vintage denim jackets and outerwear on black hangers",
+      kicker: "Category · Vintage denim & outerwear",
+      title: "Denim, leather, and 90s heat.",
+      sub:
+        "Browse upcycled jackets and coats from thrifters across Kenya — clear photos, prepaid checkout.",
+      primaryText: "Shop outerwear",
+      primaryHref: "#deals",
+      secondaryText: "Browse categories",
+      secondaryHref: "#categories",
+    },
+    {
+      image: "assets/images/marketing/category-rare-kicks.jpg",
+      alt: "Limited-edition streetwear sneakers on a dark reflective surface",
+      kicker: "Category · Rare kicks",
+      title: "Sneaker heat, studio-clean.",
+      sub:
+        "Limited pairs and streetwear staples from sellers who shoot clear product photos — offer or buy now.",
+      primaryText: "Shop sneakers",
+      primaryHref: "#deals",
+      secondaryText: "List your kicks",
+      secondaryHref: "suppliers/list.html",
+    },
+    {
+      image: "assets/images/marketing/seller-closet-cash.jpg",
+      alt: "Seller arranging thrift streetwear on a rack in a dark studio",
+      kicker: "For sellers · Zero listing fees",
+      title: "Turn your closet into cash.",
+      sub:
+        "List brand new or pre-loved in minutes. Buyers pay upfront — you dispatch, then get paid after delivery.",
+      primaryText: "Start selling",
+      primaryHref: "suppliers/list.html",
+      secondaryText: "How selling works",
+      secondaryHref: "#why-sell",
+    },
+    {
+      image: "assets/images/marketing/whatsapp-mobile-commerce.jpg",
+      alt: "Shopper checking her phone on a Nairobi street at sunset",
+      kicker: "WhatsApp commerce · Fast checkout",
+      title: "Order from your phone in minutes.",
+      sub:
+        "Browse on Sokoni, pay with M-Pesa, and message sellers in-app or on WhatsApp when you need a human.",
+      primaryText: "Shop latest finds",
+      primaryHref: "#deals",
+      secondaryText: "Chat on WhatsApp",
+      secondaryHref: "https://wa.me/254117422428",
+    },
   ];
 
   function escapeHtml(value) {
