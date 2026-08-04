@@ -10,6 +10,7 @@ const PRODUCT_SELECT = `
     su.id AS seller_user_join_id,
     su.handle AS seller_handle,
     su.shop_name AS seller_shop_name,
+    su.avatar_url AS seller_avatar_url,
     COALESCE(
       (SELECT json_agg(pi.url ORDER BY pi.sort_order)
        FROM product_images pi WHERE pi.product_id = p.id),

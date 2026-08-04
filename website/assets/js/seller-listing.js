@@ -2525,13 +2525,15 @@ async function saveShopProfile(event) {
     }
   }
 
+  const avatarUrlValue = String(el("edit-shop-avatar")?.value || "").trim();
   const payload = jsonAuthBody({
     phone,
     shopName: el("edit-shop-name")?.value || "",
     handle: el("edit-shop-handle")?.value || "",
     bio: el("edit-shop-bio")?.value || "",
     location: el("edit-shop-location")?.value || "",
-    avatarUrl: el("edit-shop-avatar")?.value || "",
+    // Only send when set — empty string would otherwise null out users.avatar_url on PATCH.
+    ...(avatarUrlValue ? { avatarUrl: avatarUrlValue } : {}),
     instagramUrl: el("edit-shop-instagram")?.value || "",
     tiktokUrl: el("edit-shop-tiktok")?.value || "",
     socialWaNotify: el("edit-shop-wa-notify") ? el("edit-shop-wa-notify").checked : true,
