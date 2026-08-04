@@ -1009,7 +1009,44 @@ body.has-depop-shell .depop-marketing-extra {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  margin-top: 1.25rem;
+  margin-top: 1rem;
+}
+
+.depop-trust-stack {
+  display: grid;
+  gap: 2rem;
+  margin-top: 1.5rem;
+}
+
+.depop-trust-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.depop-trust-card-copy h3 {
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 1.15rem;
+  margin: 0 0 0.35rem;
+}
+
+.depop-trust-card-copy p {
+  color: #a1a1aa;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 40rem;
+}
+
+.depop-empty-search-art {
+  width: min(16rem, 70vw);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: 1.25rem;
+  background: #09090b;
+  display: block;
 }
 
 .depop-how-layout {

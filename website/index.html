@@ -261,9 +261,22 @@
         <div id="price-tier-chips" class="flex flex-wrap gap-2"></div>
       </div>
       <p id="search-status" class="hidden text-sm text-brand-purple/70 dark:text-white/70 mb-4"></p>
-      <div id="local-deals-empty" class="hidden text-center py-12 text-brand-purple/50">
-        <p class="mb-4">No listings match your search.</p>
-        <a id="search-empty-wa" href="#" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-6 py-3 rounded-full">Try another search</a>
+      <div id="local-deals-empty" class="hidden text-center py-12 text-brand-purple/50 dark:text-zinc-400">
+        <img
+          class="depop-empty-search-art mx-auto mb-5"
+          src="assets/images/marketing/empty-search.jpg"
+          alt=""
+          width="320"
+          height="320"
+          loading="lazy"
+          decoding="async"
+        />
+        <p class="text-lg font-semibold text-brand-purple dark:text-white mb-2">Nothing listed for that yet.</p>
+        <p class="mb-5 max-w-md mx-auto text-sm">Try another keyword — or list the piece yourself and sell it on Sokoni.</p>
+        <div class="flex flex-wrap justify-center gap-3">
+          <a id="search-empty-wa" href="#" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-6 py-3 rounded-full">Ask on WhatsApp</a>
+          <a href="suppliers/list.html" class="inline-flex items-center gap-2 border border-brand-purple/20 dark:border-white/20 font-semibold px-6 py-3 rounded-full">List an item</a>
+        </div>
       </div>
       <div id="catalog-refresh-empty" class="hidden text-center py-16 text-brand-purple/60 col-span-full">
         <p class="text-xl font-display font-bold text-brand-purple dark:text-white mb-2">Fresh listings loading</p>
@@ -483,27 +496,78 @@
     </div>
   </section>
 
-  <!-- Trust exchange — between How it works and Reviews -->
-  <section id="trusted-exchange" class="depop-trust-banner reveal-on-scroll" aria-label="Trusted exchange on Sokoni">
+  <!-- Trust / quality / hubs — between How it works and Reviews -->
+  <section id="trusted-exchange" class="depop-trust-banner reveal-on-scroll" aria-label="Trust, quality checks, and drop-off hubs">
     <div class="depop-trust-banner-inner px-4 md:px-5">
-      <span class="depop-edu-kicker">Trusted exchange</span>
-      <h2 class="depop-edu-title">Meet, hand over, track with confidence.</h2>
+      <span class="depop-edu-kicker">From escrow to delivery</span>
+      <h2 class="depop-edu-title">Trust built into every handoff.</h2>
       <p class="text-sm text-zinc-400 max-w-2xl">
-        Prepaid escrow holds the M-Pesa until delivery. Every order gets an SK track ID — scan, follow, and shop with trust.
+        Inspect the drop, use Sokoni hubs, and track every parcel — M-Pesa stays in escrow until delivery is confirmed.
       </p>
-      <figure class="depop-trust-banner-visual">
-        <img
-          src="assets/images/marketing/trust-exchange-nairobi.jpg"
-          alt="Seller and buyer shaking hands over a Sokoni Marketplace bag with Track ID SKN-572198-XY on a Nairobi street"
-          width="1536"
-          height="1024"
-          loading="lazy"
-          decoding="async"
-        />
-      </figure>
-      <div class="depop-trust-banner-actions">
-        <a href="track.html" class="depop-hero-cta depop-hero-cta--primary">Track an order</a>
-        <a href="faq.html" class="depop-hero-cta depop-hero-cta--ghost">How escrow works</a>
+
+      <div class="depop-trust-stack">
+        <article class="depop-trust-card">
+          <figure class="depop-trust-banner-visual">
+            <img
+              src="assets/images/marketing/trust-exchange-nairobi.jpg"
+              alt="Seller and buyer shaking hands over a Sokoni Marketplace bag with Track ID SKN-572198-XY on a Nairobi street"
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div class="depop-trust-card-copy">
+            <h3>Trusted exchange</h3>
+            <p>Meet, hand over, and follow the SK track ID — escrow holds payment until delivery.</p>
+            <div class="depop-trust-banner-actions">
+              <a href="track.html" class="depop-hero-cta depop-hero-cta--primary">Track an order</a>
+              <a href="faq.html" class="depop-hero-cta depop-hero-cta--ghost">How escrow works</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="depop-trust-card">
+          <figure class="depop-trust-banner-visual">
+            <img
+              src="assets/images/marketing/inspect-before-pay.jpg"
+              alt="Buyer scanning a QR code while unboxing pre-loved sneakers at a Nairobi coffee shop"
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div class="depop-trust-card-copy">
+            <h3>Inspect before you pay</h3>
+            <p>Scan the package QR and check condition — authenticity and thrift quality, verified before you commit.</p>
+            <div class="depop-trust-banner-actions">
+              <a href="#deals" class="depop-hero-cta depop-hero-cta--primary">Shop finds</a>
+              <a href="faq.html" class="depop-hero-cta depop-hero-cta--ghost">Buyer protection</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="depop-trust-card">
+          <figure class="depop-trust-banner-visual">
+            <img
+              src="assets/images/marketing/dropoff-hub.jpg"
+              alt="Staff at a Sokoni drop-off hub handing a branded bag to a courier"
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div class="depop-trust-card-copy">
+            <h3>Drop-off hubs</h3>
+            <p>Hand parcels to partner counters in Nairobi CBD and major towns — couriers pick up, buyers track with SK-####.</p>
+            <div class="depop-trust-banner-actions">
+              <a href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--primary">Start selling</a>
+              <a href="#how-it-works" class="depop-hero-cta depop-hero-cta--ghost">How it works</a>
+            </div>
+          </div>
+        </article>
       </div>
     </div>
   </section>
