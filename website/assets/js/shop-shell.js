@@ -264,6 +264,9 @@
   }
 
   function openBagSheet() {
+    if (window.SokoniAccountGate?.requireForAction && !window.SokoniAccountGate.requireForAction("index.html")) {
+      return;
+    }
     renderBagSheet();
     document.getElementById("bag-sheet")?.classList.add("is-open");
     document.getElementById("bag-sheet")?.removeAttribute("hidden");

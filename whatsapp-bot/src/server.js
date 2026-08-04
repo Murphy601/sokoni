@@ -20,6 +20,7 @@ import { stageSellerVideo } from "./services/seller-listings.js";
 import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
 import socialApiRouter from "./routes/socialApi.js";
 import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
+import accountAuthApiRouter from "./routes/accountAuthApi.js";
 import ordersApiRouter from "./routes/ordersApi.js";
 import disputesApiRouter from "./routes/disputesApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
@@ -211,6 +212,7 @@ app.use(
 app.use("/api/", apiLimiter);
 app.use("/api/seller/onboard", authLimiter);
 app.use("/api/buyer/auth", authLimiter);
+app.use("/api/account/auth", authLimiter);
 app.use("/api/agent", authLimiter);
 app.use("/admin/", adminLimiter);
 
@@ -241,6 +243,7 @@ app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/api/seller/onboard", sellerOnboardApiRouter);
 app.use("/api/social", socialApiRouter);
 app.use("/api/buyer/auth", buyerAuthApiRouter);
+app.use("/api/account/auth", accountAuthApiRouter);
 app.use("/api/orders", ordersApiRouter);
 app.use("/api/disputes", disputesApiRouter);
 app.use("/api/checkout", checkoutApiRouter);

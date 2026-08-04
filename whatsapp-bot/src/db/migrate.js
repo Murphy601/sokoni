@@ -11,6 +11,7 @@ const SCHEMA_PHASE10_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE11_PATH = path.join(__dirname, "..", "..", "db", "schema-phase11-shop-reviews.sql");
 const SCHEMA_PHASE12_PATH = path.join(__dirname, "..", "..", "db", "schema-phase12-depop-expansion.sql");
 const SCHEMA_PHASE13_PATH = path.join(__dirname, "..", "..", "db", "schema-phase13-reviews-disputes.sql");
+const SCHEMA_PHASE14_PATH = path.join(__dirname, "..", "..", "db", "schema-phase14-account-auth.sql");
 
 async function applySchemaFile(label, filePath) {
   try {
@@ -36,6 +37,7 @@ export async function runMigrations() {
   await applySchemaFile("phase11 shop reviews", SCHEMA_PHASE11_PATH);
   await applySchemaFile("phase12 depop expansion", SCHEMA_PHASE12_PATH);
   await applySchemaFile("phase13 reviews disputes", SCHEMA_PHASE13_PATH);
+  await applySchemaFile("phase14 account auth", SCHEMA_PHASE14_PATH);
 }
 
 async function main() {

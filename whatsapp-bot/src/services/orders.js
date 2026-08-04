@@ -269,27 +269,99 @@ function normalizePhoneDigits(raw) {
   return d;
 }
 
+function normalizeOrderPhone(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("254")) return d;
+  if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
+  if (d.length === 9) return `254${d}`;
+  return d;
+}
+
 export function getOrdersForCustomer(customerKey, phone = "") {
   load();
-  const digits = String(phone || "").replace(/\D/g, "");
-  const norm = (d) => {
-    if (!d) return "";
-    if (d.startsWith("254")) return d;
-    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
-    if (d.length === 9) return `254${d}`;
-    return d;
-  };
-  const want = norm(digits);
+  const want = normalizeOrderPhone(phone);
 
   return Object.values(store.orders)
     .filter((o) => {
       if (o.customerKey === customerKey) return true;
       if (!want) return false;
-      const orderPhone = norm(String(o.phone || "").replace(/\D/g, ""));
-      const orderKeyPhone = norm(String(o.customerKey || "").replace(/\D/g, ""));
+      const orderPhone = normalizeOrderPhone(o.phone);
+      const orderKeyPhone = normalizeOrderPhone(String(o.customerKey || "").replace(/\D/g, ""));
       return orderPhone === want || orderKeyPhone === want;
     })
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Safe buyer-facing purchase row (no seller cost fields). */
+export function toBuyerPurchaseSummary(order) {
+  if (!order) return null;
+  return {
+    id: order.id,
+    productName: order.productName || null,
+    productId: order.productId || null,
+    totalKes: order.totalKes ?? order.priceKes ?? null,
+    status: order.status || null,
+    paymentStatus: order.customerPaymentStatus || order.paymentStatus || null,
+    escrowStatus: order.escrowStatus || null,
+    shipmentStatus: order.shipmentStatus || null,
+    createdAt: order.createdAt || null,
+    paidAt: order.paidAt || null,
+    trackUrl: `/track.html?order=${encodeURIComponent(order.id)}`,
+    checkoutUrl: `/checkout.html?order=${encodeURIComponent(order.id)}`,
+  };
+}
+
+/**
+ * Purchases for a site account: linked by accountUserId, or matching phone.
+ */
+export function getPurchasesForAccount({ userId, phone } = {}) {
+  load();
+  const uid = Number(userId);
+  const want = normalizeOrderPhone(phone);
+  return Object.values(store.orders)
+    .filter((o) => {
+      if (uid && Number(o.accountUserId) === uid) return true;
+      if (!want) return false;
+      const orderPhone = normalizeOrderPhone(o.phone);
+      const orderKeyPhone = normalizeOrderPhone(String(o.customerKey || "").replace(/\D/g, ""));
+      return orderPhone === want || orderKeyPhone === want;
+    })
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map(toBuyerPurchaseSummary);
+}
+
+/**
+ * Attach order to an account when phone matches (or already linked).
+ */
+export function claimOrderForAccount(orderId, { userId, phone, email } = {}) {
+  const order = getOrder(orderId);
+  if (!order) return { error: "not_found", message: "Order not found." };
+  const uid = Number(userId);
+  if (!uid) return { error: "invalid_user", message: "Sign in required." };
+
+  if (Number(order.accountUserId) === uid) {
+    return { ok: true, order: toBuyerPurchaseSummary(order), alreadyLinked: true };
+  }
+  if (order.accountUserId && Number(order.accountUserId) !== uid) {
+    return { error: "already_claimed", message: "This order is linked to another account." };
+  }
+
+  const want = normalizeOrderPhone(phone);
+  const orderPhone = normalizeOrderPhone(order.phone);
+  const orderKeyPhone = normalizeOrderPhone(String(order.customerKey || "").replace(/\D/g, ""));
+  if (!want || (orderPhone !== want && orderKeyPhone !== want)) {
+    return {
+      error: "phone_mismatch",
+      message: "Add the WhatsApp number used on this order to your account, then try again.",
+    };
+  }
+
+  updateOrderMeta(order.id, {
+    accountUserId: uid,
+    accountEmail: email || order.accountEmail || null,
+  });
+  return { ok: true, order: toBuyerPurchaseSummary(getOrder(order.id)) };
 }
 
 export function listRecentOrders(limit = 10) {

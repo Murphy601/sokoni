@@ -3020,8 +3020,24 @@ async function onVerifyCode() {
       setOnboardStatus(parsed.data?.message || parsed.message || "Wrong code.", true);
       return;
     }
-    saveVerificationToken(parsed.data.sessionToken || parsed.data.verificationToken, parsed.data.expiresInSec);
-    await routeAfterVerify(normalizePhoneInput(phone), parsed.data);
+    const waToken = parsed.data.sessionToken || parsed.data.verificationToken;
+    saveVerificationToken(waToken, parsed.data.expiresInSec);
+    const digits = normalizePhoneInput(phone);
+    if (window.SokoniAccountAuth?.isSignedIn?.() && waToken) {
+      try {
+        const linked = await window.SokoniAccountAuth.linkWhatsApp({
+          phone: digits,
+          whatsappSessionToken: waToken,
+          role: "seller",
+        });
+        if (linked.ok) {
+          setOnboardStatus(linked.data?.message || "WhatsApp linked to your Sokoni account.");
+        }
+      } catch {
+        /* seller hub still works without email link */
+      }
+    }
+    await routeAfterVerify(digits, parsed.data);
   } catch {
     setOnboardStatus("Could not reach Sokoni — try again.", true);
   } finally {

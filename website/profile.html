@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Your profile — Sokoni Mall</title>
-<meta name="description" content="Sign in with WhatsApp, see saved items, and jump to activity, inbox, or order tracking on Sokoni." />
+<title>Your account — Sokoni Mall</title>
+<meta name="description" content="Sokoni Mall account — email login, purchases, saved items, activity, and order tracking." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -46,17 +46,34 @@
 
   <main class="depop-main-content max-w-3xl mx-auto w-full px-5 py-7 flex-1 flex flex-col gap-4">
     <section class="depop-card p-5 space-y-1">
-      <p class="depop-label">Profile</p>
-      <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Your profile</h1>
+      <p class="depop-label">Account</p>
+      <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Your account</h1>
       <p class="text-sm text-zinc-400 mt-2">
-        WhatsApp sign-in keeps likes, offers, and chats tied to you. Orders stay prepaid with SK tracking.
+        Free email login for the site. WhatsApp verify still powers likes, offers, and inbox until accounts are linked.
       </p>
       <p id="profile-status" class="text-sm mt-2 text-zinc-400" role="status" aria-live="polite"></p>
 
+      <div id="account-email-card" class="mt-4 depop-card !bg-black p-4 space-y-3">
+        <p class="text-sm font-semibold text-white">Site login (email)</p>
+        <div id="account-email-signed-out" class="space-y-2">
+          <p class="text-xs text-zinc-400">New here? Create a free account. Returning? Log in.</p>
+          <div class="flex flex-wrap gap-2">
+            <a href="signup.html" class="depop-btn-accent">Sign up free</a>
+            <a href="login.html" class="depop-btn-ghost">Log in</a>
+          </div>
+        </div>
+        <div id="account-email-signed-in" class="hidden space-y-2">
+          <p id="account-email-name" class="text-sm text-white"></p>
+          <p id="account-email-address" class="text-sm text-zinc-300"></p>
+          <p id="account-email-phone" class="text-xs text-zinc-500"></p>
+          <button id="account-sign-out-btn" type="button" class="depop-btn-ghost">Sign out</button>
+        </div>
+      </div>
+
       <div id="buyer-auth-panel" class="mt-4 depop-card !bg-black p-4 space-y-3">
-        <p class="text-sm font-semibold text-white">Buyer WhatsApp sign-in</p>
+        <p class="text-sm font-semibold text-white">WhatsApp verify (social)</p>
         <p class="text-xs text-zinc-400">
-          Verify once — same session as Activity and Inbox.
+          Verify to sync likes, offers, and inbox. If you're logged in with email, this phone links to the same account.
         </p>
         <div class="flex flex-col sm:flex-row gap-2">
           <label class="flex-1 text-xs font-medium text-zinc-300">
@@ -103,6 +120,38 @@
       </div>
     </section>
 
+    <section id="account-purchases-section" class="depop-card p-5 space-y-3">
+      <h2 class="text-lg font-black text-white">My purchases</h2>
+      <p class="text-sm text-zinc-400">Prepaid orders tied to this account (by phone or claim).</p>
+      <div id="account-purchases-need-login" class="space-y-2">
+        <p class="text-sm text-zinc-400">Log in to see your purchases.</p>
+        <a href="login.html?next=profile.html" class="depop-btn-accent inline-flex">Log in</a>
+      </div>
+      <div id="account-purchases-body" class="hidden space-y-3">
+        <form id="account-phone-form" class="depop-card !bg-black p-3 space-y-2">
+          <label class="block text-xs font-medium text-zinc-300">
+            WhatsApp on this account (matches checkout phone)
+            <input id="account-phone-input" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <button type="submit" class="depop-btn-ghost">Save phone</button>
+          <p id="account-phone-status" class="text-xs text-zinc-500" role="status"></p>
+        </form>
+        <form id="account-claim-form" class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+          <label class="flex-1 text-xs font-medium text-zinc-300">
+            Claim order
+            <input id="account-claim-order" name="orderId" type="text" placeholder="SK-1022" maxlength="16"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <button type="submit" class="depop-btn-ghost">Link to account</button>
+        </form>
+        <p id="account-claim-status" class="text-xs text-zinc-500" role="status"></p>
+        <p id="account-purchases-hint" class="text-xs text-zinc-500"></p>
+        <ul id="account-purchases-list" class="space-y-2"></ul>
+        <p id="account-purchases-empty" class="text-sm text-zinc-500 hidden">No purchases yet. Order on WhatsApp or the site, then they show up here.</p>
+      </div>
+    </section>
+
     <section class="depop-card p-5">
       <h2 class="text-lg font-black text-white">Quick links</h2>
       <p class="text-sm text-zinc-400 mt-1 mb-3">Jump to the parts of Sokoni you use most.</p>
@@ -143,6 +192,8 @@
 
   <script src="assets/js/shell-chrome.js"></script>
   <script src="assets/js/depop-nav.js"></script>
+  <script src="assets/js/account-auth.js"></script>
+  <script src="assets/js/account-gate.js"></script>
   <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/buyer-profile.js"></script>
 </body>

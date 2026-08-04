@@ -19,6 +19,7 @@
     "test:gemini": "node scripts/test-gemini-vision.mjs",
     "test:nvidia": "node scripts/test-nvidia-vision.mjs",
     "verify:cloudinary": "node scripts/verify-cloudinary.mjs",
+    "test:account-auth": "node scripts/test-account-auth.mjs",
     "test:buyer-auth": "node scripts/test-buyer-social-auth.mjs",
     "test:social-routing": "node scripts/test-social-auth-routing.mjs",
     "test:seller-social-profile": "node scripts/test-seller-social-profile.mjs",
