@@ -73,6 +73,7 @@ export function rowToCatalogProduct(row, imageUrls = []) {
       const n = Number(raw);
       return Number.isInteger(n) && n > 0 ? n : undefined;
     })(),
+    sellerAvatarUrl: row.seller_avatar_url ? String(row.seller_avatar_url) : undefined,
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),

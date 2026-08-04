@@ -77,6 +77,7 @@ function toPublicProduct(p) {
     sellerHandle: p.sellerHandle,
     shopHandle: p.shopHandle,
     sellerUserId: p.sellerUserId,
+    sellerAvatarUrl: p.sellerAvatarUrl,
     scope: p.scope,
     fulfillment: p.fulfillment,
     payment: p.payment,
