@@ -562,15 +562,7 @@ body.has-depop-shell .depop-marketing-extra {
   display: none;
 }
 
-/* ── Below-hero brands + promo carousel ── */
-.depop-promo-carousel-section {
-  border-top: 1px solid #18181b;
-  border-bottom: 1px solid #18181b;
-  background: #09090b;
-  color: #ffffff;
-  padding: 1.35rem 1rem 2.25rem;
-}
-
+/* ── Below-hero ecosystem strips ── */
 .depop-brands-bar {
   border-top: 1px solid #18181b;
   border-bottom: 1px solid #18181b;
@@ -594,7 +586,7 @@ body.has-depop-shell .depop-marketing-extra {
   justify-content: center;
   gap: 0.5rem;
   max-width: 56rem;
-  margin: 0 auto 1.75rem;
+  margin: 0 auto;
 }
 
 .depop-brand-chip {
