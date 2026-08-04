@@ -296,7 +296,7 @@ export async function handleIncomingMessage(
     return handleCustomerPaidClaim(customerKey, text, phone);
   }
 
-  // DISPATCH / YES SK-#### must run before generic SK track (which would swallow them).
+  // Order-state bus: DISPATCH / YES / HELP SK-#### (before generic SK track).
   {
     const { tryHandleWaDeliveryConfirm } = await import("../services/wa-delivery-confirm.js");
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;

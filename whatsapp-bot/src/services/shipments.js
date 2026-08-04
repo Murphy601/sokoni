@@ -134,9 +134,11 @@ export function advanceShipmentStatus(orderId, nextStatus, meta = {}) {
   const updated = getOrder(orderId);
   mirrorShipmentToDb(updated).catch(() => {});
 
-  import("./order-notifications.js")
-    .then(({ notifyShipmentStatusChange }) => notifyShipmentStatusChange(updated, { prevStatus }))
-    .catch((err) => console.warn("[shipments] notify failed:", err.message));
+  if (!meta.skipBuyerNotify && !meta.skipNotify) {
+    import("./order-notifications.js")
+      .then(({ notifyShipmentStatusChange }) => notifyShipmentStatusChange(updated, { prevStatus, meta }))
+      .catch((err) => console.warn("[shipments] notify failed:", err.message));
+  }
 
   return { order: updated, status };
 }

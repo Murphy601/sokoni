@@ -263,6 +263,14 @@ export async function initiateSettlementB2C(orderId, { force = false } = {}) {
   } catch {
     /* ignore */
   }
+  import("./communication-hub.js")
+    .then(({ notifyAdminEvent }) =>
+      notifyAdminEvent("PAYOUT_FAILED", {
+        orderId: entry.orderId,
+        details: result.message || "B2C rejected — retry with #payb2c",
+      })
+    )
+    .catch(() => {});
   return { error: "b2c_rejected", message: result.message || "B2C rejected", entry, result };
 }
 

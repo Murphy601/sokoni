@@ -24,6 +24,12 @@ import { recordPurchaseFeedEvent } from "./feed-ranking.js";
 import { isDbEnabled } from "../db/pool.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { labelPageUrlForOrder } from "./prepaid-checkout.js";
+import {
+  dispatchMessages,
+  msgBuyerPaid,
+  msgSellerPaid,
+  notifyAdminEvent,
+} from "./communication-hub.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -81,89 +87,37 @@ async function lockProductForOrder(order) {
 
 async function notifyBuyerPaid(order, payment) {
   const amt = payment.amount ?? orderBuyerTotal(order);
-  const trackUrl = `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`;
-  const sellerHandled =
-    order.shippingRecipient === "seller" ||
-    order.deliveryMethod === "seller_express" ||
-    order.deliveryMethod === "meetup";
-
-  if (sellerHandled) {
-    const meet = order.deliveryMethod === "meetup";
-    await sendText(
-      order.customerKey,
-      `✅ *Payment received!*\n\n` +
-        `Receipt: *${payment.mpesaReceiptNumber || "—"}*\n` +
-        `Amount: *KES ${Number(amt).toLocaleString()}*\n` +
-        `Order: *${order.id}*\n\n` +
-        `🔒 Funds held in Sokoni escrow until delivery is confirmed.\n\n` +
-        (meet
-          ? `🤝 Seller will arrange an in-person meetup.\n`
-          : `🛵 Seller will arrange delivery.\n`) +
-        `When it arrives, reply:\n*YES ${order.id}*\n\n` +
-        `Track anytime: type *track* or *${order.id}*\n` +
-        `🌐 Live status: ${trackUrl}`
-    );
-    return;
+  const receipt = payment.mpesaReceiptNumber || "—";
+  const base = msgBuyerPaid(order);
+  const withReceipt =
+    `Receipt: *${receipt}* · KES ${Number(amt).toLocaleString()}\n\n` + base;
+  if (order.customerKey) {
+    void dispatchMessages([{ to: order.customerKey, message: withReceipt }]);
   }
-
-  const label = generateDropoffLabel(order);
-  await sendText(
-    order.customerKey,
-    `✅ *Payment received!*\n\n` +
-      `Receipt: *${payment.mpesaReceiptNumber || "—"}*\n` +
-      `Amount: *KES ${Number(amt).toLocaleString()}*\n` +
-      `Order: *${order.id}*\n\n` +
-      `🔒 Funds held in Sokoni escrow until delivery is confirmed.\n\n` +
-      `📦 Tracking: *${label.trackingCode}*\n` +
-      `Seller will drop off using prepaid label *${label.dropOffCode}*.\n\n` +
-      `Track anytime: type *track* or *${order.id}*\n` +
-      `🌐 Live status: ${trackUrl}`
-  );
 }
 
 async function notifySellerDropoff(order, label) {
   if (!order.supplierId) return;
   const sup = getSupplier(order.supplierId);
   if (!sup?.phone) return;
-  const chat = toChatId(sup.phone);
   const sellerHandled =
     order.shippingRecipient === "seller" ||
     order.deliveryMethod === "seller_express" ||
     order.deliveryMethod === "meetup";
-  const payout = order.sellerPayoutKes ?? order.sellerNetKes;
 
-  if (sellerHandled) {
-    const meet = order.deliveryMethod === "meetup";
-    const shipNote =
-      !meet && order.shippingKes
-        ? `Delivery fee KES ${Number(order.shippingKes).toLocaleString()} is included in your payout.\n`
-        : "";
-    await sendText(
-      chat,
-      `📦 *New prepaid sale — ${order.id}*\n\n` +
-        `*${order.productName}* — buyer paid upfront (escrow held).\n\n` +
-        (meet
-          ? `🤝 Arrange a safe meetup with the buyer.\n`
-          : `🛵 Arrange delivery with your courier.\n`) +
-        `When you send it, reply:\n*DISPATCH ${order.id}*\n` +
-        `Buyer then confirms with *YES ${order.id}* — that releases escrow after the hold.\n` +
-        shipNote +
-        (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
-        `Payout: 2–3 business days after *Delivered* is confirmed.`
-    );
-    return;
+  let message = msgSellerPaid(order);
+  if (!sellerHandled && label?.dropOffCode) {
+    message +=
+      `\n\nHub label: *${label.dropOffCode}*\n` +
+      `Label / QR: ${label.labelUrl || "—"}\n` +
+      `(Hub scan also works — or reply DISPATCH ${order.id} yourself.)`;
   }
-
-  await sendText(
-    chat,
-    `📦 *New prepaid sale — ${order.id}*\n\n` +
-      `*${order.productName}* — buyer paid upfront (escrow held).\n\n` +
-      `1️⃣ Attach prepaid label *${label.dropOffCode}*\n` +
-      `2️⃣ Drop package at nearest Sokoni hub — or reply *DISPATCH ${order.id}* when you send it\n` +
-      `3️⃣ Buyer confirms with *YES ${order.id}* (or hub/courier marks delivered)\n\n` +
-      `Label / QR: ${label.labelUrl}\n` +
-      `Payout: 2–3 business days after *Delivered* is confirmed.`
-  );
+  void dispatchMessages([{ to: toChatId(sup.phone), message }]);
+  void notifyAdminEvent("PAID_ESCROW", {
+    orderId: order.id,
+    details: `Payment held — seller notified to DISPATCH ${order.id}`,
+    silent: true,
+  });
 }
 
 /**
