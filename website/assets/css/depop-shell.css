@@ -615,9 +615,10 @@ body.has-depop-shell .depop-marketing-extra {
 .depop-promo-visual {
   position: relative;
   isolation: isolate;
+  width: 100%;
 }
 
-.depop-promo-img {
+.depop-promo-visual .depop-promo-img {
   position: absolute;
   inset: 0;
   width: 100%;
