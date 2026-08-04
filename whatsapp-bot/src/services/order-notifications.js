@@ -43,9 +43,10 @@ export async function notifyOrderPaidEscrow(order, payment = {}) {
         `Item: *${order.productName}*\n` +
         `Earnings: *KES ${Number(sellerNet).toLocaleString()}*\n` +
         `Tracking Code: *${order.id}*\n\n` +
-        `👉 Drop package at your nearest hub using code *${label}*.\n` +
+        `👉 Drop package at your nearest hub using code *${label}*,\n` +
+        `or reply *DISPATCH ${order.id}* when you send it.\n` +
         `Label: ${order.labelUrl || trackUrl(order.id)}\n\n` +
-        `Reply *balance* for your wallet summary.`;
+        `Buyer confirms with *YES ${order.id}*. Reply *balance* for your wallet.`;
       await sendText(toChatId(sup.phone), sellerMsg);
     }
   }
@@ -71,7 +72,8 @@ export async function notifyShipmentStatusChange(order, { prevStatus = null } = 
       `🚚 *${order.id}* is *in transit*!\n` +
       `${order.courierName ? `Courier: *${order.courierName}*\n` : ""}` +
       `${order.transitEta ? `ETA: *${order.transitEta}*\n` : ""}` +
-      `\n${renderShipmentTimelineText(order)}\n\n` +
+      `\nWhen you receive it, reply:\n*YES ${order.id}*\n\n` +
+      `${renderShipmentTimelineText(order)}\n\n` +
       `Track: ${trackUrl(order.id)}`;
   } else if (status === "at_pickup_point") {
     buyerMsg =

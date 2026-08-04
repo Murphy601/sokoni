@@ -97,8 +97,9 @@ async function notifyBuyerPaid(order, payment) {
         `Order: *${order.id}*\n\n` +
         `🔒 Funds held in Sokoni escrow until delivery is confirmed.\n\n` +
         (meet
-          ? `🤝 Seller will arrange an in-person meetup. Confirm once you have the item.\n\n`
-          : `🛵 Seller will arrange delivery (seller express). Confirm once it arrives.\n\n`) +
+          ? `🤝 Seller will arrange an in-person meetup.\n`
+          : `🛵 Seller will arrange delivery.\n`) +
+        `When it arrives, reply:\n*YES ${order.id}*\n\n` +
         `Track anytime: type *track* or *${order.id}*\n` +
         `🌐 Live status: ${trackUrl}`
     );
@@ -142,8 +143,10 @@ async function notifySellerDropoff(order, label) {
       `📦 *New prepaid sale — ${order.id}*\n\n` +
         `*${order.productName}* — buyer paid upfront (escrow held).\n\n` +
         (meet
-          ? `🤝 Arrange a safe meetup with the buyer, then confirm delivery in Seller Hub.\n`
-          : `🛵 Arrange delivery with your courier, then confirm delivery in Seller Hub.\n`) +
+          ? `🤝 Arrange a safe meetup with the buyer.\n`
+          : `🛵 Arrange delivery with your courier.\n`) +
+        `When you send it, reply:\n*DISPATCH ${order.id}*\n` +
+        `Buyer then confirms with *YES ${order.id}* — that releases escrow after the hold.\n` +
         shipNote +
         (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
         `Payout: 2–3 business days after *Delivered* is confirmed.`
@@ -156,10 +159,10 @@ async function notifySellerDropoff(order, label) {
     `📦 *New prepaid sale — ${order.id}*\n\n` +
       `*${order.productName}* — buyer paid upfront (escrow held).\n\n` +
       `1️⃣ Attach prepaid label *${label.dropOffCode}*\n` +
-      `2️⃣ Drop package at nearest Sokoni hub\n` +
-      `3️⃣ Hub scan updates status to *In Transit*\n\n` +
+      `2️⃣ Drop package at nearest Sokoni hub — or reply *DISPATCH ${order.id}* when you send it\n` +
+      `3️⃣ Buyer confirms with *YES ${order.id}* (or hub/courier marks delivered)\n\n` +
       `Label / QR: ${label.labelUrl}\n` +
-      `Payout: 2–3 business days after courier confirms *Delivered*.`
+      `Payout: 2–3 business days after *Delivered* is confirmed.`
   );
 }
 
