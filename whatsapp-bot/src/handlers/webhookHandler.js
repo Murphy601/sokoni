@@ -296,6 +296,12 @@ export async function handleIncomingMessage(
     return handleCustomerPaidClaim(customerKey, text, phone);
   }
 
+  // ADMIN_TAKE_OVER: silent relay to ops (must beat DISPATCH/YES/bot menus).
+  {
+    const { tryRelayAdminTakeOver } = await import("../services/communication-hub.js");
+    if (await tryRelayAdminTakeOver(customerKey, text, { phone })) return;
+  }
+
   // Order-state bus: DISPATCH / YES / HELP SK-#### (before generic SK track).
   {
     const { tryHandleWaDeliveryConfirm } = await import("../services/wa-delivery-confirm.js");

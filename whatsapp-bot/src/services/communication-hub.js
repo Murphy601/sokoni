@@ -1,10 +1,10 @@
 /**
  * Order-state communication hub (WAHA).
  *
- * Incoming DISPATCH / YES / HELP hit order state first, update the order,
- * alert admin, then notify the other party — never person-to-person chat.
+ * Lifecycle: PAY → DISPATCH SK-#### → YES SK-#### → escrow release path.
+ * HELP → ADMIN_TAKE_OVER (bot silent relay to admin).
  *
- * Stack: existing JSON orders + WAHA sendText (not Twilio/Mongo/BullMQ).
+ * Stack: JSON orders + WAHA (not Twilio / Mongo / Socket.io).
  */
 import { config } from "../config.js";
 import { sendText, toChatId } from "./whatsapp.js";
@@ -17,12 +17,14 @@ import {
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { advanceShipmentStatus, getEffectiveShipmentStatus } from "./shipments.js";
 import { formatLandmarkLine } from "../lib/landmark-hubs.js";
-import { setHumanHandoff, getCustomerMeta } from "./session.js";
+import { setHumanHandoff, clearHumanHandoff } from "./session.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DISPATCH_REMIND_1 = 6 * HOUR_MS;
 const DISPATCH_REMIND_2 = 12 * HOUR_MS;
-const CONFIRM_REMIND = 24 * HOUR_MS;
+const CONFIRM_REMIND_12H = 12 * HOUR_MS;
+const CONFIRM_AUTO_RELEASE_24H = 24 * HOUR_MS;
+const SUPPORT_THREAD_MAX = 80;
 
 function normalizePhone(raw) {
   let d = String(raw || "").replace(/\D/g, "");
@@ -83,31 +85,45 @@ export function isDispatched(order) {
   return ["dropped_off", "in_transit", "at_pickup_point", "delivered"].includes(ship);
 }
 
+export function isAdminTakeOver(order) {
+  return Boolean(order?.adminTakeOver || order?.supportStatus === "ADMIN_TAKE_OVER");
+}
+
 export function lifecycleLabel(order) {
   if (!order) return "UNKNOWN";
-  if (order.status === "delivered" || order.shipmentStatus === "delivered") return "DELIVERED";
-  if (order.disputeHold || order.adminFlagged) return "NEEDS_ADMIN";
+  if (isAdminTakeOver(order) || order.disputeHold) return "ADMIN_TAKE_OVER";
+  if (order.status === "delivered" || order.shipmentStatus === "delivered") return "COMPLETED";
   if (isDispatched(order)) return "DISPATCHED";
-  if (isPaidHeld(order)) return "PAID_ESCROW";
+  if (isPaidHeld(order)) return "HELD_IN_ESCROW";
   if (order.status === "awaiting_payment") return "AWAITING_PAYMENT";
   return String(order.status || "OPEN").toUpperCase();
 }
 
-/** Drop-off line for templates — landmark hub or free-text location. */
 export function dropOffLine(order) {
   const landmark = formatLandmarkLine(order);
   if (landmark) return landmark;
   return String(order?.location || "").trim() || "your drop-off point";
 }
 
+function appendSupportThread(orderId, entry) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const thread = Array.isArray(order.supportThread) ? [...order.supportThread] : [];
+  thread.push({ ...entry, at: entry.at || Date.now() });
+  if (thread.length > SUPPORT_THREAD_MAX) thread.splice(0, thread.length - SUPPORT_THREAD_MAX);
+  updateOrderMeta(orderId, { supportThread: thread, supportUpdatedAt: Date.now() });
+}
+
+function roleForSender(order, customerKey, phone) {
+  if (buyerOwnsOrder(order, customerKey, phone)) return "BUYER";
+  if (sellerOwnsOrder(order, phone)) return "SELLER";
+  return "USER";
+}
+
 /* -------------------------------------------------------------------------- */
-/* Safe send + admin events (non-blocking)                                    */
+/* Safe send + admin events                                                   */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Never throw — WAHA/offline seller must not block order state updates.
- * @returns {Promise<{ success: boolean, error?: string, dryRun?: boolean }>}
- */
 export async function sendSafeWhatsApp(to, message) {
   if (!to || !message) return { success: false, error: "missing_to_or_message" };
   try {
@@ -116,41 +132,25 @@ export async function sendSafeWhatsApp(to, message) {
   } catch (err) {
     const error = err?.message || String(err);
     console.error(`[communication-hub] WhatsApp failed → ${to}:`, error);
-    void notifyAdminEvent("WA_SEND_FAILED", {
-      orderId: null,
-      details: `Failed to notify ${to}: ${error}`,
-      silent: true,
-    });
     return { success: false, error };
   }
 }
 
-/** Fire-and-forget multi-send (does not await callers' state writes). */
 export function dispatchMessages(jobs = []) {
   return Promise.allSettled(
     jobs.filter((j) => j?.to && j?.message).map((j) => sendSafeWhatsApp(j.to, j.message))
   );
 }
 
-/**
- * Admin shadow: WhatsApp to ops + optional ADMIN_NOTIFY_URL webhook.
- */
 export async function notifyAdminEvent(eventType, { orderId = null, details = "", silent = false } = {}) {
-  const line = `[ADMIN EVENT] [${eventType}]${orderId ? ` ${orderId}` : ""} | ${details}`;
-  console.log(line);
+  console.log(`[ADMIN EVENT] [${eventType}]${orderId ? ` ${orderId}` : ""} | ${details}`);
 
   if (config.adminNotifyUrl) {
     try {
       await fetch(config.adminNotifyUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "order_event",
-          eventType,
-          orderId,
-          details,
-          at: Date.now(),
-        }),
+        body: JSON.stringify({ type: "order_event", eventType, orderId, details, at: Date.now() }),
       });
     } catch (err) {
       console.warn("[communication-hub] admin webhook failed:", err.message);
@@ -159,15 +159,23 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
 
   if (silent || !config.admin.primary) return;
 
-  // High-signal events only — avoid spam on every shipment tick.
-  const ping =
-    eventType === "DISPUTE_OR_HELP" ||
-    eventType === "PAYOUT_FAILED" ||
-    eventType === "CONFIRM_OVERDUE" ||
-    eventType === "SELLER_DISPATCHED" ||
-    eventType === "BUYER_CONFIRMED";
+  const ping = new Set([
+    "DISPUTE_OR_HELP",
+    "ADMIN_TAKE_OVER",
+    "SUPPORT_RELAY",
+    "PAYOUT_FAILED",
+    "CONFIRM_OVERDUE",
+    "AUTO_RELEASED",
+    "SELLER_DISPATCHED",
+    "BUYER_CONFIRMED",
+  ]);
+  if (!ping.has(eventType)) return;
 
-  if (!ping) return;
+  // Relay messages already include full body — don't double-wrap SUPPORT_RELAY as alert style twice
+  if (eventType === "SUPPORT_RELAY") {
+    await sendSafeWhatsApp(config.admin.primary, details);
+    return;
+  }
 
   await sendSafeWhatsApp(
     config.admin.primary,
@@ -175,109 +183,109 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
       (orderId ? `Order: *${orderId}*\n` : "") +
       `${details}\n\n` +
       (orderId
-        ? `Take over: *#${orderId} <message>*\nStatus: *#status ${orderId} delivered*`
+        ? `Reply to user: *#${orderId} <message>*\nEnd takeover: *#resolve ${orderId}*`
         : `*#help* for admin commands`)
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Clear message templates (always include SK-####)                           */
+/* Templates (expected lifecycle wording, SK-####)                            */
 /* -------------------------------------------------------------------------- */
 
 export function msgSellerPaid(order) {
   const payout = order.sellerPayoutKes ?? order.sellerNetKes;
   return (
-    `🛒 *NEW SALE — ${order.id}*\n\n` +
+    `🎉 *New Paid Order on Sokoni!*\n` +
+    `Order: *${order.id}*\n` +
     `Item: *${order.productName || "Order"}*\n` +
-    `Buyer paid into Sokoni escrow.\n` +
-    `Drop-off: *${dropOffLine(order)}*\n` +
+    `Location: *${dropOffLine(order)}*\n` +
     (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
-    `\n*Next step — when you send the item, reply exactly:*\n` +
-    `DISPATCH ${order.id}\n\n` +
-    `Buyer will confirm with:\nYES ${order.id}\n\n` +
-    `Need help? Reply: HELP ${order.id}`
+    `\nPlease pack the item. Once handed to the buyer/courier, reply:\n` +
+    `*DISPATCH ${order.id}*\n\n` +
+    `Problem? Reply: HELP ${order.id}`
   );
 }
 
 export function msgBuyerPaid(order) {
   return (
-    `✅ *PAYMENT HELD — ${order.id}*\n\n` +
-    `We received your M-Pesa for *${order.productName || "your order"}*.\n` +
-    `Money stays in Sokoni escrow until you confirm delivery.\n\n` +
-    `Drop-off: *${dropOffLine(order)}*\n\n` +
+    `✅ *Payment Confirmed for Order ${order.id}!*\n\n` +
+    `Your payment is safely held in Sokoni Escrow.\n` +
+    `The seller is preparing delivery to *${dropOffLine(order)}*.\n\n` +
     `*What happens next*\n` +
-    `1. Seller sends the item\n` +
-    `2. You get a dispatch update for *${order.id}*\n` +
-    `3. When you receive it, reply:\nYES ${order.id}\n\n` +
+    `1. Seller sends the item → you get a dispatch update\n` +
+    `2. When you receive & inspect it, reply:\n*YES ${order.id}*\n\n` +
     `Problem? Reply: HELP ${order.id}\n` +
-    `Track: type *${order.id}* or *track*`
+    `Track: *${order.id}* or *track*`
   );
 }
 
 export function msgBuyerDispatched(order) {
   return (
-    `📦 *DISPATCHED — ${order.id}*\n\n` +
-    `Your *${order.productName || "item"}* is on the way to:\n` +
-    `*${dropOffLine(order)}*\n\n` +
-    `When you receive it and it looks right, reply exactly:\n` +
-    `YES ${order.id}\n\n` +
-    `That confirms delivery so we can pay the seller.\n` +
-    `⚠️ Do *not* reply YES if something is wrong — reply:\nHELP ${order.id}`
+    `📦 *Item Dispatched!*\n` +
+    `Order *${order.id}* is en route to *${dropOffLine(order)}*.\n\n` +
+    `Once received and inspected, reply:\n` +
+    `*YES ${order.id}*\n` +
+    `to release payment to the seller.\n\n` +
+    `⚠️ Wrong/damaged item? Do *not* reply YES — reply:\nHELP ${order.id}`
   );
 }
 
 export function msgSellerDispatchAck(order) {
   return (
-    `✅ *DISPATCHED — ${order.id}*\n\n` +
-    `Buyer has been told to reply:\nYES ${order.id}\n` +
-    `after they receive *${order.productName || "the item"}*.\n\n` +
-    `Escrow stays held until they confirm (or Sokoni/admin marks delivered).\n` +
-    `Stuck? Reply: HELP ${order.id}`
+    `✅ *Status updated — ${order.id}*\n\n` +
+    `We asked the buyer to confirm receipt upon inspection with:\n` +
+    `*YES ${order.id}*`
   );
 }
 
 export function msgBuyerConfirmAck(order) {
   return (
-    `🎉 *DELIVERED — ${order.id}*\n\n` +
-    `Thanks for confirming. Enjoy *${order.productName || "your order"}*.\n` +
-    `Seller payout follows the normal escrow hold (usually 2–3 business days).\n\n` +
-    `Issue later? Reply: HELP ${order.id}`
+    `🎉 *Thank you for shopping on Sokoni!*\n` +
+    `Order *${order.id}* is complete. Seller payout is scheduled from escrow.\n\n` +
+    `How would you rate your experience? Reply *1*–*5* or wait for the review prompt.`
   );
 }
 
 export function msgSellerBuyerConfirmed(order) {
+  const payout = order.sellerPayoutKes ?? order.sellerNetKes;
   return (
-    `✅ *BUYER CONFIRMED — ${order.id}*\n\n` +
-    `They replied YES for *${order.productName || "the order"}*.\n` +
-    `Delivery recorded. Payout follows the escrow hold (usually 2–3 business days).\n\n` +
-    `Wallet: reply *balance*`
+    `💰 *Buyer confirmed receipt — ${order.id}*\n\n` +
+    `Delivery recorded. ` +
+    (payout != null
+      ? `KES ${Number(payout).toLocaleString()} payout is scheduled from escrow (usually 2–3 business days).`
+      : `Payout is scheduled from escrow (usually 2–3 business days).`) +
+    `\n\nWallet: reply *balance*`
   );
 }
 
 export function msgHelpAck(order) {
   return (
-    `🆘 *HELP LOGGED — ${order.id}*\n\n` +
-    `A Sokoni admin has been alerted for this order.\n` +
-    `Status: *${lifecycleLabel(order)}*\n\n` +
-    `We'll message you here. You can also type *${order.id}* to track.`
+    `🚨 *Sokoni Support Alerted*\n` +
+    `Order *${order.id}* is paused (escrow frozen).\n` +
+    `An admin has joined this chat. Type your message directly below — the bot will stay quiet.`
   );
 }
 
-export function msgStatusHint(order) {
+export function msgAutoReleasedBuyer(order) {
   return (
-    `Sokoni · active order *${order.id}* (${lifecycleLabel(order)}).\n\n` +
-    (isPaidHeld(order) && !isDispatched(order)
-      ? `Seller next step: DISPATCH ${order.id}\n`
-      : "") +
-    (isDispatched(order) && order.status !== "delivered"
-      ? `Buyer next step: YES ${order.id}\n`
-      : "") +
-    `Help: HELP ${order.id}`
+    `✅ *Order ${order.id} completed*\n\n` +
+    `No confirmation arrived within 24 hours after dispatch, and no dispute was opened — ` +
+    `we marked delivery complete and scheduled the seller payout.\n\n` +
+    `If something was wrong, reply HELP ${order.id} urgently.`
+  );
+}
+
+export function msgAutoReleasedSeller(order) {
+  return (
+    `💰 *Auto-complete — ${order.id}*\n\n` +
+    `Buyer did not confirm within 24h and no dispute was open.\n` +
+    `Delivery marked complete — payout follows the escrow hold.\n` +
+    `Wallet: *balance*`
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Resolve order context                                                      */
+/* Resolve / takeover helpers                                                 */
 /* -------------------------------------------------------------------------- */
 
 export function resolveActiveOrder({ customerKey, phone, text } = {}) {
@@ -290,7 +298,9 @@ export function resolveActiveOrder({ customerKey, phone, text } = {}) {
   const candidates = getOrdersForCustomer(customerKey, phone).filter(
     (o) => o.status !== "cancelled" && o.escrowStatus !== "refunded"
   );
-  // Prefer unpaid → paid open → any recent
+  const takeOver = candidates.find((o) => isAdminTakeOver(o));
+  if (takeOver) return takeOver;
+
   const open = candidates.find(
     (o) =>
       o.status !== "delivered" &&
@@ -300,17 +310,219 @@ export function resolveActiveOrder({ customerKey, phone, text } = {}) {
   return open || candidates[0] || null;
 }
 
+function findTakeOverOrder(customerKey, phone) {
+  const candidates = getOrdersForCustomer(customerKey, phone);
+  return (
+    candidates.find((o) => isAdminTakeOver(o) && o.status !== "cancelled") ||
+    listAllOrders().find(
+      (o) =>
+        isAdminTakeOver(o) &&
+        (buyerOwnsOrder(o, customerKey, phone) || sellerOwnsOrder(o, phone))
+    ) ||
+    null
+  );
+}
+
+async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) {
+  const { cancelSettlementPayout } = await import("./settlements.js");
+  try {
+    cancelSettlementPayout(order.id, "admin_take_over");
+  } catch {
+    /* ignore */
+  }
+
+  updateOrderMeta(order.id, {
+    adminTakeOver: true,
+    adminFlagged: true,
+    adminFlaggedAt: Date.now(),
+    adminFlagReason: String(rawText || "HELP").slice(0, 200),
+    supportStatus: "ADMIN_TAKE_OVER",
+    disputeHold: true,
+    escrowStatus: "held",
+    disputeFrozenAt: Date.now(),
+    payoutStatus: "held_for_dispute",
+  });
+
+  appendSupportThread(order.id, {
+    direction: "inbound",
+    role,
+    phone: phone || null,
+    customerKey,
+    text: String(rawText || "").slice(0, 1000),
+  });
+
+  // Pause bot for buyer + seller chats on this order.
+  if (order.customerKey) {
+    setHumanHandoff(order.customerKey, {
+      startedAt: Date.now(),
+      orderId: order.id,
+      adminTakeOver: true,
+      ackSent: true,
+    });
+  }
+  setHumanHandoff(customerKey, {
+    startedAt: Date.now(),
+    orderId: order.id,
+    adminTakeOver: true,
+    ackSent: true,
+  });
+  const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+  if (supplier?.phone) {
+    setHumanHandoff(toChatId(supplier.phone), {
+      startedAt: Date.now(),
+      orderId: order.id,
+      adminTakeOver: true,
+      ackSent: true,
+    });
+  }
+
+  void notifyAdminEvent("ADMIN_TAKE_OVER", {
+    orderId: order.id,
+    details:
+      `${role} requested help.\n` +
+      `Phone: ${phone || "—"}\n` +
+      `Said: "${String(rawText || "").slice(0, 160)}"\n` +
+      `Escrow FROZEN. Bot is silent — messages relay here.\n` +
+      `Reply: #${order.id} <message>\n` +
+      `End: #resolve ${order.id}`,
+  });
+}
+
+/**
+ * End ADMIN_TAKE_OVER — bot resumes; escrow unfreeze only if no open DB dispute.
+ */
+export async function resolveAdminTakeOver(orderId, { note = "" } = {}) {
+  const id = normalizeOrderId(orderId) || String(orderId || "").toUpperCase();
+  const order = getOrder(id);
+  if (!order) return { error: "not_found", message: "Order not found." };
+
+  let keepDisputeHold = Boolean(order.disputeHold);
+  try {
+    const { orderHasOpenDispute } = await import("./disputes.js");
+    keepDisputeHold = await orderHasOpenDispute(order.id);
+  } catch {
+    keepDisputeHold = false;
+  }
+
+  updateOrderMeta(order.id, {
+    adminTakeOver: false,
+    adminFlagged: false,
+    supportStatus: null,
+    adminResolvedAt: Date.now(),
+    adminResolveNote: String(note || "").slice(0, 200) || null,
+    disputeHold: keepDisputeHold,
+    payoutStatus: keepDisputeHold ? "held_for_dispute" : order.payoutStatus === "held_for_dispute" ? "scheduled" : order.payoutStatus,
+  });
+
+  if (order.customerKey) clearHumanHandoff(order.customerKey);
+  const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+  if (supplier?.phone) clearHumanHandoff(toChatId(supplier.phone));
+
+  appendSupportThread(order.id, {
+    direction: "system",
+    role: "ADMIN",
+    text: note ? `Takeover ended: ${note}` : "Takeover ended — bot resumed.",
+  });
+
+  const fresh = getOrder(order.id);
+  void dispatchMessages([
+    fresh.customerKey
+      ? {
+          to: fresh.customerKey,
+          message: `✅ Support closed for *${fresh.id}*. Bot is active again. Type *${fresh.id}* to track.`,
+        }
+      : null,
+    supplier?.phone
+      ? {
+          to: toChatId(supplier.phone),
+          message: `✅ Support closed for *${fresh.id}*. Bot is active again.`,
+        }
+      : null,
+  ]);
+
+  return { ok: true, order: fresh };
+}
+
+/** Admin dashboard / #SK reply — append outbound + ensure takeover. */
+export function recordAdminOutbound(orderId, message, { setTakeOver = true } = {}) {
+  const order = getOrder(orderId);
+  if (!order) return null;
+  if (setTakeOver && !isAdminTakeOver(order)) {
+    updateOrderMeta(order.id, {
+      adminTakeOver: true,
+      adminFlagged: true,
+      supportStatus: "ADMIN_TAKE_OVER",
+    });
+  }
+  appendSupportThread(order.id, {
+    direction: "outbound",
+    role: "ADMIN",
+    text: String(message || "").slice(0, 2000),
+  });
+  if (order.customerKey) {
+    setHumanHandoff(order.customerKey, {
+      startedAt: Date.now(),
+      orderId: order.id,
+      adminTakeOver: true,
+      adminDirect: true,
+      ackSent: true,
+    });
+  }
+  return getOrder(order.id);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Silent relay (ADMIN_TAKE_OVER)                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * If sender is on an ADMIN_TAKE_OVER order, forward to admin and stay silent.
+ * @returns {Promise<boolean>}
+ */
+export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = {}) {
+  const order = findTakeOverOrder(customerKey, phone);
+  if (!order) return false;
+
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return true;
+
+  // Still allow explicit HELP to re-ping, but stay in takeover (no bot commands).
+  const role = roleForSender(order, customerKey, phone);
+  appendSupportThread(order.id, {
+    direction: "inbound",
+    role,
+    phone: phone || null,
+    customerKey,
+    text: trimmed.slice(0, 1000),
+  });
+
+  void notifyAdminEvent("SUPPORT_RELAY", {
+    orderId: order.id,
+    details:
+      `📨 *${order.id}* · ${role}${phone ? ` (+${normalizePhone(phone)})` : ""}\n` +
+      `${trimmed.slice(0, 800)}\n\n` +
+      `Reply: *#${order.id} <message>*\nEnd: *#resolve ${order.id}*`,
+  });
+
+  // Silent — no WhatsApp reply to user (transparent relay).
+  return true;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Central router                                                             */
 /* -------------------------------------------------------------------------- */
 
 /**
- * State-driven handler for DISPATCH / YES / HELP (order-scoped).
- * @returns {Promise<boolean>} true if consumed
+ * DISPATCH / YES / HELP. Returns true if consumed.
  */
 export async function handleOrderBusMessage(customerKey, text, { phone = "" } = {}) {
   const trimmed = String(text || "").trim();
   if (!trimmed) return false;
+
+  // If already in takeover, never run bot commands — relay instead.
+  if (findTakeOverOrder(customerKey, phone)) {
+    return tryRelayAdminTakeOver(customerKey, text, { phone });
+  }
 
   const dispatchMatch = trimmed.match(/^DISPATCH\s+SK-?(\d{3,})\b/i);
   if (dispatchMatch) {
@@ -337,7 +549,14 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
 async function flowSellerDispatch(customerKey, phone, orderId) {
   const order = getOrder(orderId);
   if (!order) {
-    await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found. Check the SK number from your sale alert.`);
+    await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found. Check the SK from your sale alert.`);
+    return;
+  }
+  if (isAdminTakeOver(order) || order.disputeHold) {
+    await sendSafeWhatsApp(
+      customerKey,
+      `*${order.id}* is with Sokoni support right now. An admin will update you.`
+    );
     return;
   }
   if (!sellerOwnsOrder(order, phone)) {
@@ -357,10 +576,7 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
 
   const ship = getEffectiveShipmentStatus(order);
   if (ship === "delivered" || order.status === "delivered") {
-    await sendSafeWhatsApp(
-      customerKey,
-      `*${order.id}* is already delivered. Payout follows the escrow hold.`
-    );
+    await sendSafeWhatsApp(customerKey, `*${order.id}* is already delivered.`);
     return;
   }
 
@@ -372,11 +588,10 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
     return;
   }
 
-  // State update first — notifications must not block.
   const result = advanceShipmentStatus(orderId, "in_transit", {
     actor: "seller_dispatch",
     note: "Seller DISPATCH via communication hub",
-    skipBuyerNotify: true, // hub sends clearer buyer copy below
+    skipBuyerNotify: true,
   });
   if (result.error) {
     await sendSafeWhatsApp(customerKey, `Could not dispatch *${orderId}* (${result.error}).`);
@@ -391,7 +606,8 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
   const fresh = getOrder(orderId) || order;
   void notifyAdminEvent("SELLER_DISPATCHED", {
     orderId: fresh.id,
-    details: `Seller marked dispatched → buyer asked for YES ${fresh.id}`,
+    details: `IN_TRANSIT — buyer asked for YES ${fresh.id}`,
+    silent: true,
   });
 
   void dispatchMessages([
@@ -403,14 +619,22 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
 async function flowBuyerYes(customerKey, phone, orderId) {
   const order = getOrder(orderId);
   if (!order) {
-    await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found. Type *track* for your orders.`);
+    await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found. Type *track*.`);
+    return;
+  }
+
+  if (isAdminTakeOver(order) || order.disputeHold) {
+    await sendSafeWhatsApp(
+      customerKey,
+      `*${order.id}* is paused with Sokoni support — YES confirm is locked until an admin resolves it.`
+    );
     return;
   }
 
   if (sellerOwnsOrder(order, phone) && !buyerOwnsOrder(order, customerKey, phone)) {
     await sendSafeWhatsApp(
       customerKey,
-      `Sellers can't confirm YES for their own sale (*${order.id}*).\nWait for the buyer, or reply HELP ${order.id}`
+      `Sellers can't confirm YES for their own sale (*${order.id}*).\nReply HELP ${order.id} if stuck.`
     );
     return;
   }
@@ -418,24 +642,20 @@ async function flowBuyerYes(customerKey, phone, orderId) {
   if (!buyerOwnsOrder(order, customerKey, phone)) {
     await sendSafeWhatsApp(
       customerKey,
-      `*${order.id}* is not linked to this WhatsApp.\nUse the number you paid with, or type *track*.`
+      `*${order.id}* is not linked to this WhatsApp. Use the number you paid with.`
     );
     return;
   }
 
   if (!isPaidHeld(order)) {
-    await sendSafeWhatsApp(
-      customerKey,
-      `*${order.id}* is not paid yet. Finish checkout, then you can confirm with YES ${order.id}`
-    );
+    await sendSafeWhatsApp(customerKey, `*${order.id}* is not paid yet.`);
     return;
   }
 
   if (!isDispatched(order)) {
     await sendSafeWhatsApp(
       customerKey,
-      `⚠️ *${order.id}* has not been dispatched yet.\n` +
-        `Wait for the seller to send it (they'll reply DISPATCH ${order.id}).\n` +
+      `⚠️ Order *${order.id}* has not been marked as dispatched by the seller yet.\n` +
         `If you already have the item, reply: HELP ${order.id}`
     );
     return;
@@ -446,7 +666,7 @@ async function flowBuyerYes(customerKey, phone, orderId) {
     if (orderHasDisputeHold(order) || (await orderHasOpenDispute(order.id))) {
       await sendSafeWhatsApp(
         customerKey,
-        `*${order.id}* has an open dispute — YES confirm is paused until Sokoni resolves it.`
+        `*${order.id}* has an open dispute — YES confirm is paused.`
       );
       return;
     }
@@ -465,7 +685,7 @@ async function flowBuyerYes(customerKey, phone, orderId) {
     skipBuyerNotify: true,
   });
   if (result.error) {
-    await sendSafeWhatsApp(customerKey, `Could not confirm *${orderId}* (${result.error}). Reply HELP ${orderId}`);
+    await sendSafeWhatsApp(customerKey, `Could not confirm *${orderId}*. Reply HELP ${orderId}`);
     return;
   }
 
@@ -477,7 +697,8 @@ async function flowBuyerYes(customerKey, phone, orderId) {
   const fresh = getOrder(orderId) || order;
   void notifyAdminEvent("BUYER_CONFIRMED", {
     orderId: fresh.id,
-    details: `Buyer confirmed YES — escrow release path started`,
+    details: `COMPLETED_BY_BUYER — escrow release path started`,
+    silent: true,
   });
 
   const supplier = fresh.supplierId ? getSupplier(fresh.supplierId) : null;
@@ -494,57 +715,65 @@ async function flowHelp(customerKey, phone, orderId, rawText) {
   if (!order) {
     await sendSafeWhatsApp(
       customerKey,
-      `No active Sokoni order found on this number.\n` +
-        `Reply with your order id, e.g. HELP SK-1042\n` +
-        `Or type *track*.`
+      `No active Sokoni order found.\nReply HELP SK-1042 with your order id, or type *track*.`
     );
     return;
   }
 
-  // Ownership: buyer or seller on this order (or we still flag for admin).
   const asBuyer = buyerOwnsOrder(order, customerKey, phone);
   const asSeller = sellerOwnsOrder(order, phone);
   if (!asBuyer && !asSeller) {
     await sendSafeWhatsApp(
       customerKey,
-      `*${order.id}* is not linked to this WhatsApp. Reply HELP SK-#### using the number on the order.`
+      `*${order.id}* is not linked to this WhatsApp. Reply HELP SK-#### on the order number.`
     );
     return;
   }
 
-  updateOrderMeta(order.id, {
-    adminFlagged: true,
-    adminFlaggedAt: Date.now(),
-    adminFlagReason: String(rawText || "HELP").slice(0, 200),
-  });
+  if (isAdminTakeOver(order)) {
+    await tryRelayAdminTakeOver(customerKey, rawText, { phone });
+    return;
+  }
 
-  const meta = getCustomerMeta(customerKey) || {};
-  setHumanHandoff(customerKey, {
-    startedAt: Date.now(),
-    orderId: order.id,
-    adminDirect: false,
-    ackSent: true,
-  });
-
-  void notifyAdminEvent("DISPUTE_OR_HELP", {
-    orderId: order.id,
-    details:
-      `${asSeller ? "Seller" : "Buyer"} asked for help.\n` +
-      `Phone: ${phone || "—"}\n` +
-      `Said: "${String(rawText || "").slice(0, 160)}"\n` +
-      `State: ${lifecycleLabel(order)}\n` +
-      `Take over: #${order.id} <message>`,
-  });
-
+  const role = asSeller ? "SELLER" : "BUYER";
+  await startAdminTakeOver(order, { customerKey, phone, rawText, role });
   await sendSafeWhatsApp(customerKey, msgHelpAck(getOrder(order.id) || order));
 }
 
 /* -------------------------------------------------------------------------- */
-/* Reminders (hourly cron)                                                    */
+/* Reminders + 24h auto-release                                               */
 /* -------------------------------------------------------------------------- */
 
+async function autoReleaseOrder(order) {
+  const result = advanceShipmentStatus(order.id, "delivered", {
+    actor: "auto_release_24h",
+    note: "Auto-released 24h after DISPATCH with no YES and no dispute",
+    skipBuyerNotify: true,
+  });
+  if (result.error) return false;
+
+  updateOrderMeta(order.id, {
+    buyerConfirmedAt: Date.now(),
+    buyerConfirmedVia: "auto_release_24h",
+    autoReleasedAt: Date.now(),
+    confirmReminded24hAt: Date.now(),
+  });
+
+  const fresh = getOrder(order.id) || order;
+  const supplier = fresh.supplierId ? getSupplier(fresh.supplierId) : null;
+  void dispatchMessages([
+    fresh.customerKey ? { to: fresh.customerKey, message: msgAutoReleasedBuyer(fresh) } : null,
+    supplier?.phone ? { to: toChatId(supplier.phone), message: msgAutoReleasedSeller(fresh) } : null,
+  ]);
+  void notifyAdminEvent("AUTO_RELEASED", {
+    orderId: fresh.id,
+    details: `Auto-completed 24h after dispatch (no YES, no dispute). Payout scheduled.`,
+  });
+  return true;
+}
+
 /**
- * Remind sellers to DISPATCH; flag overdue buyer YES for admin (no silent auto-release).
+ * Hourly: seller DISPATCH reminders; buyer YES 12h remind; 24h auto-release.
  */
 export async function processOrderCommunicationReminders() {
   const now = Date.now();
@@ -553,12 +782,11 @@ export async function processOrderCommunicationReminders() {
   for (const order of listAllOrders()) {
     if (!isPaidHeld(order)) continue;
     if (order.status === "delivered" || order.shipmentStatus === "delivered") continue;
-    if (order.disputeHold || order.escrowStatus === "refunded") continue;
+    if (order.disputeHold || order.escrowStatus === "refunded" || isAdminTakeOver(order)) continue;
 
     const paidAt = Number(order.paidAt || order.customerPaidConfirmedAt || order.createdAt || 0);
     const dispatchedAt = Number(order.sellerDispatchedAt || order.inTransitAt || 0);
 
-    // Seller forgot DISPATCH
     if (!isDispatched(order) && paidAt) {
       const age = now - paidAt;
       const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
@@ -567,48 +795,103 @@ export async function processOrderCommunicationReminders() {
           updateOrderMeta(order.id, { dispatchReminded12hAt: now });
           void sendSafeWhatsApp(
             toChatId(supplier.phone),
-            `⏰ *Reminder — ${order.id}*\n` +
-              `Buyer paid ~12h ago. When you send the item, reply:\nDISPATCH ${order.id}`
+            `⏰ *Reminder — ${order.id}*\nBuyer paid ~12h ago. When you send the item, reply:\n*DISPATCH ${order.id}*`
           );
           n += 1;
         } else if (age >= DISPATCH_REMIND_1 && !order.dispatchReminded6hAt) {
           updateOrderMeta(order.id, { dispatchReminded6hAt: now });
           void sendSafeWhatsApp(
             toChatId(supplier.phone),
-            `⏰ *Reminder — ${order.id}*\n` +
-              `Buyer paid ~6h ago. When you send the item, reply:\nDISPATCH ${order.id}`
+            `⏰ *Reminder — ${order.id}*\nBuyer paid ~6h ago. When you send the item, reply:\n*DISPATCH ${order.id}*`
           );
           n += 1;
         }
       }
     }
 
-    // Buyer ignored YES — remind + admin flag (no auto-release)
     if (isDispatched(order) && dispatchedAt) {
       const age = now - dispatchedAt;
-      if (age >= CONFIRM_REMIND && !order.confirmReminded24hAt) {
-        updateOrderMeta(order.id, {
-          confirmReminded24hAt: now,
-          adminFlagged: true,
-          adminFlagReason: "buyer_confirm_overdue_24h",
-        });
+
+      if (age >= CONFIRM_REMIND_12H && age < CONFIRM_AUTO_RELEASE_24H && !order.confirmReminded12hAt) {
+        updateOrderMeta(order.id, { confirmReminded12hAt: now });
         if (order.customerKey) {
           void sendSafeWhatsApp(
             order.customerKey,
             `⏰ *Reminder — ${order.id}*\n` +
-              `Your item was marked dispatched. If you have it, reply:\nYES ${order.id}\n\n` +
+              `Your item was marked dispatched. If you have it, reply:\n*YES ${order.id}*\n\n` +
               `Problem? Reply: HELP ${order.id}`
           );
         }
-        void notifyAdminEvent("CONFIRM_OVERDUE", {
-          orderId: order.id,
-          details: `Buyer has not confirmed YES ~24h after dispatch. Manual check recommended (no auto-release).`,
-        });
         n += 1;
+      }
+
+      if (age >= CONFIRM_AUTO_RELEASE_24H && !order.autoReleasedAt) {
+        let openDispute = false;
+        try {
+          const { orderHasOpenDispute } = await import("./disputes.js");
+          openDispute = await orderHasOpenDispute(order.id);
+        } catch {
+          openDispute = false;
+        }
+        if (openDispute || order.disputeHold) {
+          if (!order.confirmReminded24hAt) {
+            updateOrderMeta(order.id, {
+              confirmReminded24hAt: now,
+              adminFlagged: true,
+              adminFlagReason: "confirm_overdue_with_dispute",
+            });
+            void notifyAdminEvent("CONFIRM_OVERDUE", {
+              orderId: order.id,
+              details: `24h after dispatch but dispute/hold is open — no auto-release.`,
+            });
+            n += 1;
+          }
+          continue;
+        }
+
+        const ok = await autoReleaseOrder(order);
+        if (ok) n += 1;
       }
     }
   }
 
-  if (n > 0) console.log(`[communication-hub] reminders sent/flagged: ${n}`);
+  if (n > 0) console.log(`[communication-hub] reminders/auto-release actions: ${n}`);
   return n;
+}
+
+/** List orders needing admin support (dashboard). */
+export function listSupportOrders({ limit = 40 } = {}) {
+  return listAllOrders()
+    .filter((o) => isAdminTakeOver(o) || o.adminFlagged || o.disputeHold)
+    .sort((a, b) => (b.supportUpdatedAt || b.adminFlaggedAt || b.updatedAt || 0) - (a.supportUpdatedAt || a.adminFlaggedAt || a.updatedAt || 0))
+    .slice(0, limit)
+    .map((o) => ({
+      orderId: o.id,
+      productName: o.productName || null,
+      lifecycle: lifecycleLabel(o),
+      adminTakeOver: isAdminTakeOver(o),
+      disputeHold: Boolean(o.disputeHold),
+      dropOff: dropOffLine(o),
+      buyerPhone: o.phone || null,
+      customerKey: o.customerKey || null,
+      supplierId: o.supplierId || null,
+      threadCount: Array.isArray(o.supportThread) ? o.supportThread.length : 0,
+      updatedAt: o.supportUpdatedAt || o.updatedAt || null,
+    }));
+}
+
+export function getSupportThread(orderId) {
+  const order = getOrder(normalizeOrderId(orderId) || orderId);
+  if (!order) return { error: "not_found" };
+  return {
+    orderId: order.id,
+    lifecycle: lifecycleLabel(order),
+    adminTakeOver: isAdminTakeOver(order),
+    disputeHold: Boolean(order.disputeHold),
+    dropOff: dropOffLine(order),
+    productName: order.productName || null,
+    buyerPhone: order.phone || null,
+    customerKey: order.customerKey || null,
+    messages: Array.isArray(order.supportThread) ? order.supportThread : [],
+  };
 }

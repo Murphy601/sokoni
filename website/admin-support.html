@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Support inbox — Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
+  <header class="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between gap-3">
+      <a href="index.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
+      <div class="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-brand-purple/55">
+        <a href="admin-disputes.html" class="hover:text-brand-purple underline">Disputes</a>
+        <span>Support</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-8 space-y-5">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <h1 class="font-display text-2xl font-bold">WhatsApp support inbox</h1>
+      <p class="text-sm text-brand-purple/65">
+        When a buyer/seller replies <strong>HELP SK-####</strong>, the bot freezes escrow, goes silent, and relays
+        messages here + to admin WhatsApp. Reply from this page or with <code>#SK-#### message</code> on WhatsApp.
+        End with <strong>Resolve</strong> or <code>#resolve SK-####</code>.
+      </p>
+      <label class="block text-sm font-medium">
+        Admin token
+        <input
+          id="admin-token"
+          type="password"
+          autocomplete="off"
+          class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm"
+          placeholder="ADMIN_SETUP_TOKEN"
+        />
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="refresh-btn" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple font-bold text-sm">
+          Refresh inbox
+        </button>
+        <p id="admin-status" class="text-sm self-center"></p>
+      </div>
+    </section>
+
+    <div class="grid md:grid-cols-[280px_1fr] gap-4">
+      <section class="rounded-3xl border border-black/5 bg-white p-4">
+        <h2 class="text-sm font-bold mb-3">Open threads</h2>
+        <div id="support-list" class="space-y-2 text-sm"></div>
+      </section>
+
+      <section class="rounded-3xl border border-black/5 bg-white p-4 flex flex-col min-h-[420px]">
+        <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+          <div>
+            <h2 id="active-order" class="font-display text-xl font-bold">Select an order</h2>
+            <p id="active-meta" class="text-xs text-brand-purple/55 mt-1"></p>
+          </div>
+          <button type="button" id="resolve-btn" class="hidden min-h-[44px] px-4 rounded-full border border-black/15 text-sm font-semibold">
+            Resolve / resume bot
+          </button>
+        </div>
+        <div id="chat-messages" class="flex-1 overflow-y-auto rounded-2xl bg-brand-purple text-white p-4 space-y-2 text-sm min-h-[240px]"></div>
+        <form id="reply-form" class="mt-3 flex flex-col sm:flex-row gap-2">
+          <label class="sr-only" for="admin-input">Reply</label>
+          <input
+            id="admin-input"
+            type="text"
+            class="flex-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm"
+            placeholder="Type reply to buyer WhatsApp…"
+            disabled
+          />
+          <button type="submit" id="send-btn" disabled class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple font-bold text-sm disabled:opacity-40">
+            Send
+          </button>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script src="assets/js/admin-support.js"></script>
+</body>
+</html>
