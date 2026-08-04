@@ -44,7 +44,8 @@ function phonesMatch(a, b) {
 function normalizeOrderId(raw) {
   const t = String(raw || "").trim().toUpperCase();
   if (!t) return "";
-  const m = t.match(/SK-?(\d{3,})/i);
+  // Accept "SK-1019", "SK1019", or bare digits from regex capture groups ("1019").
+  const m = t.match(/^(?:SK-?)?(\d{3,})$/i) || t.match(/SK-?(\d{3,})/i);
   return m ? `SK-${m[1]}` : "";
 }
 
