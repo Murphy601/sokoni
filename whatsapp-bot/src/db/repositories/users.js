@@ -205,11 +205,16 @@ export async function linkPhoneToUser(userId, phone) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number." };
   }
   const taken = await query(
-    `SELECT id FROM users WHERE phone = $1 AND id <> $2 LIMIT 1`,
+    `SELECT ${ACCOUNT_USER_COLS} FROM users WHERE phone = $1 AND id <> $2 LIMIT 1`,
     [digits, id]
   );
   if (taken.rows[0]) {
-    return { error: "phone_taken", message: "That phone is already linked to another account." };
+    return {
+      error: "phone_taken",
+      message: "That phone is already linked to another account.",
+      otherUser: mapUserRow(taken.rows[0]),
+      otherPasswordHash: taken.rows[0].password_hash || null,
+    };
   }
   const { rows } = await query(
     `UPDATE users
@@ -220,6 +225,98 @@ export async function linkPhoneToUser(userId, phone) {
   );
   if (!rows[0]) return { error: "not_found", message: "Account not found." };
   return { ok: true, user: mapUserRow(rows[0]) };
+}
+
+/**
+ * Merge a phone-only social user into an email account (or absorb email into phone user).
+ * Prefer keeping the email account id when the phone user has no password/email.
+ */
+export async function unifyEmailAccountWithPhone({
+  accountUserId,
+  phone,
+  passwordHash = null,
+  email = null,
+  displayName = null,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const accountId = parseUserId(accountUserId);
+  const digits = normalizePhone(phone);
+  if (!accountId || !digits) {
+    return { error: "invalid_input", message: "Account and phone are required." };
+  }
+
+  const accountRes = await findUserById(accountId);
+  if (accountRes.error || !accountRes.user) {
+    return { error: "not_found", message: "Account not found." };
+  }
+  const account = accountRes.user;
+
+  if (account.phone && account.phone === digits) {
+    return { ok: true, user: account, merged: false };
+  }
+  if (account.phone && account.phone !== digits) {
+    return {
+      error: "phone_mismatch",
+      message: "This account already has a different WhatsApp number.",
+    };
+  }
+
+  const phoneOwner = await query(
+    `SELECT ${ACCOUNT_USER_COLS} FROM users WHERE phone = $1 LIMIT 1`,
+    [digits]
+  );
+  const other = phoneOwner.rows[0] ? mapUserRow(phoneOwner.rows[0]) : null;
+
+  if (!other) {
+    return linkPhoneToUser(accountId, digits);
+  }
+
+  if (other.id === accountId) {
+    return { ok: true, user: account, merged: false };
+  }
+
+  // Phone user already has its own email/password — do not steal it.
+  if (other.email && other.hasPassword && other.email !== account.email) {
+    return {
+      error: "phone_taken",
+      message: "That WhatsApp belongs to another Sokoni login. Use that email, or a different number.",
+    };
+  }
+
+  // Prefer phone user's row if account is email-only orphan: move credentials onto phone user, delete account.
+  const keepId = other.id;
+  const dropId = accountId;
+  const emailToKeep = account.email || other.email || email;
+  const hashToKeep = passwordHash || accountRes.passwordHash || phoneOwner.rows[0].password_hash;
+  const nameToKeep = account.displayName || other.displayName || displayName;
+
+  await query(
+    `UPDATE users
+        SET email = COALESCE($2, email),
+            password_hash = COALESCE($3, password_hash),
+            display_name = COALESCE($4, display_name),
+            updated_at = NOW()
+      WHERE id = $1`,
+    [keepId, emailToKeep, hashToKeep, nameToKeep]
+  );
+
+  // Clear unique email/phone from dropped row then delete.
+  await query(
+    `UPDATE users
+        SET email = NULL, phone = NULL, password_hash = NULL, updated_at = NOW()
+      WHERE id = $1`,
+    [dropId]
+  );
+  try {
+    await query(`DELETE FROM users WHERE id = $1`, [dropId]);
+  } catch (err) {
+    console.warn("[users] could not delete merged orphan user", dropId, err.message);
+  }
+
+  const refreshed = await findUserById(keepId);
+  return { ok: true, user: refreshed.user, merged: true, keptUserId: keepId, droppedUserId: dropId };
 }
 
 export async function updateAccountProfile(userId, { displayName, phone } = {}) {

@@ -184,14 +184,54 @@
     return { ok: true, status: res.status, data };
   }
 
+  async function linkWhatsApp({ phone, whatsappSessionToken, role = "buyer" } = {}) {
+    const session = readSession();
+    if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
+    const body = {
+      phone,
+      role,
+      whatsappSessionToken,
+      buyerSessionToken: role === "buyer" ? whatsappSessionToken : undefined,
+      sellerSessionToken: role === "seller" ? whatsappSessionToken : undefined,
+    };
+    const res = await fetch(`${AUTH_API}/link-whatsapp`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, data };
+    if (data.sessionToken) {
+      saveSession({
+        sessionToken: data.sessionToken,
+        user: data.user,
+        expiresAt: data.expiresAt,
+        expiresInSec: data.expiresInSec,
+      });
+    } else if (data.user) {
+      saveSession({
+        sessionToken: session.sessionToken,
+        user: data.user,
+        expiresAt: session.expiresAt,
+      });
+    }
+    return { ok: true, status: res.status, data, session: readSession() };
+  }
+
+  function siteHref(file) {
+    const path = window.location.pathname || "";
+    const prefix = /\/suppliers\//i.test(path) ? "../" : "";
+    return `${prefix}${file}`;
+  }
+
   function loginUrl(next) {
-    const base = "login.html";
+    const base = siteHref("login.html");
     if (!next) return base;
     return `${base}?next=${encodeURIComponent(next)}`;
   }
 
   function signupUrl(next) {
-    const base = "signup.html";
+    const base = siteHref("signup.html");
     if (!next) return base;
     return `${base}?next=${encodeURIComponent(next)}`;
   }
@@ -312,6 +352,7 @@
     updateProfile,
     fetchPurchases,
     claimOrder,
+    linkWhatsApp,
     authHeaders,
     loginUrl,
     signupUrl,

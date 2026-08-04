@@ -12,9 +12,12 @@ import {
   createEmailAccountUser,
   findUserByEmail,
   findUserById,
+  unifyEmailAccountWithPhone,
   updateAccountProfile,
 } from "../db/repositories/users.js";
 import { isDbEnabled } from "../db/pool.js";
+import { validateBuyerSession } from "./buyer-verification.js";
+import { validateSellerSession } from "./seller-verification.js";
 
 const scrypt = promisify(scryptCb);
 
@@ -237,4 +240,61 @@ export async function updateSignedInProfile(sessionToken, patch) {
   const updated = await updateAccountProfile(auth.user.id, patch);
   if (updated.error) return updated;
   return { ok: true, user: publicUser(updated.user) };
+}
+
+/**
+ * Link a verified WhatsApp buyer/seller session to the signed-in email account.
+ * May merge a phone-only social user into the email account (or vice versa).
+ */
+export async function linkWhatsAppToAccount({
+  accountToken,
+  phone,
+  whatsappSessionToken,
+  role = "buyer",
+} = {}) {
+  const account = await validateAccountSession(accountToken);
+  if (account.error) return account;
+
+  const waToken = String(whatsappSessionToken || "").trim();
+  const wa =
+    role === "seller"
+      ? await validateSellerSession(phone, waToken)
+      : await validateBuyerSession(phone, waToken);
+  if (wa.error) return wa;
+
+  const found = await findUserById(account.user.id);
+  if (found.error || !found.user) {
+    return { error: "not_found", message: "Account not found." };
+  }
+
+  const unified = await unifyEmailAccountWithPhone({
+    accountUserId: account.user.id,
+    phone: wa.phone,
+    passwordHash: found.passwordHash,
+    email: account.user.email,
+    displayName: account.user.displayName,
+  });
+  if (unified.error) return unified;
+
+  // If merge kept a different user id, reissue session for the kept user.
+  let sessionToken = accountToken;
+  let expiresAt = account.expiresAt;
+  if (unified.merged && unified.keptUserId && unified.keptUserId !== account.user.id) {
+    await revokeAccountSession(accountToken);
+    const session = await createSession(unified.user);
+    sessionToken = session.sessionToken;
+    expiresAt = session.expiresAt;
+  }
+
+  return {
+    ok: true,
+    user: publicUser(unified.user),
+    merged: Boolean(unified.merged),
+    sessionToken,
+    expiresAt,
+    expiresInSec: Math.max(60, Math.floor((expiresAt - Date.now()) / 1000)),
+    message: unified.merged
+      ? "WhatsApp linked — your earlier profile is now this same account."
+      : "WhatsApp linked to your Sokoni account.",
+  };
 }

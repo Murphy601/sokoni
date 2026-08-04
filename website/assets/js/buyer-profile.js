@@ -232,9 +232,23 @@
 
   function init() {
     window.SokoniBuyerAuth?.bindPanel?.({
-      onVerified: () => {
+      onVerified: async (buyerSession) => {
+        if (window.SokoniAccountAuth?.isSignedIn?.() && buyerSession?.sessionToken) {
+          setStatus("Linking WhatsApp to your email account…");
+          const linked = await window.SokoniAccountAuth.linkWhatsApp({
+            phone: buyerSession.phone,
+            whatsappSessionToken: buyerSession.sessionToken,
+            role: "buyer",
+          });
+          if (!linked.ok) {
+            setStatus(linked.data?.message || "WhatsApp verified, but could not link to email account.");
+          } else {
+            setStatus(linked.data?.message || "WhatsApp linked to your account.");
+          }
+        }
         renderSession();
         renderSavedCount();
+        void renderPurchases();
       },
     });
     el("profile-sign-out-btn")?.addEventListener("click", () => {

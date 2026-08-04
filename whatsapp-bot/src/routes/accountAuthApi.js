@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   extractAccountToken,
+  linkWhatsAppToAccount,
   loginAccount,
   resolveAccountFromRequest,
   revokeAccountSession,
@@ -77,6 +78,34 @@ router.get("/purchases", async (req, res) => {
       ? null
       : "Add your WhatsApp number on this account to see prepaid orders placed by phone.",
   });
+});
+
+/** POST /api/account/auth/link-whatsapp — bind verified buyer/seller OTP to email account */
+router.post("/link-whatsapp", async (req, res) => {
+  const accountToken = extractAccountToken(req);
+  const {
+    phone,
+    buyerSessionToken,
+    sellerSessionToken,
+    whatsappSessionToken,
+    role,
+  } = req.body || {};
+  const result = await linkWhatsAppToAccount({
+    accountToken,
+    phone,
+    whatsappSessionToken:
+      whatsappSessionToken || buyerSessionToken || sellerSessionToken || "",
+    role: role === "seller" || sellerSessionToken ? "seller" : "buyer",
+  });
+  if (
+    result.error === "session_required" ||
+    result.error === "session_invalid" ||
+    result.error === "session_expired"
+  ) {
+    return res.status(401).json(result);
+  }
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
 });
 
 /** POST /api/account/auth/claim-order — link SK-#### when phone matches */
