@@ -24,6 +24,8 @@
   let pollTimer = null;
   let pollCount = 0;
   let activeOfferId = null;
+  /** @type {{ towns: string[], hubs: Record<string, string[]>, options: Array<{town:string,spotName:string,id:string}> } | null} */
+  let landmarkCatalog = null;
 
   function formatKes(n) {
     return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
@@ -34,6 +36,99 @@
     if (!node) return;
     node.textContent = msg || "";
     node.classList.toggle("text-red-600", isError);
+  }
+
+  function selectedDeliveryType() {
+    const checked = document.querySelector('input[name="offer-delivery-type"]:checked');
+    return checked?.value || "other";
+  }
+
+  function syncLandmarkUi() {
+    const type = selectedDeliveryType();
+    const hubFields = document.getElementById("offer-hub-fields");
+    const locationWrap = document.getElementById("offer-location-wrap");
+    const locationInput = document.getElementById("offer-location");
+    const townSel = document.getElementById("offer-landmark-town");
+    const spotSel = document.getElementById("offer-landmark-spot");
+    const useHub = type === "parcel_hub";
+    hubFields?.classList.toggle("hidden", !useHub);
+    locationWrap?.classList.toggle("hidden", useHub);
+    if (locationInput) locationInput.required = !useHub;
+    if (townSel) townSel.required = useHub;
+    if (spotSel) spotSel.required = useHub;
+  }
+
+  function fillSpotOptions(town) {
+    const spotSel = document.getElementById("offer-landmark-spot");
+    if (!spotSel) return;
+    const spots = (landmarkCatalog?.hubs && town && landmarkCatalog.hubs[town]) || [];
+    spotSel.innerHTML = `<option value="">Choose spot…</option>${spots
+      .map((s) => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)
+      .join("")}`;
+    spotSel.disabled = spots.length === 0;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  async function loadLandmarkCatalog() {
+    const townSel = document.getElementById("offer-landmark-town");
+    if (!townSel) return;
+    try {
+      const res = await fetch(`${CHECKOUT_API}/landmarks`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return;
+      landmarkCatalog = data;
+      townSel.innerHTML = `<option value="">Choose town…</option>${(data.towns || [])
+        .map((t) => `<option value="${escapeAttr(t)}">${escapeHtml(t)}</option>`)
+        .join("")}`;
+    } catch {
+      /* free-text fallback still works */
+    }
+    syncLandmarkUi();
+  }
+
+  function collectLandmarkPayload() {
+    const type = selectedDeliveryType();
+    const town = document.getElementById("offer-landmark-town")?.value.trim() || "";
+    const spot = document.getElementById("offer-landmark-spot")?.value.trim() || "";
+    const note = document.getElementById("offer-landmark-note")?.value.trim() || "";
+    const location = document.getElementById("offer-location")?.value.trim() || "";
+    if (type === "parcel_hub") {
+      const match = landmarkCatalog?.options?.find((o) => o.town === town && o.spotName === spot);
+      return {
+        deliveryType: "parcel_hub",
+        landmarkTown: town,
+        landmarkSpot: spot,
+        landmarkId: match?.id || undefined,
+        landmarkInstructions: note || undefined,
+        location: [spot, town, note].filter(Boolean).join(" · "),
+      };
+    }
+    return {
+      deliveryType: "other",
+      location,
+      landmarkInstructions: note || undefined,
+    };
+  }
+
+  function bindLandmarkUi() {
+    document.querySelectorAll('input[name="offer-delivery-type"]').forEach((el) => {
+      el.addEventListener("change", syncLandmarkUi);
+    });
+    document.getElementById("offer-landmark-town")?.addEventListener("change", (e) => {
+      fillSpotOptions(e.target.value);
+    });
+    syncLandmarkUi();
   }
 
   async function loadOfferPreview(offerId) {
@@ -91,11 +186,14 @@
         }
         breakdownNode.innerHTML = rows.join("");
       }
-      setOfferStatus("Enter your drop-off address, then pay on M-Pesa. Delivery is arranged directly by the seller after payment.");
+      setOfferStatus(
+        "Pick a parcel hub or enter a landmark, then pay on M-Pesa. Delivery is arranged by the seller after payment."
+      );
       const phoneInput = document.getElementById("offer-phone");
       if (phoneInput && session?.phone && !phoneInput.value) {
         phoneInput.value = session.phone;
       }
+      void loadLandmarkCatalog();
     } catch {
       setOfferStatus("Could not load offer checkout right now.", true);
     }
@@ -111,8 +209,16 @@
     }
 
     const name = document.getElementById("offer-name")?.value.trim();
-    const location = document.getElementById("offer-location")?.value.trim();
     const phone = document.getElementById("offer-phone")?.value.trim();
+    const landmark = collectLandmarkPayload();
+    if (selectedDeliveryType() === "parcel_hub" && (!landmark.landmarkTown || !landmark.landmarkSpot)) {
+      setOfferStatus("Choose a town and drop-off spot, or switch to Other landmark.", true);
+      return;
+    }
+    if (selectedDeliveryType() !== "parcel_hub" && String(landmark.location || "").trim().length < 4) {
+      setOfferStatus("Enter a clearer delivery location (estate/town + landmark).", true);
+      return;
+    }
     const btn = document.getElementById("offer-place-btn");
     if (btn) btn.disabled = true;
     setOfferStatus("Creating prepaid order…");
@@ -121,8 +227,8 @@
       let payload = {
         buyerUserId: session.userId,
         name,
-        location,
         deliveryPhone: phone,
+        ...landmark,
       };
       if (window.SokoniBuyerAuth?.authFields) {
         payload = window.SokoniBuyerAuth.authFields(payload);
@@ -379,6 +485,7 @@
 
   payBtn?.addEventListener("click", payOrder);
   document.getElementById("offer-checkout-form")?.addEventListener("submit", placeOfferOrder);
+  bindLandmarkUi();
 
   loadMeta().then(() => {
     const params = new URLSearchParams(window.location.search);
@@ -390,6 +497,7 @@
           loadOfferPreview(offerId);
         },
       });
+      void loadLandmarkCatalog();
       loadOfferPreview(offerId);
       return;
     }

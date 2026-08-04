@@ -590,12 +590,18 @@ router.post("/offers/:offerId/place-order", async (req, res) => {
         message: gated.message,
       });
     }
+    const body = gated.payload || req.body || {};
     const result = await placeOrderFromAcceptedOffer({
       offerId: req.params.offerId,
       buyerUserId: gated.payload?.buyerUserId,
-      name: gated.payload?.name ?? req.body?.name,
-      location: gated.payload?.location ?? req.body?.location,
-      phone: gated.payload?.deliveryPhone ?? req.body?.deliveryPhone ?? req.body?.phone,
+      name: body.name ?? req.body?.name,
+      location: body.location ?? req.body?.location,
+      phone: body.deliveryPhone ?? req.body?.deliveryPhone ?? body.phone ?? req.body?.phone,
+      deliveryType: body.deliveryType ?? req.body?.deliveryType,
+      landmarkTown: body.landmarkTown ?? req.body?.landmarkTown,
+      landmarkSpot: body.landmarkSpot ?? req.body?.landmarkSpot,
+      landmarkId: body.landmarkId ?? req.body?.landmarkId,
+      landmarkInstructions: body.landmarkInstructions ?? req.body?.landmarkInstructions,
     });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
