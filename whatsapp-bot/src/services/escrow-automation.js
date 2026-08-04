@@ -29,6 +29,7 @@ import {
   msgBuyerPaid,
   msgSellerPaid,
   notifyAdminEvent,
+  sellerNotifyTargets,
 } from "./communication-hub.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -112,7 +113,9 @@ async function notifySellerDropoff(order, label) {
       `Label / QR: ${label.labelUrl || "—"}\n` +
       `(Hub scan also works — or reply DISPATCH ${order.id} yourself.)`;
   }
-  void dispatchMessages([{ to: toChatId(sup.phone), message }]);
+  const targets = sellerNotifyTargets(sup.phone);
+  updateOrderMeta(order.id, { sellerNotifyChatIds: targets });
+  void dispatchMessages(targets.map((to) => ({ to, message })));
   void notifyAdminEvent("PAID_ESCROW", {
     orderId: order.id,
     details: `Payment held — seller notified to DISPATCH ${order.id}`,

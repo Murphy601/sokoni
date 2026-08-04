@@ -7,17 +7,24 @@
  * Stack: JSON orders + WAHA (not Twilio / Mongo / Socket.io).
  */
 import { config } from "../config.js";
-import { sendText, toChatId } from "./whatsapp.js";
+import { sendText, toChatId, phoneDigitsFromChatId } from "./whatsapp.js";
 import {
   getOrder,
   getOrdersForCustomer,
+  getContactPhone,
   listAllOrders,
   updateOrderMeta,
 } from "./orders.js";
 import { findSupplierByPhone, getSupplier, listSuppliers } from "./suppliers.js";
 import { advanceShipmentStatus, getEffectiveShipmentStatus } from "./shipments.js";
 import { formatLandmarkLine } from "../lib/landmark-hubs.js";
-import { setHumanHandoff, clearHumanHandoff } from "./session.js";
+import { setHumanHandoff, clearHumanHandoff, getCustomerMeta } from "./session.js";
+import {
+  registerSellerChatId,
+  getSellerPhoneForChatId,
+  listChatIdsForSellerPhone,
+  rememberSellerNotifyTarget,
+} from "./seller-chat-ids.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DISPATCH_REMIND_1 = 6 * HOUR_MS;
@@ -65,9 +72,29 @@ export function buyerOwnsOrder(order, customerKey, phone) {
   return getOrdersForCustomer(customerKey, phone).some((o) => o.id === order.id);
 }
 
+/**
+ * Recover seller phone when WAHA sends @lid (no digits in chatId).
+ * Order: webhook phone → chat registry → session meta → contacts → @c.us digits.
+ */
+export function resolveInboundSellerPhone(phone = "", customerKey = "") {
+  const candidates = [
+    phone,
+    getSellerPhoneForChatId(customerKey),
+    getCustomerMeta(customerKey)?.phone,
+    getContactPhone(customerKey),
+    phoneDigitsFromChatId(customerKey),
+  ];
+  for (const c of candidates) {
+    const n = normalizePhone(c);
+    if (n && n.length >= 9) return n;
+  }
+  return "";
+}
+
 function supplierMatchesSender(supplier, phone = "", customerKey = "") {
   if (!supplier) return false;
-  if (phone && (phonesMatch(phone, supplier.phone) || phonesMatch(phone, supplier.mpesaNumber))) {
+  const resolved = resolveInboundSellerPhone(phone, customerKey) || normalizePhone(phone);
+  if (resolved && (phonesMatch(resolved, supplier.phone) || phonesMatch(resolved, supplier.mpesaNumber))) {
     return true;
   }
   if (customerKey) {
@@ -87,15 +114,21 @@ function supplierMatchesSender(supplier, phone = "", customerKey = "") {
  */
 export function sellerOwnsOrder(order, phone, customerKey = "") {
   if (!order) return false;
+  const resolved = resolveInboundSellerPhone(phone, customerKey) || normalizePhone(phone);
 
   if (order.supplierId) {
     const onOrder = getSupplier(order.supplierId);
-    if (supplierMatchesSender(onOrder, phone, customerKey)) return true;
+    if (supplierMatchesSender(onOrder, resolved || phone, customerKey)) return true;
   }
 
   // Fallback: inbound phone → supplier id must still equal order.supplierId.
-  const byPhone = findSupplierByPhone(phone);
-  if (byPhone && order.supplierId && byPhone.id === order.supplierId) return true;
+  const byPhone = resolved ? findSupplierByPhone(resolved) : findSupplierByPhone(phone);
+  if (byPhone && order.supplierId && byPhone.id === order.supplierId) {
+    if (customerKey && (byPhone.phone || resolved)) {
+      registerSellerChatId(customerKey, byPhone.phone || resolved);
+    }
+    return true;
+  }
 
   return false;
 }
@@ -108,9 +141,38 @@ function normalizeHandle(raw) {
 }
 
 function findSupplierForSender(phone = "", customerKey = "") {
-  const byPhone = phone ? findSupplierByPhone(phone) : null;
-  if (byPhone) return byPhone;
-  return listSuppliers().find((s) => supplierMatchesSender(s, phone, customerKey)) || null;
+  const resolved = resolveInboundSellerPhone(phone, customerKey);
+  const byPhone = resolved ? findSupplierByPhone(resolved) : phone ? findSupplierByPhone(phone) : null;
+  if (byPhone) {
+    if (customerKey && (byPhone.phone || resolved)) {
+      registerSellerChatId(customerKey, byPhone.phone || resolved);
+    }
+    return byPhone;
+  }
+  const match = listSuppliers().find((s) => supplierMatchesSender(s, resolved || phone, customerKey)) || null;
+  if (match && customerKey && match.phone) {
+    registerSellerChatId(customerKey, match.phone);
+  }
+  return match;
+}
+
+/** Chat targets for seller WhatsApp (primary @c.us + any linked @lid). */
+export function sellerNotifyTargets(phone) {
+  const primary = rememberSellerNotifyTarget(phone);
+  const linked = listChatIdsForSellerPhone(phone);
+  const out = [];
+  const seen = new Set();
+  for (const id of [primary, ...linked]) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function supplierPhoneLast4(supplier) {
+  const digits = normalizePhone(supplier?.phone) || normalizePhone(supplier?.mpesaNumber);
+  return digits.length >= 4 ? digits.slice(-4) : "";
 }
 
 function productBelongsToSupplier(product, supplier) {
@@ -152,13 +214,23 @@ export async function ensureOrderSupplier(order) {
  */
 export async function authorizeSellerForOrder(order, phone = "", customerKey = "") {
   let o = (await ensureOrderSupplier(order)) || order;
-  if (sellerOwnsOrder(o, phone, customerKey)) {
-    return { ok: true, order: o };
+  const resolvedPhone = resolveInboundSellerPhone(phone, customerKey);
+
+  if (sellerOwnsOrder(o, resolvedPhone || phone, customerKey)) {
+    const owner = o.supplierId ? getSupplier(o.supplierId) : findSupplierForSender(resolvedPhone || phone, customerKey);
+    if (customerKey && owner?.phone) registerSellerChatId(customerKey, owner.phone);
+    return { ok: true, order: o, resolvedPhone: resolvedPhone || null };
   }
 
-  const inboundSeller = findSupplierForSender(phone, customerKey);
+  const inboundSeller = findSupplierForSender(resolvedPhone || phone, customerKey);
   if (!inboundSeller) {
-    return { ok: false, order: o, reason: "not_registered_seller" };
+    return {
+      ok: false,
+      order: o,
+      reason: "not_registered_seller",
+      resolvedPhone: resolvedPhone || null,
+      needsLink: Boolean(customerKey?.includes("@lid") || !resolvedPhone),
+    };
   }
 
   let product = null;
@@ -181,7 +253,8 @@ export async function authorizeSellerForOrder(order, phone = "", customerKey = "
       updateOrderMeta(o.id, { supplierId: inboundSeller.id });
       o = getOrder(o.id) || o;
     }
-    return { ok: true, order: o };
+    if (customerKey && inboundSeller.phone) registerSellerChatId(customerKey, inboundSeller.phone);
+    return { ok: true, order: o, resolvedPhone: resolvedPhone || null };
   }
 
   return {
@@ -191,6 +264,7 @@ export async function authorizeSellerForOrder(order, phone = "", customerKey = "
     inboundSellerId: inboundSeller.id,
     orderSupplierId: o.supplierId || null,
     productSupplierId: product?.supplierId || null,
+    resolvedPhone: resolvedPhone || null,
   };
 }
 
@@ -678,7 +752,7 @@ export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = 
 /* -------------------------------------------------------------------------- */
 
 /**
- * DISPATCH / YES / HELP. Returns true if consumed.
+ * DISPATCH / YES / HELP / LINKSELLER. Returns true if consumed.
  */
 export async function handleOrderBusMessage(customerKey, text, { phone = "" } = {}) {
   const trimmed = String(text || "").trim();
@@ -687,6 +761,12 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
   // If already in takeover, never run bot commands — relay instead.
   if (findTakeOverOrder(customerKey, phone)) {
     return tryRelayAdminTakeOver(customerKey, text, { phone });
+  }
+
+  const linkMatch = trimmed.match(/^LINKSELLER\s+SK-?(\d{3,})\s+(\d{4})\b/i);
+  if (linkMatch) {
+    await flowLinkSeller(customerKey, phone, normalizeOrderId(linkMatch[1]), linkMatch[2]);
+    return true;
   }
 
   const dispatchMatch = trimmed.match(/^DISPATCH\s+SK-?(\d{3,})\b/i);
@@ -711,6 +791,51 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
   return false;
 }
 
+/**
+ * Bind this WhatsApp chat (@lid) to the order's seller phone using last 4 digits.
+ * Then retry DISPATCH automatically.
+ */
+async function flowLinkSeller(customerKey, phone, orderId, last4) {
+  const order = await ensureOrderSupplier(getOrder(orderId));
+  if (!order) {
+    await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found.`);
+    return;
+  }
+  const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+  const expected = supplierPhoneLast4(supplier);
+  if (!supplier?.phone || !expected) {
+    await sendSafeWhatsApp(
+      customerKey,
+      `*${order.id}* has no seller phone on file.\nReply HELP ${order.id} so admin can fix it.`
+    );
+    return;
+  }
+  if (String(last4) !== expected) {
+    console.warn("[communication-hub] LINKSELLER bad last4", {
+      orderId: order.id,
+      customerKey,
+      phone: normalizePhone(phone) || null,
+    });
+    await sendSafeWhatsApp(
+      customerKey,
+      `That code doesn't match the seller number for *${order.id}*.\n` +
+        `Use the *last 4 digits* of your Sokoni seller WhatsApp / M-Pesa, then:\n` +
+        `LINKSELLER ${order.id} ####`
+    );
+    return;
+  }
+
+  registerSellerChatId(customerKey, supplier.phone);
+  rememberSellerNotifyTarget(supplier.phone, customerKey);
+  console.log("[communication-hub] LINKSELLER ok", { orderId: order.id, customerKey, phone: supplier.phone });
+
+  await sendSafeWhatsApp(
+    customerKey,
+    `✅ Seller chat linked for *${order.id}*.\nDispatching now…`
+  );
+  await flowSellerDispatch(customerKey, supplier.phone, order.id);
+}
+
 async function flowSellerDispatch(customerKey, phone, orderId) {
   let order = getOrder(orderId);
   if (!order) {
@@ -732,12 +857,26 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
       orderId: order.id,
       reason: auth.reason,
       phone: normalizePhone(phone) || null,
+      resolvedPhone: auth.resolvedPhone || null,
       customerKey,
+      isLid: Boolean(customerKey?.includes("@lid")),
       inboundSellerId: auth.inboundSellerId || null,
       orderSupplierId: auth.orderSupplierId || order.supplierId || null,
       productSupplierId: auth.productSupplierId || null,
     });
     if (auth.reason === "not_registered_seller") {
+      const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+      if (auth.needsLink && supplier?.phone) {
+        await sendSafeWhatsApp(
+          customerKey,
+          `*${order.id}* — WhatsApp hid your phone on this chat, so Sokoni can't match your seller account yet.\n\n` +
+            `Link this chat (last 4 digits of your seller WhatsApp / M-Pesa):\n` +
+            `*LINKSELLER ${order.id} ####*\n\n` +
+            `Then we'll dispatch automatically.\n` +
+            `Or reply *vendor menu* if you have a different seller number.`
+        );
+        return;
+      }
       await sendSafeWhatsApp(
         customerKey,
         `*${order.id}* — this WhatsApp is not a Sokoni seller account yet.\nReply *vendor menu* to sign in, then try:\nDISPATCH ${order.id}`
@@ -751,6 +890,12 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
         `Or reply HELP ${order.id} so admin can fix the link.`
     );
     return;
+  }
+
+  // Keep @lid ↔ seller phone mapping warm after a successful auth.
+  {
+    const sup = order.supplierId ? getSupplier(order.supplierId) : null;
+    if (customerKey && sup?.phone) registerSellerChatId(customerKey, sup.phone);
   }
   if (!isPaidHeld(order)) {
     await sendSafeWhatsApp(
@@ -888,10 +1033,13 @@ async function flowBuyerYes(customerKey, phone, orderId) {
   });
 
   const supplier = fresh.supplierId ? getSupplier(fresh.supplierId) : null;
-  void dispatchMessages([
-    { to: customerKey, message: msgBuyerConfirmAck(fresh) },
-    supplier?.phone ? { to: toChatId(supplier.phone), message: msgSellerBuyerConfirmed(fresh) } : null,
-  ]);
+  const sellerJobs = supplier?.phone
+    ? sellerNotifyTargets(supplier.phone).map((to) => ({
+        to,
+        message: msgSellerBuyerConfirmed(fresh),
+      }))
+    : [];
+  void dispatchMessages([{ to: customerKey, message: msgBuyerConfirmAck(fresh) }, ...sellerJobs]);
 }
 
 async function flowHelp(customerKey, phone, orderId, rawText) {
@@ -947,9 +1095,15 @@ async function autoReleaseOrder(order) {
 
   const fresh = getOrder(order.id) || order;
   const supplier = fresh.supplierId ? getSupplier(fresh.supplierId) : null;
+  const sellerJobs = supplier?.phone
+    ? sellerNotifyTargets(supplier.phone).map((to) => ({
+        to,
+        message: msgAutoReleasedSeller(fresh),
+      }))
+    : [];
   void dispatchMessages([
     fresh.customerKey ? { to: fresh.customerKey, message: msgAutoReleasedBuyer(fresh) } : null,
-    supplier?.phone ? { to: toChatId(supplier.phone), message: msgAutoReleasedSeller(fresh) } : null,
+    ...sellerJobs,
   ]);
   void notifyAdminEvent("AUTO_RELEASED", {
     orderId: fresh.id,
@@ -977,19 +1131,26 @@ export async function processOrderCommunicationReminders() {
       const age = now - paidAt;
       const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
       if (supplier?.phone) {
+        const targets = sellerNotifyTargets(supplier.phone);
+        const remindBody12 =
+          `⏰ *Reminder — ${order.id}*\nBuyer paid ~12h ago. When you send the item, reply:\n*DISPATCH ${order.id}*\n\n` +
+          `_If DISPATCH says you're not a seller, reply:_\n*LINKSELLER ${order.id} ####*\n_(last 4 digits of your seller WhatsApp / M-Pesa)_`;
+        const remindBody6 =
+          `⏰ *Reminder — ${order.id}*\nBuyer paid ~6h ago. When you send the item, reply:\n*DISPATCH ${order.id}*\n\n` +
+          `_If DISPATCH says you're not a seller, reply:_\n*LINKSELLER ${order.id} ####*\n_(last 4 digits of your seller WhatsApp / M-Pesa)_`;
         if (age >= DISPATCH_REMIND_2 && !order.dispatchReminded12hAt) {
-          updateOrderMeta(order.id, { dispatchReminded12hAt: now });
-          void sendSafeWhatsApp(
-            toChatId(supplier.phone),
-            `⏰ *Reminder — ${order.id}*\nBuyer paid ~12h ago. When you send the item, reply:\n*DISPATCH ${order.id}*`
-          );
+          updateOrderMeta(order.id, {
+            dispatchReminded12hAt: now,
+            sellerNotifyChatIds: targets,
+          });
+          for (const to of targets) void sendSafeWhatsApp(to, remindBody12);
           n += 1;
         } else if (age >= DISPATCH_REMIND_1 && !order.dispatchReminded6hAt) {
-          updateOrderMeta(order.id, { dispatchReminded6hAt: now });
-          void sendSafeWhatsApp(
-            toChatId(supplier.phone),
-            `⏰ *Reminder — ${order.id}*\nBuyer paid ~6h ago. When you send the item, reply:\n*DISPATCH ${order.id}*`
-          );
+          updateOrderMeta(order.id, {
+            dispatchReminded6hAt: now,
+            sellerNotifyChatIds: targets,
+          });
+          for (const to of targets) void sendSafeWhatsApp(to, remindBody6);
           n += 1;
         }
       }

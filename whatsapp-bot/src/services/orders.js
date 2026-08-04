@@ -112,6 +112,14 @@ export function getAllContacts() {
   return Object.entries(store.contacts).map(([key, c]) => ({ customerKey: key, ...c }));
 }
 
+/** Phone digits previously seen for this WhatsApp chat (may be empty for @lid). */
+export function getContactPhone(customerKey) {
+  if (!customerKey) return null;
+  load();
+  const phone = store.contacts[customerKey]?.phone;
+  return phone ? String(phone).replace(/\D/g, "") || null : null;
+}
+
 
 export function createOrder({ customerKey, chatId, product, details, offerId = null, totalsOverride = null }) {
   load();

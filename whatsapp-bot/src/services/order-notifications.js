@@ -13,7 +13,9 @@ import {
   msgBuyerPaid,
   msgSellerPaid,
   dropOffLine,
+  sellerNotifyTargets,
 } from "./communication-hub.js";
+import { updateOrderMeta } from "./orders.js";
 
 /** Map internal state → lifecycle label. */
 export function deriveLifecycleStatus(order) {
@@ -43,7 +45,11 @@ export async function notifyOrderPaidEscrow(order, payment = {}) {
   if (order.supplierId) {
     const sup = getSupplier(order.supplierId);
     if (sup?.phone) {
-      jobs.push({ to: toChatId(sup.phone), message: msgSellerPaid(order) });
+      const targets = sellerNotifyTargets(sup.phone);
+      updateOrderMeta(order.id, { sellerNotifyChatIds: targets });
+      for (const to of targets) {
+        jobs.push({ to, message: msgSellerPaid(order) });
+      }
     }
   }
   await dispatchMessages(jobs);

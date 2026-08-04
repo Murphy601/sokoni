@@ -3,6 +3,17 @@ import { sendText } from "./whatsapp.js";
 import { setMenuState } from "./session.js";
 import { requireAdminSender } from "./admin.js";
 import { findSupplierByPhone } from "./suppliers.js";
+import { registerSellerChatId, rememberSellerNotifyTarget } from "./seller-chat-ids.js";
+
+function linkSellerChatIfKnown(customerKey, phone) {
+  const supplier = phone ? findSupplierByPhone(phone) : null;
+  if (!supplier?.phone) return supplier;
+  if (customerKey) {
+    registerSellerChatId(customerKey, supplier.phone);
+    rememberSellerNotifyTarget(supplier.phone, customerKey);
+  }
+  return supplier;
+}
 import { sendWelcome, formatNumberedMenu } from "./menu.js";
 import { startSupplierOnboarding } from "./supplier-onboarding.js";
 import { startPickupOnboarding } from "./pickup-point-onboarding.js";
@@ -146,7 +157,7 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
   }
 
   if (isVendorMenuIntent(trimmed)) {
-    const supplier = findSupplierByPhone(phone);
+    const supplier = linkSellerChatIfKnown(customerKey, phone);
     if (supplier) {
       await sendVendorMenu(customerKey, supplier);
       return true;
@@ -155,12 +166,12 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
   }
 
   if (/^vendor\s+contact$/i.test(trimmed)) {
-    const supplier = findSupplierByPhone(phone);
+    const supplier = linkSellerChatIfKnown(customerKey, phone);
     if (supplier) return handleVendorMenuAction(customerKey, "vendor_contact", { phone });
     return sendVendorApplyPrompt(customerKey);
   }
   if (/^vendor\s+status$/i.test(trimmed)) {
-    const supplier = findSupplierByPhone(phone);
+    const supplier = linkSellerChatIfKnown(customerKey, phone);
     if (supplier) return handleVendorMenuAction(customerKey, "vendor_status", { phone });
     return sendVendorApplyPrompt(customerKey);
   }
@@ -185,7 +196,7 @@ export async function handlePickupMenuAction(customerKey, actionId, { phone = ""
 }
 
 export async function handleVendorMenuAction(customerKey, actionId, { phone = "" } = {}) {
-  const supplier = findSupplierByPhone(phone);
+  const supplier = linkSellerChatIfKnown(customerKey, phone);
   if (!supplier && actionId !== "vendor_start_apply" && actionId !== "customer_menu" && actionId !== "shop_all") {
     return sendVendorApplyPrompt(customerKey);
   }

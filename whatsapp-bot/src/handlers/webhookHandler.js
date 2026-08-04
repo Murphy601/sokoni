@@ -237,6 +237,23 @@ export async function handleIncomingMessage(
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
 
+  // Persist seller phone ↔ chatId early (critical for WhatsApp @lid replies).
+  if (phone) {
+    try {
+      const { findSupplierByPhone } = await import("../services/suppliers.js");
+      const { registerSellerChatId, rememberSellerNotifyTarget } = await import(
+        "../services/seller-chat-ids.js"
+      );
+      const seller = findSupplierByPhone(phone);
+      if (seller?.phone) {
+        registerSellerChatId(customerKey, seller.phone);
+        rememberSellerNotifyTarget(seller.phone, customerKey);
+      }
+    } catch (err) {
+      console.warn("[webhook] seller chat link skipped:", err.message);
+    }
+  }
+
   const normalized = text.toLowerCase().trim();
 
   if (isInPickupOnboarding(customerKey)) {
