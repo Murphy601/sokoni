@@ -103,15 +103,22 @@ export const config = {
     mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },
   /** Safaricom Daraja — STK push + escrow auto-confirm (Phase 5.1). */
-  mpesa: {
-    consumerKey: process.env.MPESA_CONSUMER_KEY || "",
-    consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
-    passkey: process.env.MPESA_PASSKEY || "",
-    shortcode: process.env.MPESA_SHORTCODE || "",
-    callbackUrl: process.env.MPESA_CALLBACK_URL || "",
-    env: process.env.MPESA_ENV === "production" ? "production" : "sandbox",
-    transactionType: process.env.MPESA_TRANSACTION_TYPE || "CustomerBuyGoodsOnline",
-  },
+  mpesa: (() => {
+    const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
+    const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
+    return {
+      consumerKey: trim(process.env.MPESA_CONSUMER_KEY),
+      consumerSecret: trim(process.env.MPESA_CONSUMER_SECRET),
+      passkey: trim(process.env.MPESA_PASSKEY),
+      shortcode: trim(process.env.MPESA_SHORTCODE),
+      // Prefer /daraja/callback — Safaricom often rejects callback URLs containing "mpesa".
+      callbackUrl:
+        trim(process.env.MPESA_CALLBACK_URL) ||
+        "https://bot.sokonimall.com/api/payments/daraja/callback",
+      env: envRaw === "production" || envRaw === "prod" ? "production" : "sandbox",
+      transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerBuyGoodsOnline",
+    };
+  })(),
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**
    * Admin console phone(s). Set ADMIN_PHONES to a number DIFFERENT from the bot
