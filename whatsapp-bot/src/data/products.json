@@ -6,8 +6,8 @@
     "subcategory": "groceries",
     "browseCategory": "home",
     "browseSubCategory": "supermarket",
-    "sourcePriceKes": 276,
-    "priceKes": 300,
+    "sourcePriceKes": 76,
+    "priceKes": 84,
     "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack.",
     "brand": "Delamere",
     "color": "white",
@@ -25,7 +25,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/sm-tlom7-001.jpg",
     "images": [
       "assets/images/products/sm-tlom7-001.jpg",
@@ -34,11 +34,21 @@
       "assets/images/products/sm-tlom7-001-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785545700245,
+    "publishedAt": 1785807363788,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785545700245
+    "refreshedAt": 1785807363788,
+    "sellerNetKes": 76,
+    "platformFeeKes": 8,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 76,
+    "shippingKes": 0,
+    "freeShipping": true,
+    "priceUpdatedAt": 1785807363788,
+    "isSold": true,
+    "soldAt": 1785877488607,
+    "soldOrderId": "SK-1023"
   },
   {
     "id": "hb-tlom7-001",
@@ -167,7 +177,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/hb-tlom7-002.jpg",
     "images": [
       "assets/images/products/hb-tlom7-002.jpg",
@@ -180,7 +190,10 @@
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785545704019
+    "refreshedAt": 1785545704019,
+    "isSold": true,
+    "soldAt": 1785796111723,
+    "soldOrderId": "SK-1018"
   },
   {
     "id": "hb-tlom7-003",
@@ -242,12 +255,12 @@
     "subcategory": "womens-fashion",
     "browseCategory": "women",
     "browseSubCategory": "shoes",
-    "sellerNetKes": 250,
-    "sourcePriceKes": 250,
-    "priceKes": 280,
-    "platformFeeKes": 25,
-    "transactionFeeKes": 5,
-    "sellerPayoutKes": 250,
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 55,
+    "platformFeeKes": 5,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 50,
     "deliveryMethod": "seller_express",
     "shippingRecipient": "seller",
     "description": "A single yellow and green flip flop is shown against a white background. The sole has a textured pattern.",
@@ -279,9 +292,11 @@
     ],
     "videoUrl": "assets/images/products/fa-tlom7-002.mp4",
     "videoKind": "preview",
-    "publishedAt": 1785640659809,
+    "publishedAt": 1785807282780,
     "moderation": {
       "status": "pending_scan"
-    }
+    },
+    "refreshedAt": 1785807282780,
+    "priceUpdatedAt": 1785807276836
   }
 ]

@@ -22,12 +22,6 @@
           "label": "Women's Fashion"
         }
       ]
-    },
-    {
-      "id": "supermarket",
-      "label": "Supermarket",
-      "emoji": "🛒",
-      "subcategories": []
     }
   ]
 }
