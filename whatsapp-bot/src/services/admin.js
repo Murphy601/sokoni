@@ -56,7 +56,13 @@ import {
   handleFlagsCommand,
   handleDbOpsCommand,
 } from "./platform-admin.js";
-import { getSettlementSummary, markPayoutPaid } from "./settlements.js";
+import {
+  getSettlementSummary,
+  listOwedPayouts,
+  listScheduledPayouts,
+  markPayoutPaid,
+  processDuePayouts,
+} from "./settlements.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 
 function digitsOnly(value) {
@@ -446,7 +452,7 @@ async function handleStatusCommand(adminChatId, args) {
   if (!orderId || !statusInput) {
     return sendText(
       adminChatId,
-      `Usage: #status SK-1042 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
+      `Usage: #status SK-1042 delivered\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
     );
   }
   const order = getOrder(orderId);
@@ -461,9 +467,39 @@ async function handleStatusCommand(adminChatId, args) {
   ) {
     return sendText(
       adminChatId,
-      `⚠️ *${order.id}* — payment not confirmed. Run #payconfirm ${order.id} first.`
+      `⚠️ *${order.id}* — payment not confirmed (status: ${order.customerPaymentStatus || "unpaid"}).\n\n` +
+        `1) Verify M-Pesa on till\n` +
+        `2) Send *#payconfirm ${order.id}*\n` +
+        `3) Then *#status ${order.id} delivered*`
     );
   }
+
+  // Already delivered — still (re)run escrow release if payout never scheduled.
+  if (next === "delivered" && order.status === "delivered") {
+    try {
+      await onOrderDelivered(order);
+    } catch (err) {
+      console.warn("[admin] onOrderDelivered retry failed:", err.message);
+    }
+    const fresh = getOrder(order.id) || order;
+    const sett = listScheduledPayouts(50)
+      .concat(listOwedPayouts(50))
+      .find((e) => e.orderId === fresh.id);
+    const amountLine = sett
+      ? `Seller amount: *KES ${Number(sett.payoutAmountKes || 0).toLocaleString()}* → ${sett.supplierPhone || "seller"}\n`
+      : "";
+    return sendText(
+      adminChatId,
+      `ℹ️ *${fresh.id}* already delivered.\n` +
+        `Escrow flag: ${fresh.escrowStatus || "—"} _(not M-Pesa — money stays on your till)_\n` +
+        `Payout book: ${fresh.payoutStatus || "—"}\n` +
+        amountLine +
+        (sett
+          ? `Send that from your till to the seller, then *#paid ${fresh.id}*.\nCheck *#payouts* for the full list.`
+          : `No settlement row yet — check dispute hold, or missing seller price on the order.`)
+    );
+  }
+
   const result = updateOrderStatus(orderId, statusInput);
   if (!result) {
     return sendText(adminChatId, `⚠️ Order *${orderId}* not found. Try #orders.`);
@@ -478,17 +514,37 @@ async function handleStatusCommand(adminChatId, args) {
     );
   }
   await notifyCustomerOfStatus(result.order);
+  let escrowLine = "";
   if (result.status === "delivered") {
-    advanceShipmentStatus(result.order.id, "delivered", { actor: "admin_status", note: "#status delivered" });
-    onOrderDelivered(getOrder(result.order.id) || result.order);
+    try {
+      advanceShipmentStatus(result.order.id, "delivered", {
+        actor: "admin_status",
+        note: "#status delivered",
+      });
+    } catch (err) {
+      console.warn("[admin] advanceShipmentStatus:", err.message);
+    }
+    try {
+      await onOrderDelivered(getOrder(result.order.id) || result.order);
+    } catch (err) {
+      console.warn("[admin] onOrderDelivered failed:", err.message);
+      escrowLine = `\n⚠️ Escrow release error: ${err.message}`;
+    }
+    const fresh = getOrder(result.order.id) || result.order;
+    const sett = listScheduledPayouts(50)
+      .concat(listOwedPayouts(50))
+      .find((e) => e.orderId === fresh.id);
+    escrowLine =
+      `\nEscrow flag: ${fresh.escrowStatus || "—"} _(money still on your till)_\n` +
+      `Payout book: ${fresh.payoutStatus || "—"}\n` +
+      (sett
+        ? `Seller: KES ${Number(sett.payoutAmountKes || 0).toLocaleString()} → ${sett.supplierPhone || "—"}\n` +
+          `Hold ≈3 business days, then send from till + *#paid ${fresh.id}*. See *#payouts*.`
+        : `No settlement row — check dispute hold or missing seller price.`);
   }
-  const payoutNote =
-    result.status === "delivered" && result.order.sourcePriceKes
-      ? `\nSeller payout scheduled (2–3 business days). Check #payouts.`
-      : "";
   return sendText(
     adminChatId,
-    `✅ *${result.order.id}* → ${statusLabel(result.status)}\nCustomer notified.${payoutNote}`
+    `✅ *${result.order.id}* → ${statusLabel(result.status)}\nCustomer notified.${escrowLine}`
   );
 }
 
@@ -566,20 +622,64 @@ async function handleFulfillCommand(adminChatId, args) {
 }
 
 async function handlePayoutsCommand(adminChatId) {
-  const summary = getSettlementSummary();
-  if (summary.count === 0) {
-    return sendText(adminChatId, "💰 No supplier payouts owed right now.");
+  // Promote any scheduled holds whose 3 business days elapsed.
+  try {
+    processDuePayouts();
+  } catch (err) {
+    console.warn("[admin] processDuePayouts:", err.message);
   }
-  const lines = summary.entries.slice(0, 10).map(
+  const summary = getSettlementSummary();
+  const scheduled = listScheduledPayouts(15);
+  const owed = summary.entries || [];
+
+  if (owed.length === 0 && scheduled.length === 0) {
+    return sendText(
+      adminChatId,
+      "💰 No supplier payouts on the books.\n\n" +
+        "_Escrow “released” on an order only flags accounting — money stays on your till until you send it. " +
+        "After #status … delivered, a row should appear here as *scheduled* (3 business days) then *owed*._"
+    );
+  }
+
+  const fmtWhen = (ms) => {
+    if (!ms) return "—";
+    try {
+      return new Date(ms).toLocaleString("en-KE", { timeZone: "Africa/Nairobi", dateStyle: "medium" });
+    } catch {
+      return "—";
+    }
+  };
+
+  const owedLines = owed.slice(0, 10).map(
     (e) =>
       `*${e.orderId}* · ${e.supplierName}\n` +
-      `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
-      `#paid ${e.orderId} when sent`
+      `Pay *now*: KES ${Number(e.payoutAmountKes || 0).toLocaleString()} · ${e.productName}\n` +
+      `Phone: ${e.supplierPhone || "—"}\n` +
+      `#paid ${e.orderId} after you send M-Pesa`
   );
-  return sendText(
-    adminChatId,
-    `💰 *Owed to suppliers:* KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+  const schedLines = scheduled.slice(0, 10).map(
+    (e) =>
+      `*${e.orderId}* · ${e.supplierName}\n` +
+      `Hold: KES ${Number(e.payoutAmountKes || 0).toLocaleString()} · due ${fmtWhen(e.payoutEligibleAt)}\n` +
+      `${e.productName}`
   );
+
+  let msg = "💰 *Supplier payouts*\n\n";
+  if (owed.length) {
+    msg +=
+      `*Owed now:* KES ${summary.totalOwedKes.toLocaleString()} (${owed.length})\n` +
+      `_Send from your till, then #paid SK-####_\n\n${owedLines.join("\n\n")}\n\n`;
+  } else {
+    msg += "*Owed now:* none\n\n";
+  }
+  if (scheduled.length) {
+    msg +=
+      `*Scheduled (escrow hold):* KES ${summary.totalScheduledKes.toLocaleString()} (${scheduled.length})\n` +
+      `${schedLines.join("\n\n")}\n\n`;
+  }
+  msg +=
+    "_Auto B2C payout is not live yet — transfer manually from Till/Paybill to the seller, then mark #paid._";
+  return sendText(adminChatId, msg.trim());
 }
 
 async function handlePaymentsCommand(adminChatId) {
@@ -781,11 +881,20 @@ async function handleAssignPickupCommand(adminChatId, args) {
 async function handlePaidCommand(adminChatId, orderId) {
   if (!orderId) return sendText(adminChatId, "Usage: #paid SK-1042");
   const entry = markPayoutPaid(orderId);
-  if (!entry) return sendText(adminChatId, `⚠️ No owed payout for *${orderId}*.`);
+  if (!entry) {
+    return sendText(
+      adminChatId,
+      `⚠️ No payout row for *${orderId}*.\n` +
+        `Run *#status ${String(orderId).toUpperCase()} delivered* first (creates the settlement), ` +
+        `send M-Pesa from your till to the seller, then *#paid* again.\n` +
+        `Check *#payouts*.`
+    );
+  }
   updateOrderMeta(orderId, { payoutStatus: "paid" });
   return sendText(
     adminChatId,
-    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.`
+    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.\n` +
+      `_This only updates Sokoni books — confirm the M-Pesa left your till._`
   );
 }
 

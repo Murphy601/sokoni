@@ -73,21 +73,37 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
 
 /**
  * Schedule seller payout 3 business days after delivery (Depop-style escrow release).
+ * Always create a settlement row when we can infer an amount — order.payoutStatus alone
+ * is not enough for #payouts.
  */
 export function scheduleSellerPayoutAfterDelivery(order) {
-  if (!order?.supplierId) return null;
-  const payoutBase = resolveSellerPayoutKes(order);
-  if (!payoutBase) return null;
+  if (!order?.id || !order?.supplierId) return null;
+  const payoutBase =
+    resolveSellerPayoutKes(order) ||
+    Math.round(Number(order.sellerNetKes ?? order.sourcePriceKes) || 0) ||
+    Math.round(orderBuyerTotal(order) * 0.9);
+  if (!payoutBase || payoutBase < 1) {
+    console.warn("[settlements] skip schedule — no seller payout amount on", order.id);
+    return null;
+  }
   load();
 
   const existing = store.entries.find((e) => e.orderId === order.id && e.status !== "cancelled");
   if (existing) return existing;
 
   const eligibleAt = order.payoutEligibleAt || addBusinessDays(Date.now(), 3);
-  const entry = buildPayoutEntry(order, { status: "scheduled", payoutEligibleAt: eligibleAt });
+  const entry = buildPayoutEntry(
+    { ...order, sellerPayoutKes: payoutBase },
+    { status: "scheduled", payoutEligibleAt: eligibleAt }
+  );
   store.entries.unshift(entry);
   if (store.entries.length > 500) store.entries.length = 500;
   persist();
+  console.log("[settlements] scheduled payout", {
+    orderId: order.id,
+    payoutAmountKes: entry.payoutAmountKes,
+    eligibleAt: new Date(eligibleAt).toISOString(),
+  });
   return entry;
 }
 
@@ -139,7 +155,12 @@ export function listScheduledPayouts(limit = 20) {
 
 export function markPayoutPaid(orderId) {
   load();
-  const entry = store.entries.find((e) => e.orderId === orderId && e.status === "owed");
+  // Allow #paid on scheduled rows too (admin sent early from till).
+  const entry = store.entries.find(
+    (e) =>
+      e.orderId === String(orderId || "").toUpperCase() &&
+      (e.status === "owed" || e.status === "scheduled")
+  );
   if (!entry) return null;
   entry.status = "paid";
   entry.paidAt = Date.now();
