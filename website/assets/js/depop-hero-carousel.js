@@ -3,6 +3,10 @@
  * Existing routes only; no lockup graphic. Respects prefers-reduced-motion.
  */
 (function () {
+  const HERO_IMG = "assets/images/marketing/hero-banner-thrift.jpg";
+  const PRODUCT_IMG = "assets/images/marketing/product-sneakers.jpg";
+  const DISPATCH_IMG = "assets/images/marketing/how-it-works-dispatch.jpg";
+
   const SLIDES = [
     {
       id: "buyers",
@@ -16,6 +20,7 @@
       secondaryCtaText: "Browse categories",
       secondaryCtaLink: "#categories",
       bleedClass: "depop-hero-bleed--buyers",
+      image: HERO_IMG,
     },
     {
       id: "sellers",
@@ -29,6 +34,7 @@
       secondaryCtaText: "How selling works",
       secondaryCtaLink: "#why-sell",
       bleedClass: "depop-hero-bleed--sellers",
+      image: PRODUCT_IMG,
     },
     {
       id: "dispatch",
@@ -42,6 +48,7 @@
       secondaryCtaText: "Start selling",
       secondaryCtaLink: "suppliers/list.html",
       bleedClass: "depop-hero-bleed--pickup",
+      image: DISPATCH_IMG,
     },
     {
       id: "escrow",
@@ -55,6 +62,7 @@
       secondaryCtaText: "Track an order",
       secondaryCtaLink: "track.html",
       bleedClass: "depop-hero-bleed--escrow",
+      image: DISPATCH_IMG,
     },
     {
       id: "circular",
@@ -69,6 +77,7 @@
       secondaryCtaText: "Start selling thrift",
       secondaryCtaLink: "suppliers/list.html",
       bleedClass: "depop-hero-bleed--circular",
+      image: HERO_IMG,
     },
     {
       id: "offers",
@@ -82,6 +91,7 @@
       secondaryCtaText: "How Sokoni works",
       secondaryCtaLink: "#how-it-works",
       bleedClass: "depop-hero-bleed--offers",
+      image: PRODUCT_IMG,
     },
   ];
 
@@ -107,7 +117,10 @@
     let timer = null;
 
     root.innerHTML = `
-      <div class="depop-hero-bleed ${SLIDES[0].bleedClass}" aria-hidden="true"></div>
+      <div class="depop-hero-bleed ${SLIDES[0].bleedClass}" aria-hidden="true">
+        <img class="depop-hero-bleed-img" data-hero-bleed-img src="${escapeHtml(SLIDES[0].image || "")}" alt="" width="1536" height="1024" decoding="async" fetchpriority="high" />
+        <div class="depop-hero-bleed-veil"></div>
+      </div>
       <div class="depop-hero-carousel-inner depop-hero-brand-inner">
         <div class="depop-hero-brand-copy">
           <div class="depop-hero-tag-row">
@@ -127,6 +140,7 @@
       </div>`;
 
     const bleed = root.querySelector(".depop-hero-bleed");
+    const bleedImg = root.querySelector("[data-hero-bleed-img]");
     const tagEl = root.querySelector("[data-hero-tag]");
     const badgeEl = root.querySelector("[data-hero-badge]");
     const titleEl = root.querySelector("[data-hero-title]");
@@ -145,7 +159,12 @@
       if (!slide) return;
       index = i;
       if (bleed) {
-        bleed.className = `depop-hero-bleed ${slide.bleedClass}`;
+        bleed.className = `depop-hero-bleed depop-hero-bleed--photo ${slide.bleedClass}`;
+      }
+      if (bleedImg && slide.image) {
+        if (bleedImg.getAttribute("src") !== slide.image) {
+          bleedImg.setAttribute("src", slide.image);
+        }
       }
       if (tagEl) tagEl.textContent = slide.tag;
       if (badgeEl) badgeEl.textContent = `• ${slide.badge}`;
