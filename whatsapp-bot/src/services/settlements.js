@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getSupplier } from "./suppliers.js";
 import { orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
-import { getOrder } from "./orders.js";
+import { getOrder, updateOrderMeta } from "./orders.js";
+import { config } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -55,6 +56,7 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
     supplierId: order.supplierId,
     supplierName: supplier?.businessName || order.supplierId,
     supplierPhone: supplier?.phone || "",
+    mpesaPhone: supplier?.mpesaNumber || supplier?.phone || "",
     productName: order.productName,
     payoutAmountKes,
     marginKes: order.platformFeeKes ?? Math.max(0, buyerTotal - payoutAmountKes),
@@ -68,6 +70,7 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
     deliveredAt: Date.now(),
     payoutEligibleAt,
     paidAt: null,
+    b2c: null,
   };
 }
 
@@ -137,20 +140,223 @@ export function listScheduledPayouts(limit = 20) {
   return store.entries.filter((e) => e.status === "scheduled").slice(0, limit);
 }
 
-export function markPayoutPaid(orderId) {
+export function listDisbursingPayouts(limit = 20) {
   load();
-  const entry = store.entries.find((e) => e.orderId === orderId && e.status === "owed");
+  return store.entries.filter((e) => e.status === "disbursing").slice(0, limit);
+}
+
+export function findSettlementByOrderId(orderId) {
+  load();
+  return (
+    store.entries.find(
+      (e) =>
+        e.orderId === orderId &&
+        (e.status === "owed" ||
+          e.status === "disbursing" ||
+          e.status === "scheduled" ||
+          e.status === "b2c_failed")
+    ) || null
+  );
+}
+
+export function findSettlementByOriginatorId(originatorConversationId) {
+  load();
+  const oid = String(originatorConversationId || "").trim();
+  if (!oid) return null;
+  return (
+    store.entries.find((e) => e.b2c?.originatorConversationId === oid) ||
+    store.entries.find((e) => e.b2c?.conversationId === oid) ||
+    null
+  );
+}
+
+export function markPayoutPaid(orderId, extra = {}) {
+  load();
+  const entry = store.entries.find(
+    (e) =>
+      e.orderId === orderId &&
+      (e.status === "owed" || e.status === "disbursing" || e.status === "b2c_failed")
+  );
   if (!entry) return null;
   entry.status = "paid";
   entry.paidAt = Date.now();
+  if (extra.receipt) entry.mpesaReceipt = extra.receipt;
+  if (extra.b2c) entry.b2c = { ...(entry.b2c || {}), ...extra.b2c, completedAt: Date.now() };
   persist();
   return entry;
+}
+
+/**
+ * Start B2C for one owed (or failed) settlement. Marks disbursing on accept.
+ */
+export async function initiateSettlementB2C(orderId, { force = false } = {}) {
+  load();
+  const entry = store.entries.find((e) => e.orderId === orderId);
+  if (!entry) return { error: "not_found", message: `No settlement for ${orderId}` };
+  if (entry.status === "paid") return { skipped: true, message: "Already paid." };
+  if (entry.status === "cancelled") return { error: "cancelled", message: "Settlement cancelled." };
+  if (entry.status === "scheduled" && !force) {
+    return { error: "still_held", message: "Still in escrow hold — wait until owed, or use force." };
+  }
+  if (entry.status === "disbursing" && !force) {
+    return { skipped: true, message: "B2C already in flight — wait for ResultURL callback." };
+  }
+
+  const supplier = getSupplier(entry.supplierId);
+  const mpesaPhone =
+    entry.mpesaPhone || supplier?.mpesaNumber || supplier?.phone || entry.supplierPhone;
+  if (!mpesaPhone) {
+    return { error: "no_mpesa", message: "Seller M-Pesa number not on file." };
+  }
+
+  const attempt = Number(entry.b2c?.attempt || 0) + 1;
+  const { initiateB2CPayout, isB2CReady, b2cOriginatorId } = await import("./daraja-mpesa.js");
+  if (!isB2CReady()) {
+    return {
+      error: "b2c_not_configured",
+      message: "B2C not configured on this bot yet.",
+    };
+  }
+
+  const originatorConversationId = b2cOriginatorId({ orderId: entry.orderId, attempt });
+  let result;
+  try {
+    result = await initiateB2CPayout({
+      phone: mpesaPhone,
+      amount: entry.payoutAmountKes,
+      remarks: `Sokoni payout ${entry.orderId}`,
+      occasion: entry.orderId,
+      orderId: entry.orderId,
+      originatorConversationId,
+    });
+  } catch (err) {
+    result = { ok: false, message: err.message };
+  }
+
+  entry.mpesaPhone = mpesaPhone;
+  entry.b2c = {
+    ...(entry.b2c || {}),
+    attempt,
+    originatorConversationId: result.originatorConversationId || originatorConversationId,
+    conversationId: result.conversationId || null,
+    lastRequestAt: Date.now(),
+    lastMessage: result.message || result.responseDescription || null,
+  };
+
+  if (result.ok) {
+    entry.status = "disbursing";
+    entry.b2c.acceptedAt = Date.now();
+    persist();
+    try {
+      updateOrderMeta(entry.orderId, { payoutStatus: "disbursing" });
+    } catch {
+      /* ignore */
+    }
+    return { success: true, entry, result };
+  }
+
+  entry.status = "b2c_failed";
+  entry.b2c.failedAt = Date.now();
+  persist();
+  try {
+    updateOrderMeta(entry.orderId, { payoutStatus: "b2c_failed" });
+  } catch {
+    /* ignore */
+  }
+  return { error: "b2c_rejected", message: result.message || "B2C rejected", entry, result };
+}
+
+/** Apply Safaricom B2C ResultURL / timeout callback to a settlement. */
+export function applyB2CResult(parsed) {
+  if (!parsed?.valid) return { error: "invalid" };
+  load();
+
+  let entry =
+    findSettlementByOriginatorId(parsed.originatorConversationId) ||
+    (parsed.conversationId ? findSettlementByOriginatorId(parsed.conversationId) : null);
+
+  if (!entry) {
+    console.warn("[settlements] B2C result unmatched", {
+      originator: parsed.originatorConversationId,
+      conversation: parsed.conversationId,
+    });
+    return { error: "not_found" };
+  }
+
+  entry.b2c = {
+    ...(entry.b2c || {}),
+    conversationId: parsed.conversationId || entry.b2c?.conversationId,
+    originatorConversationId:
+      parsed.originatorConversationId || entry.b2c?.originatorConversationId,
+    resultCode: parsed.resultCode,
+    resultDesc: parsed.resultDesc,
+    receipt: parsed.receipt || null,
+    receiverPublicName: parsed.receiverPublicName || null,
+    callbackAt: Date.now(),
+    timeout: Boolean(parsed.timeout),
+  };
+
+  if (parsed.success) {
+    entry.status = "paid";
+    entry.paidAt = Date.now();
+    entry.mpesaReceipt = parsed.receipt || entry.mpesaReceipt || null;
+    persist();
+    try {
+      updateOrderMeta(entry.orderId, {
+        payoutStatus: "paid",
+        isPaidOut: true,
+        paidOutAt: Date.now(),
+        mpesaPayoutReceipt: parsed.receipt || null,
+      });
+    } catch {
+      /* ignore */
+    }
+    console.log("[settlements] B2C paid", entry.orderId, parsed.receipt);
+    return { success: true, entry };
+  }
+
+  entry.status = "b2c_failed";
+  persist();
+  try {
+    updateOrderMeta(entry.orderId, { payoutStatus: "b2c_failed" });
+  } catch {
+    /* ignore */
+  }
+  console.warn("[settlements] B2C failed", entry.orderId, parsed.resultDesc);
+  return { success: false, entry, resultDesc: parsed.resultDesc };
+}
+
+/**
+ * Auto-disburse owed settlements when MPESA_B2C_AUTO=true.
+ * @returns {Promise<number>} number of B2C requests accepted
+ */
+export async function disburseOwedPayoutsViaB2C({ includeFailed = false, limit = 10 } = {}) {
+  if (!config.mpesa.b2cAuto) return 0;
+  const { isB2CReady } = await import("./daraja-mpesa.js");
+  if (!isB2CReady()) return 0;
+
+  load();
+  const candidates = store.entries
+    .filter((e) => e.status === "owed" || (includeFailed && e.status === "b2c_failed"))
+    .slice(0, limit);
+
+  let accepted = 0;
+  for (const entry of candidates) {
+    const out = await initiateSettlementB2C(entry.orderId);
+    if (out.success) accepted += 1;
+  }
+  return accepted;
 }
 
 export function cancelSettlementPayout(orderId, reason = "dispute") {
   load();
   const entry = store.entries.find(
-    (e) => e.orderId === orderId && (e.status === "scheduled" || e.status === "owed")
+    (e) =>
+      e.orderId === orderId &&
+      (e.status === "scheduled" ||
+        e.status === "owed" ||
+        e.status === "disbursing" ||
+        e.status === "b2c_failed")
   );
   if (!entry) return null;
   entry.status = "cancelled";
@@ -177,13 +383,19 @@ export function getSettlementSummary() {
   load();
   const owed = store.entries.filter((e) => e.status === "owed");
   const scheduled = store.entries.filter((e) => e.status === "scheduled");
+  const disbursing = store.entries.filter((e) => e.status === "disbursing");
+  const failed = store.entries.filter((e) => e.status === "b2c_failed");
   const totalOwed = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   const totalScheduled = scheduled.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   return {
     count: owed.length,
     scheduledCount: scheduled.length,
+    disbursingCount: disbursing.length,
+    failedCount: failed.length,
     totalOwedKes: totalOwed,
     totalScheduledKes: totalScheduled,
     entries: owed,
+    disbursing,
+    failed,
   };
 }

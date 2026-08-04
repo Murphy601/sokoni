@@ -56,8 +56,9 @@ import {
   handleFlagsCommand,
   handleDbOpsCommand,
 } from "./platform-admin.js";
-import { getSettlementSummary, markPayoutPaid } from "./settlements.js";
+import { getSettlementSummary, markPayoutPaid, initiateSettlementB2C } from "./settlements.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
+import { isB2CReady, b2cMeta } from "./daraja-mpesa.js";
 
 function digitsOnly(value) {
   return String(value || "").replace(/\D/g, "");
@@ -216,7 +217,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|payb2c|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -393,8 +394,9 @@ function adminHelpText() {
     `• *#transit SK-1042 rider:John phone:0712… eta:2 hours* — rider on the way alert\n\n` +
     `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
     `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
-    `💰 *#payouts* — supplier amounts owed\n` +
-    `✅ *#paid SK-1042* — mark supplier paid\n\n` +
+    `💰 *#payouts* — supplier amounts owed / B2C status\n` +
+    `💸 *#payb2c SK-1042* — send seller payout via M-Pesa B2C\n` +
+    `✅ *#paid SK-1042* — mark supplier paid (manual transfer)\n\n` +
     `📣 *Customer comms & offers*\n` +
     `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
@@ -567,18 +569,70 @@ async function handleFulfillCommand(adminChatId, args) {
 
 async function handlePayoutsCommand(adminChatId) {
   const summary = getSettlementSummary();
-  if (summary.count === 0) {
-    return sendText(adminChatId, "💰 No supplier payouts owed right now.");
+  const b2c = b2cMeta();
+  const b2cLine = b2c.ready
+    ? `B2C: ready · ${b2c.auto ? "auto after hold" : "manual #payb2c"} · shortcode ${b2c.shortcode}`
+    : "B2C: not configured (set MPESA_INITIATOR_NAME + SECURITY_CREDENTIAL)";
+
+  const parts = [`💰 *Supplier payouts*\n${b2cLine}`];
+
+  if (summary.scheduledCount > 0) {
+    parts.push(`⏳ Scheduled (escrow hold): ${summary.scheduledCount} · KES ${summary.totalScheduledKes.toLocaleString()}`);
   }
-  const lines = summary.entries.slice(0, 10).map(
-    (e) =>
-      `*${e.orderId}* · ${e.supplierName}\n` +
-      `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
-      `#paid ${e.orderId} when sent`
-  );
+  if (summary.disbursingCount > 0) {
+    const lines = (summary.disbursing || []).slice(0, 5).map(
+      (e) => `*${e.orderId}* · KES ${e.payoutAmountKes.toLocaleString()} · waiting M-Pesa result`
+    );
+    parts.push(`📤 Disbursing (${summary.disbursingCount})\n${lines.join("\n")}`);
+  }
+  if (summary.failedCount > 0) {
+    const lines = (summary.failed || []).slice(0, 5).map(
+      (e) =>
+        `*${e.orderId}* · KES ${e.payoutAmountKes.toLocaleString()}\n` +
+        `${e.b2c?.resultDesc || e.b2c?.lastMessage || "failed"} · #payb2c ${e.orderId}`
+    );
+    parts.push(`⚠️ B2C failed (${summary.failedCount})\n${lines.join("\n\n")}`);
+  }
+
+  if (summary.count === 0 && summary.disbursingCount === 0 && summary.failedCount === 0) {
+    parts.push("No supplier payouts owed right now.");
+    return sendText(adminChatId, parts.join("\n\n"));
+  }
+
+  if (summary.count > 0) {
+    const lines = summary.entries.slice(0, 10).map(
+      (e) =>
+        `*${e.orderId}* · ${e.supplierName}\n` +
+        `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
+        (b2c.ready ? `#payb2c ${e.orderId}` : `#paid ${e.orderId} when sent`)
+    );
+    parts.push(
+      `🟢 Owed: KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+    );
+  }
+
+  return sendText(adminChatId, parts.join("\n\n"));
+}
+
+async function handlePayB2CCommand(adminChatId, orderId) {
+  if (!orderId) return sendText(adminChatId, "Usage: #payb2c SK-1042");
+  if (!isB2CReady()) {
+    return sendText(
+      adminChatId,
+      "⚠️ B2C not configured. Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (or INITIATOR_PASSWORD + CERT_PATH) + MPESA_B2C_SHORTCODE, then restart the bot."
+    );
+  }
+  const out = await initiateSettlementB2C(orderId);
+  if (out.skipped) {
+    return sendText(adminChatId, `ℹ️ *${orderId}* — ${out.message}`);
+  }
+  if (out.error) {
+    return sendText(adminChatId, `⚠️ *${orderId}* — ${out.message || out.error}`);
+  }
+  const amt = out.entry?.payoutAmountKes;
   return sendText(
     adminChatId,
-    `💰 *Owed to suppliers:* KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+    `✅ B2C submitted for *${orderId}*${amt != null ? ` · KES ${Number(amt).toLocaleString()}` : ""}.\nWaiting for Safaricom ResultURL — check #payouts.`
   );
 }
 
@@ -901,6 +955,11 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#payouts\b/i.test(t)) {
     await handlePayoutsCommand(adminChatId);
+    return true;
+  }
+  if (/^#payb2c\b/i.test(t)) {
+    const oid = t.replace(/^#payb2c\b/i, "").trim().split(/\s+/)[0];
+    await handlePayB2CCommand(adminChatId, oid);
     return true;
   }
   if (/^#payments\b/i.test(t)) {
