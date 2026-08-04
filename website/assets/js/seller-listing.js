@@ -2337,10 +2337,10 @@ async function loadMyListings() {
         const needsPhoto = status === "draft" && !img;
         if (status === "draft") draftById.set(String(pid), item);
         return `
-          <div class="rounded-2xl border border-zinc-800 bg-black p-4 flex gap-4 items-start ${status === "hidden" ? "sell-listing-card--hidden" : ""}" data-product-id="${escapeHtml(pid)}" data-status="${escapeHtml(status)}">
-            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-16 h-16 rounded-xl object-cover shrink-0" />` : `<div class="w-16 h-16 rounded-xl bg-zinc-900 shrink-0 flex items-center justify-center text-[10px] text-center px-1 text-zinc-500">No photo</div>`}
-            <div class="min-w-0 flex-1">
-              <p class="font-semibold truncate">${title}</p>
+          <div class="sell-hub-rail-card ${status === "hidden" ? "sell-listing-card--hidden" : ""}" role="listitem" data-product-id="${escapeHtml(pid)}" data-status="${escapeHtml(status)}">
+            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="sell-hub-rail-card__thumb" />` : `<div class="sell-hub-rail-card__thumb sell-hub-rail-card__thumb--empty">No photo</div>`}
+            <div class="sell-hub-rail-card__body">
+              <p class="font-semibold truncate text-sm">${title}</p>
               <p class="text-xs text-zinc-400 mt-1">${escapeHtml(pid)}${price ? ` · ${formatKes(price)}` : ""}${item.source === "bulk_csv" ? " · CSV" : ""}</p>
               <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${badge}">${escapeHtml(status)}</span>
               ${needsPhoto ? `<p class="text-xs text-zinc-400 mt-2">Add photos before posting.</p>` : ""}
@@ -3448,12 +3448,12 @@ function renderSellerOrders(orders) {
         actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
       }
       return `
-        <div class="sell-order-card">
+        <div class="sell-order-card sell-hub-rail-card" role="listitem">
           <div class="sell-order-card-head">
-            <p class="font-semibold">${o.productName || "Order"}</p>
-            <span class="sell-order-badge ${shipmentBadgeClass(o.shipmentStatus)}">${o.shipmentStatusLabel}</span>
+            <p class="font-semibold text-sm truncate">${escapeHtml(o.productName || "Order")}</p>
+            <span class="sell-order-badge ${shipmentBadgeClass(o.shipmentStatus)}">${escapeHtml(o.shipmentStatusLabel || "")}</span>
           </div>
-          <p class="text-xs text-zinc-500 mt-1"><span class="font-mono">${o.orderId}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
+          <p class="text-xs text-zinc-500 mt-1"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
           <div class="sell-order-actions">${actions.join("")}</div>
         </div>`;
     })

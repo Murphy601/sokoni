@@ -282,7 +282,7 @@
             </div>
             <button id="load-orders-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
-          <div id="seller-orders" class="space-y-3"></div>
+          <div id="seller-orders" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
         </section>
 
         <section class="sell-depop-section p-6 space-y-4">
@@ -405,7 +405,7 @@
             <p id="bulk-drafts-hint" class="hidden text-sm text-zinc-400">
               Drafts from CSV need photos — tap <strong>Continue editing</strong>, add pics, then Post.
             </p>
-            <div id="my-listings" class="space-y-3"></div>
+            <div id="my-listings" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
           </section>
         </div>
 
@@ -886,6 +886,6 @@
   </main>
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
-  <script src="../assets/js/seller-listing.js?v=seller-video-bin-1"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-rail-1"></script>
 </body>
 </html>

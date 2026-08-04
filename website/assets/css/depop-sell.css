@@ -1047,14 +1047,70 @@ html.dark .bulk-studio-remove:hover {
 
 /* Selling Hub overview — Depop layout + matte black / scarlet */
 .seller-hub-carousel {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: #27272a transparent;
+  padding-bottom: 0.25rem;
 }
 
 .seller-hub-carousel > * {
   scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+/* My listings + Orders to ship — sideways rail cards */
+.sell-hub-rail-card {
+  min-width: 15.5rem;
+  max-width: 17.5rem;
+  width: 72vw;
+  flex-shrink: 0;
+  border-radius: 1rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  padding: 0.85rem;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .sell-hub-rail-card {
+    width: 16.5rem;
+  }
+}
+
+.sell-hub-rail-card__thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 9rem;
+  object-fit: cover;
+  border-radius: 0.75rem;
+  background: #18181b;
+  display: block;
+}
+
+.sell-hub-rail-card__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #71717a;
+}
+
+.sell-hub-rail-card__body {
+  min-width: 0;
+}
+
+.sell-order-card.sell-hub-rail-card {
+  display: flex;
+  flex-direction: column;
 }
 
 .seller-hub-card {
