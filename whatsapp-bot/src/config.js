@@ -102,7 +102,7 @@ export const config = {
     mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
     mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },
-  /** Safaricom Daraja — STK push + escrow auto-confirm (Phase 5.1). */
+  /** Safaricom Daraja — STK push + B2C seller payouts. */
   mpesa: (() => {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
@@ -112,6 +112,8 @@ export const config = {
       trim(process.env.MPESA_PARTY_B) ||
       trim(process.env.MPESA_TILL_NUMBER) ||
       shortcode;
+    const botBase = "https://bot.sokonimall.com";
+    const b2cShortcode = trim(process.env.MPESA_B2C_SHORTCODE) || shortcode;
     return {
       consumerKey: trim(process.env.MPESA_CONSUMER_KEY),
       consumerSecret: trim(process.env.MPESA_CONSUMER_SECRET),
@@ -120,10 +122,24 @@ export const config = {
       partyB,
       // Prefer /daraja/callback — Safaricom often rejects callback URLs containing "mpesa".
       callbackUrl:
-        trim(process.env.MPESA_CALLBACK_URL) ||
-        "https://bot.sokonimall.com/api/payments/daraja/callback",
+        trim(process.env.MPESA_CALLBACK_URL) || `${botBase}/api/payments/daraja/callback`,
       env: envRaw === "production" || envRaw === "prod" ? "production" : "sandbox",
       transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerBuyGoodsOnline",
+      /** B2C (BusinessPayment) — seller escrow disbursement. */
+      b2cShortcode,
+      initiatorName: trim(process.env.MPESA_INITIATOR_NAME),
+      /** Pre-encrypted initiator password (Daraja portal / openssl). Preferred. */
+      securityCredential: trim(process.env.MPESA_SECURITY_CREDENTIAL),
+      /** Plain initiator password — encrypted at runtime if cert path is set. */
+      initiatorPassword: trim(process.env.MPESA_INITIATOR_PASSWORD),
+      certPath: trim(process.env.MPESA_CERT_PATH),
+      b2cCommandId: trim(process.env.MPESA_B2C_COMMAND_ID) || "BusinessPayment",
+      b2cResultUrl:
+        trim(process.env.MPESA_B2C_RESULT_URL) || `${botBase}/api/payments/daraja/b2c/result`,
+      b2cTimeoutUrl:
+        trim(process.env.MPESA_B2C_TIMEOUT_URL) || `${botBase}/api/payments/daraja/b2c/timeout`,
+      /** When true, owed settlements are auto-sent via B2C after escrow hold. */
+      b2cAuto: /^(1|true|yes)$/i.test(trim(process.env.MPESA_B2C_AUTO) || ""),
     };
   })(),
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",

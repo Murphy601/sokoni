@@ -535,7 +535,10 @@ export async function confirmOrderDelivery(orderId) {
   };
 }
 
-/** Release escrow payout via M-Pesa B2C when order is delivered. */
+/**
+ * After delivery — schedule escrow hold only.
+ * B2C runs later via hourly cron (MPESA_B2C_AUTO) or admin `#payb2c SK-…`.
+ */
 export async function releaseEscrowPayout(orderId) {
   const order = getOrder(orderId);
   if (!order) return { error: "not_found" };
@@ -549,40 +552,31 @@ export async function releaseEscrowPayout(orderId) {
   const mpesaPhone = seller?.mpesaNumber || seller?.phone;
   const netAmount = sellerOrderNet(order);
 
-  if (!mpesaPhone) {
-    return { error: "no_mpesa", message: "Seller M-Pesa number not on file." };
-  }
-
-  const { initiateB2CPayout } = await import("./daraja-mpesa.js");
-  let payoutResult;
-  try {
-    payoutResult = await initiateB2CPayout({
-      phone: mpesaPhone,
-      amount: netAmount,
-      remarks: `Payout for Order #${order.id}`,
-    });
-  } catch (err) {
-    payoutResult = { ok: false, error: err.message };
-  }
-
   const { updateOrderMeta } = await import("./orders.js");
-  const { scheduleSellerPayoutAfterDelivery } = await import("./settlements.js");
+  const { scheduleSellerPayoutAfterDelivery, addBusinessDays } = await import("./settlements.js");
+  const { isB2CReady, b2cMeta } = await import("./daraja-mpesa.js");
 
-  if (payoutResult.ok) {
-    updateOrderMeta(orderId, { isPaidOut: true, payoutStatus: "paid", paidOutAt: Date.now() });
-    return { success: true, payoutResult, netAmount, mpesaPhone };
-  }
-
-  scheduleSellerPayoutAfterDelivery({ ...order, sourcePriceKes: netAmount });
-  updateOrderMeta(orderId, { payoutStatus: "scheduled", isPaidOut: false });
+  const eligibleAt = order.payoutEligibleAt || addBusinessDays(Date.now(), 3);
+  scheduleSellerPayoutAfterDelivery({
+    ...order,
+    sourcePriceKes: netAmount,
+    sellerNetKes: netAmount,
+    payoutEligibleAt: eligibleAt,
+  });
+  updateOrderMeta(orderId, {
+    payoutStatus: "scheduled",
+    isPaidOut: false,
+    payoutEligibleAt: eligibleAt,
+  });
 
   return {
     success: true,
     scheduled: true,
-    payoutResult,
     netAmount,
-    message: payoutResult.stub
-      ? "Payout scheduled — B2C API pending, manual transfer for now."
-      : "Payout scheduled after escrow hold.",
+    mpesaPhone: mpesaPhone || null,
+    b2c: b2cMeta(),
+    message: isB2CReady()
+      ? "Payout scheduled for escrow hold — B2C will send after hold (or use #payb2c)."
+      : "Payout scheduled — configure B2C env vars or pay manually with #paid.",
   };
 }

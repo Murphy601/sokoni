@@ -31,7 +31,8 @@ import agentApiRouter from "./routes/agentApi.js";
 import adminOpsApiRouter from "./routes/adminOpsApi.js";
 import whatsappApiRouter from "./routes/whatsappApi.js";
 import feedApiRouter from "./routes/feedApi.js";
-import { processDuePayouts } from "./services/settlements.js";
+import { processDuePayouts, disburseOwedPayoutsViaB2C } from "./services/settlements.js";
+import { isB2CReady, b2cMeta } from "./services/daraja-mpesa.js";
 import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
@@ -181,6 +182,7 @@ app.get("/health", async (_req, res) => {
     dbError: db.ok ? null : db.reason,
     prepaidOnly: checkout.prepaidOnly,
     darajaConfigured: checkout.darajaConfigured,
+    b2c: b2cMeta(),
   });
 });
 
@@ -314,19 +316,26 @@ function startFeedScheduler() {
   console.log("✓ Feed ranking scheduler enabled (hourly)");
 }
 
-/** Move scheduled seller payouts to owed after 2–3 business day escrow hold. */
+/** Move scheduled seller payouts to owed after 2–3 business day escrow hold; optional B2C auto-send. */
 function startPayoutScheduler() {
-  const tick = () => {
+  const tick = async () => {
     try {
       const n = processDuePayouts();
       if (n > 0) console.log(`[settlements] ${n} seller payout(s) now owed`);
+      if (isB2CReady()) {
+        const sent = await disburseOwedPayoutsViaB2C({ includeFailed: false, limit: 10 });
+        if (sent > 0) console.log(`[settlements] B2C accepted ${sent} payout(s)`);
+      }
     } catch (err) {
       console.error("[settlements] payout cron:", err.message);
     }
   };
   tick();
   setInterval(tick, 60 * 60 * 1000);
-  console.log("✓ Seller payout scheduler enabled (hourly)");
+  const b2c = b2cMeta();
+  console.log(
+    `✓ Seller payout scheduler enabled (hourly)${b2c.ready ? ` · B2C ${b2c.auto ? "auto" : "manual (#payb2c)"}` : " · B2C not configured"}`
+  );
 }
 
 /** Parse "HH:MM" slots for daily posting. */
