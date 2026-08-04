@@ -78,6 +78,81 @@
   color: #a1a1aa;
 }
 
+.inbox-shops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inbox-shop-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  text-align: left;
+  color: #fff;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.inbox-shop-row:hover,
+.inbox-shop-row:focus-visible {
+  border-color: #3f3f46;
+  background: #0c0c0e;
+  outline: none;
+}
+
+.inbox-shop-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: #18181b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.inbox-shop-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inbox-shop-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.inbox-shop-meta strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-shop-meta span {
+  display: block;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  margin-top: 0.1rem;
+}
+
+.inbox-shop-cta {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #ff2300;
+}
+
 .inbox-messenger {
   display: flex;
   flex-direction: column;
