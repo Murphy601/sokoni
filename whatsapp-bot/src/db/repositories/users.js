@@ -50,6 +50,25 @@ function normalizeEmail(email) {
 const ACCOUNT_USER_COLS =
   "id, phone, email, role, handle, display_name, shop_name, bio, avatar_url, location, password_hash";
 
+export async function findUserByPhone(phone) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const digits = normalizePhone(phone);
+  if (!digits || digits.length < 12) {
+    return { error: "invalid_phone", message: "Enter a valid WhatsApp number." };
+  }
+  const { rows } = await query(
+    `SELECT ${ACCOUNT_USER_COLS}
+       FROM users
+      WHERE phone = $1
+      LIMIT 1`,
+    [digits]
+  );
+  if (!rows[0]) return { ok: true, user: null };
+  return { ok: true, user: mapUserRow(rows[0]), passwordHash: rows[0].password_hash || null };
+}
+
 export async function findUserByEmail(email) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };

@@ -59,7 +59,7 @@
         </label>
         <label class="flex items-center gap-2 text-sm text-zinc-300 min-h-[44px]">
           <input name="rememberMe" type="checkbox" value="1" class="rounded border-zinc-600" />
-          Keep me signed in (30 days)
+          Keep me signed in (90 days)
         </label>
         <p id="account-login-form-status" class="text-sm text-zinc-400" role="status" aria-live="polite"></p>
         <button type="submit" class="w-full min-h-[48px] rounded-full bg-[#25D366] text-[#1B1035] font-bold text-sm hover:opacity-90 transition">
@@ -67,14 +67,35 @@
         </button>
       </form>
 
-      <p id="login-forgot-hint" class="text-sm text-zinc-500 text-center">
-        Forgot password? Message WhatsApp support for now — email reset lands in a later update.
+      <p class="text-sm text-zinc-500 text-center">
+        <a href="forgot-password.html" class="hover:text-white underline-offset-2 hover:underline">Forgot password?</a>
       </p>
+
+      <div class="border-t border-zinc-800 pt-4 space-y-3">
+        <p class="text-sm font-semibold text-white">Or continue with WhatsApp</p>
+        <p class="text-xs text-zinc-400">Same OTP as buyer verify — signs you into the account linked to that number.</p>
+        <label class="block text-xs font-medium text-zinc-300">
+          WhatsApp number
+          <input id="account-wa-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <label class="block text-xs font-medium text-zinc-300">
+          Code
+          <input id="account-wa-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="account-wa-send-btn" class="depop-btn-ghost">Send code</button>
+          <button type="button" id="account-wa-verify-btn" class="depop-btn-accent">Verify &amp; continue</button>
+        </div>
+        <p id="account-wa-status" class="text-xs text-zinc-400" role="status"></p>
+      </div>
     </section>
   </main>
 
   <div id="sokoni-shell-nav"></div>
   <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/account-auth.js"></script>
   <script src="assets/js/account-gate.js"></script>
 </body>

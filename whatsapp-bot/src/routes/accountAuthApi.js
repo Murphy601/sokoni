@@ -3,6 +3,9 @@ import {
   extractAccountToken,
   linkWhatsAppToAccount,
   loginAccount,
+  loginWithWhatsApp,
+  requestPasswordReset,
+  resetPasswordWithToken,
   resolveAccountFromRequest,
   revokeAccountSession,
   signupAccount,
@@ -47,6 +50,37 @@ router.get("/session", async (req, res) => {
 router.post("/sign-out", async (req, res) => {
   const token = extractAccountToken(req);
   const result = await revokeAccountSession(token);
+  res.json(result);
+});
+
+/** POST /api/account/auth/forgot-password */
+router.post("/forgot-password", async (req, res) => {
+  const result = await requestPasswordReset(req.body?.email);
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /api/account/auth/reset-password */
+router.post("/reset-password", async (req, res) => {
+  const { token, password } = req.body || {};
+  const result = await resetPasswordWithToken({ token, password });
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  if (result.error === "invalid_token") return res.status(400).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /api/account/auth/whatsapp-login — after buyer OTP verify */
+router.post("/whatsapp-login", async (req, res) => {
+  const { phone, buyerSessionToken, sessionToken } = req.body || {};
+  const result = await loginWithWhatsApp({
+    phone,
+    buyerSessionToken: buyerSessionToken || sessionToken,
+  });
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  if (result.error === "need_signup") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
   res.json(result);
 });
 

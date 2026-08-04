@@ -12,10 +12,16 @@ import {
   createEmailAccountUser,
   findUserByEmail,
   findUserById,
+  findUserByPhone,
+  setUserPasswordResetToken,
+  findUserByPasswordResetToken,
+  updateUserPasswordHash,
   unifyEmailAccountWithPhone,
   updateAccountProfile,
 } from "../db/repositories/users.js";
 import { isDbEnabled } from "../db/pool.js";
+import { config } from "../config.js";
+import { sendText } from "./whatsapp.js";
 import { validateBuyerSession } from "./buyer-verification.js";
 import { validateSellerSession } from "./seller-verification.js";
 
@@ -24,8 +30,10 @@ const scrypt = promisify(scryptCb);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORE_FILE = path.join(__dirname, "..", "..", "data", "account-sessions.json");
 
-/** Default session: 7 days (Phase E can extend with “remember me”). */
-export const ACCOUNT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Default session: 14 days; remember-me: 90 days. */
+export const ACCOUNT_SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+export const ACCOUNT_REMEMBER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -167,7 +175,7 @@ export async function loginAccount({ email, password, rememberMe = false } = {})
     return { error: "invalid_credentials", message: "Wrong email or password." };
   }
 
-  const ttlMs = rememberMe ? 30 * 24 * 60 * 60 * 1000 : ACCOUNT_SESSION_TTL_MS;
+  const ttlMs = rememberMe ? ACCOUNT_REMEMBER_TTL_MS : ACCOUNT_SESSION_TTL_MS;
   const session = await createSession(found.user, { ttlMs });
   return {
     ok: true,
@@ -200,6 +208,13 @@ export async function validateAccountSession(sessionToken) {
     delete store.sessions[token];
     await saveStore();
     return { error: "session_invalid", message: "Account not found — sign up again." };
+  }
+
+  // Sliding expiry: refresh when more than halfway through the window.
+  const remaining = entry.expiresAt - Date.now();
+  if (remaining < ACCOUNT_SESSION_TTL_MS / 2) {
+    entry.expiresAt = Date.now() + ACCOUNT_SESSION_TTL_MS;
+    await saveStore();
   }
 
   return {
@@ -240,6 +255,96 @@ export async function updateSignedInProfile(sessionToken, patch) {
   const updated = await updateAccountProfile(auth.user.id, patch);
   if (updated.error) return updated;
   return { ok: true, user: publicUser(updated.user) };
+}
+
+/** Request password reset — sends WhatsApp link when phone is on file (free via WAHA). */
+export async function requestPasswordReset(email) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured yet." };
+  }
+  const generic = {
+    ok: true,
+    message:
+      "If that email is on Sokoni and has WhatsApp on file, we sent a reset link. Check WhatsApp.",
+  };
+  const found = await findUserByEmail(email);
+  if (found.error || !found.user || !found.passwordHash) {
+    return generic;
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+  await setUserPasswordResetToken(found.user.id, token, expiresAt);
+
+  const site = config.publicSiteUrl || "https://sokonimall.com";
+  const resetUrl = `${site}/reset-password.html?token=${encodeURIComponent(token)}`;
+
+  if (found.user.phone) {
+    try {
+      await sendText(
+        found.user.phone,
+        `Sokoni Mall password reset\n\n` +
+          `Tap to set a new password (valid 1 hour):\n${resetUrl}\n\n` +
+          `_If you didn't ask for this, ignore the message._`
+      );
+    } catch (err) {
+      console.warn("[account-auth] reset WhatsApp send failed:", err.message);
+    }
+  }
+
+  return generic;
+}
+
+export async function resetPasswordWithToken({ token, password } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured yet." };
+  }
+  const pw = String(password || "");
+  if (pw.length < 8) {
+    return { error: "weak_password", message: "Use a password with at least 8 characters." };
+  }
+  const found = await findUserByPasswordResetToken(token);
+  if (found.error) return found;
+  if (!found.user || !found.resetExpiresAt || found.resetExpiresAt < Date.now()) {
+    return { error: "invalid_token", message: "Reset link expired or invalid. Request a new one." };
+  }
+  const passwordHash = await hashPassword(pw);
+  const updated = await updateUserPasswordHash(found.user.id, passwordHash);
+  if (updated.error) return updated;
+  const session = await createSession(updated.user);
+  return {
+    ok: true,
+    user: publicUser(updated.user),
+    ...session,
+    message: "Password updated. You're signed in.",
+  };
+}
+
+/** Continue with WhatsApp — OTP already verified via buyer auth. */
+export async function loginWithWhatsApp({ phone, buyerSessionToken } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured yet." };
+  }
+  const wa = await validateBuyerSession(phone, buyerSessionToken);
+  if (wa.error) return wa;
+
+  const found = await findUserByPhone(wa.phone);
+  if (found.error) return found;
+  if (!found.user) {
+    return {
+      error: "need_signup",
+      phone: wa.phone,
+      message: "No account for this WhatsApp yet — create a free email signup (phone will be filled in).",
+    };
+  }
+
+  const session = await createSession(found.user, { ttlMs: ACCOUNT_REMEMBER_TTL_MS });
+  return {
+    ok: true,
+    user: publicUser(found.user),
+    ...session,
+    message: "Signed in with WhatsApp.",
+  };
 }
 
 /**

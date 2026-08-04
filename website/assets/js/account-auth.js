@@ -184,6 +184,40 @@
     return { ok: true, status: res.status, data };
   }
 
+  async function forgotPassword(email) {
+    const res = await fetch(`${AUTH_API}/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  async function resetPassword({ token, password } = {}) {
+    const res = await fetch(`${AUTH_API}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, data };
+    const saved = saveSession(data);
+    return { ok: Boolean(saved), status: res.status, data, session: saved };
+  }
+
+  async function loginWithWhatsApp({ phone, buyerSessionToken } = {}) {
+    const res = await fetch(`${AUTH_API}/whatsapp-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, buyerSessionToken }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, data };
+    const saved = saveSession(data);
+    return { ok: Boolean(saved), status: res.status, data, session: saved };
+  }
+
   async function linkWhatsApp({ phone, whatsappSessionToken, role = "buyer" } = {}) {
     const session = readSession();
     if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
@@ -250,14 +284,14 @@
     document.querySelectorAll("[data-account-nav]").forEach((el) => {
       if (session) {
         const label = session.user?.displayName || "Account";
-        el.innerHTML = `<a href="profile.html" class="${el.dataset.accountNavClass || ""}" title="${escapeAttr(session.email)}">${escapeHtml(label)}</a>`;
+        el.innerHTML = `<a href="${siteHref("profile.html")}" class="${el.dataset.accountNavClass || ""}" title="${escapeAttr(session.email)}">${escapeHtml(label)}</a>`;
       } else {
-        el.innerHTML = `<a href="login.html" class="${el.dataset.accountNavClass || ""}">Log in</a>`;
+        el.innerHTML = `<a href="${siteHref("login.html")}" class="${el.dataset.accountNavClass || ""}">Log in</a>`;
       }
     });
     document.querySelectorAll("[data-account-nav-label]").forEach((el) => {
       el.textContent = session ? "Account" : "Log in";
-      if (el.tagName === "A") el.href = session ? "profile.html" : "login.html";
+      if (el.tagName === "A") el.href = session ? siteHref("profile.html") : siteHref("login.html");
     });
   }
 
@@ -271,6 +305,13 @@
 
   function escapeAttr(s) {
     return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  function redirectAfterAuth() {
+    paintNavSlots();
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next") || consumeNextUrl("profile.html");
+    window.location.href = next;
   }
 
   function bindAuthForm(formId, mode) {
@@ -287,17 +328,31 @@
       const displayName = String(fd.get("displayName") || "").trim();
       const phone = String(fd.get("phone") || "").trim();
       const rememberMe = Boolean(fd.get("rememberMe"));
+      const token = String(fd.get("token") || "").trim();
 
       if (status) {
-        status.textContent = mode === "signup" ? "Creating account…" : "Signing in…";
+        status.textContent =
+          mode === "signup"
+            ? "Creating account…"
+            : mode === "forgot"
+              ? "Sending…"
+              : mode === "reset"
+                ? "Saving…"
+                : "Signing in…";
         status.classList.remove("text-red-400", "text-[#25D366]");
       }
       if (submitBtn) submitBtn.disabled = true;
 
-      const result =
-        mode === "signup"
-          ? await signup({ email, password, displayName, phone: phone || undefined })
-          : await login({ email, password, rememberMe });
+      let result;
+      if (mode === "signup") {
+        result = await signup({ email, password, displayName, phone: phone || undefined });
+      } else if (mode === "forgot") {
+        result = await forgotPassword(email);
+      } else if (mode === "reset") {
+        result = await resetPassword({ token, password });
+      } else {
+        result = await login({ email, password, rememberMe });
+      }
 
       if (submitBtn) submitBtn.disabled = false;
 
@@ -313,24 +368,105 @@
         status.textContent = result.data?.message || "Done.";
         status.classList.add("text-[#25D366]");
       }
-      paintNavSlots();
-      const params = new URLSearchParams(window.location.search);
-      const next = params.get("next") || consumeNextUrl("profile.html");
-      window.location.href = next;
+      if (mode === "forgot") return;
+      redirectAfterAuth();
+    });
+  }
+
+  function bindWhatsAppContinue() {
+    const sendBtn = document.getElementById("account-wa-send-btn");
+    const verifyBtn = document.getElementById("account-wa-verify-btn");
+    const phoneInput = document.getElementById("account-wa-phone");
+    const codeInput = document.getElementById("account-wa-code");
+    const status = document.getElementById("account-wa-status");
+    if (!sendBtn || !verifyBtn || !window.SokoniBuyerAuth) return;
+
+    sendBtn.addEventListener("click", async () => {
+      const phone = window.SokoniBuyerAuth.normalizePhoneInput(phoneInput?.value || "");
+      if (status) status.textContent = "Sending WhatsApp code…";
+      sendBtn.disabled = true;
+      try {
+        const result = await window.SokoniBuyerAuth.sendCode(phone);
+        if (status) {
+          status.textContent = result.ok
+            ? result.data?.message || "Code sent."
+            : result.data?.message || "Could not send code.";
+          status.classList.toggle("text-red-400", !result.ok);
+        }
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
+
+    verifyBtn.addEventListener("click", async () => {
+      const phone = window.SokoniBuyerAuth.normalizePhoneInput(phoneInput?.value || "");
+      const code = String(codeInput?.value || "").trim();
+      if (status) status.textContent = "Verifying…";
+      verifyBtn.disabled = true;
+      try {
+        const verified = await window.SokoniBuyerAuth.verifyCode(phone, code);
+        if (!verified.ok) {
+          if (status) {
+            status.textContent = verified.data?.message || "Could not verify.";
+            status.classList.add("text-red-400");
+          }
+          return;
+        }
+        const result = await loginWithWhatsApp({
+          phone: verified.session?.phone || phone,
+          buyerSessionToken: verified.session?.sessionToken,
+        });
+        if (!result.ok) {
+          if (result.data?.error === "need_signup") {
+            if (status) status.textContent = "No account yet — finishing signup…";
+            const phoneQ = encodeURIComponent(result.data.phone || phone);
+            window.location.href = `${siteHref("signup.html")}?phone=${phoneQ}`;
+            return;
+          }
+          if (status) {
+            status.textContent = result.data?.message || "WhatsApp login failed.";
+            status.classList.add("text-red-400");
+          }
+          return;
+        }
+        if (status) {
+          status.textContent = result.data?.message || "Signed in.";
+          status.classList.add("text-[#25D366]");
+        }
+        redirectAfterAuth();
+      } finally {
+        verifyBtn.disabled = false;
+      }
     });
   }
 
   function initPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("next")) setNextUrl(params.get("next"));
+    const phonePrefill = params.get("phone");
+    if (phonePrefill) {
+      const phoneField = document.querySelector('#account-signup-form [name="phone"]');
+      if (phoneField) phoneField.value = phonePrefill.startsWith("254")
+        ? `0${phonePrefill.slice(3)}`
+        : phonePrefill;
+    }
+    const resetToken = params.get("token");
+    if (resetToken) {
+      const tokenInput = document.getElementById("reset-token");
+      if (tokenInput) tokenInput.value = resetToken;
+    }
+
     bindAuthForm("account-signup-form", "signup");
     bindAuthForm("account-login-form", "login");
+    bindAuthForm("account-forgot-form", "forgot");
+    bindAuthForm("account-reset-form", "reset");
+    bindWhatsAppContinue();
     paintNavSlots();
 
     document.getElementById("account-sign-out-btn")?.addEventListener("click", async () => {
       await signOut();
       paintNavSlots();
-      window.location.href = "login.html";
+      window.location.href = siteHref("login.html");
     });
   }
 
@@ -353,6 +489,9 @@
     fetchPurchases,
     claimOrder,
     linkWhatsApp,
+    forgotPassword,
+    resetPassword,
+    loginWithWhatsApp,
     authHeaders,
     loginUrl,
     signupUrl,

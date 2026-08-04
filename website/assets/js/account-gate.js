@@ -11,7 +11,7 @@
  */
 (() => {
   const PUBLIC_RE =
-    /(login|signup|forgot-password|track|label|terms|privacy|about|faq|pickup-points|design-preview|admin-)\.html/i;
+    /(login|signup|forgot-password|reset-password|track|label|terms|privacy|about|faq|pickup-points|design-preview|admin-)\.html/i;
 
   function siteHref(file) {
     const path = window.location.pathname || "";
@@ -42,7 +42,8 @@
     if (/\/suppliers\//i.test(window.location.pathname || "")) return false;
     // Shop surfaces
     const file = currentPageFile().toLowerCase();
-    return file === "index.html" || file === "shop.html" || file === "" || file === "/";
+    // Main catalog only — seller shop.html stays shareable without login.
+    return file === "index.html" || file === "" || file === "/";
   }
 
   function getGateMode() {
