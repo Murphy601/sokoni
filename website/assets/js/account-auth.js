@@ -78,10 +78,8 @@
   }
 
   function authHeaders(extra = {}) {
-    const session = readSession();
-    const headers = { "Content-Type": "application/json", ...extra };
-    if (session?.sessionToken) headers["X-Account-Token"] = session.sessionToken;
-    return headers;
+    // Prefer body/query sessionToken — custom X-Account-Token needs CORS allowlist.
+    return { "Content-Type": "application/json", ...extra };
   }
 
   async function signup({ email, password, displayName, phone } = {}) {
@@ -111,20 +109,29 @@
   async function fetchSession() {
     const session = readSession();
     if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
-    const res = await fetch(`${AUTH_API}/session`, {
-      headers: { "X-Account-Token": session.sessionToken },
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      clearSession();
-      return { ok: false, status: res.status, data };
+    try {
+      const params = new URLSearchParams({ sessionToken: session.sessionToken });
+      const res = await fetch(`${AUTH_API}/session?${params}`, {
+        headers: { Accept: "application/json" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        clearSession();
+        return { ok: false, status: res.status, data };
+      }
+      saveSession({
+        sessionToken: session.sessionToken,
+        user: data.user,
+        expiresAt: data.expiresAt || session.expiresAt,
+      });
+      return { ok: true, status: res.status, data, session: readSession() };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        data: { error: "network_error", message: err?.message || "Network error." },
+      };
     }
-    saveSession({
-      sessionToken: session.sessionToken,
-      user: data.user,
-      expiresAt: data.expiresAt || session.expiresAt,
-    });
-    return { ok: true, status: res.status, data, session: readSession() };
   }
 
   async function signOut() {
@@ -145,43 +152,68 @@
   async function updateProfile(patch) {
     const session = readSession();
     if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
-    const res = await fetch(`${AUTH_API}/profile`, {
-      method: "PATCH",
-      headers: authHeaders(),
-      body: JSON.stringify({ ...patch, sessionToken: session.sessionToken }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, status: res.status, data };
-    saveSession({
-      sessionToken: session.sessionToken,
-      user: data.user,
-      expiresAt: session.expiresAt,
-    });
-    return { ok: true, status: res.status, data, session: readSession() };
+    try {
+      const res = await fetch(`${AUTH_API}/profile`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ ...patch, sessionToken: session.sessionToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, status: res.status, data };
+      saveSession({
+        sessionToken: session.sessionToken,
+        user: data.user,
+        expiresAt: session.expiresAt,
+      });
+      return { ok: true, status: res.status, data, session: readSession() };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        data: { error: "network_error", message: err?.message || "Network error saving profile." },
+      };
+    }
   }
 
   async function fetchPurchases() {
     const session = readSession();
     if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
-    const res = await fetch(`${AUTH_API}/purchases`, {
-      headers: { "X-Account-Token": session.sessionToken },
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, status: res.status, data };
-    return { ok: true, status: res.status, data };
+    try {
+      const params = new URLSearchParams({ sessionToken: session.sessionToken });
+      const res = await fetch(`${AUTH_API}/purchases?${params}`, {
+        headers: { Accept: "application/json" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, status: res.status, data };
+      return { ok: true, status: res.status, data };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        data: { error: "network_error", message: err?.message || "Network error loading purchases." },
+      };
+    }
   }
 
   async function claimOrder(orderId) {
     const session = readSession();
     if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
-    const res = await fetch(`${AUTH_API}/claim-order`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ orderId, sessionToken: session.sessionToken }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, status: res.status, data };
-    return { ok: true, status: res.status, data };
+    try {
+      const res = await fetch(`${AUTH_API}/claim-order`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ orderId, sessionToken: session.sessionToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, status: res.status, data };
+      return { ok: true, status: res.status, data };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        data: { error: "network_error", message: err?.message || "Network error linking order." },
+      };
+    }
   }
 
   async function forgotPassword(email) {
