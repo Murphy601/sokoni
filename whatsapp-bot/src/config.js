@@ -106,11 +106,18 @@ export const config = {
   mpesa: (() => {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
+    const shortcode = trim(process.env.MPESA_SHORTCODE);
+    // Buy Goods: BusinessShortCode is often H.O.; PartyB is the store/till (can differ).
+    const partyB =
+      trim(process.env.MPESA_PARTY_B) ||
+      trim(process.env.MPESA_TILL_NUMBER) ||
+      shortcode;
     return {
       consumerKey: trim(process.env.MPESA_CONSUMER_KEY),
       consumerSecret: trim(process.env.MPESA_CONSUMER_SECRET),
       passkey: trim(process.env.MPESA_PASSKEY),
-      shortcode: trim(process.env.MPESA_SHORTCODE),
+      shortcode,
+      partyB,
       // Prefer /daraja/callback — Safaricom often rejects callback URLs containing "mpesa".
       callbackUrl:
         trim(process.env.MPESA_CALLBACK_URL) ||

@@ -97,19 +97,34 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   const amt = Math.round(Number(amount));
   if (!Number.isFinite(amt) || amt < 1) throw new Error("Invalid STK amount");
 
+  // Lipa Na M-Pesa Buy Goods: BusinessShortCode = H.O. shortcode (password), PartyB = store/till.
+  // Paybill: both are usually the same paybill number + CustomerPayBillOnline.
+  const businessShortCode = String(config.mpesa.shortcode || "").trim();
+  const partyB = String(config.mpesa.partyB || businessShortCode).trim();
+  const transactionType = config.mpesa.transactionType || "CustomerBuyGoodsOnline";
+
   const body = {
-    BusinessShortCode: config.mpesa.shortcode,
+    BusinessShortCode: businessShortCode,
     Password: password,
     Timestamp: ts,
-    TransactionType: config.mpesa.transactionType || "CustomerBuyGoodsOnline",
+    TransactionType: transactionType,
     Amount: amt,
     PartyA: partyPhone,
-    PartyB: config.mpesa.shortcode,
+    PartyB: partyB,
     PhoneNumber: partyPhone,
     CallBackURL: config.mpesa.callbackUrl,
     AccountReference: String(accountReference).slice(0, 12),
     TransactionDesc: String(description).slice(0, 13),
   };
+  console.log("[daraja] STK request", {
+    env: config.mpesa.env,
+    transactionType,
+    businessShortCode,
+    partyB,
+    amount: amt,
+    phone: partyPhone,
+    accountReference: body.AccountReference,
+  });
 
   const res = await fetch(`${baseUrl()}/mpesa/stkpush/v1/processrequest`, {
     method: "POST",

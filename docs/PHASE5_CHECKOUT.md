@@ -42,11 +42,15 @@ Set in `whatsapp-bot/.env`:
 MPESA_CONSUMER_KEY=
 MPESA_CONSUMER_SECRET=
 MPESA_PASSKEY=
-MPESA_SHORTCODE=
-MPESA_ENV=sandbox
-MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline
+MPESA_SHORTCODE=            # BusinessShortCode / H.O. (used in STK password)
+MPESA_TILL_NUMBER=          # Store/till → STK PartyB (can differ from SHORTCODE)
+# MPESA_PARTY_B=            # optional override for PartyB
+MPESA_ENV=production
+MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline   # Paybill → CustomerPayBillOnline
 MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
+
+**Till vs shortcode:** for a simple till they are often the same. For many Buy Goods merchants, Daraja **Short Code** is the **H.O.** number (`MPESA_SHORTCODE` / `BusinessShortCode`) and the **store/till** is `MPESA_TILL_NUMBER` (`PartyB`). If STK fails with “Agent number and Store number … do not match”, set those two correctly from Safaricom Business (don’t force them equal).
 
 Register the callback URL in the [Safaricom Daraja portal](https://developer.safaricom.co.ke/). Prefer `/daraja/callback` — URLs containing `mpesa` are often rejected. Trim keys/secrets (no quotes/spaces) and match `MPESA_ENV=production` to production Consumer Key/Secret.
 
