@@ -154,36 +154,48 @@
     </div>
   </section>
 
-  <!-- Popular brands / styles -->
-  <section class="depop-brands-bar" aria-label="Popular brands and styles">
+  <!-- Brands + promo rotator (hero-style in-place swap; no slide-away blanking) -->
+  <section class="depop-brands-bar depop-promo-section reveal-on-scroll" aria-label="Popular brands and featured finds">
     <p class="depop-brands-kicker">Popular brands &amp; styles on Sokoni</p>
     <div id="depop-brands-row" class="depop-brands-row"></div>
-  </section>
 
-  <!-- Product showcase (static — no auto-rotate) -->
-  <section class="depop-product-showcase reveal-on-scroll" aria-label="Pre-loved product showcase">
-    <div class="depop-product-showcase-inner">
-      <figure class="depop-product-showcase-visual">
-        <img
-          src="assets/images/marketing/product-sneakers.jpg"
-          alt="Vintage streetwear sneakers on a dark studio podium"
-          width="1024"
-          height="1024"
-          loading="lazy"
-          decoding="async"
-        />
-      </figure>
-      <div class="depop-product-showcase-copy">
-        <span class="depop-edu-kicker">Pre-loved finds</span>
-        <h2 class="depop-edu-title">Studio-clean shots. Real thrift heat.</h2>
-        <p class="text-sm text-zinc-400 max-w-md">
-          Sellers list sneakers, denim, and streetwear with clear photos — you pay on M-Pesa, escrow holds until delivery.
-        </p>
-        <div class="depop-product-showcase-actions">
-          <a href="#deals" class="depop-hero-cta depop-hero-cta--primary">Shop pre-loved</a>
-          <a href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--ghost">List your kicks</a>
+    <div class="depop-product-showcase depop-promo-panel" id="depop-promo-carousel">
+      <div class="depop-product-showcase-inner">
+        <figure class="depop-product-showcase-visual depop-promo-visual" aria-hidden="false">
+          <img
+            data-promo-img="a"
+            class="depop-promo-img is-active"
+            src="assets/images/marketing/product-sneakers.jpg"
+            alt="Vintage streetwear sneakers on a dark studio podium"
+            width="1024"
+            height="1024"
+            decoding="async"
+            fetchpriority="high"
+          />
+          <img
+            data-promo-img="b"
+            class="depop-promo-img"
+            src="assets/images/marketing/product-sneakers.jpg"
+            alt=""
+            width="1024"
+            height="1024"
+            decoding="async"
+            aria-hidden="true"
+          />
+        </figure>
+        <div class="depop-product-showcase-copy depop-promo-copy">
+          <span class="depop-edu-kicker" data-promo-kicker>Pre-loved finds</span>
+          <h2 class="depop-edu-title" data-promo-title>Studio-clean shots. Real thrift heat.</h2>
+          <p class="text-sm text-zinc-400 max-w-md" data-promo-sub>
+            Sellers list sneakers, denim, and streetwear with clear photos — you pay on M-Pesa, escrow holds until delivery.
+          </p>
+          <div class="depop-product-showcase-actions depop-promo-actions">
+            <a data-promo-primary href="#deals" class="depop-hero-cta depop-hero-cta--primary">Shop pre-loved</a>
+            <a data-promo-secondary href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--ghost">List your kicks</a>
+          </div>
         </div>
       </div>
+      <div class="depop-promo-dots" id="depop-promo-dots" role="tablist" aria-label="Featured promo slides"></div>
     </div>
   </section>
 
@@ -667,6 +679,7 @@
   <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/browse.js"></script>
   <script src="assets/js/depop-hero-carousel.js"></script>
+  <script src="assets/js/depop-promo-carousel.js"></script>
   <script src="assets/js/depop-ecosystem.js"></script>
   <script src="assets/js/depop-nav.js"></script>
   <script src="assets/js/shop-shell.js"></script>
