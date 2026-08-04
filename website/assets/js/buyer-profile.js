@@ -170,9 +170,15 @@
 
     if (!list) return;
     list.innerHTML = `<li class="text-sm text-zinc-500">Loading purchases…</li>`;
-    const result = await window.SokoniAccountAuth.fetchPurchases();
-    if (!result.ok) {
-      list.innerHTML = `<li class="text-sm text-red-400">${result.data?.message || "Could not load purchases."}</li>`;
+    let result;
+    try {
+      result = await window.SokoniAccountAuth.fetchPurchases();
+    } catch (err) {
+      list.innerHTML = `<li class="text-sm text-red-400">${err?.message || "Could not load purchases."}</li>`;
+      return;
+    }
+    if (!result?.ok) {
+      list.innerHTML = `<li class="text-sm text-red-400">${result?.data?.message || "Could not load purchases. Try logging in again."}</li>`;
       return;
     }
     if (hint) hint.textContent = result.data?.hint || "";
@@ -205,14 +211,18 @@
       const status = el("account-phone-status");
       const phone = el("account-phone-input")?.value || "";
       if (status) status.textContent = "Saving…";
-      const result = await window.SokoniAccountAuth?.updateProfile?.({ phone });
-      if (!result?.ok) {
-        if (status) status.textContent = result?.data?.message || "Could not save phone.";
-        return;
+      try {
+        const result = await window.SokoniAccountAuth?.updateProfile?.({ phone });
+        if (!result?.ok) {
+          if (status) status.textContent = result?.data?.message || "Could not save phone.";
+          return;
+        }
+        if (status) status.textContent = "Phone saved — refreshing purchases…";
+        renderEmailAccount();
+        await renderPurchases();
+      } catch (err) {
+        if (status) status.textContent = err?.message || "Could not save phone.";
       }
-      if (status) status.textContent = "Phone saved — refreshing purchases…";
-      renderEmailAccount();
-      await renderPurchases();
     });
 
     el("account-claim-form")?.addEventListener("submit", async (e) => {
@@ -220,13 +230,17 @@
       const status = el("account-claim-status");
       const orderId = el("account-claim-order")?.value || "";
       if (status) status.textContent = "Linking…";
-      const result = await window.SokoniAccountAuth?.claimOrder?.(orderId);
-      if (!result?.ok) {
-        if (status) status.textContent = result?.data?.message || "Could not link order.";
-        return;
+      try {
+        const result = await window.SokoniAccountAuth?.claimOrder?.(orderId);
+        if (!result?.ok) {
+          if (status) status.textContent = result?.data?.message || "Could not link order.";
+          return;
+        }
+        if (status) status.textContent = `Linked ${result.data?.order?.id || orderId}.`;
+        await renderPurchases();
+      } catch (err) {
+        if (status) status.textContent = err?.message || "Could not link order.";
       }
-      if (status) status.textContent = `Linked ${result.data?.order?.id || orderId}.`;
-      await renderPurchases();
     });
   }
 
