@@ -1,4 +1,5 @@
 /** Maps DB rows to the legacy JSON catalog shape used by catalog.js and the bot. */
+import { sellerTrustPayload } from "../lib/seller-badges.js";
 
 const CONDITION_LABELS = {
   brand_new_with_tags: "Brand New with Tags",
@@ -74,6 +75,16 @@ export function rowToCatalogProduct(row, imageUrls = []) {
       return Number.isInteger(n) && n > 0 ? n : undefined;
     })(),
     sellerAvatarUrl: row.seller_avatar_url ? String(row.seller_avatar_url) : undefined,
+    isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
+    sellerSalesCount:
+      row.seller_sales_count != null ? Number(row.seller_sales_count) || 0 : undefined,
+    sellerTrust: sellerTrustPayload({
+      isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
+      salesCount: Number(row.seller_sales_count || 0),
+      avgDispatchHours: null,
+      avgRating: 0,
+      totalReviews: 0,
+    }),
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),

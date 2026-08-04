@@ -66,11 +66,42 @@
           Full name
           <input id="offer-name" type="text" required autocomplete="name" class="sell-form-input" placeholder="Jane Wanjiru" />
         </label>
-        <label class="block text-sm font-medium text-zinc-300">
-          Drop-off address / landmark
-          <input id="offer-location" type="text" required autocomplete="street-address" class="sell-form-input" placeholder="Umoja 1 near the market" />
-          <span class="mt-1 block text-xs text-zinc-500">Seller uses this to arrange delivery after you pay — no shipping fee added at checkout.</span>
-        </label>
+        <fieldset class="space-y-3">
+          <legend class="text-sm font-medium text-zinc-300">Where should the seller drop off?</legend>
+          <div class="flex flex-wrap gap-3 text-sm text-zinc-300" role="radiogroup" aria-label="Delivery type">
+            <label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer">
+              <input type="radio" name="offer-delivery-type" value="parcel_hub" checked class="accent-[#FF2300]" />
+              Parcel hub
+            </label>
+            <label class="inline-flex items-center gap-2 min-h-[44px] cursor-pointer">
+              <input type="radio" name="offer-delivery-type" value="other" class="accent-[#FF2300]" />
+              Other landmark
+            </label>
+          </div>
+          <div id="offer-hub-fields" class="space-y-3">
+            <label class="block text-sm font-medium text-zinc-300">
+              Town / area
+              <select id="offer-landmark-town" class="sell-form-input mt-1">
+                <option value="">Choose town…</option>
+              </select>
+            </label>
+            <label class="block text-sm font-medium text-zinc-300">
+              Drop-off spot
+              <select id="offer-landmark-spot" class="sell-form-input mt-1" disabled>
+                <option value="">Choose spot…</option>
+              </select>
+            </label>
+            <label class="block text-sm font-medium text-zinc-300">
+              Extra note <span class="text-zinc-500 font-normal">(optional)</span>
+              <input id="offer-landmark-note" type="text" maxlength="280" class="sell-form-input" placeholder="Call on arrival / blue gate" />
+            </label>
+          </div>
+          <label id="offer-location-wrap" class="hidden block text-sm font-medium text-zinc-300">
+            Drop-off address / landmark
+            <input id="offer-location" type="text" autocomplete="street-address" class="sell-form-input" placeholder="Umoja 1 near the market" />
+          </label>
+          <p class="text-xs text-zinc-500">Seller uses this to arrange delivery after you pay — no shipping fee added at checkout.</p>
+        </fieldset>
         <label class="block text-sm font-medium text-zinc-300">
           M-Pesa / rider phone
           <input id="offer-phone" type="tel" required inputmode="tel" autocomplete="tel" class="sell-form-input" placeholder="07xx or 2547xx" />

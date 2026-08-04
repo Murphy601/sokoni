@@ -296,6 +296,12 @@ export async function handleIncomingMessage(
     return handleCustomerPaidClaim(customerKey, text, phone);
   }
 
+  // DISPATCH / YES SK-#### must run before generic SK track (which would swallow them).
+  {
+    const { tryHandleWaDeliveryConfirm } = await import("../services/wa-delivery-confirm.js");
+    if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
+  }
+
   // Customers must never see admin console
   if (!requireAdminSender(customerKey, phone)) {
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {

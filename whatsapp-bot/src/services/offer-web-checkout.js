@@ -6,6 +6,7 @@ import { getAcceptedOfferForCheckout } from "../db/repositories/social.js";
 import { getProductById } from "./catalog.js";
 import { createOrder, registerContact } from "./orders.js";
 import { normalizeKenyanPhone } from "./delivery-details.js";
+import { resolveLandmarkSelection } from "../lib/landmark-hubs.js";
 
 function normalizeMpesaPhone(raw) {
   const local = normalizeKenyanPhone(raw);
@@ -14,7 +15,18 @@ function normalizeMpesaPhone(raw) {
 }
 
 /**
- * @param {{ offerId: number|string, buyerUserId: number|string, name: string, location: string, phone: string }} args
+ * @param {{
+ *   offerId: number|string,
+ *   buyerUserId: number|string,
+ *   name: string,
+ *   location?: string,
+ *   phone: string,
+ *   deliveryType?: string,
+ *   landmarkTown?: string,
+ *   landmarkSpot?: string,
+ *   landmarkId?: string,
+ *   landmarkInstructions?: string,
+ * }} args
  */
 export async function placeOrderFromAcceptedOffer({
   offerId,
@@ -22,12 +34,16 @@ export async function placeOrderFromAcceptedOffer({
   name,
   location,
   phone,
+  deliveryType,
+  landmarkTown,
+  landmarkSpot,
+  landmarkId,
+  landmarkInstructions,
 } = {}) {
   const checkout = await getAcceptedOfferForCheckout({ offerId, buyerUserId });
   if (checkout.error) return checkout;
 
   const fullName = String(name || "").trim();
-  const deliveryLocation = String(location || "").trim();
   const mpesaPhone = normalizeMpesaPhone(phone);
 
   if (fullName.length < 3 || fullName.split(/\s+/).length < 2) {
@@ -36,17 +52,23 @@ export async function placeOrderFromAcceptedOffer({
       message: "Enter your full name (first and last name).",
     };
   }
-  if (deliveryLocation.length < 4) {
-    return {
-      error: "invalid_delivery_details",
-      message: "Enter a clearer delivery location (estate/town + landmark).",
-    };
-  }
   if (!mpesaPhone) {
     return {
       error: "invalid_delivery_details",
       message: "Enter a valid Kenyan phone number for M-Pesa / the rider.",
     };
+  }
+
+  const landmark = resolveLandmarkSelection({
+    deliveryType,
+    town: landmarkTown,
+    spotName: landmarkSpot,
+    landmarkId,
+    instructions: landmarkInstructions,
+    locationText: location,
+  });
+  if (landmark.error) {
+    return { error: landmark.error, message: landmark.message };
   }
 
   const product = await getProductById(checkout.productId);
@@ -67,8 +89,13 @@ export async function placeOrderFromAcceptedOffer({
     product: { ...product, productId: product.id },
     details: {
       name: fullName,
-      location: deliveryLocation,
+      location: landmark.location,
       phone: mpesaPhone,
+      deliveryType: landmark.deliveryType,
+      landmarkTown: landmark.landmarkTown,
+      landmarkSpot: landmark.landmarkSpot,
+      landmarkInstructions: landmark.landmarkInstructions,
+      landmarkId: landmark.landmarkId,
     },
     offerId: checkout.offer.id,
     totalsOverride: {

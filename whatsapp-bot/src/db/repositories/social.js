@@ -8,6 +8,7 @@ import { CONDITION_LABELS } from "../product-mapper.js";
 import { getOrder, getOrdersForCustomer } from "../../services/orders.js";
 import { getProductById } from "../../services/catalog.js";
 import { getSupplier } from "../../services/suppliers.js";
+import { sellerTrustPayload } from "../../lib/seller-badges.js";
 
 /** Shared product columns for offer hydration (includes shipping for escrow math). */
 const OFFER_PRODUCT_SELECT = `
@@ -1498,6 +1499,13 @@ export async function getShopProfileByHandle({
           likesReceivedCount: likesReceived,
           avgRating: reviewSummary.avgRating,
           totalReviews: reviewSummary.totalReviews,
+          trust: sellerTrustPayload({
+            isSellerVerified: Boolean(user.is_seller_verified || linkedSeller?.is_verified),
+            salesCount: sellerMetrics.salesCount,
+            avgDispatchHours: sellerMetrics.avgDispatchHours,
+            avgRating: reviewSummary.avgRating,
+            totalReviews: reviewSummary.totalReviews,
+          }),
         },
         tab: listingTab,
         products: storefront.products,
@@ -1605,6 +1613,13 @@ export async function getShopProfileByHandle({
         likesReceivedCount: likesReceived,
         avgRating: reviewSummary.avgRating,
         totalReviews: reviewSummary.totalReviews,
+        trust: sellerTrustPayload({
+          isSellerVerified: Boolean(sellerUser?.is_seller_verified || seller.is_verified),
+          salesCount: sellerMetrics.salesCount,
+          avgDispatchHours: sellerMetrics.avgDispatchHours,
+          avgRating: reviewSummary.avgRating,
+          totalReviews: reviewSummary.totalReviews,
+        }),
       },
       tab: listingTab,
       products: storefront.products,

@@ -160,6 +160,12 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     customerName: details.name,
     location: details.location,
     phone: details.phone,
+    /** Feature 2 — structured landmark / hub (optional; location remains the display string). */
+    deliveryType: details.deliveryType || null,
+    landmarkTown: details.landmarkTown || null,
+    landmarkSpot: details.landmarkSpot || null,
+    landmarkInstructions: details.landmarkInstructions || null,
+    landmarkId: details.landmarkId || null,
     status: prepaid ? "awaiting_payment" : "received",
     paymentModel: prepaid ? "prepaid" : "cod",
     escrowStatus: prepaid ? "pending" : null,

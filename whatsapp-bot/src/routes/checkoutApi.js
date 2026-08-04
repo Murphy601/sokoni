@@ -10,11 +10,18 @@ import { generateDropoffLabel } from "../services/escrow-automation.js";
 import { getOrder } from "../services/orders.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
 import { config } from "../config.js";
+import { listLandmarkHubs, formatLandmarkLine } from "../lib/landmark-hubs.js";
 
 const router = Router();
 
 router.get("/meta", (_req, res) => {
   res.json(checkoutMeta());
+});
+
+/** Curated Kenyan hubs / landmarks for checkout dropdowns. */
+router.get("/landmarks", (_req, res) => {
+  const data = listLandmarkHubs();
+  res.json({ success: true, ...data });
 });
 
 /** Prepaid drop-off label / QR payload for seller. */
@@ -27,6 +34,10 @@ router.get("/:orderId/label", (req, res) => {
     orderId: order.id,
     productName: order.productName || null,
     buyerLocation: order.location || null,
+    landmarkLine: formatLandmarkLine(order) || null,
+    deliveryType: order.deliveryType || null,
+    landmarkTown: order.landmarkTown || null,
+    landmarkSpot: order.landmarkSpot || null,
     buyerName: order.name || order.customerName || null,
     pickupPointName: order.pickupPointName || null,
     pickupPointPhone: order.pickupPointPhone || null,
