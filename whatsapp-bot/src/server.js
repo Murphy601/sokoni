@@ -295,6 +295,7 @@ app.listen(config.port, "0.0.0.0", () => {
   startTokenRefreshScheduler();
   startTiktokScheduler();
   startPayoutScheduler();
+  startOrderCommunicationScheduler();
   startFeedScheduler();
   // Ensure platform storefront has a social user id (Make an offer / inbox).
   if (isDbEnabled()) {
@@ -336,6 +337,19 @@ function startPayoutScheduler() {
   console.log(
     `✓ Seller payout scheduler enabled (hourly)${b2c.ready ? ` · B2C ${b2c.auto ? "auto" : "manual (#payb2c)"}` : " · B2C not configured"}`
   );
+}
+
+/** DISPATCH / YES reminders + overdue buyer-confirm admin flags (communication hub). */
+function startOrderCommunicationScheduler() {
+  const tick = () => {
+    import("./services/communication-hub.js")
+      .then(({ processOrderCommunicationReminders }) => processOrderCommunicationReminders())
+      .catch((err) => console.error("[communication-hub] reminder cron:", err.message));
+  };
+  // Offset from payout cron so we don't stampede the WAHA API.
+  setTimeout(tick, 90_000);
+  setInterval(tick, 60 * 60 * 1000);
+  console.log("✓ Order communication reminder scheduler enabled (hourly)");
 }
 
 /** Parse "HH:MM" slots for daily posting. */
