@@ -159,17 +159,23 @@ function normalizePhoneDigits(phone) {
   return d;
 }
 
-/** Approved supplier record for a WhatsApp phone, if any. */
+function phoneDigitsMatch(a, b) {
+  const x = normalizePhoneDigits(a);
+  const y = normalizePhoneDigits(b);
+  if (!x || !y) return false;
+  return x === y || x.slice(-9) === y.slice(-9);
+}
+
+/** Approved supplier record for a WhatsApp / M-Pesa phone, if any. */
 export function findSupplierByPhone(phone) {
   loadSuppliers();
   const target = normalizePhoneDigits(phone);
   if (!target) return null;
   return (
     Object.values(supplierStore.suppliers).find((s) => {
-      const sp = normalizePhoneDigits(s.phone);
-      if (!sp) return false;
-      if (sp === target) return true;
-      return sp.slice(-9) === target.slice(-9);
+      if (phoneDigitsMatch(s.phone, target)) return true;
+      if (phoneDigitsMatch(s.mpesaNumber, target)) return true;
+      return false;
     }) || null
   );
 }

@@ -65,10 +65,58 @@ export function buyerOwnsOrder(order, customerKey, phone) {
   return getOrdersForCustomer(customerKey, phone).some((o) => o.id === order.id);
 }
 
-export function sellerOwnsOrder(order, phone) {
-  if (!order?.supplierId) return false;
-  const supplier = findSupplierByPhone(phone);
-  return Boolean(supplier && supplier.id === order.supplierId);
+function supplierMatchesSender(supplier, phone = "", customerKey = "") {
+  if (!supplier) return false;
+  if (phone && (phonesMatch(phone, supplier.phone) || phonesMatch(phone, supplier.mpesaNumber))) {
+    return true;
+  }
+  if (customerKey) {
+    if (supplier.phone && toChatId(supplier.phone) === customerKey) return true;
+    if (supplier.mpesaNumber && toChatId(supplier.mpesaNumber) === customerKey) return true;
+    const keyDigits = String(customerKey || "").replace(/\D/g, "");
+    if (keyDigits && (phonesMatch(keyDigits, supplier.phone) || phonesMatch(keyDigits, supplier.mpesaNumber))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Seller ownership: prefer the order's supplier record (phone or M-Pesa),
+ * not "find any supplier by inbound phone then compare ids".
+ */
+export function sellerOwnsOrder(order, phone, customerKey = "") {
+  if (!order) return false;
+
+  if (order.supplierId) {
+    const onOrder = getSupplier(order.supplierId);
+    if (supplierMatchesSender(onOrder, phone, customerKey)) return true;
+  }
+
+  // Fallback: inbound phone → supplier id must still equal order.supplierId.
+  const byPhone = findSupplierByPhone(phone);
+  if (byPhone && order.supplierId && byPhone.id === order.supplierId) return true;
+
+  return false;
+}
+
+/** Backfill supplierId from product when missing (social listings). */
+export async function ensureOrderSupplier(order) {
+  if (!order?.id) return order;
+  if (order.supplierId && getSupplier(order.supplierId)) return order;
+  if (!order.productId) return order;
+  try {
+    const { getProductById } = await import("./catalog.js");
+    const product = await getProductById(order.productId);
+    const sid = product?.supplierId || null;
+    if (sid) {
+      updateOrderMeta(order.id, { supplierId: sid });
+      return getOrder(order.id) || order;
+    }
+  } catch (err) {
+    console.warn("[communication-hub] ensureOrderSupplier:", err.message);
+  }
+  return order;
 }
 
 export function isPaidHeld(order) {
@@ -117,7 +165,7 @@ function appendSupportThread(orderId, entry) {
 
 function roleForSender(order, customerKey, phone) {
   if (buyerOwnsOrder(order, customerKey, phone)) return "BUYER";
-  if (sellerOwnsOrder(order, phone)) return "SELLER";
+  if (sellerOwnsOrder(order, phone, customerKey)) return "SELLER";
   return "USER";
 }
 
@@ -164,6 +212,7 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
     "DISPUTE_OR_HELP",
     "ADMIN_TAKE_OVER",
     "SUPPORT_RELAY",
+    "SUPPORT_CLOSED_BY_USER",
     "PAYOUT_FAILED",
     "CONFIRM_OVERDUE",
     "AUTO_RELEASED",
@@ -263,7 +312,9 @@ export function msgHelpAck(order) {
   return (
     `🚨 *Sokoni Support Alerted*\n` +
     `Order *${order.id}* is paused (escrow frozen).\n` +
-    `An admin has joined this chat. Type your message directly below — the bot will stay quiet.`
+    `An admin has joined this chat. Type your message below — the bot stays quiet.\n\n` +
+    `When you're finished with support, reply:\n*DONE*\n` +
+    `(or *DONE ${order.id}*) — that closes support and turns the bot back on.`
   );
 }
 
@@ -318,7 +369,7 @@ function findTakeOverOrder(customerKey, phone) {
     listAllOrders().find(
       (o) =>
         isAdminTakeOver(o) &&
-        (buyerOwnsOrder(o, customerKey, phone) || sellerOwnsOrder(o, phone))
+        (buyerOwnsOrder(o, customerKey, phone) || sellerOwnsOrder(o, phone, customerKey))
     ) ||
     null
   );
@@ -477,7 +528,16 @@ export function recordAdminOutbound(orderId, message, { setTakeOver = true } = {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Buyer/seller ends support: DONE / END / CLOSE (optional SK).
+ */
+function isSupportDoneCommand(text) {
+  const t = String(text || "").trim();
+  return /^(DONE|END|CLOSE|BYE)\b(?:\s+SK-?\d{3,})?$/i.test(t);
+}
+
+/**
  * If sender is on an ADMIN_TAKE_OVER order, forward to admin and stay silent.
+ * Exception: DONE/END/CLOSE closes takeover and resumes the bot.
  * @returns {Promise<boolean>}
  */
 export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = {}) {
@@ -487,8 +547,37 @@ export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = 
   const trimmed = String(text || "").trim();
   if (!trimmed) return true;
 
-  // Still allow explicit HELP to re-ping, but stay in takeover (no bot commands).
   const role = roleForSender(order, customerKey, phone);
+
+  // Buyer/seller can end support without waiting for admin #resolve.
+  if (isSupportDoneCommand(trimmed)) {
+    if (role === "USER") {
+      await sendSafeWhatsApp(
+        customerKey,
+        `*${order.id}* support is open, but this WhatsApp isn't the buyer/seller on the order.\nAsk them to reply *DONE*, or wait for admin.`
+      );
+      return true;
+    }
+    appendSupportThread(order.id, {
+      direction: "inbound",
+      role,
+      phone: phone || null,
+      customerKey,
+      text: trimmed.slice(0, 200),
+    });
+    await resolveAdminTakeOver(order.id, { note: `${role} closed support with ${trimmed.split(/\s+/)[0]}` });
+    clearHumanHandoff(customerKey);
+    await sendSafeWhatsApp(
+      customerKey,
+      `✅ Support closed for *${order.id}*.\nBot is active again — type *${order.id}* to track, or *menu*.`
+    );
+    void notifyAdminEvent("SUPPORT_CLOSED_BY_USER", {
+      orderId: order.id,
+      details: `${role} ended support (${trimmed}). Bot resumed.`,
+    });
+    return true;
+  }
+
   appendSupportThread(order.id, {
     direction: "inbound",
     role,
@@ -502,7 +591,7 @@ export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = 
     details:
       `📨 *${order.id}* · ${role}${phone ? ` (+${normalizePhone(phone)})` : ""}\n` +
       `${trimmed.slice(0, 800)}\n\n` +
-      `Reply: *#${order.id} <message>*\nEnd: *#resolve ${order.id}*`,
+      `Reply: *#${order.id} <message>*\nEnd: *#resolve ${order.id}* · User can also reply *DONE*`,
   });
 
   // Silent — no WhatsApp reply to user (transparent relay).
@@ -548,23 +637,24 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
 }
 
 async function flowSellerDispatch(customerKey, phone, orderId) {
-  const order = getOrder(orderId);
+  let order = getOrder(orderId);
   if (!order) {
     await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found. Check the SK from your sale alert.`);
     return;
   }
+  order = (await ensureOrderSupplier(order)) || order;
   if (isAdminTakeOver(order) || order.disputeHold) {
     await sendSafeWhatsApp(
       customerKey,
-      `*${order.id}* is with Sokoni support right now. An admin will update you.`
+      `*${order.id}* is with Sokoni support right now. Reply *DONE* when finished, or wait for admin.`
     );
     return;
   }
-  if (!sellerOwnsOrder(order, phone)) {
-    await sendSafeWhatsApp(
-      customerKey,
-      `*${order.id}* is not on your seller account.\nUse the SK from your sale message, or reply *vendor menu*.`
-    );
+  if (!sellerOwnsOrder(order, phone, customerKey)) {
+    const hint = order.supplierId
+      ? `Use the WhatsApp number linked to this sale (same one that got the paid alert), or reply *vendor menu*.`
+      : `This order has no seller account linked yet — reply *vendor menu* or HELP ${order.id}.`;
+    await sendSafeWhatsApp(customerKey, `*${order.id}* is not on your seller account.\n${hint}`);
     return;
   }
   if (!isPaidHeld(order)) {
@@ -632,7 +722,7 @@ async function flowBuyerYes(customerKey, phone, orderId) {
     return;
   }
 
-  if (sellerOwnsOrder(order, phone) && !buyerOwnsOrder(order, customerKey, phone)) {
+  if (sellerOwnsOrder(order, phone, customerKey) && !buyerOwnsOrder(order, customerKey, phone)) {
     await sendSafeWhatsApp(
       customerKey,
       `Sellers can't confirm YES for their own sale (*${order.id}*).\nReply HELP ${order.id} if stuck.`
@@ -722,7 +812,7 @@ async function flowHelp(customerKey, phone, orderId, rawText) {
   }
 
   const asBuyer = buyerOwnsOrder(order, customerKey, phone);
-  const asSeller = sellerOwnsOrder(order, phone);
+  const asSeller = sellerOwnsOrder(order, phone, customerKey);
   if (!asBuyer && !asSeller) {
     await sendSafeWhatsApp(
       customerKey,
