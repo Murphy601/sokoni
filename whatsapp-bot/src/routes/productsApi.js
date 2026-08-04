@@ -78,6 +78,8 @@ function toPublicProduct(p) {
     shopHandle: p.shopHandle,
     sellerUserId: p.sellerUserId,
     sellerAvatarUrl: p.sellerAvatarUrl,
+    isSellerVerified: Boolean(p.isSellerVerified),
+    sellerTrust: p.sellerTrust || undefined,
     scope: p.scope,
     fulfillment: p.fulfillment,
     payment: p.payment,

@@ -7,10 +7,24 @@ const PRODUCT_SELECT = `
     s.business_name AS seller_business_name,
     s.slug AS seller_slug,
     s.user_id AS seller_table_user_id,
+    s.is_verified AS seller_table_verified,
     su.id AS seller_user_join_id,
     su.handle AS seller_handle,
     su.shop_name AS seller_shop_name,
     su.avatar_url AS seller_avatar_url,
+    su.is_seller_verified AS seller_user_verified,
+    (
+      SELECT COUNT(*)::int
+        FROM products px
+       WHERE px.is_sold = TRUE
+         AND (
+           (p.seller_id IS NOT NULL AND px.seller_id = p.seller_id)
+           OR (
+             COALESCE(p.seller_user_id, s.user_id) IS NOT NULL
+             AND px.seller_user_id = COALESCE(p.seller_user_id, s.user_id)
+           )
+         )
+    ) AS seller_sales_count,
     COALESCE(
       (SELECT json_agg(pi.url ORDER BY pi.sort_order)
        FROM product_images pi WHERE pi.product_id = p.id),

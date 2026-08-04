@@ -2405,6 +2405,11 @@ function showSellerProfile(profile, opts = {}) {
   updateUndoLastDoneButton();
   el("seller-badge").textContent = profile.businessName || profile.shopName || "Your shop";
   if (profile.shopHandle) el("seller-handle").textContent = profile.shopHandle;
+  const trustLine = el("seller-trust-line");
+  if (trustLine) {
+    const verified = Boolean(profile.isVerified || profile.isSellerVerified || profile.verified);
+    trustLine.classList.toggle("hidden", !verified);
+  }
   el("seller-profile-bar")?.classList.remove("hidden");
   el("seller-shop-edit")?.classList.remove("hidden");
   el("listing-wizard")?.classList.remove("hidden");

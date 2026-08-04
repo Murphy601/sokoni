@@ -456,15 +456,40 @@ function renderShopHeader(payload) {
   el("shop-name").textContent = shop.shopName || "Shop";
   el("shop-handle").textContent = shop.handle || "";
 
+  const trustBadges = window.SokoniSellerTrust?.resolveBadges?.(stats.trust || shop, { max: 4 }) || [];
+  const trustIds = new Set(trustBadges.map((b) => b.id));
+
   const verified = el("shop-verified");
-  if (verified) verified.classList.toggle("hidden", !shop.isSellerVerified);
+  if (verified) {
+    // Prefer trust.badges strip; keep legacy chip only when trust payload absent.
+    const showLegacyVerified = Boolean(shop.isSellerVerified) && !trustBadges.length;
+    verified.classList.toggle("hidden", !showLegacyVerified);
+  }
 
   const avg = Number(stats.avgRating || 0);
   const totalReviews = Number(stats.totalReviews || 0);
   const topSeller = el("shop-top-seller");
   if (topSeller) {
-    const qualifies = avg >= 4.8 && totalReviews >= 20;
+    const qualifies =
+      !trustIds.has("top_seller") &&
+      !trustIds.has("top_rated") &&
+      avg >= 4.8 &&
+      totalReviews >= 20;
     topSeller.classList.toggle("hidden", !qualifies);
+  }
+
+  const trustRow = el("shop-trust-badges");
+  if (trustRow) {
+    // badgesHtml wraps in a span — inject inner chips only into the host node.
+    const wrapped =
+      window.SokoniSellerTrust?.badgesHtml?.(stats.trust || shop, {
+        max: 4,
+        className: "seller-trust-badges-inner",
+      }) || "";
+    const tmp = document.createElement("div");
+    tmp.innerHTML = wrapped;
+    trustRow.innerHTML = tmp.firstElementChild?.innerHTML || "";
+    trustRow.classList.toggle("hidden", !trustBadges.length);
   }
 
   const bio = el("shop-bio");

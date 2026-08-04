@@ -390,6 +390,12 @@
         <p class="product-sheet-price">${escapeHtml(formatPrice(product))}</p>
         <p class="product-sheet-dispatch text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">Seller handles dispatch (direct delivery)</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
+        ${
+          window.SokoniSellerTrust?.badgesHtml?.(product, {
+            max: 3,
+            className: "seller-trust-badges product-sheet-trust",
+          }) || ""
+        }
         <p class="product-sheet-tags">${escapeHtml([browseLabel(product), secondhand, condition].filter(Boolean).join(" · "))}</p>
         ${
           measures

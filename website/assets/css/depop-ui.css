@@ -315,6 +315,55 @@ html.dark .depop-card-seller {
   color: rgba(255, 248, 240, 0.5);
 }
 
+.seller-trust-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.seller-trust-badge {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.35rem;
+  background: rgba(37, 211, 102, 0.16);
+  color: #1b1035;
+}
+
+html.dark .seller-trust-badge {
+  color: #fff8f0;
+  background: rgba(37, 211, 102, 0.22);
+}
+
+.seller-trust-badge--fast_dispatcher,
+.seller-trust-badge--top_rated,
+.seller-trust-badge--top_seller {
+  background: rgba(27, 16, 53, 0.08);
+}
+
+html.dark .seller-trust-badge--fast_dispatcher,
+html.dark .seller-trust-badge--top_rated,
+html.dark .seller-trust-badge--top_seller {
+  background: rgba(255, 248, 240, 0.12);
+}
+
+.seller-trust-badge--sales {
+  background: transparent;
+  border: 1px solid rgba(27, 16, 53, 0.12);
+  font-weight: 600;
+}
+
+html.dark .seller-trust-badge--sales {
+  border-color: rgba(255, 248, 240, 0.18);
+}
+
+.product-sheet-trust {
+  margin: 0.35rem 0 0;
+}
+
 .depop-card-body {
   padding: 0.4rem 0.15rem 0.65rem;
 }

@@ -740,6 +740,7 @@ function renderDepopCard(product) {
               }</p>`
             : ""
         }
+        ${window.SokoniSellerTrust?.badgesHtml?.(product, { max: 2, className: "seller-trust-badges depop-card-trust" }) || ""}
       </div>
     </article>`;
 }
