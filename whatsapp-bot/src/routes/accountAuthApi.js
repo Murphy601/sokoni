@@ -7,6 +7,7 @@ import {
   signupAccount,
   updateSignedInProfile,
 } from "../services/account-auth.js";
+import { claimOrderForAccount, getPurchasesForAccount } from "../services/orders.js";
 
 const router = Router();
 
@@ -56,6 +57,46 @@ router.patch("/profile", async (req, res) => {
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
   }
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** GET /api/account/auth/purchases — my orders for signed-in account */
+router.get("/purchases", async (req, res) => {
+  const auth = await resolveAccountFromRequest(req);
+  if (auth.error) return res.status(auth.error === "session_required" ? 401 : 403).json(auth);
+  const purchases = getPurchasesForAccount({
+    userId: auth.user.id,
+    phone: auth.user.phone,
+  });
+  res.json({
+    ok: true,
+    purchases,
+    phoneOnFile: Boolean(auth.user.phone),
+    hint: auth.user.phone
+      ? null
+      : "Add your WhatsApp number on this account to see prepaid orders placed by phone.",
+  });
+});
+
+/** POST /api/account/auth/claim-order — link SK-#### when phone matches */
+router.post("/claim-order", async (req, res) => {
+  const auth = await resolveAccountFromRequest(req);
+  if (auth.error) return res.status(auth.error === "session_required" ? 401 : 403).json(auth);
+  const orderId = String(req.body?.orderId || "").trim().toUpperCase();
+  if (!orderId) return res.status(400).json({ error: "missing_order_id", message: "Send orderId like SK-1022." });
+  if (!auth.user.phone) {
+    return res.status(400).json({
+      error: "phone_required",
+      message: "Add your WhatsApp number to your account first (same number used at checkout).",
+    });
+  }
+  const result = claimOrderForAccount(orderId, {
+    userId: auth.user.id,
+    phone: auth.user.phone,
+    email: auth.user.email,
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
   if (result.error) return res.status(400).json(result);
   res.json(result);
 });

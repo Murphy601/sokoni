@@ -120,6 +120,38 @@
       </div>
     </section>
 
+    <section id="account-purchases-section" class="depop-card p-5 space-y-3">
+      <h2 class="text-lg font-black text-white">My purchases</h2>
+      <p class="text-sm text-zinc-400">Prepaid orders tied to this account (by phone or claim).</p>
+      <div id="account-purchases-need-login" class="space-y-2">
+        <p class="text-sm text-zinc-400">Log in to see your purchases.</p>
+        <a href="login.html?next=profile.html" class="depop-btn-accent inline-flex">Log in</a>
+      </div>
+      <div id="account-purchases-body" class="hidden space-y-3">
+        <form id="account-phone-form" class="depop-card !bg-black p-3 space-y-2">
+          <label class="block text-xs font-medium text-zinc-300">
+            WhatsApp on this account (matches checkout phone)
+            <input id="account-phone-input" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <button type="submit" class="depop-btn-ghost">Save phone</button>
+          <p id="account-phone-status" class="text-xs text-zinc-500" role="status"></p>
+        </form>
+        <form id="account-claim-form" class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+          <label class="flex-1 text-xs font-medium text-zinc-300">
+            Claim order
+            <input id="account-claim-order" name="orderId" type="text" placeholder="SK-1022" maxlength="16"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <button type="submit" class="depop-btn-ghost">Link to account</button>
+        </form>
+        <p id="account-claim-status" class="text-xs text-zinc-500" role="status"></p>
+        <p id="account-purchases-hint" class="text-xs text-zinc-500"></p>
+        <ul id="account-purchases-list" class="space-y-2"></ul>
+        <p id="account-purchases-empty" class="text-sm text-zinc-500 hidden">No purchases yet. Order on WhatsApp or the site, then they show up here.</p>
+      </div>
+    </section>
+
     <section class="depop-card p-5">
       <h2 class="text-lg font-black text-white">Quick links</h2>
       <p class="text-sm text-zinc-400 mt-1 mb-3">Jump to the parts of Sokoni you use most.</p>

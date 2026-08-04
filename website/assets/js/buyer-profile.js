@@ -134,6 +134,102 @@
     }
   }
 
+  function formatKes(n) {
+    return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
+  }
+
+  function statusLabel(p) {
+    const pay = String(p.paymentStatus || "").toLowerCase();
+    if (pay === "confirmed" || pay === "paid") return p.status || "paid";
+    if (pay === "unpaid" || pay === "pending") return "awaiting payment";
+    return p.status || "—";
+  }
+
+  async function renderPurchases() {
+    const needLogin = el("account-purchases-need-login");
+    const body = el("account-purchases-body");
+    const list = el("account-purchases-list");
+    const empty = el("account-purchases-empty");
+    const hint = el("account-purchases-hint");
+    const account = window.SokoniAccountAuth?.readSession?.();
+
+    if (!account?.userId) {
+      needLogin?.classList.remove("hidden");
+      body?.classList.add("hidden");
+      return;
+    }
+    needLogin?.classList.add("hidden");
+    body?.classList.remove("hidden");
+
+    const phoneInput = el("account-phone-input");
+    if (phoneInput && account.user?.phone) {
+      phoneInput.value = account.user.phone.startsWith("254")
+        ? `0${account.user.phone.slice(3)}`
+        : account.user.phone;
+    }
+
+    if (!list) return;
+    list.innerHTML = `<li class="text-sm text-zinc-500">Loading purchases…</li>`;
+    const result = await window.SokoniAccountAuth.fetchPurchases();
+    if (!result.ok) {
+      list.innerHTML = `<li class="text-sm text-red-400">${result.data?.message || "Could not load purchases."}</li>`;
+      return;
+    }
+    if (hint) hint.textContent = result.data?.hint || "";
+    const purchases = result.data?.purchases || [];
+    if (!purchases.length) {
+      list.innerHTML = "";
+      empty?.classList.remove("hidden");
+      return;
+    }
+    empty?.classList.add("hidden");
+    list.innerHTML = purchases
+      .slice(0, 30)
+      .map((p) => {
+        const paid = String(p.paymentStatus || "").toLowerCase() === "confirmed";
+        const href = paid ? p.trackUrl || `track.html?order=${p.id}` : p.checkoutUrl || `checkout.html?order=${p.id}`;
+        return `<li class="rounded-2xl border border-zinc-800 bg-black/60 p-3 flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+          <div>
+            <p class="text-sm font-semibold text-white">${p.id} · ${p.productName || "Order"}</p>
+            <p class="text-xs text-zinc-400">${formatKes(p.totalKes)} · ${statusLabel(p)}</p>
+          </div>
+          <a href="${href}" class="depop-btn-ghost text-center">${paid ? "Track" : "Pay / open"}</a>
+        </li>`;
+      })
+      .join("");
+  }
+
+  function bindPurchaseForms() {
+    el("account-phone-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const status = el("account-phone-status");
+      const phone = el("account-phone-input")?.value || "";
+      if (status) status.textContent = "Saving…";
+      const result = await window.SokoniAccountAuth?.updateProfile?.({ phone });
+      if (!result?.ok) {
+        if (status) status.textContent = result?.data?.message || "Could not save phone.";
+        return;
+      }
+      if (status) status.textContent = "Phone saved — refreshing purchases…";
+      renderEmailAccount();
+      await renderPurchases();
+    });
+
+    el("account-claim-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const status = el("account-claim-status");
+      const orderId = el("account-claim-order")?.value || "";
+      if (status) status.textContent = "Linking…";
+      const result = await window.SokoniAccountAuth?.claimOrder?.(orderId);
+      if (!result?.ok) {
+        if (status) status.textContent = result?.data?.message || "Could not link order.";
+        return;
+      }
+      if (status) status.textContent = `Linked ${result.data?.order?.id || orderId}.`;
+      await renderPurchases();
+    });
+  }
+
   function init() {
     window.SokoniBuyerAuth?.bindPanel?.({
       onVerified: () => {
@@ -144,8 +240,10 @@
     el("profile-sign-out-btn")?.addEventListener("click", () => {
       void signOut();
     });
+    bindPurchaseForms();
     renderSession();
     renderSavedCount();
+    void renderPurchases();
   }
 
   if (document.readyState === "loading") {

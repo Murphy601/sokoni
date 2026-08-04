@@ -271,12 +271,23 @@
         );
       }
       renderCheckout(data);
+      void tryClaimOrderForAccount(orderId);
       return data;
     } catch (err) {
       if (!quiet) showError(err.message);
       return null;
     } finally {
       if (!quiet) loadingEl.classList.add("hidden");
+    }
+  }
+
+  async function tryClaimOrderForAccount(orderId) {
+    const account = window.SokoniAccountAuth?.readSession?.();
+    if (!account?.sessionToken || !account.user?.phone) return;
+    try {
+      await window.SokoniAccountAuth.claimOrder(orderId);
+    } catch {
+      /* non-blocking */
     }
   }
 

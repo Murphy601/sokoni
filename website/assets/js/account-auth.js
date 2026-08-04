@@ -160,6 +160,30 @@
     return { ok: true, status: res.status, data, session: readSession() };
   }
 
+  async function fetchPurchases() {
+    const session = readSession();
+    if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
+    const res = await fetch(`${AUTH_API}/purchases`, {
+      headers: { "X-Account-Token": session.sessionToken },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, data };
+    return { ok: true, status: res.status, data };
+  }
+
+  async function claimOrder(orderId) {
+    const session = readSession();
+    if (!session) return { ok: false, status: 401, data: { error: "session_required" } };
+    const res = await fetch(`${AUTH_API}/claim-order`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ orderId, sessionToken: session.sessionToken }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: res.status, data };
+    return { ok: true, status: res.status, data };
+  }
+
   function loginUrl(next) {
     const base = "login.html";
     if (!next) return base;
@@ -286,6 +310,8 @@
     fetchSession,
     signOut,
     updateProfile,
+    fetchPurchases,
+    claimOrder,
     authHeaders,
     loginUrl,
     signupUrl,
