@@ -402,7 +402,9 @@ function adminHelpText() {
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
-    `🆔 *#SK-1042 <message>* — message one customer\n` +
+    `🆔 *#SK-1042 <message>* — message buyer (starts ADMIN_TAKE_OVER / silent bot)\n` +
+    `🆘 *#resolve SK-1042* — end support takeover, resume bot\n` +
+    `🖥️ Support inbox — https://sokonimall.com/admin-support.html?token=...\n` +
     `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
     `   · GET /admin/suppliers/seller-listings/flagged?token=...\n` +
     `   · POST …/seller-listings/:productId/takedown?token=…\n` +
@@ -899,7 +901,7 @@ function getBroadcastRecipients() {
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
   const embedded = t.match(
-    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db)\b[\s\S]*/i
+    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|resolve)\b[\s\S]*/i
   );
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
@@ -914,15 +916,45 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
     return sendText(adminChatId, `⚠️ Order *${orderId}* not found. Try #orders.`);
   }
   try {
-    await sendText(order.customerKey, message.trim());
-    setHumanHandoff(order.customerKey, { adminDirect: true, startedAt: Date.now(), ackSent: true });
+    const body = `🛡️ *[Sokoni Support]:* ${message.trim()}`;
+    await sendText(order.customerKey, body);
+    setHumanHandoff(order.customerKey, {
+      adminDirect: true,
+      adminTakeOver: true,
+      orderId: order.id,
+      startedAt: Date.now(),
+      ackSent: true,
+    });
+    try {
+      const { recordAdminOutbound } = await import("./communication-hub.js");
+      recordAdminOutbound(order.id, message.trim(), { setTakeOver: true });
+    } catch {
+      /* ignore */
+    }
     if (order.status === "delivered" && !order.reviewPromptSent) {
       await sendReviewPrompt(order.customerKey, order);
     }
-    return sendText(adminChatId, `✅ Sent to *${order.customerName}* (${order.id}).`);
+    return sendText(
+      adminChatId,
+      `✅ Sent to *${order.customerName || "buyer"}* (${order.id}). Bot is silent on that chat.\nEnd: *#resolve ${order.id}*`
+    );
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed to send: ${err.message}`);
   }
+}
+
+async function handleResolveSupportCommand(adminChatId, rest) {
+  const m = String(rest || "").trim().match(/SK-?(\d{3,})/i);
+  if (!m) {
+    return sendText(adminChatId, "Usage: *#resolve SK-1042*");
+  }
+  const orderId = `SK-${m[1]}`;
+  const { resolveAdminTakeOver } = await import("./communication-hub.js");
+  const result = await resolveAdminTakeOver(orderId, { note: "resolved via #resolve" });
+  if (result.error) {
+    return sendText(adminChatId, `⚠️ ${result.message || result.error}`);
+  }
+  return sendText(adminChatId, `✅ Support closed for *${orderId}*. Bot resumed.`);
 }
 
 /** Parse and run an admin command. Returns true if handled. */
@@ -1040,6 +1072,11 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#db\b/i.test(t)) {
     await handleDbOpsCommand(adminChatId, t.replace(/^#db\b/i, ""));
+    return true;
+  }
+
+  if (/^#resolve\b/i.test(t)) {
+    await handleResolveSupportCommand(adminChatId, t.replace(/^#resolve\b/i, ""));
     return true;
   }
 
