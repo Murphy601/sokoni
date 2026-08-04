@@ -14,7 +14,7 @@ import {
   listAllOrders,
   updateOrderMeta,
 } from "./orders.js";
-import { findSupplierByPhone, getSupplier } from "./suppliers.js";
+import { findSupplierByPhone, getSupplier, listSuppliers } from "./suppliers.js";
 import { advanceShipmentStatus, getEffectiveShipmentStatus } from "./shipments.js";
 import { formatLandmarkLine } from "../lib/landmark-hubs.js";
 import { setHumanHandoff, clearHumanHandoff } from "./session.js";
@@ -100,7 +100,31 @@ export function sellerOwnsOrder(order, phone, customerKey = "") {
   return false;
 }
 
-/** Backfill supplierId from product when missing (social listings). */
+function normalizeHandle(raw) {
+  return String(raw || "")
+    .replace(/^@+/, "")
+    .trim()
+    .toLowerCase();
+}
+
+function findSupplierForSender(phone = "", customerKey = "") {
+  const byPhone = phone ? findSupplierByPhone(phone) : null;
+  if (byPhone) return byPhone;
+  return listSuppliers().find((s) => supplierMatchesSender(s, phone, customerKey)) || null;
+}
+
+function productBelongsToSupplier(product, supplier) {
+  if (!product || !supplier) return false;
+  if (product.supplierId && product.supplierId === supplier.id) return true;
+  if (product.sellerPhone && phonesMatch(product.sellerPhone, supplier.phone)) return true;
+  if (product.sellerPhone && phonesMatch(product.sellerPhone, supplier.mpesaNumber)) return true;
+  const ph = normalizeHandle(product.shopHandle || product.sellerHandle);
+  const sh = normalizeHandle(supplier.shopHandle || supplier.businessName);
+  if (ph && sh && ph === sh) return true;
+  return false;
+}
+
+/** Backfill supplierId from product when missing / broken. */
 export async function ensureOrderSupplier(order) {
   if (!order?.id) return order;
   if (order.supplierId && getSupplier(order.supplierId)) return order;
@@ -108,7 +132,10 @@ export async function ensureOrderSupplier(order) {
   try {
     const { getProductById } = await import("./catalog.js");
     const product = await getProductById(order.productId);
-    const sid = product?.supplierId || null;
+    let sid = product?.supplierId || null;
+    if (!sid && product?.sellerPhone) {
+      sid = findSupplierByPhone(product.sellerPhone)?.id || null;
+    }
     if (sid) {
       updateOrderMeta(order.id, { supplierId: sid });
       return getOrder(order.id) || order;
@@ -117,6 +144,54 @@ export async function ensureOrderSupplier(order) {
     console.warn("[communication-hub] ensureOrderSupplier:", err.message);
   }
   return order;
+}
+
+/**
+ * Authorize DISPATCH for the inbound WhatsApp seller.
+ * Claims/repairs order.supplierId when the product clearly belongs to them.
+ */
+export async function authorizeSellerForOrder(order, phone = "", customerKey = "") {
+  let o = (await ensureOrderSupplier(order)) || order;
+  if (sellerOwnsOrder(o, phone, customerKey)) {
+    return { ok: true, order: o };
+  }
+
+  const inboundSeller = findSupplierForSender(phone, customerKey);
+  if (!inboundSeller) {
+    return { ok: false, order: o, reason: "not_registered_seller" };
+  }
+
+  let product = null;
+  if (o.productId) {
+    try {
+      const { getProductById } = await import("./catalog.js");
+      product = await getProductById(o.productId);
+    } catch (err) {
+      console.warn("[communication-hub] product lookup:", err.message);
+    }
+  }
+
+  const productTheirs = productBelongsToSupplier(product, inboundSeller);
+  // Claim when the listing is theirs (even if order.supplierId was null/wrong).
+  if (productTheirs || o.supplierId === inboundSeller.id) {
+    if (o.supplierId !== inboundSeller.id) {
+      console.log(
+        `[communication-hub] claiming ${o.id} for seller ${inboundSeller.id} (was ${o.supplierId || "none"})`
+      );
+      updateOrderMeta(o.id, { supplierId: inboundSeller.id });
+      o = getOrder(o.id) || o;
+    }
+    return { ok: true, order: o };
+  }
+
+  return {
+    ok: false,
+    order: o,
+    reason: "wrong_seller",
+    inboundSellerId: inboundSeller.id,
+    orderSupplierId: o.supplierId || null,
+    productSupplierId: product?.supplierId || null,
+  };
 }
 
 export function isPaidHeld(order) {
@@ -642,7 +717,6 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
     await sendSafeWhatsApp(customerKey, `Order *${orderId}* not found. Check the SK from your sale alert.`);
     return;
   }
-  order = (await ensureOrderSupplier(order)) || order;
   if (isAdminTakeOver(order) || order.disputeHold) {
     await sendSafeWhatsApp(
       customerKey,
@@ -650,11 +724,32 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
     );
     return;
   }
-  if (!sellerOwnsOrder(order, phone, customerKey)) {
-    const hint = order.supplierId
-      ? `Use the WhatsApp number linked to this sale (same one that got the paid alert), or reply *vendor menu*.`
-      : `This order has no seller account linked yet — reply *vendor menu* or HELP ${order.id}.`;
-    await sendSafeWhatsApp(customerKey, `*${order.id}* is not on your seller account.\n${hint}`);
+
+  const auth = await authorizeSellerForOrder(order, phone, customerKey);
+  order = auth.order || order;
+  if (!auth.ok) {
+    console.warn("[communication-hub] DISPATCH denied", {
+      orderId: order.id,
+      reason: auth.reason,
+      phone: normalizePhone(phone) || null,
+      customerKey,
+      inboundSellerId: auth.inboundSellerId || null,
+      orderSupplierId: auth.orderSupplierId || order.supplierId || null,
+      productSupplierId: auth.productSupplierId || null,
+    });
+    if (auth.reason === "not_registered_seller") {
+      await sendSafeWhatsApp(
+        customerKey,
+        `*${order.id}* — this WhatsApp is not a Sokoni seller account yet.\nReply *vendor menu* to sign in, then try:\nDISPATCH ${order.id}`
+      );
+      return;
+    }
+    await sendSafeWhatsApp(
+      customerKey,
+      `*${order.id}* is not linked to your seller shop on Sokoni.\n` +
+        `If this is your sale, reply *vendor menu* once, then:\nDISPATCH ${order.id}\n` +
+        `Or reply HELP ${order.id} so admin can fix the link.`
+    );
     return;
   }
   if (!isPaidHeld(order)) {
