@@ -9,7 +9,7 @@
     explore: { href: "index.html#deals", label: "Explore", icon: "🧭" },
     sell: { href: "suppliers/list.html", label: "Sell", icon: "➕", sell: true },
     inbox: { href: "inbox.html", label: "Inbox", icon: "💬" },
-    profile: { href: "profile.html", label: "Profile", icon: "👤" },
+    profile: { href: "profile.html", label: "Account", icon: "👤" },
   };
 
   function detectPage() {
@@ -31,53 +31,52 @@
     return "home";
   }
 
+  function accountNavHref() {
+    try {
+      return window.SokoniAccountAuth?.isSignedIn?.() ? "profile.html" : "login.html";
+    } catch {
+      return "login.html";
+    }
+  }
+
+  function accountNavLabel() {
+    try {
+      return window.SokoniAccountAuth?.isSignedIn?.() ? "Account" : "Log in";
+    } catch {
+      return "Log in";
+    }
+  }
+
   function headerLinks(page) {
+    const account = { href: accountNavHref(), label: accountNavLabel(), account: true };
     if (page === "activity") {
-      return [
-        { href: "ask.html", label: "Ask" },
-        { href: "inbox.html", label: "Inbox" },
-      ];
+      return [{ href: "ask.html", label: "Ask" }, account];
     }
     if (page === "inbox") {
-      return [
-        { href: "activity.html", label: "Activity" },
-        { href: "disputes.html", label: "Disputes" },
-      ];
+      return [{ href: "activity.html", label: "Activity" }, account];
     }
     if (page === "disputes") {
-      return [
-        { href: "track.html", label: "Track" },
-        { href: "inbox.html", label: "Inbox" },
-      ];
+      return [{ href: "track.html", label: "Track" }, account];
     }
     if (page === "shop") {
-      return [
-        { href: "ask.html", label: "Ask" },
-        { href: "profile.html", label: "Profile" },
-      ];
+      return [{ href: "ask.html", label: "Ask" }, account];
     }
     if (page === "track") {
-      return [
-        { href: "disputes.html", label: "Disputes" },
-        { href: "profile.html", label: "Profile" },
-      ];
+      return [{ href: "disputes.html", label: "Disputes" }, account];
     }
     if (page === "ask") {
-      return [
-        { href: "track.html", label: "Track" },
-        { href: "profile.html", label: "Profile" },
-      ];
+      return [{ href: "track.html", label: "Track" }, account];
     }
     if (page === "about" || page === "faq" || page === "terms" || page === "privacy") {
       return [
         { href: "faq.html", label: "FAQ" },
-        { href: "about.html", label: "About" },
+        account,
       ];
     }
-    // profile + default
+    // profile + login/signup + default
     return [
       { href: "ask.html", label: "Ask Plug" },
-      { href: "disputes.html", label: "Disputes" },
+      account,
     ];
   }
 
@@ -103,10 +102,12 @@
     const mount = document.getElementById("sokoni-shell-header");
     if (!mount) return;
     const links = headerLinks(page)
-      .map(
-        (l) =>
-          `<a href="${l.href}" class="text-xs font-semibold min-h-[44px] inline-flex items-center px-2 hover:opacity-80">${l.label}</a>`
-      )
+      .map((l) => {
+        if (l.account) {
+          return `<span data-account-nav data-account-nav-class="text-xs font-semibold min-h-[44px] inline-flex items-center px-2 hover:opacity-80"></span>`;
+        }
+        return `<a href="${l.href}" class="text-xs font-semibold min-h-[44px] inline-flex items-center px-2 hover:opacity-80">${l.label}</a>`;
+      })
       .join("");
     mount.outerHTML = `
   <header class="depop-shell-header" aria-label="Sokoni Mall">
@@ -115,6 +116,11 @@
       <div class="depop-header-actions ml-auto">${links}</div>
     </div>
   </header>`;
+    try {
+      window.SokoniAccountAuth?.paintNavSlots?.();
+    } catch {
+      /* optional */
+    }
   }
 
   function renderBottomNav(page) {

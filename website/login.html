@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Log in — Sokoni Mall</title>
+<meta name="description" content="Log in to your Sokoni Mall account to see purchases, saved items, and messages." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () { document.documentElement.classList.add("dark"); })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
+</head>
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="profile">
+  <div id="sokoni-shell-header"></div>
+
+  <main class="depop-main-content max-w-md mx-auto w-full px-5 py-8 flex-1">
+    <section class="depop-card p-6 space-y-4">
+      <p class="depop-label">Welcome back</p>
+      <h1 class="font-display text-3xl font-bold tracking-tight text-white">Log in</h1>
+      <p class="text-sm text-zinc-400">
+        Use the email you signed up with. New here?
+        <a href="signup.html" class="text-[#25D366] font-semibold hover:underline">Create a free account</a>.
+      </p>
+
+      <form id="account-login-form" class="space-y-3" novalidate>
+        <label class="block text-xs font-medium text-zinc-300">
+          Email
+          <input name="email" type="email" required autocomplete="email" placeholder="you@email.com"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <label class="block text-xs font-medium text-zinc-300">
+          Password
+          <input name="password" type="password" required autocomplete="current-password" minlength="8" placeholder="Your password"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <label class="flex items-center gap-2 text-sm text-zinc-300 min-h-[44px]">
+          <input name="rememberMe" type="checkbox" value="1" class="rounded border-zinc-600" />
+          Keep me signed in (30 days)
+        </label>
+        <p id="account-login-form-status" class="text-sm text-zinc-400" role="status" aria-live="polite"></p>
+        <button type="submit" class="w-full min-h-[48px] rounded-full bg-[#25D366] text-[#1B1035] font-bold text-sm hover:opacity-90 transition">
+          Log in
+        </button>
+      </form>
+
+      <p id="login-forgot-hint" class="text-sm text-zinc-500 text-center">
+        Forgot password? Message WhatsApp support for now — email reset lands in a later update.
+      </p>
+    </section>
+  </main>
+
+  <div id="sokoni-shell-nav"></div>
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/account-auth.js"></script>
+</body>
+</html>

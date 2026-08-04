@@ -45,22 +45,63 @@
     node.textContent = `${n} saved item${n === 1 ? "" : "s"} in your bag on this device.`;
   }
 
+  function renderEmailAccount() {
+    const account = window.SokoniAccountAuth?.readSession?.();
+    const signedOut = el("account-email-signed-out");
+    const signedIn = el("account-email-signed-in");
+    if (!signedOut || !signedIn) return account;
+
+    if (!account?.userId) {
+      signedOut.classList.remove("hidden");
+      signedIn.classList.add("hidden");
+      return null;
+    }
+
+    signedOut.classList.add("hidden");
+    signedIn.classList.remove("hidden");
+    const name = el("account-email-name");
+    const email = el("account-email-address");
+    const phone = el("account-email-phone");
+    if (name) name.textContent = account.user?.displayName || "Sokoni member";
+    if (email) email.textContent = account.email || account.user?.email || "";
+    if (phone) {
+      const p = account.user?.phone;
+      phone.textContent = p ? `WhatsApp on file: ${maskPhone(p)}` : "No phone on file yet — add one when linking orders.";
+    }
+    return account;
+  }
+
   function renderSession() {
+    const account = renderEmailAccount();
     const session = window.SokoniBuyerAuth?.readSession?.();
     const card = el("profile-session-card");
     const phoneNode = el("profile-phone");
     const userNode = el("profile-user-id");
 
+    if (account?.userId) {
+      setStatus("Site account signed in. Purchases will show here once phone is linked.");
+    } else if (!session?.userId) {
+      setStatus("Create a free email account, or verify WhatsApp for social features.");
+    }
+
     if (!session?.userId) {
       card?.classList.add("hidden");
-      setStatus("Verify WhatsApp to sync likes, offers, and chats.");
+      if (!account?.userId) {
+        /* status already set */
+      } else {
+        setStatus("Site account signed in. Optional: verify WhatsApp for likes & inbox.");
+      }
       return;
     }
 
     card?.classList.remove("hidden");
     if (phoneNode) phoneNode.textContent = `WhatsApp ${maskPhone(session.phone)}`;
     if (userNode) userNode.textContent = `Buyer #${session.userId}`;
-    setStatus("You're signed in. Activity and Inbox use this same session.");
+    setStatus(
+      account?.userId
+        ? "Email account + WhatsApp verify both active on this device."
+        : "WhatsApp verified. Activity and Inbox use this session."
+    );
   }
 
   async function signOut() {

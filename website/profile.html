@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Your profile — Sokoni Mall</title>
-<meta name="description" content="Sign in with WhatsApp, see saved items, and jump to activity, inbox, or order tracking on Sokoni." />
+<title>Your account — Sokoni Mall</title>
+<meta name="description" content="Sokoni Mall account — email login, purchases, saved items, activity, and order tracking." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -46,17 +46,34 @@
 
   <main class="depop-main-content max-w-3xl mx-auto w-full px-5 py-7 flex-1 flex flex-col gap-4">
     <section class="depop-card p-5 space-y-1">
-      <p class="depop-label">Profile</p>
-      <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Your profile</h1>
+      <p class="depop-label">Account</p>
+      <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Your account</h1>
       <p class="text-sm text-zinc-400 mt-2">
-        WhatsApp sign-in keeps likes, offers, and chats tied to you. Orders stay prepaid with SK tracking.
+        Free email login for the site. WhatsApp verify still powers likes, offers, and inbox until accounts are linked.
       </p>
       <p id="profile-status" class="text-sm mt-2 text-zinc-400" role="status" aria-live="polite"></p>
 
+      <div id="account-email-card" class="mt-4 depop-card !bg-black p-4 space-y-3">
+        <p class="text-sm font-semibold text-white">Site login (email)</p>
+        <div id="account-email-signed-out" class="space-y-2">
+          <p class="text-xs text-zinc-400">New here? Create a free account. Returning? Log in.</p>
+          <div class="flex flex-wrap gap-2">
+            <a href="signup.html" class="depop-btn-accent">Sign up free</a>
+            <a href="login.html" class="depop-btn-ghost">Log in</a>
+          </div>
+        </div>
+        <div id="account-email-signed-in" class="hidden space-y-2">
+          <p id="account-email-name" class="text-sm text-white"></p>
+          <p id="account-email-address" class="text-sm text-zinc-300"></p>
+          <p id="account-email-phone" class="text-xs text-zinc-500"></p>
+          <button id="account-sign-out-btn" type="button" class="depop-btn-ghost">Sign out</button>
+        </div>
+      </div>
+
       <div id="buyer-auth-panel" class="mt-4 depop-card !bg-black p-4 space-y-3">
-        <p class="text-sm font-semibold text-white">Buyer WhatsApp sign-in</p>
+        <p class="text-sm font-semibold text-white">WhatsApp verify (social)</p>
         <p class="text-xs text-zinc-400">
-          Verify once — same session as Activity and Inbox.
+          Optional for likes, offers, and inbox — same as before.
         </p>
         <div class="flex flex-col sm:flex-row gap-2">
           <label class="flex-1 text-xs font-medium text-zinc-300">
@@ -143,6 +160,7 @@
 
   <script src="assets/js/shell-chrome.js"></script>
   <script src="assets/js/depop-nav.js"></script>
+  <script src="assets/js/account-auth.js"></script>
   <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/buyer-profile.js"></script>
 </body>
