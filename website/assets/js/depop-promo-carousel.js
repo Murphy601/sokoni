@@ -103,6 +103,18 @@
       secondaryText: "Chat on WhatsApp",
       secondaryHref: "https://wa.me/254117422428",
     },
+    {
+      image: "assets/images/marketing/trust-exchange-nairobi.jpg",
+      alt: "Seller and buyer shaking hands over a Sokoni Marketplace bag with Track ID SKN-572198-XY",
+      kicker: "Trusted exchange · SK tracking",
+      title: "Meet, hand over, track with confidence.",
+      sub:
+        "Prepaid escrow holds the M-Pesa until delivery. Every order gets an SK track ID — scan, follow, and shop with trust.",
+      primaryText: "Track an order",
+      primaryHref: "track.html",
+      secondaryText: "How escrow works",
+      secondaryHref: "faq.html",
+    },
   ];
 
   function escapeHtml(value) {
