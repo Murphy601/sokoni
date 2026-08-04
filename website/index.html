@@ -5,6 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Sokoni Mall — Brand New & Pre-Loved Marketplace</title>
 <meta name="description" content="Shop brand new and pre-loved fashion across Kenya. 100% prepaid escrow — instant SK order tracking. No COD." />
+<meta name="sokoni-account-gate" content="hard" />
+<script>
+  /* Early hard-gate: avoid shop flash before account-auth.js loads. Bypass with ?gate=soft|off */
+  (function () {
+    try {
+      var q = new URLSearchParams(location.search).get("gate");
+      if (q) localStorage.setItem("sokoni-account-gate", String(q).toLowerCase());
+      var mode = (localStorage.getItem("sokoni-account-gate") || "hard").toLowerCase();
+      if (mode !== "hard") return;
+      var raw = localStorage.getItem("sokoni-account-session");
+      if (!raw) {
+        location.replace("login.html?next=" + encodeURIComponent("index.html" + location.search));
+        return;
+      }
+      var p = JSON.parse(raw);
+      if (!p.token || !p.expiresAt || Number(p.expiresAt) <= Date.now()) {
+        localStorage.removeItem("sokoni-account-session");
+        location.replace("login.html?next=" + encodeURIComponent("index.html"));
+      }
+    } catch (e) {}
+  })();
+</script>
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="assets/images/favicon-32.png" sizes="32x32" type="image/png" />
 <link rel="apple-touch-icon" href="assets/images/logo-apple-touch.png" />
@@ -602,6 +624,7 @@
 
   <script src="assets/js/component-handler.js"></script>
   <script src="assets/js/account-auth.js"></script>
+  <script src="assets/js/account-gate.js"></script>
   <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/browse.js"></script>
   <script src="assets/js/depop-hero-carousel.js"></script>
