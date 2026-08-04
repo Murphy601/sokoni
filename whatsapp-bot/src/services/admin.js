@@ -404,6 +404,7 @@ function adminHelpText() {
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
     `🆔 *#SK-1042 <message>* — message buyer (starts ADMIN_TAKE_OVER / silent bot)\n` +
     `🆘 *#resolve SK-1042* — end support takeover, resume bot\n` +
+    `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
     `🖥️ Support inbox — https://sokonimall.com/admin-support.html?token=...\n` +
     `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
     `   · GET /admin/suppliers/seller-listings/flagged?token=...\n` +
