@@ -4,6 +4,7 @@ const API_BASE =
     : "https://bot.sokonimall.com";
 
 const SOCIAL_API = `${API_BASE}/api/social`;
+const PRODUCTS_API = `${API_BASE}/api/products`;
 const SELLER_PHONE_KEY = "sokoni-seller-phone";
 const SELLER_VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 
@@ -157,11 +158,118 @@ function renderInboxHomeHint({ signedIn }) {
   if (!empty) return;
   empty.classList.remove("hidden");
   if (signedIn) {
-    empty.innerHTML = `You're signed in. Tap a <strong class="text-white">recently viewed</strong> fit above, or open a shop and hit Message — then this thread unlocks.
+    empty.innerHTML = `You're signed in. Pick a <strong class="text-white">shop below</strong>, or tap a recently viewed fit — then this thread unlocks.
       <span class="block mt-2"><a href="index.html#deals" class="text-[#FF2300] font-semibold hover:underline">Browse fits</a>
       · <a href="activity.html" class="text-[#FF2300] font-semibold hover:underline">Open activity</a></span>`;
   } else {
-    empty.innerHTML = `Verify WhatsApp above, then open a shop (or tap a recently viewed fit) to start chatting.`;
+    empty.innerHTML = `Verify WhatsApp above, then pick a shop below (or a recently viewed fit) to start chatting.`;
+  }
+  void loadAvailableShops();
+}
+
+function shopPickerVisible(show) {
+  const section = el("inbox-shops-section");
+  if (!section) return;
+  section.classList.toggle("hidden", !show);
+}
+
+function collectShopsFromProducts(products) {
+  const map = new Map();
+  for (const product of products || []) {
+    const handle = normalizeHandle(product.sellerHandle || product.shopHandle || product.handle);
+    const userId = parsePositiveInt(product.sellerUserId);
+    if (!handle && !userId) continue;
+    const key = handle || `id:${userId}`;
+    const current = map.get(key) || {
+      handle,
+      userId,
+      name: "",
+      listings: 0,
+      avatarUrl: "",
+      sampleProductId: product.id || product.productId || "",
+    };
+    current.listings += 1;
+    if (!current.userId && userId) current.userId = userId;
+    if (!current.handle && handle) current.handle = handle;
+    if (!current.name) {
+      current.name = String(product.shopName || product.sellerName || product.supplierName || "").trim();
+    }
+    if (!current.avatarUrl) {
+      current.avatarUrl = String(product.sellerAvatarUrl || product.avatarUrl || "").trim();
+    }
+    if (!current.sampleProductId) current.sampleProductId = product.id || product.productId || "";
+    map.set(key, current);
+  }
+  return [...map.values()]
+    .filter((s) => s.handle || s.userId)
+    .sort((a, b) => b.listings - a.listings || String(a.handle || "").localeCompare(String(b.handle || "")))
+    .slice(0, 20);
+}
+
+function inboxHrefForShop(shop) {
+  const params = new URLSearchParams();
+  if (shop.handle) params.set("handle", shop.handle);
+  if (shop.userId) params.set("with", String(shop.userId));
+  if (shop.sampleProductId) params.set("product", String(shop.sampleProductId));
+  return `inbox.html?${params.toString()}`;
+}
+
+function renderAvailableShops(shops) {
+  const list = el("inbox-shops-list");
+  const empty = el("inbox-shops-empty");
+  if (!list) return;
+  if (!shops.length) {
+    list.innerHTML = "";
+    empty?.classList.remove("hidden");
+    return;
+  }
+  empty?.classList.add("hidden");
+  list.innerHTML = shops
+    .map((shop) => {
+      const handle = formatHandle(shop.handle) || (shop.userId ? `Shop #${shop.userId}` : "Shop");
+      const name = shop.name || "Sokoni seller";
+      const avatar = shop.avatarUrl
+        ? `<img src="${escapeHtml(shop.avatarUrl)}" alt="" loading="lazy" decoding="async" />`
+        : "🏪";
+      return `<a class="inbox-shop-row" role="listitem" href="${escapeHtml(inboxHrefForShop(shop))}">
+        <span class="inbox-shop-avatar" aria-hidden="true">${avatar}</span>
+        <span class="inbox-shop-meta">
+          <strong>${escapeHtml(handle)}</strong>
+          <span>${escapeHtml(name)} · ${shop.listings} live listing${shop.listings === 1 ? "" : "s"}</span>
+        </span>
+        <span class="inbox-shop-cta">Message</span>
+      </a>`;
+    })
+    .join("");
+}
+
+async function loadAvailableShops() {
+  const list = el("inbox-shops-list");
+  if (!list) return;
+  // Hide picker once a peer thread is selected.
+  if (state.peerId || state.peerHandle) {
+    shopPickerVisible(false);
+    return;
+  }
+  shopPickerVisible(true);
+  if (!list.dataset.loading) {
+    list.dataset.loading = "1";
+    list.innerHTML = `<p class="text-sm text-zinc-500 px-1">Loading shops…</p>`;
+  }
+  try {
+    const res = await fetch(`${PRODUCTS_API}?limit=60&offset=0`);
+    const data = await res.json().catch(() => ({}));
+    const products = Array.isArray(data?.products) ? data.products : [];
+    renderAvailableShops(collectShopsFromProducts(products));
+  } catch {
+    list.innerHTML = "";
+    const empty = el("inbox-shops-empty");
+    if (empty) {
+      empty.classList.remove("hidden");
+      empty.textContent = "Could not load shops right now. Browse the catalog and tap Message on a listing.";
+    }
+  } finally {
+    delete list.dataset.loading;
   }
 }
 
@@ -195,8 +303,12 @@ function beginChatIfReady() {
   if (state.viewerId && state.peerId && state.viewerId === state.peerId) {
     setStatus("You can’t message your own shop in this inbox.", true);
     disableChatComposer();
+    shopPickerVisible(true);
+    void loadAvailableShops();
     return false;
   }
+
+  shopPickerVisible(false);
 
   if (state.sellerAuthRequired && (!state.sellerSession?.phone || !state.sellerSession?.sessionToken)) {
     setStatus(
@@ -749,7 +861,10 @@ function init() {
       setStatus("Loading shop…");
       await resolvePeerFromHandle();
     }
-    beginChatIfReady();
+    const ready = beginChatIfReady();
+    if (!ready && !(state.peerId || state.peerHandle)) {
+      void loadAvailableShops();
+    }
   })();
 }
 
