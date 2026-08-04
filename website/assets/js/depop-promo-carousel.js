@@ -115,6 +115,42 @@
       secondaryText: "How escrow works",
       secondaryHref: "faq.html",
     },
+    {
+      image: "assets/images/marketing/inspect-before-pay.jpg",
+      alt: "Buyer scanning a QR code while unboxing pre-loved sneakers at a Nairobi coffee shop",
+      kicker: "Inspect before you pay · Quality check",
+      title: "Verify the fit before you commit.",
+      sub:
+        "Scan the package QR, check condition photos, and confirm authenticity — escrow keeps your M-Pesa safe until you’re happy.",
+      primaryText: "Shop sneakers",
+      primaryHref: "#deals",
+      secondaryText: "How escrow works",
+      secondaryHref: "faq.html",
+    },
+    {
+      image: "assets/images/marketing/dropoff-hub.jpg",
+      alt: "Staff at a Sokoni drop-off hub handing a branded bag to a courier",
+      kicker: "Drop-off hubs · Across Kenya",
+      title: "Hand it in at a Sokoni hub.",
+      sub:
+        "Sellers drop parcels at partner counters in Nairobi CBD and major towns — couriers pick up, buyers track with SK-####.",
+      primaryText: "Start selling",
+      primaryHref: "suppliers/list.html",
+      secondaryText: "How it works",
+      secondaryHref: "#how-it-works",
+    },
+    {
+      image: "assets/images/marketing/empty-search.jpg",
+      alt: "Minimal dark clothing rack with a spotlight on a sneaker box — nothing listed yet",
+      kicker: "Nothing listed yet · Be first",
+      title: "That search is still waiting for a drop.",
+      sub:
+        "No matching listings right now. Try another keyword — or list the piece yourself and sell it on Sokoni.",
+      primaryText: "Browse all finds",
+      primaryHref: "#deals",
+      secondaryText: "List an item",
+      secondaryHref: "suppliers/list.html",
+    },
   ];
 
   function escapeHtml(value) {
