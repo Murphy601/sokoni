@@ -211,7 +211,8 @@ function inboxHrefForShop(shop) {
   if (shop.handle) params.set("handle", shop.handle);
   if (shop.userId) params.set("with", String(shop.userId));
   if (shop.sampleProductId) params.set("product", String(shop.sampleProductId));
-  return `inbox.html?${params.toString()}`;
+  // Absolute path — Cloudflare rewrites /inbox.html → /inbox
+  return `/inbox.html?${params.toString()}`;
 }
 
 function renderAvailableShops(shops) {
@@ -252,24 +253,28 @@ async function loadAvailableShops() {
     return;
   }
   shopPickerVisible(true);
-  if (!list.dataset.loading) {
-    list.dataset.loading = "1";
-    list.innerHTML = `<p class="text-sm text-zinc-500 px-1">Loading shops…</p>`;
-  }
+  list.innerHTML = `<p class="text-sm text-zinc-500 px-1">Loading shops…</p>`;
   try {
     const res = await fetch(`${PRODUCTS_API}?limit=60&offset=0`);
     const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    }
     const products = Array.isArray(data?.products) ? data.products : [];
-    renderAvailableShops(collectShopsFromProducts(products));
-  } catch {
+    const shops = collectShopsFromProducts(products);
+    renderAvailableShops(shops);
+    if (shops.length) {
+      setStatus(`Pick a shop below to chat (${shops.length} available).`);
+    }
+  } catch (err) {
     list.innerHTML = "";
     const empty = el("inbox-shops-empty");
     if (empty) {
       empty.classList.remove("hidden");
-      empty.textContent = "Could not load shops right now. Browse the catalog and tap Message on a listing.";
+      empty.textContent =
+        "Could not load shops right now. Browse the catalog and tap Message on a listing.";
     }
-  } finally {
-    delete list.dataset.loading;
+    console.warn("[inbox] loadAvailableShops failed:", err?.message || err);
   }
 }
 
@@ -808,6 +813,13 @@ function init() {
   parseQuery();
   setPeerLabel();
   syncMakeOfferButton();
+  // Load shops immediately so “Pick a shop” always has a real list under the header.
+  if (!(state.peerId || state.peerHandle)) {
+    shopPickerVisible(true);
+    void loadAvailableShops();
+  } else {
+    shopPickerVisible(false);
+  }
   window.SokoniRecentlyViewed?.renderCarousel?.("inbox-recently-viewed", {
     onSelect: ({ id, handle, sellerUserId }) => {
       const params = new URLSearchParams();

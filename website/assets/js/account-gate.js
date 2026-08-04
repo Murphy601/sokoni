@@ -98,8 +98,9 @@
     }
 
     if ((mode === "soft" || mode === "hard") && isSoftProtectedPage() && !isSignedIn()) {
-      // profile.html shows its own signup CTAs — don't bounce
-      if (currentPageFile().toLowerCase() === "profile.html") {
+      const page = currentPageFile().toLowerCase();
+      // These pages have their own WhatsApp / account CTAs — don't bounce before content loads.
+      if (page === "profile.html" || page === "inbox.html" || page === "activity.html" || page === "disputes.html") {
         return { mode, blocked: false };
       }
       redirectToLogin();
