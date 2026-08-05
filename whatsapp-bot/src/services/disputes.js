@@ -546,16 +546,30 @@ export async function resolveDispute({
   const dispute = mapDisputeRow(rows[0]);
   const resolvedOrder = getOrder(detail.dispute.orderRef);
   if (resolvedOrder) {
+    // End WhatsApp ADMIN_TAKE_OVER / handoff so the bot resumes (same as admin #done).
+    try {
+      const { resolveAdminTakeOver } = await import("./communication-hub.js");
+      await resolveAdminTakeOver(resolvedOrder.id, {
+        note: `dispute ${dispute.id} resolved_${action}`,
+        notifyParties: false,
+      });
+    } catch (err) {
+      console.warn("[disputes] resume bot after resolve failed:", err?.message || err);
+    }
+
     const outcome =
       action === "refund"
         ? "Refund approved — we’ll process the M-Pesa refund."
         : "Released to seller — dispute closed in seller’s favour.";
     const noteBit = adminNotes ? `\nNote: ${adminNotes.slice(0, 120)}` : "";
-    void notifyDisputeParties(resolvedOrder, dispute, {
+    const resumed = `\nBot is active again on WhatsApp.`;
+    void notifyDisputeParties(getOrder(resolvedOrder.id) || resolvedOrder, dispute, {
       eventType: "DISPUTE_RESOLVED",
-      adminDetails: `Dispute #${dispute.id} resolved: ${action}${noteBit}`,
-      buyerMessage: `✅ Dispute on *${resolvedOrder.id}* resolved: ${outcome}${noteBit}`,
-      sellerMessage: `✅ Dispute on *${resolvedOrder.id}* resolved: ${outcome}${noteBit}`,
+      adminDetails:
+        `Dispute #${dispute.id} resolved: ${action}${noteBit}\n` +
+        `Bot resumed (same as #done ${resolvedOrder.id}).`,
+      buyerMessage: `✅ Dispute on *${resolvedOrder.id}* resolved: ${outcome}${noteBit}${resumed}`,
+      sellerMessage: `✅ Dispute on *${resolvedOrder.id}* resolved: ${outcome}${noteBit}${resumed}`,
     });
   }
   return { success: true, dispute };
