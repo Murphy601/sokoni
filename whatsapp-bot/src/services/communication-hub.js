@@ -504,7 +504,7 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
       (orderId ? `Order: *${orderId}*\n` : "") +
       `${details}\n\n` +
       (orderId
-        ? `Reply to user: *#${orderId} <message>*\nEnd takeover: *#resolve ${orderId}*`
+        ? `Reply to user: *#${orderId} <message>*\nEnd takeover: *#done ${orderId}*`
         : `*#help* for admin commands`)
   );
 }
@@ -707,7 +707,7 @@ async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) 
       `Said: "${String(rawText || "").slice(0, 160)}"\n` +
       `Escrow FROZEN. Bot is silent — messages relay here.\n` +
       `Reply: #${order.id} <message>\n` +
-      `End: #resolve ${order.id}`,
+      `End: #done ${order.id}`,
   });
 
   // Alert the other party (buyer↔seller) — was missing before.
@@ -722,8 +722,9 @@ async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) 
 
 /**
  * End ADMIN_TAKE_OVER — bot resumes; escrow unfreeze only if no open DB dispute.
+ * Admin WhatsApp: *#done SK-####* (alias *#resolve*). Buyer/seller: *DONE*.
  */
-export async function resolveAdminTakeOver(orderId, { note = "" } = {}) {
+export async function resolveAdminTakeOver(orderId, { note = "", notifyParties = true } = {}) {
   const id = normalizeOrderId(orderId) || String(orderId || "").toUpperCase();
   const order = getOrder(id);
   if (!order) return { error: "not_found", message: "Order not found." };
@@ -746,7 +747,13 @@ export async function resolveAdminTakeOver(orderId, { note = "" } = {}) {
     payoutStatus: keepDisputeHold ? "held_for_dispute" : order.payoutStatus === "held_for_dispute" ? "scheduled" : order.payoutStatus,
   });
 
-  if (order.customerKey) clearHumanHandoff(order.customerKey);
+  const parties = await getOrderPartyChats(order, {
+    sellerUserId: order.sellerUserId || order.seller_user_id || null,
+  });
+  for (const chat of [...parties.buyer, ...parties.seller]) {
+    clearHumanHandoff(chat);
+  }
+  // Also clear classic supplier chat id if not already covered.
   const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
   if (supplier?.phone) clearHumanHandoff(toChatId(supplier.phone));
 
@@ -757,22 +764,17 @@ export async function resolveAdminTakeOver(orderId, { note = "" } = {}) {
   });
 
   const fresh = getOrder(order.id);
-  void dispatchMessages([
-    fresh.customerKey
-      ? {
-          to: fresh.customerKey,
-          message: `✅ Support closed for *${fresh.id}*. Bot is active again. Type *${fresh.id}* to track.`,
-        }
-      : null,
-    supplier?.phone
-      ? {
-          to: toChatId(supplier.phone),
-          message: `✅ Support closed for *${fresh.id}*. Bot is active again.`,
-        }
-      : null,
-  ]);
+  if (notifyParties) {
+    const buyerMsg = `✅ Support closed for *${fresh.id}*. Bot is active again. Type *${fresh.id}* to track.`;
+    const sellerMsg = `✅ Support closed for *${fresh.id}*. Bot is active again.`;
+    void notifyOrderParties(fresh, {
+      buyerMessage: parties.buyer.length ? buyerMsg : null,
+      sellerMessage: parties.seller.length ? sellerMsg : null,
+      sellerUserId: fresh.sellerUserId || fresh.seller_user_id || null,
+    });
+  }
 
-  return { ok: true, order: fresh };
+  return { ok: true, order: fresh, disputeHold: keepDisputeHold };
 }
 
 /** Admin dashboard / #SK reply — append outbound + ensure takeover. */
@@ -829,7 +831,7 @@ export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = 
 
   const role = roleForSender(order, customerKey, phone);
 
-  // Buyer/seller can end support without waiting for admin #resolve.
+  // Buyer/seller can end support without waiting for admin #done.
   if (isSupportDoneCommand(trimmed)) {
     if (role === "USER") {
       await sendSafeWhatsApp(
@@ -871,7 +873,7 @@ export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = 
     details:
       `📨 *${order.id}* · ${role}${phone ? ` (+${normalizePhone(phone)})` : ""}\n` +
       `${trimmed.slice(0, 800)}\n\n` +
-      `Reply: *#${order.id} <message>*\nEnd: *#resolve ${order.id}* · User can also reply *DONE*`,
+      `Reply: *#${order.id} <message>*\nEnd: *#done ${order.id}* · User can also reply *DONE*`,
   });
 
   // Forward to the other party (buyer↔seller), not only admin.
@@ -986,7 +988,7 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
   if (isAdminTakeOver(order) || order.disputeHold) {
     await sendSafeWhatsApp(
       customerKey,
-      `*${order.id}* is with Sokoni support right now. Reply *DONE* when finished, or wait for admin.`
+      `*${order.id}* is with Sokoni support right now. Reply *DONE* when finished, or wait for admin *#done ${order.id}*.`
     );
     return;
   }

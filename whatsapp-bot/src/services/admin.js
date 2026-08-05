@@ -217,7 +217,7 @@ export function registerAdminChatId(chatId, phone = "") {
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|payb2c|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|payb2c|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit|resolve|done)\b/i.test(t)) return true;
   if (/^#SK-\d+\s+/i.test(t)) return true;
   return false;
 }
@@ -402,8 +402,9 @@ function adminHelpText() {
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
-    `🆔 *#SK-1042 <message>* — message buyer (starts ADMIN_TAKE_OVER / silent bot)\n` +
-    `🆘 *#resolve SK-1042* — end support takeover, resume bot\n` +
+    `🆔 *#SK-1042 <message>* — message buyer/seller (starts ADMIN_TAKE_OVER / silent bot)\n` +
+    `✅ *#done SK-1042* — end dispute/help takeover, resume bot\n` +
+    `   _(alias: *#resolve SK-1042* · or *#done* alone if only one open thread)_\n` +
     `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
     `🖥️ Support inbox — https://sokonimall.com/admin-support.html?token=...\n` +
     `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
@@ -902,7 +903,7 @@ function getBroadcastRecipients() {
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
   const embedded = t.match(
-    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|resolve)\b[\s\S]*/i
+    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|resolve|done)\b[\s\S]*/i
   );
   if (embedded) return embedded[0].trim();
   const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
@@ -949,25 +950,56 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
       .join(" + ");
     return sendText(
       adminChatId,
-      `✅ Sent to *${who || "no chats"}* (${order.id}). Bot is silent on those chats.\nEnd: *#resolve ${order.id}*`
+      `✅ Sent to *${who || "no chats"}* (${order.id}). Bot is silent on those chats.\nEnd: *#done ${order.id}*`
     );
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed to send: ${err.message}`);
   }
 }
 
-async function handleResolveSupportCommand(adminChatId, rest) {
-  const m = String(rest || "").trim().match(/SK-?(\d{3,})/i);
-  if (!m) {
-    return sendText(adminChatId, "Usage: *#resolve SK-1042*");
+function listOpenTakeOverOrders(limit = 20) {
+  return listRecentOrders(200)
+    .filter((o) => o?.adminTakeOver || o?.supportStatus === "ADMIN_TAKE_OVER")
+    .slice(0, limit);
+}
+
+/**
+ * Admin ends HELP/dispute takeover and resumes the bot.
+ * Accepts: #done SK-1042 · #resolve SK-1042 · #done (if exactly one open thread)
+ */
+async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } = {}) {
+  const raw = String(rest || "").trim();
+  let orderId = null;
+  const m = raw.match(/SK-?(\d{3,})/i);
+  if (m) {
+    orderId = `SK-${m[1]}`;
+  } else if (!raw) {
+    const open = listOpenTakeOverOrders();
+    if (open.length === 1) {
+      orderId = open[0].id;
+    } else if (open.length === 0) {
+      return sendText(adminChatId, "No open support/dispute takeovers. Usage: *#done SK-1042*");
+    } else {
+      const lines = open.slice(0, 10).map((o) => `• *#done ${o.id}* — ${o.productName || "order"}`);
+      return sendText(
+        adminChatId,
+        `Several takeovers are open — pick one:\n${lines.join("\n")}` +
+          (open.length > 10 ? `\n…+${open.length - 10} more` : "")
+      );
+    }
+  } else {
+    return sendText(adminChatId, "Usage: *#done SK-1042* (or *#resolve SK-1042*)");
   }
-  const orderId = `SK-${m[1]}`;
+
   const { resolveAdminTakeOver } = await import("./communication-hub.js");
-  const result = await resolveAdminTakeOver(orderId, { note: "resolved via #resolve" });
+  const result = await resolveAdminTakeOver(orderId, { note: `resolved via #${via}` });
   if (result.error) {
     return sendText(adminChatId, `⚠️ ${result.message || result.error}`);
   }
-  return sendText(adminChatId, `✅ Support closed for *${orderId}*. Bot resumed.`);
+  const hold = result.order?.disputeHold
+    ? "\n⚠️ Escrow still on dispute hold until the in-app dispute is resolved."
+    : "";
+  return sendText(adminChatId, `✅ Support closed for *${orderId}*. Bot resumed.${hold}`);
 }
 
 /** Parse and run an admin command. Returns true if handled. */
@@ -1088,8 +1120,9 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
     return true;
   }
 
-  if (/^#resolve\b/i.test(t)) {
-    await handleResolveSupportCommand(adminChatId, t.replace(/^#resolve\b/i, ""));
+  if (/^#(?:done|resolve)\b/i.test(t)) {
+    const via = /^#done\b/i.test(t) ? "done" : "resolve";
+    await handleResolveSupportCommand(adminChatId, t.replace(/^#(?:done|resolve)\b/i, ""), { via });
     return true;
   }
 
