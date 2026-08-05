@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "itemTypes": [
     {
       "id": "all",
@@ -1452,6 +1452,401 @@
       ]
     },
     {
+      "id": "sokoni-mashinani",
+      "label": "Sokoni Mashinani",
+      "emoji": "🌾",
+      "aliases": [
+        "farm",
+        "farmers",
+        "agriculture",
+        "produce",
+        "mashinani",
+        "mama mboga",
+        "livestock",
+        "farm fresh"
+      ],
+      "subcategories": [
+        {
+          "id": "fruits-vegetables",
+          "label": "Fruits & Vegetables",
+          "image": "https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=600&h=600&q=80&sig=301"
+        },
+        {
+          "id": "dairy-eggs",
+          "label": "Dairy & Eggs",
+          "image": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?auto=format&fit=crop&w=600&h=600&q=80&sig=302"
+        },
+        {
+          "id": "grains-cereals",
+          "label": "Grains & Cereals",
+          "image": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&h=600&q=80&sig=303"
+        },
+        {
+          "id": "livestock",
+          "label": "Livestock",
+          "image": "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?auto=format&fit=crop&w=600&h=600&q=80&sig=304"
+        },
+        {
+          "id": "poultry",
+          "label": "Poultry",
+          "image": "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?auto=format&fit=crop&w=600&h=600&q=80&sig=305"
+        },
+        {
+          "id": "fresh-herbs",
+          "label": "Fresh Herbs",
+          "image": "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=600&h=600&q=80&sig=306"
+        },
+        {
+          "id": "honey-bee",
+          "label": "Honey & Bee Products",
+          "image": "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&h=600&q=80&sig=307"
+        },
+        {
+          "id": "tubers-roots",
+          "label": "Tubers & Roots",
+          "image": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&h=600&q=80&sig=308"
+        },
+        {
+          "id": "farm-oils",
+          "label": "Farm Oils",
+          "image": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=600&h=600&q=80&sig=309"
+        },
+        {
+          "id": "nuts-legumes",
+          "label": "Nuts & Legumes",
+          "image": "https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=600&h=600&q=80&sig=310"
+        },
+        {
+          "id": "spices-chilies",
+          "label": "Spices & Chilies",
+          "image": "https://images.unsplash.com/photo-1506368083636-6defb67639a7?auto=format&fit=crop&w=600&h=600&q=80&sig=311"
+        },
+        {
+          "id": "coffee-tea-leaves",
+          "label": "Coffee & Tea Leaves",
+          "image": "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=600&h=600&q=80&sig=312"
+        },
+        {
+          "id": "fish-aquaculture",
+          "label": "Fish & Aquaculture",
+          "image": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&h=600&q=80&sig=313"
+        },
+        {
+          "id": "flowers-plants",
+          "label": "Flowers & Plants",
+          "image": "https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=600&h=600&q=80&sig=314"
+        },
+        {
+          "id": "farm-tools",
+          "label": "Farm Tools",
+          "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=315"
+        },
+        {
+          "id": "organic-produce",
+          "label": "Organic Produce",
+          "image": "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&h=600&q=80&sig=316"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=600&h=600&q=80&sig=22",
+      "groups": [
+        {
+          "title": "Fresh produce",
+          "subcategories": [
+            {
+              "id": "fruits-vegetables",
+              "label": "Fruits & Vegetables",
+              "image": "https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=600&h=600&q=80&sig=301"
+            },
+            {
+              "id": "tubers-roots",
+              "label": "Tubers & Roots",
+              "image": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&h=600&q=80&sig=308"
+            },
+            {
+              "id": "fresh-herbs",
+              "label": "Fresh Herbs",
+              "image": "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=600&h=600&q=80&sig=306"
+            },
+            {
+              "id": "organic-produce",
+              "label": "Organic Produce",
+              "image": "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&h=600&q=80&sig=316"
+            }
+          ]
+        },
+        {
+          "title": "Farm staples",
+          "subcategories": [
+            {
+              "id": "grains-cereals",
+              "label": "Grains & Cereals",
+              "image": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=600&h=600&q=80&sig=303"
+            },
+            {
+              "id": "nuts-legumes",
+              "label": "Nuts & Legumes",
+              "image": "https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=600&h=600&q=80&sig=310"
+            },
+            {
+              "id": "spices-chilies",
+              "label": "Spices & Chilies",
+              "image": "https://images.unsplash.com/photo-1506368083636-6defb67639a7?auto=format&fit=crop&w=600&h=600&q=80&sig=311"
+            },
+            {
+              "id": "farm-oils",
+              "label": "Farm Oils",
+              "image": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=600&h=600&q=80&sig=309"
+            }
+          ]
+        },
+        {
+          "title": "Dairy & protein",
+          "subcategories": [
+            {
+              "id": "dairy-eggs",
+              "label": "Dairy & Eggs",
+              "image": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?auto=format&fit=crop&w=600&h=600&q=80&sig=302"
+            },
+            {
+              "id": "livestock",
+              "label": "Livestock",
+              "image": "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?auto=format&fit=crop&w=600&h=600&q=80&sig=304"
+            },
+            {
+              "id": "poultry",
+              "label": "Poultry",
+              "image": "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?auto=format&fit=crop&w=600&h=600&q=80&sig=305"
+            },
+            {
+              "id": "fish-aquaculture",
+              "label": "Fish & Aquaculture",
+              "image": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&h=600&q=80&sig=313"
+            }
+          ]
+        },
+        {
+          "title": "Farm extras",
+          "subcategories": [
+            {
+              "id": "honey-bee",
+              "label": "Honey & Bee Products",
+              "image": "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&h=600&q=80&sig=307"
+            },
+            {
+              "id": "coffee-tea-leaves",
+              "label": "Coffee & Tea Leaves",
+              "image": "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=600&h=600&q=80&sig=312"
+            },
+            {
+              "id": "flowers-plants",
+              "label": "Flowers & Plants",
+              "image": "https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=600&h=600&q=80&sig=314"
+            },
+            {
+              "id": "farm-tools",
+              "label": "Farm Tools",
+              "image": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=600&h=600&q=80&sig=315"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "artisans",
+      "label": "Artisans & Crafts",
+      "emoji": "🪵",
+      "aliases": [
+        "artisans",
+        "crafts",
+        "makers",
+        "handmade",
+        "woodwork",
+        "kitenge",
+        "tailor",
+        "mama mboga crafts"
+      ],
+      "subcategories": [
+        {
+          "id": "wood-furniture",
+          "label": "Wood Furniture",
+          "image": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=600&h=600&q=80&sig=331"
+        },
+        {
+          "id": "textiles-kitenge",
+          "label": "Textiles & Kitenge",
+          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=332"
+        },
+        {
+          "id": "home-decor",
+          "label": "Home Decor",
+          "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&h=600&q=80&sig=333"
+        },
+        {
+          "id": "traditional-wear",
+          "label": "Traditional Wear",
+          "image": "https://images.unsplash.com/photo-1594736797933-d0501ba2fe65?auto=format&fit=crop&w=600&h=600&q=80&sig=334"
+        },
+        {
+          "id": "beadwork-jewelry",
+          "label": "Beadwork & Jewelry",
+          "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&h=600&q=80&sig=335"
+        },
+        {
+          "id": "pottery-ceramics",
+          "label": "Pottery & Ceramics",
+          "image": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&h=600&q=80&sig=336"
+        },
+        {
+          "id": "baskets-weaving",
+          "label": "Baskets & Weaving",
+          "image": "https://images.unsplash.com/photo-1606768666853-403c90a981ad?auto=format&fit=crop&w=600&h=600&q=80&sig=337"
+        },
+        {
+          "id": "leather-goods",
+          "label": "Leather Goods",
+          "image": "https://images.unsplash.com/photo-1473187983305-f615310e7daa?auto=format&fit=crop&w=600&h=600&q=80&sig=338"
+        },
+        {
+          "id": "metalwork",
+          "label": "Metalwork",
+          "image": "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=600&h=600&q=80&sig=339"
+        },
+        {
+          "id": "carvings-sculpture",
+          "label": "Carvings & Sculpture",
+          "image": "https://images.unsplash.com/photo-1578926375605-eaf7559b1458?auto=format&fit=crop&w=600&h=600&q=80&sig=340"
+        },
+        {
+          "id": "handmade-shoes",
+          "label": "Handmade Shoes",
+          "image": "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?auto=format&fit=crop&w=600&h=600&q=80&sig=341"
+        },
+        {
+          "id": "soap-candles",
+          "label": "Soap & Candles",
+          "image": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=600&h=600&q=80&sig=342"
+        },
+        {
+          "id": "crochet-knit",
+          "label": "Crochet & Knit",
+          "image": "https://images.unsplash.com/photo-1606923829579-0cb981a83e2e?auto=format&fit=crop&w=600&h=600&q=80&sig=343"
+        },
+        {
+          "id": "custom-tailoring",
+          "label": "Custom Tailoring",
+          "image": "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&h=600&q=80&sig=344"
+        },
+        {
+          "id": "local-art",
+          "label": "Local Art",
+          "image": "https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=600&h=600&q=80&sig=345"
+        },
+        {
+          "id": "handmade-toys",
+          "label": "Handmade Toys",
+          "image": "https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&w=600&h=600&q=80&sig=346"
+        }
+      ],
+      "image": "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=600&h=600&q=80&sig=23",
+      "groups": [
+        {
+          "title": "Furniture & wood",
+          "subcategories": [
+            {
+              "id": "wood-furniture",
+              "label": "Wood Furniture",
+              "image": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=600&h=600&q=80&sig=331"
+            },
+            {
+              "id": "carvings-sculpture",
+              "label": "Carvings & Sculpture",
+              "image": "https://images.unsplash.com/photo-1578926375605-eaf7559b1458?auto=format&fit=crop&w=600&h=600&q=80&sig=340"
+            },
+            {
+              "id": "home-decor",
+              "label": "Home Decor",
+              "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&h=600&q=80&sig=333"
+            }
+          ]
+        },
+        {
+          "title": "Textiles & wear",
+          "subcategories": [
+            {
+              "id": "textiles-kitenge",
+              "label": "Textiles & Kitenge",
+              "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=332"
+            },
+            {
+              "id": "traditional-wear",
+              "label": "Traditional Wear",
+              "image": "https://images.unsplash.com/photo-1594736797933-d0501ba2fe65?auto=format&fit=crop&w=600&h=600&q=80&sig=334"
+            },
+            {
+              "id": "custom-tailoring",
+              "label": "Custom Tailoring",
+              "image": "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&h=600&q=80&sig=344"
+            },
+            {
+              "id": "crochet-knit",
+              "label": "Crochet & Knit",
+              "image": "https://images.unsplash.com/photo-1606923829579-0cb981a83e2e?auto=format&fit=crop&w=600&h=600&q=80&sig=343"
+            }
+          ]
+        },
+        {
+          "title": "Handmade goods",
+          "subcategories": [
+            {
+              "id": "beadwork-jewelry",
+              "label": "Beadwork & Jewelry",
+              "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&h=600&q=80&sig=335"
+            },
+            {
+              "id": "baskets-weaving",
+              "label": "Baskets & Weaving",
+              "image": "https://images.unsplash.com/photo-1606768666853-403c90a981ad?auto=format&fit=crop&w=600&h=600&q=80&sig=337"
+            },
+            {
+              "id": "pottery-ceramics",
+              "label": "Pottery & Ceramics",
+              "image": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&h=600&q=80&sig=336"
+            },
+            {
+              "id": "leather-goods",
+              "label": "Leather Goods",
+              "image": "https://images.unsplash.com/photo-1473187983305-f615310e7daa?auto=format&fit=crop&w=600&h=600&q=80&sig=338"
+            }
+          ]
+        },
+        {
+          "title": "Craft extras",
+          "subcategories": [
+            {
+              "id": "metalwork",
+              "label": "Metalwork",
+              "image": "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=600&h=600&q=80&sig=339"
+            },
+            {
+              "id": "handmade-shoes",
+              "label": "Handmade Shoes",
+              "image": "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?auto=format&fit=crop&w=600&h=600&q=80&sig=341"
+            },
+            {
+              "id": "soap-candles",
+              "label": "Soap & Candles",
+              "image": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=600&h=600&q=80&sig=342"
+            },
+            {
+              "id": "local-art",
+              "label": "Local Art",
+              "image": "https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=600&h=600&q=80&sig=345"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "restaurant",
       "label": "Restaurant",
       "emoji": "🍽️",
@@ -2153,6 +2548,178 @@
     "home-office/lighting": {
       "browse": "home",
       "sub": "lighting"
+    },
+    "sokoni-mashinani": {
+      "browse": "sokoni-mashinani",
+      "sub": "fruits-vegetables"
+    },
+    "sokoni-mashinani/fruits-vegetables": {
+      "browse": "sokoni-mashinani",
+      "sub": "fruits-vegetables"
+    },
+    "sokoni-mashinani/dairy-eggs": {
+      "browse": "sokoni-mashinani",
+      "sub": "dairy-eggs"
+    },
+    "sokoni-mashinani/grains-cereals": {
+      "browse": "sokoni-mashinani",
+      "sub": "grains-cereals"
+    },
+    "sokoni-mashinani/livestock": {
+      "browse": "sokoni-mashinani",
+      "sub": "livestock"
+    },
+    "sokoni-mashinani/poultry": {
+      "browse": "sokoni-mashinani",
+      "sub": "poultry"
+    },
+    "sokoni-mashinani/fresh-herbs": {
+      "browse": "sokoni-mashinani",
+      "sub": "fresh-herbs"
+    },
+    "sokoni-mashinani/honey-bee": {
+      "browse": "sokoni-mashinani",
+      "sub": "honey-bee"
+    },
+    "sokoni-mashinani/tubers-roots": {
+      "browse": "sokoni-mashinani",
+      "sub": "tubers-roots"
+    },
+    "sokoni-mashinani/farm-oils": {
+      "browse": "sokoni-mashinani",
+      "sub": "farm-oils"
+    },
+    "sokoni-mashinani/nuts-legumes": {
+      "browse": "sokoni-mashinani",
+      "sub": "nuts-legumes"
+    },
+    "sokoni-mashinani/spices-chilies": {
+      "browse": "sokoni-mashinani",
+      "sub": "spices-chilies"
+    },
+    "sokoni-mashinani/coffee-tea-leaves": {
+      "browse": "sokoni-mashinani",
+      "sub": "coffee-tea-leaves"
+    },
+    "sokoni-mashinani/fish-aquaculture": {
+      "browse": "sokoni-mashinani",
+      "sub": "fish-aquaculture"
+    },
+    "sokoni-mashinani/flowers-plants": {
+      "browse": "sokoni-mashinani",
+      "sub": "flowers-plants"
+    },
+    "sokoni-mashinani/farm-tools": {
+      "browse": "sokoni-mashinani",
+      "sub": "farm-tools"
+    },
+    "sokoni-mashinani/organic-produce": {
+      "browse": "sokoni-mashinani",
+      "sub": "organic-produce"
+    },
+    "farm": {
+      "browse": "sokoni-mashinani",
+      "sub": "fruits-vegetables"
+    },
+    "agriculture": {
+      "browse": "sokoni-mashinani",
+      "sub": "fruits-vegetables"
+    },
+    "produce": {
+      "browse": "sokoni-mashinani",
+      "sub": "fruits-vegetables"
+    },
+    "mashinani": {
+      "browse": "sokoni-mashinani",
+      "sub": "fruits-vegetables"
+    },
+    "livestock": {
+      "browse": "sokoni-mashinani",
+      "sub": "livestock"
+    },
+    "artisans": {
+      "browse": "artisans",
+      "sub": "wood-furniture"
+    },
+    "artisans/wood-furniture": {
+      "browse": "artisans",
+      "sub": "wood-furniture"
+    },
+    "artisans/textiles-kitenge": {
+      "browse": "artisans",
+      "sub": "textiles-kitenge"
+    },
+    "artisans/home-decor": {
+      "browse": "artisans",
+      "sub": "home-decor"
+    },
+    "artisans/traditional-wear": {
+      "browse": "artisans",
+      "sub": "traditional-wear"
+    },
+    "artisans/beadwork-jewelry": {
+      "browse": "artisans",
+      "sub": "beadwork-jewelry"
+    },
+    "artisans/pottery-ceramics": {
+      "browse": "artisans",
+      "sub": "pottery-ceramics"
+    },
+    "artisans/baskets-weaving": {
+      "browse": "artisans",
+      "sub": "baskets-weaving"
+    },
+    "artisans/leather-goods": {
+      "browse": "artisans",
+      "sub": "leather-goods"
+    },
+    "artisans/metalwork": {
+      "browse": "artisans",
+      "sub": "metalwork"
+    },
+    "artisans/carvings-sculpture": {
+      "browse": "artisans",
+      "sub": "carvings-sculpture"
+    },
+    "artisans/handmade-shoes": {
+      "browse": "artisans",
+      "sub": "handmade-shoes"
+    },
+    "artisans/soap-candles": {
+      "browse": "artisans",
+      "sub": "soap-candles"
+    },
+    "artisans/crochet-knit": {
+      "browse": "artisans",
+      "sub": "crochet-knit"
+    },
+    "artisans/custom-tailoring": {
+      "browse": "artisans",
+      "sub": "custom-tailoring"
+    },
+    "artisans/local-art": {
+      "browse": "artisans",
+      "sub": "local-art"
+    },
+    "artisans/handmade-toys": {
+      "browse": "artisans",
+      "sub": "handmade-toys"
+    },
+    "crafts": {
+      "browse": "artisans",
+      "sub": "wood-furniture"
+    },
+    "handmade": {
+      "browse": "artisans",
+      "sub": "home-decor"
+    },
+    "kitenge": {
+      "browse": "artisans",
+      "sub": "textiles-kitenge"
+    },
+    "woodwork": {
+      "browse": "artisans",
+      "sub": "wood-furniture"
     },
     "restaurant": {
       "browse": "restaurant",
