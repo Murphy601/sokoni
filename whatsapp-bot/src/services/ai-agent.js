@@ -44,6 +44,46 @@ function sanitizeReply(text) {
   return cleaned;
 }
 
+const FLUFF_SENTENCE =
+  /^(?:hello[!.,]?\s*)?(?:hi[!.,]?\s*)?(?:i hope (?:this|you|that)[^.!?]*[.!?]|thank you for (?:choosing|contacting|reaching out to) sokoni[^.!?]*[.!?]|i(?:'d| would) be delighted[^.!?]*[.!?]|hope (?:this|that) helps[^.!?]*[.!?]|(?:let me know if you need|is there anything else|would you (?:also )?like)[^.!?]*[.!?])\s*/i;
+
+/** Hard brevity guard after the model (WhatsApp notifications must fit one glance). */
+export function enforceReplyBrevity(text, channel = "whatsapp") {
+  let cleaned = sanitizeReply(text);
+  if (!cleaned) return null;
+
+  const maxWords = channel === "web" ? 60 : 40;
+  const maxChars = channel === "web" ? 420 : 280;
+
+  // Strip corporate fluff sentences (leading / trailing / mid-stack).
+  let sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => !FLUFF_SENTENCE.test(s) && !/let me know if you need|is there anything else|would you also like|hope you are having|thank you for choosing sokoni|delighted to assist/i.test(s));
+
+  if (!sentences.length) {
+    sentences = cleaned
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 2);
+  }
+
+  cleaned = sentences.slice(0, 3).join(" ").trim();
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length > maxWords) {
+    cleaned = words.slice(0, maxWords).join(" ");
+    if (!/[.!?…]$/.test(cleaned)) cleaned += "…";
+  }
+  if (cleaned.length > maxChars) {
+    cleaned = cleaned.slice(0, maxChars - 1).replace(/\s+\S*$/, "").trim();
+    if (!/[.!?…]$/.test(cleaned)) cleaned += "…";
+  }
+  return cleaned || null;
+}
+
 function formatProductLine(p) {
   return `• *${p.name}* — KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""} ⭐ ${p.rating || "—"}`;
 }
@@ -68,45 +108,44 @@ function offlineReply(toolResults, channel) {
       );
     }
     if ((r.tool === "search_products" || r.tool === "browse_products") && r.products?.length) {
+      const n = Math.min(3, r.products.length);
+      // WhatsApp: numbered picker follows — keep text tiny to avoid double walls of text.
+      if (channel === "whatsapp") {
+        return `Found *${n}* match${n === 1 ? "" : "es"}. Reply with the *number* to view & order, or *menu*.`;
+      }
       const aisle = r.label || r.browseLabel || "";
       const lines = r.products.slice(0, 3).map(formatProductLine);
       return (
-        `${aisle ? `In *${aisle}* — ` : ""}Here's what I found:\n\n${lines.join("\n")}\n\n` +
-        (channel === "web"
-          ? `Tap *Order on WhatsApp* on any item, or message us on WhatsApp to buy.`
-          : `Reply *1* to order, or *menu* to browse.`)
+        `${aisle ? `In *${aisle}* — ` : ""}Found ${n}:\n${lines.join("\n")}\n` +
+        `Tap *Order on WhatsApp* on an item.`
       );
     }
     if (r.tool === "browse_taxonomy" && r.categories?.length) {
       const top = r.categories
         .filter((c) => !c.navOnly)
-        .slice(0, 8)
-        .map((c) => `${c.emoji || "•"} ${c.label}`)
-        .join("\n");
-      return (
-        `Sokoni Mall aisles:\n\n${top}\n\n` +
-        (channel === "web"
-          ? `Ask for a category (e.g. "women dresses") or browse sokonimall.com.`
-          : `Type a category or *menu* to browse.`)
-      );
+        .slice(0, 3)
+        .map((c) => c.label)
+        .join(", ");
+      return channel === "web"
+        ? `Top aisles: ${top}. Ask for one (e.g. "women dresses") or browse sokonimall.com.`
+        : `Aisles include ${top}. Type a category or *menu*.`;
     }
     if (r.tool === "store_info") {
       const till = r.till ? ` Till *${r.till}*` : "";
-      return (
-        `💳 Sokoni is *100% prepaid* — pay upfront via M-Pesa${till}, funds held in escrow until delivery. No COD.\n` +
-        `${r.deliveryNote || ""}\n` +
-        (channel === "web" ? `Track orders at /track.html · Ask more anytime here.` : `_Type *menu* or ask how it works._`)
-      );
+      return `Sokoni is *100% prepaid* via M-Pesa${till} — escrow until you confirm delivery. No COD.`;
     }
   }
   return channel === "web"
-    ? "Tell me what you're looking for (e.g. party outfit under KES 3,000), ask what categories we have, or paste an SK-#### order number to track."
-    : "Type *menu* to browse, ask for a category, tell me what you need, or send your *SK-####* to track an order.";
+    ? "Tell me what you want (e.g. denim under KES 3,000) or paste an SK-#### to track."
+    : "Type *menu* to browse, or send your *SK-####* to track.";
 }
 
-async function callLLM(messages) {
+async function callLLM(messages, { channel = "whatsapp" } = {}) {
   const openai = getClient();
   if (!openai) throw new Error("No API key");
+
+  // Hard caps: ~40 words WA / ~60 words web — model cannot ramble past this budget.
+  const maxTokens = channel === "web" ? 120 : 80;
 
   let lastError = null;
   for (const model of modelChain()) {
@@ -114,12 +153,14 @@ async function callLLM(messages) {
       const response = await openai.chat.completions.create({
         model,
         messages,
-        max_tokens: 550,
-        temperature: 0.35,
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        presence_penalty: 0,
+        frequency_penalty: 0.5,
       });
-      const reply = sanitizeReply(response.choices[0]?.message?.content);
+      const reply = enforceReplyBrevity(response.choices[0]?.message?.content, channel);
       if (reply) {
-        console.log(`[ai-agent] replied via ${model}`);
+        console.log(`[ai-agent] replied via ${model} (max_tokens=${maxTokens})`);
         return reply;
       }
     } catch (err) {
@@ -172,7 +213,7 @@ export async function runAgentTurn({
       { role: "user", content: text },
     ];
 
-    let reply = await callLLM(messages);
+    let reply = await callLLM(messages, { channel });
 
     if (
       !reply &&
@@ -186,6 +227,8 @@ export async function runAgentTurn({
       reply = offlineReply(toolResults, channel);
     }
 
+    reply = enforceReplyBrevity(reply || offlineReply(toolResults, channel), channel);
+
     if (persist && channel === "whatsapp" && reply) {
       pushMessage(sessionKey, "assistant", reply);
     }
@@ -196,7 +239,7 @@ export async function runAgentTurn({
       [];
 
     return {
-      reply: reply || offlineReply(toolResults, channel),
+      reply,
       tools: toolResults,
       products,
       tracking: toolResults.find((r) => r.tool === "track_order")?.tracking || null,
