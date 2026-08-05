@@ -388,7 +388,7 @@
       </div>
       <div class="product-sheet-meta">
         <p class="product-sheet-price">${escapeHtml(formatPrice(product))}</p>
-        <p class="product-sheet-dispatch text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">Seller handles dispatch (direct delivery)</p>
+        <p class="product-sheet-dispatch text-xs font-semibold mt-1">Seller handles dispatch (direct delivery)</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
         ${
           window.SokoniSellerTrust?.badgesHtml?.(product, {
@@ -410,7 +410,15 @@
             ? `<p class="product-sheet-desc">${escapeHtml(product.description)}</p>`
             : ""
         }
-        <p class="product-sheet-rating">⭐ ${Number(product.rating) || 0} · ${Number(product.reviews) || 0} reviews</p>
+        <p class="product-sheet-rating">${(() => {
+          const trust = product.sellerTrust || {};
+          const count = Number(trust.totalReviews ?? product.reviews) || 0;
+          const avg = Number(trust.avgRating ?? product.rating) || 0;
+          const sales = Number(trust.salesCount ?? product.sellerSalesCount) || 0;
+          if (count > 0) return `★ ${avg.toFixed(1)} · ${count} review${count === 1 ? "" : "s"}`;
+          if (sales > 0) return `★ 5.0 · ${sales} completed sale${sales === 1 ? "" : "s"}`;
+          return "New seller";
+        })()}</p>
         <p class="product-sheet-escrow text-xs text-brand-purple/60 dark:text-white/60 mt-2">
           Protected by Sokoni escrow — full refund if the item does not match photos/description. Final sale unless misdescribed.
         </p>

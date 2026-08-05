@@ -14,14 +14,22 @@
       extend: {
         colors: {
           brand: {
-            green: "#25D366",
-            purple: "#1B1035",
-            purpleLight: "#2E1B57",
-            cream: "#FFF8F0",
+            green: "#FF2300",
+            purple: "#000000",
+            purpleLight: "#121212",
+            cream: "#121212",
+          },
+          depop: {
+            red: "#FF2300",
+            black: "#000000",
+            darkBg: "#121212",
+            cardDark: "#1E1E1E",
+            borderDark: "#2C2C2C",
+            grayText: "#8E8E93",
           },
         },
         fontFamily: {
-          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          sans: ['Inter', '"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
           display: ["Fraunces", "Georgia", "serif"],
         },
       },
@@ -50,15 +58,15 @@
   <div id="sokoni-shell-header"></div>
 
   <main class="depop-main-content max-w-5xl mx-auto w-full px-5 py-8 space-y-7 flex-1">
-    <section class="rounded-3xl border border-black/5 dark:border-white/10 bg-white dark:bg-brand-purpleLight/45 p-6 md:p-8">
+    <section class="rounded-3xl border border-depop-borderDark bg-depop-cardDark p-6 md:p-8 text-white">
       <div class="flex flex-col sm:flex-row gap-5 sm:items-center">
-        <div id="shop-avatar" class="w-20 h-20 rounded-full bg-brand-cream dark:bg-brand-purple/30 border border-black/10 dark:border-white/15 flex items-center justify-center shrink-0"></div>
+        <div id="shop-avatar" class="w-20 h-20 rounded-full bg-depop-darkBg border border-depop-borderDark flex items-center justify-center shrink-0"></div>
         <div class="min-w-0 flex-1">
           <h1 id="shop-name" class="font-display text-3xl font-bold leading-tight">Shop profile</h1>
           <p id="shop-handle" class="text-sm text-brand-purple/60 dark:text-white/65 mt-1"></p>
           <div class="flex flex-wrap items-center gap-2 mt-2">
-            <span id="shop-verified" class="hidden text-[11px] font-semibold px-2 py-1 rounded-full bg-brand-green/20 text-brand-purple dark:text-brand-green">Verified seller</span>
-            <span id="shop-top-seller" class="hidden text-[11px] font-semibold px-2 py-1 rounded-full bg-brand-purple text-white dark:bg-brand-green dark:text-brand-purple">★ Top seller</span>
+            <span id="shop-verified" class="hidden text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-400">Verified seller</span>
+            <span id="shop-top-seller" class="hidden text-[11px] font-semibold px-2 py-1 rounded-full bg-depop-red text-white">★ Top seller</span>
             <span id="shop-trust-badges" class="hidden seller-trust-badges"></span>
             <span id="shop-rating" class="text-xs text-brand-purple/60 dark:text-white/65">New seller</span>
           </div>
@@ -135,7 +143,7 @@
           href="https://wa.me/254117422428"
           target="_blank"
           rel="noopener"
-          class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold inline-flex items-center justify-center">
+          class="min-h-[44px] px-5 rounded-full bg-depop-red text-white text-sm font-bold inline-flex items-center justify-center hover:opacity-90">
           Start on WhatsApp
         </a>
         <button
@@ -193,7 +201,7 @@
           <button id="buyer-auth-send-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold">
             Send code
           </button>
-          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          <button id="buyer-auth-verify-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-depop-red text-white text-sm font-bold">
             Verify
           </button>
         </div>
