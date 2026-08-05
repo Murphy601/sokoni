@@ -140,6 +140,42 @@
       secondaryHref: "#how-it-works",
     },
     {
+      image: "assets/images/marketing/sokoni-mashinani-farm.jpg",
+      alt: "Kenyan farmer handing a crate of fresh tomatoes and avocados to a courier beside a pickup truck",
+      kicker: "Sokoni Mashinani · Direct from the farm",
+      title: "Fresh from the farm — skip the middleman.",
+      sub:
+        "Buy produce, livestock, and raw agricultural goods from verified farmers across Nakuru, Eldoret, Meru, and Kisumu — fresh dispatch via local parcel networks.",
+      primaryText: "Shop latest finds",
+      primaryHref: "#deals",
+      secondaryText: "Trade across Kenya",
+      secondaryHref: "#trade-across-kenya",
+    },
+    {
+      image: "assets/images/marketing/sokoni-local-artisan.jpg",
+      alt: "Kenyan craftsman in a woodwork shop holding a finished wooden coffee table",
+      kicker: "Local artisans · Makers & crafts",
+      title: "Empowering local artisans & crafts.",
+      sub:
+        "From custom wood furniture to hand-woven kitenge wear, Sokoni gives local makers a digital storefront — buyers pay safely with M-Pesa escrow.",
+      primaryText: "Start selling",
+      primaryHref: "suppliers/list.html",
+      secondaryText: "Browse finds",
+      secondaryHref: "#deals",
+    },
+    {
+      image: "assets/images/marketing/sokoni-county-courier.jpg",
+      alt: "Courier loading Sokoni Marketplace boxes onto a transport vehicle at a Kenyan parcel depot",
+      kicker: "County-to-county · Nationwide parcel",
+      title: "Nationwide delivery to any county.",
+      sub:
+        "Whether you're ordering from Nairobi CBD or shipping from a village in Nyeri, our door-to-hub parcel network tracks delivery to your nearest town centre.",
+      primaryText: "Track an order",
+      primaryHref: "track.html",
+      secondaryText: "How it works",
+      secondaryHref: "#how-it-works",
+    },
+    {
       image: "assets/images/marketing/empty-search.jpg",
       alt: "Minimal dark clothing rack with a spotlight on a sneaker box — nothing listed yet",
       kicker: "Nothing listed yet · Be first",
