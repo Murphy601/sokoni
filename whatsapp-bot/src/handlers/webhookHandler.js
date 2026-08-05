@@ -578,6 +578,15 @@ export async function handleWahaWebhook(body) {
     });
   }
 
+  // Idempotency: WAHA (or proxies) can redeliver the same inbound event.
+  {
+    const { claimInboundMessageId } = await import("../services/message-dedupe.js");
+    if (claimInboundMessageId(parsed.messageId)) {
+      console.log(`[webhook] duplicate blocked messageId=${parsed.messageId}`);
+      return;
+    }
+  }
+
   if (shouldRouteIncomingAsAdmin(body, parsed)) {
     const handled = await handleAdminIncoming({
       ...parsed,
