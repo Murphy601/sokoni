@@ -898,11 +898,10 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
       if (auth.needsLink && supplier?.phone) {
         await sendSafeWhatsApp(
           customerKey,
-          `*${order.id}* — WhatsApp hid your phone on this chat, so Sokoni can't match your seller account yet.\n\n` +
-            `Link this chat (last 4 digits of your seller WhatsApp / M-Pesa):\n` +
+          `*${order.id}* — this chat isn't linked to your seller account yet (usually only needed for older sellers).\n\n` +
+            `One-time fix — last 4 digits of your seller WhatsApp / M-Pesa:\n` +
             `*LINKSELLER ${order.id} ####*\n\n` +
-            `Then we'll dispatch automatically.\n` +
-            `Or reply *vendor menu* if you have a different seller number.`
+            `New sellers are linked automatically at sign-up / *vendor menu*.`
         );
         return;
       }
