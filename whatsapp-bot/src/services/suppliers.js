@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { computeRetailPrice } from "./pricing.js";
+import { bindSellerWhatsAppChat } from "./seller-chat-ids.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -96,11 +97,13 @@ export function createApplication(payload) {
   appStore.seq += 1;
   const id = `SUP-${new Date().getFullYear()}-${String(appStore.seq).padStart(4, "0")}`;
   const now = Date.now();
+  const applicantChatId = payload.applicantChatId ? String(payload.applicantChatId).trim() : null;
   const application = {
     id,
     status: "submitted",
     createdAt: now,
     updatedAt: now,
+    applicantChatId,
     business: {
       name: String(payload.businessName || "").trim(),
       contactName: String(payload.contactName || "").trim(),
@@ -123,7 +126,40 @@ export function createApplication(payload) {
 
   appStore.applications[id] = application;
   persistApps();
+  // Bind WhatsApp chat during apply — DISPATCH works after approval without LINKSELLER.
+  if (applicantChatId && application.business.phone) {
+    void attachSellerWhatsAppChat(application.business.phone, applicantChatId);
+  }
   return { application };
+}
+
+/**
+ * Persist WhatsApp chatId on the supplier + seller-chat-ids registry.
+ * Call from onboarding, OTP, vendor menu, and approval so DISPATCH
+ * never needs LINKSELLER for a normal seller journey.
+ */
+export function attachSellerWhatsAppChat(phone, chatId = null) {
+  const p = normalizePhoneDigits(phone);
+  if (!p) return null;
+
+  bindSellerWhatsAppChat(chatId, p);
+
+  loadSuppliers();
+  const supplier = findSupplierByPhone(p);
+  if (!supplier) return null;
+
+  const ids = new Set(
+    [...(Array.isArray(supplier.whatsappChatIds) ? supplier.whatsappChatIds : []), `${p}@c.us`].filter(
+      Boolean
+    )
+  );
+  if (chatId) {
+    ids.add(String(chatId));
+    supplier.whatsappChatId = String(chatId);
+  }
+  supplier.whatsappChatIds = [...ids];
+  persistSuppliers();
+  return supplier;
 }
 
 function normalizeProductDraft(p, index) {
@@ -188,6 +224,7 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
   if (app.status === "approved") return { error: "already_approved" };
 
   const supplierId = `sup-${slugify(app.business.name)}-${Date.now().toString(36).slice(-4)}`;
+  const applicantChatId = app.applicantChatId || null;
   const supplier = {
     id: supplierId,
     applicationId,
@@ -201,6 +238,14 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
     deliveryNote: app.business.deliveryNote,
     approvedAt: Date.now(),
     productIds: [],
+    whatsappChatId: applicantChatId,
+    whatsappChatIds: [
+      ...new Set(
+        [applicantChatId, app.business.phone ? `${normalizePhoneDigits(app.business.phone)}@c.us` : null].filter(
+          Boolean
+        )
+      ),
+    ],
   };
 
   const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
@@ -255,6 +300,10 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
   app.approvedProductCount = added.length;
   persistApps();
 
+  if (app.business.phone) {
+    attachSellerWhatsAppChat(app.business.phone, applicantChatId);
+  }
+
   try {
     const { execSync } = await import("node:child_process");
     execSync("node scripts/build-site-catalog.mjs", {
@@ -268,8 +317,16 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
   return { supplier, products: added, application: app };
 }
 
-export function createPeerSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId = "" }) {
+export function createPeerSeller({
+  phone,
+  shopName,
+  shopHandle,
+  mpesaNumber,
+  nationalId = "",
+  whatsappChatId = null,
+} = {}) {
   loadSuppliers();
+  const normalizedPhone = normalizePhoneDigits(phone);
   const existing = findSupplierByPhone(phone);
   if (existing) {
     if (mpesaNumber) existing.mpesaNumber = mpesaNumber;
@@ -278,6 +335,7 @@ export function createPeerSeller({ phone, shopName, shopHandle, mpesaNumber, nat
     existing.isSellerVerified = true;
     existing.role = "SELLER";
     persistSuppliers();
+    attachSellerWhatsAppChat(normalizedPhone, whatsappChatId);
     return { supplier: existing, existing: true };
   }
 
@@ -285,12 +343,13 @@ export function createPeerSeller({ phone, shopName, shopHandle, mpesaNumber, nat
     .replace(/^@/, "")
     .trim();
   const id = `seller-${slugify(handle)}-${Date.now().toString(36).slice(-4)}`;
+  const cus = normalizedPhone ? `${normalizedPhone}@c.us` : null;
   const supplier = {
     id,
     businessName: String(shopName || handle).trim(),
     shopHandle: handle ? `@${handle.replace(/^@/, "")}` : null,
     contactName: String(shopName || handle).trim(),
-    phone: normalizePhoneDigits(phone),
+    phone: normalizedPhone,
     mpesaNumber: normalizePhoneDigits(mpesaNumber),
     nationalId: String(nationalId || "").trim() || null,
     isSellerVerified: true,
@@ -301,10 +360,13 @@ export function createPeerSeller({ phone, shopName, shopHandle, mpesaNumber, nat
     city: "",
     delivers: true,
     deliveryAreas: "Countrywide",
+    whatsappChatId: whatsappChatId || cus,
+    whatsappChatIds: [...new Set([whatsappChatId, cus].filter(Boolean))],
   };
 
   supplierStore.suppliers[id] = supplier;
   persistSuppliers();
+  attachSellerWhatsAppChat(normalizedPhone, whatsappChatId);
   return { supplier, existing: false };
 }
 
