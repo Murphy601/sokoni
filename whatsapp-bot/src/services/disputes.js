@@ -14,6 +14,33 @@ import { buildPublicTrackingPayload } from "./shipments.js";
 const OPEN_STATUSES = new Set(["open", "under_review"]);
 const REASONS = new Set(["not_as_described", "wrong_item", "damaged", "not_received", "other"]);
 
+/** WhatsApp fan-out for dispute lifecycle (dynamic import avoids hub↔orders cycles). */
+async function notifyDisputeParties(order, dispute, {
+  eventType,
+  adminDetails,
+  buyerMessage = null,
+  sellerMessage = null,
+} = {}) {
+  if (!order) return;
+  try {
+    const { notifyOrderParties, notifyAdminEvent } = await import("./communication-hub.js");
+    const sellerUserId = Number(dispute?.sellerUserId || order.sellerUserId || 0) || null;
+    if (sellerUserId && !order.sellerUserId) {
+      updateOrderMeta(order.id, { sellerUserId });
+      order = getOrder(order.id) || order;
+    }
+    await notifyOrderParties(order, { buyerMessage, sellerMessage, sellerUserId });
+    if (eventType && adminDetails) {
+      await notifyAdminEvent(eventType, {
+        orderId: order.id,
+        details: adminDetails,
+      });
+    }
+  } catch (err) {
+    console.warn("[disputes] notify failed:", err?.message || err);
+  }
+}
+
 function parseUserId(value) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) return null;
@@ -178,6 +205,7 @@ export async function createDispute({
   }
 
   const freeze = freezeOrderEscrow(ref);
+  updateOrderMeta(order.id, { sellerUserId: resolvedSellerId, disputeHold: true });
 
   const inserted = await query(
     `INSERT INTO order_disputes (
@@ -211,6 +239,25 @@ export async function createDispute({
   } catch {
     /* optional */
   }
+
+  const fresh = getOrder(order.id) || order;
+  const reasonLabel = text || cleanReason;
+  const short = String(reasonLabel).slice(0, 140);
+  void notifyDisputeParties(fresh, dispute, {
+    eventType: "DISPUTE_OPENED",
+    adminDetails:
+      `Buyer opened a dispute (#${dispute.id}).\n` +
+      `Reason: ${cleanReason}\n` +
+      `${short}\n` +
+      `Escrow: ${freeze.frozen ? "frozen" : "not frozen"}`,
+    sellerMessage:
+      `⚠️ Buyer opened a dispute on *${fresh.id}*.\n` +
+      `Reason: ${cleanReason}\n` +
+      `${short}\n\n` +
+      `Reply in Seller Hub → Disputes, or WhatsApp. Escrow is on hold.`,
+    buyerMessage:
+      `✅ Dispute opened for *${fresh.id}*. We’ll review and message you here. Escrow is on hold.`,
+  });
 
   return { success: true, dispute, escrowFrozen: Boolean(freeze.frozen) };
 }
@@ -337,10 +384,27 @@ export async function addDisputeEvidence({
      RETURNING id, kind, url, note, created_at`,
     [d.id, uid, cleanKind, cleanUrl, cleanNote || null]
   );
-  await appendEvent(d.id, uid === d.buyerUserId ? "buyer" : "seller", "evidence_added", cleanKind);
+  const actorRole = uid === d.buyerUserId ? "buyer" : "seller";
+  await appendEvent(d.id, actorRole, "evidence_added", cleanKind);
   await query(`UPDATE order_disputes SET status = 'under_review', updated_at = NOW() WHERE id = $1 AND status = 'open'`, [
     d.id,
   ]);
+
+  const order = getOrder(d.orderRef);
+  if (order) {
+    const preview = String(cleanNote || cleanKind || "Evidence attached").slice(0, 140);
+    const fromBuyer = actorRole === "buyer";
+    void notifyDisputeParties(order, d, {
+      eventType: "DISPUTE_EVIDENCE",
+      adminDetails: `${actorRole} added evidence on dispute #${d.id}: ${preview}`,
+      sellerMessage: fromBuyer
+        ? `📎 Buyer added evidence on dispute for *${order.id}*:\n${preview}`
+        : null,
+      buyerMessage: !fromBuyer
+        ? `📎 Seller added evidence on your dispute for *${order.id}*:\n${preview}`
+        : null,
+    });
+  }
 
   return { success: true, evidence: rows[0] };
 }
@@ -373,7 +437,18 @@ export async function respondToDispute({ disputeId, sellerUserId, response = "" 
     [detail.dispute.id, text]
   );
   await appendEvent(detail.dispute.id, "seller", "seller_response", text);
-  return { success: true, dispute: mapDisputeRow(rows[0]) };
+  const dispute = mapDisputeRow(rows[0]);
+  const order = getOrder(dispute.orderRef);
+  if (order) {
+    const short = text.slice(0, 160);
+    void notifyDisputeParties(order, dispute, {
+      eventType: "DISPUTE_SELLER_REPLY",
+      adminDetails: `Seller replied on dispute #${dispute.id}:\n${short}`,
+      buyerMessage: `📩 Seller replied on your dispute for *${order.id}*:\n${short}`,
+      sellerMessage: null,
+    });
+  }
+  return { success: true, dispute };
 }
 
 export async function listAdminDisputes({ status = "open", limit = 50 } = {}) {
@@ -468,7 +543,22 @@ export async function resolveDispute({
   }
 
   await appendEvent(detail.dispute.id, "admin", `resolved_${action}`, adminNotes || null);
-  return { success: true, dispute: mapDisputeRow(rows[0]) };
+  const dispute = mapDisputeRow(rows[0]);
+  const resolvedOrder = getOrder(detail.dispute.orderRef);
+  if (resolvedOrder) {
+    const outcome =
+      action === "refund"
+        ? "Refund approved — we’ll process the M-Pesa refund."
+        : "Released to seller — dispute closed in seller’s favour.";
+    const noteBit = adminNotes ? `\nNote: ${adminNotes.slice(0, 120)}` : "";
+    void notifyDisputeParties(resolvedOrder, dispute, {
+      eventType: "DISPUTE_RESOLVED",
+      adminDetails: `Dispute #${dispute.id} resolved: ${action}${noteBit}`,
+      buyerMessage: `✅ Dispute on *${resolvedOrder.id}* resolved: ${outcome}${noteBit}`,
+      sellerMessage: `✅ Dispute on *${resolvedOrder.id}* resolved: ${outcome}${noteBit}`,
+    });
+  }
+  return { success: true, dispute };
 }
 
 /** Used by escrow delivery hook — true if payout must wait. */

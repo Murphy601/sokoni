@@ -918,26 +918,38 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
   }
   try {
     const body = `🛡️ *[Sokoni Support]:* ${message.trim()}`;
-    await sendText(order.customerKey, body);
-    setHumanHandoff(order.customerKey, {
-      adminDirect: true,
-      adminTakeOver: true,
-      orderId: order.id,
-      startedAt: Date.now(),
-      ackSent: true,
+    const {
+      recordAdminOutbound,
+      notifyOrderParties,
+      getOrderPartyChats,
+    } = await import("./communication-hub.js");
+    const parties = await getOrderPartyChats(order);
+    await notifyOrderParties(order, {
+      buyerMessage: parties.buyer.length ? body : null,
+      sellerMessage: parties.seller.length ? body : null,
     });
-    try {
-      const { recordAdminOutbound } = await import("./communication-hub.js");
-      recordAdminOutbound(order.id, message.trim(), { setTakeOver: true });
-    } catch {
-      /* ignore */
+    if (order.customerKey) {
+      setHumanHandoff(order.customerKey, {
+        adminDirect: true,
+        adminTakeOver: true,
+        orderId: order.id,
+        startedAt: Date.now(),
+        ackSent: true,
+      });
     }
-    if (order.status === "delivered" && !order.reviewPromptSent) {
+    recordAdminOutbound(order.id, message.trim(), { setTakeOver: true });
+    if (order.status === "delivered" && !order.reviewPromptSent && order.customerKey) {
       await sendReviewPrompt(order.customerKey, order);
     }
+    const who = [
+      parties.buyer.length ? "buyer" : null,
+      parties.seller.length ? "seller" : null,
+    ]
+      .filter(Boolean)
+      .join(" + ");
     return sendText(
       adminChatId,
-      `✅ Sent to *${order.customerName || "buyer"}* (${order.id}). Bot is silent on that chat.\nEnd: *#resolve ${order.id}*`
+      `✅ Sent to *${who || "no chats"}* (${order.id}). Bot is silent on those chats.\nEnd: *#resolve ${order.id}*`
     );
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed to send: ${err.message}`);

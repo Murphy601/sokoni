@@ -41,16 +41,37 @@ router.post("/:orderId/reply", async (req, res) => {
 
   try {
     const body = `🛡️ *[Sokoni Support]:* ${message}`;
-    await sendText(order.customerKey, body);
-    setHumanHandoff(order.customerKey, {
-      adminDirect: true,
-      adminTakeOver: true,
-      orderId: order.id,
-      startedAt: Date.now(),
-      ackSent: true,
+    const { notifyOrderParties, getOrderPartyChats } = await import("../services/communication-hub.js");
+    const parties = await getOrderPartyChats(order);
+    if (!parties.buyer.length && !parties.seller.length) {
+      return res.status(400).json({
+        error: "no_party_chat",
+        message: "Order has no buyer or seller WhatsApp chat to message.",
+      });
+    }
+    await notifyOrderParties(order, {
+      buyerMessage: parties.buyer.length ? body : null,
+      sellerMessage: parties.seller.length ? body : null,
     });
+    if (order.customerKey) {
+      setHumanHandoff(order.customerKey, {
+        adminDirect: true,
+        adminTakeOver: true,
+        orderId: order.id,
+        startedAt: Date.now(),
+        ackSent: true,
+      });
+    }
     recordAdminOutbound(order.id, message, { setTakeOver: true });
-    res.json({ ok: true, orderId: order.id, thread: getSupportThread(order.id) });
+    res.json({
+      ok: true,
+      orderId: order.id,
+      notified: {
+        buyer: parties.buyer.length > 0,
+        seller: parties.seller.length > 0,
+      },
+      thread: getSupportThread(order.id),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -369,6 +369,95 @@ export function dispatchMessages(jobs = []) {
   );
 }
 
+/**
+ * Buyer + seller WhatsApp chat targets for an order.
+ * @param {object} order
+ * @param {{ sellerUserId?: number|null }} [opts] — dispute/order override when order.sellerUserId missing
+ */
+export async function getOrderPartyChats(order, opts = {}) {
+  const buyer = [];
+  const seller = [];
+  if (!order) return { buyer, seller };
+  if (order.customerKey) buyer.push(order.customerKey);
+  if (!buyer.length) {
+    const phone = order.phone || order.mpesaPhone || order.customerPhone;
+    if (phone) {
+      try {
+        const chat = toChatId(phone);
+        if (chat) buyer.push(chat);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  try {
+    const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+    if (supplier?.phone) {
+      seller.push(...sellerNotifyTargets(supplier.phone));
+    }
+  } catch {
+    /* ignore */
+  }
+
+  if (!seller.length) {
+    try {
+      const uid = Number(opts.sellerUserId ?? order.sellerUserId ?? order.seller_user_id);
+      if (Number.isInteger(uid) && uid > 0) {
+        const { query, isDbEnabled } = await import("../db/pool.js");
+        if (isDbEnabled()) {
+          const { rows } = await query(`SELECT phone FROM users WHERE id = $1 LIMIT 1`, [uid]);
+          const phone = rows[0]?.phone;
+          if (phone) seller.push(...sellerNotifyTargets(phone));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return {
+    buyer: [...new Set(buyer.filter(Boolean))],
+    seller: [...new Set(seller.filter(Boolean))],
+  };
+}
+
+/**
+ * Ping the other party on a support/dispute thread (never echoes to the sender).
+ * @param {"BUYER"|"SELLER"|"ADMIN"|"USER"} fromRole
+ */
+export async function notifyCounterpart(order, fromRole, message, opts = {}) {
+  if (!order || !message) return;
+  const parties = await getOrderPartyChats(order, opts);
+  const jobs = [];
+  const role = String(fromRole || "").toUpperCase();
+  if (role === "BUYER") {
+    for (const to of parties.seller) jobs.push({ to, message });
+  } else if (role === "SELLER") {
+    for (const to of parties.buyer) jobs.push({ to, message });
+  } else if (role === "ADMIN") {
+    for (const to of [...parties.buyer, ...parties.seller]) jobs.push({ to, message });
+  }
+  if (jobs.length) void dispatchMessages(jobs);
+}
+
+/** Fan-out support/dispute WhatsApp to buyer and/or seller. */
+export async function notifyOrderParties(
+  order,
+  { buyerMessage = null, sellerMessage = null, sellerUserId = null } = {}
+) {
+  if (!order) return;
+  const parties = await getOrderPartyChats(order, { sellerUserId });
+  const jobs = [];
+  if (buyerMessage) {
+    for (const to of parties.buyer) jobs.push({ to, message: buyerMessage });
+  }
+  if (sellerMessage) {
+    for (const to of parties.seller) jobs.push({ to, message: sellerMessage });
+  }
+  if (jobs.length) void dispatchMessages(jobs);
+}
+
 export async function notifyAdminEvent(eventType, { orderId = null, details = "", silent = false } = {}) {
   console.log(`[ADMIN EVENT] [${eventType}]${orderId ? ` ${orderId}` : ""} | ${details}`);
 
@@ -388,6 +477,10 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
 
   const ping = new Set([
     "DISPUTE_OR_HELP",
+    "DISPUTE_OPENED",
+    "DISPUTE_SELLER_REPLY",
+    "DISPUTE_EVIDENCE",
+    "DISPUTE_RESOLVED",
     "ADMIN_TAKE_OVER",
     "SUPPORT_RELAY",
     "SUPPORT_CLOSED_BY_USER",
@@ -616,6 +709,15 @@ async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) 
       `Reply: #${order.id} <message>\n` +
       `End: #resolve ${order.id}`,
   });
+
+  // Alert the other party (buyer↔seller) — was missing before.
+  const otherMsg =
+    role === "BUYER"
+      ? `⚠️ Buyer opened support on *${order.id}*. Escrow frozen. Admin is on the thread — reply here or wait for Sokoni.`
+      : role === "SELLER"
+        ? `⚠️ Seller opened support on *${order.id}*. Escrow frozen. Admin is on the thread — reply here or wait for Sokoni.`
+        : `⚠️ Support opened on *${order.id}*. Escrow frozen. Admin will reply here.`;
+  void notifyCounterpart(order, role, otherMsg);
 }
 
 /**
@@ -772,7 +874,17 @@ export async function tryRelayAdminTakeOver(customerKey, text, { phone = "" } = 
       `Reply: *#${order.id} <message>*\nEnd: *#resolve ${order.id}* · User can also reply *DONE*`,
   });
 
-  // Silent — no WhatsApp reply to user (transparent relay).
+  // Forward to the other party (buyer↔seller), not only admin.
+  if (role === "BUYER" || role === "SELLER") {
+    const preview = trimmed.length > 280 ? `${trimmed.slice(0, 277)}…` : trimmed;
+    void notifyCounterpart(
+      order,
+      role,
+      `💬 *${order.id}* · ${role}:\n${preview}\n\nReply in this chat (admin is copied). Or *DONE* to close.`
+    );
+  }
+
+  // Silent to sender — transparent relay.
   return true;
 }
 
