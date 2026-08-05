@@ -195,6 +195,13 @@ export async function sendSellerVerificationCode(phone) {
 
   const chatId = toChatId(digits);
   try {
+    const { attachSellerWhatsAppChat } = await import("./suppliers.js");
+    // OTP send is the website onboarding handshake — bind @c.us immediately.
+    attachSellerWhatsAppChat(digits, chatId);
+  } catch (err) {
+    console.warn("[seller-verification] chat bind skipped:", err.message);
+  }
+  try {
     const resp = await sendText(chatId, verificationMessage(code));
     if (resp?.dryRun) {
       console.log(`[seller-verification] dry-run OTP for ${digits}: ${code}`);
@@ -261,6 +268,13 @@ export async function verifySellerCode(phone, codeInput) {
   delete store.pending[digits];
   const session = createSessionForPhone(digits);
   await saveStore();
+
+  try {
+    const { attachSellerWhatsAppChat } = await import("./suppliers.js");
+    attachSellerWhatsAppChat(digits, toChatId(digits));
+  } catch (err) {
+    console.warn("[seller-verification] post-verify chat bind skipped:", err.message);
+  }
 
   const existing = findSupplierByPhone(digits);
   const needsSetup = !existing;

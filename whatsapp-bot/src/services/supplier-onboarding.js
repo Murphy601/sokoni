@@ -245,6 +245,11 @@ export async function startSupplierOnboarding(customerKey, { phone = "", prefill
     prefillMode: Boolean(prefill && (prefill.business?.name || prefill.products?.length)),
   };
   setOnboarding(customerKey, onboarding);
+  // Bind this WhatsApp chat as soon as onboarding starts (covers @lid).
+  if (draft.business?.phone || phone) {
+    const { attachSellerWhatsAppChat } = await import("./suppliers.js");
+    attachSellerWhatsAppChat(draft.business?.phone || phone, customerKey);
+  }
   await promptStep(customerKey, STEPS.BUSINESS_NAME, onboarding.draft, { prefill: onboarding.prefillMode });
   return true;
 }
@@ -284,6 +289,7 @@ async function submitApplication(customerKey, draft) {
     delivers: draft.business.delivers,
     deliveryAreas: draft.business.deliveryAreas,
     deliveryNote: draft.business.deliveryNote,
+    applicantChatId: customerKey,
     products: draft.products.map((p) => ({
       sku: p.sku || `wa-${Date.now().toString(36)}`,
       name: p.name,
@@ -393,6 +399,10 @@ export async function handleSupplierOnboarding(
         draft.business.name = t;
       }
       if (!draft.business.phone && phone) draft.business.phone = digitsOnly(phone);
+      if (draft.business.phone) {
+        const { attachSellerWhatsAppChat } = await import("./suppliers.js");
+        attachSellerWhatsAppChat(draft.business.phone, customerKey);
+      }
       onboarding.step = STEPS.CONTACT_NAME;
       break;
     case STEPS.CONTACT_NAME:

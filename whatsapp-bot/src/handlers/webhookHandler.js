@@ -240,15 +240,11 @@ export async function handleIncomingMessage(
   // Persist seller phone ↔ chatId early (critical for WhatsApp @lid replies).
   if (phone) {
     try {
-      const { findSupplierByPhone } = await import("../services/suppliers.js");
-      const { registerSellerChatId, rememberSellerNotifyTarget } = await import(
-        "../services/seller-chat-ids.js"
+      const { attachSellerWhatsAppChat, findSupplierByPhone } = await import(
+        "../services/suppliers.js"
       );
       const seller = findSupplierByPhone(phone);
-      if (seller?.phone) {
-        registerSellerChatId(customerKey, seller.phone);
-        rememberSellerNotifyTarget(seller.phone, customerKey);
-      }
+      if (seller?.phone) attachSellerWhatsAppChat(seller.phone, customerKey);
     } catch (err) {
       console.warn("[webhook] seller chat link skipped:", err.message);
     }
