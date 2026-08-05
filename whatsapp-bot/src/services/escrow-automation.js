@@ -170,6 +170,15 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
     updated = applyFulfillmentPlan(order.id, plan) || getOrder(order.id);
   }
 
+  // Sticky social seller id for reviews / auto ratings.
+  try {
+    const { ensureOrderSellerUserId } = await import("../db/repositories/social.js");
+    await ensureOrderSellerUserId(updated);
+    updated = getOrder(order.id) || updated;
+  } catch (err) {
+    console.warn("[escrow] sellerUserId resolve skipped:", err.message);
+  }
+
   await lockProductForOrder(updated);
   recordPurchaseFeedEvent(updated);
   await notifyBuyerPaid(updated, payment);

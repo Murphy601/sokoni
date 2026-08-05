@@ -165,6 +165,12 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     offerAmountKes: offerKey ? totalKes : null,
     supplierId: product.supplierId || null,
     supplierSku: product.supplierSku || null,
+    /** Social shop user id — sticky for reviews / sale ratings. */
+    sellerUserId: (() => {
+      const n = Number(product.sellerUserId ?? product.seller?.id);
+      return Number.isInteger(n) && n > 0 ? n : null;
+    })(),
+    shopHandle: product.shopHandle || product.sellerHandle || null,
     customerName: details.name,
     location: details.location,
     phone: details.phone,

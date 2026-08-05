@@ -205,6 +205,13 @@ async function getPostgresOrderByReference(orderRef) {
   return null;
 }
 
+function normalizePhoneDigits(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9 && /^[17]/.test(d)) d = `254${d}`;
+  return d.length >= 9 ? d : "";
+}
+
 async function lookupSellerUserIdByKey(key) {
   const raw = String(key || "").trim();
   if (!raw) return null;
@@ -216,32 +223,130 @@ async function lookupSellerUserIdByKey(key) {
     if (bySellerId.rows[0]?.user_id != null) return Number(bySellerId.rows[0].user_id);
   }
   const handle = raw.replace(/^@+/, "").toLowerCase();
-  const bySlug = await query(
-    `SELECT user_id FROM sellers WHERE LOWER(slug) = LOWER($1) LIMIT 1`,
-    [handle]
-  );
-  if (bySlug.rows[0]?.user_id != null) return Number(bySlug.rows[0].user_id);
+  if (handle) {
+    const byUserHandle = await query(
+      `SELECT id AS user_id FROM users
+        WHERE LOWER(handle) = $1 OR LOWER(handle) = $2
+        LIMIT 1`,
+      [handle, `@${handle}`]
+    );
+    if (byUserHandle.rows[0]?.user_id != null) return Number(byUserHandle.rows[0].user_id);
+
+    const bySlug = await query(
+      `SELECT user_id FROM sellers WHERE LOWER(slug) = LOWER($1) OR LOWER(slug) = LOWER($2) LIMIT 1`,
+      [handle, `@${handle}`]
+    );
+    if (bySlug.rows[0]?.user_id != null) return Number(bySlug.rows[0].user_id);
+  }
+
+  const phone = normalizePhoneDigits(raw);
+  if (phone) {
+    const byPhone = await query(
+      `SELECT id AS user_id FROM users
+        WHERE phone = $1 OR phone = $2
+        LIMIT 1`,
+      [phone, phone.startsWith("254") ? `0${phone.slice(3)}` : phone]
+    );
+    if (byPhone.rows[0]?.user_id != null) return Number(byPhone.rows[0].user_id);
+  }
   return null;
+}
+
+/** True when this social seller owns the product on a JSON prepaid order. */
+async function jsonOrderBelongsToSeller(order, sellerUserId) {
+  const sid = parseUserId(sellerUserId);
+  if (!order || !sid) return false;
+
+  const stored = parseUserId(order.sellerUserId ?? order.seller_user_id);
+  if (stored && stored === sid) return true;
+
+  const resolved = await resolveSellerUserIdForJsonOrder(order);
+  if (resolved && resolved === sid) return true;
+
+  const productId = String(order.productId || order.product_id || "").trim();
+  if (productId) {
+    try {
+      const { rows } = await query(
+        `SELECT 1
+           FROM products p
+           LEFT JOIN sellers s ON s.id = p.seller_id
+          WHERE p.id = $1
+            AND (
+              p.seller_user_id = $2
+              OR s.user_id = $2
+            )
+          LIMIT 1`,
+        [productId, sid]
+      );
+      if (rows[0]) return true;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const product = await getProductById(productId);
+      const handleKeys = [
+        product?.shopHandle,
+        product?.sellerHandle,
+        product?.businessName,
+        product?.supplierId,
+      ].filter(Boolean);
+      for (const key of handleKeys) {
+        const uid = await lookupSellerUserIdByKey(key);
+        if (uid === sid) return true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const supplierKey = String(order.supplierId || order.supplier_id || "").trim();
+  if (supplierKey) {
+    try {
+      const supplier = getSupplier(supplierKey);
+      const keys = [
+        supplier?.userId,
+        supplier?.shopHandle,
+        supplier?.slug,
+        supplier?.phone,
+        supplier?.mpesaNumber,
+        supplierKey,
+      ].filter(Boolean);
+      for (const key of keys) {
+        const uid = await lookupSellerUserIdByKey(key);
+        if (uid === sid) return true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
+
+/** Resolve + persist sellerUserId on a JSON order (checkout / pay / review). */
+export async function ensureOrderSellerUserId(order) {
+  if (!order?.id) return null;
+  const existing = parseUserId(order.sellerUserId ?? order.seller_user_id);
+  if (existing) return existing;
+  const resolved = await resolveSellerUserIdForJsonOrder(order);
+  if (!resolved) return null;
+  try {
+    const { updateOrderMeta, getOrder } = await import("../../services/orders.js");
+    updateOrderMeta(order.id, { sellerUserId: resolved });
+    return parseUserId(getOrder(order.id)?.sellerUserId) || resolved;
+  } catch {
+    return resolved;
+  }
 }
 
 async function resolveSellerUserIdForJsonOrder(order) {
   if (!order || typeof order !== "object") return null;
 
+  // Sticky id written at checkout / payment — most reliable.
+  const stored = parseUserId(order.sellerUserId ?? order.seller_user_id);
+  if (stored) return stored;
+
   const productId = String(order.productId || order.product_id || "").trim();
   if (productId) {
-    try {
-      const product = await getProductById(productId);
-      if (product?.sellerUserId != null) {
-        const n = Number(product.sellerUserId);
-        if (Number.isInteger(n) && n > 0) return n;
-      }
-      if (product?.supplierId) {
-        const fromSupplier = await lookupSellerUserIdByKey(product.supplierId);
-        if (fromSupplier) return fromSupplier;
-      }
-    } catch {
-      /* catalog optional */
-    }
     try {
       const { rows } = await query(
         `SELECT COALESCE(p.seller_user_id, s.user_id) AS seller_user_id
@@ -255,6 +360,24 @@ async function resolveSellerUserIdForJsonOrder(order) {
     } catch {
       /* db optional for this lookup */
     }
+    try {
+      const product = await getProductById(productId);
+      if (product?.sellerUserId != null) {
+        const n = Number(product.sellerUserId);
+        if (Number.isInteger(n) && n > 0) return n;
+      }
+      for (const key of [
+        product?.shopHandle,
+        product?.sellerHandle,
+        product?.supplierId,
+        product?.sellerPhone,
+      ]) {
+        const fromKey = await lookupSellerUserIdByKey(key);
+        if (fromKey) return fromKey;
+      }
+    } catch {
+      /* catalog optional */
+    }
   }
 
   const supplierKey = String(order.supplierId || order.supplier_id || "").trim();
@@ -265,10 +388,16 @@ async function resolveSellerUserIdForJsonOrder(order) {
         const n = Number(supplier.userId);
         if (Number.isInteger(n) && n > 0) return n;
       }
-      const fromSupplier =
-        (await lookupSellerUserIdByKey(supplier?.shopHandle || supplier?.slug || supplierKey)) ||
-        (await lookupSellerUserIdByKey(supplierKey));
-      if (fromSupplier) return fromSupplier;
+      for (const key of [
+        supplier?.shopHandle,
+        supplier?.slug,
+        supplier?.phone,
+        supplier?.mpesaNumber,
+        supplierKey,
+      ]) {
+        const fromSupplier = await lookupSellerUserIdByKey(key);
+        if (fromSupplier) return fromSupplier;
+      }
     } catch {
       /* ignore */
     }
@@ -1463,10 +1592,14 @@ export async function getShopProfileByHandle({
       sellerId: linkedSeller?.id || null,
     });
     const follows = await getFollowCounts(user.id);
-    const reviewSummary = await getReviewSummary(user.id);
     const sellerMetrics = await getSellerStorefrontMetrics({
       sellerUserId: user.id,
       sellerId: linkedSeller?.id || null,
+    });
+    const reviewSummary = await loadShopReviewStats({
+      sellerUserId: user.id,
+      sellerId: linkedSeller?.id || null,
+      salesCount: sellerMetrics.salesCount,
     });
 
     return attachViewerToShopProfile(
@@ -1581,19 +1714,11 @@ export async function getShopProfileByHandle({
     sellerUserId: sellerUser?.id || null,
     sellerId: seller.id,
   });
-  let reviewSummary = await getReviewSummary(sellerUser?.id || null);
-  // +1 shop rating per completed sale — backfill when sales outpace reviews.
-  if (Number(sellerMetrics.salesCount || 0) > Number(reviewSummary.totalReviews || 0)) {
-    try {
-      await backfillSellerSaleReviews({
-        sellerUserId: sellerUser?.id || null,
-        sellerId: seller.id,
-      });
-      reviewSummary = await getReviewSummary(sellerUser?.id || null);
-    } catch (err) {
-      console.warn("[social] sale-rating backfill:", err.message);
-    }
-  }
+  const reviewSummary = await loadShopReviewStats({
+    sellerUserId: sellerUser?.id || null,
+    sellerId: seller.id,
+    salesCount: sellerMetrics.salesCount,
+  });
 
   return attachViewerToShopProfile(
     {
@@ -2784,6 +2909,14 @@ function isDeliveredStatus(status) {
   return s === "delivered" || s === "completed";
 }
 
+function isJsonOrderDelivered(order) {
+  if (!order) return false;
+  if (isDeliveredStatus(order.status) || isDeliveredStatus(order.shipmentStatus)) return true;
+  if (order.buyerConfirmedAt) return true;
+  if (String(order.escrowStatus || "").toLowerCase() === "released") return true;
+  return false;
+}
+
 export async function createOrderReview({
   orderId,
   buyerUserId,
@@ -2834,11 +2967,11 @@ export async function createOrderReview({
     };
   }
 
-  const status =
+  const delivered =
     order.source === "json"
-      ? order.jsonOrder?.status || order.jsonOrder?.shipmentStatus || order.status
-      : order.status;
-  if (!isDeliveredStatus(status)) {
+      ? isJsonOrderDelivered(order.jsonOrder)
+      : isDeliveredStatus(order.status);
+  if (!delivered) {
     return {
       error: "review_not_allowed",
       message:
@@ -2878,19 +3011,34 @@ export async function createOrderReview({
     };
   }
 
-  const orderSellerUserId =
-    order.seller_user_id != null ? Number(order.seller_user_id) : null;
-  if (orderSellerUserId != null && orderSellerUserId !== sellerId) {
-    return {
-      error: "seller_mismatch",
-      message: "This order is for a different shop.",
-    };
-  }
-  if (orderSellerUserId == null && order.source === "json") {
-    return {
-      error: "seller_mismatch",
-      message: "Could not match this order to the shop. Message Sokoni support with your SK number.",
-    };
+  // Seller ownership: accept sticky id, resolved id, OR product/shop ownership.
+  // Fixes "different shop" when resolveSellerUserId was incomplete/wrong.
+  if (order.source === "json") {
+    const belongs = await jsonOrderBelongsToSeller(order.jsonOrder, sellerId);
+    if (!belongs) {
+      return {
+        error: "seller_mismatch",
+        message: "This order is for a different shop.",
+      };
+    }
+    // Persist sticky seller id so later lookups stay consistent.
+    try {
+      const { updateOrderMeta } = await import("../../services/orders.js");
+      if (!order.jsonOrder.sellerUserId) {
+        updateOrderMeta(order.jsonOrder.id, { sellerUserId: sellerId });
+      }
+    } catch {
+      /* non-fatal */
+    }
+  } else {
+    const orderSellerUserId =
+      order.seller_user_id != null ? Number(order.seller_user_id) : null;
+    if (orderSellerUserId != null && orderSellerUserId !== sellerId) {
+      return {
+        error: "seller_mismatch",
+        message: "This order is for a different shop.",
+      };
+    }
   }
 
   const orderRef = String(order.tracking_code || orderRefInput).toUpperCase();
@@ -2938,7 +3086,7 @@ async function ensureAutomaticSaleBuyerId() {
  * +1 seller shop rating on every completed sale (YES / auto-release / sold).
  * Uses a 5★ "Completed sale" review so shops show ★ 5.0 (N) instead of "No reviews yet".
  */
-export async function creditSellerSaleReview(order) {
+export async function creditSellerSaleReview(order, { sellerUserId: forcedSellerUserId = null } = {}) {
   if (!isDbEnabled() || !order?.id) {
     return { skipped: true, reason: "unavailable" };
   }
@@ -2948,9 +3096,22 @@ export async function creditSellerSaleReview(order) {
     return { skipped: true, reason: "exists" };
   }
 
-  const sellerUserId = await resolveSellerUserIdForJsonOrder(order);
+  let sellerUserId = parseUserId(forcedSellerUserId) || (await resolveSellerUserIdForJsonOrder(order));
+  if (!sellerUserId && forcedSellerUserId) {
+    sellerUserId = parseUserId(forcedSellerUserId);
+  }
   if (!sellerUserId) {
     return { skipped: true, reason: "no_seller_user" };
+  }
+
+  // Stick seller onto the order for future review / DISPATCH paths.
+  if (!order.sellerUserId) {
+    try {
+      const { updateOrderMeta } = await import("../../services/orders.js");
+      updateOrderMeta(order.id, { sellerUserId });
+    } catch {
+      /* non-fatal */
+    }
   }
 
   let buyerUserId = await resolveBuyerUserIdForJsonOrder(order);
@@ -2980,7 +3141,7 @@ export async function creditSellerSaleReview(order) {
        RETURNING id`,
       [null, orderRef, sellerUserId, buyerUserId, 5, "Completed sale", "buyer_to_seller"]
     );
-    return { success: true, reviewId: Number(inserted.rows[0]?.id) || null };
+    return { success: true, reviewId: Number(inserted.rows[0]?.id) || null, sellerUserId };
   } catch (err) {
     console.warn("[social] creditSellerSaleReview failed:", err.message);
     return { skipped: true, reason: "insert_failed", error: err.message };
@@ -2989,6 +3150,7 @@ export async function creditSellerSaleReview(order) {
 
 /**
  * Backfill missing +1 sale ratings for a shop (sold products + delivered SK orders).
+ * Credits against the shop's social userId even when product.seller_user_id was null/wrong.
  */
 export async function backfillSellerSaleReviews({ sellerUserId = null, sellerId = null } = {}) {
   if (!isDbEnabled()) return { credited: 0 };
@@ -3003,69 +3165,81 @@ export async function backfillSellerSaleReviews({ sellerUserId = null, sellerId 
       /* ignore */
     }
   }
+  if (!uid) return { credited: 0 };
   let credited = 0;
 
-  // Delivered JSON prepaid orders for this seller.
-  if (uid) {
-    try {
-      const { listAllOrders } = await import("../../services/orders.js");
-      for (const order of listAllOrders()) {
-        const delivered =
-          String(order.status || "").toLowerCase() === "delivered" ||
-          String(order.shipmentStatus || "").toLowerCase() === "delivered" ||
-          Boolean(order.buyerConfirmedAt);
-        if (!delivered) continue;
-        const seller = await resolveSellerUserIdForJsonOrder(order);
-        if (seller !== uid) continue;
-        const result = await creditSellerSaleReview(order);
-        if (result.success) credited += 1;
-      }
-    } catch (err) {
-      console.warn("[social] order backfill skipped:", err.message);
+  // Delivered JSON prepaid orders belonging to this shop.
+  try {
+    const { listAllOrders } = await import("../../services/orders.js");
+    for (const order of listAllOrders()) {
+      if (!isJsonOrderDelivered(order)) continue;
+      if (!(await jsonOrderBelongsToSeller(order, uid))) continue;
+      const result = await creditSellerSaleReview(order, { sellerUserId: uid });
+      if (result.success) credited += 1;
     }
+  } catch (err) {
+    console.warn("[social] order backfill skipped:", err.message);
   }
 
-  // Sold listings without an order review — one 5★ credit per sold product.
-  if (uid || sellerId) {
-    try {
-      const params = [];
-      const ownerParts = [];
-      if (uid) {
-        params.push(uid);
-        ownerParts.push(`COALESCE(p.seller_user_id, s.user_id) = $${params.length}`);
-      }
-      if (sellerId) {
-        params.push(Number(sellerId));
-        ownerParts.push(`p.seller_id = $${params.length}`);
-      }
-      const { rows } = await query(
-        `SELECT p.id, COALESCE(p.seller_user_id, s.user_id) AS seller_user_id
-           FROM products p
-           LEFT JOIN sellers s ON s.id = p.seller_id
-          WHERE p.is_sold = TRUE
-            AND (${ownerParts.join(" OR ")})
-          LIMIT 200`,
-        params
-      );
-      const systemBuyer = await ensureAutomaticSaleBuyerId();
-      for (const row of rows) {
-        const seller = row.seller_user_id != null ? Number(row.seller_user_id) : null;
-        if (!seller || !systemBuyer || seller === systemBuyer) continue;
-        const orderRef = `SALE-${String(row.id).toUpperCase()}`;
-        if (await reviewAlreadyExists({ orderRef, direction: "buyer_to_seller" })) continue;
-        await query(
-          `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction)
-           VALUES (NULL, $1, $2, $3, 5, $4, 'buyer_to_seller')`,
-          [orderRef, seller, systemBuyer, "Completed sale"]
-        );
-        credited += 1;
-      }
-    } catch (err) {
-      console.warn("[social] sold-product backfill skipped:", err.message);
+  // Sold listings — one 5★ credit per sold product, attributed to this shop user.
+  try {
+    const params = [];
+    const ownerParts = [];
+    params.push(uid);
+    ownerParts.push(`COALESCE(p.seller_user_id, s.user_id) = $${params.length}`);
+    if (sellerId) {
+      params.push(Number(sellerId));
+      ownerParts.push(`p.seller_id = $${params.length}`);
     }
+    const { rows } = await query(
+      `SELECT p.id
+         FROM products p
+         LEFT JOIN sellers s ON s.id = p.seller_id
+        WHERE p.is_sold = TRUE
+          AND (${ownerParts.join(" OR ")})
+        LIMIT 200`,
+      params
+    );
+    const systemBuyer = await ensureAutomaticSaleBuyerId();
+    if (!systemBuyer || systemBuyer === uid) return { credited };
+    for (const row of rows) {
+      const orderRef = `SALE-${String(row.id).toUpperCase()}`;
+      if (await reviewAlreadyExists({ orderRef, direction: "buyer_to_seller" })) continue;
+      // Prefer SK order credit when soldOrderId is on the product meta — else SALE-*.
+      await query(
+        `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction)
+         VALUES (NULL, $1, $2, $3, 5, $4, 'buyer_to_seller')`,
+        [orderRef, uid, systemBuyer, "Completed sale"]
+      );
+      credited += 1;
+    }
+  } catch (err) {
+    console.warn("[social] sold-product backfill skipped:", err.message);
   }
 
   return { credited };
+}
+
+/** Load review summary, backfilling sale credits when sales outpace reviews. */
+async function loadShopReviewStats({ sellerUserId = null, sellerId = null, salesCount = 0 } = {}) {
+  let reviewSummary = await getReviewSummary(sellerUserId);
+  if (Number(salesCount || 0) > Number(reviewSummary.totalReviews || 0)) {
+    try {
+      await backfillSellerSaleReviews({ sellerUserId, sellerId });
+      reviewSummary = await getReviewSummary(sellerUserId);
+    } catch (err) {
+      console.warn("[social] sale-rating backfill:", err.message);
+    }
+  }
+  // Last-resort display credit if DB still empty but shop has sales (e.g. offline DB write).
+  if (Number(salesCount || 0) > 0 && Number(reviewSummary.totalReviews || 0) === 0) {
+    return {
+      avgRating: 5,
+      totalReviews: Number(salesCount),
+      synthetic: true,
+    };
+  }
+  return { ...reviewSummary, synthetic: false };
 }
 
 /**
@@ -3093,14 +3267,13 @@ export async function listReviewableOrdersForSeller({
 
   const out = [];
 
-  // JSON prepaid orders (SK-*)
+  // JSON prepaid orders (SK-*) — match by ownership, not fragile resolved id equality.
   const customerKey = `web:buyer:${buyerId}`;
   const jsonOrders = getOrdersForCustomer(customerKey, buyerPhone);
   for (const order of jsonOrders) {
     if (out.length >= safeLimit) break;
-    if (!isDeliveredStatus(order.status) && !isDeliveredStatus(order.shipmentStatus)) continue;
-    const orderSeller = await resolveSellerUserIdForJsonOrder(order);
-    if (orderSeller !== sellerId) continue;
+    if (!isJsonOrderDelivered(order)) continue;
+    if (!(await jsonOrderBelongsToSeller(order, sellerId))) continue;
     if (await reviewAlreadyExists({ orderRef: order.id, direction: "buyer_to_seller" })) continue;
     out.push({
       orderId: order.id,

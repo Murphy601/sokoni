@@ -1061,7 +1061,10 @@ async function flowBuyerYes(customerKey, phone, orderId) {
   });
 
   void import("../db/repositories/social.js")
-    .then(({ creditSellerSaleReview }) => creditSellerSaleReview(fresh))
+    .then(async ({ ensureOrderSellerUserId, creditSellerSaleReview }) => {
+      await ensureOrderSellerUserId(fresh);
+      return creditSellerSaleReview(getOrder(fresh.id) || fresh);
+    })
     .catch((err) => console.warn("[communication-hub] sale rating credit:", err.message));
 
   const supplier = fresh.supplierId ? getSupplier(fresh.supplierId) : null;
@@ -1127,7 +1130,10 @@ async function autoReleaseOrder(order) {
 
   const fresh = getOrder(order.id) || order;
   void import("../db/repositories/social.js")
-    .then(({ creditSellerSaleReview }) => creditSellerSaleReview(fresh))
+    .then(async ({ ensureOrderSellerUserId, creditSellerSaleReview }) => {
+      await ensureOrderSellerUserId(fresh);
+      return creditSellerSaleReview(getOrder(fresh.id) || fresh);
+    })
     .catch((err) => console.warn("[communication-hub] sale rating credit:", err.message));
   const supplier = fresh.supplierId ? getSupplier(fresh.supplierId) : null;
   const sellerJobs = supplier?.phone
