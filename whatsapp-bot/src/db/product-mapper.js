@@ -82,8 +82,8 @@ export function rowToCatalogProduct(row, imageUrls = []) {
       isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
       salesCount: Number(row.seller_sales_count || 0),
       avgDispatchHours: null,
-      avgRating: 0,
-      totalReviews: 0,
+      avgRating: Number(row.seller_avg_rating || 0),
+      totalReviews: Number(row.seller_total_reviews || 0),
     }),
     description: row.description || undefined,
 
@@ -104,8 +104,17 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     retailPerMlKes: row.retail_per_ml_kes != null ? Number(row.retail_per_ml_kes) : undefined,
     volumeMl: row.volume_ml != null ? Number(row.volume_ml) : undefined,
 
-    rating: row.rating != null ? Number(row.rating) : 4.5,
-    reviews: Number(row.review_count) || 0,
+    // Prefer live seller shop ratings over catalog placeholder 4.5 / 0.
+    rating:
+      Number(row.seller_total_reviews || 0) > 0
+        ? Number(row.seller_avg_rating || 0)
+        : row.rating != null
+          ? Number(row.rating)
+          : 0,
+    reviews:
+      Number(row.seller_total_reviews || 0) > 0
+        ? Number(row.seller_total_reviews || 0)
+        : Number(row.review_count) || 0,
 
     source: row.source || "Sokoni",
     sourceUrl: row.source_url || undefined,

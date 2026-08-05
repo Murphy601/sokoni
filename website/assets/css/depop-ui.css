@@ -862,3 +862,85 @@ body.sheet-open {
     font-size: 1.125rem;
   }
 }
+
+/* ── Depop shell: black chrome + scarlet CTAs (overrides purple/green leftovers) ── */
+body.has-depop-shell .shop-mobile-bar,
+body.has-depop-shell.html.dark .shop-mobile-bar,
+html.dark body.has-depop-shell .shop-mobile-bar {
+  background: var(--depop-surface, #000);
+  border-bottom-color: var(--depop-border, #27272a);
+  color: var(--depop-ink, #fff);
+}
+
+body.has-depop-shell .sheet-panel,
+html.dark body.has-depop-shell .sheet-panel {
+  background: var(--depop-elevated, #09090b);
+  color: var(--depop-ink, #fff);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
+}
+
+body.has-depop-shell .sheet-close,
+html.dark body.has-depop-shell .sheet-close {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--depop-ink, #fff);
+}
+
+body.has-depop-shell .product-sheet-video,
+body.has-depop-shell .product-sheet-image {
+  background: #111113;
+}
+
+body.has-depop-shell .product-sheet-tags,
+body.has-depop-shell .product-sheet-id,
+body.has-depop-shell .product-sheet-desc,
+body.has-depop-shell .product-sheet-rating,
+body.has-depop-shell .product-sheet-ask,
+body.has-depop-shell .product-sheet-escrow {
+  color: var(--depop-muted, #a1a1aa);
+}
+
+body.has-depop-shell .product-sheet-price,
+body.has-depop-shell .product-sheet-title {
+  color: var(--depop-ink, #fff);
+}
+
+body.has-depop-shell .product-sheet-order,
+body.has-depop-shell .product-sheet-order.btn-whatsapp,
+body.has-depop-shell .btn-whatsapp,
+body.has-depop-shell .product-sheet-offer-submit,
+body.has-depop-shell .shop-bag-count {
+  background: var(--depop-action, #ff2300) !important;
+  color: var(--depop-on-action, #fff) !important;
+  border-color: transparent;
+}
+
+body.has-depop-shell .product-sheet-order:hover,
+body.has-depop-shell .btn-whatsapp:hover {
+  background: var(--depop-action-hover, #e01f00) !important;
+}
+
+body.has-depop-shell .product-sheet-save,
+body.has-depop-shell .product-sheet-thumb.is-active {
+  border-color: var(--depop-action, #ff2300);
+  color: var(--depop-ink, #fff);
+}
+
+body.has-depop-shell .product-sheet-save.is-saved {
+  border-color: var(--depop-action, #ff2300);
+  color: var(--depop-action, #ff2300);
+  background: rgba(255, 35, 0, 0.12);
+}
+
+body.has-depop-shell .product-sheet-dispatch {
+  color: var(--depop-escrow, #34d399) !important;
+}
+
+body.has-depop-shell .product-sheet-offer-form {
+  border-color: var(--depop-border, #27272a);
+}
+
+body.has-depop-shell .product-sheet-offer-input {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--depop-border, #27272a);
+  color: var(--depop-ink, #fff);
+}

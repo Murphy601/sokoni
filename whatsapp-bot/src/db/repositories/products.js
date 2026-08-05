@@ -25,6 +25,18 @@ const PRODUCT_SELECT = `
            )
          )
     ) AS seller_sales_count,
+    (
+      SELECT COALESCE(AVG(r.rating), 0)::numeric(10,2)
+        FROM order_reviews r
+       WHERE r.seller_user_id = COALESCE(p.seller_user_id, s.user_id)
+         AND r.direction = 'buyer_to_seller'
+    ) AS seller_avg_rating,
+    (
+      SELECT COUNT(*)::int
+        FROM order_reviews r
+       WHERE r.seller_user_id = COALESCE(p.seller_user_id, s.user_id)
+         AND r.direction = 'buyer_to_seller'
+    ) AS seller_total_reviews,
     COALESCE(
       (SELECT json_agg(pi.url ORDER BY pi.sort_order)
        FROM product_images pi WHERE pi.product_id = p.id),

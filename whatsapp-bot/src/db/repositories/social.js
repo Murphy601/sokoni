@@ -1577,11 +1577,23 @@ export async function getShopProfileByHandle({
     sellerId: seller.id,
   });
   const follows = await getFollowCounts(sellerUser?.id || null);
-  const reviewSummary = await getReviewSummary(sellerUser?.id || null);
   const sellerMetrics = await getSellerStorefrontMetrics({
     sellerUserId: sellerUser?.id || null,
     sellerId: seller.id,
   });
+  let reviewSummary = await getReviewSummary(sellerUser?.id || null);
+  // +1 shop rating per completed sale — backfill when sales outpace reviews.
+  if (Number(sellerMetrics.salesCount || 0) > Number(reviewSummary.totalReviews || 0)) {
+    try {
+      await backfillSellerSaleReviews({
+        sellerUserId: sellerUser?.id || null,
+        sellerId: seller.id,
+      });
+      reviewSummary = await getReviewSummary(sellerUser?.id || null);
+    } catch (err) {
+      console.warn("[social] sale-rating backfill:", err.message);
+    }
+  }
 
   return attachViewerToShopProfile(
     {
@@ -2906,6 +2918,154 @@ export async function createOrderReview({
     orderTrackingCode: orderRef,
   };
   return { success: true, review };
+}
+
+async function ensureAutomaticSaleBuyerId() {
+  const existing = await query(
+    `SELECT id FROM users WHERE LOWER(handle) = 'sokoni_sales' LIMIT 1`
+  );
+  if (existing.rows[0]?.id != null) return Number(existing.rows[0].id);
+
+  const inserted = await query(
+    `INSERT INTO users (display_name, role, handle)
+     VALUES ('Sokoni sales', 'buyer', 'sokoni_sales')
+     RETURNING id`
+  );
+  return inserted.rows[0]?.id != null ? Number(inserted.rows[0].id) : null;
+}
+
+/**
+ * +1 seller shop rating on every completed sale (YES / auto-release / sold).
+ * Uses a 5★ "Completed sale" review so shops show ★ 5.0 (N) instead of "No reviews yet".
+ */
+export async function creditSellerSaleReview(order) {
+  if (!isDbEnabled() || !order?.id) {
+    return { skipped: true, reason: "unavailable" };
+  }
+
+  const orderRef = String(order.id).toUpperCase();
+  if (await reviewAlreadyExists({ orderRef, direction: "buyer_to_seller" })) {
+    return { skipped: true, reason: "exists" };
+  }
+
+  const sellerUserId = await resolveSellerUserIdForJsonOrder(order);
+  if (!sellerUserId) {
+    return { skipped: true, reason: "no_seller_user" };
+  }
+
+  let buyerUserId = await resolveBuyerUserIdForJsonOrder(order);
+  if (!buyerUserId) {
+    const phone = String(order.phone || order.mpesaPhone || "").replace(/\D/g, "");
+    if (phone) {
+      try {
+        const { findOrCreateBuyerUserByPhone } = await import("./users.js");
+        const created = await findOrCreateBuyerUserByPhone(phone);
+        if (created?.ok && created.user?.id) buyerUserId = Number(created.user.id);
+      } catch {
+        /* fall through to system buyer */
+      }
+    }
+  }
+  if (!buyerUserId) {
+    buyerUserId = await ensureAutomaticSaleBuyerId();
+  }
+  if (!buyerUserId || buyerUserId === sellerUserId) {
+    return { skipped: true, reason: "no_buyer" };
+  }
+
+  try {
+    const inserted = await query(
+      `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [null, orderRef, sellerUserId, buyerUserId, 5, "Completed sale", "buyer_to_seller"]
+    );
+    return { success: true, reviewId: Number(inserted.rows[0]?.id) || null };
+  } catch (err) {
+    console.warn("[social] creditSellerSaleReview failed:", err.message);
+    return { skipped: true, reason: "insert_failed", error: err.message };
+  }
+}
+
+/**
+ * Backfill missing +1 sale ratings for a shop (sold products + delivered SK orders).
+ */
+export async function backfillSellerSaleReviews({ sellerUserId = null, sellerId = null } = {}) {
+  if (!isDbEnabled()) return { credited: 0 };
+  let uid = parseUserId(sellerUserId);
+  if (!uid && sellerId) {
+    try {
+      const { rows } = await query(`SELECT user_id FROM sellers WHERE id = $1 LIMIT 1`, [
+        Number(sellerId),
+      ]);
+      if (rows[0]?.user_id != null) uid = Number(rows[0].user_id);
+    } catch {
+      /* ignore */
+    }
+  }
+  let credited = 0;
+
+  // Delivered JSON prepaid orders for this seller.
+  if (uid) {
+    try {
+      const { listAllOrders } = await import("../../services/orders.js");
+      for (const order of listAllOrders()) {
+        const delivered =
+          String(order.status || "").toLowerCase() === "delivered" ||
+          String(order.shipmentStatus || "").toLowerCase() === "delivered" ||
+          Boolean(order.buyerConfirmedAt);
+        if (!delivered) continue;
+        const seller = await resolveSellerUserIdForJsonOrder(order);
+        if (seller !== uid) continue;
+        const result = await creditSellerSaleReview(order);
+        if (result.success) credited += 1;
+      }
+    } catch (err) {
+      console.warn("[social] order backfill skipped:", err.message);
+    }
+  }
+
+  // Sold listings without an order review — one 5★ credit per sold product.
+  if (uid || sellerId) {
+    try {
+      const params = [];
+      const ownerParts = [];
+      if (uid) {
+        params.push(uid);
+        ownerParts.push(`COALESCE(p.seller_user_id, s.user_id) = $${params.length}`);
+      }
+      if (sellerId) {
+        params.push(Number(sellerId));
+        ownerParts.push(`p.seller_id = $${params.length}`);
+      }
+      const { rows } = await query(
+        `SELECT p.id, COALESCE(p.seller_user_id, s.user_id) AS seller_user_id
+           FROM products p
+           LEFT JOIN sellers s ON s.id = p.seller_id
+          WHERE p.is_sold = TRUE
+            AND (${ownerParts.join(" OR ")})
+          LIMIT 200`,
+        params
+      );
+      const systemBuyer = await ensureAutomaticSaleBuyerId();
+      for (const row of rows) {
+        const seller = row.seller_user_id != null ? Number(row.seller_user_id) : null;
+        if (!seller || !systemBuyer || seller === systemBuyer) continue;
+        const orderRef = `SALE-${String(row.id).toUpperCase()}`;
+        if (await reviewAlreadyExists({ orderRef, direction: "buyer_to_seller" })) continue;
+        await query(
+          `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction)
+           VALUES (NULL, $1, $2, $3, 5, $4, 'buyer_to_seller')`,
+          [orderRef, seller, systemBuyer, "Completed sale"]
+        );
+        credited += 1;
+      }
+    } catch (err) {
+      console.warn("[social] sold-product backfill skipped:", err.message);
+    }
+  }
+
+  return { credited };
 }
 
 /**
