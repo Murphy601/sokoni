@@ -101,6 +101,16 @@ export function rememberSellerNotifyTarget(phone, extraChatId = null) {
   return chat;
 }
 
+/**
+ * Bind this WhatsApp chat to a seller phone during onboarding / sign-in.
+ * Primary path — sellers should never need LINKSELLER after this.
+ */
+export function bindSellerWhatsAppChat(chatId, phone) {
+  const p = normalizePhone(phone);
+  if (!p) return null;
+  return rememberSellerNotifyTarget(p, chatId || null);
+}
+
 export function listSellerChatIds() {
   load();
   return Object.fromEntries(chatToPhone);

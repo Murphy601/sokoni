@@ -117,6 +117,7 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     shopHandle: String(shopHandle || shopName).trim(),
     mpesaNumber: normalizePhone(mpesaNumber),
     nationalId,
+    whatsappChatId: `${normalizedPhone}@c.us`,
   });
 
   return {

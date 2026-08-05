@@ -98,6 +98,14 @@ function supplierMatchesSender(supplier, phone = "", customerKey = "") {
     return true;
   }
   if (customerKey) {
+    // Bound during onboarding / OTP / vendor menu (covers @lid).
+    if (supplier.whatsappChatId && supplier.whatsappChatId === customerKey) return true;
+    if (
+      Array.isArray(supplier.whatsappChatIds) &&
+      supplier.whatsappChatIds.includes(customerKey)
+    ) {
+      return true;
+    }
     if (supplier.phone && toChatId(supplier.phone) === customerKey) return true;
     if (supplier.mpesaNumber && toChatId(supplier.mpesaNumber) === customerKey) return true;
     const keyDigits = String(customerKey || "").replace(/\D/g, "");
@@ -149,6 +157,19 @@ function findSupplierForSender(phone = "", customerKey = "") {
     }
     return byPhone;
   }
+  // Onboarding-bound @lid / chat — works even when WAHA sends no phone digits.
+  if (customerKey) {
+    const byChat =
+      listSuppliers().find(
+        (s) =>
+          s.whatsappChatId === customerKey ||
+          (Array.isArray(s.whatsappChatIds) && s.whatsappChatIds.includes(customerKey))
+      ) || null;
+    if (byChat) {
+      if (byChat.phone) registerSellerChatId(customerKey, byChat.phone);
+      return byChat;
+    }
+  }
   const match = listSuppliers().find((s) => supplierMatchesSender(s, resolved || phone, customerKey)) || null;
   if (match && customerKey && match.phone) {
     registerSellerChatId(customerKey, match.phone);
@@ -156,13 +177,21 @@ function findSupplierForSender(phone = "", customerKey = "") {
   return match;
 }
 
-/** Chat targets for seller WhatsApp (primary @c.us + any linked @lid). */
+/** Chat targets for seller WhatsApp (primary @c.us + onboarding-linked chats). */
 export function sellerNotifyTargets(phone) {
   const primary = rememberSellerNotifyTarget(phone);
   const linked = listChatIdsForSellerPhone(phone);
+  const supplier = phone ? findSupplierByPhone(phone) : null;
+  const fromSupplier = [
+    supplier?.whatsappChatId,
+    ...(Array.isArray(supplier?.whatsappChatIds) ? supplier.whatsappChatIds : []),
+  ].filter(Boolean);
+  for (const id of fromSupplier) {
+    if (phone) registerSellerChatId(id, phone);
+  }
   const out = [];
   const seen = new Set();
-  for (const id of [primary, ...linked]) {
+  for (const id of [primary, ...linked, ...fromSupplier]) {
     if (!id || seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -1133,11 +1162,9 @@ export async function processOrderCommunicationReminders() {
       if (supplier?.phone) {
         const targets = sellerNotifyTargets(supplier.phone);
         const remindBody12 =
-          `⏰ *Reminder — ${order.id}*\nBuyer paid ~12h ago. When you send the item, reply:\n*DISPATCH ${order.id}*\n\n` +
-          `_If DISPATCH says you're not a seller, reply:_\n*LINKSELLER ${order.id} ####*\n_(last 4 digits of your seller WhatsApp / M-Pesa)_`;
+          `⏰ *Reminder — ${order.id}*\nBuyer paid ~12h ago. When you send the item, reply:\n*DISPATCH ${order.id}*`;
         const remindBody6 =
-          `⏰ *Reminder — ${order.id}*\nBuyer paid ~6h ago. When you send the item, reply:\n*DISPATCH ${order.id}*\n\n` +
-          `_If DISPATCH says you're not a seller, reply:_\n*LINKSELLER ${order.id} ####*\n_(last 4 digits of your seller WhatsApp / M-Pesa)_`;
+          `⏰ *Reminder — ${order.id}*\nBuyer paid ~6h ago. When you send the item, reply:\n*DISPATCH ${order.id}*`;
         if (age >= DISPATCH_REMIND_2 && !order.dispatchReminded12hAt) {
           updateOrderMeta(order.id, {
             dispatchReminded12hAt: now,

@@ -2,23 +2,19 @@ import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
 import { setMenuState } from "./session.js";
 import { requireAdminSender } from "./admin.js";
-import { findSupplierByPhone } from "./suppliers.js";
-import { registerSellerChatId, rememberSellerNotifyTarget } from "./seller-chat-ids.js";
-
-function linkSellerChatIfKnown(customerKey, phone) {
-  const supplier = phone ? findSupplierByPhone(phone) : null;
-  if (!supplier?.phone) return supplier;
-  if (customerKey) {
-    registerSellerChatId(customerKey, supplier.phone);
-    rememberSellerNotifyTarget(supplier.phone, customerKey);
-  }
-  return supplier;
-}
+import { attachSellerWhatsAppChat, findSupplierByPhone } from "./suppliers.js";
 import { sendWelcome, formatNumberedMenu } from "./menu.js";
 import { startSupplierOnboarding } from "./supplier-onboarding.js";
 import { startPickupOnboarding } from "./pickup-point-onboarding.js";
 import { OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
 import { formatSellerWalletReply } from "./seller-wallet.js";
+
+function linkSellerChatIfKnown(customerKey, phone) {
+  const supplier = phone ? findSupplierByPhone(phone) : null;
+  if (!supplier?.phone) return supplier;
+  if (customerKey) attachSellerWhatsAppChat(supplier.phone, customerKey);
+  return supplier;
+}
 
 function normalize(text) {
   return String(text || "").trim().toLowerCase();
