@@ -1,11 +1,14 @@
 /**
- * Homepage hero carousel — buyers / sellers / escrow.
+ * Homepage hero carousel — buyers / sellers / escrow / trade across Kenya.
  * Existing routes only; no lockup graphic. Respects prefers-reduced-motion.
  */
 (function () {
   const HERO_IMG = "assets/images/marketing/hero-banner-thrift.jpg";
   const PRODUCT_IMG = "assets/images/marketing/product-sneakers.jpg";
   const DISPATCH_IMG = "assets/images/marketing/how-it-works-dispatch.jpg";
+  const FARM_IMG = "assets/images/marketing/sokoni-mashinani-farm.jpg";
+  const ARTISAN_IMG = "assets/images/marketing/sokoni-local-artisan.jpg";
+  const COURIER_IMG = "assets/images/marketing/sokoni-county-courier.jpg";
 
   const SLIDES = [
     {
@@ -49,6 +52,48 @@
       secondaryCtaLink: "suppliers/list.html",
       bleedClass: "depop-hero-bleed--pickup",
       image: DISPATCH_IMG,
+    },
+    {
+      id: "mashinani",
+      tag: "Sokoni Mashinani",
+      badge: "Direct from the farm",
+      headline: "Fresh from the farm — no middleman.",
+      subtext:
+        "Buy produce, livestock, and raw goods from verified farmers across Nakuru, Eldoret, Meru, and Kisumu — fresh dispatch via local parcel networks.",
+      primaryCtaText: "Shop latest finds",
+      primaryCtaLink: "#deals",
+      secondaryCtaText: "Trade across Kenya",
+      secondaryCtaLink: "#trade-across-kenya",
+      bleedClass: "depop-hero-bleed--mashinani",
+      image: FARM_IMG,
+    },
+    {
+      id: "artisans",
+      tag: "Local makers & artisans",
+      badge: "M-Pesa escrow",
+      headline: "Empowering local artisans & crafts.",
+      subtext:
+        "From custom wood furniture to hand-woven kitenge — makers get a digital storefront and buyers pay safely with M-Pesa escrow.",
+      primaryCtaText: "Start selling",
+      primaryCtaLink: "suppliers/list.html",
+      secondaryCtaText: "Browse finds",
+      secondaryCtaLink: "#deals",
+      bleedClass: "depop-hero-bleed--artisans",
+      image: ARTISAN_IMG,
+    },
+    {
+      id: "courier",
+      tag: "County-to-county network",
+      badge: "Tracked delivery",
+      headline: "Nationwide delivery to any county.",
+      subtext:
+        "Order from Nairobi CBD or ship from a village in Nyeri — our door-to-hub parcel network tracks delivery to your nearest town centre.",
+      primaryCtaText: "Track an order",
+      primaryCtaLink: "track.html",
+      secondaryCtaText: "How it works",
+      secondaryCtaLink: "#how-it-works",
+      bleedClass: "depop-hero-bleed--courier",
+      image: COURIER_IMG,
     },
     {
       id: "escrow",
