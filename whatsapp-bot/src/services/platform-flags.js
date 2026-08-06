@@ -14,10 +14,12 @@ const DEFAULTS = {
   prepaidOnly: config.store.prepaidOnly !== false,
   catalogSyncOnPublish: true,
   maintenanceMode: false,
-  /** Multi-seller cart (SKN parent + per-line children). Env MULTI_SELLER_CART=1 also enables. */
-  multiSellerCart:
-    process.env.MULTI_SELLER_CART === "1" ||
-    String(process.env.MULTI_SELLER_CART || "").toLowerCase() === "true",
+  /**
+   * Multi-seller cart (SKN parent + per-line children).
+   * Default ON so website bag handoff works after deploy.
+   * Disable with MULTI_SELLER_CART=0 or flags.multiSellerCart=false.
+   */
+  multiSellerCart: true,
   notes: "",
   updatedAt: null,
 };
@@ -71,11 +73,9 @@ export function isMaintenanceMode() {
 
 /** Phase 9 — multi-seller cart feature flag (env OR platform-flags.json). */
 export function isMultiSellerCartEnabled() {
-  if (
-    process.env.MULTI_SELLER_CART === "1" ||
-    String(process.env.MULTI_SELLER_CART || "").toLowerCase() === "true"
-  ) {
-    return true;
-  }
-  return load().multiSellerCart === true;
+  const env = String(process.env.MULTI_SELLER_CART || "").trim().toLowerCase();
+  if (env === "0" || env === "false" || env === "off") return false;
+  if (env === "1" || env === "true" || env === "on") return true;
+  // Default ON (DEFAULTS.multiSellerCart); explicit false in flags file disables.
+  return load().multiSellerCart !== false;
 }
