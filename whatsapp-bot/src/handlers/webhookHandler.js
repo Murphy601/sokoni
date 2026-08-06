@@ -565,6 +565,12 @@ export async function handleIncomingMessage(
     return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
   }
 
+  // Never let AI invent till / product-picker replies during cart checkout
+  if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
+    const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText);
+    if (pendingAgain) return;
+  }
+
   // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
   try {
     const agent = await runAiAgent(customerKey, combinedText, phone);

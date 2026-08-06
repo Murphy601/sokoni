@@ -418,7 +418,6 @@ export function parentBuyerTotal(parent) {
 /** Parse website WA cart handoff message for product lines. */
 export function parseCartHandoffMessage(text) {
   const raw = String(text || "");
-  if (!/SOKONI_CART/i.test(raw) && !/NEW SOKONI CART/i.test(raw)) return null;
   const ids = [];
   const re = /\[SKU:([^\]]+)\]/gi;
   let m;
@@ -433,5 +432,8 @@ export function parseCartHandoffMessage(text) {
     if (id && !ids.some((x) => x.productId === id)) ids.push({ productId: id, quantity: 1 });
   }
   if (!ids.length) return null;
+  const hasMarker = /SOKONI_CART/i.test(raw) || /NEW SOKONI CART/i.test(raw);
+  // Require cart marker OR 2+ SKUs (avoid stealing single-SKU browse messages)
+  if (!hasMarker && ids.length < 2) return null;
   return { lines: ids, raw };
 }
