@@ -86,10 +86,25 @@ export async function handleStockCommand(adminChatId, args) {
   if (!productId) {
     return sendText(adminChatId, "Usage: #stock prod_abc123 in\nOr: #stock prod_abc123 out");
   }
+  const markSold = /^(sold)$/i.test(action);
   const inStock = !/^(out|off|0|false|sold)$/i.test(action);
+
+  if (markSold) {
+    const { markProductSoldAndSync } = await import("./catalog-ops.js");
+    const result = await markProductSoldAndSync(productId);
+    if (result.error) {
+      return sendText(adminChatId, `⚠️ Mark sold failed: ${result.error} (${productId})`);
+    }
+    return sendText(
+      adminChatId,
+      `✅ *${productId}* marked *sold* (tombstoned — will not reappear on publish).\nPublic catalog synced.`
+    );
+  }
+
   const result = await setProductStock(productId, inStock);
   if (result.error) {
-    return sendText(adminChatId, `⚠️ Stock update failed: ${result.error} (${productId})`);
+    const detail = result.message ? ` — ${result.message}` : "";
+    return sendText(adminChatId, `⚠️ Stock update failed: ${result.error}${detail} (${productId})`);
   }
   return sendText(
     adminChatId,

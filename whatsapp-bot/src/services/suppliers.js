@@ -282,14 +282,24 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
     };
 
     const existingIdx = master.findIndex((p) => p.id === productId);
-    if (existingIdx >= 0) master[existingIdx] = product;
-    else master.push(product);
+    if (existingIdx >= 0) {
+      const { preserveSoldState } = await import("./product-availability.js");
+      master[existingIdx] = preserveSoldState(master[existingIdx], product);
+    } else {
+      master.push(product);
+    }
 
     supplier.productIds.push(productId);
     added.push(product);
   }
 
   await writeFile(MASTER_CATALOG, JSON.stringify(master, null, 2) + "\n", "utf-8");
+  try {
+    const { enforceSoldLocksOnMaster } = await import("./product-availability.js");
+    await enforceSoldLocksOnMaster();
+  } catch (err) {
+    console.warn("[suppliers] sold-lock enforce:", err.message);
+  }
 
   supplierStore.suppliers[supplierId] = supplier;
   persistSuppliers();

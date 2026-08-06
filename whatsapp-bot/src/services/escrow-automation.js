@@ -55,25 +55,31 @@ export function generateDropoffLabel(order) {
 
 async function lockProductForOrder(order) {
   if (!order?.productId) return;
-  const paths = [PRODUCTS_PATH, REPO_PRODUCTS].filter((p) => existsSync(p));
-  for (const file of paths) {
-    try {
-      const raw = await readFile(file, "utf-8");
-      const products = JSON.parse(raw);
-      const idx = products.findIndex((p) => p.id === order.productId);
-      if (idx === -1) continue;
-      products[idx] = {
-        ...products[idx],
-        inStock: false,
-        isSold: true,
-        soldAt: Date.now(),
-        soldOrderId: order.id,
-      };
-      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
-    } catch (err) {
-      console.warn("[escrow] lock product failed:", file, err.message);
+
+  try {
+    const { recordSoldSku, markProductSoldFields } = await import("./product-availability.js");
+    await recordSoldSku(order.productId, { orderId: order.id, soldAt: Date.now() });
+
+    const paths = [PRODUCTS_PATH, REPO_PRODUCTS].filter((p) => existsSync(p));
+    for (const file of paths) {
+      try {
+        const raw = await readFile(file, "utf-8");
+        const products = JSON.parse(raw);
+        const idx = products.findIndex((p) => p.id === order.productId);
+        if (idx === -1) continue;
+        products[idx] = markProductSoldFields(
+          { ...products[idx] },
+          { orderId: order.id, soldAt: Date.now() }
+        );
+        await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      } catch (err) {
+        console.warn("[escrow] lock product failed:", file, err.message);
+      }
     }
+  } catch (err) {
+    console.warn("[escrow] sold registry failed:", err.message);
   }
+
   invalidateProductCache();
 
   if (isDbEnabled()) {
@@ -83,6 +89,14 @@ async function lockProductForOrder(order) {
     } catch (err) {
       console.warn("[escrow] DB mark sold failed:", err.message);
     }
+  }
+
+  // Drop the SKU from the public website catalog immediately (no wait for next admin publish).
+  try {
+    const { syncPublicCatalog } = await import("./catalog-ops.js");
+    await syncPublicCatalog();
+  } catch (err) {
+    console.warn("[escrow] public catalog sync after sold:", err.message);
   }
 }
 

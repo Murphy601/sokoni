@@ -58,7 +58,7 @@ export function getFeaturedProductIds() {
 
 async function loadProducts() {
   const raw = await readFile(PRODUCTS_FILE, "utf-8");
-  const all = JSON.parse(raw).filter((p) => p.inStock !== false);
+  const all = JSON.parse(raw).filter((p) => p.inStock !== false && p.isSold !== true);
   const store = all.filter((p) => p.fulfillment === "store" || p.scope === "local");
   return store.length ? store : all;
 }

@@ -934,6 +934,12 @@ export async function publishSellerListing({
 
   master.push(product);
   await writeFile(MASTER_CATALOG, JSON.stringify(master, null, 2) + "\n", "utf-8");
+  try {
+    const { enforceSoldLocksOnMaster } = await import("./product-availability.js");
+    await enforceSoldLocksOnMaster();
+  } catch (err) {
+    console.warn("[seller-listings] sold-lock enforce:", err.message);
+  }
   invalidateProductCache();
 
   if (dbProductsAvailable()) {
