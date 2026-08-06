@@ -483,20 +483,38 @@ html.dark .sheet-panel {
   top: 0.65rem;
   right: 0.75rem;
   z-index: 2;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 44px;
+  min-height: 44px;
+  border: 2px solid #ff2300;
   border-radius: 9999px;
-  background: rgba(27, 16, 53, 0.08);
-  font-size: 1.35rem;
+  background: #ff2300;
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
-  color: #1b1035;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(255, 35, 0, 0.35);
+}
+
+.sheet-close:hover {
+  background: #e01f00;
+  border-color: #e01f00;
+}
+
+.sheet-close:focus-visible {
+  outline: 2px solid #25d366;
+  outline-offset: 2px;
 }
 
 html.dark .sheet-close {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff8f0;
+  background: #ff2300;
+  border-color: #ff2300;
+  color: #ffffff;
 }
 
 .sheet-scroll {
@@ -886,8 +904,16 @@ html.dark body.has-depop-shell .sheet-panel {
 
 body.has-depop-shell .sheet-close,
 html.dark body.has-depop-shell .sheet-close {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--depop-ink, #fff);
+  background: #ff2300;
+  border-color: #ff2300;
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(255, 35, 0, 0.45);
+}
+
+body.has-depop-shell .sheet-close:hover,
+html.dark body.has-depop-shell .sheet-close:hover {
+  background: #e01f00;
+  border-color: #e01f00;
 }
 
 body.has-depop-shell .product-sheet-video,
