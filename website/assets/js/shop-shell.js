@@ -264,8 +264,9 @@
         .map((p) => `• ${p.name} (${formatPriceLine(p)}) [SKU:${p.id}]`)
         .join("\n");
       orderBtn.textContent = "Order cart on WhatsApp";
+      // Machine-readable handoff only — bot replies with photos + asks for details.
       orderBtn.href = waLink(
-        `🛒 *NEW SOKONI CART ORDER*\nSOKONI_CART\n\n${skuLines}\n\n💰 *TOTAL AMOUNT: KES ${grandTotal.toLocaleString()}*\n\n📍 *Delivery Landmark:* (reply with name, landmark, phone)`
+        `🛒 *NEW SOKONI CART ORDER*\nSOKONI_CART\n\n${skuLines}\n\n💰 Estimated total KES ${grandTotal.toLocaleString()}`
       );
     }
   }

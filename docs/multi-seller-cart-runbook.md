@@ -2,20 +2,19 @@
 
 ## Enable (Phase 9)
 
-On the VM bot `.env`:
+Cart is **ON by default**. Website bag → WhatsApp handoff should:
+1. Send each item **photo**
+2. Ask once for name / landmark / phone  
+(no AI till prompt, no “pick a number” list)
+
+Disable only if needed:
 
 ```bash
-MULTI_SELLER_CART=1
+# bot .env
+MULTI_SELLER_CART=0
 ```
 
-Or via admin flags:
-
-```bash
-curl -X POST https://bot.sokonimall.com/admin/ops/flags \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"multiSellerCart":true}'
-```
+Or via admin flags `multiSellerCart: false`.
 
 Redeploy bot **without** WAHA bounce:
 
@@ -24,7 +23,7 @@ cd ~/sokoni
 SKIP_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
 ```
 
-Rollback: set `MULTI_SELLER_CART=0` / `multiSellerCart:false` and redeploy. Single-item `SK-####` keeps working.
+Rollback: `MULTI_SELLER_CART=0`. Single-item `SK-####` keeps working.
 
 ## Buyer flow
 

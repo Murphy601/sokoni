@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { sendText, sendProductCard } from "./whatsapp.js";
+import { sendText, sendProductCard, sendProductImage } from "./whatsapp.js";
 import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, listBrowseProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
 import { buildBrowseSubmenus, priceTierMaxKes } from "./browse-menu.js";
 import { isCatalogPubliclyDisabled } from "./catalog-guard.js";
@@ -14,6 +14,7 @@ import {
   clearPendingCart,
   setMenuState,
   getMenuState,
+  clearMenuState,
   setProductContext,
   clearHumanHandoff,
   getCustomerMeta,
@@ -978,7 +979,9 @@ export async function handleCart(to) {
 }
 
 /**
- * Phase 3–4 — Start cart from website WA handoff (SOKONI_CART + [SKU:id] lines).
+ * Website bag handoff (SOKONI_CART + [SKU:id]).
+ * Flow: product images for each line → ONE message asking name / landmark / phone.
+ * No AI till prompts, no "pick a number" lists.
  */
 export async function startCartFromHandoff(to, text) {
   if (!isMultiSellerCartEnabled()) return false;
@@ -986,6 +989,8 @@ export async function startCartFromHandoff(to, text) {
   if (!parsed?.lines?.length) return false;
 
   clearPendingOrder(to);
+  clearMenuState(to);
+
   const resolved = [];
   for (const line of parsed.lines.slice(0, 20)) {
     const product = await getProductById(line.productId);
@@ -1015,26 +1020,35 @@ export async function startCartFromHandoff(to, text) {
     createdAt: Date.now(),
   });
 
-  const linesText = resolved
-    .map(
-      (r, i) =>
-        `${i + 1}. *${r.product.name}* ×${r.quantity} — KES ${r.fees.lineBuyerKes.toLocaleString()}`
-    )
-    .join("\n");
+  // 1) Show each ordered item with its photo (no order-action menus)
+  for (const r of resolved) {
+    const caption =
+      `*${r.product.name}*\n` +
+      `KES ${r.fees.lineBuyerKes.toLocaleString()}` +
+      (r.quantity > 1 ? ` × ${r.quantity}` : "") +
+      `\n_In your cart_`;
+    try {
+      const sent = await sendProductImage(to, r.product, caption);
+      if (!sent) {
+        await sendText(to, caption);
+      }
+    } catch (err) {
+      console.warn("[cart] image send failed:", r.product.id, err.message);
+      await sendText(to, caption);
+    }
+  }
 
+  // 2) Single ask for delivery / M-Pesa details (payment STK comes after this)
   await sendText(
     to,
-    `🛒 *NEW SOKONI CART ORDER*\n\n` +
-      `${linesText}\n\n` +
-      `Subtotal (incl. 10% per item): KES ${parentTotals.chargeBeforeTxnKes.toLocaleString()}\n` +
-      `M-Pesa fee (once): KES ${parentTotals.transactionFeeKes.toLocaleString()}\n` +
-      `💰 *TOTAL: KES ${parentTotals.totalKes.toLocaleString()}*\n\n` +
-      `Items may ship separately — each gets its own SKN tracking ID after payment.\n\n` +
+    `🛒 *${resolved.length} item${resolved.length === 1 ? "" : "s"} ready*\n` +
+      `💰 Total: *KES ${parentTotals.totalKes.toLocaleString()}*\n` +
+      `_10% Sokoni fee per item · one M-Pesa fee on the total_\n\n` +
       `Reply in *one message* with:\n` +
       `1️⃣ Full name\n` +
-      `2️⃣ Preferred pickup / landmark\n` +
-      `3️⃣ M-Pesa phone\n\n` +
-      `_Example: Jane Wanjiru, Archways Mall Hub Nairobi, 0712345678_`
+      `2️⃣ Landmark / town\n` +
+      `3️⃣ Phone for M-Pesa\n\n` +
+      `_Example: Peter Mwangi, Kenol town, 0757764009_`
   );
   return true;
 }

@@ -403,17 +403,27 @@ export async function handleIncomingMessage(
     return handleCart(customerKey);
   }
 
-  // Website multi-seller bag handoff → pending cart (feature-flagged inside)
-  if (/SOKONI_CART/i.test(text) || /NEW SOKONI CART/i.test(text)) {
-    if (await startCartFromHandoff(customerKey, text)) return;
-  }
-
   if (/^cancel(\s+order)?$/i.test(normalized) || normalized === "cancel order") {
     return cancelOrder(customerKey);
   }
 
   if (/^change(\s+order)?$/i.test(normalized) || normalized === "change order") {
     return changeOrder(customerKey);
+  }
+
+  // Website bag handoff — BEFORE AI / product pickers (must set pendingCart)
+  if (
+    /SOKONI_CART/i.test(combinedText) ||
+    /NEW SOKONI CART/i.test(combinedText) ||
+    /\[SKU:[^\]]+\]/i.test(combinedText)
+  ) {
+    if (await startCartFromHandoff(customerKey, combinedText)) return;
+  }
+
+  // Cart or single-item checkout awaiting delivery details — before AI
+  if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
+    const pendingHandledEarly = await tryHandlePendingOrder(customerKey, combinedText);
+    if (pendingHandledEarly) return;
   }
 
   // Accepted structured offer → prepaid checkout at agreed buyer total
@@ -474,10 +484,13 @@ export async function handleIncomingMessage(
     );
   }
 
-  const websiteProduct = await findProductFromWebsiteMessage(combinedText);
-  if (websiteProduct) {
-    const { showProductActions } = await import("../services/menu.js");
-    return showProductActions(customerKey, websiteProduct.id);
+  // Never treat a cart handoff as a single-product website referral
+  if (!/SOKONI_CART/i.test(combinedText) && !/\[SKU:/i.test(combinedText)) {
+    const websiteProduct = await findProductFromWebsiteMessage(combinedText);
+    if (websiteProduct) {
+      const { showProductActions } = await import("../services/menu.js");
+      return showProductActions(customerKey, websiteProduct.id);
+    }
   }
 
   if (await handleCatalogPagination(customerKey, text)) return;
@@ -550,6 +563,12 @@ export async function handleIncomingMessage(
 
   if (/human|agent|person|call me|speak to someone|talk to a human|i need human/i.test(normalized)) {
     return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
+  }
+
+  // Never let AI invent till / product-picker replies during cart checkout
+  if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
+    const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText);
+    if (pendingAgain) return;
   }
 
   // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
