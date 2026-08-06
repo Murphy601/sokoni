@@ -489,6 +489,7 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
   }
 
   const drop = oldBuyerTotal != null && newBuyerTotal < oldBuyerTotal;
+  const raise = oldBuyerTotal != null && newBuyerTotal > oldBuyerTotal;
   return {
     success: true,
     productId,
@@ -497,11 +498,14 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
     previousPriceKes: oldBuyerTotal,
     previousSellerNetKes: oldSellerNet,
     priceDropped: drop,
+    priceRaised: raise,
     likersNotified: notified,
     refreshedAt: updated.refreshedAt,
     message: drop
       ? `Price dropped to buyer total KES ${newBuyerTotal.toLocaleString()} — you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.${notified ? ` Notified ${notified} liker${notified === 1 ? "" : "s"}.` : ""}`
-      : `Price updated — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`,
+      : raise
+        ? `Price raised — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`
+        : `Price updated — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`,
   };
 }
 

@@ -2355,6 +2355,7 @@ async function loadMyListings() {
               <div class="flex flex-wrap gap-2 mt-3">
                 <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline refresh-listing-btn" data-id="${escapeHtml(pid)}">↻ Refresh listing</button>
                 <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline drop-price-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">↓ Drop price</button>
+                <button type="button" class="text-xs font-semibold text-emerald-400 hover:underline raise-price-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">↑ Raise price</button>
                 <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-[#FF2300] hover:underline">Share to WhatsApp</a>
               </div>` : ""}
             </div>
@@ -2367,7 +2368,12 @@ async function loadMyListings() {
     });
     wrap.querySelectorAll(".drop-price-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        void dropListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal);
+        void updateListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "drop");
+      });
+    });
+    wrap.querySelectorAll(".raise-price-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void updateListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "raise");
       });
     });
     wrap.querySelectorAll(".continue-draft-btn").forEach((btn) => {
@@ -3151,16 +3157,22 @@ async function refreshListing(productId) {
   }
 }
 
-async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) {
+async function updateListingPrice(productId, currentSellerNet, currentBuyerTotal, mode = "drop") {
   const phone = apiPhone();
   if (!phone || !productId) return;
   const currentNet = Math.round(Number(currentSellerNet) || 0);
   const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+  const raising = mode === "raise";
+  const actionLabel = raising ? "raise" : "drop";
   const hint =
     currentNet > 0
-      ? `Current: you receive KES ${currentNet.toLocaleString()}${currentBuyer > 0 ? ` (buyer pays KES ${currentBuyer.toLocaleString()})` : ""}.\n\nNew amount you want to receive (KES):`
-      : "New amount you want to receive (KES):";
-  const raw = window.prompt(hint, currentNet > 0 ? String(currentNet) : "");
+      ? `Current: you receive KES ${currentNet.toLocaleString()}${
+          currentBuyer > 0 ? ` (buyer pays KES ${currentBuyer.toLocaleString()})` : ""
+        }.\n\nNew amount you want to receive (KES) — ${actionLabel} price:`
+      : `New amount you want to receive (KES) — ${actionLabel} price:`;
+  const defaultVal =
+    currentNet > 0 ? String(raising ? currentNet + 100 : Math.max(50, currentNet - 100)) : "";
+  const raw = window.prompt(hint, defaultVal);
   if (raw == null) return;
   const nextNet = Math.round(Number(String(raw).replace(/[^\d.]/g, "")));
   if (!Number.isFinite(nextNet) || nextNet < 50) {
@@ -3171,7 +3183,15 @@ async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) 
     setStatus("Price unchanged.");
     return;
   }
-  setStatus("Updating price…");
+  if (raising && currentNet > 0 && nextNet < currentNet) {
+    setStatus("Raise price needs a higher amount than the current price. Use Drop price to go lower.", true);
+    return;
+  }
+  if (!raising && currentNet > 0 && nextNet > currentNet) {
+    setStatus("Drop price needs a lower amount than the current price. Use Raise price to go higher.", true);
+    return;
+  }
+  setStatus(raising ? "Raising price…" : "Dropping price…");
   try {
     const res = await fetch(`${ONBOARD_API}/price`, {
       method: "POST",
@@ -3187,11 +3207,16 @@ async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) 
       setStatus(data.message || data.error || "Price update failed.", true);
       return;
     }
-    setStatus(data.message || "Price updated.");
+    setStatus(data.message || (raising ? "Price raised." : "Price dropped."));
     await loadMyListings();
   } catch {
     setStatus("Network error.", true);
   }
+}
+
+/** @deprecated use updateListingPrice(..., "drop") */
+async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) {
+  return updateListingPrice(productId, currentSellerNet, currentBuyerTotal, "drop");
 }
 
 function renderLedgerDetail() {
