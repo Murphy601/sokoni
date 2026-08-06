@@ -77,7 +77,7 @@ function toPublicProduct(p) {
 
 async function loadStoreProducts() {
   const products = await searchProducts({ scope: "local", fulfillment: "store", limit: 500 });
-  return products.filter((p) => p.inStock !== false);
+  return products.filter((p) => p.inStock !== false && p.isSold !== true);
 }
 
 function rankProducts(products, events, { limit = 12, filter = null, boost = null } = {}) {

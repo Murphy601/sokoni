@@ -91,7 +91,9 @@
   }
 
   function pickProducts(list) {
-    const store = list.filter((p) => p.fulfillment === "store" && p.inStock !== false);
+    const store = list.filter(
+      (p) => p.fulfillment === "store" && p.inStock !== false && p.isSold !== true
+    );
     const intl = list.filter((p) => p.scope === "international");
     featured = store.find((p) => p.imageUrl) || store[0] || null;
     intlProduct = intl[0] || null;
@@ -114,7 +116,9 @@
    */
   function buildDiverseFilmstrip(list) {
     const PER_SUB_CAP = 6;
-    const store = list.filter((p) => p.imageUrl && p.fulfillment === "store" && p.inStock !== false);
+    const store = list.filter(
+      (p) => p.imageUrl && p.fulfillment === "store" && p.inStock !== false && p.isSold !== true
+    );
     const buckets = new Map();
     for (const p of store) {
       const key = `${p.category || "other"}::${p.subcategory || "general"}`;

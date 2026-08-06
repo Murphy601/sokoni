@@ -379,7 +379,11 @@ router.get("/:id", async (req, res) => {
   }
   try {
     const product = await getProductById(req.params.id);
-    if (!product || (!product.inStock && req.query.includeHidden !== "true")) {
+    if (
+      !product ||
+      product.isSold === true ||
+      (!product.inStock && req.query.includeHidden !== "true")
+    ) {
       return res.status(404).json({ error: "not_found" });
     }
     res.json({ product: toPublicProduct(product) });

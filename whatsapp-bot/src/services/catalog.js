@@ -6,6 +6,7 @@ import { normalizeShopperQuery } from "./shopper-language.js";
 import { isDbEnabled } from "../db/pool.js";
 import { listProducts as listProductsFromDb } from "../db/repositories/products.js";
 import { isCatalogPubliclyDisabled } from "./catalog-guard.js";
+import { applySoldLocks, isProductAvailable } from "./product-availability.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
@@ -45,7 +46,8 @@ async function loadProducts() {
     }
   }
   const raw = await readFile(PRODUCTS_PATH, "utf-8");
-  cachedProducts = JSON.parse(raw);
+  const parsed = JSON.parse(raw);
+  cachedProducts = Array.isArray(parsed) ? await applySoldLocks(parsed) : parsed;
   cachedAtMs = now;
   return cachedProducts;
 }
@@ -88,7 +90,7 @@ export async function searchProducts({
   const keywordTokens = expandKeywordTokens(keywords);
 
   let results = products.filter((product) => {
-    if (product.inStock === false) return false;
+    if (!isProductAvailable(product)) return false;
     if (category && product.category !== category) return false;
     if (subcategory && product.subcategory !== subcategory) return false;
     if (browseCategory || browseSubCategory) {
@@ -176,7 +178,7 @@ export async function listPerfumeScentFamilies() {
   const families = [];
   const seen = new Set();
   for (const p of products) {
-    if (!isPerfumeOil(p)) continue;
+    if (!isPerfumeOil(p) || !isProductAvailable(p)) continue;
     const family = scentFamilyName(p);
     if (seen.has(family)) continue;
     seen.add(family);
@@ -189,7 +191,12 @@ export async function getPerfumeVariantsForFamily(familyName) {
   const products = await loadProducts();
   const target = normalizeFamilyKey(familyName);
   return products
-    .filter((p) => isPerfumeOil(p) && normalizeFamilyKey(scentFamilyName(p)) === target)
+    .filter(
+      (p) =>
+        isPerfumeOil(p) &&
+        isProductAvailable(p) &&
+        normalizeFamilyKey(scentFamilyName(p)) === target
+    )
     .sort((a, b) => (a.volumeMl || 0) - (b.volumeMl || 0));
 }
 
@@ -209,7 +216,7 @@ function normalizeFamilyKey(name) {
 export async function getDealOfTheDay({ scope = "all", limit = 3 } = {}) {
   const products = await loadProducts();
   const filtered = products.filter((product) => {
-    if (product.inStock === false) return false;
+    if (!isProductAvailable(product)) return false;
     if (scope === "all") return true;
     return product.scope === scope;
   });
@@ -319,7 +326,7 @@ function matchProductByNameInText(text, products, { storeOnly = false } = {}) {
   let best = null;
   let bestLen = 0;
   for (const p of products) {
-    if (p.inStock === false) continue;
+    if (!isProductAvailable(p)) continue;
     if (storeOnly && p.fulfillment !== "store") continue;
     const name = p.name.toLowerCase();
     if (lower.includes(name) && name.length > bestLen) {
@@ -336,7 +343,7 @@ function fuzzyProductHit(guess, products, { storeOnly = false } = {}) {
     products.find(
       (p) =>
         (!storeOnly || p.fulfillment === "store") &&
-        p.inStock !== false &&
+        isProductAvailable(p) &&
         (g.includes(p.name.toLowerCase().slice(0, 14)) ||
           p.name.toLowerCase().includes(g.slice(0, 20)))
     ) || null

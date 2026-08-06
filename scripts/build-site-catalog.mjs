@@ -15,6 +15,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { CATEGORY_TAXONOMY } from "./catalog-taxonomy.mjs";
 import { computeProductTotals } from "../whatsapp-bot/src/services/shipping-tiers.js";
+import {
+  applySoldLocks,
+  enforceSoldLocksOnMaster,
+  isProductAvailable,
+} from "../whatsapp-bot/src/services/product-availability.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -123,8 +128,22 @@ async function main() {
     /* no pause file — publish as normal */
   }
 
-  const master = paused ? [] : JSON.parse(await readFile(MASTER, "utf-8"));
-  const publicItems = master.map(toPublic).filter(Boolean).filter((p) => p.inStock !== false);
+  // Re-apply sold tombstones so RMW races cannot resurrect sold SKUs on publish.
+  if (!paused) {
+    try {
+      await enforceSoldLocksOnMaster();
+    } catch (err) {
+      console.warn("[build-site-catalog] sold-lock enforce:", err.message);
+    }
+  }
+
+  const masterRaw = paused ? [] : JSON.parse(await readFile(MASTER, "utf-8"));
+  const master = paused ? [] : await applySoldLocks(masterRaw);
+  const publicItems = master
+    .filter((p) => isProductAvailable(p))
+    .map(toPublic)
+    .filter(Boolean)
+    .filter((p) => p.inStock !== false);
   await writeFile(OUTPUT, JSON.stringify(publicItems, null, 2) + "\n", "utf-8");
 
   const storeItems = publicItems.filter((p) => p.fulfillment === "store");

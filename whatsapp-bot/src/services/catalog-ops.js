@@ -110,9 +110,68 @@ export async function publishCatalogToGit() {
   return getOpsStatus();
 }
 
+/** Admin / WhatsApp: permanently mark sold + sync public catalog. */
+export async function markProductSoldAndSync(productId, { orderId = null } = {}) {
+  if (!productId) return { error: "missing_product_id" };
+  const id = String(productId).trim();
+  const {
+    recordSoldSku,
+    markProductSoldFields,
+    enforceSoldLocksOnMaster,
+  } = await import("./product-availability.js");
+
+  const products = await readJson(MASTER_PRODUCTS, []);
+  if (!Array.isArray(products)) return { error: "master_not_array" };
+  const idx = products.findIndex((p) => p.id === id);
+  if (idx === -1) return { error: "product_not_found", productId: id };
+
+  await recordSoldSku(id, { orderId, soldAt: Date.now() });
+  products[idx] = markProductSoldFields(
+    { ...products[idx] },
+    { orderId, soldAt: Date.now() }
+  );
+  await writeJson(MASTER_PRODUCTS, products);
+  await enforceSoldLocksOnMaster();
+  invalidateProductCache();
+  clearCatalogPauseCache();
+
+  if (isDbEnabled()) {
+    try {
+      const { markProductSold } = await import("../db/repositories/products.js");
+      await markProductSold(id, orderId);
+    } catch (err) {
+      console.warn("[catalog-ops] DB mark sold:", err.message);
+    }
+  }
+
+  try {
+    await syncPublicCatalog();
+  } catch (err) {
+    console.warn("[catalog-ops] sync after sold:", err.message);
+  }
+
+  return { ok: true, productId: id, isSold: true };
+}
+
 export async function setProductStock(productId, inStock) {
   if (!productId) return { error: "missing_product_id" };
   const id = String(productId).trim();
+  const wantInStock = Boolean(inStock);
+
+  if (wantInStock) {
+    const { assertCanRestock } = await import("./product-availability.js");
+    const master = await readJson(MASTER_PRODUCTS, []);
+    const existing = Array.isArray(master) ? master.find((p) => p.id === id) : null;
+    const gate = await assertCanRestock(id, existing);
+    if (!gate.ok) {
+      return {
+        error: gate.error,
+        productId: id,
+        message: gate.message || "Sold items cannot be put back in stock.",
+      };
+    }
+  }
+
   const paths = [MASTER_PRODUCTS, WEBSITE_PRODUCTS];
   let updated = false;
 
@@ -122,16 +181,38 @@ export async function setProductStock(productId, inStock) {
     if (!Array.isArray(products)) continue;
     const idx = products.findIndex((p) => p.id === id);
     if (idx === -1) continue;
-    products[idx] = { ...products[idx], inStock: Boolean(inStock) };
+    products[idx] = { ...products[idx], inStock: wantInStock };
     await writeJson(file, products);
     updated = true;
   }
 
   if (!updated) return { error: "product_not_found", productId: id };
 
+  if (!wantInStock) {
+    try {
+      const { recordSoldSku, markProductSoldFields } = await import("./product-availability.js");
+      // Admin #stock out alone is not a sale — only record sold tombstone when already sold.
+      const master = await readJson(MASTER_PRODUCTS, []);
+      const row = Array.isArray(master) ? master.find((p) => p.id === id) : null;
+      if (row?.isSold) {
+        await recordSoldSku(id, { orderId: row.soldOrderId || null, soldAt: row.soldAt || Date.now() });
+        const idx = master.findIndex((p) => p.id === id);
+        if (idx >= 0) {
+          master[idx] = markProductSoldFields({ ...master[idx] }, {
+            orderId: row.soldOrderId || null,
+            soldAt: row.soldAt || Date.now(),
+          });
+          await writeJson(MASTER_PRODUCTS, master);
+        }
+      }
+    } catch (err) {
+      console.warn("[catalog-ops] sold registry:", err.message);
+    }
+  }
+
   invalidateProductCache();
   clearCatalogPauseCache();
-  return { ok: true, productId: id, inStock: Boolean(inStock) };
+  return { ok: true, productId: id, inStock: wantInStock };
 }
 
 export async function runDbMigrate() {

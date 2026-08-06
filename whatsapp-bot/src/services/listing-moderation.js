@@ -122,6 +122,12 @@ async function loadMaster() {
 
 async function saveMaster(products) {
   await writeFile(MASTER_CATALOG, JSON.stringify(products, null, 2) + "\n", "utf-8");
+  try {
+    const { enforceSoldLocksOnMaster } = await import("./product-availability.js");
+    await enforceSoldLocksOnMaster();
+  } catch (err) {
+    console.warn("[listing-moderation] sold-lock enforce:", err.message);
+  }
   invalidateProductCache();
 }
 
@@ -156,6 +162,15 @@ export async function restoreListing(productId) {
   if (idx < 0) return { error: "not_found" };
 
   const product = master[idx];
+  const { assertCanRestock } = await import("./product-availability.js");
+  const gate = await assertCanRestock(productId, product);
+  if (!gate.ok) {
+    return {
+      error: gate.error,
+      message: gate.message || "Sold items cannot be restored to the live grid.",
+    };
+  }
+
   product.inStock = true;
   product.moderation = {
     ...(product.moderation || {}),

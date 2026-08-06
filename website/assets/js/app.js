@@ -1349,7 +1349,9 @@ async function renderProducts() {
   try {
     await loadTiktokFeaturedIds();
     await loadStoreMeta();
-    const products = (await loadProducts()).filter((p) => p.inStock !== false);
+    const products = (await loadProducts()).filter(
+      (p) => p.inStock !== false && p.isSold !== true
+    );
     storeProducts = products.filter((p) => p.fulfillment === "store" || (p.scope === "local" && p.fulfillment !== "supplier"));
 
     loadCurrencyPref();

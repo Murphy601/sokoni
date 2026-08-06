@@ -483,8 +483,12 @@ const UPSERT_CATALOG_SQL = `
     price_usd = EXCLUDED.price_usd,
     source_price_kes = EXCLUDED.source_price_kes,
     original_price_kes = EXCLUDED.original_price_kes,
-    in_stock = EXCLUDED.in_stock,
-    is_sold = EXCLUDED.is_sold,
+    -- Never clear sold / never restock a sold row via JSON upsert races.
+    is_sold = products.is_sold OR EXCLUDED.is_sold,
+    in_stock = CASE
+      WHEN products.is_sold OR EXCLUDED.is_sold THEN FALSE
+      ELSE EXCLUDED.in_stock
+    END,
     primary_image_url = EXCLUDED.primary_image_url,
     image_key = EXCLUDED.image_key,
     image_hash = EXCLUDED.image_hash,
@@ -536,7 +540,38 @@ export async function upsertCatalogProduct(catalogProduct) {
     }
   }
 
-  const row = jsonToDbProduct(catalogProduct, sellerId);
+  // Preserve sold tombstones even when callers omit isSold on the JSON patch.
+  let productForUpsert = catalogProduct;
+  try {
+    const { preserveSoldState, isSkuSold, isProductSold } = await import(
+      "../../services/product-availability.js"
+    );
+    const { rows: existingRows } = await query(
+      `SELECT is_sold, in_stock, tracking_code, legacy_json FROM products WHERE id = $1`,
+      [catalogProduct.id]
+    );
+    const existing = existingRows[0];
+    if (existing?.is_sold || (await isSkuSold(catalogProduct.id)) || isProductSold(catalogProduct)) {
+      const legacy =
+        existing?.legacy_json && typeof existing.legacy_json === "object"
+          ? existing.legacy_json
+          : {};
+      productForUpsert = preserveSoldState(
+        {
+          ...legacy,
+          id: catalogProduct.id,
+          isSold: true,
+          inStock: false,
+          soldOrderId: catalogProduct.soldOrderId || legacy.soldOrderId || existing?.tracking_code,
+        },
+        catalogProduct
+      );
+    }
+  } catch (err) {
+    console.warn("[products] sold-preserve on upsert skipped:", err.message);
+  }
+
+  const row = jsonToDbProduct(productForUpsert, sellerId);
   await query(UPSERT_CATALOG_SQL, [
     row.id,
     row.seller_id,
@@ -583,18 +618,20 @@ export async function upsertCatalogProduct(catalogProduct) {
     row.legacy_json,
   ]);
 
-  const imageUrl = catalogProduct.imageUrl || null;
+  const imageUrl = productForUpsert.imageUrl || catalogProduct.imageUrl || null;
   const allImages =
-    Array.isArray(catalogProduct.images) && catalogProduct.images.length
-      ? catalogProduct.images
-      : imageUrl
-        ? [imageUrl]
-        : [];
+    Array.isArray(productForUpsert.images) && productForUpsert.images.length
+      ? productForUpsert.images
+      : Array.isArray(catalogProduct.images) && catalogProduct.images.length
+        ? catalogProduct.images
+        : imageUrl
+          ? [imageUrl]
+          : [];
   if (allImages.length) {
-    await query(`DELETE FROM product_images WHERE product_id = $1`, [catalogProduct.id]);
+    await query(`DELETE FROM product_images WHERE product_id = $1`, [productForUpsert.id || catalogProduct.id]);
     for (let i = 0; i < allImages.length; i += 1) {
       await query(`INSERT INTO product_images (product_id, url, sort_order) VALUES ($1, $2, $3)`, [
-        catalogProduct.id,
+        productForUpsert.id || catalogProduct.id,
         allImages[i],
         i,
       ]);

@@ -293,11 +293,12 @@ export async function refreshSellerListing({ phone, productId, sessionToken }) {
       const products = JSON.parse(await readFile(file, "utf-8"));
       const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
       if (idx === -1) continue;
-      products[idx] = {
+      const { preserveSoldState } = await import("./product-availability.js");
+      products[idx] = preserveSoldState(products[idx], {
         ...products[idx],
         publishedAt: Date.now(),
         refreshedAt: Date.now(),
-      };
+      });
       await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
       updated = products[idx];
     } catch (err) {
@@ -386,7 +387,15 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
         deliveryMethod: current.deliveryMethod || "hub",
       });
 
-      products[idx] = {
+      const { preserveSoldState, assertCanRestock } = await import("./product-availability.js");
+      const gate = await assertCanRestock(productId, current);
+      if (!gate.ok) {
+        return {
+          error: gate.error,
+          message: gate.message || "Sold listings cannot be repriced onto the live grid.",
+        };
+      }
+      products[idx] = preserveSoldState(current, {
         ...current,
         sellerNetKes: fees.sellerNetKes,
         sourcePriceKes: fees.sellerNetKes,
@@ -399,7 +408,7 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
         publishedAt: Date.now(),
         refreshedAt: Date.now(),
         priceUpdatedAt: Date.now(),
-      };
+      });
       await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
       updated = products[idx];
     } catch (err) {
