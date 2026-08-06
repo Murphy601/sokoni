@@ -1,0 +1,41 @@
+# Sokoni Design & Animation System (.cursorrules)
+
+## 1. Core stack (Path B — safe)
+
+- Storefront shell: static HTML under `website/` (Cloudflare Wrangler `assets.directory`)
+- Catalog / auth / WhatsApp / checkout logic: existing vanilla JS (`website/assets/js/*`) — **do not rewrite or replace**
+- Animation layer: React + Framer Motion in `website-motion/` → build to `website/assets/js/sokoni-motion/`
+- Styling: existing Tailwind CDN + `DESIGN.md` tokens (`design-tokens.css`, cream/purple, green for actions only)
+- Icons: prefer existing site icons; do not require lucide unless already present
+
+## 2. Framer Motion guidelines
+
+- Use `<LazyMotion features={domAnimation}>` and `m` components for React-owned UI
+- For DOM that `app.js` owns (product cards, sheets), enhance with `animate` / `stagger` from `framer-motion` — **never remount/replace** nodes that already have event listeners
+- Hardware acceleration only: animate `opacity` and `transform` (`x`, `y`, `scale`) — never `height`, `width`, `margin`, `padding`
+- Primary CTAs: light `scale` tap feedback (`0.95`–`0.97`); hover scale ≤ `1.03`
+- Sheets/drawers: spring (`stiffness` ~300, `damping` ~25) or short ease; respect `prefers-reduced-motion`
+- Grids: `staggerChildren` / stagger delay ~`0.04`–`0.06`, duration `0.2`–`0.3s`, `easeOut`
+- Avoid heavy `backdrop-filter` blurs on large grids (mid-range Android)
+
+## 3. UI/UX & brand (Sokoni DESIGN.md wins)
+
+- Green `#25D366` = actions only (WhatsApp, order, success)
+- Surfaces: cream `#FFF8F0`; headings: `#1B1035`; fonts: Fraunces + DM Sans
+- Touch targets ≥ 44px (prefer 48px / `h-12` on primary CTAs)
+- Price hierarchy: clear `KES` amount → escrow/prepaid trust → buy action
+- Countrywide Kenya voice — no single-city marketing anchors
+- Always honor `prefers-reduced-motion: reduce` (instant or opacity-only)
+
+## 4. Safety rules
+
+- Do not break `wa.me` links, `bot.sokonimall.com` APIs, account gate, or Wrangler deploy
+- Do not migrate the whole site to Next.js App Router unless explicitly requested
+- One surface/enhancer at a time; keep progressive enhancement fail-soft (if motion fails, site still works)
+- After `website-motion` changes: run `npm run build` inside `website-motion/` and commit built assets under `website/assets/js/sokoni-motion/`
+
+## 5. Code output expectations
+
+- Keep enhancers small, idempotent (`data-sokoni-motion` markers)
+- Use MutationObserver for dynamically injected catalog grids
+- Comments only where transition state is non-obvious
