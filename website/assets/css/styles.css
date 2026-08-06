@@ -291,8 +291,9 @@ html.dark .cat-chip:not(.depop-cat-card) {
 }
 
 html.dark .depop-cat-card {
-  background-color: #18181b !important;
-  border-color: #27272a !important;
+  /* Keep faux-glass translucency in dark mode — don't force opaque fill */
+  background-color: rgba(255, 255, 255, 0.045) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Keep product image tiles light so photos stay vibrant/legible */
