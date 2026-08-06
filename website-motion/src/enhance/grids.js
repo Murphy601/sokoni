@@ -18,6 +18,7 @@ const CHILD_SELECTORS = [
   ".depop-card",
   ".product-card",
   ".depop-trade-cat-card",
+  ".depop-cat-card",
   ".depop-edu-card",
   ".depop-trust-card",
   ".depop-collection-card",

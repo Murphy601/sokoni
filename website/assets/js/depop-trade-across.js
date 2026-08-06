@@ -34,25 +34,28 @@
       subcategory: sub.id,
       scroll: true,
     });
+    // Keep dynamic image URLs intact — only wrap for glass shell + motion.
     return `
       <a
         href="#deals"
         class="depop-trade-cat-card"
         data-depop-filter="${escapeHtml(filter)}"
       >
-        <span class="depop-trade-cat-card-media">
-          <img
-            src="${escapeHtml(src)}"
-            alt=""
-            width="600"
-            height="600"
-            loading="lazy"
-            decoding="async"
-            referrerpolicy="no-referrer"
-            onerror="this.onerror=null;this.src='${FALLBACK_IMG}'"
-          />
+        <span class="depop-trade-cat-card-glass">
+          <span class="depop-trade-cat-card-media">
+            <img
+              src="${escapeHtml(src)}"
+              alt=""
+              width="600"
+              height="600"
+              loading="lazy"
+              decoding="async"
+              referrerpolicy="no-referrer"
+              onerror="this.onerror=null;this.src='${FALLBACK_IMG}'"
+            />
+          </span>
+          <span class="depop-trade-cat-card-label">${escapeHtml(label)}</span>
         </span>
-        <span class="depop-trade-cat-card-label">${escapeHtml(label)}</span>
       </a>`;
   }
 

@@ -128,24 +128,41 @@ h1, h3, .font-display {
   font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Browse category tiles — full-bleed photo, label on the image */
+/* Browse category tiles — full-bleed photo + faux glass frame (no backdrop-filter) */
 .depop-cat-card {
   position: relative;
   display: block;
   aspect-ratio: 1 / 1;
-  padding: 0;
+  padding: 0.35rem;
   overflow: hidden;
-  background: #18181b;
-  border: 1px solid #27272a;
-  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 18px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
+.depop-cat-card__glass {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #18181b;
+}
+
 .depop-cat-card:hover {
-  border-color: #52525b;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 24px rgba(0, 0, 0, 0.32);
 }
 
 .depop-cat-card:hover .depop-cat-card__icon--img img {
@@ -153,8 +170,16 @@ h1, h3, .font-display {
 }
 
 .depop-cat-card.is-active {
-  border-color: var(--depop-red, #ff2300);
-  box-shadow: 0 0 0 1px rgba(255, 35, 0, 0.35);
+  border-color: rgba(255, 35, 0, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 35, 0, 0.35),
+    0 10px 22px rgba(0, 0, 0, 0.3);
+}
+
+.depop-cat-card:focus-visible {
+  outline: 2px solid #25d366;
+  outline-offset: 2px;
 }
 
 .depop-cat-card__icon {
@@ -187,20 +212,24 @@ h1, h3, .font-display {
 
 .depop-cat-card__label {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 0.4rem;
+  right: 0.4rem;
+  bottom: 0.4rem;
   z-index: 1;
   margin: 0;
-  padding: 2.25rem 0.55rem 0.7rem;
-  font-family: Inter, "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.8125rem;
+  padding: 0.45rem 0.55rem;
+  font-family: var(--font-body, "DM Sans", ui-sans-serif, system-ui, sans-serif);
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   color: #fff;
   line-height: 1.25;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 55%, transparent 100%);
+  border-radius: 0.55rem;
+  /* Faux glass chip — solid translucency, no blur */
+  background: rgba(9, 9, 11, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  text-shadow: none;
 }
 
 @media (min-width: 768px) {
@@ -209,8 +238,15 @@ h1, h3, .font-display {
   }
 
   .depop-cat-card__label {
-    font-size: 0.875rem;
-    padding: 2.5rem 0.65rem 0.8rem;
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.65rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .depop-cat-card,
+  .depop-cat-card__icon--img img {
+    transition: none;
   }
 }
 
@@ -255,8 +291,9 @@ html.dark .cat-chip:not(.depop-cat-card) {
 }
 
 html.dark .depop-cat-card {
-  background-color: #18181b !important;
-  border-color: #27272a !important;
+  /* Keep faux-glass translucency in dark mode — don't force opaque fill */
+  background-color: rgba(255, 255, 255, 0.045) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Keep product image tiles light so photos stay vibrant/legible */
