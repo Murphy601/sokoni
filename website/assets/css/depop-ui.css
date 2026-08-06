@@ -311,8 +311,9 @@ html.dark .depop-card-placeholder {
   margin: 0.1rem 0 0;
 }
 
-html.dark .depop-card-seller {
-  color: rgba(255, 248, 240, 0.5);
+html.dark .depop-card-seller,
+body.has-depop-shell .depop-card-seller {
+  color: rgba(255, 248, 240, 0.55);
 }
 
 .seller-trust-badges {
@@ -333,9 +334,10 @@ html.dark .depop-card-seller {
   color: #1b1035;
 }
 
-html.dark .seller-trust-badge {
+html.dark .seller-trust-badge,
+body.has-depop-shell .seller-trust-badge {
   color: #fff8f0;
-  background: rgba(37, 211, 102, 0.22);
+  background: rgba(37, 211, 102, 0.28);
 }
 
 .seller-trust-badge--fast_dispatcher,
@@ -375,7 +377,8 @@ html.dark .seller-trust-badge--sales {
   margin: 0 0 0.15rem;
 }
 
-html.dark .depop-card-price {
+html.dark .depop-card-price,
+body.has-depop-shell .depop-card-price {
   color: #fff8f0;
 }
 
@@ -395,8 +398,9 @@ html.dark .depop-card-price {
   margin-top: 0.1rem;
 }
 
-html.dark .depop-card-shipping {
-  color: rgba(255, 255, 255, 0.45);
+html.dark .depop-card-shipping,
+body.has-depop-shell .depop-card-shipping {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .depop-card-title {
@@ -411,8 +415,9 @@ html.dark .depop-card-shipping {
   overflow: hidden;
 }
 
-html.dark .depop-card-title {
-  color: rgba(255, 248, 240, 0.65);
+html.dark .depop-card-title,
+body.has-depop-shell .depop-card-title {
+  color: rgba(255, 248, 240, 0.78);
 }
 
 /* Legacy card hidden inside depop grid (fallback) */
