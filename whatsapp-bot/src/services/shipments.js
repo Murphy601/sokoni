@@ -134,6 +134,12 @@ export function advanceShipmentStatus(orderId, nextStatus, meta = {}) {
   const updated = getOrder(orderId);
   mirrorShipmentToDb(updated).catch(() => {});
 
+  if (updated?.kind === "cart_child" && updated.parentOrderId) {
+    import("./cart-orders.js")
+      .then(({ refreshCartParentStatus }) => refreshCartParentStatus(updated.parentOrderId))
+      .catch((err) => console.warn("[shipments] cart parent rollup failed:", err.message));
+  }
+
   if (!meta.skipBuyerNotify && !meta.skipNotify) {
     import("./order-notifications.js")
       .then(({ notifyShipmentStatusChange }) => notifyShipmentStatusChange(updated, { prevStatus, meta }))
