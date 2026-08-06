@@ -14,6 +14,10 @@ const DEFAULTS = {
   prepaidOnly: config.store.prepaidOnly !== false,
   catalogSyncOnPublish: true,
   maintenanceMode: false,
+  /** Multi-seller cart (SKN parent + per-line children). Env MULTI_SELLER_CART=1 also enables. */
+  multiSellerCart:
+    process.env.MULTI_SELLER_CART === "1" ||
+    String(process.env.MULTI_SELLER_CART || "").toLowerCase() === "true",
   notes: "",
   updatedAt: null,
 };
@@ -51,6 +55,7 @@ export function updatePlatformFlags(patch = {}) {
   if (patch.prepaidOnly != null) allowed.prepaidOnly = Boolean(patch.prepaidOnly);
   if (patch.catalogSyncOnPublish != null) allowed.catalogSyncOnPublish = Boolean(patch.catalogSyncOnPublish);
   if (patch.maintenanceMode != null) allowed.maintenanceMode = Boolean(patch.maintenanceMode);
+  if (patch.multiSellerCart != null) allowed.multiSellerCart = Boolean(patch.multiSellerCart);
   if (patch.notes != null) allowed.notes = String(patch.notes).slice(0, 500);
   return persist({ ...current, ...allowed });
 }
@@ -62,4 +67,15 @@ export function isPrepaidOnlyEffective() {
 
 export function isMaintenanceMode() {
   return load().maintenanceMode === true;
+}
+
+/** Phase 9 — multi-seller cart feature flag (env OR platform-flags.json). */
+export function isMultiSellerCartEnabled() {
+  if (
+    process.env.MULTI_SELLER_CART === "1" ||
+    String(process.env.MULTI_SELLER_CART || "").toLowerCase() === "true"
+  ) {
+    return true;
+  }
+  return load().multiSellerCart === true;
 }

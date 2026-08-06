@@ -9,6 +9,9 @@ import {
   setPendingOrder,
   getPendingOrder,
   clearPendingOrder,
+  setPendingCart,
+  getPendingCart,
+  clearPendingCart,
   setMenuState,
   getMenuState,
   setProductContext,
@@ -16,6 +19,15 @@ import {
   getCustomerMeta,
   setCustomerMeta,
 } from "./session.js";
+import { isMultiSellerCartEnabled } from "./platform-flags.js";
+import {
+  createCartOrder,
+  parseCartHandoffMessage,
+  computeCartLineFees,
+  computeCartParentTotals,
+  getCartChildren,
+  CART_PARENT_KIND,
+} from "./cart-orders.js";
 import { startHumanHandoff, buildOrderAdminSummary } from "./handoff.js";
 import {
   createOrder,
@@ -625,6 +637,26 @@ export async function sendOrderStatus(to, orderId, phone = "") {
     return sendText(to, `I couldn't find order *${orderId}* on this number. Type *track* to see your orders.`);
   }
   try {
+    if (order.kind === CART_PARENT_KIND) {
+      const children = getCartChildren(order.id);
+      const lines = children
+        .map(
+          (c) =>
+            `• *${c.id}* — ${c.productName}\n  ${statusLabel(c.status)} · ${c.shipmentStatus || "pending"} · escrow ${c.escrowStatus || "—"}`
+        )
+        .join("\n");
+      await sendText(
+        to,
+        `🛒 *Cart ${order.id}*\n` +
+          `Pay status: ${order.customerPaymentStatus === "confirmed" ? "✅ Paid" : "💳 Awaiting payment"}\n` +
+          `Total: KES ${orderBuyerTotal(order).toLocaleString()}\n` +
+          `Parent status: ${order.status}\n\n` +
+          `*Items:*\n${lines}\n\n` +
+          `_Track a child ID (e.g. ${children[0]?.id || "SKN-…-1"}) for shipment detail._`
+      );
+      if (order.customerPaymentStatus !== "confirmed") await sendPaymentReminderSafe(to, order);
+      return true;
+    }
     await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
     await sendPaymentReminderSafe(to, order);
     return true;
@@ -823,6 +855,27 @@ export async function startPrepaidOrder(to, productId, { offerId = null, totalsO
 
 /** Handle messages while customer is mid-order (before confirm). */
 export async function tryHandlePendingOrder(to, text) {
+  const pendingCart = getPendingCart(to);
+  if (pendingCart?.lines?.length) {
+    const lower = text.toLowerCase();
+    if (/^(cancel|stop|nevermind|abort)(\s+order)?$/i.test(lower) || /cancel order/i.test(lower)) {
+      clearPendingCart(to);
+      await sendText(to, "Cart checkout cancelled ✅ Type *menu* or reopen your website bag.");
+      return true;
+    }
+    const parsed = parseDeliveryDetails(text);
+    if (!parsed) {
+      await sendText(
+        to,
+        `Still checking out your *cart* (${pendingCart.lines.length} items).\n\n` +
+          `${deliveryDetailsHint(text)}\n\n` +
+          `_Example: Jane Wanjiru, Nakuru Naivas, 0712345678_`
+      );
+      return true;
+    }
+    return confirmCartOrder(to, parsed);
+  }
+
   const pending = getPendingOrder(to);
   if (!pending) return false;
 
@@ -865,6 +918,10 @@ export async function tryHandlePendingOrder(to, text) {
 }
 
 export async function cancelOrder(to) {
+  if (getPendingCart(to)) {
+    clearPendingCart(to);
+    return sendText(to, "Cart checkout cancelled ✅ Type *menu* to shop again.");
+  }
   if (getPendingOrder(to)) {
     clearPendingOrder(to);
     return sendText(to, "Your order was cancelled ✅ Type *menu* to shop again.");
@@ -884,6 +941,19 @@ export async function changeOrder(to) {
 }
 
 export async function handleCart(to) {
+  const pendingCart = getPendingCart(to);
+  if (pendingCart?.lines?.length) {
+    const n = pendingCart.lines.length;
+    return sendText(
+      to,
+      `🛒 *Cart checkout in progress* (${n} item${n === 1 ? "" : "s"})\n` +
+        `Estimated total: *KES ${Number(pendingCart.estimatedTotalKes || 0).toLocaleString()}*\n\n` +
+        `Send delivery details in one message:\n` +
+        `1️⃣ Full name\n2️⃣ Landmark / pickup spot\n3️⃣ Phone for M-Pesa\n\n` +
+        `_Example: Jane Wanjiru, Nakuru Naivas, 0712345678_\n\n` +
+        `Type *cancel* to clear the cart checkout.`
+    );
+  }
   const pending = getPendingOrder(to);
   if (pending) {
     return sendText(
@@ -892,10 +962,165 @@ export async function handleCart(to) {
         `Send delivery details to complete, or type *cancel* / *change order*.`
     );
   }
+  if (!isMultiSellerCartEnabled()) {
+    return sendText(
+      to,
+      "Sokoni orders one item at a time (100% prepaid — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
+    );
+  }
   return sendText(
     to,
-    "Sokoni orders one item at a time (100% prepaid — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
+    "🛒 *Multi-seller cart*\n\n" +
+      "Save items on the website bag, then tap *Order cart on WhatsApp*.\n" +
+      "You'll pay once via M-Pesa; each item gets its own tracking ID (SKN-…-1, SKN-…-2…).\n\n" +
+      "Or type *menu* to order a single item as before."
   );
+}
+
+/**
+ * Phase 3–4 — Start cart from website WA handoff (SOKONI_CART + [SKU:id] lines).
+ */
+export async function startCartFromHandoff(to, text) {
+  if (!isMultiSellerCartEnabled()) return false;
+  const parsed = parseCartHandoffMessage(text);
+  if (!parsed?.lines?.length) return false;
+
+  clearPendingOrder(to);
+  const resolved = [];
+  for (const line of parsed.lines.slice(0, 20)) {
+    const product = await getProductById(line.productId);
+    if (!product) continue;
+    const fees = computeCartLineFees({ ...product, productId: product.id }, line.quantity || 1);
+    resolved.push({ product: { ...product, productId: product.id }, quantity: fees.quantity, fees });
+  }
+  if (!resolved.length) {
+    await sendText(
+      to,
+      "I couldn't match those bag items in the catalog. Open the site bag again or type *menu* to browse."
+    );
+    return true;
+  }
+
+  const parentTotals = computeCartParentTotals(resolved.map((r) => r.fees));
+  setPendingCart(to, {
+    lines: resolved.map((r) => ({
+      productId: r.product.id,
+      quantity: r.quantity,
+      name: r.product.name,
+      lineBuyerKes: r.fees.lineBuyerKes,
+    })),
+    estimatedTotalKes: parentTotals.totalKes,
+    estimatedTxnFeeKes: parentTotals.transactionFeeKes,
+    estimatedPlatformFeeKes: parentTotals.platformFeeKes,
+    createdAt: Date.now(),
+  });
+
+  const linesText = resolved
+    .map(
+      (r, i) =>
+        `${i + 1}. *${r.product.name}* ×${r.quantity} — KES ${r.fees.lineBuyerKes.toLocaleString()}`
+    )
+    .join("\n");
+
+  await sendText(
+    to,
+    `🛒 *NEW SOKONI CART ORDER*\n\n` +
+      `${linesText}\n\n` +
+      `Subtotal (incl. 10% per item): KES ${parentTotals.chargeBeforeTxnKes.toLocaleString()}\n` +
+      `M-Pesa fee (once): KES ${parentTotals.transactionFeeKes.toLocaleString()}\n` +
+      `💰 *TOTAL: KES ${parentTotals.totalKes.toLocaleString()}*\n\n` +
+      `Items may ship separately — each gets its own SKN tracking ID after payment.\n\n` +
+      `Reply in *one message* with:\n` +
+      `1️⃣ Full name\n` +
+      `2️⃣ Preferred pickup / landmark\n` +
+      `3️⃣ M-Pesa phone\n\n` +
+      `_Example: Jane Wanjiru, Archways Mall Hub Nairobi, 0712345678_`
+  );
+  return true;
+}
+
+export async function confirmCartOrder(to, parsed) {
+  const pending = getPendingCart(to);
+  if (!pending?.lines?.length) return false;
+
+  const details =
+    typeof parsed === "string" ? parseDeliveryDetails(parsed) : parsed;
+  if (!details) {
+    await sendText(
+      to,
+      `Still checking out your cart.\n\n${deliveryDetailsHint(typeof parsed === "string" ? parsed : "")}\n\n` +
+        `_Example: Jane Wanjiru, Nakuru Naivas, 0712345678_`
+    );
+    return true;
+  }
+
+  clearPendingCart(to);
+  setCustomerMeta(to, { phone: details.phone.replace(/\D/g, "") });
+  const meta = getCustomerMeta(to) || {};
+
+  const lineInputs = [];
+  for (const line of pending.lines) {
+    const product = await getProductById(line.productId);
+    if (!product) continue;
+    lineInputs.push({
+      product: { ...product, productId: product.id },
+      quantity: line.quantity || 1,
+    });
+  }
+  if (!lineInputs.length) {
+    await sendText(to, "Those cart items are no longer available. Type *menu* to browse again.");
+    return true;
+  }
+
+  let created = null;
+  try {
+    created = createCartOrder({
+      customerKey: to,
+      chatId: meta.chatId || to,
+      lines: lineInputs,
+      details,
+    });
+  } catch (err) {
+    console.error("[cart] createCartOrder failed:", err.message);
+    await sendText(
+      to,
+      `Could not create the cart order (${err.message}). Type *menu* or try a single-item order.`
+    );
+    return true;
+  }
+
+  const { parent, children } = created;
+  const childLines = children
+    .map((c) => `• *${c.id}* — ${c.productName}`)
+    .join("\n");
+
+  try {
+    await sendText(
+      config.admin.primary,
+      `🛒 *CART ORDER ${parent.id}*\n` +
+        `${children.length} lines · KES ${orderBuyerTotal(parent).toLocaleString()}\n` +
+        `Buyer: ${details.name} · ${details.phone}\n` +
+        `📍 ${details.location}\n` +
+        `${childLines}`
+    );
+  } catch (err) {
+    console.error("[cart] admin notify failed:", err.message);
+  }
+
+  await sendText(
+    to,
+    `✅ *Cart placed — ${parent.id}*\n\n` +
+      `${childLines}\n\n` +
+      `💰 Total: *KES ${orderBuyerTotal(parent).toLocaleString()}*\n` +
+      `(Includes 10% Sokoni fee *per item* + one M-Pesa fee)\n` +
+      `📍 ${details.location}\n\n` +
+      `Pay once — escrow holds each item separately.\n` +
+      `🌐 Pay: ${checkoutUrlForOrder(parent.id)}\n` +
+      `${siteUrlLine()}`
+  );
+
+  await sendPrepaidCheckoutSafe(to, parent);
+  return true;
 }
 
 export async function confirmPrepaidOrder(to, parsed) {

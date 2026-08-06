@@ -58,7 +58,7 @@ const STATUS_LABELS = {
   cancelled: "❌ Cancelled",
 };
 
-let store = { seq: 1000, orders: {}, contacts: {} };
+let store = { seq: 1000, sknSeq: 1000, orders: {}, cartOrders: {}, contacts: {} };
 let loaded = false;
 
 function load() {
@@ -66,7 +66,16 @@ function load() {
   loaded = true;
   try {
     if (existsSync(ORDERS_FILE)) {
-      store = { seq: 1000, orders: {}, contacts: {}, ...JSON.parse(readFileSync(ORDERS_FILE, "utf-8")) };
+      store = {
+        seq: 1000,
+        sknSeq: 1000,
+        orders: {},
+        cartOrders: {},
+        contacts: {},
+        ...JSON.parse(readFileSync(ORDERS_FILE, "utf-8")),
+      };
+      if (!store.cartOrders) store.cartOrders = {};
+      if (!store.sknSeq) store.sknSeq = 1000;
     }
   } catch (err) {
     console.error("[orders] failed to load store:", err.message);
@@ -80,6 +89,37 @@ function persist() {
   } catch (err) {
     console.error("[orders] failed to persist store:", err.message);
   }
+}
+
+/** Shared with cart-orders.js — keep single file-backed store. */
+export function loadOrderStore() {
+  load();
+}
+
+export function persistOrderStore() {
+  persist();
+}
+
+export function getOrderStore() {
+  load();
+  return store;
+}
+
+/**
+ * Normalize SK-####, SKN-#### (parent), or SKN-####-n (child).
+ * Must not coerce SKN-8921-1 → SK-89211.
+ */
+export function normalizeOrderId(id) {
+  if (id == null || id === "") return null;
+  const raw = String(id).trim().toUpperCase();
+  if (/^SKN-\d+-\d+$/.test(raw)) return raw;
+  if (/^SKN-\d+$/.test(raw)) return raw;
+  if (/^SK-\d+$/.test(raw)) return raw;
+  if (raw.startsWith("SKN-")) return raw;
+  if (raw.startsWith("SK-")) return raw;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  return `SK-${digits}`;
 }
 
 export function normalizeStatus(input) {
@@ -233,9 +273,11 @@ export function markReviewPromptSent(id) {
 
 export function getOrder(id) {
   load();
-  if (!id) return null;
-  const key = String(id).toUpperCase().startsWith("SK-") ? String(id).toUpperCase() : `SK-${String(id).replace(/\D/g, "")}`;
-  return store.orders[key] || null;
+  const key = normalizeOrderId(id);
+  if (!key) return null;
+  if (store.orders[key]) return store.orders[key];
+  if (store.cartOrders?.[key]) return store.cartOrders[key];
+  return null;
 }
 
 export function listAllOrders() {
@@ -246,8 +288,12 @@ export function listAllOrders() {
 export function findOrderByCheckoutRequestId(checkoutRequestId) {
   if (!checkoutRequestId) return null;
   load();
+  const fromOrders =
+    Object.values(store.orders).find((o) => o.checkoutRequestId === checkoutRequestId) || null;
+  if (fromOrders) return fromOrders;
   return (
-    Object.values(store.orders).find((o) => o.checkoutRequestId === checkoutRequestId) || null
+    Object.values(store.cartOrders || {}).find((o) => o.checkoutRequestId === checkoutRequestId) ||
+    null
   );
 }
 
@@ -271,6 +317,8 @@ export function findProcessingOrderByPhoneAmount(phone, amountKes) {
   if (!wantPhone || !Number.isFinite(wantAmt)) return null;
 
   const candidates = Object.values(store.orders).filter((o) => {
+    // Cart children are paid via parent STK — never match STK amount to a child line.
+    if (o.kind === "cart_child") return false;
     if (o.customerPaymentStatus === "confirmed") return false;
     if (o.paymentStatus !== "processing" && o.status !== "awaiting_payment") return false;
     const orderPhone = normalizePhoneDigits(o.phone || o.mpesaPhone);
@@ -304,6 +352,8 @@ export function getOrdersForCustomer(customerKey, phone = "") {
 
   return Object.values(store.orders)
     .filter((o) => {
+      // Hide cart children in list views — parent SKN summarizes them.
+      if (o.kind === "cart_child") return false;
       if (o.customerKey === customerKey) return true;
       if (!want) return false;
       const orderPhone = normalizeOrderPhone(o.phone);
