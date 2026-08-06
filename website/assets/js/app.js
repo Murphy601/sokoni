@@ -825,15 +825,18 @@ function renderCategoryChips() {
     const label = item.label || id;
     const active = activeCategory === id && !activeProductId;
     const src = item.image || FALLBACK_IMG;
+    // Keep dynamic image URLs intact — glass shell wraps existing media/label.
     return `
     <button type="button" data-cat="${escapeHtml(id)}"
       class="depop-cat-card cat-chip ${active ? "is-active" : ""}">
-      <span class="depop-cat-card__icon depop-cat-card__icon--img" aria-hidden="true">
-        <img src="${escapeHtml(src)}" alt="" width="240" height="240" loading="lazy"
-          referrerpolicy="no-referrer"
-          onerror="this.onerror=null;this.src='${FALLBACK_IMG}'" />
+      <span class="depop-cat-card__glass">
+        <span class="depop-cat-card__icon depop-cat-card__icon--img" aria-hidden="true">
+          <img src="${escapeHtml(src)}" alt="" width="240" height="240" loading="lazy"
+            referrerpolicy="no-referrer"
+            onerror="this.onerror=null;this.src='${FALLBACK_IMG}'" />
+        </span>
+        <span class="depop-cat-card__label">${escapeHtml(label)}</span>
       </span>
-      <span class="depop-cat-card__label">${escapeHtml(label)}</span>
     </button>`;
   };
 

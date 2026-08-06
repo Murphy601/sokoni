@@ -4,6 +4,7 @@ const CARD_SELECTORS = [
   ".depop-card",
   ".product-card",
   ".depop-trade-cat-card",
+  ".depop-cat-card",
   ".depop-collection-card",
   ".depop-edu-card",
   ".depop-trust-card",
