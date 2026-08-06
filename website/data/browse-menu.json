@@ -1474,7 +1474,7 @@
         {
           "id": "dairy-eggs",
           "label": "Dairy & Eggs",
-          "image": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?auto=format&fit=crop&w=600&h=600&q=80&sig=302"
+          "image": "https://images.unsplash.com/photo-1628088062854-d1870b4553da?auto=format&fit=crop&w=600&h=600&q=80&sig=302"
         },
         {
           "id": "grains-cereals",
@@ -1499,7 +1499,7 @@
         {
           "id": "honey-bee",
           "label": "Honey & Bee Products",
-          "image": "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&h=600&q=80&sig=307"
+          "image": "https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?auto=format&fit=crop&w=600&h=600&q=80&sig=307"
         },
         {
           "id": "tubers-roots",
@@ -1605,7 +1605,7 @@
             {
               "id": "dairy-eggs",
               "label": "Dairy & Eggs",
-              "image": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?auto=format&fit=crop&w=600&h=600&q=80&sig=302"
+              "image": "https://images.unsplash.com/photo-1628088062854-d1870b4553da?auto=format&fit=crop&w=600&h=600&q=80&sig=302"
             },
             {
               "id": "livestock",
@@ -1630,7 +1630,7 @@
             {
               "id": "honey-bee",
               "label": "Honey & Bee Products",
-              "image": "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&h=600&q=80&sig=307"
+              "image": "https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?auto=format&fit=crop&w=600&h=600&q=80&sig=307"
             },
             {
               "id": "coffee-tea-leaves",
@@ -1669,12 +1669,12 @@
         {
           "id": "wood-furniture",
           "label": "Wood Furniture",
-          "image": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=600&h=600&q=80&sig=331"
+          "image": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=600&h=600&q=80&sig=331"
         },
         {
           "id": "textiles-kitenge",
           "label": "Textiles & Kitenge",
-          "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=332"
+          "image": "https://images.unsplash.com/photo-1766107349536-c6de9ab38dcd?auto=format&fit=crop&w=600&h=600&q=80&sig=332"
         },
         {
           "id": "home-decor",
@@ -1684,12 +1684,12 @@
         {
           "id": "traditional-wear",
           "label": "Traditional Wear",
-          "image": "https://images.unsplash.com/photo-1594736797933-d0501ba2fe65?auto=format&fit=crop&w=600&h=600&q=80&sig=334"
+          "image": "https://images.unsplash.com/photo-1648328168368-3a25f2152802?auto=format&fit=crop&w=600&h=600&q=80&sig=334"
         },
         {
           "id": "beadwork-jewelry",
           "label": "Beadwork & Jewelry",
-          "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&h=600&q=80&sig=335"
+          "image": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&h=600&q=80&sig=335"
         },
         {
           "id": "pottery-ceramics",
@@ -1699,7 +1699,7 @@
         {
           "id": "baskets-weaving",
           "label": "Baskets & Weaving",
-          "image": "https://images.unsplash.com/photo-1606768666853-403c90a981ad?auto=format&fit=crop&w=600&h=600&q=80&sig=337"
+          "image": "https://images.unsplash.com/photo-1777566131330-8f2c8b497847?auto=format&fit=crop&w=600&h=600&q=80&sig=337"
         },
         {
           "id": "leather-goods",
@@ -1714,7 +1714,7 @@
         {
           "id": "carvings-sculpture",
           "label": "Carvings & Sculpture",
-          "image": "https://images.unsplash.com/photo-1578926375605-eaf7559b1458?auto=format&fit=crop&w=600&h=600&q=80&sig=340"
+          "image": "https://images.unsplash.com/photo-1549497538-303791108f95?auto=format&fit=crop&w=600&h=600&q=80&sig=340"
         },
         {
           "id": "handmade-shoes",
@@ -1729,7 +1729,7 @@
         {
           "id": "crochet-knit",
           "label": "Crochet & Knit",
-          "image": "https://images.unsplash.com/photo-1606923829579-0cb981a83e2e?auto=format&fit=crop&w=600&h=600&q=80&sig=343"
+          "image": "https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&h=600&q=80&sig=343"
         },
         {
           "id": "custom-tailoring",
@@ -1739,12 +1739,12 @@
         {
           "id": "local-art",
           "label": "Local Art",
-          "image": "https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=600&h=600&q=80&sig=345"
+          "image": "https://images.unsplash.com/photo-1541961017774-22349e4a1262?auto=format&fit=crop&w=600&h=600&q=80&sig=345"
         },
         {
           "id": "handmade-toys",
           "label": "Handmade Toys",
-          "image": "https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&w=600&h=600&q=80&sig=346"
+          "image": "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&w=600&h=600&q=80&sig=346"
         }
       ],
       "image": "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=600&h=600&q=80&sig=23",
@@ -1755,12 +1755,12 @@
             {
               "id": "wood-furniture",
               "label": "Wood Furniture",
-              "image": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=600&h=600&q=80&sig=331"
+              "image": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=600&h=600&q=80&sig=331"
             },
             {
               "id": "carvings-sculpture",
               "label": "Carvings & Sculpture",
-              "image": "https://images.unsplash.com/photo-1578926375605-eaf7559b1458?auto=format&fit=crop&w=600&h=600&q=80&sig=340"
+              "image": "https://images.unsplash.com/photo-1549497538-303791108f95?auto=format&fit=crop&w=600&h=600&q=80&sig=340"
             },
             {
               "id": "home-decor",
@@ -1775,12 +1775,12 @@
             {
               "id": "textiles-kitenge",
               "label": "Textiles & Kitenge",
-              "image": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&h=600&q=80&sig=332"
+              "image": "https://images.unsplash.com/photo-1766107349536-c6de9ab38dcd?auto=format&fit=crop&w=600&h=600&q=80&sig=332"
             },
             {
               "id": "traditional-wear",
               "label": "Traditional Wear",
-              "image": "https://images.unsplash.com/photo-1594736797933-d0501ba2fe65?auto=format&fit=crop&w=600&h=600&q=80&sig=334"
+              "image": "https://images.unsplash.com/photo-1648328168368-3a25f2152802?auto=format&fit=crop&w=600&h=600&q=80&sig=334"
             },
             {
               "id": "custom-tailoring",
@@ -1790,7 +1790,7 @@
             {
               "id": "crochet-knit",
               "label": "Crochet & Knit",
-              "image": "https://images.unsplash.com/photo-1606923829579-0cb981a83e2e?auto=format&fit=crop&w=600&h=600&q=80&sig=343"
+              "image": "https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&h=600&q=80&sig=343"
             }
           ]
         },
@@ -1800,12 +1800,12 @@
             {
               "id": "beadwork-jewelry",
               "label": "Beadwork & Jewelry",
-              "image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&h=600&q=80&sig=335"
+              "image": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&h=600&q=80&sig=335"
             },
             {
               "id": "baskets-weaving",
               "label": "Baskets & Weaving",
-              "image": "https://images.unsplash.com/photo-1606768666853-403c90a981ad?auto=format&fit=crop&w=600&h=600&q=80&sig=337"
+              "image": "https://images.unsplash.com/photo-1777566131330-8f2c8b497847?auto=format&fit=crop&w=600&h=600&q=80&sig=337"
             },
             {
               "id": "pottery-ceramics",
@@ -1840,7 +1840,7 @@
             {
               "id": "local-art",
               "label": "Local Art",
-              "image": "https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=600&h=600&q=80&sig=345"
+              "image": "https://images.unsplash.com/photo-1541961017774-22349e4a1262?auto=format&fit=crop&w=600&h=600&q=80&sig=345"
             }
           ]
         }
