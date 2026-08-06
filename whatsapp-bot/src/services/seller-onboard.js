@@ -190,7 +190,9 @@ export function getSellerOrders(supplierId) {
 
       return {
         orderId: o.id,
+        productId: o.productId || null,
         productName: o.productName,
+        quantity: Math.max(1, Math.round(Number(o.quantity) || 1)),
         sellerNetKes: sellerOrderNet(o),
         paid,
         shipmentStatus,
@@ -264,11 +266,14 @@ export function getSellerEscrowLedger(supplierId) {
   const availableTotal = available
     .filter((e) => e.status === "available")
     .reduce((s, e) => s + (e.amountKes || 0), 0);
+  const paidOutItems = available.filter((e) => e.status === "paid");
+  const paidOutTotal = paidOutItems.reduce((s, e) => s + (e.amountKes || 0), 0);
   const pendingTotal = pendingEscrow.reduce((s, e) => s + (e.amountKes || 0), 0);
   const transitTotal = inTransit.reduce((s, e) => s + (e.amountKes || 0), 0);
 
   return {
-    available: { totalKes: availableTotal, items: available },
+    available: { totalKes: availableTotal, items: available.filter((e) => e.status === "available") },
+    paidOut: { totalKes: paidOutTotal, items: paidOutItems },
     pendingEscrow: { totalKes: pendingTotal, items: pendingEscrow },
     inTransit: { totalKes: transitTotal, items: inTransit },
   };

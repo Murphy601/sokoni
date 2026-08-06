@@ -3274,6 +3274,14 @@ function hubGrossSalesKes(orders = hubCache.orders) {
     .reduce((sum, o) => sum + Math.round(Number(o.sellerNetKes) || 0), 0);
 }
 
+function refreshSellerAnalytics() {
+  if (typeof window.SokoniSellerAnalytics?.render !== "function") return;
+  window.SokoniSellerAnalytics.render({
+    orders: hubCache.orders || [],
+    ledger: ledgerData,
+  });
+}
+
 function renderHubTrendingCarousel() {
   const wrap = el("hub-trending-carousel");
   if (!wrap || wrap.dataset.bound === "1") return;
@@ -3461,6 +3469,7 @@ function renderSellerOrders(orders) {
   if (!wrap) return;
   hubCache.orders = Array.isArray(orders) ? orders : [];
   renderSellerHubOverview();
+  refreshSellerAnalytics();
 
   const active = hubOrdersToShip(hubCache.orders);
   if (!active.length) {
@@ -5745,6 +5754,7 @@ async function loadEscrowLedger() {
     el("ledger-transit-total").textContent = formatKes(ledgerData.inTransit?.totalKes || 0);
     renderLedgerDetail();
     renderSellerHubOverview();
+    refreshSellerAnalytics();
   } catch {}
 }
 

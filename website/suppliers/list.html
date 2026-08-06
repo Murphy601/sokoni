@@ -416,6 +416,41 @@
             <p class="sell-dash-group__label">Money</p>
             <p class="sell-dash-group__hint">Escrow and payouts — withdraw from the Withdraw tab</p>
           </div>
+
+        <section id="seller-analytics" class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Seller performance analytics">
+          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div>
+              <h2 class="font-bold text-lg text-white">Performance</h2>
+              <p class="text-sm text-zinc-400">Where your money sits, and how price changes affect sales.</p>
+            </div>
+            <p id="seller-analytics-sync" class="text-[11px] font-mono text-zinc-500">Synced from paid orders</p>
+          </div>
+
+          <div class="seller-analytics-grid">
+            <div class="seller-analytics-panel seller-analytics-panel--wide">
+              <div class="seller-analytics-panel__head">
+                <div>
+                  <h3 class="text-sm font-bold text-white">Sales volume vs unit price</h3>
+                  <p class="text-xs text-zinc-500 mt-0.5">Bars = units sold · Line = avg payout per unit (KES)</p>
+                </div>
+                <span id="seller-analytics-period" class="seller-analytics-chip">Last weeks</span>
+              </div>
+              <div id="seller-analytics-volume" class="seller-analytics-chart" role="img" aria-label="Units sold versus average unit price"></div>
+              <div id="seller-analytics-top-products" class="seller-analytics-top"></div>
+            </div>
+
+            <div class="seller-analytics-panel">
+              <div class="seller-analytics-panel__head">
+                <div>
+                  <h3 class="text-sm font-bold text-white">Escrow &amp; cash flow</h3>
+                  <p class="text-xs text-zinc-500 mt-0.5">Live snapshot of your earnings pipeline</p>
+                </div>
+              </div>
+              <div id="seller-analytics-escrow" class="seller-analytics-donut-wrap" role="img" aria-label="Escrow cash flow breakdown"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="sell-depop-section p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <h2 class="font-bold text-lg text-white">Earnings</h2>
@@ -887,7 +922,8 @@
   </main>
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
-  <script src="../assets/js/seller-listing.js?v=raise-price-1"></script>
+  <script src="../assets/js/seller-analytics.js?v=analytics-1"></script>
+  <script src="../assets/js/seller-listing.js?v=analytics-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
