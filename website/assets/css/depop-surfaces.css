@@ -383,7 +383,9 @@ body.sell-depop-page {
   color: var(--depop-text) !important;
 }
 
-body.sell-depop-page header {
+/* Only the top Sell page chrome — never flatten #seller-hub-nav */
+body.sell-depop-page > header.sell-page-header,
+body.sell-depop-page header.sell-page-header {
   background: rgba(0, 0, 0, 0.95) !important;
   border-bottom: 1px solid var(--depop-border) !important;
   color: var(--depop-text);
