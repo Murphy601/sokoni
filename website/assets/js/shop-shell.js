@@ -178,6 +178,20 @@
     return true;
   }
 
+  /** Clear cart after handing off to WhatsApp (order started). */
+  function clearBagAfterOrder() {
+    const ids = [...bagIds];
+    bagIds = new Set();
+    saveBag();
+    ids.forEach((id) => {
+      likedIds.delete(id);
+      syncHeartButtons(id);
+      window.SokoniProductSheet?.syncSaveButton?.(id);
+    });
+    syncHeartButtons();
+    renderBagSheet();
+  }
+
   function bagProducts() {
     return [...bagIds].map(findProduct).filter(Boolean);
   }
@@ -268,6 +282,7 @@
       orderBtn.href = waLink(
         `🛒 *NEW SOKONI CART ORDER*\nSOKONI_CART\n\n${skuLines}\n\n💰 Estimated total KES ${grandTotal.toLocaleString()}`
       );
+      orderBtn.dataset.clearCartOnClick = "1";
     }
   }
 
@@ -341,6 +356,17 @@
     document.getElementById("bag-sheet-close")?.addEventListener("click", closeBagSheet);
     document.querySelector("#bag-sheet .sheet-backdrop")?.addEventListener("click", closeBagSheet);
 
+    // After Order on WhatsApp — wipe cart so completed handoff doesn't linger
+    document.getElementById("bag-sheet-order")?.addEventListener("click", () => {
+      const btn = document.getElementById("bag-sheet-order");
+      if (!btn || btn.classList.contains("hidden")) return;
+      // Let the wa.me tab open, then clear local cart
+      setTimeout(() => {
+        clearBagAfterOrder();
+        closeBagSheet();
+      }, 120);
+    });
+
     document.getElementById("bag-sheet-list")?.addEventListener("click", (e) => {
       const remove = e.target.closest("[data-remove-id]");
       if (remove) {
@@ -376,6 +402,7 @@
     syncHeartButtons,
     openBag: openBagSheet,
     refreshBag: renderBagSheet,
+    clearBagAfterOrder,
     syncSearchInputs,
   };
 

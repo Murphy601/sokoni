@@ -105,8 +105,9 @@
         <a href="track.html" class="hidden sm:inline-flex text-xs font-semibold min-h-[44px] items-center px-2 hover:opacity-80" title="Track order">Track</a>
         <span data-account-nav data-account-nav-class="hidden sm:inline-flex text-xs font-semibold min-h-[44px] items-center px-2 hover:opacity-80"></span>
         <a href="suppliers/list.html" class="depop-btn-sell hidden sm:inline-flex">Sell</a>
-        <button type="button" id="shop-bag-btn" class="depop-icon-btn" aria-label="Saved items">
-          🛍️
+        <button type="button" id="shop-bag-btn" class="depop-icon-btn depop-cart-btn" aria-label="Cart" title="Cart">
+          <img class="depop-cart-icon" src="assets/images/ui/cart-icon.svg" width="22" height="22" alt="" />
+          <span class="depop-cart-label">Cart</span>
           <span id="shop-bag-count" class="depop-bag-count hidden" aria-hidden="true">0</span>
         </button>
         <button id="theme-toggle" type="button" aria-label="Toggle dark mode" class="depop-icon-btn hidden md:inline-flex">
@@ -810,17 +811,17 @@
     </div>
   </div>
 
-  <!-- Phase 3 — Saved items (bag) sheet -->
+  <!-- Cart sheet -->
   <div id="bag-sheet" class="bottom-sheet" hidden aria-hidden="true">
     <div class="sheet-backdrop" aria-hidden="true"></div>
-    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Saved items">
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Cart">
       <button type="button" id="bag-sheet-close" class="sheet-close" aria-label="Close">&times;</button>
       <div class="sheet-scroll">
-        <h2 class="bag-sheet-title">Saved items</h2>
-        <p id="bag-sheet-empty" class="bag-sheet-empty hidden">Nothing saved yet — tap ♡ on any item while browsing.</p>
+        <h2 class="bag-sheet-title">Cart</h2>
+        <p id="bag-sheet-empty" class="bag-sheet-empty hidden">Your cart is empty — tap Add to cart on any item.</p>
         <ul id="bag-sheet-list" class="bag-sheet-list"></ul>
         <div id="bag-sheet-summary" class="bag-sheet-summary hidden"></div>
-        <a id="bag-sheet-order" href="#" target="_blank" rel="noopener" class="bag-sheet-order hidden">💬 Order all on WhatsApp</a>
+        <a id="bag-sheet-order" href="#" target="_blank" rel="noopener" class="bag-sheet-order hidden">💬 Order cart on WhatsApp</a>
       </div>
     </div>
   </div>
