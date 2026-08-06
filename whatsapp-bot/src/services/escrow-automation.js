@@ -28,6 +28,7 @@ import {
   dispatchMessages,
   msgBuyerPaid,
   msgSellerPaid,
+  msgSellerCartPaid,
   notifyAdminEvent,
   sellerNotifyTargets,
 } from "./communication-hub.js";
@@ -128,13 +129,77 @@ async function notifySellerDropoff(order, label) {
       `(Hub scan also works — or reply DISPATCH ${order.id} yourself.)`;
   }
   const targets = sellerNotifyTargets(sup.phone);
-  updateOrderMeta(order.id, { sellerNotifyChatIds: targets });
-  void dispatchMessages(targets.map((to) => ({ to, message })));
+  // One chat only — linked @c.us + @lid both used to fire and double every alert.
+  const primary = targets[0];
+  updateOrderMeta(order.id, { sellerNotifyChatIds: targets, supplierNotified: Boolean(primary) });
+  if (primary) {
+    void dispatchMessages([{ to: primary, message }]);
+  }
   void notifyAdminEvent("PAID_ESCROW", {
     orderId: order.id,
     details: `Payment held — seller notified to DISPATCH ${order.id}`,
     silent: true,
   });
+}
+
+/**
+ * Cart paid: one WhatsApp per seller listing all of their child lines
+ * (listing id + SKN-####-n tracking). Never 1 message per line × N chats.
+ */
+async function notifySellersForPaidCart(parent, children) {
+  const list = Array.isArray(children) ? children.filter(Boolean) : [];
+  if (!list.length) return;
+
+  const bySupplier = new Map();
+  for (const child of list) {
+    const key = child.supplierId || `__none__:${child.id}`;
+    if (!bySupplier.has(key)) bySupplier.set(key, []);
+    bySupplier.get(key).push(child);
+  }
+
+  for (const [supplierKey, group] of bySupplier) {
+    if (supplierKey.startsWith("__none__")) continue;
+    const first = group[0];
+    const sup = getSupplier(first.supplierId);
+    if (!sup?.phone) continue;
+
+    let message = msgSellerCartPaid(parent, group);
+    const hubLines = [];
+    for (const c of group) {
+      const sellerHandled =
+        c.shippingRecipient === "seller" ||
+        c.deliveryMethod === "seller_express" ||
+        c.deliveryMethod === "meetup";
+      if (!sellerHandled && c.dropOffCode) {
+        const listing = c.productId || c.supplierSku || "item";
+        hubLines.push(
+          `• *${c.id}* (${listing}): *${c.dropOffCode}*\n  ${c.labelUrl || "—"}`
+        );
+      }
+    }
+    if (hubLines.length) {
+      message +=
+        `\n\nHub labels:\n${hubLines.join("\n")}\n` +
+        `(Hub scan works — or reply DISPATCH with the tracking ID.)`;
+    }
+
+    const targets = sellerNotifyTargets(sup.phone);
+    const primary = targets[0];
+    for (const c of group) {
+      updateOrderMeta(c.id, {
+        sellerNotifyChatIds: targets,
+        supplierNotified: Boolean(primary),
+      });
+    }
+    if (primary) {
+      void dispatchMessages([{ to: primary, message }]);
+    }
+    void notifyAdminEvent("PAID_CART_SELLER", {
+      orderId: parent?.id || first.parentOrderId,
+      details: `Seller ${sup.id || first.supplierId} — 1 notify for ${group.length} item(s)`,
+      silent: true,
+    });
+  }
 }
 
 /**
@@ -244,7 +309,7 @@ async function applyCartParentPostPayment(order, payment = {}) {
     ]);
   }
 
-  // Sellers: only their lines, after payment (Phase 0)
+  // Per child: labels + lock stock. Seller WhatsApp is batched once per seller below.
   for (const child of children) {
     const label = generateDropoffLabel(child);
     const sellerHandled =
@@ -264,8 +329,9 @@ async function applyCartParentPostPayment(order, payment = {}) {
     });
     await lockProductForOrder(getOrder(child.id));
     recordPurchaseFeedEvent(getOrder(child.id));
-    await notifySellerDropoff(getOrder(child.id), label);
   }
+
+  await notifySellersForPaidCart(parent, getCartChildren(order.id));
 
   void notifyAdminEvent("PAID_CART_ESCROW", {
     orderId: parent.id,

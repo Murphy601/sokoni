@@ -46,9 +46,10 @@ export async function notifyOrderPaidEscrow(order, payment = {}) {
     const sup = getSupplier(order.supplierId);
     if (sup?.phone) {
       const targets = sellerNotifyTargets(sup.phone);
-      updateOrderMeta(order.id, { sellerNotifyChatIds: targets });
-      for (const to of targets) {
-        jobs.push({ to, message: msgSellerPaid(order) });
+      updateOrderMeta(order.id, { sellerNotifyChatIds: targets, supplierNotified: Boolean(targets[0]) });
+      // Primary chat only — avoid duplicate WA when @c.us + linked chats both fire.
+      if (targets[0]) {
+        jobs.push({ to: targets[0], message: msgSellerPaid(order) });
       }
     }
   }

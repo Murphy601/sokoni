@@ -515,15 +515,52 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
 
 export function msgSellerPaid(order) {
   const payout = order.sellerPayoutKes ?? order.sellerNetKes;
+  const listingId = order.productId || order.supplierSku || null;
   return (
     `🎉 *New Paid Order on Sokoni!*\n` +
     `Order: *${order.id}*\n` +
+    (listingId ? `Listing: *${listingId}*\n` : "") +
     `Item: *${order.productName || "Order"}*\n` +
     `Location: *${dropOffLine(order)}*\n` +
     (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
     `\nPlease pack the item. Once handed to the buyer/courier, reply:\n` +
     `*DISPATCH ${order.id}*\n\n` +
     `Problem? Reply: HELP ${order.id}`
+  );
+}
+
+/**
+ * One WhatsApp for a seller covering all their lines in a paid cart (SKN parent).
+ * Includes listing id (e.g. hb-tlom7-003) + child tracking id (SKN-####-n).
+ */
+export function msgSellerCartPaid(parent, children = []) {
+  const list = Array.isArray(children) ? children.filter(Boolean) : [];
+  if (!list.length) return msgSellerPaid(parent);
+  if (list.length === 1) return msgSellerPaid(list[0]);
+
+  const parentId = parent?.id || list[0].parentOrderId || "SKN";
+  const lines = list
+    .map((c, i) => {
+      const payout = c.sellerPayoutKes ?? c.sellerNetKes;
+      const listingId = c.productId || c.supplierSku || "—";
+      return (
+        `${i + 1}. *${c.productName || "Item"}*\n` +
+        `   Listing: *${listingId}*\n` +
+        `   Tracking: *${c.id}*\n` +
+        (payout != null ? `   Your payout: *KES ${Number(payout).toLocaleString()}*\n` : "") +
+        `   When sent → *DISPATCH ${c.id}*`
+      );
+    })
+    .join("\n\n");
+
+  return (
+    `🎉 *New Paid Cart Order on Sokoni!*\n` +
+    `Cart: *${parentId}*\n` +
+    `Your items (${list.length}):\n\n` +
+    `${lines}\n\n` +
+    `Location: *${dropOffLine(list[0])}*\n\n` +
+    `Pack each item. Reply *DISPATCH* with that item's tracking ID when you hand it over.\n` +
+    `Problem? Reply: HELP <tracking id>`
   );
 }
 
