@@ -1,4 +1,4 @@
-import { staggerSelector } from "../lib/motion.js";
+import { staggerNodes } from "../lib/motion.js";
 
 const GRID_ROOTS = [
   "#product-grid",
@@ -27,16 +27,15 @@ const CHILD_SELECTORS = [
 
 function staggerGrid(root) {
   if (!root) return;
+  // Scope children to THIS root only — never querySelectorAll across the whole document
   const kids = Array.from(root.querySelectorAll(CHILD_SELECTORS)).filter(
     (n) => !n.hasAttribute("data-sokoni-motion-staggered")
   );
   if (!kids.length) return;
-  kids.forEach((k) => k.setAttribute("data-sokoni-motion-pending", "1"));
-  staggerSelector(`${CHILD_SELECTORS}[data-sokoni-motion-pending="1"]`, { opacity: 1, y: 0 }, {
-    delayChildren: 0.045,
-    duration: 0.28,
+  staggerNodes(kids, { opacity: 1, y: 0 }, {
+    delayChildren: 0.055,
+    duration: 0.34,
   });
-  kids.forEach((k) => k.removeAttribute("data-sokoni-motion-pending"));
 }
 
 /** Phase 4 — staggered entrance for catalog & trade grids. */
