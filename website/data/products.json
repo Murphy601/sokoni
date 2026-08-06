@@ -3,7 +3,7 @@
     "id": "sm-tlom7-001",
     "name": "Delamere Premium Yoghurt with Real Lemon Biscuit",
     "category": "supermarket",
-    "priceKes": 300,
+    "priceKes": 84,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -32,7 +32,7 @@
     "id": "fa-tlom7-001",
     "name": "Product listing",
     "category": "fashion",
-    "priceKes": 753,
+    "priceKes": 456,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -56,7 +56,7 @@
     "id": "hb-tlom7-002",
     "name": "BodyLuxe Moisturising Body Lotion",
     "category": "health-beauty",
-    "priceKes": 500,
+    "priceKes": 390,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -85,7 +85,7 @@
     "id": "hb-tlom7-003",
     "name": "Sedoso Massage Oil",
     "category": "health-beauty",
-    "priceKes": 225,
+    "priceKes": 55,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -111,32 +111,5 @@
       "paraben-free"
     ],
     "description": "A clear bottle of Sedoso Massage Oil, labeled as all-natural, plant-based, and paraben-free. The label indicates it is Sweet Almond oil."
-  },
-  {
-    "id": "fa-tlom7-002",
-    "name": "Yellow and Green Flip Flop",
-    "category": "fashion",
-    "priceKes": 280,
-    "rating": 4.5,
-    "reviews": 0,
-    "source": "Sokoni",
-    "emoji": "👗",
-    "scope": "local",
-    "fulfillment": "store",
-    "payment": "prepaid",
-    "inStock": true,
-    "imageUrl": "assets/images/products/fa-tlom7-002.jpg",
-    "images": [
-      "assets/images/products/fa-tlom7-002.jpg"
-    ],
-    "videoUrl": "assets/images/products/fa-tlom7-002.mp4",
-    "videoKind": "preview",
-    "subcategory": "womens-fashion",
-    "browseCategory": "women",
-    "browseSubCategory": "shoes",
-    "condition": "brand_new_without_tags",
-    "isSecondhand": false,
-    "color": "yellow",
-    "description": "A single yellow and green flip flop is shown against a white background. The sole has a textured pattern."
   }
 ]

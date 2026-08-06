@@ -6,8 +6,8 @@
     "subcategory": "groceries",
     "browseCategory": "home",
     "browseSubCategory": "supermarket",
-    "sourcePriceKes": 276,
-    "priceKes": 300,
+    "sourcePriceKes": 76,
+    "priceKes": 84,
     "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack.",
     "brand": "Delamere",
     "color": "white",
@@ -34,11 +34,18 @@
       "assets/images/products/sm-tlom7-001-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785545700245,
+    "publishedAt": 1786053452275,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785545700245
+    "refreshedAt": 1786053452275,
+    "sellerNetKes": 76,
+    "platformFeeKes": 8,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 76,
+    "shippingKes": 0,
+    "freeShipping": true,
+    "priceUpdatedAt": 1786053452275
   },
   {
     "id": "hb-tlom7-001",
@@ -47,10 +54,10 @@
     "subcategory": "skincare",
     "browseCategory": "men",
     "browseSubCategory": "t-shirts",
-    "sellerNetKes": 300,
-    "sourcePriceKes": 300,
-    "priceKes": 523,
-    "platformFeeKes": 48,
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 390,
+    "platformFeeKes": 35,
     "description": "Intensive body lotion for men featuring ginseng, castor, and coconut oils for skin repair and hydration with a cooling effect.",
     "brand": "Amara",
     "color": "grey",
@@ -59,7 +66,7 @@
     "condition": "brand_new_without_tags",
     "isSecondhand": false,
     "location": "Kenol",
-    "shippingKes": 175,
+    "shippingKes": 300,
     "freeShipping": false,
     "estimatedWeightClass": "small",
     "shippingNote": "Seller delivery",
@@ -78,14 +85,17 @@
       "assets/images/products/hb-tlom7-001.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785165846682,
+    "publishedAt": 1786053519674,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785165846682,
+    "refreshedAt": 1786053519674,
     "isSold": true,
     "soldAt": 1785172670111,
-    "soldOrderId": "SK-1011"
+    "soldOrderId": "SK-1011",
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 50,
+    "priceUpdatedAt": 1786053519674
   },
   {
     "id": "fa-tlom7-001",
@@ -94,10 +104,10 @@
     "subcategory": "product-listing",
     "browseCategory": "women",
     "browseSubCategory": "tops",
-    "sellerNetKes": 500,
-    "sourcePriceKes": 500,
-    "priceKes": 743,
-    "platformFeeKes": 68,
+    "sellerNetKes": 110,
+    "sourcePriceKes": 110,
+    "priceKes": 456,
+    "platformFeeKes": 41,
     "description": "Product listing. 100% prepaid across Kenya.",
     "color": "",
     "size": "",
@@ -105,7 +115,7 @@
     "condition": "brand_new_without_tags",
     "isSecondhand": false,
     "location": "Kenol",
-    "shippingKes": 175,
+    "shippingKes": 300,
     "freeShipping": false,
     "estimatedWeightClass": "small",
     "shippingNote": "Seller delivery",
@@ -124,10 +134,14 @@
       "assets/images/products/fa-tlom7-001.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785368914233,
+    "publishedAt": 1786053496312,
     "moderation": {
       "status": "pending_scan"
-    }
+    },
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 110,
+    "refreshedAt": 1786053496312,
+    "priceUpdatedAt": 1786053496312
   },
   {
     "id": "hb-tlom7-002",
@@ -136,12 +150,12 @@
     "subcategory": "skin-care",
     "browseCategory": "women",
     "browseSubCategory": "beauty",
-    "sellerNetKes": 150,
-    "sourcePriceKes": 150,
-    "priceKes": 500,
-    "platformFeeKes": 45,
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 390,
+    "platformFeeKes": 35,
     "transactionFeeKes": 5,
-    "sellerPayoutKes": 450,
+    "sellerPayoutKes": 350,
     "deliveryMethod": "seller_express",
     "shippingRecipient": "seller",
     "description": "A pink bottle of BodyLuxe Moisturising Body Lotion enriched with glycerine, featuring a new design and improved formula.",
@@ -176,11 +190,12 @@
       "assets/images/products/hb-tlom7-002-4.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785545704019,
+    "publishedAt": 1786053425216,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1785545704019
+    "refreshedAt": 1786053425216,
+    "priceUpdatedAt": 1786053425216
   },
   {
     "id": "hb-tlom7-003",
@@ -189,12 +204,12 @@
     "subcategory": "personal-care",
     "browseCategory": "health-beauty",
     "browseSubCategory": "personal-care",
-    "sellerNetKes": 200,
-    "sourcePriceKes": 200,
-    "priceKes": 225,
-    "platformFeeKes": 20,
-    "transactionFeeKes": 5,
-    "sellerPayoutKes": 200,
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 55,
+    "platformFeeKes": 5,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 50,
     "deliveryMethod": "seller_express",
     "shippingRecipient": "seller",
     "description": "A clear bottle of Sedoso Massage Oil, labeled as all-natural, plant-based, and paraben-free. The label indicates it is Sweet Almond oil.",
@@ -230,10 +245,12 @@
       "assets/images/products/hb-tlom7-003.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1785545955395,
+    "publishedAt": 1786053415309,
     "moderation": {
       "status": "pending_scan"
-    }
+    },
+    "refreshedAt": 1786053415309,
+    "priceUpdatedAt": 1786053415309
   },
   {
     "id": "fa-tlom7-002",
@@ -242,12 +259,12 @@
     "subcategory": "womens-fashion",
     "browseCategory": "women",
     "browseSubCategory": "shoes",
-    "sellerNetKes": 250,
-    "sourcePriceKes": 250,
-    "priceKes": 280,
-    "platformFeeKes": 25,
-    "transactionFeeKes": 5,
-    "sellerPayoutKes": 250,
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 55,
+    "platformFeeKes": 5,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 50,
     "deliveryMethod": "seller_express",
     "shippingRecipient": "seller",
     "description": "A single yellow and green flip flop is shown against a white background. The sole has a textured pattern.",
@@ -272,16 +289,21 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/fa-tlom7-002.jpg",
     "images": [
       "assets/images/products/fa-tlom7-002.jpg"
     ],
     "videoUrl": "assets/images/products/fa-tlom7-002.mp4",
     "videoKind": "preview",
-    "publishedAt": 1785640659809,
+    "publishedAt": 1786053395785,
     "moderation": {
       "status": "pending_scan"
-    }
+    },
+    "isSold": true,
+    "soldAt": 1786052956948,
+    "soldOrderId": "SKN-1002-1",
+    "refreshedAt": 1786053395785,
+    "priceUpdatedAt": 1786053395785
   }
 ]
