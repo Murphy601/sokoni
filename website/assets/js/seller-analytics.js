@@ -144,7 +144,7 @@
     ];
   }
 
-  function renderVolumeChart(container, buckets) {
+  function volumeChartHtml(buckets) {
     const w = 560;
     const h = 220;
     const pad = { top: 16, right: 44, bottom: 36, left: 36 };
@@ -195,7 +195,7 @@
       )
       .join("");
 
-    container.innerHTML = `
+    return `
       <svg viewBox="0 0 ${w} ${h}" class="seller-analytics-svg" role="presentation" aria-hidden="true">
         ${gridLines}
         ${bars}
@@ -212,7 +212,7 @@
       </div>`;
   }
 
-  function renderEscrowDonut(container, segments) {
+  function escrowDonutHtml(segments) {
     const total = segments.reduce((s, x) => s + x.value, 0);
     const size = 180;
     const cx = size / 2;
@@ -255,7 +255,7 @@
       )
       .join("");
 
-    container.innerHTML = `
+    return `
       <div class="seller-analytics-donut">
         <svg viewBox="0 0 ${size} ${size}" class="seller-analytics-svg" role="presentation" aria-hidden="true">
           <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${COLORS.grid}" stroke-width="${stroke}" />
@@ -269,14 +269,10 @@
       <div class="seller-analytics-escrow-legend">${legend}</div>`;
   }
 
-  function renderTopProducts(container, products) {
-    if (!container) return;
-    if (!products.length) {
-      container.innerHTML = "";
-      return;
-    }
+  function topProductsHtml(products) {
+    if (!products.length) return "";
     const total = products.reduce((s, p) => s + p.revenueKes, 0) || 1;
-    container.innerHTML = `
+    return `
       <p class="seller-analytics-top-label">Top earners</p>
       <ul class="seller-analytics-top-list">
         ${products
@@ -295,51 +291,54 @@
       </ul>`;
   }
 
-  function renderEmptyVolume(container, message) {
-    container.innerHTML = `<p class="seller-analytics-empty">${escapeHtml(message)}</p>`;
+  function paintAll(selector, html) {
+    document.querySelectorAll(selector).forEach((node) => {
+      node.innerHTML = html;
+    });
+  }
+
+  function setTextAll(selector, text) {
+    document.querySelectorAll(selector).forEach((node) => {
+      node.textContent = text;
+    });
   }
 
   /**
+   * Paint Overview + Analytics mounts (data-analytics-* attributes).
    * @param {{ orders?: any[], ledger?: any }} data
    */
   function renderSellerAnalytics(data = {}) {
-    const volumeEl = el("seller-analytics-volume");
-    const escrowEl = el("seller-analytics-escrow");
-    const topEl = el("seller-analytics-top-products");
-    const periodEl = el("seller-analytics-period");
-    const syncEl = el("seller-analytics-sync");
-    if (!volumeEl || !escrowEl) return;
+    const mounts = document.querySelectorAll("[data-analytics-volume]");
+    if (!mounts.length && !el("seller-analytics-volume")) return;
 
     const orders = Array.isArray(data.orders) ? data.orders : [];
     const { buckets, paidCount } = buildSalesVsPriceSeries(orders, 6);
     const hasSales = buckets.some((b) => b.unitsSold > 0);
 
-    if (periodEl) periodEl.textContent = "Last 6 weeks";
-    if (syncEl) {
-      syncEl.textContent =
-        paidCount > 0
-          ? `${paidCount} paid order${paidCount === 1 ? "" : "s"} · updated ${new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}`
-          : "Synced from paid orders";
-    }
+    setTextAll("[data-analytics-period]", "Last 6 weeks");
+    setTextAll(
+      "[data-analytics-sync]",
+      paidCount > 0
+        ? `${paidCount} paid order${paidCount === 1 ? "" : "s"} · updated ${new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}`
+        : "Synced from paid orders"
+    );
 
-    if (!hasSales) {
-      renderEmptyVolume(
-        volumeEl,
-        "Not enough paid sales yet — this chart unlocks after a few orders so you can see how price changes affect volume."
-      );
-    } else {
-      renderVolumeChart(volumeEl, buckets);
-    }
-
-    renderTopProducts(topEl, topProductsByRevenue(orders, 3));
+    const emptyMsg =
+      "Not enough paid sales yet — this chart unlocks after a few orders so you can see how price changes affect volume.";
+    paintAll(
+      "[data-analytics-volume]",
+      hasSales ? volumeChartHtml(buckets) : `<p class="seller-analytics-empty">${escapeHtml(emptyMsg)}</p>`
+    );
+    paintAll("[data-analytics-top]", topProductsHtml(topProductsByRevenue(orders, 3)));
 
     const segments = buildEscrowSegments(data.ledger);
     const pipeline = segments.reduce((s, x) => s + x.value, 0);
-    if (pipeline <= 0 && !data.ledger) {
-      escrowEl.innerHTML = `<p class="seller-analytics-empty">Load earnings to see your escrow breakdown.</p>`;
-    } else {
-      renderEscrowDonut(escrowEl, segments);
-    }
+    paintAll(
+      "[data-analytics-escrow]",
+      pipeline <= 0 && !data.ledger
+        ? `<p class="seller-analytics-empty">Load earnings to see your escrow breakdown.</p>`
+        : escrowDonutHtml(segments)
+    );
   }
 
   global.SokoniSellerAnalytics = {

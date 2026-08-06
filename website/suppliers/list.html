@@ -212,35 +212,80 @@
         </form>
       </details>
 
-      <div class="sell-view-tabs" role="tablist" aria-label="Seller views">
-        <button type="button" id="tab-dashboard" class="sell-view-tab is-active" role="tab" aria-selected="true">
-          <span>Home</span>
-          <span id="tab-dashboard-offers-badge" class="sell-tab-badge hidden" aria-live="polite"></span>
-        </button>
-        <button type="button" id="tab-listing" class="sell-view-tab" role="tab" aria-selected="false">List item</button>
-        <button type="button" id="tab-withdraw" class="sell-view-tab" role="tab" aria-selected="false">Withdraw</button>
-      </div>
+      <!-- Depop-style sticky seller nav (pillars) -->
+      <header id="seller-hub-nav" class="seller-hub-nav sticky top-0 z-40 -mx-4 sm:mx-0 px-4 sm:px-0 mb-6">
+        <div class="seller-hub-nav__shell">
+          <div class="seller-hub-nav__top">
+            <div class="seller-hub-nav__identity">
+              <div id="hub-nav-avatar" class="seller-hub-nav__avatar" aria-hidden="true">S</div>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h1 id="hub-nav-shop-name" class="seller-hub-nav__title truncate">Your shop</h1>
+                  <span id="hub-nav-verified" class="seller-hub-nav__verified hidden">Verified</span>
+                </div>
+                <p id="hub-nav-shop-url" class="seller-hub-nav__url truncate">sokonimall.com/shop/…</p>
+              </div>
+            </div>
+            <div class="seller-hub-nav__actions">
+              <a id="hub-nav-storefront" href="../shop.html" class="seller-hub-nav__ghost hidden sm:inline-flex">
+                View storefront
+                <span aria-hidden="true">↗</span>
+              </a>
+              <button type="button" id="hub-bulk-studio-btn" class="seller-hub-nav__ghost hidden md:inline-flex">Bulk CSV</button>
+              <button type="button" id="hub-create-drop-btn" class="seller-hub-nav__cta">+ List item</button>
+            </div>
+          </div>
+
+          <nav class="seller-hub-nav__tabs" role="tablist" aria-label="Seller hub sections">
+            <button type="button" class="seller-hub-nav__tab is-active" data-hub-nav="overview" role="tab" aria-selected="true" id="tab-dashboard">
+              <span class="seller-hub-nav__icon" aria-hidden="true">⌂</span>
+              <span>Overview</span>
+            </button>
+            <button type="button" class="seller-hub-nav__tab" data-hub-nav="orders" role="tab" aria-selected="false">
+              <span class="seller-hub-nav__icon" aria-hidden="true">▣</span>
+              <span>Orders</span>
+              <span id="nav-badge-orders" class="seller-hub-nav__badge hidden" aria-live="polite"></span>
+              <span id="tab-dashboard-offers-badge" class="hidden" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="seller-hub-nav__tab" data-hub-nav="listings" role="tab" aria-selected="false">
+              <span class="seller-hub-nav__icon" aria-hidden="true">▦</span>
+              <span>Listings</span>
+            </button>
+            <button type="button" class="seller-hub-nav__tab" data-hub-nav="analytics" role="tab" aria-selected="false">
+              <span class="seller-hub-nav__icon" aria-hidden="true">▤</span>
+              <span>Analytics</span>
+            </button>
+            <button type="button" class="seller-hub-nav__tab" data-hub-nav="payouts" role="tab" aria-selected="false" id="tab-withdraw">
+              <span class="seller-hub-nav__icon" aria-hidden="true">⬡</span>
+              <span>Payouts</span>
+            </button>
+            <button type="button" class="seller-hub-nav__tab" data-hub-nav="settings" role="tab" aria-selected="false">
+              <span class="seller-hub-nav__icon" aria-hidden="true">⚙</span>
+              <span>Settings</span>
+            </button>
+            <button type="button" id="tab-listing" class="sr-only" tabindex="-1" aria-hidden="true">List item</button>
+            <span class="seller-hub-nav__pill" id="seller-hub-nav-pill" aria-hidden="true"></span>
+          </nav>
+        </div>
+      </header>
 
       <div id="view-dashboard" class="space-y-8">
-        <!-- 1. Snapshot -->
+        <!-- OVERVIEW: snapshot + charts -->
+        <div data-hub-panel="overview" id="hub-panel-overview" class="space-y-8">
         <section id="seller-hub-overview" class="seller-hub depop-hub depop-surface rounded-3xl p-5 sm:p-6 space-y-5" aria-label="Shop overview">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <div class="flex flex-wrap items-center gap-2 mb-1">
-                <span class="depop-label">Your shop</span>
+                <span class="depop-label">Overview</span>
                 <span class="text-zinc-700" aria-hidden="true">·</span>
                 <span id="hub-shop-handle" class="text-xs text-zinc-400 font-mono">@yourshop</span>
               </div>
-              <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Home</h2>
-              <p class="text-sm text-zinc-400 mt-1">Ship orders, answer offers, list the next item.</p>
+              <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white">Your shop at a glance</h2>
+              <p class="text-sm text-zinc-400 mt-1">Sales, escrow health, and what needs shipping.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <button type="button" id="hub-bulk-studio-btn" class="depop-btn-ghost">
-                Bulk CSV
-              </button>
-              <button type="button" id="hub-create-drop-btn" class="depop-btn-accent">
-                + List item
-              </button>
+              <button type="button" class="depop-btn-ghost" data-hub-jump="orders">View orders</button>
+              <button type="button" class="depop-btn-accent" data-hub-jump="listing">+ List item</button>
             </div>
           </div>
 
@@ -268,11 +313,47 @@
           </div>
         </section>
 
-        <!-- 2. Needs action -->
+        <section id="seller-analytics" class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Seller performance analytics" data-analytics-root="overview">
+          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div>
+              <h2 class="font-bold text-lg text-white">Performance</h2>
+              <p class="text-sm text-zinc-400">Where your money sits, and how price changes affect sales.</p>
+            </div>
+            <p class="text-[11px] font-mono text-zinc-500" data-analytics-sync>Synced from paid orders</p>
+          </div>
+
+          <div class="seller-analytics-grid">
+            <div class="seller-analytics-panel seller-analytics-panel--wide">
+              <div class="seller-analytics-panel__head">
+                <div>
+                  <h3 class="text-sm font-bold text-white">Sales volume vs unit price</h3>
+                  <p class="text-xs text-zinc-500 mt-0.5">Bars = units sold · Line = avg payout per unit (KES)</p>
+                </div>
+                <span class="seller-analytics-chip" data-analytics-period>Last weeks</span>
+              </div>
+              <div id="seller-analytics-volume" class="seller-analytics-chart" data-analytics-volume role="img" aria-label="Units sold versus average unit price"></div>
+              <div id="seller-analytics-top-products" class="seller-analytics-top" data-analytics-top></div>
+            </div>
+
+            <div class="seller-analytics-panel">
+              <div class="seller-analytics-panel__head">
+                <div>
+                  <h3 class="text-sm font-bold text-white">Escrow &amp; cash flow</h3>
+                  <p class="text-xs text-zinc-500 mt-0.5">Live snapshot of your earnings pipeline</p>
+                </div>
+              </div>
+              <div id="seller-analytics-escrow" class="seller-analytics-donut-wrap" data-analytics-escrow role="img" aria-label="Escrow cash flow breakdown"></div>
+            </div>
+          </div>
+        </section>
+        </div><!-- /overview panel -->
+
+        <!-- ORDERS & ESCROW -->
+        <div data-hub-panel="orders" id="hub-panel-orders" class="space-y-8 hidden">
         <div class="sell-dash-group space-y-4">
           <div class="sell-dash-group__head">
-            <p class="sell-dash-group__label">Needs action</p>
-            <p class="sell-dash-group__hint">Do these first — buyers are waiting</p>
+            <p class="sell-dash-group__label">Orders &amp; escrow</p>
+            <p class="sell-dash-group__hint">Ship paid sales, handle offers, track money</p>
           </div>
 
         <section class="sell-depop-section p-6 space-y-4">
@@ -378,10 +459,41 @@
         </section>
         </div><!-- /needs action -->
 
-        <!-- 3. Listings -->
         <div class="sell-dash-group space-y-4">
           <div class="sell-dash-group__head">
-            <p class="sell-dash-group__label">Your listings</p>
+            <p class="sell-dash-group__label">Money</p>
+            <p class="sell-dash-group__hint">Escrow ledger — withdraw from Payouts</p>
+          </div>
+        <section class="sell-depop-section p-6 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="font-bold text-lg text-white">Earnings</h2>
+            <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
+              <span class="sell-ledger-dot available"></span>Available
+              <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+            <button type="button" class="sell-ledger-tab" data-ledger="pending">
+              <span class="sell-ledger-dot pending"></span>Pending escrow
+              <p id="ledger-pending-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+            <button type="button" class="sell-ledger-tab" data-ledger="transit">
+              <span class="sell-ledger-dot transit"></span>In transit
+              <p id="ledger-transit-total" class="text-lg font-bold mt-1">—</p>
+            </button>
+          </div>
+          <div id="ledger-detail" class="text-sm space-y-2"></div>
+          <button type="button" class="depop-btn-accent text-sm mt-2" data-hub-jump="payouts">Go to Payouts / Withdraw</button>
+        </section>
+        </div>
+        </div><!-- /orders panel -->
+
+        <!-- LISTINGS -->
+        <div data-hub-panel="listings" id="hub-panel-listings" class="space-y-8 hidden">
+        <div class="sell-dash-group space-y-4">
+          <div class="sell-dash-group__head">
+            <p class="sell-dash-group__label">Shop &amp; listings</p>
             <p class="sell-dash-group__hint">Drafts and live items</p>
           </div>
 
@@ -409,23 +521,18 @@
             <div id="my-listings" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
           </section>
         </div>
+        </div><!-- /listings panel -->
 
-        <!-- 4. Money -->
-        <div class="sell-dash-group space-y-4">
-          <div class="sell-dash-group__head">
-            <p class="sell-dash-group__label">Money</p>
-            <p class="sell-dash-group__hint">Escrow and payouts — withdraw from the Withdraw tab</p>
-          </div>
-
-        <section id="seller-analytics" class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Seller performance analytics">
+        <!-- ANALYTICS (same charts as overview — second mount) -->
+        <div data-hub-panel="analytics" id="hub-panel-analytics" class="space-y-8 hidden">
+        <section class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Full seller analytics" data-analytics-root="analytics">
           <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
             <div>
-              <h2 class="font-bold text-lg text-white">Performance</h2>
-              <p class="text-sm text-zinc-400">Where your money sits, and how price changes affect sales.</p>
+              <h2 class="font-bold text-lg text-white">Analytics</h2>
+              <p class="text-sm text-zinc-400">Price vs volume and escrow cash flow — same live numbers as Overview.</p>
             </div>
-            <p id="seller-analytics-sync" class="text-[11px] font-mono text-zinc-500">Synced from paid orders</p>
+            <p class="text-[11px] font-mono text-zinc-500" data-analytics-sync>Synced from paid orders</p>
           </div>
-
           <div class="seller-analytics-grid">
             <div class="seller-analytics-panel seller-analytics-panel--wide">
               <div class="seller-analytics-panel__head">
@@ -433,12 +540,11 @@
                   <h3 class="text-sm font-bold text-white">Sales volume vs unit price</h3>
                   <p class="text-xs text-zinc-500 mt-0.5">Bars = units sold · Line = avg payout per unit (KES)</p>
                 </div>
-                <span id="seller-analytics-period" class="seller-analytics-chip">Last weeks</span>
+                <span class="seller-analytics-chip" data-analytics-period>Last weeks</span>
               </div>
-              <div id="seller-analytics-volume" class="seller-analytics-chart" role="img" aria-label="Units sold versus average unit price"></div>
-              <div id="seller-analytics-top-products" class="seller-analytics-top"></div>
+              <div class="seller-analytics-chart" data-analytics-volume role="img" aria-label="Units sold versus average unit price"></div>
+              <div class="seller-analytics-top" data-analytics-top></div>
             </div>
-
             <div class="seller-analytics-panel">
               <div class="seller-analytics-panel__head">
                 <div>
@@ -446,35 +552,14 @@
                   <p class="text-xs text-zinc-500 mt-0.5">Live snapshot of your earnings pipeline</p>
                 </div>
               </div>
-              <div id="seller-analytics-escrow" class="seller-analytics-donut-wrap" role="img" aria-label="Escrow cash flow breakdown"></div>
+              <div class="seller-analytics-donut-wrap" data-analytics-escrow role="img" aria-label="Escrow cash flow breakdown"></div>
             </div>
           </div>
         </section>
+        </div><!-- /analytics panel -->
 
-        <section class="sell-depop-section p-6 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <h2 class="font-bold text-lg text-white">Earnings</h2>
-            <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
-          </div>
-          <div class="flex gap-2">
-            <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
-              <span class="sell-ledger-dot available"></span>Available
-              <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
-            </button>
-            <button type="button" class="sell-ledger-tab" data-ledger="pending">
-              <span class="sell-ledger-dot pending"></span>Pending escrow
-              <p id="ledger-pending-total" class="text-lg font-bold mt-1">—</p>
-            </button>
-            <button type="button" class="sell-ledger-tab" data-ledger="transit">
-              <span class="sell-ledger-dot transit"></span>In transit
-              <p id="ledger-transit-total" class="text-lg font-bold mt-1">—</p>
-            </button>
-          </div>
-          <div id="ledger-detail" class="text-sm space-y-2"></div>
-        </section>
-        </div>
-
-        <!-- 5. Grow / secondary (collapsed) -->
+        <!-- Grow / tools stay on Overview -->
+        <div data-hub-panel="overview" class="space-y-8">
         <details class="sell-dash-collapse sell-depop-section p-0">
           <summary class="sell-dash-collapse__summary px-5 py-4 cursor-pointer list-none">
             <div class="flex items-center justify-between gap-3">
@@ -661,7 +746,8 @@
           <p id="bulk-csv-status" class="text-sm text-brand-purple/60 dark:text-white/65" role="status"></p>
           </div>
         </details>
-      </div>
+        </div><!-- /overview tools -->
+      </div><!-- /view-dashboard -->
 
       <div id="view-withdraw" class="hidden space-y-6">
         <section class="sell-depop-section p-6 space-y-5">
@@ -922,8 +1008,8 @@
   </main>
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
-  <script src="../assets/js/seller-analytics.js?v=analytics-1"></script>
-  <script src="../assets/js/seller-listing.js?v=analytics-1"></script>
+  <script src="../assets/js/seller-analytics.js?v=analytics-2"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-nav-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
