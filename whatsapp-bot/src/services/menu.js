@@ -1048,7 +1048,7 @@ export async function startCartFromHandoff(to, text) {
       `1️⃣ Full name\n` +
       `2️⃣ Landmark / town\n` +
       `3️⃣ Phone for M-Pesa\n\n` +
-      `_Example: Peter Mwangi, Kenol town, 0757764009_`
+      `_Example: Amina Otieno, Archways Mall hub, 0712345678_`
   );
   return true;
 }

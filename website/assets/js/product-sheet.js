@@ -428,7 +428,7 @@
           🛒 Buy — prepaid
         </a>
         <button type="button" id="product-sheet-save" class="product-sheet-save ${saved ? "is-saved" : ""}">
-          ${saved ? "♥ Saved" : "♡ Save for later"}
+          ${saved ? "✓ In cart" : "🛒 Add to cart"}
         </button>
         <button type="button" id="product-sheet-share" class="product-sheet-ask">
           Share card
@@ -710,7 +710,7 @@
     const saved =
       window.SokoniShopShell?.isHearted?.(productId) ?? window.SokoniShopShell?.isInBag?.(productId);
     btn.classList.toggle("is-saved", saved);
-    btn.textContent = saved ? "♥ Saved" : "♡ Save for later";
+    btn.textContent = saved ? "✓ In cart" : "🛒 Add to cart";
   }
 
   function open(product) {
