@@ -9,6 +9,7 @@ import {
   syncPublicCatalog,
   publishCatalogToGit,
   setProductStock,
+  markProductSoldAndSync,
   runDbMigrate,
   runDbSeed,
   updatePlatformFlags,
@@ -90,7 +91,6 @@ export async function handleStockCommand(adminChatId, args) {
   const inStock = !/^(out|off|0|false|sold)$/i.test(action);
 
   if (markSold) {
-    const { markProductSoldAndSync } = await import("./catalog-ops.js");
     const result = await markProductSoldAndSync(productId);
     if (result.error) {
       return sendText(adminChatId, `⚠️ Mark sold failed: ${result.error} (${productId})`);

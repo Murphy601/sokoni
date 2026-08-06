@@ -12,8 +12,9 @@ Unified **catalog ops**, **runtime flags**, and a **token-gated REST API** for g
 | `#catalog status` | Pause/live counts |
 | `#sync` | Rebuild `website/data/products.json` from master |
 | `#sync push` | Build + git commit/push (VM only) |
-| `#stock prod_abc in` | Mark product in stock (master + public) |
+| `#stock prod_abc in` | Mark product in stock (master + public). Blocked if the SKU was sold. |
 | `#stock prod_abc out` | Mark out of stock |
+| `#stock prod_abc sold` | Permanently tombstone as sold (sold-skus registry) + sync public catalog |
 | `#flags prepaid on\|off` | Toggle prepaid-only checkout |
 | `#db migrate` | Run Postgres schema migration |
 | `#db seed` | Seed products from master JSON |
