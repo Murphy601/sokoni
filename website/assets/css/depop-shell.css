@@ -1558,6 +1558,67 @@ body.has-depop-shell #deals .text-zinc-400 {
   color: var(--depop-muted) !important;
 }
 
+/*
+ * Product cards / deals copy sit on matte black always.
+ * Light-theme purple ink (#1B1035) is invisible here — force light type
+ * whether or not html.dark is set (users often stay on "light" theme).
+ */
+body.has-depop-shell .depop-card-price {
+  color: #ffffff !important;
+}
+
+body.has-depop-shell .depop-card-title {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+body.has-depop-shell .depop-card-seller,
+body.has-depop-shell .depop-card-seller a {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+body.has-depop-shell .depop-card-seller a:hover {
+  color: #25d366 !important;
+}
+
+body.has-depop-shell .depop-card-shipping {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+body.has-depop-shell .seller-trust-badge {
+  color: #ffffff !important;
+  background: rgba(37, 211, 102, 0.28) !important;
+}
+
+body.has-depop-shell .seller-trust-badge--fast_dispatcher,
+body.has-depop-shell .seller-trust-badge--top_rated,
+body.has-depop-shell .seller-trust-badge--top_seller {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+body.has-depop-shell .seller-trust-badge--sales {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Deals empty / status helpers that still use brand-purple utilities */
+body.has-depop-shell #deals .text-brand-purple {
+  color: #ffffff !important;
+}
+
+body.has-depop-shell #deals .text-brand-purple\/70 {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+body.has-depop-shell #deals .text-brand-purple\/60,
+body.has-depop-shell #deals .text-brand-purple\/50 {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Keep dark text on green CTA pills */
+body.has-depop-shell #deals .bg-brand-green.text-brand-purple {
+  color: #1b1035 !important;
+}
+
 /* ── Bottom nav (mobile) ── */
 .depop-bottom-nav {
   position: fixed;
