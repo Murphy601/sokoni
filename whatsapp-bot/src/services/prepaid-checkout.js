@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { updateOrderMeta } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isDarajaReady, initiateStkPush } from "./daraja-mpesa.js";
-import { isPrepaidOnlyEffective } from "./platform-flags.js";
+import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
 
 export const ESCROW_STATUSES = ["pending", "held", "released", "refunded"];
 
@@ -87,6 +87,14 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     return { ok: false, method: "invalid", message: "Missing order" };
   }
 
+  if (order.kind === "cart_child") {
+    return {
+      ok: false,
+      method: "pay_parent",
+      message: `Pay the parent cart order ${order.parentOrderId || "SKN-####"} — not the child line.`,
+    };
+  }
+
   if (order.customerPaymentStatus === "confirmed") {
     return { ok: true, method: "already_paid", alreadyPaid: true };
   }
@@ -146,6 +154,8 @@ export function checkoutMeta() {
     darajaIntegration: isDarajaConfigured() ? "stk_active" : "manual_fallback",
     escrow: true,
     autoConfirm: isDarajaConfigured(),
+    multiSellerCart: isMultiSellerCartEnabled(),
+    cartIdFormat: "SKN-#### (+ SKN-####-n children)",
     paymentMethods: isDarajaConfigured() ? ["mpesa_stk"] : ["manual_till"],
     till: config.mpesa.partyB || config.store.mpesaTill || null,
     tillName: config.store.mpesaTillName || null,

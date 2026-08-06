@@ -125,11 +125,20 @@ async function notifySellerDropoff(order, label) {
 
 /**
  * Apply full post-payment automation (Daraja callback → PAID).
+ * Cart parents (SKN-####): fan-out hold + per-child seller notify (paid only).
+ * Cart children never receive STK callbacks directly.
  */
 export async function applyPostPaymentAutomation(order, payment = {}) {
   if (!order?.id) return { error: "missing_order" };
+  if (order.kind === "cart_child") {
+    return { error: "cart_child_not_payable", message: "Pay the parent cart order (SKN-####)." };
+  }
   if (order.customerPaymentStatus === "confirmed") {
     return { order, skipped: true, reason: "already_paid" };
+  }
+
+  if (order.kind === "cart_parent") {
+    return applyCartParentPostPayment(order, payment);
   }
 
   const sellerHandled =
@@ -191,6 +200,71 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   return { order: getOrder(order.id), label };
 }
 
+/** Phase 5–6 — parent paid → children held → seller alerts per line. */
+async function applyCartParentPostPayment(order, payment = {}) {
+  const { markCartParentPaid, getCartChildren } = await import("./cart-orders.js");
+  const result = markCartParentPaid(order.id, payment);
+  if (result.error) return result;
+  if (result.skipped) return { order: getOrder(order.id), skipped: true, reason: result.reason };
+
+  const parent = getOrder(order.id);
+  const children = getCartChildren(order.id);
+
+  // Buyer: one receipt for the whole cart
+  const amt = payment.amount ?? orderBuyerTotal(parent);
+  const receipt = payment.mpesaReceiptNumber || "—";
+  const childList = children
+    .map((c) => `• *${c.id}* — ${c.productName} (KES ${Math.round(Number(c.totalKes) || 0).toLocaleString()})`)
+    .join("\n");
+  if (parent.customerKey) {
+    void dispatchMessages([
+      {
+        to: parent.customerKey,
+        message:
+          `✅ *Cart paid — ${parent.id}*\n` +
+          `Receipt: *${receipt}* · KES ${Number(amt).toLocaleString()}\n` +
+          `🛡️ Escrow held per item. Items may ship separately.\n\n` +
+          `Tracking IDs:\n${childList}\n\n` +
+          `Track any ID on the site or reply *track ${parent.id}*`,
+      },
+    ]);
+  }
+
+  // Sellers: only their lines, after payment (Phase 0)
+  for (const child of children) {
+    const label = generateDropoffLabel(child);
+    const sellerHandled =
+      child.shippingRecipient === "seller" ||
+      child.deliveryMethod === "seller_express" ||
+      child.deliveryMethod === "meetup";
+    updateOrderMeta(child.id, {
+      dropOffCode: sellerHandled ? null : label.dropOffCode,
+      labelUrl: sellerHandled ? null : label.labelUrl,
+      qrPayload: label.qrPayload,
+    });
+    advanceShipmentStatus(child.id, sellerHandled ? "pending" : "label_ready", {
+      note: sellerHandled
+        ? "Seller-handled delivery — awaiting dispatch"
+        : "Prepaid label generated after cart M-Pesa payment",
+      actor: "daraja_callback_cart",
+    });
+    await lockProductForOrder(getOrder(child.id));
+    recordPurchaseFeedEvent(getOrder(child.id));
+    await notifySellerDropoff(getOrder(child.id), label);
+  }
+
+  void notifyAdminEvent("PAID_CART_ESCROW", {
+    orderId: parent.id,
+    details: `Cart paid — ${children.length} child line(s) held in escrow`,
+    silent: true,
+  });
+
+  console.log(
+    `[escrow] PAID CART ${parent.id} children=${children.length} receipt=${payment.mpesaReceiptNumber || "—"}`
+  );
+  return { order: getOrder(parent.id), children, cart: true };
+}
+
 /** Handle failed / cancelled STK. */
 export async function applyPaymentFailure(checkoutRequestId, resultDesc = "") {
   const order = findOrderByCheckoutRequestId(checkoutRequestId) || null;
@@ -229,9 +303,13 @@ export function resolveOrderFromStkCallback(parsed) {
   return null;
 }
 
-/** On courier delivery scan — schedule seller payout after escrow hold. */
+/** On courier delivery scan — schedule seller payout after escrow hold (per child / SK order). */
 export async function onOrderDelivered(order) {
   if (!order?.id) return;
+  if (order.kind === "cart_parent") {
+    console.warn("[escrow] onOrderDelivered ignored for cart parent — deliver children individually");
+    return;
+  }
 
   try {
     const { orderHasOpenDispute, orderHasDisputeHold } = await import("./disputes.js");
@@ -256,5 +334,15 @@ export async function onOrderDelivered(order) {
     payoutEligibleAt: eligibleAt,
     payoutStatus: "scheduled",
   });
+  // sellerPayoutKes already nets per-item platform commission (never cart-level).
   scheduleSellerPayoutAfterDelivery(getOrder(order.id) || { ...order, payoutEligibleAt: eligibleAt });
+
+  if (order.parentOrderId || order.kind === "cart_child") {
+    try {
+      const { refreshCartParentStatus } = await import("./cart-orders.js");
+      refreshCartParentStatus(order.parentOrderId || order.id.replace(/-\d+$/, ""));
+    } catch (err) {
+      console.warn("[escrow] cart parent rollup skipped:", err.message);
+    }
+  }
 }

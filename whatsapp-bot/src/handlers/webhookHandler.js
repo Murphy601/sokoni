@@ -6,6 +6,7 @@ import {
   cancelOrder,
   changeOrder,
   handleCart,
+  startCartFromHandoff,
   startCodOrder,
   startPrepaidOrderFromOffer,
   sendHumanHandoff,
@@ -30,7 +31,7 @@ import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
 import { handleProductRouter, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
-import { getPendingOrder } from "../services/session.js";
+import { getPendingOrder, getPendingCart } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
 import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
 import { handleSellerWalletMessage } from "../services/seller-wallet.js";
@@ -402,6 +403,11 @@ export async function handleIncomingMessage(
     return handleCart(customerKey);
   }
 
+  // Website multi-seller bag handoff → pending cart (feature-flagged inside)
+  if (/SOKONI_CART/i.test(text) || /NEW SOKONI CART/i.test(text)) {
+    if (await startCartFromHandoff(customerKey, text)) return;
+  }
+
   if (/^cancel(\s+order)?$/i.test(normalized) || normalized === "cancel order") {
     return cancelOrder(customerKey);
   }
@@ -457,7 +463,11 @@ export async function handleIncomingMessage(
   const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
   if (pendingHandled) return;
 
-  if (looksLikeDeliveryDetails(combinedText) && !getPendingOrder(customerKey)) {
+  if (
+    looksLikeDeliveryDetails(combinedText) &&
+    !getPendingOrder(customerKey) &&
+    !getPendingCart(customerKey)
+  ) {
     return sendText(
       customerKey,
       "I have your name and location 👍 To place the order, first pick an item (*menu* → category → reply with the number → *1* to order), then send those details again."

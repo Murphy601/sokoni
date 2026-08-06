@@ -215,11 +215,54 @@ export function renderShipmentTimelineText(order) {
 export function buildPublicTrackingPayload(order) {
   if (!order) return null;
 
+  // Cart parent — summarize children (Phase 6)
+  if (order.kind === "cart_parent") {
+    const childIds = order.itemIds || (order.items || []).map((i) => i.id).filter(Boolean);
+    const children = childIds.map((id) => {
+      const c = getOrder(id);
+      if (!c) return { orderId: id, missing: true };
+      return {
+        orderId: c.id,
+        productName: c.productName,
+        totalKes: orderBuyerTotal(c),
+        paid: c.customerPaymentStatus === "confirmed",
+        orderStatus: c.status,
+        shipmentStatus: getEffectiveShipmentStatus(c),
+        shipmentStatusLabel: shipmentStatusLabel(getEffectiveShipmentStatus(c)),
+        escrowStatus: c.escrowStatus || null,
+      };
+    });
+
+    return {
+      orderId: order.id,
+      kind: "cart_parent",
+      productName: order.productName || `Cart (${childIds.length} items)`,
+      totalKes: orderBuyerTotal(order),
+      paid: order.customerPaymentStatus === "confirmed",
+      paymentLine:
+        order.customerPaymentStatus === "confirmed"
+          ? "Paid — escrow held per item"
+          : "Awaiting payment (one M-Pesa for whole cart)",
+      orderStatus: order.status,
+      orderStatusLabel: statusLabel(order.status),
+      shipmentStatus: order.status,
+      shipmentStatusLabel: String(order.status || "").replace(/_/g, " "),
+      shipmentTimeline: [],
+      children,
+      fulfillment: null,
+      trackingRef: order.id,
+      updatedAt: order.updatedAt || order.createdAt,
+      history: [],
+    };
+  }
+
   const shipmentSteps = buildShipmentTimeline(order);
   const orderStatus = order.status;
 
   return {
     orderId: order.id,
+    kind: order.kind || "order",
+    parentOrderId: order.parentOrderId || null,
     productName: order.productName,
     totalKes: orderBuyerTotal(order),
     paid: order.customerPaymentStatus === "confirmed",
@@ -229,6 +272,7 @@ export function buildPublicTrackingPayload(order) {
     shipmentStatus: getEffectiveShipmentStatus(order),
     shipmentStatusLabel: shipmentStatusLabel(getEffectiveShipmentStatus(order)),
     shipmentTimeline: shipmentSteps,
+    escrowStatus: order.escrowStatus || null,
     fulfillment: formatFulfillmentLine(order),
     courier: order.courierName || null,
     trackingRef: order.courierTrackingRef || order.id,
@@ -260,6 +304,7 @@ export function trackingMeta() {
     couriers: ["manual", "fargo", "pickup_mtaani", "sendy", "g4s"],
     shipmentStatuses: SHIPMENT_STATUSES,
     publicEndpoint: "/api/tracking/:orderId",
-    scanCommand: "#scan SK-#### [dropped_off|in_transit|delivered] hub:Name",
+    scanCommand: "#scan SK-####|SKN-####-n [dropped_off|in_transit|delivered] hub:Name",
+    cartParentTracking: true,
   };
 }

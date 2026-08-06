@@ -235,22 +235,37 @@
       })
       .join("");
 
+    // Group by seller for display (checkout remains one payment)
+    const bySeller = new Map();
+    items.forEach((p) => {
+      const key = p.shopHandle || p.sellerHandle || p.supplierId || "seller";
+      if (!bySeller.has(key)) bySeller.set(key, []);
+      bySeller.get(key).push(p);
+    });
+
     if (summary) {
       summary.classList.remove("hidden");
+      const sellerNote =
+        bySeller.size > 1
+          ? `${bySeller.size} sellers — one M-Pesa PIN; items ship separately with their own SKN tracking IDs.`
+          : `Pay once on WhatsApp. Each item gets its own SKN tracking ID.`;
       summary.innerHTML = `
         <table class="sell-fee-table" aria-label="Bag total">
           <tbody>
             <tr class="sell-fee-total"><th scope="row">Estimated total</th><td>KES ${grandTotal.toLocaleString()}</td></tr>
           </tbody>
         </table>
-        <p class="text-xs text-brand-purple/50 mt-2">All prices include delivery. Sokoni orders one item at a time on WhatsApp.</p>`;
+        <p class="text-xs text-zinc-400 mt-2">${escapeHtml(sellerNote)} Commission is per item, not on the cart total.</p>`;
     }
 
     if (orderBtn) {
       orderBtn.classList.remove("hidden");
-      const lines = items.map((p) => `• ${p.name} (${formatPriceLine(p)})`).join("\n");
+      const skuLines = items
+        .map((p) => `• ${p.name} (${formatPriceLine(p)}) [SKU:${p.id}]`)
+        .join("\n");
+      orderBtn.textContent = "Order cart on WhatsApp";
       orderBtn.href = waLink(
-        `Hi Sokoni, I'd like to order these saved items (prepaid):\n\n${lines}\n\nEstimated total KES ${grandTotal.toLocaleString()}\n\nMy name, delivery location and phone:`
+        `🛒 *NEW SOKONI CART ORDER*\nSOKONI_CART\n\n${skuLines}\n\n💰 *TOTAL AMOUNT: KES ${grandTotal.toLocaleString()}*\n\n📍 *Delivery Landmark:* (reply with name, landmark, phone)`
       );
     }
   }

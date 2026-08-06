@@ -13,6 +13,8 @@ export function getSession(phoneNumber) {
       history: [],
       lastProductContext: null,
       pendingOrder: null,
+      /** Multi-seller cart draft awaiting delivery details */
+      pendingCart: null,
       menuState: null,
       humanHandoff: null,
       customerMeta: null,
@@ -48,6 +50,18 @@ export function getPendingOrder(phoneNumber) {
 
 export function clearPendingOrder(phoneNumber) {
   getSession(phoneNumber).pendingOrder = null;
+}
+
+export function setPendingCart(phoneNumber, cart) {
+  getSession(phoneNumber).pendingCart = cart;
+}
+
+export function getPendingCart(phoneNumber) {
+  return getSession(phoneNumber).pendingCart;
+}
+
+export function clearPendingCart(phoneNumber) {
+  getSession(phoneNumber).pendingCart = null;
 }
 
 /** Numbered menu context for WAHA (no interactive buttons). */
