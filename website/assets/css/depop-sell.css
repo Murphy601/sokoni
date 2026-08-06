@@ -1352,9 +1352,19 @@ html.dark .bulk-studio-remove:hover {
 }
 
 .seller-hub-nav__icon {
-  font-size: 0.85rem;
-  line-height: 1;
-  color: rgba(255, 248, 240, 0.4);
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: rgba(255, 248, 240, 0.45);
+}
+
+.seller-hub-nav__tab.is-active .seller-hub-nav__icon {
+  color: #25d366;
+}
+
+/* Hub nav replaces the old "Selling as" strip */
+body.sell-depop-page #listing-wizard:not(.hidden) #seller-profile-bar {
+  display: none !important;
 }
 
 .seller-hub-nav__badge {
