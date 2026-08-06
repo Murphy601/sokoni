@@ -2838,17 +2838,39 @@ async function parseApiResponse(res) {
   }
 }
 
+const API_DOWN_BANNER_DEFAULT =
+  "Sokoni server is temporarily offline — sign-in will work again shortly. You can also message us on WhatsApp from the shop page.";
+const WAHA_DOWN_BANNER =
+  "Sokoni WhatsApp is temporarily offline — sign-in codes can’t send right now. Try again shortly.";
+
 async function checkApiHealth() {
   const banner = el("api-down-banner");
   if (!banner) return;
   try {
     const res = await fetch(`${API_BASE}/health`, { method: "GET" });
-    if (res.ok) {
-      banner.classList.add("hidden");
+    if (!res.ok) {
+      banner.textContent = API_DOWN_BANNER_DEFAULT;
+      banner.classList.remove("hidden");
       return;
     }
-  } catch {}
-  banner.classList.remove("hidden");
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    // Bot process is up but WhatsApp session is down — OTP / seller chat will fail.
+    if (data && data.wahaConfigured && data.wahaLinked === false) {
+      banner.textContent = WAHA_DOWN_BANNER;
+      banner.classList.remove("hidden");
+      return;
+    }
+    banner.classList.add("hidden");
+    return;
+  } catch {
+    banner.textContent = API_DOWN_BANNER_DEFAULT;
+    banner.classList.remove("hidden");
+  }
 }
 
 function setOnboardStatus(msg, isError = false) {

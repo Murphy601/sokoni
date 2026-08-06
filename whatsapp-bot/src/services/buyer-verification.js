@@ -9,6 +9,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sendText, toChatId } from "./whatsapp.js";
 import { config } from "../config.js";
+import { getWahaHealthSummary } from "./waha-session.js";
+
+const WAHA_OFFLINE_MESSAGE =
+  "Sokoni WhatsApp is temporarily offline — try again in a few minutes.";
 
 function normalizePhone(phone) {
   let d = String(phone || "").replace(/\D/g, "");
@@ -173,6 +177,24 @@ export async function sendBuyerVerificationCode(phone) {
     };
   }
 
+  if (config.waha.apiUrl) {
+    try {
+      const waha = await getWahaHealthSummary();
+      if (!waha.wahaLinked || waha.wahaSessionStatus !== "WORKING") {
+        console.error(
+          `[buyer-verification] WAHA not ready: linked=${waha.wahaLinked} status=${waha.wahaSessionStatus}`
+        );
+        return {
+          error: "send_failed",
+          message: WAHA_OFFLINE_MESSAGE,
+          wahaSessionStatus: waha.wahaSessionStatus || null,
+        };
+      }
+    } catch (err) {
+      console.warn("[buyer-verification] WAHA health check skipped:", err.message);
+    }
+  }
+
   const code = generateCode();
   const sendHistory = [...(entry?.sendHistory || []), now].slice(-20);
 
@@ -198,7 +220,7 @@ export async function sendBuyerVerificationCode(phone) {
     console.error("[buyer-verification] send failed:", err.message);
     return {
       error: "send_failed",
-      message: "Could not send WhatsApp code - make sure Sokoni WhatsApp is online and try again.",
+      message: WAHA_OFFLINE_MESSAGE,
     };
   }
 
