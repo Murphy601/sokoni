@@ -3407,11 +3407,61 @@ function renderHubDraftsCarousel() {
   });
 }
 
+function updateSellerHubNavIdentity() {
+  const handle = String(sellerProfile?.shopHandle || sellerProfile?.handle || "").replace(/^@+/, "");
+  const name =
+    sellerProfile?.businessName ||
+    sellerProfile?.shopName ||
+    (handle ? `@${handle}` : "Your shop");
+  const initials = String(name)
+    .replace(/^@/, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || "")
+    .join("") || "S";
+
+  if (el("hub-nav-shop-name")) el("hub-nav-shop-name").textContent = name;
+  if (el("hub-nav-avatar")) el("hub-nav-avatar").textContent = initials;
+  if (el("hub-nav-shop-url")) {
+    el("hub-nav-shop-url").textContent = handle
+      ? `sokonimall.com/shop/${handle}`
+      : "sokonimall.com/shop/…";
+  }
+  const storefront = el("hub-nav-storefront");
+  if (storefront) {
+    if (handle) {
+      storefront.href = `../shop.html?handle=${encodeURIComponent(handle)}`;
+      storefront.classList.remove("hidden");
+    } else {
+      storefront.classList.add("hidden");
+    }
+  }
+  const verified = el("hub-nav-verified");
+  if (verified) {
+    const ok = sellerProfile?.isSellerVerified !== false && Boolean(sellerProfile);
+    verified.classList.toggle("hidden", !ok);
+  }
+}
+
+function moveSellerHubNavPill(activeBtn) {
+  const pill = el("seller-hub-nav-pill");
+  const nav = document.querySelector(".seller-hub-nav__tabs");
+  if (!pill || !nav || !activeBtn) return;
+  const navRect = nav.getBoundingClientRect();
+  const btnRect = activeBtn.getBoundingClientRect();
+  pill.style.width = `${btnRect.width}px`;
+  pill.style.height = `${btnRect.height}px`;
+  pill.style.transform = `translate(${btnRect.left - navRect.left + nav.scrollLeft}px, ${btnRect.top - navRect.top + nav.scrollTop}px)`;
+  pill.classList.add("is-ready");
+}
+
 function renderSellerHubOverview() {
   const handle = String(sellerProfile?.shopHandle || sellerProfile?.handle || "").replace(/^@+/, "");
   if (el("hub-shop-handle")) {
     el("hub-shop-handle").textContent = handle ? `@${handle}` : "@yourshop";
   }
+  updateSellerHubNavIdentity();
 
   const toShip = hubOrdersToShip();
   const gross = hubGrossSalesKes();
@@ -3450,14 +3500,25 @@ function renderSellerHubOverview() {
 
 function bindSellerHubUi() {
   el("hub-bulk-studio-btn")?.addEventListener("click", () => {
-    showSellerView("dashboard");
+    showSellerView("overview");
     const bulk = el("bulk-draft-studio");
     if (bulk && "open" in bulk) bulk.open = true;
     bulk?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   el("hub-create-drop-btn")?.addEventListener("click", () => showSellerView("listing"));
   el("hub-view-all-drafts-btn")?.addEventListener("click", () => {
+    showSellerView("listings");
     el("section-my-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
+    btn.addEventListener("click", () => showSellerView(btn.dataset.hubNav || "overview"));
+  });
+  document.querySelectorAll("[data-hub-jump]").forEach((btn) => {
+    btn.addEventListener("click", () => showSellerView(btn.dataset.hubJump || "overview"));
+  });
+  window.addEventListener("resize", () => {
+    const active = document.querySelector(".seller-hub-nav__tab.is-active");
+    if (active) moveSellerHubNavPill(active);
   });
   renderHubTrendingCarousel();
   renderHubGuidesCarousel();
@@ -3715,18 +3776,25 @@ function setOffersStatus(message, isError = false) {
 }
 
 function setDashboardOfferBadge(pendingCount = 0) {
-  const badge = el("tab-dashboard-offers-badge");
-  if (!badge) return;
   const count = Math.max(0, Number(pendingCount) || 0);
-  if (!count) {
-    badge.textContent = "";
-    badge.classList.add("hidden");
-    badge.removeAttribute("aria-label");
-    return;
+  const toShip = hubOrdersToShip().length;
+  const badgeCount = Math.max(count, toShip);
+
+  const badges = [el("nav-badge-orders"), el("tab-dashboard-offers-badge")].filter(Boolean);
+  for (const badge of badges) {
+    if (!badgeCount) {
+      badge.textContent = "";
+      badge.classList.add("hidden");
+      badge.removeAttribute("aria-label");
+      continue;
+    }
+    badge.textContent = badgeCount > 99 ? "99+" : String(badgeCount);
+    badge.classList.remove("hidden");
+    badge.setAttribute(
+      "aria-label",
+      `${badgeCount} item${badgeCount === 1 ? "" : "s"} needing attention`
+    );
   }
-  badge.textContent = count > 99 ? "99+" : String(count);
-  badge.classList.remove("hidden");
-  badge.setAttribute("aria-label", `${count} pending offer${count === 1 ? "" : "s"}`);
 }
 
 function normalizeOfferFilter(value) {
@@ -5694,28 +5762,58 @@ async function requestWithdrawal() {
   }
 }
 
+function normalizeSellerHubView(view) {
+  const raw = String(view || "overview").trim().toLowerCase();
+  if (raw === "dashboard" || raw === "home") return "overview";
+  if (raw === "withdraw") return "payouts";
+  if (raw === "list" || raw === "list-item" || raw === "create") return "listing";
+  return raw;
+}
+
 function showSellerView(view) {
+  view = normalizeSellerHubView(view);
   currentSellerView = view;
+
   const dashboard = el("view-dashboard");
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
-  const tabDash = el("tab-dashboard");
-  const tabWithdraw = el("tab-withdraw");
-  const tabList = el("tab-listing");
+  const shopEdit = el("seller-shop-edit");
 
-  dashboard?.classList.toggle("hidden", view !== "dashboard");
-  withdraw?.classList.toggle("hidden", view !== "withdraw");
-  listing?.classList.toggle("hidden", view !== "listing");
+  const dashPanels = ["overview", "orders", "listings", "analytics"];
+  const showDash = dashPanels.includes(view) || view === "settings";
+  const showWithdraw = view === "payouts";
+  const showListing = view === "listing";
 
-  tabDash?.classList.toggle("is-active", view === "dashboard");
-  tabWithdraw?.classList.toggle("is-active", view === "withdraw");
-  tabList?.classList.toggle("is-active", view === "listing");
+  dashboard?.classList.toggle("hidden", !showDash);
+  withdraw?.classList.toggle("hidden", !showWithdraw);
+  listing?.classList.toggle("hidden", !showListing);
 
-  tabDash?.setAttribute("aria-selected", view === "dashboard" ? "true" : "false");
-  tabWithdraw?.setAttribute("aria-selected", view === "withdraw" ? "true" : "false");
-  tabList?.setAttribute("aria-selected", view === "listing" ? "true" : "false");
+  const panelKey = view === "settings" ? "overview" : view;
+  document.querySelectorAll("[data-hub-panel]").forEach((panel) => {
+    const key = panel.getAttribute("data-hub-panel");
+    const visible = showDash && key === panelKey;
+    panel.classList.toggle("hidden", !visible);
+  });
 
-  if (view === "dashboard") {
+  document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
+    const key = btn.dataset.hubNav;
+    const active = key === view || (view === "listing" && key === "listings");
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  const activeNav =
+    document.querySelector(`.seller-hub-nav__tab[data-hub-nav="${view}"]`) ||
+    document.querySelector(".seller-hub-nav__tab.is-active");
+  requestAnimationFrame(() => moveSellerHubNavPill(activeNav));
+
+  if (view === "settings" && shopEdit) {
+    shopEdit.open = true;
+    shopEdit.classList.remove("hidden");
+    shopEdit.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (showDash) {
     loadSellerOrders();
     loadSellerOffers();
     loadEscrowLedger();
@@ -5724,7 +5822,8 @@ function showSellerView(view) {
     void loadSellerDisputes();
     startSellerOffersPolling();
     ensureReminderCooldownTicker();
-  } else if (view === "withdraw") {
+    refreshSellerAnalytics();
+  } else if (showWithdraw) {
     stopSellerOffersPolling();
     stopReminderCooldownTicker();
     loadWithdrawPanel();
@@ -5804,9 +5903,7 @@ function init() {
     updateCoverStudioUi();
   }
 
-  el("tab-dashboard")?.addEventListener("click", () => showSellerView("dashboard"));
-  el("tab-withdraw")?.addEventListener("click", () => showSellerView("withdraw"));
-  el("tab-listing")?.addEventListener("click", () => showSellerView("listing"));
+  // Pillar nav is bound in bindSellerHubUi via [data-hub-nav].
   el("load-withdraw-btn")?.addEventListener("click", loadWithdrawPanel);
   el("withdraw-request-btn")?.addEventListener("click", requestWithdrawal);
   el("load-orders-btn")?.addEventListener("click", loadSellerOrders);
