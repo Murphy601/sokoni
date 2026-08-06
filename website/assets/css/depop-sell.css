@@ -1183,17 +1183,18 @@ html.dark .bulk-studio-remove:hover {
 /* —— Depop-style sticky seller hub nav —— */
 .seller-hub-nav {
   position: sticky;
-  top: 0;
-  z-index: 40;
+  top: 4.25rem; /* sit under .sell-page-header */
+  z-index: 45;
 }
 
 .seller-hub-nav__shell {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 10, 14, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(37, 211, 102, 0.28);
+  background: rgba(10, 10, 14, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-radius: 1.25rem;
   overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 .seller-hub-nav__top {
