@@ -55,7 +55,8 @@
     </div>
 
     <div id="wizard-root" class="space-y-6">
-      <div>
+      <!-- Only shown before login -->
+      <div id="sell-intro">
         <p class="depop-label mb-2">Sell on Sokoni · Prepaid marketplace</p>
         <h1 class="text-3xl font-black tracking-tight text-white mb-2">Start selling</h1>
         <p class="text-sm text-brand-purple/60 dark:text-white/60">
@@ -123,94 +124,13 @@
       </section>
 
       <div id="listing-wizard" class="hidden space-y-6">
-      <div id="seller-profile-bar" class="hidden sell-depop-section !rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p class="text-xs text-brand-purple/60 dark:text-white/60">Selling as</p>
-          <p id="seller-badge" class="font-semibold"></p>
-          <p id="seller-trust-line" class="hidden text-[11px] font-semibold text-brand-green mt-0.5">Verified seller</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <p id="seller-handle" class="text-sm text-[#FF2300] font-medium"></p>
-          <a id="seller-public-shop-link" href="../shop.html" class="hidden text-xs font-semibold underline text-zinc-400 hover:text-white">View public shop</a>
-          <button type="button" id="sign-out-btn" class="text-xs font-semibold text-zinc-400 hover:text-white underline">Sign out</button>
-        </div>
+      <!-- Kept for JS identity hooks; visually replaced by hub nav -->
+      <div id="seller-profile-bar" class="hidden" aria-hidden="true">
+        <p id="seller-badge" class="font-semibold"></p>
+        <p id="seller-trust-line" class="hidden"></p>
+        <p id="seller-handle" class="hidden"></p>
+        <a id="seller-public-shop-link" href="../shop.html" class="hidden">View public shop</a>
       </div>
-
-      <details id="seller-shop-edit" class="hidden sell-depop-section sell-dash-collapse p-0">
-        <summary class="sell-dash-collapse__summary px-5 py-4 cursor-pointer list-none">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="depop-label">Settings</p>
-              <h2 class="font-bold text-lg text-white mt-0.5">Shop profile</h2>
-              <p class="text-sm text-zinc-400 mt-0.5">Name, bio, photo — what buyers see on your shop page.</p>
-            </div>
-            <span class="sell-dash-collapse__chevron text-zinc-500 text-sm shrink-0" aria-hidden="true">Edit</span>
-          </div>
-        </summary>
-        <form id="seller-shop-edit-form" class="grid gap-3 md:grid-cols-2 px-5 pb-5">
-          <label class="text-sm font-medium md:col-span-1">
-            Shop name
-            <input id="edit-shop-name" type="text" maxlength="255" class="sell-form-input mt-1" placeholder="e.g. Adiv Thrift" />
-          </label>
-          <label class="text-sm font-medium md:col-span-1">
-            Handle
-            <input id="edit-shop-handle" type="text" maxlength="40" class="sell-form-input mt-1" placeholder="e.g. adiv_thrift" />
-          </label>
-          <label class="text-sm font-medium md:col-span-2">
-            Bio
-            <textarea id="edit-shop-bio" rows="3" maxlength="1000" class="sell-form-input mt-1" placeholder="What you sell, sizes, how you dispatch…"></textarea>
-          </label>
-          <label class="text-sm font-medium md:col-span-1">
-            Location
-            <input id="edit-shop-location" type="text" maxlength="120" class="sell-form-input mt-1" placeholder="e.g. Nairobi CBD / ships Kenya-wide" />
-          </label>
-          <div class="text-sm font-medium md:col-span-1 space-y-2">
-            <span>Shop photo <span class="font-normal text-brand-purple/50">(optional)</span></span>
-            <div class="flex items-center gap-3">
-              <div id="edit-shop-avatar-preview" class="h-16 w-16 rounded-2xl border border-zinc-800 bg-black overflow-hidden flex items-center justify-center text-xs text-zinc-500">
-                —
-              </div>
-              <div class="flex-1 space-y-2 min-w-0">
-                <label class="inline-flex min-h-[44px] items-center px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-xs font-semibold cursor-pointer hover:border-brand-green">
-                  Upload photo
-                  <input id="edit-shop-avatar-file" type="file" accept="image/*" class="sr-only" />
-                </label>
-                <input id="edit-shop-avatar" type="url" maxlength="1000" class="sell-form-input text-xs" placeholder="Or paste https://… image link" />
-              </div>
-            </div>
-          </div>
-          <label class="text-sm font-medium md:col-span-1">
-            Instagram
-            <input id="edit-shop-instagram" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
-          </label>
-          <label class="text-sm font-medium md:col-span-1">
-            TikTok
-            <input id="edit-shop-tiktok" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
-          </label>
-          <fieldset class="md:col-span-2 space-y-2">
-            <legend class="text-sm font-medium">WhatsApp social pings</legend>
-            <p class="text-xs text-brand-purple/60 dark:text-white/60">Master switch plus per-event. Orders stay on. Offer replies are under buyer Activity.</p>
-            <label class="flex items-start gap-3 text-sm font-medium min-h-[44px]">
-              <input id="edit-shop-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
-              <span>All social WhatsApp pings</span>
-            </label>
-            <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
-              <input id="edit-shop-wa-notify-follows" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
-              <span>New followers</span>
-            </label>
-            <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
-              <input id="edit-shop-wa-notify-likes" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
-              <span>Listing likes</span>
-            </label>
-          </fieldset>
-          <div class="md:col-span-2 flex flex-wrap items-center gap-3">
-            <button type="submit" id="edit-shop-save-btn" class="depop-btn-accent text-sm">
-              Save shop profile
-            </button>
-            <p id="edit-shop-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
-          </div>
-        </form>
-      </details>
 
       <!-- Depop-style sticky seller nav (pillars) — not a page <header>, so site chrome CSS cannot flatten it -->
       <div id="seller-hub-nav" class="seller-hub-nav mb-6" role="navigation" aria-label="Seller hub">
@@ -557,6 +477,85 @@
           </div>
         </section>
         </div><!-- /analytics panel -->
+
+        <!-- SETTINGS: shop profile (opened from Settings tab only) -->
+        <div data-hub-panel="settings" id="hub-panel-settings" class="space-y-6 hidden">
+          <section id="seller-shop-edit" class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Shop settings">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <p class="depop-label">Settings</p>
+                <h2 class="font-bold text-lg text-white mt-0.5">Shop profile</h2>
+                <p class="text-sm text-zinc-400 mt-0.5">Name, bio, photo — what buyers see on your shop page.</p>
+              </div>
+              <button type="button" id="sign-out-btn" class="min-h-[44px] px-4 rounded-xl border border-white/15 text-sm font-semibold text-zinc-300 hover:text-white hover:border-white/30">
+                Sign out
+              </button>
+            </div>
+            <form id="seller-shop-edit-form" class="grid gap-3 md:grid-cols-2">
+              <label class="text-sm font-medium md:col-span-1">
+                Shop name
+                <input id="edit-shop-name" type="text" maxlength="255" class="sell-form-input mt-1" placeholder="e.g. Adiv Thrift" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                Handle
+                <input id="edit-shop-handle" type="text" maxlength="40" class="sell-form-input mt-1" placeholder="e.g. adiv_thrift" />
+              </label>
+              <label class="text-sm font-medium md:col-span-2">
+                Bio
+                <textarea id="edit-shop-bio" rows="3" maxlength="1000" class="sell-form-input mt-1" placeholder="What you sell, sizes, how you dispatch…"></textarea>
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                Location
+                <input id="edit-shop-location" type="text" maxlength="120" class="sell-form-input mt-1" placeholder="e.g. Nairobi CBD / ships Kenya-wide" />
+              </label>
+              <div class="text-sm font-medium md:col-span-1 space-y-2">
+                <span>Shop photo <span class="font-normal text-brand-purple/50">(optional)</span></span>
+                <div class="flex items-center gap-3">
+                  <div id="edit-shop-avatar-preview" class="h-16 w-16 rounded-2xl border border-zinc-800 bg-black overflow-hidden flex items-center justify-center text-xs text-zinc-500">
+                    —
+                  </div>
+                  <div class="flex-1 space-y-2 min-w-0">
+                    <label class="inline-flex min-h-[44px] items-center px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-xs font-semibold cursor-pointer hover:border-brand-green">
+                      Upload photo
+                      <input id="edit-shop-avatar-file" type="file" accept="image/*" class="sr-only" />
+                    </label>
+                    <input id="edit-shop-avatar" type="url" maxlength="1000" class="sell-form-input text-xs" placeholder="Or paste https://… image link" />
+                  </div>
+                </div>
+              </div>
+              <label class="text-sm font-medium md:col-span-1">
+                Instagram
+                <input id="edit-shop-instagram" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                TikTok
+                <input id="edit-shop-tiktok" type="text" maxlength="300" class="sell-form-input mt-1" placeholder="@handle or profile URL" />
+              </label>
+              <fieldset class="md:col-span-2 space-y-2">
+                <legend class="text-sm font-medium">WhatsApp social pings</legend>
+                <p class="text-xs text-brand-purple/60 dark:text-white/60">Master switch plus per-event. Orders stay on. Offer replies are under buyer Activity.</p>
+                <label class="flex items-start gap-3 text-sm font-medium min-h-[44px]">
+                  <input id="edit-shop-wa-notify" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+                  <span>All social WhatsApp pings</span>
+                </label>
+                <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
+                  <input id="edit-shop-wa-notify-follows" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+                  <span>New followers</span>
+                </label>
+                <label class="flex items-start gap-3 text-sm font-medium min-h-[44px] pl-2">
+                  <input id="edit-shop-wa-notify-likes" type="checkbox" class="mt-1 h-5 w-5 accent-[#25D366]" checked />
+                  <span>Listing likes</span>
+                </label>
+              </fieldset>
+              <div class="md:col-span-2 flex flex-wrap items-center gap-3">
+                <button type="submit" id="edit-shop-save-btn" class="depop-btn-accent text-sm">
+                  Save shop profile
+                </button>
+                <p id="edit-shop-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+              </div>
+            </form>
+          </section>
+        </div><!-- /settings panel -->
 
         <!-- Grow / tools stay on Overview -->
         <div data-hub-panel="overview" class="space-y-8">
@@ -1009,7 +1008,7 @@
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
   <script src="../assets/js/seller-analytics.js?v=analytics-3"></script>
-  <script src="../assets/js/seller-listing.js?v=hub-nav-2"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-settings-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
