@@ -29,13 +29,13 @@ function watchNonRevealSection(el) {
   if (el.classList.contains("is-visible")) return;
 
   el.style.opacity = "0";
-  el.style.transform = "translate3d(0, 18px, 0)";
+  el.style.transform = "translate3d(0, 24px, 0)";
 
   const io = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        safeAnimate(el, { opacity: 1, y: 0 }, { duration: 0.4, ease: "easeOut" }).then?.(() => {
+        safeAnimate(el, { opacity: 1, y: 0 }, { duration: 0.45, ease: "easeOut" }).then?.(() => {
           el.style.opacity = "";
           el.style.transform = "";
         });
@@ -45,7 +45,7 @@ function watchNonRevealSection(el) {
             el.style.opacity = "";
             el.style.transform = "";
           }
-        }, 500);
+        }, 600);
         io.unobserve(el);
       });
     },

@@ -9,14 +9,21 @@ function wireFab(el) {
 
   if (prefersReducedMotion()) return;
   el.style.opacity = "0";
-  el.style.transform = "translate3d(0, 24px, 0) scale(0.9)";
+  el.style.transform = "translate3d(0, 28px, 0) scale(0.88)";
   requestAnimationFrame(() => {
     safeAnimate(
       el,
       { opacity: 1, y: 0, scale: 1 },
-      { type: "spring", stiffness: 320, damping: 22, delay: 0.35 }
+      { type: "spring", stiffness: 320, damping: 22, delay: 0.25 }
     );
   });
+  // Fail-safe: never leave the WhatsApp float invisible
+  setTimeout(() => {
+    if (el.style.opacity === "0") {
+      el.style.opacity = "";
+      el.style.transform = "";
+    }
+  }, 1200);
 }
 
 function wireNudge(el) {

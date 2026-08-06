@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import AnimationProvider from "./providers/AnimationProvider.jsx";
+import { MOTION_BUILD } from "./lib/motion.js";
 import { observeCards } from "./enhance/cards.js";
 import { observeGrids } from "./enhance/grids.js";
 import { observeSheets } from "./enhance/sheets.js";
@@ -11,6 +12,9 @@ import { observeSections } from "./enhance/sections.js";
 /**
  * Sokoni Path B boot — progressive Framer Motion layer.
  * Fail-soft: any enhancer error must not break catalog/auth/WhatsApp.
+ *
+ * Note: this is NOT Next.js. There is no `'use client'` / SSR for this IIFE.
+ * LazyMotion wraps React-owned UI; DOM enhancers use framer-motion `animate()`.
  */
 function mountProvider() {
   let host = document.getElementById("sokoni-motion-root");
@@ -23,7 +27,7 @@ function mountProvider() {
   }
   createRoot(host).render(
     <AnimationProvider>
-      <span data-sokoni-motion-ready="1" />
+      <span data-sokoni-motion-ready="1" data-sokoni-motion-build={MOTION_BUILD} />
     </AnimationProvider>
   );
 }
@@ -74,6 +78,9 @@ function boot() {
   }
   bootEnhancers();
   document.documentElement.setAttribute("data-sokoni-motion", "path-b");
+  document.documentElement.setAttribute("data-sokoni-motion-build", MOTION_BUILD);
+  // One-line proof in DevTools that the bundle actually executed on this deploy
+  console.info(`[sokoni-motion] active (${MOTION_BUILD})`);
 }
 
 if (document.readyState === "loading") {

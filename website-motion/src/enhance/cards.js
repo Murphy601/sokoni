@@ -30,9 +30,10 @@ function enhanceCard(card) {
   card.style.willChange = "transform";
   card.style.transformOrigin = "center center";
 
-  const lift = () => safeAnimate(card, { y: -4 }, { duration: 0.22, ease: "easeOut" });
-  const reset = () => safeAnimate(card, { y: 0 }, { duration: 0.22, ease: "easeOut" });
-  const press = () => safeAnimate(card, { scale: 0.985, y: -2 }, { duration: 0.1, ease: "easeOut" });
+  // Stronger than Path B v1 (−4px) so hover is obvious on mid-range phones
+  const lift = () => safeAnimate(card, { y: -8, scale: 1.02 }, { duration: 0.22, ease: "easeOut" });
+  const reset = () => safeAnimate(card, { y: 0, scale: 1 }, { duration: 0.22, ease: "easeOut" });
+  const press = () => safeAnimate(card, { scale: 0.97, y: -3 }, { duration: 0.1, ease: "easeOut" });
 
   card.addEventListener("pointerenter", lift, { passive: true });
   card.addEventListener("pointerleave", reset, { passive: true });

@@ -13,10 +13,16 @@ export function enhanceForms(root = document) {
 
     if (!prefersReducedMotion()) {
       form.style.opacity = "0";
-      form.style.transform = "translate3d(0, 10px, 0)";
+      form.style.transform = "translate3d(0, 14px, 0)";
       requestAnimationFrame(() => {
-        safeAnimate(form, { opacity: 1, y: 0 }, { duration: 0.32, ease: "easeOut" });
+        safeAnimate(form, { opacity: 1, y: 0 }, { duration: 0.36, ease: "easeOut" });
       });
+      setTimeout(() => {
+        if (form.style.opacity === "0") {
+          form.style.opacity = "";
+          form.style.transform = "";
+        }
+      }, 700);
     }
 
     form.querySelectorAll("button[type='submit'], .button-whatsapp, .depop-hero-cta--primary, .depop-btn-accent").forEach((btn) => {
