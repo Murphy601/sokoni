@@ -207,6 +207,7 @@ function handleSessionExpired(data) {
 function showVerifyPanel() {
   el("listing-wizard")?.classList.add("hidden");
   el("onboard-panel")?.classList.remove("hidden");
+  el("sell-intro")?.classList.remove("hidden");
   el("onboard-details-step")?.classList.add("hidden");
   el("onboard-btn")?.classList.add("hidden");
   el("onboard-verify-step")?.classList.remove("hidden", "opacity-80");
@@ -2417,15 +2418,15 @@ function showSellerProfile(profile, opts = {}) {
     trustLine.classList.toggle("hidden", !verified);
   }
   el("seller-profile-bar")?.classList.remove("hidden");
-  el("seller-shop-edit")?.classList.remove("hidden");
   el("listing-wizard")?.classList.remove("hidden");
   el("onboard-panel")?.classList.add("hidden");
+  el("sell-intro")?.classList.add("hidden");
   fillShopEditFormFromSeller(profile);
   void hydrateShopEditFormFromSocial();
   void loadSellerActivity();
-  // Login / onboard land on dashboard; listing AI must not yank sellers off the wizard.
+  // Login / onboard land on Overview; listing AI must not yank sellers off the wizard.
   if (!opts.preserveView) {
-    showSellerView("dashboard");
+    showSellerView("overview");
   }
 }
 
@@ -2915,6 +2916,7 @@ function showSignupStep() {
   el("onboard-details-step")?.classList.remove("hidden");
   el("onboard-btn")?.classList.remove("hidden");
   el("onboard-panel")?.classList.remove("hidden");
+  el("sell-intro")?.classList.remove("hidden");
   el("listing-wizard")?.classList.add("hidden");
   const phoneInput = el("seller-phone");
   if (phoneInput) phoneInput.readOnly = true;
@@ -5777,10 +5779,9 @@ function showSellerView(view) {
   const dashboard = el("view-dashboard");
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
-  const shopEdit = el("seller-shop-edit");
 
-  const dashPanels = ["overview", "orders", "listings", "analytics"];
-  const showDash = dashPanels.includes(view) || view === "settings";
+  const dashPanels = ["overview", "orders", "listings", "analytics", "settings"];
+  const showDash = dashPanels.includes(view);
   const showWithdraw = view === "payouts";
   const showListing = view === "listing";
 
@@ -5788,10 +5789,9 @@ function showSellerView(view) {
   withdraw?.classList.toggle("hidden", !showWithdraw);
   listing?.classList.toggle("hidden", !showListing);
 
-  const panelKey = view === "settings" ? "overview" : view;
   document.querySelectorAll("[data-hub-panel]").forEach((panel) => {
     const key = panel.getAttribute("data-hub-panel");
-    const visible = showDash && key === panelKey;
+    const visible = showDash && key === view;
     panel.classList.toggle("hidden", !visible);
   });
 
@@ -5806,12 +5806,6 @@ function showSellerView(view) {
     document.querySelector(`.seller-hub-nav__tab[data-hub-nav="${view}"]`) ||
     document.querySelector(".seller-hub-nav__tab.is-active");
   requestAnimationFrame(() => moveSellerHubNavPill(activeNav));
-
-  if (view === "settings" && shopEdit) {
-    shopEdit.open = true;
-    shopEdit.classList.remove("hidden");
-    shopEdit.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 
   if (showDash) {
     loadSellerOrders();
