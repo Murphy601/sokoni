@@ -101,7 +101,7 @@
       badge: "Guaranteed until delivery",
       headline: "Shop with peace of mind.",
       subtext:
-        "Your M-Pesa stays in Sokoni escrow until you receive the order from the seller. Track every order with SK-####.",
+        "Your M-Pesa stays in Sokoni escrow until you receive the order from the seller. Track every order with SKN-####.",
       primaryCtaText: "How escrow works",
       primaryCtaLink: "faq.html",
       secondaryCtaText: "Track an order",

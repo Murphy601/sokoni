@@ -79,7 +79,7 @@ Documented order in `webhookHandler.js`:
 3. `"menu"` / `"start"` / `"habari"` → reset + main menu
 4. Pending COD order → order flow (name/location/phone)
 5. Active product menu (`1`/`2`/`3`) → order / ask AI / main menu
-6. `"track"` + `SK-####` → order status
+6. `"track"` + `SKN-####` / `SKN-####-n` (or older `SK-####`) → order status
 7. `"human"` / `"agent"` → handoff
 8. **Product router** (`product-router.js`) → perfume oils + all-category search
 9. Purchase intent (`nipee`/`nataka`) + product context → start COD order
@@ -105,7 +105,7 @@ Documented order in `webhookHandler.js`:
 1. Chat Sokoni on WhatsApp (or browse sokonimall.com)
 2. AI finds the right product from our **pay-on-delivery store** catalog
 3. Reply *1* to order (local) OR *menu* → Shop International (partner links)
-4. Track with your **SK-####** order number anytime
+4. Track with your **SKN-####** / **SKN-####-n** (or older **SK-####**) anytime
 
 ---
 

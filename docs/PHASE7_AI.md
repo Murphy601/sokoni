@@ -30,7 +30,7 @@ User message (web or WhatsApp)
 | `browse_products` | List live items on a browse category/subcategory path |
 | `browse_taxonomy` | Categories, subcategories, aesthetics, price tiers, site paths |
 | `get_product` | Lookup by `prod_*` id |
-| `track_order` | SK-#### shipment timeline (Phase 6) |
+| `track_order` | SKN-#### / SK-#### shipment timeline (Phase 6) |
 | `list_orders` | Customer orders by phone/chat |
 | `store_info` | Prepaid, escrow, till, delivery note, how-it-works, promo, site URLs |
 

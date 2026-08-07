@@ -1,6 +1,12 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
-import { getOrder, getOrdersForCustomer, updateOrderMeta, listRecentOrders } from "./orders.js";
+import {
+  getOrder,
+  getOrdersForCustomer,
+  updateOrderMeta,
+  listRecentOrders,
+  extractOrderIdFromText,
+} from "./orders.js";
 import { getPickupPoint } from "./pickupPoints.js";
 import { getSupplier } from "./suppliers.js";
 import { paymentVerificationPrompt, paymentConfirmedMessage } from "./trust-copy.js";
@@ -91,9 +97,9 @@ function orderMatchesCustomer(order, customerKey, phone = "") {
 }
 
 function pickOrderForPaidClaim(customerKey, text = "", phone = "") {
-  const idMatch = text.match(/\bSK-?(\d{3,})\b/i);
-  if (idMatch) {
-    const order = getOrder(`SK-${idMatch[1]}`);
+  const trackId = extractOrderIdFromText(text);
+  if (trackId) {
+    const order = getOrder(trackId);
     if (orderMatchesCustomer(order, customerKey, phone)) return order;
   }
 
@@ -147,7 +153,7 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
   if (!order) {
     await sendText(
       customerKey,
-      `I couldn't find an active order to mark as paid.\n\nType *track* or your order number (e.g. *SK-1042*), then reply *paid* again.`
+      `I couldn't find an active order to mark as paid.\n\nType *track* or your order number (e.g. *SKN-1002* or *SK-1042*), then reply *paid* again.`
     );
     return true;
   }
@@ -197,7 +203,7 @@ export function filterPendingPaymentClaims(orders) {
 export async function notifyStorePaymentConfirmed(order) {
   const store = resolveOrderStore(order);
   if (!store?.phone) {
-    return { error: "no_store", message: "No store/pickup point assigned. Use #pickup SK-xxxx <pp-id> first." };
+    return { error: "no_store", message: "No store/pickup point assigned. Use #pickup SKN-xxxx <pp-id> first." };
   }
 
   const storeChat = `${String(store.phone).replace(/\D/g, "")}@c.us`;

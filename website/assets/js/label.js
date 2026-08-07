@@ -13,11 +13,7 @@
   const printBtn = document.getElementById("label-print-btn");
 
   function normalizeOrderId(raw) {
-    const t = String(raw || "").trim().toUpperCase();
-    if (!t) return "";
-    if (t.startsWith("SK-")) return t;
-    const digits = t.replace(/\D/g, "");
-    return digits ? `SK-${digits}` : t;
+    return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
   }
 
   function showError(msg) {
@@ -151,7 +147,7 @@
       if (!res.ok) {
         throw new Error(
           data.error === "order_not_found"
-            ? "Order not found. Check the SK-#### from WhatsApp."
+            ? "Order not found. Check the SKN-#### from WhatsApp."
             : data.message || "Could not load label."
         );
       }

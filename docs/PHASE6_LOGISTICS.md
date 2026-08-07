@@ -1,4 +1,4 @@
-# Phase 6 — Logistics & SK-#### tracking
+# Phase 6 — Logistics & SKN-#### / SK-#### tracking
 
 Depop-style prepaid drop-off adapted for **Kenya hubs and couriers** (Fargo, Pickup Mtaani, Sendy, G4S — manual adapter first, live APIs later).
 
@@ -39,11 +39,11 @@ Body: { "status": "in_transit", "hub": "Umoja", "courier": "fargo" }
 | Method | Path |
 |--------|------|
 | GET | `/api/tracking/meta` |
-| GET | `/api/tracking/SK-1042` — sanitized payload (no payment secrets) |
+| GET | `/api/tracking/SKN-1002-1` (or older `SK-1042`) — sanitized payload (no payment secrets) |
 
-**Website:** [track.html](../website/track.html) — enter SK-####, visual shipment stepper, all-in price only (no item/shipping split).
+**Website:** [track.html](../website/track.html) — enter SKN-#### / SKN-####-n (or older SK-####), visual shipment stepper, all-in price only (no item/shipping split).
 
-**Drop-off label:** [label.html](../website/label.html)?order=SK-#### — printable QR + hub code (linked from seller Print label after payment).
+**Drop-off label:** [label.html](../website/label.html)?order=SKN-####-n — printable QR + hub code (linked from seller Print label after payment).
 
 **WhatsApp:** Customer types `SK-1042` or `track` — shipment timeline when order is paid.
 
@@ -73,12 +73,12 @@ Cloudflare Pages deploys `website/` on push to `main`.
 ## Test plan
 
 - [ ] Pay order (Phase 5) → `shipmentStatus: label_ready`
-- [ ] `#scan SK-####` → `dropped_off` → customer WhatsApp update
-- [ ] `#scan SK-#### in_transit` → timeline shows In transit
-- [ ] `#status SK-#### delivered` → shipment + escrow release
-- [ ] `GET /api/tracking/SK-####` → public JSON
-- [ ] `track.html?order=SK-####` → live stepper
-- [ ] Customer types SK-#### in WhatsApp → shipment timeline
+- [ ] `#scan SKN-####-n` → `dropped_off` → customer WhatsApp update
+- [ ] `#scan SKN-####-n in_transit` → timeline shows In transit
+- [ ] `#status SKN-####-n delivered` → shipment + escrow release
+- [ ] `GET /api/tracking/SKN-####-n` → public JSON
+- [ ] `track.html?order=SKN-####-n` → live stepper
+- [ ] Customer types SKN-####-n (or older SK-####) in WhatsApp → shipment timeline
 
 ## Next: Phase 7
 

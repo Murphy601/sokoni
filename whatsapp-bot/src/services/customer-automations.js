@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
-import { getOrdersForCustomer, getOrder, updateOrderStatus } from "./orders.js";
+import { getOrdersForCustomer, getOrder, updateOrderStatus, extractOrderIdFromText } from "./orders.js";
 import { getCustomerMeta, setCustomerMeta } from "./session.js";
 import { alertAdminIssueAction } from "./ops-admin.js";
 import {
@@ -78,8 +78,7 @@ function latestRelevantOrder(customerKey, phone = "") {
 }
 
 function orderIdFromText(text) {
-  const m = String(text || "").match(/\b(SK-\d+)\b/i);
-  return m ? m[1].toUpperCase() : null;
+  return extractOrderIdFromText(text);
 }
 
 async function handleReplaceOrCancel(customerKey, action, { phone = "", displayName = "" } = {}) {
@@ -90,7 +89,7 @@ async function handleReplaceOrCancel(customerKey, action, { phone = "", displayN
   if (!order) {
     await sendText(
       customerKey,
-      "I couldn't find your order. Reply with your order number (e.g. *SK-1042*) or type *track*."
+      "I couldn't find your order. Reply with your order number (e.g. *SKN-1002-1* or older *SK-1042*) or type *track*."
     );
     return true;
   }

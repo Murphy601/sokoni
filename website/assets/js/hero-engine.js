@@ -66,7 +66,7 @@
     return {
       productName: p.name || "Tecno Spark 20",
       price: formatKes(p.priceKes || 13599),
-      orderId: "SK-1042",
+      orderId: "SKN-1002-1",
       till: siteStory.mpesaTill || "4775847",
       tillName: siteStory.mpesaTillName || "David Thuku Muiruri",
       whatsappDisplay: siteStory.whatsappDisplay || "+254 117 422 428",

@@ -8,7 +8,7 @@ router.get("/meta", (_req, res) => {
   res.json(trackingMeta());
 });
 
-/** Public SK-#### tracking — no payment internals exposed. */
+/** Public SKN-#### / SKN-####-n / legacy SK-#### tracking — no payment internals exposed. */
 router.get("/:orderId", (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {

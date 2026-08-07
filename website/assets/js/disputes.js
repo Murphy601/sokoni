@@ -25,14 +25,14 @@ const GUIDES = [
     title: "SK Station returns",
     blurb: "If a return is approved, drop at a Sokoni hub with your order ref on the parcel.",
     detail:
-      "Only return after admin approves. Write your SK-#### on the parcel, drop at an SK Station / Sokoni hub, and keep the drop receipt. Returns without approval may not be refunded.",
+      "Only return after admin approves. Write your SKN-#### on the parcel, drop at an SK Station / Sokoni hub, and keep the drop receipt. Returns without approval may not be refunded.",
   },
   {
     id: "open",
     title: "Open a claim from Track",
     blurb: "After you pay, use Track order → Open dispute with a short statement.",
     detail:
-      "Go to Track, enter your SK-####, verify WhatsApp if asked, then use Open dispute. Or use the form on this page: enter your order number, pick a reason, and submit a short statement.",
+      "Go to Track, enter your SKN-####, verify WhatsApp if asked, then use Open dispute. Or use the form on this page: enter your order number, pick a reason, and submit a short statement.",
   },
 ];
 
@@ -105,11 +105,7 @@ function formatWhen(ts) {
 }
 
 function normalizeOrderId(raw) {
-  const t = String(raw || "").trim().toUpperCase();
-  if (!t) return "";
-  if (t.startsWith("SK-")) return t;
-  const digits = t.replace(/\D/g, "");
-  return digits ? `SK-${digits}` : t;
+  return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
 }
 
 function renderGuides() {
@@ -226,7 +222,7 @@ async function loadDisputes() {
     if (!disputes.length) {
       wrap.innerHTML = `<div class="dispute-card text-sm text-zinc-400">
         No tickets yet. Paid order problem? Use <strong class="text-white">Open a dispute</strong> below, or
-        <a href="track.html" class="text-[#FF2300] font-semibold hover:underline">Track</a> your SK-####.
+        <a href="track.html" class="text-[#FF2300] font-semibold hover:underline">Track</a> your SKN-####.
       </div>`;
       setStatus("Signed in — no open tickets.");
       return;
@@ -251,7 +247,7 @@ async function submitOpenDispute(ev) {
   const reason = el("open-dispute-reason")?.value || "other";
   const statement = String(el("open-dispute-statement")?.value || "").trim();
   if (!orderId) {
-    setOpenStatus("Enter your SK-#### order number.", true);
+    setOpenStatus("Enter your SKN-#### order number.", true);
     return;
   }
   if (statement.length < 8) {

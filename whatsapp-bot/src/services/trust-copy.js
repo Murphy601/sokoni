@@ -34,7 +34,7 @@ export function paymentTrustDisclosure() {
     `Pay via M-Pesa (STK push via Safaricom Daraja coming soon; manual till until then).\n\n` +
     `During our founder-led launch phase, payments go to Buy Goods Till *${till()}* — registered to *${tillName()}*.\n\n` +
     `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
-    `✅ *Verify:* call or WhatsApp us before paying to confirm your SK-#### order number.\n` +
+    `✅ *Verify:* call or WhatsApp us before paying to confirm your SKN-#### (or older SK-####) order number.\n` +
     `_No pay-on-delivery. No COD._`
   );
 }
@@ -134,7 +134,7 @@ export function howItWorksMessage() {
     `2️⃣ Our AI finds products from our *prepaid* local catalog.\n` +
     `3️⃣ Reply *1* to order — send name, location & phone in one message.\n` +
     `4️⃣ *Pay upfront:* M-Pesa to Till *${till()}* (escrow held until delivery). Daraja STK push coming soon.\n` +
-    `5️⃣ Track with your *SK-####* order number anytime.\n\n` +
+    `5️⃣ Track with your *SKN-####* / *SKN-####-n* (or older *SK-####*) anytime.\n\n` +
     `${config.store.deliveryNote}\n\n` +
     `Type *menu* anytime to start again.`
   );
@@ -149,7 +149,7 @@ export function paymentVerificationPrompt(amountKes = null) {
     amountLine +
     `🏢 *Buy Goods Till:* ${till()}\n` +
     `👤 *Registered to:* ${tillName()} (Sokoni Mall founder)\n\n` +
-    `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your SK-#### order number.\n` +
+    `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your SKN-#### (or older SK-####) order number.\n` +
     `After paying, paste your M-Pesa confirmation or reply *paid* with the transaction code. 🧾`
   );
 }

@@ -3,7 +3,7 @@
  * Money stays on JSON SK-orders + settlements.json (same as live prepaid flow).
  */
 import { isDbEnabled, query } from "../db/pool.js";
-import { getOrder, updateOrderMeta, listAllOrders } from "./orders.js";
+import { getOrder, updateOrderMeta, listAllOrders, normalizeOrderId } from "./orders.js";
 import {
   cancelSettlementPayout,
   reinstateSettlementPayout,
@@ -48,11 +48,7 @@ function parseUserId(value) {
 }
 
 function normalizeOrderRef(value) {
-  const raw = String(value || "").trim().toUpperCase();
-  if (!raw) return "";
-  if (raw.startsWith("SK-")) return raw;
-  const digits = raw.replace(/\D/g, "");
-  return digits ? `SK-${digits}` : raw;
+  return normalizeOrderId(value) || "";
 }
 
 function mapDisputeRow(row) {
@@ -138,7 +134,7 @@ export async function createDispute({
 
   const order = getOrder(ref);
   if (!order) {
-    return { error: "order_not_found", message: "Order not found. Check your SK-#### number." };
+    return { error: "order_not_found", message: "Order not found. Check your SKN-#### (or older SK-####) number." };
   }
   if (order.status === "cancelled") {
     return { error: "dispute_not_allowed", message: "Cancelled orders cannot be disputed." };

@@ -263,11 +263,7 @@
   }
 
   function normalizeOrderId(raw) {
-    const t = String(raw || "").trim().toUpperCase();
-    if (!t) return "";
-    if (t.startsWith("SK-")) return t;
-    const digits = t.replace(/\D/g, "");
-    return digits ? `SK-${digits}` : t;
+    return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
   }
 
   function showError(msg) {
@@ -306,7 +302,7 @@
     const tillName = meta.tillName || "Sokoni Mall";
     document.getElementById("checkout-till").textContent = till;
     document.getElementById("checkout-till-name").textContent = tillName;
-    document.getElementById("checkout-till-ref").textContent = orderId || "SK-####";
+    document.getElementById("checkout-till-ref").textContent = orderId || "SKN-####";
   }
 
   function renderCheckout(data) {
@@ -372,7 +368,7 @@
       if (!res.ok) {
         throw new Error(
           data.error === "order_not_found"
-            ? "Order not found. Check your SK-#### from WhatsApp."
+            ? "Order not found. Check your SKN-#### from WhatsApp."
             : "Could not load order."
         );
       }

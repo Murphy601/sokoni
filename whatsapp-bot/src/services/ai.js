@@ -30,7 +30,7 @@ export async function runAiAgent(sessionKey, userMessage, phone = "") {
   } catch (err) {
     console.error("[ai] runAiAgent failed:", err.message);
     return {
-      reply: "Something went wrong. Type *menu* to browse, or send your *SK-####* to track.",
+      reply: "Something went wrong. Type *menu* to browse, or send your *SKN-####* (or older *SK-####*) to track.",
       products: [],
       tools: [],
     };

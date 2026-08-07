@@ -11,7 +11,7 @@ You maintain the Sokoni storefront (`website/`) so it feels like **texting a tru
 
 ## Brand voice
 
-- Conversational, not corporate. Short sentences. Real examples (SK-xxxx, M-Pesa Till, pickup partners).
+- Conversational, not corporate. Short sentences. Real examples (SKN-xxxx / SKN-xxxx-n, older SK-xxxx, M-Pesa Till, pickup partners).
 - English, Kiswahili, and Sheng are welcome where natural.
 - **Never** anchor marketing to a single city or region — Sokoni serves Kenya broadly (home delivery + pickup points).
 - **Never** use hollow adjectives: seamless, leverage, ecosystem, world-class, cutting-edge.

@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Drop-off label — Sokoni Mall</title>
-<meta name="description" content="Print your Sokoni prepaid drop-off label for hub scan — SK-#### tracking." />
+<meta name="description" content="Print your Sokoni prepaid drop-off label for hub scan — SKN-#### tracking." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -39,7 +39,7 @@
 
     <form id="label-lookup" class="label-screen-only flex flex-col sm:flex-row gap-3 mb-8">
       <label for="order-id" class="sr-only">Order number</label>
-      <input id="order-id" type="text" placeholder="SK-1042" required autocomplete="off"
+      <input id="order-id" type="text" placeholder="SKN-1002-1" required autocomplete="off"
         class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-base text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]" />
       <button type="submit" class="depop-btn-accent min-h-[48px] px-6">Load</button>
     </form>
@@ -54,7 +54,7 @@
           <p class="label-kicker">Prepaid drop-off</p>
         </header>
 
-        <p class="label-order-id" id="label-order-id">SK-####</p>
+        <p class="label-order-id" id="label-order-id">SKN-####</p>
         <p class="label-product" id="label-product">—</p>
         <div class="label-route" id="label-route" hidden>
           <p class="label-kicker">Ship to</p>
@@ -64,12 +64,12 @@
 
         <div class="label-qr-wrap">
           <canvas id="label-qr" width="200" height="200" aria-label="Drop-off QR code"></canvas>
-          <p class="label-qr-caption" id="label-qr-caption">SOKONI:SK-####</p>
+          <p class="label-qr-caption" id="label-qr-caption">SOKONI:SKN-####</p>
         </div>
 
         <div class="label-code-block">
           <p class="label-kicker">Hub scan code</p>
-          <p class="label-drop-code" id="label-drop-code">SK-####</p>
+          <p class="label-drop-code" id="label-drop-code">SKN-####</p>
         </div>
 
         <ol class="label-steps">
@@ -94,7 +94,8 @@
   </footer>
 
   <script src="assets/vendor/qrcode.min.js"></script>
-  <script src="assets/js/label.js"></script>
+  <script src="assets/js/order-id.js?v=skn-1"></script>
+  <script src="assets/js/label.js?v=skn-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>

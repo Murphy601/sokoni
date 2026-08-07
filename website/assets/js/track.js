@@ -18,11 +18,7 @@
   let currentOrderId = "";
 
   function normalizeOrderId(raw) {
-    const t = String(raw || "").trim().toUpperCase();
-    if (!t) return "";
-    if (t.startsWith("SK-")) return t;
-    const digits = t.replace(/\D/g, "");
-    return digits ? `SK-${digits}` : t;
+    return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
   }
 
   function formatKes(n) {
@@ -241,7 +237,7 @@
       const res = await fetch(`${API_BASE}/${encodeURIComponent(orderId)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error === "order_not_found" ? "Order not found. Check your SK-#### number." : "Could not load tracking.");
+        throw new Error(data.error === "order_not_found" ? "Order not found. Check your SKN-#### number." : "Could not load tracking.");
       }
       renderTracking(data);
     } catch (err) {
