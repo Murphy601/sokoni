@@ -144,13 +144,16 @@ async function getAccessToken() {
   if (tokenCache.token && Date.now() < tokenCache.expiresAt - 60_000) {
     return tokenCache.token;
   }
-  const key = String(config.mpesa.consumerKey || "").trim();
-  const secret = String(config.mpesa.consumerSecret || "").trim();
+  const key = String(config.mpesa.consumerKey || "").replace(/\s+/g, "");
+  const secret = String(config.mpesa.consumerSecret || "").replace(/\s+/g, "");
   const auth = Buffer.from(`${key}:${secret}`, "utf8").toString("base64");
   const url = `${baseUrl()}/oauth/v1/generate?grant_type=client_credentials`;
   const res = await fetch(url, {
     method: "GET",
-    headers: { Authorization: `Basic ${auth}` },
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    },
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
