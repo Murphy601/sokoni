@@ -106,7 +106,7 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
       stkAvailable: false,
       till: config.store.mpesaTill,
       tillName: config.store.mpesaTillName,
-      message: "Pay Buy Goods Till 3439153 (SOKONIMA) with your order number as account reference, then reply paid on WhatsApp.",
+      message: "Pay Buy Goods Till 4775847 (David Thuku Muiruri) with your order number as account reference, then reply paid on WhatsApp.",
     };
   }
 

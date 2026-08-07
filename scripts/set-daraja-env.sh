@@ -18,7 +18,9 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# --- Production Daraja app credentials (Prod-SOKONIMALL / Buy Goods Till 3439153) ---
+# --- Production Daraja (org H.O. 3439153) + Buy Goods Till 4775847 ---
+# Hierarchy: org/Daraja 3439153 → merchant store 4421485 → till 4775847
+# STK uses SHORTCODE (password) + TILL (PartyB). Store 4421485 is not sent on STK.
 DEFAULT_KEY="Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB"
 DEFAULT_SECRET="P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHAVhfo"
 DEFAULT_PASSKEY="ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d"
@@ -50,8 +52,9 @@ MPESA_CONSUMER_SECRET="$(pick_cred "${MPESA_CONSUMER_SECRET:-}" "$DEFAULT_SECRET
 MPESA_PASSKEY="$(pick_cred "${MPESA_PASSKEY:-}" "$DEFAULT_PASSKEY" "MPESA_PASSKEY")"
 
 SHORTCODE="${MPESA_SHORTCODE:-3439153}"
-TILL="${MPESA_TILL_NUMBER:-$SHORTCODE}"
-TILL_NAME="${MPESA_TILL_NAME:-SOKONIMA}"
+TILL="${MPESA_TILL_NUMBER:-4775847}"
+TILL_NAME="${MPESA_TILL_NAME:-David Thuku Muiruri}"
+PARTY_B="${MPESA_PARTY_B:-$TILL}"
 TX_TYPE="${MPESA_TRANSACTION_TYPE:-CustomerBuyGoodsOnline}"
 ENV_NAME="${MPESA_ENV:-production}"
 CALLBACK="${MPESA_CALLBACK_URL:-https://bot.sokonimall.com/api/payments/daraja/callback}"
@@ -77,8 +80,8 @@ upsert() {
   fi
 }
 
-if grep -qE '^MPESA_TILL_NUMBER=4775847' "$ENV_FILE" 2>/dev/null; then
-  echo "==> Replacing legacy till 4775847 with $SHORTCODE"
+if grep -qE '^MPESA_TILL_NUMBER=3439153$' "$ENV_FILE" 2>/dev/null; then
+  echo "==> Restoring Buy Goods Till 4775847 (was wrongly set to org shortcode 3439153)"
 fi
 
 upsert MPESA_CONSUMER_KEY "$MPESA_CONSUMER_KEY"
@@ -87,6 +90,7 @@ upsert MPESA_PASSKEY "$MPESA_PASSKEY"
 upsert MPESA_SHORTCODE "$SHORTCODE"
 upsert MPESA_TILL_NUMBER "$TILL"
 upsert MPESA_TILL_NAME "$TILL_NAME"
+upsert MPESA_PARTY_B "$PARTY_B"
 upsert MPESA_ENV "$ENV_NAME"
 upsert MPESA_TRANSACTION_TYPE "$TX_TYPE"
 upsert MPESA_CALLBACK_URL "$CALLBACK"
@@ -111,7 +115,9 @@ fi
 
 echo "==> Updated Daraja production config in $ENV_FILE"
 echo "    Key len=${#MPESA_CONSUMER_KEY}  Secret len=${#MPESA_CONSUMER_SECRET}  Passkey len=${#MPESA_PASSKEY}"
-echo "    Shortcode: $SHORTCODE ($TILL_NAME) · STK: $TX_TYPE · Env: $ENV_NAME"
+echo "    Org/Daraja SHORTCODE (BusinessShortCode): $SHORTCODE"
+echo "    Buy Goods TILL (PartyB): $TILL ($TILL_NAME) · STK: $TX_TYPE · Env: $ENV_NAME"
+echo "    Merchant store 4421485 is not used in STK payload"
 echo "    STK callback: $CALLBACK"
 echo "    B2C shortcode: $B2C_SHORT · result: $B2C_RESULT"
 if grep -qE '^MPESA_INITIATOR_NAME=.' "$ENV_FILE" 2>/dev/null && \

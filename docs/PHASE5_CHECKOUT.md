@@ -55,19 +55,16 @@ MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 
 **Seller B2C:** org roles include B2C API Initiator — set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
 
-**Till vs shortcode (Buy Goods):**
-- `MPESA_SHORTCODE` = Daraja portal **Short Code** → STK `BusinessShortCode` + password
-- `MPESA_TILL_NUMBER` = store **Till** → STK `PartyB` (money lands here)
-- If you only have one number, set both equal. If STK fails with “Agent number and Store number do not match”, set H.O. on `MPESA_SHORTCODE` and the store till on `MPESA_TILL_NUMBER`.
+**Till vs shortcode (Buy Goods — Sokoni live):**
+- `MPESA_SHORTCODE=3439153` — Daraja / org H.O. → STK `BusinessShortCode` + password
+- Merchant store shortcode `4421485` — portal hierarchy only (not sent on STK)
+- `MPESA_TILL_NUMBER=4775847` — Buy Goods till → STK `PartyB` (money lands here)
 
-**Web username vs API:** Daraja/M-Pesa **web login** is not sent on STK. Buyer STK uses **Consumer Key + Secret + Passkey**. Org **Initiator username** is only for B2C (`#payb2c`), not checkout.
+Proven working combo from live logs: `businessShortCode: 3439153`, `partyB: 4775847`, `CustomerBuyGoodsOnline`.
+
+**Web username vs API:** portal web login is not STK auth. STK uses Consumer Key/Secret/Passkey. Initiator username is for B2C only.
 
 Register callback `https://bot.sokonimall.com/api/payments/daraja/callback` on the Daraja app.
-
-**Debug STK on the VM after a failed pay:**
-```bash
-grep -iE 'daraja|STK' ~/.pm2/logs/sokoni-bot-out.log ~/.pm2/logs/sokoni-bot-error.log | tail -40
-```
 
 **Manual fallback** (Daraja unset): customer pays till + replies `paid` → admin `#payconfirm`. Web checkout shows till details when `GET /api/checkout/meta` reports `darajaConfigured: false`.
 
