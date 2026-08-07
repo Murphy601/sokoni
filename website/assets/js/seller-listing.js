@@ -421,9 +421,15 @@ let ledgerData = null;
 let hubCache = {
   orders: [],
   drafts: [],
+  listings: [],
   liveCount: 0,
   draftCount: 0,
 };
+
+const HUB_DEFAULT_HUB_KEY = "sokoni-seller-default-hub";
+const HUB_STOCK_NOTES_KEY = "sokoni-seller-stock-notes";
+const HUB_PROMO_CODE_KEY = "sokoni-seller-promo-code";
+const SOKONI_SUPPORT_WA = "254117422428";
 
 const HUB_TRENDING_SEARCHES = [
   { tag: "Vintage Nike", growth: "High demand" },
@@ -2302,9 +2308,12 @@ async function loadMyListings() {
     }
     const items = [...(data.drafts || []), ...(data.listings || [])];
     hubCache.drafts = data.drafts || [];
+    hubCache.listings = data.listings || [];
     hubCache.draftCount = hubCache.drafts.length;
     hubCache.liveCount = (data.listings || []).filter((l) => (l.status || "live") === "live").length;
     renderSellerHubOverview();
+    renderHubStockAlerts();
+    renderHubMarketing();
     if (!items.length) {
       wrap.innerHTML = `<p class="text-sm text-zinc-500">No listings yet — add your first item above, or import a CSV.</p>`;
       return;
@@ -3638,6 +3647,8 @@ function renderSellerOrders(orders) {
   hubCache.orders = Array.isArray(orders) ? orders : [];
   renderSellerHubOverview();
   refreshSellerAnalytics();
+  renderHubLogistics();
+  renderHubMarketing();
 
   const active = hubOrdersToShip(hubCache.orders);
   const received = hubOrdersReceived(hubCache.orders);
@@ -5763,6 +5774,13 @@ function renderWithdrawPanel(data) {
   el("withdraw-available").textContent = formatKes(data.availableKes || 0);
   el("withdraw-mpesa").textContent = data.maskedMpesa || data.mpesaNumber || "—";
 
+  const available = Number(data.availableKes || ledgerData?.available?.totalKes || 0);
+  const pending = Number(ledgerData?.pendingEscrow?.totalKes || 0);
+  const transit = Number(ledgerData?.inTransit?.totalKes || 0);
+  if (el("payout-pipeline-available")) el("payout-pipeline-available").textContent = formatKes(available);
+  if (el("payout-pipeline-pending")) el("payout-pipeline-pending").textContent = formatKes(pending);
+  if (el("payout-pipeline-transit")) el("payout-pipeline-transit").textContent = formatKes(transit);
+
   const pendingEl = el("withdraw-pending");
   const reqBtn = el("withdraw-request-btn");
   if (data.pendingRequest) {
@@ -5803,6 +5821,8 @@ function renderWithdrawPanel(data) {
         )
         .join("")
     : `<p class="text-brand-purple/50 dark:text-white/50">No withdrawals yet.</p>`;
+
+  window.__sokoniWithdrawExport = { breakdown: items, history, availableKes: data.availableKes || 0 };
 }
 
 async function loadWithdrawPanel() {
@@ -5862,15 +5882,379 @@ async function requestWithdrawal() {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Command center: logistics / stock / marketing                              */
+/* -------------------------------------------------------------------------- */
+
+function sellerStorageKey(base) {
+  const phone = apiPhone() || "anon";
+  return `${base}:${phone}`;
+}
+
+function readJsonStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function getSellerDefaultHub() {
+  return (
+    localStorage.getItem(sellerStorageKey(HUB_DEFAULT_HUB_KEY)) ||
+    "Nairobi CBD — Archways Mall Hub"
+  );
+}
+
+function setSellerDefaultHub(hub) {
+  localStorage.setItem(sellerStorageKey(HUB_DEFAULT_HUB_KEY), String(hub || ""));
+}
+
+function getStockNotes() {
+  return readJsonStorage(sellerStorageKey(HUB_STOCK_NOTES_KEY), {});
+}
+
+function setStockNote(productId, qty) {
+  const notes = getStockNotes();
+  const n = Math.max(0, Math.round(Number(qty) || 0));
+  notes[productId] = n;
+  writeJsonStorage(sellerStorageKey(HUB_STOCK_NOTES_KEY), notes);
+}
+
+function getSellerPromoCode() {
+  return (
+    localStorage.getItem(sellerStorageKey(HUB_PROMO_CODE_KEY)) ||
+    "SOKONI10"
+  ).toUpperCase();
+}
+
+function setSellerPromoCode(code) {
+  localStorage.setItem(
+    sellerStorageKey(HUB_PROMO_CODE_KEY),
+    String(code || "SOKONI10")
+      .trim()
+      .toUpperCase()
+      .slice(0, 24)
+  );
+}
+
+function sellerPublicShopUrl() {
+  const handle = String(sellerProfile?.shopHandle || sellerProfile?.handle || "")
+    .replace(/^@+/, "")
+    .trim();
+  const origin =
+    window.location.origin && window.location.origin !== "null"
+      ? window.location.origin
+      : "https://sokonimall.com";
+  if (handle) return `${origin}/shop.html?handle=${encodeURIComponent(handle)}`;
+  return `${origin}/shop.html`;
+}
+
+function hubDropOffOrders(orders = hubCache.orders) {
+  return hubOrdersAwaitingShip(orders).filter(
+    (o) => o.needsDropOff || orderPhase(o) === "awaiting_ship"
+  );
+}
+
+function renderHubLogistics() {
+  const wrap = el("logistics-dropoffs");
+  const status = el("logistics-status");
+  const select = el("logistics-hub-select");
+  if (select && !select.dataset.bound) {
+    select.value = getSellerDefaultHub();
+    select.addEventListener("change", () => {
+      setSellerDefaultHub(select.value);
+      if (el("logistics-hub-status")) {
+        el("logistics-hub-status").textContent = `Saved — ${select.value}`;
+      }
+      updateLogisticsBodaLink();
+    });
+    select.dataset.bound = "1";
+  } else if (select) {
+    select.value = getSellerDefaultHub();
+  }
+  updateLogisticsBodaLink();
+
+  if (!wrap) return;
+  const rows = hubDropOffOrders();
+  if (!rows.length) {
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">No parcels waiting for drop-off. Paid sales needing a label show here.</p>`;
+    if (status) status.textContent = "";
+    return;
+  }
+  const hub = getSellerDefaultHub();
+  wrap.innerHTML = rows
+    .map((o) => {
+      const actions = [];
+      if (o.labelUrl) {
+        actions.push(
+          `<a href="${escapeHtml(o.labelUrl)}" target="_blank" rel="noopener" class="sell-order-action sell-order-action--primary">Print label</a>`
+        );
+      }
+      if (o.trackUrl) {
+        actions.push(`<a href="${escapeHtml(o.trackUrl)}" class="sell-order-action">Track</a>`);
+      }
+      return `
+        <div class="sell-order-card sell-order-card--static" role="listitem">
+          <div class="sell-order-card-head">
+            <p class="font-semibold text-sm sell-order-card__title">${escapeHtml(o.productName || "Order")}</p>
+            <span class="sell-order-badge sell-order-badge--action">${o.needsDropOff ? "Ready for drop" : "Awaiting ship"}</span>
+          </div>
+          <p class="text-xs text-zinc-500 mt-1 sell-order-card__meta"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · Hub: ${escapeHtml(hub)}</p>
+          ${actions.length ? `<div class="sell-order-actions">${actions.join("")}</div>` : ""}
+        </div>`;
+    })
+    .join("");
+  if (status) status.textContent = `${rows.length} parcel${rows.length === 1 ? "" : "s"} for hub drop-off`;
+}
+
+function updateLogisticsBodaLink() {
+  const a = el("logistics-boda-btn");
+  if (!a) return;
+  const hub = getSellerDefaultHub();
+  const ids = hubDropOffOrders()
+    .map((o) => o.orderId)
+    .filter(Boolean)
+    .slice(0, 8);
+  const msg =
+    `Habari Sokoni — ninaomba boda rider pickup.\n` +
+    `Hub: ${hub}\n` +
+    (ids.length ? `Parcels: ${ids.join(", ")}\n` : "") +
+    `Shop: ${sellerPublicShopUrl()}`;
+  a.href = `https://wa.me/${SOKONI_SUPPORT_WA}?text=${encodeURIComponent(msg)}`;
+}
+
+function generateHubManifest() {
+  const hub = getSellerDefaultHub();
+  const rows = hubDropOffOrders();
+  if (!rows.length) {
+    if (el("logistics-status")) el("logistics-status").textContent = "Nothing to put on a manifest yet.";
+    return;
+  }
+  const lines = [
+    "SOKONI MASHINANI — HUB DROP-OFF MANIFEST",
+    `Hub: ${hub}`,
+    `Seller: ${sellerProfile?.shopName || sellerProfile?.name || apiPhone() || "—"}`,
+    `Date: ${new Date().toLocaleString()}`,
+    "",
+    ...rows.map(
+      (o, i) =>
+        `${i + 1}. ${o.orderId} — ${o.productName || "Item"} — ${formatKes(o.sellerNetKes)}`
+    ),
+    "",
+    `Scan / track: ${rows.map((o) => o.trackUrl || o.orderId).join(" | ")}`,
+  ];
+  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Sokoni Hub Manifest</title>
+    <style>body{font-family:ui-monospace,monospace;padding:24px;color:#111}h1{font-size:16px}pre{white-space:pre-wrap;font-size:12px}</style></head>
+    <body><h1>Sokoni hub drop-off manifest</h1><pre>${lines
+      .map((l) =>
+        String(l)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+      )
+      .join("\n")}</pre>
+    <script>window.onload=()=>window.print()<\/script></body></html>`;
+  const w = window.open("", "_blank", "noopener,noreferrer");
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+  }
+}
+
+function renderHubStockAlerts() {
+  const wrap = el("stock-alerts");
+  if (!wrap) return;
+  const live = hubCache.listings || [];
+  const drafts = hubCache.drafts || [];
+  const notes = getStockNotes();
+  const cards = [];
+
+  const draftsNeedPhotos = drafts.filter(
+    (d) => !(d.imageUrl || (Array.isArray(d.images) && d.images.length))
+  );
+  if (draftsNeedPhotos.length) {
+    cards.push(`
+      <div class="sell-order-card sell-order-card--static">
+        <p class="font-semibold text-sm text-white">${draftsNeedPhotos.length} draft${draftsNeedPhotos.length === 1 ? "" : "s"} need photos</p>
+        <p class="text-xs text-zinc-500 mt-1">Finish photos before posting — buyers skip empty cards.</p>
+        <div class="sell-order-actions"><button type="button" class="sell-order-action sell-order-action--primary" data-hub-jump="listings">Open drafts</button></div>
+      </div>`);
+  }
+
+  live.forEach((item) => {
+    const pid = item.id || item.productId;
+    if (!pid) return;
+    const qty = notes[pid] != null ? Number(notes[pid]) : 1;
+    const low = qty > 0 && qty <= 2;
+    const soldOut = qty <= 0;
+    cards.push(`
+      <div class="sell-order-card sell-order-card--static" data-stock-id="${escapeHtml(pid)}">
+        <div class="sell-order-card-head">
+          <p class="font-semibold text-sm sell-order-card__title">${escapeHtml(item.name || item.title || pid)}</p>
+          <span class="sell-order-badge ${soldOut ? "sell-order-badge--transit" : low ? "sell-order-badge--action" : "sell-order-badge--done"}">${
+            soldOut ? "Out of stock" : low ? "Low stock" : "In stock"
+          }</span>
+        </div>
+        <label class="block text-xs text-zinc-400 mt-2">Units on hand
+          <input type="number" min="0" max="9999" value="${qty}" data-stock-qty="${escapeHtml(pid)}" class="sell-form-input mt-1 max-w-[8rem]" />
+        </label>
+        <p class="text-xs text-zinc-500 mt-1">${
+          soldOut
+            ? "Pause WhatsApp selling until you restock."
+            : low
+              ? "Only a few left — update before the next order."
+              : "Looks healthy."
+        }</p>
+      </div>`);
+  });
+
+  if (!cards.length) {
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">No live listings yet. List an item, then track units here.</p>`;
+  } else {
+    wrap.innerHTML = cards.join("");
+    wrap.querySelectorAll("[data-stock-qty]").forEach((input) => {
+      input.addEventListener("change", () => {
+        setStockNote(input.getAttribute("data-stock-qty"), input.value);
+        renderHubStockAlerts();
+      });
+    });
+    wrap.querySelectorAll("[data-hub-jump]").forEach((btn) => {
+      btn.addEventListener("click", () => showSellerView(btn.dataset.hubJump || "listings"));
+    });
+  }
+  if (el("stock-status")) {
+    const lowCount = live.filter((item) => {
+      const pid = item.id || item.productId;
+      const qty = notes[pid] != null ? Number(notes[pid]) : 1;
+      return qty <= 2;
+    }).length;
+    el("stock-status").textContent = lowCount
+      ? `${lowCount} listing${lowCount === 1 ? "" : "s"} at low or zero stock`
+      : "";
+  }
+}
+
+function buildMarketingShareMessage() {
+  const code = getSellerPromoCode();
+  const shop = sellerPublicShopUrl();
+  const link = `${shop}${shop.includes("?") ? "&" : "?"}promo=${encodeURIComponent(code)}`;
+  return (
+    `✨ *NEW ON SOKONI*\n\n` +
+    `Check my verified shop — pay safe with M-Pesa escrow:\n\n` +
+    `👉 ${link}\n\n` +
+    `Promo code: *${code}* (mention it in chat)`
+  );
+}
+
+function renderHubMarketing() {
+  const preview = el("marketing-share-preview");
+  const codeInput = el("marketing-promo-code");
+  const waBtn = el("marketing-wa-btn");
+  if (codeInput && !codeInput.dataset.bound) {
+    codeInput.value = getSellerPromoCode();
+    codeInput.addEventListener("input", () => {
+      setSellerPromoCode(codeInput.value);
+      renderHubMarketing();
+    });
+    codeInput.dataset.bound = "1";
+  } else if (codeInput) {
+    codeInput.value = getSellerPromoCode();
+  }
+
+  const msg = buildMarketingShareMessage();
+  if (preview) preview.textContent = msg;
+  if (waBtn) waBtn.href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+  const buyersWrap = el("marketing-buyers");
+  if (!buyersWrap) return;
+  const seen = new Map();
+  (hubCache.orders || [])
+    .filter((o) => o.paid)
+    .forEach((o) => {
+      const key = String(o.buyerPhone || o.customerName || o.orderId || "");
+      if (!key || seen.has(key)) return;
+      seen.set(key, o);
+    });
+  const buyers = [...seen.values()].slice(0, 12);
+  if (!buyers.length) {
+    buyersWrap.innerHTML = `<p class="text-sm text-zinc-500">Paid buyers appear here after your first sales.</p>`;
+    return;
+  }
+  buyersWrap.innerHTML = buyers
+    .map((o) => {
+      const name = o.customerName || o.buyerName || "Buyer";
+      const thank = `Asante ${name}! Thanks for shopping my Sokoni store 🙏\n${sellerPublicShopUrl()}`;
+      const restock = `Habari ${name} — fresh stock just landed on Sokoni:\n${sellerPublicShopUrl()}?promo=${encodeURIComponent(getSellerPromoCode())}`;
+      return `
+        <div class="sell-order-card sell-order-card--static">
+          <p class="font-semibold text-sm text-white">${escapeHtml(name)}</p>
+          <p class="text-xs text-zinc-500 mt-1 font-mono">${escapeHtml(o.orderId || "")}</p>
+          <div class="sell-order-actions">
+            <a class="sell-order-action sell-order-action--primary" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(thank)}">Thank you</a>
+            <a class="sell-order-action" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(restock)}">Restock notice</a>
+          </div>
+        </div>`;
+    })
+    .join("");
+}
+
+function exportPayoutCsv() {
+  const payload = window.__sokoniWithdrawExport || {};
+  const rows = [["type", "id", "status", "amountKes"]];
+  (payload.breakdown || []).forEach((item) => {
+    rows.push(["order", item.orderId || "", "available", String(item.amountKes || 0)]);
+  });
+  (payload.history || []).forEach((h) => {
+    rows.push(["withdrawal", h.id || "", h.status || "", String(h.amountKes || 0)]);
+  });
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sokoni-payout-statement-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function bindSellerCommandCenterUi() {
+  el("logistics-manifest-btn")?.addEventListener("click", generateHubManifest);
+  el("logistics-refresh-btn")?.addEventListener("click", () => {
+    loadSellerOrders();
+    renderHubLogistics();
+  });
+  el("marketing-copy-btn")?.addEventListener("click", async () => {
+    const msg = buildMarketingShareMessage();
+    try {
+      await navigator.clipboard.writeText(msg);
+      if (el("marketing-status")) el("marketing-status").textContent = "Copied — paste into WhatsApp Status or Groups.";
+    } catch {
+      if (el("marketing-status")) el("marketing-status").textContent = "Could not copy — select the preview text manually.";
+    }
+  });
+  el("payout-export-csv-btn")?.addEventListener("click", exportPayoutCsv);
+}
+
 function isSellerDashView(view) {
   return [
     "overview",
     "orders",
+    "logistics",
     "offers",
     "disputes",
+    "stock",
     "listings",
     "tools",
     "analytics",
+    "marketing",
     "grow",
     "settings",
   ].includes(view);
@@ -5879,9 +6263,12 @@ function isSellerDashView(view) {
 function normalizeSellerHubView(view) {
   const raw = String(view || "overview").trim().toLowerCase();
   if (raw === "dashboard" || raw === "home") return "overview";
-  if (raw === "withdraw") return "payouts";
+  if (raw === "withdraw" || raw === "mpesa-ledger" || raw === "ledger") return "payouts";
   if (raw === "list" || raw === "list-item" || raw === "create") return "listing";
   if (raw === "offer" || raw === "price-offers") return "offers";
+  if (raw === "hub" || raw === "hub-drop-offs" || raw === "drop-off" || raw === "mashinani") return "logistics";
+  if (raw === "inventory" || raw === "shop-stock" || raw === "stock-alerts") return "stock";
+  if (raw === "promo" || raw === "whatsapp-promo" || raw === "wa-promo") return "marketing";
   if (
     raw === "grow-your-shop" ||
     raw === "grow_shop" ||
@@ -5959,6 +6346,9 @@ function showSellerView(view, opts = {}) {
       renderHubGuidesCarousel();
       renderSellerHubOverview();
     }
+    if (view === "logistics") renderHubLogistics();
+    if (view === "stock") renderHubStockAlerts();
+    if (view === "marketing") renderHubMarketing();
     startSellerOffersPolling();
     ensureReminderCooldownTicker();
     refreshSellerAnalytics();
@@ -5994,6 +6384,15 @@ async function loadEscrowLedger() {
     el("ledger-available-total").textContent = formatKes(ledgerData.available?.totalKes || 0);
     el("ledger-pending-total").textContent = formatKes(ledgerData.pendingEscrow?.totalKes || 0);
     el("ledger-transit-total").textContent = formatKes(ledgerData.inTransit?.totalKes || 0);
+    if (el("payout-pipeline-available")) {
+      el("payout-pipeline-available").textContent = formatKes(ledgerData.available?.totalKes || 0);
+    }
+    if (el("payout-pipeline-pending")) {
+      el("payout-pipeline-pending").textContent = formatKes(ledgerData.pendingEscrow?.totalKes || 0);
+    }
+    if (el("payout-pipeline-transit")) {
+      el("payout-pipeline-transit").textContent = formatKes(ledgerData.inTransit?.totalKes || 0);
+    }
     renderLedgerDetail();
     renderSellerHubOverview();
     refreshSellerAnalytics();
@@ -6072,6 +6471,7 @@ function init() {
   el("load-listings-btn")?.addEventListener("click", loadMyListings);
   bindBulkCsvUi();
   bindSellerHubUi();
+  bindSellerCommandCenterUi();
   el("load-ledger-btn")?.addEventListener("click", loadEscrowLedger);
   el("onboard-btn")?.addEventListener("click", onOnboard);
   el("send-code-btn")?.addEventListener("click", onSendCode);

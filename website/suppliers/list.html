@@ -33,9 +33,9 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/design-tokens.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
-<link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-grow-menu-1" />
+<link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-command-1" />
 <link rel="stylesheet" href="../assets/css/inbox-disputes.css" />
-<link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-grow-menu-1" />
+<link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-command-1" />
 </head>
 <body class="sell-depop-page depop-surface-page font-sans antialiased text-white min-h-screen">
   <header class="sell-page-header border-b border-zinc-900 bg-black/95 backdrop-blur sticky top-0 z-50">
@@ -198,6 +198,10 @@
               <span>Orders</span>
               <span id="nav-badge-orders-menu" class="seller-hub-nav__badge hidden" aria-live="polite"></span>
             </button>
+            <button type="button" class="seller-hub-drawer__link" data-hub-nav="logistics">
+              <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              <span>Hub Drop-Offs</span>
+            </button>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="offers">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 8c0 4 2.5 8 5 10 2.5-2 5-6 5-10"/><path d="M9.5 12h5"/></svg>
               <span>Offers</span>
@@ -205,7 +209,11 @@
             </button>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="disputes">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-              <span>Disputes</span>
+              <span>Disputes &amp; Reviews</span>
+            </button>
+            <button type="button" class="seller-hub-drawer__link" data-hub-nav="stock">
+              <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
+              <span>Shop &amp; Stock</span>
             </button>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="listings">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -224,6 +232,10 @@
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15v-4"/><path d="M12 15V8"/><path d="M16 15v-7"/></svg>
               <span>Analytics</span>
             </button>
+            <button type="button" class="seller-hub-drawer__link" data-hub-nav="marketing">
+              <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12v8"/><path d="M4 16h8l8-4v8l-8-4H4z"/><path d="M12 8V4l4 2-4 2z"/></svg>
+              <span>WhatsApp Promo</span>
+            </button>
             <div class="seller-hub-drawer__group" data-hub-group="grow">
               <button type="button" class="seller-hub-drawer__link" data-hub-nav="grow" id="tab-grow-shop">
                 <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-6"/></svg>
@@ -239,7 +251,7 @@
             </div>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="payouts" id="tab-withdraw">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="14" r="1"/></svg>
-              <span>Payouts</span>
+              <span>M-Pesa Ledger</span>
             </button>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="settings">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -478,6 +490,132 @@
         </div>
         </div><!-- /offers panel -->
 
+        <!-- LOGISTICS: Hub Drop-Offs -->
+        <div data-hub-panel="logistics" id="hub-panel-logistics" class="space-y-8 hidden">
+          <div class="sell-dash-group space-y-4">
+            <div class="sell-dash-group__head">
+              <p class="sell-dash-group__label">Sokoni Mashinani</p>
+              <p class="sell-dash-group__hint">Drop-off hubs, batch manifests, and rider pickup</p>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-2">
+              <section class="sell-depop-section p-5 space-y-3">
+                <h2 class="font-bold text-base text-white">Default drop-off hub</h2>
+                <p class="text-xs text-zinc-400">Where you hand parcels for buyer delivery across Kenya.</p>
+                <label class="block text-sm font-medium text-zinc-300" for="logistics-hub-select">
+                  Hub location
+                  <select id="logistics-hub-select" class="sell-form-input mt-1 w-full">
+                    <option value="Nairobi CBD — Archways Mall Hub">Nairobi CBD — Archways Mall Hub</option>
+                    <option value="Nakuru Town — Naivas Hub">Nakuru Town — Naivas Hub</option>
+                    <option value="Eldoret — Zion Mall Drop Point">Eldoret — Zion Mall Drop Point</option>
+                    <option value="Mombasa — Nyali Centre Drop Point">Mombasa — Nyali Centre Drop Point</option>
+                    <option value="Kisumu — Mega City Hub">Kisumu — Mega City Hub</option>
+                    <option value="Other / arrange with buyer">Other / arrange with buyer</option>
+                  </select>
+                </label>
+                <p id="logistics-hub-status" class="text-xs text-zinc-500" role="status"></p>
+              </section>
+
+              <section class="sell-depop-section p-5 space-y-3 border border-emerald-800/40 bg-emerald-950/20">
+                <div class="flex items-center justify-between gap-2">
+                  <h2 class="font-bold text-base text-white">Call boda rider pickup</h2>
+                  <span class="text-[10px] font-mono uppercase tracking-wide text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded-full">Same-day</span>
+                </div>
+                <p class="text-xs text-zinc-400">Can't reach the hub? Message Sokoni to arrange a verified rider from your workshop or farm.</p>
+                <a id="logistics-boda-btn" href="https://wa.me/254117422428" target="_blank" rel="noopener" class="depop-btn-accent inline-flex items-center justify-center min-h-[44px] w-full text-sm font-semibold">
+                  Request pickup rider on WhatsApp
+                </a>
+              </section>
+            </div>
+
+            <section class="sell-depop-section p-5 space-y-4">
+              <div class="sell-orders-section__head">
+                <div class="min-w-0">
+                  <h2 class="font-bold text-lg text-white">Pending hub drop-offs</h2>
+                  <p class="text-sm text-zinc-400">Paid sales awaiting print label / drop-off today</p>
+                </div>
+                <div class="sell-orders-section__actions">
+                  <button type="button" id="logistics-manifest-btn" class="depop-btn-ghost text-sm">Generate hub manifest</button>
+                  <button type="button" id="logistics-refresh-btn" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+                </div>
+              </div>
+              <div id="logistics-dropoffs" class="seller-hub-stack sell-orders-stack" role="list"></div>
+              <p id="logistics-status" class="text-sm text-zinc-500" role="status"></p>
+            </section>
+          </div>
+        </div><!-- /logistics panel -->
+
+        <!-- STOCK: Inventory alerts -->
+        <div data-hub-panel="stock" id="hub-panel-stock" class="space-y-8 hidden">
+          <div class="sell-dash-group space-y-4">
+            <div class="sell-dash-group__head">
+              <p class="sell-dash-group__label">Shop &amp; Stock</p>
+              <p class="sell-dash-group__hint">Low-stock alerts, fast restock notes, seasonal tips</p>
+            </div>
+
+            <section class="sell-depop-section p-5 space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <h2 class="font-bold text-lg text-white">Inventory alerts</h2>
+                  <p class="text-sm text-zinc-400">Keep WhatsApp sales honest — mark units before they sell out.</p>
+                </div>
+                <button type="button" class="depop-btn-ghost text-sm" data-hub-jump="listing">+ List item</button>
+              </div>
+              <div id="stock-alerts" class="seller-hub-stack sell-orders-stack" role="list"></div>
+              <p id="stock-status" class="text-sm text-zinc-500" role="status"></p>
+            </section>
+
+            <section class="sell-depop-section p-5 space-y-3">
+              <h2 class="font-bold text-base text-white">Seasonal demand tips</h2>
+              <ul id="stock-seasonal-tips" class="space-y-2 text-sm text-zinc-400">
+                <li class="rounded-xl border border-zinc-800 px-3 py-2">December holidays — gift baskets, kiondos, and party fits move faster. Restock early.</li>
+                <li class="rounded-xl border border-zinc-800 px-3 py-2">Back-to-school (Jan / Sep) — bags, shoes, and uniforms see spikes countrywide.</li>
+                <li class="rounded-xl border border-zinc-800 px-3 py-2">Harvest seasons — fresh produce and farm packs sell best with clear unit counts.</li>
+              </ul>
+            </section>
+          </div>
+        </div><!-- /stock panel -->
+
+        <!-- MARKETING: WhatsApp Promo -->
+        <div data-hub-panel="marketing" id="hub-panel-marketing" class="space-y-8 hidden">
+          <div class="sell-dash-group space-y-4">
+            <div class="sell-dash-group__head">
+              <p class="sell-dash-group__label">WhatsApp Promo</p>
+              <p class="sell-dash-group__hint">Catalog links, promo codes, and re-engage past buyers</p>
+            </div>
+
+            <section class="sell-depop-section p-5 space-y-4">
+              <h2 class="font-bold text-lg text-white">Storefront promoter</h2>
+              <p class="text-sm text-zinc-400">Share a tracked shop link on Statuses or Groups. Buyers still pay with prepaid escrow.</p>
+              <label class="block text-sm font-medium text-zinc-300" for="marketing-promo-code">
+                Active promo code
+                <input id="marketing-promo-code" type="text" maxlength="24" class="sell-form-input mt-1 font-mono uppercase" placeholder="SOKONI10" autocomplete="off" />
+              </label>
+              <p class="text-xs text-zinc-500">Tip: tell buyers the code in chat — cart promo auto-apply ships later. For now this builds your share message.</p>
+            </section>
+
+            <section class="sell-depop-section p-5 space-y-3">
+              <h2 class="font-bold text-base text-white">Ready-to-share message</h2>
+              <pre id="marketing-share-preview" class="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-xs text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed"></pre>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <button type="button" id="marketing-copy-btn" class="depop-btn-ghost min-h-[44px] flex-1 text-sm font-semibold">Copy text &amp; link</button>
+                <a id="marketing-wa-btn" href="#" target="_blank" rel="noopener" class="depop-btn-accent inline-flex items-center justify-center min-h-[44px] flex-1 text-sm font-semibold">Post on WhatsApp</a>
+              </div>
+              <p id="marketing-status" class="text-sm text-zinc-500" role="status"></p>
+            </section>
+
+            <section class="sell-depop-section p-5 space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <h2 class="font-bold text-base text-white">Repeat buyers</h2>
+                  <p class="text-sm text-zinc-400">From your paid orders — thank them or send a restock note.</p>
+                </div>
+              </div>
+              <div id="marketing-buyers" class="seller-hub-stack sell-orders-stack" role="list"></div>
+            </section>
+          </div>
+        </div><!-- /marketing panel -->
+
         <!-- LISTINGS -->
         <div data-hub-panel="listings" id="hub-panel-listings" class="space-y-8 hidden">
         <div class="sell-dash-group space-y-4">
@@ -518,7 +656,7 @@
           <section class="sell-depop-section p-6 space-y-4">
             <div class="flex items-center justify-between gap-4">
               <div>
-                <p class="depop-label">Disputes</p>
+                <p class="depop-label">Disputes &amp; Reviews</p>
                 <h2 class="font-bold text-lg text-white mt-0.5">Open tickets</h2>
                 <p class="text-sm text-zinc-400 mt-0.5">Respond when a buyer opens a ticket. Escrow stays held until admin decides.</p>
               </div>
@@ -526,6 +664,16 @@
             </div>
             <div id="seller-disputes" class="space-y-3"></div>
             <p id="seller-disputes-status" class="text-sm text-zinc-400"></p>
+          </section>
+          <section class="sell-depop-section p-6 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h2 class="font-bold text-base text-white">Rate buyers</h2>
+                <p class="text-sm text-zinc-400">After delivery, leave stars — builds trust on your shop.</p>
+              </div>
+              <button type="button" class="text-sm font-semibold text-[#FF2300] hover:underline" data-hub-jump="grow" data-hub-anchor="grow-rate-buyers">Open full list</button>
+            </div>
+            <p class="text-xs text-zinc-500">Dispute desk + buyer ratings keep escrow fair for both sides.</p>
           </section>
         </div><!-- /disputes panel -->
 
@@ -832,10 +980,26 @@
         <section class="sell-depop-section p-6 space-y-5">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <h2 class="font-bold text-lg text-white">Manual withdraw</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">Transfer available earnings to your M-Pesa payout number.</p>
+              <p class="depop-label">M-Pesa Ledger</p>
+              <h2 class="font-bold text-lg text-white mt-0.5">Escrow &amp; withdraw</h2>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">See locked vs ready funds, then request M-Pesa payout.</p>
             </div>
             <button id="load-withdraw-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="payout-pipeline">
+            <div class="rounded-2xl border border-zinc-800 bg-black p-4">
+              <p class="text-[11px] uppercase tracking-wide text-zinc-500">Locked in transit</p>
+              <p id="payout-pipeline-transit" class="text-xl font-bold font-mono text-white mt-1">—</p>
+            </div>
+            <div class="rounded-2xl border border-zinc-800 bg-black p-4">
+              <p class="text-[11px] uppercase tracking-wide text-zinc-500">Pending escrow</p>
+              <p id="payout-pipeline-pending" class="text-xl font-bold font-mono text-amber-300 mt-1">—</p>
+            </div>
+            <div class="rounded-2xl border border-emerald-800/50 bg-emerald-950/30 p-4">
+              <p class="text-[11px] uppercase tracking-wide text-emerald-400/80">Ready for M-Pesa</p>
+              <p id="payout-pipeline-available" class="text-xl font-bold font-mono text-emerald-400 mt-1">—</p>
+            </div>
           </div>
 
           <div class="rounded-2xl bg-black border border-zinc-800 p-5">
@@ -844,6 +1008,12 @@
             <p class="text-sm text-brand-purple/60 dark:text-white/60 mt-2">
               Payout M-Pesa: <strong id="withdraw-mpesa">—</strong>
             </p>
+          </div>
+
+          <div class="rounded-2xl border border-zinc-800 p-4 space-y-2">
+            <p class="text-sm font-semibold text-white">Auto-payout preference</p>
+            <p class="text-xs text-zinc-400">B2C auto-send is platform-managed. Prefer bundled evening payouts? Tell admin on WhatsApp — per-item instant release stays the default after buyer YES.</p>
+            <a href="https://wa.me/254117422428?text=Hi%20Sokoni%20%E2%80%94%20I%20want%20to%20set%20my%20seller%20payout%20preference%20(instant%20vs%20daily%20bundle)." target="_blank" rel="noopener" class="text-sm font-semibold text-[#FF2300] hover:underline">Message payout preference</a>
           </div>
 
           <p id="withdraw-pending" class="hidden text-sm rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-amber-900 dark:text-amber-200"></p>
@@ -862,6 +1032,10 @@
           <div>
             <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-2">Withdrawal history</p>
             <div id="withdraw-history" class="text-sm space-y-2"></div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="payout-export-csv-btn" class="depop-btn-ghost text-sm">Download CSV statement</button>
           </div>
 
           <p class="text-xs text-brand-purple/50 dark:text-white/50">
@@ -1088,7 +1262,7 @@
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
   <script src="../assets/js/seller-analytics.js?v=analytics-5"></script>
-  <script src="../assets/js/seller-listing.js?v=hub-offers-menu-1"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-command-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
