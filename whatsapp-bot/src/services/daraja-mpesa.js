@@ -192,8 +192,11 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   const amt = Math.round(Number(amount));
   if (!Number.isFinite(amt) || amt < 1) throw new Error("Invalid STK amount");
 
-  // Lipa Na M-Pesa Buy Goods: BusinessShortCode + PartyB are usually the same till + CustomerBuyGoodsOnline.
-  // Paybill merchants use CustomerPayBillOnline instead.
+  // Buy Goods STK:
+  //   BusinessShortCode = MPESA_SHORTCODE (Daraja Short Code / H.O., password)
+  //   PartyB            = MPESA_TILL_NUMBER (store till) — may differ from H.O.
+  // Org portal "Web" operator is for viewing balances — NOT used as STK auth.
+  // Successful STK credits Merchant Account under shortcode 3439153 (visible in portal).
   const businessShortCode = String(config.mpesa.shortcode || "").trim();
   const partyB = String(config.mpesa.partyB || businessShortCode).trim();
   const transactionType = config.mpesa.transactionType || "CustomerBuyGoodsOnline";
@@ -211,15 +214,20 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
     AccountReference: String(accountReference).slice(0, 12),
     TransactionDesc: String(description).slice(0, 13),
   };
-  console.log("[daraja] STK request", {
-    env: config.mpesa.env,
-    transactionType,
-    businessShortCode,
-    partyB,
-    amount: amt,
-    phone: partyPhone,
-    accountReference: body.AccountReference,
-  });
+  // Single-line so `grep daraja` on the VM shows the full payload.
+  console.log(
+    "[daraja] STK request",
+    JSON.stringify({
+      env: config.mpesa.env,
+      transactionType,
+      businessShortCode,
+      partyB,
+      amount: amt,
+      phone: partyPhone,
+      accountReference: body.AccountReference,
+      callbackUrl: body.CallBackURL,
+    })
+  );
 
   const res = await fetch(`${baseUrl()}/mpesa/stkpush/v1/processrequest`, {
     method: "POST",
@@ -232,9 +240,34 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ResponseCode !== "0") {
-    const msg = data.errorMessage || data.ResponseDescription || JSON.stringify(data).slice(0, 300);
+    const msg =
+      data.errorMessage ||
+      data.ResponseDescription ||
+      data.errorCode ||
+      JSON.stringify(data).slice(0, 300);
+    console.error(
+      "[daraja] STK failed",
+      JSON.stringify({
+        http: res.status,
+        responseCode: data.ResponseCode ?? null,
+        errorCode: data.errorCode ?? null,
+        message: msg,
+        businessShortCode,
+        partyB,
+        transactionType,
+      })
+    );
     throw new Error(`STK push failed: ${msg}`);
   }
+
+  console.log(
+    "[daraja] STK accepted",
+    JSON.stringify({
+      checkoutRequestId: data.CheckoutRequestID,
+      merchantRequestId: data.MerchantRequestID,
+      customerMessage: data.CustomerMessage,
+    })
+  );
 
   return {
     merchantRequestId: data.MerchantRequestID,
