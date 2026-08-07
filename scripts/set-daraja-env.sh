@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # Apply production Daraja / M-Pesa env on the bot VM (run from ~/sokoni after SSH / during deploy).
 #
-# Prod app: Prod-SOKONIMALL · Shortcode 3439153 (SOKONIMA)
+# Prod app: Prod-SOKONIMALL · Org shortcode 3439153 · Buy Goods till 4775847
 #
-# Usage (recommended — uses baked-in Prod-SOKONIMALL keys):
-#   unset MPESA_CONSUMER_KEY MPESA_CONSUMER_SECRET
+# Credentials are NEVER baked into this repo. Provide them once from the portal
+# Copy buttons, then deploy keeps whatever is already in whatsapp-bot/.env.
+#
+# First-time / after regenerate (paste from developer.safaricom.co.ke → Prod-SOKONIMALL):
+#   export MPESA_CONSUMER_KEY='…paste…'
+#   export MPESA_CONSUMER_SECRET='…paste…'
+#   export MPESA_PASSKEY='…paste…'   # Lipa Na M-Pesa Online passkey for shortcode 3439153
 #   bash scripts/set-daraja-env.sh
+#   bash scripts/test-daraja-oauth.sh
 #
-# Do NOT export placeholder dots like '…' — that overwrites real keys with 1-char junk.
+# Later deploys: just run this script (or deploy-bot.sh) — it keeps existing keys.
+#
+# Do NOT export placeholder dots like '…' alone — that overwrites real keys with junk.
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
@@ -21,35 +29,70 @@ fi
 # --- Production Daraja (org H.O. 3439153) + Buy Goods Till 4775847 ---
 # Hierarchy: org/Daraja 3439153 → merchant store 4421485 → till 4775847
 # STK uses SHORTCODE (password) + TILL (PartyB). Store 4421485 is not sent on STK.
-DEFAULT_KEY="Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB"
-DEFAULT_SECRET="P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHAVhfo"
-DEFAULT_PASSKEY="ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d"
+#
+# Known-bad Consumer Key (screenshot OCR) — Safaricom returns HTTP 400 empty body.
+# sha256 prefix of that key; refuse to write it again.
+BAD_KEY_SHA16="24df15d590a14320"
 
-# Accept an override only if it looks like a real key (not '…', '...', empty, or tiny).
-pick_cred() {
-  local raw="$1"
-  local fallback="$2"
-  local label="$3"
-  # Strip whitespace / surrounding quotes
-  raw="$(printf '%s' "$raw" | tr -d '[:space:]' | sed -e 's/^["'\'']//' -e 's/["'\'']$//')"
-  case "$raw" in
-    ""|"…"|"..."|"…"|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX")
-      echo "==> Ignoring invalid ${label} override (placeholder) — using production default" >&2
-      printf '%s' "$fallback"
-      return
-      ;;
-  esac
-  if [ "${#raw}" -lt 16 ]; then
-    echo "==> Ignoring invalid ${label} override (len=${#raw}, need ≥16) — using production default" >&2
-    printf '%s' "$fallback"
-    return
-  fi
-  printf '%s' "$raw"
+env_get() {
+  local key="$1"
+  grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
 }
 
-MPESA_CONSUMER_KEY="$(pick_cred "${MPESA_CONSUMER_KEY:-}" "$DEFAULT_KEY" "MPESA_CONSUMER_KEY")"
-MPESA_CONSUMER_SECRET="$(pick_cred "${MPESA_CONSUMER_SECRET:-}" "$DEFAULT_SECRET" "MPESA_CONSUMER_SECRET")"
-MPESA_PASSKEY="$(pick_cred "${MPESA_PASSKEY:-}" "$DEFAULT_PASSKEY" "MPESA_PASSKEY")"
+clean_cred() {
+  printf '%s' "$1" | tr -d '[:space:]' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+
+is_placeholder() {
+  local raw="$1"
+  case "$raw" in
+    ""|"…"|"..."|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX") return 0 ;;
+  esac
+  [ "${#raw}" -lt 16 ]
+}
+
+cred_sha16() {
+  printf '%s' "$1" | sha256sum | cut -c1-16
+}
+
+# Prefer explicit env export; else keep value already in .env.
+resolve_cred() {
+  local label="$1"
+  local from_env="$2"
+  local from_file="$3"
+  local picked=""
+
+  from_env="$(clean_cred "$from_env")"
+  from_file="$(clean_cred "$from_file")"
+
+  if ! is_placeholder "$from_env"; then
+    picked="$from_env"
+  elif ! is_placeholder "$from_file"; then
+    picked="$from_file"
+  else
+    echo "ERROR: ${label} missing." >&2
+    echo "  On developer.safaricom.co.ke → Apps → Prod-SOKONIMALL → Keys:" >&2
+    echo "  use the Copy button (do not retype from a screenshot), then:" >&2
+    echo "    export MPESA_CONSUMER_KEY='…'" >&2
+    echo "    export MPESA_CONSUMER_SECRET='…'" >&2
+    echo "    export MPESA_PASSKEY='…'" >&2
+    echo "    bash scripts/set-daraja-env.sh" >&2
+    echo "    bash scripts/test-daraja-oauth.sh" >&2
+    exit 1
+  fi
+
+  if [ "$label" = "MPESA_CONSUMER_KEY" ] && [ "$(cred_sha16 "$picked")" = "$BAD_KEY_SHA16" ]; then
+    echo "ERROR: ${label} is the old screenshot/OCR value Safaricom rejects (HTTP 400)." >&2
+    echo "  Regenerate or re-copy Consumer Key + Secret from Prod-SOKONIMALL, then export and re-run." >&2
+    exit 1
+  fi
+
+  printf '%s' "$picked"
+}
+
+MPESA_CONSUMER_KEY="$(resolve_cred MPESA_CONSUMER_KEY "${MPESA_CONSUMER_KEY:-}" "$(env_get MPESA_CONSUMER_KEY)")"
+MPESA_CONSUMER_SECRET="$(resolve_cred MPESA_CONSUMER_SECRET "${MPESA_CONSUMER_SECRET:-}" "$(env_get MPESA_CONSUMER_SECRET)")"
+MPESA_PASSKEY="$(resolve_cred MPESA_PASSKEY "${MPESA_PASSKEY:-}" "$(env_get MPESA_PASSKEY)")"
 
 SHORTCODE="${MPESA_SHORTCODE:-3439153}"
 TILL="${MPESA_TILL_NUMBER:-4775847}"
@@ -69,15 +112,11 @@ upsert() {
   local val="$2"
   local tmp
   tmp="$(mktemp)"
-  if grep -qE "^${key}=" "$ENV_FILE"; then
-    local esc
-    esc="$(printf '%s' "$val" | sed -e 's/[&\\]/\\&/g')"
-    sed -E "s|^${key}=.*|${key}=${esc}|" "$ENV_FILE" > "$tmp"
-    mv "$tmp" "$ENV_FILE"
-  else
-    printf '\n%s=%s\n' "$key" "$val" >> "$ENV_FILE"
-    rm -f "$tmp"
-  fi
+  # Remove every existing line for this key, then append once.
+  # Do NOT use awk -v / sed for values — they can mangle long secrets.
+  grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true
+  printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  mv "$tmp" "$ENV_FILE"
 }
 
 if grep -qE '^MPESA_TILL_NUMBER=3439153$' "$ENV_FILE" 2>/dev/null; then
@@ -115,11 +154,15 @@ fi
 
 echo "==> Updated Daraja production config in $ENV_FILE"
 echo "    Key len=${#MPESA_CONSUMER_KEY}  Secret len=${#MPESA_CONSUMER_SECRET}  Passkey len=${#MPESA_PASSKEY}"
+echo "    Key fingerprint (sha256…16): $(cred_sha16 "$MPESA_CONSUMER_KEY")"
 echo "    Org/Daraja SHORTCODE (BusinessShortCode): $SHORTCODE"
 echo "    Buy Goods TILL (PartyB): $TILL ($TILL_NAME) · STK: $TX_TYPE · Env: $ENV_NAME"
 echo "    Merchant store 4421485 is not used in STK payload"
 echo "    STK callback: $CALLBACK"
 echo "    B2C shortcode: $B2C_SHORT · result: $B2C_RESULT"
+echo "    Org API roles (Business Manager, B2C initiator, Buy Goods Org API, etc.) are"
+echo "    toggled in the Safaricom org portal — not in this .env. Buyer STK only needs"
+echo "    Consumer Key + Secret + Passkey + shortcode/till mapping above."
 if grep -qE '^MPESA_INITIATOR_NAME=.' "$ENV_FILE" 2>/dev/null && \
    { grep -qE '^MPESA_SECURITY_CREDENTIAL=.' "$ENV_FILE" 2>/dev/null || \
      grep -qE '^MPESA_INITIATOR_PASSWORD=.' "$ENV_FILE" 2>/dev/null; }; then

@@ -39,21 +39,29 @@ Buyer checkout → STK push → funds held in escrow
 Set in `whatsapp-bot/.env`:
 
 ```env
-MPESA_CONSUMER_KEY=           # VM only — never commit
+MPESA_CONSUMER_KEY=           # VM only — never commit; Copy from Prod-SOKONIMALL
 MPESA_CONSUMER_SECRET=
-MPESA_PASSKEY=
-MPESA_SHORTCODE=3439153       # BusinessShortCode (SOKONIMA)
-MPESA_TILL_NUMBER=3439153     # PartyB / account display (same for this Paybill)
-MPESA_TILL_NAME=SOKONIMA
-# MPESA_PARTY_B=              # optional override for PartyB
+MPESA_PASSKEY=                # Lipa Na M-Pesa Online passkey for shortcode 3439153
+MPESA_SHORTCODE=3439153       # BusinessShortCode (org H.O.)
+MPESA_TILL_NUMBER=4775847     # PartyB — Buy Goods till (David Thuku Muiruri)
+MPESA_TILL_NAME=David Thuku Muiruri
+# MPESA_PARTY_B=4775847       # optional override for PartyB
 MPESA_ENV=production
-MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline   # Till → CustomerBuyGoodsOnline
+MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline
 MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
 
-**Ops on the bot VM:** `SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh` applies `scripts/set-daraja-env.sh` (Prod-SOKONIMALL keys + Till 3439153). Or run `bash scripts/set-daraja-env.sh` alone. Retires leftover `4775847` values.
+**Ops on the bot VM:** keys are **not** in git. After copying from the portal:
 
-**Seller B2C:** org roles include B2C API Initiator — set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
+```bash
+export MPESA_CONSUMER_KEY='…' MPESA_CONSUMER_SECRET='…' MPESA_PASSKEY='…'
+bash scripts/set-daraja-env.sh
+bash scripts/test-daraja-oauth.sh
+```
+
+Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcode/till mapping and **keeps** existing keys in `.env`. HTTP 400 on OAuth means Safaricom rejected Key/Secret — regenerate/re-copy; org API roles do not fix OAuth.
+
+**Seller B2C:** with org roles (Business Manager, ORG B2C API initiator, etc.) enabled in the Safaricom org portal, set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
 
 **Till vs shortcode (Buy Goods — Sokoni live):**
 - `MPESA_SHORTCODE=3439153` — Daraja / org H.O. → STK `BusinessShortCode` + password

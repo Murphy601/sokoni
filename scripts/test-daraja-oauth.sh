@@ -30,16 +30,27 @@ else
   HOST="https://sandbox.safaricom.co.ke"
 fi
 
+KEY_FP="$(printf '%s' "$KEY" | sha256sum | cut -c1-16)"
+
 echo "Env file: $ENV_FILE"
 echo "Host: $HOST"
 echo "Key length: ${#KEY}  Secret length: ${#SECRET}  Passkey length: ${#PASSKEY}  Shortcode: ${SHORTCODE:-unset}"
+echo "Key fingerprint (sha256…16): $KEY_FP"
 
 if [ "${#KEY}" -lt 16 ] || [ "${#SECRET}" -lt 16 ]; then
   echo "ERROR: Consumer Key/Secret in .env look wrong (too short)." >&2
-  echo "  You probably exported placeholder '…' earlier. Fix with:" >&2
-  echo "    unset MPESA_CONSUMER_KEY MPESA_CONSUMER_SECRET MPESA_PASSKEY" >&2
+  echo "  Fix with portal Copy buttons:" >&2
+  echo "    export MPESA_CONSUMER_KEY='…'" >&2
+  echo "    export MPESA_CONSUMER_SECRET='…'" >&2
+  echo "    export MPESA_PASSKEY='…'" >&2
   echo "    bash scripts/set-daraja-env.sh" >&2
   echo "    bash scripts/test-daraja-oauth.sh" >&2
+  exit 1
+fi
+
+if [ "$KEY_FP" = "24df15d590a14320" ]; then
+  echo "ERROR: .env still has the screenshot/OCR Consumer Key Safaricom rejects." >&2
+  echo "  On developer.safaricom.co.ke → Prod-SOKONIMALL → regenerate or Copy Key + Secret, then export + set-daraja-env." >&2
   exit 1
 fi
 
@@ -51,8 +62,12 @@ BODY="$(printf '%s' "$RESP" | sed '$d')"
 CODE="$(printf '%s' "$RESP" | tail -1 | sed 's/HTTP://')"
 
 echo "HTTP $CODE"
-echo "$BODY" | head -c 400
-echo
+if [ -n "$BODY" ]; then
+  echo "$BODY" | head -c 400
+  echo
+else
+  echo "(empty body)"
+fi
 
 if printf '%s' "$BODY" | grep -q 'access_token'; then
   echo "OK — OAuth works. STK should authenticate."
@@ -60,5 +75,11 @@ if printf '%s' "$BODY" | grep -q 'access_token'; then
 fi
 
 echo "FAIL — no access_token from Safaricom." >&2
-echo "  Confirm keys on developer.safaricom.co.ke (Prod-SOKONIMALL) and MPESA_ENV=production." >&2
+if [ "$CODE" = "400" ]; then
+  echo "  HTTP 400 = Consumer Key/Secret rejected (wrong, revoked, or wrong app)." >&2
+  echo "  Org portal roles (Business Manager, B2C initiator, etc.) do NOT fix OAuth." >&2
+  echo "  Fix: developer.safaricom.co.ke → Prod-SOKONIMALL → Copy/regenerate Keys → export → set-daraja-env." >&2
+else
+  echo "  Confirm MPESA_ENV=production and network can reach $HOST." >&2
+fi
 exit 1
