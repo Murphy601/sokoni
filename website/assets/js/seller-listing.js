@@ -3289,7 +3289,7 @@ function orderPhaseLabel(o) {
   if (o?.shipmentStatusLabel) return o.shipmentStatusLabel;
   const phase = orderPhase(o);
   if (phase === "received") return "Received";
-  if (phase === "shipped") return "Shipped · awaiting buyer";
+  if (phase === "shipped") return "Shipped";
   if (phase === "awaiting_ship") return "Awaiting ship";
   return "Order";
 }
@@ -3614,12 +3614,12 @@ function renderSellerOrderCard(o, { allowPrintLabel = true } = {}) {
         ? "Buyer confirmed — marked received"
         : "Print label, drop off, then DISPATCH on WhatsApp";
   return `
-    <div class="sell-order-card sell-hub-rail-card" role="listitem" data-order-phase="${escapeHtml(phase)}">
+    <div class="sell-order-card sell-order-card--static" role="listitem" data-order-phase="${escapeHtml(phase)}">
       <div class="sell-order-card-head">
-        <p class="font-semibold text-sm truncate">${escapeHtml(o.productName || "Order")}</p>
+        <p class="font-semibold text-sm sell-order-card__title">${escapeHtml(o.productName || "Order")}</p>
         <span class="sell-order-badge ${shipmentBadgeClass(o)}">${escapeHtml(orderPhaseLabel(o))}</span>
       </div>
-      <p class="text-xs text-zinc-500 mt-1"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
+      <p class="text-xs text-zinc-500 mt-1 sell-order-card__meta"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
       <p class="text-xs text-zinc-500 mt-1">${escapeHtml(hint)}</p>
       ${actions.length ? `<div class="sell-order-actions">${actions.join("")}</div>` : ""}
     </div>`;

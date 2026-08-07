@@ -223,7 +223,7 @@ export function sellerOrderFulfillment(order) {
     phase === "received"
       ? "Received"
       : phase === "shipped"
-        ? "Shipped · awaiting buyer"
+        ? "Shipped"
         : phase === "awaiting_ship"
           ? needsDropOff
             ? "Awaiting ship"
@@ -237,7 +237,7 @@ export function sellerOrderFulfillment(order) {
       phase === "received"
         ? "Received"
         : phase === "shipped"
-          ? "Shipped · awaiting buyer"
+          ? "Shipped"
           : shipmentStatusLabel(shipmentStatus),
     status: order?.status || null,
     needsDropOff,
