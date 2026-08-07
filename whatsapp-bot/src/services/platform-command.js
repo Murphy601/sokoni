@@ -145,6 +145,15 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
 
   const settlements = getSettlementSummary();
   const safeLimit = Math.min(Math.max(Number(limit) || 80, 1), 200);
+  const holdDays = Number(config.mpesa?.escrowHoldBusinessDays);
+  const readyRows = (settlements.entries || []).slice(0, 40).map((e) => ({
+    orderId: e.orderId,
+    supplierName: e.supplierName || e.supplierId,
+    productName: e.productName,
+    payoutAmountKes: e.payoutAmountKes,
+    status: e.status,
+    mpesaPhone: e.mpesaPhone || e.supplierPhone || null,
+  }));
 
   return {
     ok: true,
@@ -153,6 +162,15 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
       name: config.store?.mpesaTillName || null,
       note:
         "Logical escrow holding tank from paid orders (buyer totals). Till cash position is on Safaricom — reconcile manually until AccountBalance API is wired. Prefer Release only when status is Delivered.",
+    },
+    payoutPolicy: {
+      escrowHoldBusinessDays: Number.isFinite(holdDays) ? holdDays : 0,
+      readyOnDelivery: !holdDays,
+      withdrawInstantB2c: Boolean(config.mpesa?.withdrawInstantB2c),
+      note:
+        (holdDays || 0) === 0
+          ? "Delivery / buyer confirm credits Seller Hub Ready for M-Pesa immediately. Withdraw sends B2C when initiator credentials are set."
+          : `Seller Ready after ${holdDays} business day hold (or admin Release).`,
     },
     totals: {
       heldOrders: rows.length,
@@ -166,7 +184,16 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
       settlementOwedKes: settlements.totalOwedKes || 0,
       settlementScheduledKes: settlements.totalScheduledKes || 0,
       settlementDisbursingCount: settlements.disbursingCount || 0,
+      settlementFailedCount: settlements.failedCount || 0,
+      settlementOwedCount: settlements.count || 0,
     },
+    readyPayouts: readyRows,
+    failedPayouts: (settlements.failed || []).slice(0, 20).map((e) => ({
+      orderId: e.orderId,
+      supplierName: e.supplierName || e.supplierId,
+      payoutAmountKes: e.payoutAmountKes,
+      resultDesc: e.b2c?.resultDesc || e.b2c?.lastMessage || null,
+    })),
     orders: rows.slice(0, safeLimit),
     generatedAt: Date.now(),
   };

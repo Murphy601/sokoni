@@ -1083,30 +1083,41 @@ export async function releaseEscrowPayout(orderId) {
   const netAmount = sellerOrderNet(order);
 
   const { updateOrderMeta } = await import("./orders.js");
-  const { scheduleSellerPayoutAfterDelivery, addBusinessDays } = await import("./settlements.js");
+  const { creditSellerWalletAfterDelivery, escrowHoldBusinessDays } = await import(
+    "./settlements.js"
+  );
   const { isB2CReady, b2cMeta } = await import("./daraja-mpesa.js");
 
-  const eligibleAt = order.payoutEligibleAt || addBusinessDays(Date.now(), 3);
-  scheduleSellerPayoutAfterDelivery({
-    ...order,
-    sourcePriceKes: netAmount,
-    sellerNetKes: netAmount,
-    payoutEligibleAt: eligibleAt,
-  });
+  const holdDays = escrowHoldBusinessDays();
+  const ready = creditSellerWalletAfterDelivery(
+    {
+      ...order,
+      sourcePriceKes: netAmount,
+      sellerNetKes: netAmount,
+    },
+    { payoutAmountKes: netAmount }
+  );
+  const immediate = holdDays === 0 || ready?.status === "owed";
   updateOrderMeta(orderId, {
-    payoutStatus: "scheduled",
+    payoutStatus: immediate ? "owed" : "scheduled",
     isPaidOut: false,
-    payoutEligibleAt: eligibleAt,
+    payoutEligibleAt: ready?.payoutEligibleAt || Date.now(),
+    escrowStatus: "released",
   });
 
   return {
     success: true,
-    scheduled: true,
+    scheduled: !immediate,
+    ready: immediate,
     netAmount,
     mpesaPhone: mpesaPhone || null,
     b2c: b2cMeta(),
-    message: isB2CReady()
-      ? "Payout scheduled for escrow hold — B2C will send after hold (or use #payb2c)."
-      : "Payout scheduled — configure B2C env vars or pay manually with #paid.",
+    message: immediate
+      ? isB2CReady()
+        ? "Seller wallet credited (Ready for M-Pesa). Withdraw sends B2C instantly."
+        : "Seller wallet credited (Ready for M-Pesa). Configure B2C for instant withdraw, or #paid after manual send."
+      : isB2CReady()
+        ? `Payout scheduled (${holdDays} business day hold) — then Ready / #payb2c.`
+        : `Payout scheduled (${holdDays} business day hold).`,
   };
 }

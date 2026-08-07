@@ -51,14 +51,22 @@ function persist() {
 
 /** Add N business days (Mon–Fri) in Africa/Nairobi calendar. */
 export function addBusinessDays(fromMs, days) {
+  const n = Math.max(0, Math.floor(Number(days) || 0));
+  if (n === 0) return fromMs;
   let d = new Date(fromMs);
   let added = 0;
-  while (added < days) {
+  while (added < n) {
     d.setDate(d.getDate() + 1);
     const dow = d.getDay();
     if (dow !== 0 && dow !== 6) added += 1;
   }
   return d.getTime();
+}
+
+/** Configured escrow hold (0 = instant Ready for M-Pesa on delivery). */
+export function escrowHoldBusinessDays() {
+  const n = Number(config.mpesa?.escrowHoldBusinessDays);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
 }
 
 function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
@@ -90,7 +98,7 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
 }
 
 /**
- * Schedule seller payout 3 business days after delivery (Depop-style escrow release).
+ * Schedule seller payout after delivery (hold days from ESCROW_HOLD_BUSINESS_DAYS).
  * Pass refreshEligibleAt when an admin/dispute override needs to pull forward eligibility.
  */
 export function scheduleSellerPayoutAfterDelivery(order, { refreshEligibleAt = false } = {}) {
@@ -117,12 +125,46 @@ export function scheduleSellerPayoutAfterDelivery(order, { refreshEligibleAt = f
     return existing;
   }
 
-  const eligibleAt = order.payoutEligibleAt || addBusinessDays(Date.now(), 3);
+  const holdDays = escrowHoldBusinessDays();
+  const eligibleAt =
+    order.payoutEligibleAt != null
+      ? Number(order.payoutEligibleAt)
+      : addBusinessDays(Date.now(), holdDays);
   const entry = buildPayoutEntry(order, { status: "scheduled", payoutEligibleAt: eligibleAt });
   store.entries.unshift(entry);
   if (store.entries.length > 500) store.entries.length = 500;
   persist();
   return entry;
+}
+
+/**
+ * After delivery / buyer confirm: credit Seller Hub Ready for M-Pesa.
+ * Hold days 0 → owed immediately; otherwise scheduled until processDuePayouts.
+ */
+export function creditSellerWalletAfterDelivery(order, { payoutAmountKes = null } = {}) {
+  if (!order?.id || !order?.supplierId) return null;
+  const holdDays = escrowHoldBusinessDays();
+  const amount =
+    Math.round(Number(payoutAmountKes)) ||
+    resolveSellerPayoutKes(order) ||
+    Math.round(Number(order.sellerNetKes ?? order.sourcePriceKes) || 0);
+  if (!amount) return null;
+
+  const eligibleAt = holdDays === 0 ? Date.now() : addBusinessDays(Date.now(), holdDays);
+  const patched = {
+    ...order,
+    sellerNetKes: order.sellerNetKes ?? amount,
+    sellerPayoutKes: order.sellerPayoutKes ?? amount,
+    sourcePriceKes: order.sourcePriceKes ?? amount,
+    payoutEligibleAt: eligibleAt,
+  };
+
+  scheduleSellerPayoutAfterDelivery(patched, { refreshEligibleAt: true });
+  if (holdDays === 0) {
+    processDuePayouts();
+    return markSettlementReadyForMpesa(patched, { payoutAmountKes: amount });
+  }
+  return findSettlementByOrderId(order.id);
 }
 
 /** Promote scheduled payouts whose hold period has elapsed. */
