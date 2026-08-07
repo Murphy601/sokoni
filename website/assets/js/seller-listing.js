@@ -6193,8 +6193,8 @@ function renderHubStockAlerts() {
     wrap.innerHTML = cards.join("");
     wrap.querySelectorAll("[data-stock-step]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const pid = btn.getAttribute("data-stock-step");
-        const input = wrap.querySelector(`[data-stock-qty="${CSS.escape(pid)}"]`);
+        const card = btn.closest("[data-stock-id]");
+        const input = card?.querySelector("[data-stock-qty]");
         if (!input) return;
         const delta = Number(btn.getAttribute("data-delta") || 0);
         const next = Math.max(0, Math.min(9999, (Number(input.value) || 0) + delta));
@@ -6203,9 +6203,10 @@ function renderHubStockAlerts() {
     });
     wrap.querySelectorAll("[data-stock-save]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const pid = btn.getAttribute("data-stock-save");
-        const input = wrap.querySelector(`[data-stock-qty="${CSS.escape(pid)}"]`);
-        void saveListingStock(pid, input?.value, btn);
+        const card = btn.closest("[data-stock-id]");
+        const pid = card?.getAttribute("data-stock-id") || btn.getAttribute("data-stock-save");
+        const input = card?.querySelector("[data-stock-qty]");
+        void saveListingStock(pid, input?.value, btn, card);
       });
     });
     wrap.querySelectorAll("[data-hub-jump]").forEach((btn) => {
@@ -6220,49 +6221,123 @@ function renderHubStockAlerts() {
   }
 }
 
-async function saveListingStock(productId, rawQty, btn) {
+async function saveListingStock(productId, rawQty, btn, card = null) {
   const phone = apiPhone();
   const qty = Math.max(0, Math.min(9999, Math.round(Number(rawQty) || 0)));
-  const hint = document.querySelector(`[data-stock-hint="${CSS.escape(productId)}"]`);
-  if (!phone || !productId) return;
+  const hint =
+    card?.querySelector("[data-stock-hint]") ||
+    document.querySelector(`[data-stock-hint="${String(productId || "").replace(/"/g, "")}"]`);
+  if (!phone || !productId) {
+    if (hint) hint.textContent = "Sign in again, then Save units.";
+    return;
+  }
   if (btn) {
     btn.disabled = true;
     btn.textContent = "Saving…";
   }
   setStockNote(productId, qty);
+
+  const applyLocalQty = (nextQty, inStock = nextQty > 0) => {
+    const listing = (hubCache.listings || []).find((l) => (l.id || l.productId) === productId);
+    if (listing) {
+      listing.stockQuantity = nextQty;
+      listing.inStock = inStock;
+      listing.isSold = !inStock && nextQty <= 0 ? listing.isSold : false;
+    }
+  };
+
+  const payload = jsonAuthBody({
+    phone,
+    productId,
+    stockQuantity: qty,
+  });
+
   try {
-    const res = await fetch(`${ONBOARD_API}/stock`, {
+    let res = await fetch(`${ONBOARD_API}/stock`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(
-        jsonAuthBody({
-          phone,
-          productId,
-          stockQuantity: qty,
-        })
-      ),
+      body: JSON.stringify(payload),
     });
+
+    // Older bot builds lack /stock — piggyback units on /price (same auth) once that build supports it.
+    if (res.status === 404) {
+      const listing = (hubCache.listings || []).find((l) => (l.id || l.productId) === productId);
+      const net = Math.round(
+        Number(listing?.draft?.sellerNetKes ?? listing?.draft?.sourcePriceKes ?? listing?.draft?.priceKes) || 0
+      );
+      if (net >= 50) {
+        res = await fetch(`${ONBOARD_API}/price`, {
+          method: "POST",
+          headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(
+            jsonAuthBody({
+              phone,
+              productId,
+              sellerNetKes: net,
+              stockQuantity: qty,
+            })
+          ),
+        });
+        // Live bot before this fix ignores stockQuantity — detect missing stock echo.
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.stockQuantity == null && data.stockMessage == null) {
+            applyLocalQty(qty);
+            if (hint) {
+              hint.textContent =
+                "Saved on this phone only — WhatsApp bot needs a redeploy for catalog stock.";
+            }
+            if (el("stock-status")) {
+              el("stock-status").textContent =
+                "Bot is on an old build. Redeploy bot.sokonimall.com so Save updates the live menu.";
+            }
+            renderHubStockAlerts();
+            return;
+          }
+          applyLocalQty(data.stockQuantity ?? qty, data.inStock !== false);
+          if (hint) hint.textContent = data.stockMessage || data.message || `Saved — ${qty} on hand.`;
+          if (el("stock-status")) el("stock-status").textContent = data.stockMessage || data.message || "";
+          renderHubStockAlerts();
+          return;
+        }
+      } else {
+        applyLocalQty(qty);
+        if (hint) {
+          hint.textContent =
+            "Saved on this phone only — WhatsApp bot needs a redeploy for catalog stock.";
+        }
+        if (el("stock-status")) {
+          el("stock-status").textContent =
+            "Stock API missing on bot (404). Redeploy the bot, then Save again.";
+        }
+        renderHubStockAlerts();
+        return;
+      }
+    }
+
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
       handleSessionExpired(data);
       return;
     }
     if (!res.ok) {
-      if (hint) hint.textContent = data.message || data.error || "Could not save stock.";
-      if (el("stock-status")) el("stock-status").textContent = data.message || "Stock update failed.";
+      const msg =
+        data.message ||
+        data.error ||
+        (res.status === 404
+          ? "Stock API missing — redeploy the WhatsApp bot."
+          : `Could not save stock (${res.status}).`);
+      if (hint) hint.textContent = msg;
+      if (el("stock-status")) el("stock-status").textContent = msg;
       return;
     }
-    const listing = (hubCache.listings || []).find((l) => (l.id || l.productId) === productId);
-    if (listing) {
-      listing.stockQuantity = data.stockQuantity ?? qty;
-      listing.inStock = data.inStock !== false;
-      listing.isSold = Boolean(data.isSold);
-    }
+    applyLocalQty(data.stockQuantity ?? qty, data.inStock !== false);
     if (hint) hint.textContent = data.message || `Saved — ${qty} unit${qty === 1 ? "" : "s"} on hand.`;
     if (el("stock-status")) el("stock-status").textContent = data.message || "";
     renderHubStockAlerts();
   } catch {
-    if (hint) hint.textContent = "Network error — try Save again.";
+    applyLocalQty(qty);
+    if (hint) hint.textContent = "Network error — units kept on this phone. Try Save again.";
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -6308,7 +6383,10 @@ function renderHubMarketing() {
   (hubCache.orders || [])
     .filter((o) => o.paid)
     .forEach((o) => {
-      const key = waDigits(o.buyerPhone) || String(o.customerName || "").trim() || String(o.orderId || "");
+      const key =
+        waDigits(o.buyerPhone) ||
+        String(o.customerName || "").trim() ||
+        String(o.productId || o.orderId || "");
       if (!key || seen.has(key)) return;
       seen.set(key, o);
     });
@@ -6320,7 +6398,7 @@ function renderHubMarketing() {
   const handle = sellerShopHandle();
   const code = getSellerPromoCode();
   buyersWrap.innerHTML = buyers
-    .map((o) => {
+    .map((o, idx) => {
       const name = o.customerName || o.buyerName || "Buyer";
       const productId = o.productId || "";
       const productName = o.productName || "your item";
@@ -6335,20 +6413,22 @@ function renderHubMarketing() {
         (handle ? `Shop: @${handle}\n` : "") +
         `\nPromo: *${code}* — mention it in chat`;
       const phone = waDigits(o.buyerPhone);
-      const thankHref = phone ? waChatUrl(phone, thank) : "#";
-      const restockHref = phone ? waChatUrl(phone, restock) : "#";
-      const disabled = phone
-        ? ""
-        : ` aria-disabled="true" onclick="return false;" title="Buyer phone missing on this order"`;
+      // Always clickable: deep-link to buyer when known, otherwise open WhatsApp with the draft ready.
+      const thankHref = waChatUrl(phone, thank);
+      const restockHref = waChatUrl(phone, restock);
+      const phoneHint = phone
+        ? `+${phone}`
+        : "Opens WhatsApp with draft — pick the buyer chat";
       return `
-        <div class="sell-order-card sell-order-card--static">
+        <div class="sell-order-card sell-order-card--static" data-repeat-buyer="${idx}">
           <p class="font-semibold text-sm text-white">${escapeHtml(name)}</p>
           <p class="text-xs text-zinc-500 mt-1">${escapeHtml(productName)}${
             productId ? ` · <span class="font-mono">${escapeHtml(productId)}</span>` : ""
           }</p>
+          <p class="text-[11px] text-zinc-500 mt-1">${escapeHtml(phoneHint)}</p>
           <div class="sell-order-actions">
-            <a class="sell-order-action sell-order-action--primary" target="_blank" rel="noopener" href="${thankHref}"${disabled}>Thank you</a>
-            <a class="sell-order-action" target="_blank" rel="noopener" href="${restockHref}"${disabled}>Restock notice</a>
+            <a class="sell-order-action sell-order-action--primary" target="_blank" rel="noopener" href="${thankHref}">Thank you</a>
+            <a class="sell-order-action sell-order-action--primary" target="_blank" rel="noopener" href="${restockHref}">Restock notice</a>
           </div>
         </div>`;
     })

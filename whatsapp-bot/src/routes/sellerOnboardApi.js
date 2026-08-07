@@ -145,12 +145,41 @@ router.post("/refresh", async (req, res) => {
 
 /** POST /api/seller/onboard/price — update live listing seller-net (notifies likers on drop) */
 router.post("/price", async (req, res) => {
-  const { phone, productId, sellerNetKes, priceKes } = req.body || {};
+  const { phone, productId, sellerNetKes, priceKes, stockQuantity, quantity } = req.body || {};
+  const sessionToken = sellerSessionFromReq(req);
+  const stockQty = stockQuantity ?? quantity;
+
+  // Apply units first when present — clears wrongful sold locks so price update can proceed.
+  let stockResult = null;
+  if (stockQty != null && stockQty !== "") {
+    stockResult = await updateSellerListingStock({
+      phone,
+      productId,
+      stockQuantity: stockQty,
+      sessionToken,
+    });
+    if (stockResult.error === "session_required" || stockResult.error === "session_invalid" || stockResult.error === "session_expired") {
+      return res.status(401).json(stockResult);
+    }
+    if (stockResult.error && sellerNetKes == null && priceKes == null) {
+      if (stockResult.error === "not_found") return res.status(404).json(stockResult);
+      if (stockResult.error === "invalid_stock" || stockResult.error === "missing_product_id") {
+        return res.status(400).json(stockResult);
+      }
+      return res.status(403).json(stockResult);
+    }
+  }
+
+  if (sellerNetKes == null && priceKes == null) {
+    if (stockResult?.success) return res.json(stockResult);
+    return res.status(400).json({ error: "invalid_price", message: "Enter a price or stock quantity." });
+  }
+
   const result = await updateSellerListingPrice({
     phone,
     productId,
     sellerNetKes: sellerNetKes ?? priceKes,
-    sessionToken: sellerSessionFromReq(req),
+    sessionToken,
   });
   if (result.error === "not_found") return res.status(404).json(result);
   if (result.error === "invalid_price") return res.status(400).json(result);
@@ -158,6 +187,23 @@ router.post("/price", async (req, res) => {
     return res.status(401).json(result);
   }
   if (result.error) return res.status(403).json(result);
+
+  if (stockResult?.success) {
+    return res.json({
+      ...result,
+      stockQuantity: stockResult.stockQuantity,
+      inStock: stockResult.inStock,
+      stockMessage: stockResult.message,
+    });
+  }
+  if (stockResult?.error) {
+    return res.json({
+      ...result,
+      stockError: stockResult.error,
+      message: `${result.message} Stock note: ${stockResult.message || stockResult.error}`,
+    });
+  }
+
   res.json(result);
 });
 

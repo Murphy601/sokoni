@@ -171,6 +171,16 @@ async function writeRegistry(registry) {
   return payload;
 }
 
+export async function clearSoldSku(productId) {
+  const id = String(productId || "").trim();
+  if (!id) return { ok: false, error: "missing_product_id" };
+  const reg = await loadSoldRegistry({ force: true });
+  if (!reg.skus?.[id]) return { ok: true, cleared: false, productId: id };
+  delete reg.skus[id];
+  await writeRegistry(reg);
+  return { ok: true, cleared: true, productId: id };
+}
+
 export async function isSkuSold(productId) {
   const id = String(productId || "").trim();
   if (!id) return false;
