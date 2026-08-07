@@ -47,11 +47,12 @@ function nextWithdrawId(store) {
   return `WD-${year}-${String(store.seq).padStart(4, "0")}`;
 }
 
-/** Owed settlement lines eligible for manual withdraw. */
+/** Settlement lines eligible for manual withdraw (Ready for M-Pesa). */
 export function getWithdrawableEntries(supplierId) {
   const settlements = loadSettlements();
   return (settlements.entries || []).filter(
-    (e) => e.supplierId === supplierId && e.status === "owed"
+    (e) =>
+      e.supplierId === supplierId && (e.status === "owed" || e.status === "b2c_failed")
   );
 }
 

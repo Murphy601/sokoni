@@ -314,16 +314,28 @@ export function getSellerEscrowLedger(supplierId) {
 
   const sellerEntries = settlements.entries.filter((e) => e.supplierId === supplierId);
 
+  // Ready for M-Pesa = owed (withdrawable) + failed B2C (retry). Never pending escrow.
   const available = sellerEntries
-    .filter((e) => e.status === "owed" || e.status === "paid")
+    .filter((e) => e.status === "owed" || e.status === "b2c_failed" || e.status === "paid")
     .map((e) => ({
       orderId: e.orderId,
       amountKes: e.payoutAmountKes,
-      status: e.status === "paid" ? "paid" : "available",
+      status: e.status === "paid" ? "paid" : e.status === "b2c_failed" ? "b2c_failed" : "available",
       productName: e.productName,
     }));
 
-  const heldPending = orders
+  // Sending to M-Pesa — show under Ready list as in-flight, but not withdrawable again.
+  const sending = sellerEntries
+    .filter((e) => e.status === "disbursing")
+    .map((e) => ({
+      orderId: e.orderId,
+      amountKes: e.payoutAmountKes,
+      status: "disbursing",
+      productName: e.productName,
+    }));
+
+  // Pending escrow = buyer paid, still held. Released money must NEVER land here.
+  const pendingEscrow = orders
     .filter(
       (o) =>
         o.customerPaymentStatus === "confirmed" &&
@@ -340,28 +352,6 @@ export function getSellerEscrowLedger(supplierId) {
       shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus || "pending"),
       trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
     }));
-
-  // Settlements in clearing (scheduled / sending) used to vanish from the ledger
-  // between escrow release and owed — keep them visible under pending.
-  const releasingPending = sellerEntries
-    .filter((e) => e.status === "scheduled" || e.status === "disbursing" || e.status === "b2c_failed")
-    .map((e) => ({
-      orderId: e.orderId,
-      amountKes: e.payoutAmountKes,
-      status:
-        e.status === "disbursing" ? "disbursing" : e.status === "b2c_failed" ? "b2c_failed" : "releasing",
-      productName: e.productName,
-      trackingCode: e.orderId,
-      shipmentStatusLabel:
-        e.status === "disbursing"
-          ? "Payout sending"
-          : e.status === "b2c_failed"
-            ? "Payout failed — retry"
-            : "Released — payout clearing",
-      trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(e.orderId)}`,
-    }));
-
-  const pendingEscrow = [...heldPending, ...releasingPending];
 
   const inTransit = orders
     .filter(
@@ -381,16 +371,15 @@ export function getSellerEscrowLedger(supplierId) {
       trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
     }));
 
-  const availableTotal = available
-    .filter((e) => e.status === "available")
-    .reduce((s, e) => s + (e.amountKes || 0), 0);
+  const readyItems = available.filter((e) => e.status === "available" || e.status === "b2c_failed");
+  const availableTotal = readyItems.reduce((s, e) => s + (e.amountKes || 0), 0);
   const paidOutItems = available.filter((e) => e.status === "paid");
   const paidOutTotal = paidOutItems.reduce((s, e) => s + (e.amountKes || 0), 0);
   const pendingTotal = pendingEscrow.reduce((s, e) => s + (e.amountKes || 0), 0);
   const transitTotal = inTransit.reduce((s, e) => s + (e.amountKes || 0), 0);
 
   return {
-    available: { totalKes: availableTotal, items: available.filter((e) => e.status === "available") },
+    available: { totalKes: availableTotal, items: [...readyItems, ...sending] },
     paidOut: { totalKes: paidOutTotal, items: paidOutItems },
     pendingEscrow: { totalKes: pendingTotal, items: pendingEscrow },
     inTransit: { totalKes: transitTotal, items: inTransit },

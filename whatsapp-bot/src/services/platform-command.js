@@ -10,6 +10,7 @@ import {
   reinstateSettlementPayout,
   scheduleSellerPayoutAfterDelivery,
   processDuePayouts,
+  markSettlementReadyForMpesa,
 } from "./settlements.js";
 import { listLandmarkHubs } from "../lib/landmark-hubs.js";
 import { config } from "../config.js";
@@ -171,6 +172,142 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
   };
 }
 
+/**
+ * Keep buyer / seller / admin surfaces in sync after escrow overrides.
+ * Fire-and-forget — never blocks the admin API response.
+ */
+async function fanOutEscrowSync(orderId, action, { reason = "", payoutAmountKes = null } = {}) {
+  try {
+    const order = getOrder(orderId);
+    if (!order) return;
+
+    const { notifyOrderParties, notifyAdminEvent, resolveAdminTakeOver } = await import(
+      "./communication-hub.js"
+    );
+
+    const reasonBit = reason ? `\nReason: ${String(reason).slice(0, 160)}` : "";
+    const trackUrl = `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`;
+    let buyerMessage = null;
+    let sellerMessage = null;
+    let eventType = null;
+
+    if (action === "release") {
+      const amt = payoutAmountKes ?? order.sellerPayoutKes ?? order.sellerNetKes;
+      buyerMessage =
+        `✅ *Order ${order.id} completed*\n\n` +
+        `Sokoni released escrow — your order is complete.\n` +
+        `Track: ${trackUrl}\n\n` +
+        `How was it? Reply *1*–*5* when prompted.`;
+      sellerMessage =
+        `💰 *Escrow released — ${order.id}*\n\n` +
+        (amt != null
+          ? `KES ${Number(amt).toLocaleString()} is now *Ready for M-Pesa* (not pending escrow).\n`
+          : `Payout is now *Ready for M-Pesa* (not pending escrow).\n`) +
+        `Seller Hub → Payouts to withdraw, or WhatsApp *balance* / *WITHDRAW*.`;
+      eventType = "ESCROW_RELEASED";
+    } else if (action === "pause") {
+      buyerMessage =
+        `⏸️ *Order ${order.id} paused*\n\n` +
+        `Sokoni paused escrow while we review.` +
+        `${reasonBit}\n` +
+        `We'll update you shortly. Reply HELP ${order.id} if you need support.`;
+      sellerMessage =
+        `⏸️ *Escrow paused — ${order.id}*\n\n` +
+        `Seller payout is frozen until Sokoni refunds or releases.` +
+        reasonBit;
+      eventType = "ESCROW_PAUSED";
+    } else if (action === "refund") {
+      buyerMessage =
+        `↩️ *Refund started — ${order.id}*\n\n` +
+        `Sokoni will refund your M-Pesa payment to the buyer Till/phone.` +
+        `${reasonBit}\n` +
+        `Track: ${trackUrl}`;
+      sellerMessage =
+        `↩️ *Order refunded — ${order.id}*\n\n` +
+        `Escrow returns to the buyer — this sale will not pay out.` +
+        reasonBit;
+      eventType = "ESCROW_REFUNDED";
+    }
+
+    await notifyOrderParties(order, { buyerMessage, sellerMessage });
+    if (eventType) {
+      void notifyAdminEvent(eventType, {
+        orderId: order.id,
+        details: reason || action,
+        silent: true,
+      });
+    }
+
+    if (action === "release" || action === "refund") {
+      try {
+        const live = getOrder(order.id) || order;
+        if (live.adminTakeOver || live.adminFlagged || live.supportStatus) {
+          await resolveAdminTakeOver(order.id, {
+            note: `admin_${action}`,
+            notifyParties: false,
+          });
+        }
+        // Admin override wins over any open-dispute hold that takeover helper might restore.
+        if (action === "release") {
+          updateOrderMeta(order.id, {
+            disputeHold: false,
+            escrowPaused: false,
+            escrowStatus: "released",
+          });
+        } else {
+          updateOrderMeta(order.id, {
+            disputeHold: false,
+            escrowStatus: "refunded",
+          });
+        }
+      } catch (err) {
+        console.warn("[platform-command] resolve takeover failed:", err?.message || err);
+      }
+    }
+
+    if (action === "release") {
+      try {
+        const { ensureOrderSellerUserId, creditSellerSaleReview } = await import(
+          "../db/repositories/social.js"
+        );
+        await ensureOrderSellerUserId(order);
+        await creditSellerSaleReview(getOrder(order.id) || order);
+      } catch (err) {
+        console.warn("[platform-command] social credit skipped:", err?.message || err);
+      }
+    }
+
+    if (order.parentOrderId || order.kind === "cart_child") {
+      try {
+        const { refreshCartParentStatus } = await import("./cart-orders.js");
+        refreshCartParentStatus(order.parentOrderId || order.id.replace(/-\d+$/, ""));
+      } catch (err) {
+        console.warn("[platform-command] cart parent rollup skipped:", err?.message || err);
+      }
+    }
+  } catch (err) {
+    console.warn("[platform-command] fan-out sync failed:", err?.message || err);
+  }
+}
+
+/** Align order/shipment status with released escrow without re-running onOrderDelivered (+3bd hold). */
+function markOrderCompleteOnRelease(order) {
+  if (!order?.id) return;
+  const now = Date.now();
+  try {
+    if (order.status !== "delivered" && order.status !== "cancelled") {
+      updateOrderStatus(order.id, "delivered");
+    }
+  } catch {
+    /* ignore */
+  }
+  updateOrderMeta(order.id, {
+    shipmentStatus: "delivered",
+    deliveredAt: order.deliveredAt || now,
+    shipmentDeliveredAt: order.shipmentDeliveredAt || now,
+  });
+}
+
 /** Pause seller payout / mark escrow under manual review. */
 export function pauseEscrowOrder(orderId, { reason = "", adminLabel = "admin" } = {}) {
   const order = getOrder(orderId);
@@ -183,11 +320,12 @@ export function pauseEscrowOrder(orderId, { reason = "", adminLabel = "admin" } 
     escrowPausedAt: Date.now(),
     escrowPausedBy: String(adminLabel).slice(0, 80),
   });
+  void fanOutEscrowSync(order.id, "pause", { reason });
   return {
     ok: true,
     action: "pause",
     order: summarizeOrder(getOrder(order.id) || order),
-    message: `Escrow paused for ${order.id}. Seller payout frozen until you refund or release.`,
+    message: `Escrow paused for ${order.id}. Seller payout frozen until you refund or release. Buyer & seller notified.`,
   };
 }
 
@@ -212,11 +350,12 @@ export function refundEscrowOrder(orderId, { reason = "", adminLabel = "admin" }
   } catch {
     /* ignore */
   }
+  void fanOutEscrowSync(order.id, "refund", { reason });
   return {
     ok: true,
     action: "refund",
     order: summarizeOrder(getOrder(order.id) || order),
-    message: `Marked ${order.id} for manual Till refund to buyer. Complete the M-Pesa reverse/transfer outside the bot.`,
+    message: `Marked ${order.id} for manual Till refund to buyer. Buyer & seller notified — complete the M-Pesa reverse/transfer outside the bot.`,
   };
 }
 
@@ -257,9 +396,20 @@ export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" 
     sourcePriceKes: order.sourcePriceKes ?? netAmount,
   });
 
+  // Align buyer track + seller order lists without re-entering onOrderDelivered
+  // (that path would reset eligibility to +3 business days).
+  markOrderCompleteOnRelease(getOrder(order.id) || order);
+  // Re-assert release after status/meta patches.
+  updateOrderMeta(order.id, {
+    payoutEligibleAt: eligibleAt,
+    payoutStatus: "owed",
+    escrowStatus: "released",
+  });
+
   reinstateSettlementPayout(order.id, { payoutEligibleAt: eligibleAt });
   const fresh = getOrder(order.id) || order;
-  const scheduled = scheduleSellerPayoutAfterDelivery(
+  // Ensure a settlement line exists, then force Ready for M-Pesa (owed) — never pending escrow.
+  scheduleSellerPayoutAfterDelivery(
     {
       ...fresh,
       sellerNetKes: netAmount,
@@ -269,23 +419,31 @@ export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" 
     },
     { refreshEligibleAt: true }
   );
-  const promoted = processDuePayouts();
+  processDuePayouts();
+  const ready = markSettlementReadyForMpesa(getOrder(order.id) || fresh, {
+    payoutAmountKes: netAmount,
+  });
+  updateOrderMeta(order.id, { payoutStatus: ready?.status === "owed" ? "owed" : "scheduled" });
+
+  void fanOutEscrowSync(order.id, "release", {
+    reason,
+    payoutAmountKes: ready?.payoutAmountKes ?? netAmount,
+  });
 
   return {
     ok: true,
     action: "release",
     order: summarizeOrder(getOrder(order.id) || order),
-    payout: scheduled
+    payout: ready
       ? {
-          orderId: scheduled.orderId,
-          payoutAmountKes: scheduled.payoutAmountKes,
-          status: scheduled.status,
-          payoutEligibleAt: scheduled.payoutEligibleAt,
+          orderId: ready.orderId,
+          payoutAmountKes: ready.payoutAmountKes,
+          status: ready.status,
+          payoutEligibleAt: ready.payoutEligibleAt,
         }
       : null,
-    promoted,
-    message: scheduled
-      ? `Escrow released for ${order.id}. Seller payout ${formatKesShort(scheduled.payoutAmountKes)} is now on their available balance (withdraw when ready).`
+    message: ready
+      ? `Escrow released for ${order.id}. Seller payout ${formatKesShort(ready.payoutAmountKes)} moved to Ready for M-Pesa (not pending escrow). Buyer & seller notified.`
       : `Escrow released for ${order.id}, but no seller payout line was created — check supplierId / seller net on the order.`,
   };
 }

@@ -34,10 +34,10 @@ export function formatSellerWalletReply(supplier) {
   return (
     `💼 *SELLER DASHBOARD SUMMARY*\n` +
     `_${supplier.businessName || supplier.shopName || supplier.id}_\n\n` +
-    `🟢 Available payout: *KES ${withdrawable.toLocaleString()}*\n` +
-    `🟡 Pending escrow: *KES ${ledger.pendingEscrow.totalKes.toLocaleString()}*\n` +
+    `🟢 Ready for M-Pesa: *KES ${withdrawable.toLocaleString()}*\n` +
+    `🟡 Pending escrow (still held): *KES ${ledger.pendingEscrow.totalKes.toLocaleString()}*\n` +
     `🚚 In transit: *KES ${ledger.inTransit.totalKes.toLocaleString()}*\n\n` +
-    `Reply *WITHDRAW* to request M-Pesa cash out.\n` +
+    `Reply *WITHDRAW* to cash out Ready funds only.\n` +
     `Seller Hub: sokonimall.com/suppliers/list.html\n` +
     `· Hub Drop-Offs · Inventory (units) · WhatsApp Promo (@handle)\n` +
     `· Orders · Offers · Grow · M-Pesa Ledger`
