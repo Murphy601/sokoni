@@ -1,4 +1,16 @@
-import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+// Always load whatsapp-bot/.env as source of truth. Default dotenv does not
+// override existing process.env, so a polluted `pm2 restart --update-env` from
+// a shell with a bad/OCR Consumer Key would win and break STK OAuth (HTTP 400)
+// even when the .env file (and scripts/test-daraja-oauth.sh) were correct.
+const __configDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({
+  path: path.join(__configDir, "..", ".env"),
+  override: true,
+});
 
 /**
  * Central config, read once from environment variables. Missing values are left

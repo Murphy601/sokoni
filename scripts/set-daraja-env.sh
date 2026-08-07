@@ -32,7 +32,11 @@ fi
 
 env_get() {
   local key="$1"
-  grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+  local line=""
+  if [ -f "$ENV_FILE" ]; then
+    line="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 || true)"
+  fi
+  printf '%s' "$line" | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
 }
 
 clean_cred() {
@@ -44,7 +48,7 @@ is_placeholder() {
   case "$raw" in
     ""|"…"|"..."|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX") return 0 ;;
     # Instruction text people paste by mistake (not real portal keys)
-    paste-from-portal*|paste-passkey*|*portal-copy*|*from-portal*) return 0 ;;
+    paste-from-portal*|paste-passkey*|*portal-copy*|*from-portal*|PASTE_*|*COPY_BUTTON*) return 0 ;;
   esac
   # Real Prod-SOKONIMALL Consumer Key is 48 chars; Secret/Passkey 64. Reject short junk.
   [ "${#raw}" -lt 32 ]
@@ -140,9 +144,19 @@ upsert SELLER_WITHDRAW_INSTANT_B2C "$WITHDRAW_B2C"
 # Initiator username is not secret — default SOKONIMA (Prod org). Password/credential
 # must come from configure-b2c-initiator.sh (never bake into git).
 upsert MPESA_INITIATOR_NAME "${MPESA_INITIATOR_NAME:-SOKONIMA}"
-if [ -n "${MPESA_SECURITY_CREDENTIAL:-}" ]; then
-  upsert MPESA_SECURITY_CREDENTIAL "$MPESA_SECURITY_CREDENTIAL"
-fi
+# Never clobber a good portal SecurityCredential with instruction/placeholder text
+# left exported in the shell (e.g. PASTE_FROM_PORTAL_COPY_BUTTON).
+SEC_CLEAN="$(clean_cred "${MPESA_SECURITY_CREDENTIAL:-}")"
+case "$SEC_CLEAN" in
+  ""|PASTE_*|paste-*|*PORTAL_COPY*|*portal-copy*) ;;
+  *)
+    if [ "${#SEC_CLEAN}" -ge 80 ]; then
+      upsert MPESA_SECURITY_CREDENTIAL "$SEC_CLEAN"
+    else
+      echo "WARN: ignoring short/placeholder MPESA_SECURITY_CREDENTIAL (len=${#SEC_CLEAN}) — keeping .env value"
+    fi
+    ;;
+esac
 if [ -n "${MPESA_INITIATOR_PASSWORD:-}" ]; then
   upsert MPESA_INITIATOR_PASSWORD "$MPESA_INITIATOR_PASSWORD"
 fi
@@ -174,8 +188,11 @@ if [ "${SKIP_RESTART:-}" = "1" ]; then
 fi
 
 if command -v pm2 >/dev/null 2>&1; then
-  echo "==> Restarting sokoni-bot"
-  pm2 restart sokoni-bot --update-env
+  echo "==> Restarting sokoni-bot (env from whatsapp-bot/.env, not this shell)"
+  # Avoid injecting whatever MPESA_* happens to be exported in the SSH session.
+  env -u MPESA_CONSUMER_KEY -u MPESA_CONSUMER_SECRET -u MPESA_PASSKEY \
+    -u MPESA_SECURITY_CREDENTIAL -u MPESA_INITIATOR_PASSWORD \
+    pm2 restart sokoni-bot --update-env
   pm2 save >/dev/null 2>&1 || true
 else
   echo "WARN: pm2 not found — restart the bot process yourself"

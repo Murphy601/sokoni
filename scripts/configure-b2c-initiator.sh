@@ -35,6 +35,15 @@ INITIATOR_NAME="$(printf '%s' "$INITIATOR_NAME" | tr -d '[:space:]')"
 PASSWORD="$(printf '%s' "$PASSWORD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
 PREMADE_CRED="$(printf '%s' "$PREMADE_CRED" | tr -d '[:space:]')"
 
+case "$PREMADE_CRED" in
+  PASTE_*|paste-*|*PORTAL_COPY*|*portal-copy*|*COPY_BUTTON*)
+    echo "ERROR: MPESA_SECURITY_CREDENTIAL is instruction text, not the portal value." >&2
+    echo "  In Daraja → Security Credential → use Copy Credentials, then:" >&2
+    echo "  export MPESA_SECURITY_CREDENTIAL='…long base64…'" >&2
+    exit 1
+    ;;
+esac
+
 upsert() {
   local key="$1"
   local val="$2"
@@ -134,8 +143,11 @@ echo "    SecurityCredential len=${#CRED}"
 echo "    B2C shortcode: $B2C_SHORT · URL: /mpesa/b2c/v1/paymentrequest"
 
 if [ "${SKIP_RESTART:-}" != "1" ] && command -v pm2 >/dev/null 2>&1; then
-  echo "==> Restarting sokoni-bot"
-  pm2 restart sokoni-bot --update-env
+  echo "==> Restarting sokoni-bot (env from whatsapp-bot/.env, not this shell)"
+  # Do not let a leftover OCR/wrong Consumer Key in the SSH session override .env.
+  env -u MPESA_CONSUMER_KEY -u MPESA_CONSUMER_SECRET -u MPESA_PASSKEY \
+    -u MPESA_SECURITY_CREDENTIAL -u MPESA_INITIATOR_PASSWORD \
+    pm2 restart sokoni-bot --update-env
   pm2 save >/dev/null 2>&1 || true
 fi
 
