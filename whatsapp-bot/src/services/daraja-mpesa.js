@@ -425,18 +425,32 @@ export async function initiateB2CPayout({
     }
   }
 
-  const msg =
+  const errCode = data.errorCode || data.ErrorCode || "";
+  const rawMsg =
     data.errorMessage ||
     data.ResponseDescription ||
     data.ResponseDesc ||
     data.error ||
     JSON.stringify(data).slice(0, 300) ||
     `HTTP ${lastStatus}`;
-  console.warn("[daraja] B2C rejected:", msg);
+  let msg = errCode ? `${rawMsg} (${errCode})` : String(rawMsg);
+  // Safaricom often returns 404.001.03 "Invalid Access Token" when OAuth is fine
+  // but B2C is not whitelisted on the production shortcode / Daraja app.
+  const looksLikeWhitelist =
+    String(errCode).includes("404.001.03") ||
+    /invalid access token/i.test(String(rawMsg));
+  if (looksLikeWhitelist) {
+    msg +=
+      " — OAuth can still work; usually B2C is not enabled on this production shortcode. " +
+      "Confirm B2C on Prod-SOKONIMALL in Daraja, then email apisupport@safaricom.co.ke " +
+      "to whitelist B2C for shortcode 3439153.";
+  }
+  console.warn("[daraja] B2C rejected:", { status: lastStatus, errCode, msg, data });
   return {
     ok: false,
     accepted: false,
     message: `B2C failed: ${msg}`,
+    errorCode: errCode || null,
     originatorConversationId: originator,
     response: data,
   };
