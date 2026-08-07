@@ -47,15 +47,15 @@ MPESA_TILL_NUMBER=3439153     # PartyB / account display (same for this Paybill)
 MPESA_TILL_NAME=SOKONIMA
 # MPESA_PARTY_B=              # optional override for PartyB
 MPESA_ENV=production
-MPESA_TRANSACTION_TYPE=CustomerPayBillOnline   # Till → CustomerBuyGoodsOnline
+MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline   # Till → CustomerBuyGoodsOnline
 MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
 
-**Ops on the bot VM:** `SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh` applies `scripts/set-daraja-env.sh` (Prod-SOKONIMALL keys + Paybill 3439153). Or run `bash scripts/set-daraja-env.sh` alone. Retires leftover `4775847` values.
+**Ops on the bot VM:** `SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh` applies `scripts/set-daraja-env.sh` (Prod-SOKONIMALL keys + Till 3439153). Or run `bash scripts/set-daraja-env.sh` alone. Retires leftover `4775847` values.
 
 **Seller B2C:** org roles include B2C API Initiator — set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
 
-**Till vs shortcode:** for this Paybill they are the same (`3439153`). Register callback `https://bot.sokonimall.com/api/payments/daraja/callback` on the Daraja app.
+**Till vs shortcode:** for this Buy Goods till they are the same (`3439153`). Register callback `https://bot.sokonimall.com/api/payments/daraja/callback` on the Daraja app.
 
 **Manual fallback** (Daraja unset): customer pays till + replies `paid` → admin `#payconfirm`. Web checkout shows till details when `GET /api/checkout/meta` reports `darajaConfigured: false`.
 

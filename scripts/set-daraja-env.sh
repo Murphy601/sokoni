@@ -18,7 +18,7 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# --- Production Daraja app credentials (Prod-SOKONIMALL / Paybill 3439153) ---
+# --- Production Daraja app credentials (Prod-SOKONIMALL / Buy Goods Till 3439153) ---
 DEFAULT_KEY="Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB"
 DEFAULT_SECRET="P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHAVhfo"
 DEFAULT_PASSKEY="ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d"
@@ -52,7 +52,7 @@ MPESA_PASSKEY="$(pick_cred "${MPESA_PASSKEY:-}" "$DEFAULT_PASSKEY" "MPESA_PASSKE
 SHORTCODE="${MPESA_SHORTCODE:-3439153}"
 TILL="${MPESA_TILL_NUMBER:-$SHORTCODE}"
 TILL_NAME="${MPESA_TILL_NAME:-SOKONIMA}"
-TX_TYPE="${MPESA_TRANSACTION_TYPE:-CustomerPayBillOnline}"
+TX_TYPE="${MPESA_TRANSACTION_TYPE:-CustomerBuyGoodsOnline}"
 ENV_NAME="${MPESA_ENV:-production}"
 CALLBACK="${MPESA_CALLBACK_URL:-https://bot.sokonimall.com/api/payments/daraja/callback}"
 B2C_SHORT="${MPESA_B2C_SHORTCODE:-$SHORTCODE}"

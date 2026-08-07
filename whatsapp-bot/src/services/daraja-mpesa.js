@@ -192,8 +192,8 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   const amt = Math.round(Number(amount));
   if (!Number.isFinite(amt) || amt < 1) throw new Error("Invalid STK amount");
 
-  // Lipa Na M-Pesa Buy Goods: BusinessShortCode = H.O. shortcode (password), PartyB = store/till.
-  // Paybill: both are usually the same paybill number + CustomerPayBillOnline.
+  // Lipa Na M-Pesa Buy Goods: BusinessShortCode + PartyB are usually the same till + CustomerBuyGoodsOnline.
+  // Paybill merchants use CustomerPayBillOnline instead.
   const businessShortCode = String(config.mpesa.shortcode || "").trim();
   const partyB = String(config.mpesa.partyB || businessShortCode).trim();
   const transactionType = config.mpesa.transactionType || "CustomerBuyGoodsOnline";

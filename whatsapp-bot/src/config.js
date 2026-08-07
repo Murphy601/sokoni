@@ -108,7 +108,7 @@ export const config = {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
     const shortcode = trim(process.env.MPESA_SHORTCODE) || "3439153";
-    // Paybill: BusinessShortCode === PartyB. Buy Goods: H.O. shortcode + store till as PartyB.
+    // Buy Goods Till: BusinessShortCode + PartyB are usually the same till number + CustomerBuyGoodsOnline.
     const partyB =
       trim(process.env.MPESA_PARTY_B) ||
       trim(process.env.MPESA_TILL_NUMBER) ||
@@ -125,7 +125,7 @@ export const config = {
       callbackUrl:
         trim(process.env.MPESA_CALLBACK_URL) || `${botBase}/api/payments/daraja/callback`,
       env: envRaw === "production" || envRaw === "prod" ? "production" : "sandbox",
-      transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerPayBillOnline",
+      transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerBuyGoodsOnline",
       /** B2C (BusinessPayment) — seller escrow disbursement. */
       b2cShortcode,
       initiatorName: trim(process.env.MPESA_INITIATOR_NAME),
