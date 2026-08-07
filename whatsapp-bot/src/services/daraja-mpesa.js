@@ -192,8 +192,10 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   const amt = Math.round(Number(amount));
   if (!Number.isFinite(amt) || amt < 1) throw new Error("Invalid STK amount");
 
-  // Lipa Na M-Pesa Buy Goods: BusinessShortCode + PartyB are usually the same till + CustomerBuyGoodsOnline.
-  // Paybill merchants use CustomerPayBillOnline instead.
+  // Buy Goods STK:
+  //   BusinessShortCode = MPESA_SHORTCODE (Daraja Short Code / H.O., used in password)
+  //   PartyB            = MPESA_TILL_NUMBER (store till) — set separately if H.O. ≠ till
+  // Web portal login / B2C initiator username are NOT used here.
   const businessShortCode = String(config.mpesa.shortcode || "").trim();
   const partyB = String(config.mpesa.partyB || businessShortCode).trim();
   const transactionType = config.mpesa.transactionType || "CustomerBuyGoodsOnline";
