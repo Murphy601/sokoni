@@ -432,6 +432,15 @@
   }
 
   let suggestTimer = null;
+  let dashPollTimer = null;
+
+  function startDashboardPolling() {
+    if (dashPollTimer) return;
+    dashPollTimer = setInterval(() => {
+      if (document.hidden || !token()) return;
+      void loadDashboard();
+    }, 60000);
+  }
   async function runSmartSearch(q) {
     const query = String(q || "").trim();
     const results = el("smart-results");
@@ -527,6 +536,18 @@
   }
 
   bindUi();
-  if (token()) void loadDashboard();
-  else setStatus("Enter admin token to load the holding tank.");
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !token()) return;
+    void loadDashboard();
+  });
+  if (token()) {
+    void loadDashboard();
+    startDashboardPolling();
+  } else setStatus("Enter admin token to load the holding tank.");
+  el("admin-token")?.addEventListener("change", () => {
+    if (token()) {
+      void loadDashboard();
+      startDashboardPolling();
+    }
+  });
 })();

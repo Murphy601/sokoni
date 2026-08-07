@@ -3,7 +3,7 @@
  * Money stays on JSON SK-orders + settlements.json (same as live prepaid flow).
  */
 import { isDbEnabled, query } from "../db/pool.js";
-import { getOrder, updateOrderMeta, listAllOrders, normalizeOrderId } from "./orders.js";
+import { getOrder, updateOrderMeta, updateOrderStatus, listAllOrders, normalizeOrderId } from "./orders.js";
 import {
   cancelSettlementPayout,
   reinstateSettlementPayout,
@@ -524,6 +524,11 @@ export async function resolveDispute({
         disputeResolution: "refund",
         refundPendingManual: true,
       });
+      try {
+        if (order.status !== "cancelled") updateOrderStatus(order.id, "cancelled");
+      } catch {
+        /* ignore */
+      }
     } else {
       const eligibleAt = order.payoutEligibleAt || Date.now();
       updateOrderMeta(order.id, {
@@ -533,6 +538,23 @@ export async function resolveDispute({
         escrowStatus: "released",
         payoutEligibleAt: eligibleAt,
         payoutStatus: "scheduled",
+        shipmentStatus: "delivered",
+        deliveredAt: order.deliveredAt || Date.now(),
+        shipmentDeliveredAt: order.shipmentDeliveredAt || Date.now(),
+        buyerConfirmedAt: order.buyerConfirmedAt || Date.now(),
+      });
+      try {
+        if (order.status !== "delivered" && order.status !== "cancelled") {
+          updateOrderStatus(order.id, "delivered");
+        }
+      } catch {
+        /* ignore */
+      }
+      // Keep immediate eligibility after status patch.
+      updateOrderMeta(order.id, {
+        payoutEligibleAt: eligibleAt,
+        payoutStatus: "scheduled",
+        escrowStatus: "released",
       });
       const fresh = getOrder(order.id);
       reinstateSettlementPayout(order.id, { payoutEligibleAt: eligibleAt });
@@ -552,6 +574,25 @@ export async function resolveDispute({
           { refreshEligibleAt: true }
         );
         processDuePayouts();
+      }
+      try {
+        const { ensureOrderSellerUserId, creditSellerSaleReview } = await import(
+          "../db/repositories/social.js"
+        );
+        const forCredit = getOrder(order.id) || order;
+        await ensureOrderSellerUserId(forCredit);
+        await creditSellerSaleReview(forCredit);
+      } catch (err) {
+        console.warn("[disputes] social credit skipped:", err?.message || err);
+      }
+    }
+
+    if (order.parentOrderId || order.kind === "cart_child") {
+      try {
+        const { refreshCartParentStatus } = await import("./cart-orders.js");
+        refreshCartParentStatus(order.parentOrderId || order.id.replace(/-\d+$/, ""));
+      } catch (err) {
+        console.warn("[disputes] cart parent rollup skipped:", err?.message || err);
       }
     }
   }

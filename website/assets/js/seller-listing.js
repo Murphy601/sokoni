@@ -469,6 +469,7 @@ let resendCooldownTimer = null;
 let sellerSocialUserIdPromise = null;
 let sellerOffersPollTimer = null;
 let sellerOffersRequestInFlight = false;
+let sellerBalancePollTimer = null;
 let currentSellerView = "dashboard";
 let activeSellerOffersFilter = "pending";
 let sellerOffersCache = [];
@@ -5669,6 +5670,27 @@ function startSellerOffersPolling() {
   }, SELLER_OFFERS_POLL_MS);
 }
 
+function stopSellerBalancePolling() {
+  if (sellerBalancePollTimer) {
+    window.clearInterval(sellerBalancePollTimer);
+    sellerBalancePollTimer = null;
+  }
+}
+
+/** Keep payout ledger + orders in sync when admin releases escrow (no websocket). */
+function startSellerBalancePolling() {
+  stopSellerBalancePolling();
+  if (!sellerProfile) return;
+  const tick = () => {
+    if (document.hidden) return;
+    if (!isSellerDashView(currentSellerView) && currentSellerView !== "payouts") return;
+    void loadEscrowLedger();
+    if (isSellerDashView(currentSellerView)) void loadSellerOrders();
+    if (currentSellerView === "payouts") void loadWithdrawPanel();
+  };
+  sellerBalancePollTimer = window.setInterval(tick, 45000);
+}
+
 async function loadSellerOffers({ silent = false } = {}) {
   const wrap = el("seller-offers");
   if (!wrap) return;
@@ -6730,14 +6752,18 @@ function showSellerView(view, opts = {}) {
     if (view === "stock") renderHubStockAlerts();
     if (view === "marketing") renderHubMarketing();
     startSellerOffersPolling();
+    startSellerBalancePolling();
     ensureReminderCooldownTicker();
     refreshSellerAnalytics();
   } else if (showWithdraw) {
     stopSellerOffersPolling();
     stopReminderCooldownTicker();
     loadWithdrawPanel();
+    loadEscrowLedger();
+    startSellerBalancePolling();
   } else {
     stopSellerOffersPolling();
+    stopSellerBalancePolling();
     stopReminderCooldownTicker();
   }
 
@@ -6853,6 +6879,13 @@ function init() {
   bindSellerHubUi();
   bindSellerCommandCenterUi();
   el("load-ledger-btn")?.addEventListener("click", loadEscrowLedger);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !sellerProfile) return;
+    if (!isSellerDashView(currentSellerView) && currentSellerView !== "payouts") return;
+    void loadEscrowLedger();
+    if (isSellerDashView(currentSellerView)) void loadSellerOrders();
+    if (currentSellerView === "payouts") void loadWithdrawPanel();
+  });
   el("onboard-btn")?.addEventListener("click", onOnboard);
   el("send-code-btn")?.addEventListener("click", onSendCode);
   el("verify-code-btn")?.addEventListener("click", onVerifyCode);
