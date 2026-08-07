@@ -8,6 +8,7 @@ import {
   getPlatformCommandDashboard,
   getEscrowHoldingTank,
   getHubPerformanceStats,
+  getPlatformCommissions,
   pauseEscrowOrder,
   refundEscrowOrder,
   releaseEscrowOrder,
@@ -67,6 +68,14 @@ router.post("/escrow/:orderId/release", (req, res) => {
 router.get("/hubs", (req, res) => {
   const days = Number(req.query.days) || 30;
   res.json(getHubPerformanceStats({ days }));
+});
+
+/** GET /admin/command/commissions?days=30&status=all|earned|held|refunded */
+router.get("/commissions", (req, res) => {
+  const days = Number(req.query.days) || 30;
+  const limit = Number(req.query.limit) || 80;
+  const status = String(req.query.status || "all");
+  res.json(getPlatformCommissions({ days, limit, status }));
 });
 
 /** GET /admin/command/disputes?status=open */

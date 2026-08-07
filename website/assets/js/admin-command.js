@@ -251,6 +251,103 @@
       .join("");
   }
 
+  function feeStatusBadge(status) {
+    const s = String(status || "").toLowerCase();
+    const label = s === "earned" ? "Earned" : s === "held" ? "Held" : s === "refunded" ? "Refunded" : s || "—";
+    const cls =
+      s === "earned"
+        ? "bg-emerald-100 text-emerald-900 border-emerald-200"
+        : s === "held"
+          ? "bg-amber-100 text-amber-900 border-amber-200"
+          : "bg-zinc-100 text-zinc-700 border-zinc-200";
+    return `<span class="inline-flex items-center min-h-[28px] px-2.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${cls}">${escapeHtml(label)}</span>`;
+  }
+
+  function formatWhen(ts) {
+    if (!ts) return "—";
+    try {
+      return new Date(ts).toLocaleString();
+    } catch {
+      return "—";
+    }
+  }
+
+  function renderCommissions(payload) {
+    const totals = payload?.totals || {};
+    if (el("stat-comm-earned")) el("stat-comm-earned").textContent = formatKes(totals.earnedPlatformFeeKes);
+    if (el("stat-comm-held")) el("stat-comm-held").textContent = formatKes(totals.heldPlatformFeeKes);
+    if (el("stat-comm-alltime")) el("stat-comm-alltime").textContent = formatKes(totals.earnedAllTimeKes);
+    if (el("stat-comm-counts")) {
+      el("stat-comm-counts").textContent = `${totals.earnedCount ?? 0} / ${totals.heldCount ?? 0}`;
+    }
+    if (el("comm-note")) {
+      const txn = totals.earnedTransactionFeeKes || 0;
+      el("comm-note").textContent =
+        (payload?.note || "Sokoni 10% fee — earned on escrow release.") +
+        (txn
+          ? ` M-Pesa txn fees earned in window: ${formatKes(txn)}.`
+          : "") +
+        (totals.refundedCount
+          ? ` Refunded (not earned): ${formatKes(totals.refundedPlatformFeeKes)} across ${totals.refundedCount} orders.`
+          : "");
+    }
+    const wrap = el("comm-list");
+    if (!wrap) return;
+    const fees = payload?.fees || [];
+    if (!fees.length) {
+      wrap.innerHTML = `<p class="text-sm text-brand-purple/60">No commission rows for this filter yet. Fees appear after paid orders, and move to Earned when you Release.</p>`;
+      return;
+    }
+    wrap.innerHTML = fees
+      .map((f) => {
+        const when =
+          f.feeStatus === "earned"
+            ? `Earned ${formatWhen(f.earnedAt)}`
+            : f.feeStatus === "held"
+              ? `Paid ${formatWhen(f.paidAt)} · waiting for release`
+              : `Refunded path · paid ${formatWhen(f.paidAt)}`;
+        return `
+        <article class="rounded-2xl border border-black/5 p-4 space-y-1 ${
+          f.feeStatus === "earned" ? "ring-1 ring-emerald-200" : ""
+        }">
+          <div class="flex flex-wrap justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="font-bold font-mono text-sm">${escapeHtml(f.orderId)}</h3>
+                ${feeStatusBadge(f.feeStatus)}
+              </div>
+              <p class="text-sm text-brand-purple/70 mt-1">${escapeHtml(f.productName || "Item")}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="font-semibold">${formatKes(f.platformFeeKes)}</p>
+              <p class="text-[11px] text-brand-purple/50">Sokoni fee</p>
+            </div>
+          </div>
+          <p class="text-xs text-brand-purple/55">
+            Buyer ${formatKes(f.buyerTotalKes)} · seller payout ${formatKes(f.sellerPayoutKes)}
+            ${f.transactionFeeKes ? ` · txn fee ${formatKes(f.transactionFeeKes)}` : ""}
+            · ${escapeHtml(f.hub || "—")}
+          </p>
+          <p class="text-xs text-brand-purple/50">${escapeHtml(when)}</p>
+        </article>`;
+      })
+      .join("");
+  }
+
+  async function loadCommissions() {
+    const t = token();
+    if (!t) return null;
+    const days = Number(el("comm-days")?.value || 30);
+    const status = el("comm-status")?.value || "all";
+    const res = await fetch(
+      `${CMD_API}/commissions?days=${encodeURIComponent(days)}&status=${encodeURIComponent(status)}&limit=80`,
+      { headers: adminHeaders() }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: true, data };
+    return data;
+  }
+
   async function loadDashboard() {
     const t = token();
     if (!t) {
@@ -261,21 +358,42 @@
     setStatus("Loading…");
     try {
       const days = Number(el("hub-days")?.value || 30);
-      const [dashRes, hubRes] = await Promise.all([
+      const [dashRes, hubRes, commPayload] = await Promise.all([
         fetch(`${CMD_API}/dashboard`, { headers: adminHeaders() }),
         fetch(`${CMD_API}/hubs?days=${encodeURIComponent(days)}`, { headers: adminHeaders() }),
+        loadCommissions(),
       ]);
       const dash = await dashRes.json().catch(() => ({}));
       const hubs = await hubRes.json().catch(() => ({}));
       if (!dashRes.ok) {
-        setStatus(dash.message || dash.error || "Could not load dashboard.", true);
+        const msg = dash.message || dash.error || "Could not load dashboard.";
+        if (dashRes.status === 404) {
+          setStatus(
+            `${msg} Bot may need redeploy for /admin/command APIs.`,
+            true
+          );
+        } else {
+          setStatus(msg, true);
+        }
         return;
       }
       renderEscrow(dash.escrow);
       renderDisputes(dash.disputes);
       renderHubs(hubRes.ok ? hubs : dash.hubs);
+      if (commPayload && !commPayload.error) {
+        renderCommissions(commPayload);
+      } else if (dash.commissions) {
+        renderCommissions(dash.commissions);
+      } else {
+        renderCommissions({
+          note: "Commissions API not on this bot build yet — redeploy bot to see earned fees.",
+          totals: {},
+          fees: [],
+        });
+      }
+      const earned = commPayload?.totals?.earnedPlatformFeeKes ?? dash.commissions?.totals?.earnedPlatformFeeKes ?? 0;
       setStatus(
-        `Tank ${dash.escrow?.totals?.heldOrders || 0} orders · ${dash.disputes?.openCount || 0} open disputes · updated ${new Date().toLocaleTimeString()}`
+        `Tank ${dash.escrow?.totals?.heldOrders || 0} orders · earned ${formatKes(earned)} · ${dash.disputes?.openCount || 0} open disputes · updated ${new Date().toLocaleTimeString()}`
       );
     } catch {
       setStatus("Network error loading command center.", true);
@@ -391,6 +509,8 @@
     });
     el("refresh-btn")?.addEventListener("click", () => loadDashboard());
     el("hub-days")?.addEventListener("change", () => loadDashboard());
+    el("comm-days")?.addEventListener("change", () => loadDashboard());
+    el("comm-status")?.addEventListener("change", () => loadDashboard());
     document.querySelectorAll("[data-override]").forEach((btn) => {
       btn.addEventListener("click", () => runOverride(btn.getAttribute("data-override")));
     });
