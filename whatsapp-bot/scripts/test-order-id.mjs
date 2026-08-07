@@ -20,7 +20,7 @@ function assert(label, cond) {
 }
 
 assert("legacy SK", normalizeOrderId("sk-1042") === "SK-1042");
-assert("bare digits → SK", normalizeOrderId("1042") === "SK-1042");
+assert("bare digits → SKN", normalizeOrderId("1042") === "SKN-1042");
 assert("SKN parent", normalizeOrderId("skn-1002") === "SKN-1002");
 assert("SKN child", normalizeOrderId("SKN-1002-1") === "SKN-1002-1");
 assert("SKN child must NOT become SK-10021", normalizeOrderId("SKN-1002-1") !== "SK-10021");

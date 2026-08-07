@@ -152,10 +152,17 @@ export function getContactPhone(customerKey) {
 }
 
 
+/** Next SKN parent id — shared by single-item checkout and multi-seller cart. */
+export function allocateSknParentId(orderStore = store) {
+  orderStore.sknSeq = Math.max(1000, Number(orderStore.sknSeq) || 1000) + 1;
+  return `SKN-${orderStore.sknSeq}`;
+}
+
 export function createOrder({ customerKey, chatId, product, details, offerId = null, totalsOverride = null }) {
   load();
+  // Keep store.seq advancing for other ID families (DR-/WD-); order ids are SKN-.
   store.seq += 1;
-  const id = `SK-${store.seq}`;
+  const id = allocateSknParentId(store);
   const now = Date.now();
   const sourcePriceKes = product.sourcePriceKes != null ? Number(product.sourcePriceKes) : null;
   const totals = totalsOverride || computeProductTotals(product);
@@ -283,6 +290,17 @@ export function getOrder(id) {
   if (!key) return null;
   if (store.orders[key]) return store.orders[key];
   if (store.cartOrders?.[key]) return store.cartOrders[key];
+  // Legacy SK-#### ↔ SKN-#### same digits (single-item prefix migration).
+  const skMatch = key.match(/^SK-(\d+)$/);
+  const sknMatch = key.match(/^SKN-(\d+)$/);
+  if (skMatch) {
+    const alt = `SKN-${skMatch[1]}`;
+    if (store.orders[alt]) return store.orders[alt];
+    if (store.cartOrders?.[alt]) return store.cartOrders[alt];
+  } else if (sknMatch) {
+    const alt = `SK-${sknMatch[1]}`;
+    if (store.orders[alt]) return store.orders[alt];
+  }
   return null;
 }
 

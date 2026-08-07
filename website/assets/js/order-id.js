@@ -21,7 +21,7 @@
     if (raw.startsWith("SKN-") || raw.startsWith("SK-")) return raw;
 
     const digits = raw.replace(/\D/g, "");
-    return digits ? `SK-${digits}` : "";
+    return digits ? `SKN-${digits}` : "";
   }
 
   function extractOrderIdFromText(text) {
