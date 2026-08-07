@@ -1197,6 +1197,29 @@ html.dark .bulk-studio-remove:hover {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
+.seller-hub-nav__menu-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem 0.15rem;
+}
+
+.seller-hub-nav__menu-label {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #25d366;
+}
+
+.seller-hub-nav__menu-hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: rgba(255, 248, 240, 0.4);
+}
+
 .seller-hub-nav__top {
   display: flex;
   flex-wrap: wrap;
@@ -1305,17 +1328,22 @@ html.dark .bulk-studio-remove:hover {
 
 .seller-hub-nav__tabs {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  overflow-x: auto;
-  padding: 0.45rem 0.55rem;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem 0.65rem;
 }
 
-.seller-hub-nav__tabs::-webkit-scrollbar {
-  display: none;
+@media (min-width: 640px) {
+  .seller-hub-nav__tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .seller-hub-nav__tabs {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
 }
 
 .seller-hub-nav__tab {
@@ -1323,13 +1351,15 @@ html.dark .bulk-studio-remove:hover {
   z-index: 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   min-height: 44px;
-  padding: 0.45rem 0.85rem;
-  border: none;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 0.85rem;
-  background: transparent;
-  color: rgba(255, 248, 240, 0.5);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 248, 240, 0.55);
   font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
@@ -1338,13 +1368,15 @@ html.dark .bulk-studio-remove:hover {
 }
 
 .seller-hub-nav__tab:hover {
-  color: rgba(255, 248, 240, 0.85);
-  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 248, 240, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .seller-hub-nav__tab.is-active {
   color: #fff8f0;
-  background: transparent;
+  background: rgba(37, 211, 102, 0.1);
+  border-color: rgba(37, 211, 102, 0.4);
 }
 
 .seller-hub-nav__tab.is-active .seller-hub-nav__icon {
@@ -1360,6 +1392,106 @@ html.dark .bulk-studio-remove:hover {
 
 .seller-hub-nav__tab.is-active .seller-hub-nav__icon {
   color: #25d366;
+}
+
+/* Sticky bottom menu — mobile thumb navigation */
+.seller-hub-bottom-menu {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.15rem;
+  padding: 0.4rem 0.45rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(37, 211, 102, 0.28);
+  background: rgba(8, 8, 12, 0.97);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.seller-hub-bottom-menu__item {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: 52px;
+  border: none;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: rgba(255, 248, 240, 0.45);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.seller-hub-bottom-menu__item:hover,
+.seller-hub-bottom-menu__item:focus-visible {
+  color: rgba(255, 248, 240, 0.85);
+  outline: none;
+}
+
+.seller-hub-bottom-menu__item.is-active {
+  color: #fff8f0;
+  background: rgba(37, 211, 102, 0.1);
+}
+
+.seller-hub-bottom-menu__item.is-active svg {
+  color: #25d366;
+}
+
+.seller-hub-bottom-menu__item--cta {
+  color: #1b1035;
+}
+
+.seller-hub-bottom-menu__item--cta .seller-hub-bottom-menu__plus {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.seller-hub-bottom-menu__item--cta.is-active {
+  background: rgba(37, 211, 102, 0.16);
+  color: #fff8f0;
+}
+
+.seller-hub-bottom-menu__dot {
+  position: absolute;
+  top: 0.35rem;
+  right: calc(50% - 1.1rem);
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: #25d366;
+}
+
+.seller-hub-bottom-menu__dot.hidden {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .seller-hub-bottom-menu {
+    display: none;
+  }
+}
+
+/* Hide bottom menu when seller hub is not shown */
+#listing-wizard.hidden .seller-hub-bottom-menu {
+  display: none;
 }
 
 /* Hub nav replaces the old "Selling as" strip */
@@ -1386,17 +1518,9 @@ body.sell-depop-page #listing-wizard:not(.hidden) #seller-profile-bar {
   display: none;
 }
 
+/* Sliding pill retired — menu uses bordered active tiles instead */
 .seller-hub-nav__pill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 0;
-  border-radius: 0.85rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  pointer-events: none;
-  opacity: 0;
-  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), width 0.28s cubic-bezier(0.22, 1, 0.36, 1), height 0.28s ease, opacity 0.2s ease;
+  display: none !important;
 }
 
 .seller-hub-nav__pill.is-ready {
