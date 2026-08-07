@@ -45,9 +45,50 @@ function orderHubLabel(order) {
   return "Direct / other";
 }
 
+function orderDeliveryState(order) {
+  const shipmentStatus = String(order?.shipmentStatus || "pending").toLowerCase();
+  const status = String(order?.status || "").toLowerCase();
+  const delivered = Boolean(
+    status === "delivered" ||
+      shipmentStatus === "delivered" ||
+      order?.buyerConfirmedAt ||
+      order?.shipmentDeliveredAt ||
+      order?.deliveredAt
+  );
+  const inTransit = Boolean(
+    !delivered &&
+      (order?.sellerDispatchedAt ||
+        order?.inTransitAt ||
+        ["dropped_off", "in_transit", "at_pickup_point", "out_for_delivery"].includes(shipmentStatus) ||
+        status === "out_for_delivery")
+  );
+  const buyerConfirmed = Boolean(order?.buyerConfirmedAt);
+  let deliveryLabel = "Not delivered";
+  let releaseHint = "Wait for delivery before releasing";
+  if (delivered && buyerConfirmed) {
+    deliveryLabel = "Delivered · buyer confirmed";
+    releaseHint = "Safe to release";
+  } else if (delivered) {
+    deliveryLabel = "Delivered";
+    releaseHint = "Delivered — release when ready";
+  } else if (inTransit) {
+    deliveryLabel = "In transit";
+    releaseHint = "Not delivered yet";
+  }
+  return {
+    delivered,
+    inTransit,
+    buyerConfirmed,
+    deliveryLabel,
+    releaseHint,
+    shipmentStatus: shipmentStatus || "pending",
+  };
+}
+
 function summarizeOrder(order) {
   const buyerTotal = orderBuyerTotal(order);
   const sellerNet = resolveSellerPayoutKes(order) || Math.round(buyerTotal * 0.9);
+  const delivery = orderDeliveryState(order);
   return {
     orderId: order.id,
     productId: order.productId || null,
@@ -57,7 +98,12 @@ function summarizeOrder(order) {
     platformFeeKes: Math.max(0, buyerTotal - sellerNet),
     escrowStatus: order.escrowStatus || null,
     status: order.status || null,
-    shipmentStatus: order.shipmentStatus || null,
+    shipmentStatus: delivery.shipmentStatus,
+    delivered: delivery.delivered,
+    inTransit: delivery.inTransit,
+    buyerConfirmed: delivery.buyerConfirmed,
+    deliveryLabel: delivery.deliveryLabel,
+    releaseHint: delivery.releaseHint,
     disputeHold: Boolean(order.disputeHold),
     escrowPaused: Boolean(order.escrowPaused),
     refundPendingManual: Boolean(order.refundPendingManual),
@@ -66,24 +112,33 @@ function summarizeOrder(order) {
     customerName: order.customerName || null,
     paidAt: order.paidAt || null,
     createdAt: order.createdAt || null,
+    deliveredAt: order.deliveredAt || order.shipmentDeliveredAt || order.buyerConfirmedAt || null,
   };
 }
 
 /** Live view of KES held after buyer prepaid, awaiting confirmation / release. */
 export function getEscrowHoldingTank({ limit = 80 } = {}) {
   const orders = listAllOrders().filter(isHeldEscrow);
-  orders.sort((a, b) => (b.paidAt || b.createdAt || 0) - (a.paidAt || a.createdAt || 0));
+  const rows = orders.map(summarizeOrder);
+  // Delivered first (ready to consider release), then newest paid.
+  rows.sort((a, b) => {
+    if (Boolean(a.delivered) !== Boolean(b.delivered)) return a.delivered ? -1 : 1;
+    return (b.paidAt || b.createdAt || 0) - (a.paidAt || a.createdAt || 0);
+  });
 
   let heldBuyerKes = 0;
   let heldSellerNetKes = 0;
   let pausedCount = 0;
   let disputeCount = 0;
-  for (const o of orders) {
-    const row = summarizeOrder(o);
+  let deliveredCount = 0;
+  let notDeliveredCount = 0;
+  for (const row of rows) {
     heldBuyerKes += row.buyerTotalKes;
     heldSellerNetKes += row.sellerNetKes;
     if (row.escrowPaused) pausedCount += 1;
     if (row.disputeHold) disputeCount += 1;
+    if (row.delivered) deliveredCount += 1;
+    else notDeliveredCount += 1;
   }
 
   const settlements = getSettlementSummary();
@@ -95,20 +150,22 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
       number: config.store?.mpesaTill || null,
       name: config.store?.mpesaTillName || null,
       note:
-        "Logical escrow holding tank from paid orders (buyer totals). Till cash position is on Safaricom — reconcile manually until AccountBalance API is wired.",
+        "Logical escrow holding tank from paid orders (buyer totals). Till cash position is on Safaricom — reconcile manually until AccountBalance API is wired. Prefer Release only when status is Delivered.",
     },
     totals: {
-      heldOrders: orders.length,
+      heldOrders: rows.length,
       heldBuyerKes,
       heldSellerNetKes,
       platformFeeKes: Math.max(0, heldBuyerKes - heldSellerNetKes),
       pausedCount,
       disputeHoldCount: disputeCount,
+      deliveredCount,
+      notDeliveredCount,
       settlementOwedKes: settlements.totalOwedKes || 0,
       settlementScheduledKes: settlements.totalScheduledKes || 0,
       settlementDisbursingCount: settlements.disbursingCount || 0,
     },
-    orders: orders.slice(0, safeLimit).map(summarizeOrder),
+    orders: rows.slice(0, safeLimit),
     generatedAt: Date.now(),
   };
 }
