@@ -2,7 +2,7 @@
  * Safaricom Daraja — OAuth, STK Push, B2C payouts, callback parsing.
  * @see https://developer.safaricom.co.ke/
  */
-import { createPublicKey, publicEncrypt, constants } from "node:crypto";
+import { createPublicKey, publicEncrypt, constants, X509Certificate } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { config } from "../config.js";
 
@@ -388,8 +388,9 @@ export async function initiateB2CPayout({
   });
 
   const token = await getAccessToken();
-  // Prefer v3; fall back to v1 if the app only has the older product path.
-  const paths = ["/mpesa/b2c/v3/paymentrequest", "/mpesa/b2c/v1/paymentrequest"];
+  // Prod-SOKONIMALL is entitled to B2C v1 (Safaricom go-live URL list).
+  // Try v1 first, then v3 for apps that only have the newer path.
+  const paths = ["/mpesa/b2c/v1/paymentrequest", "/mpesa/b2c/v3/paymentrequest"];
   let data = {};
   let lastStatus = 0;
   for (const path of paths) {

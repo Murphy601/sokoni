@@ -12,3 +12,7 @@ waha-qr*.png
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# Local Daraja certs / encrypted credentials (download on VM)
+whatsapp-bot/certs/*.cer
+whatsapp-bot/certs/*.pem
