@@ -51,11 +51,11 @@ MPESA_TRANSACTION_TYPE=CustomerPayBillOnline   # Till → CustomerBuyGoodsOnline
 MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
 
-**Ops on the bot VM:** after pull, set secrets and restart with `bash scripts/set-daraja-env.sh` (exports `MPESA_CONSUMER_KEY` / `SECRET` / `PASSKEY` first). Retire any leftover `4775847` / personal-till values from `.env`.
+**Ops on the bot VM:** `SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh` applies `scripts/set-daraja-env.sh` (Prod-SOKONIMALL keys + Paybill 3439153). Or run `bash scripts/set-daraja-env.sh` alone. Retires leftover `4775847` values.
 
-**Till vs shortcode:** for Paybill they are usually the same (`3439153`). For Buy Goods merchants, Daraja **Short Code** can be the **H.O.** number (`MPESA_SHORTCODE`) and the **store/till** is `MPESA_TILL_NUMBER` (`PartyB`). If STK fails with “Agent number and Store number … do not match”, set those two correctly from Safaricom Business.
+**Seller B2C:** org roles include B2C API Initiator — set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
 
-Register the callback URL in the [Safaricom Daraja portal](https://developer.safaricom.co.ke/). Prefer `/daraja/callback` — URLs containing `mpesa` are often rejected. Trim keys/secrets (no quotes/spaces) and match `MPESA_ENV=production` to production Consumer Key/Secret. Ensure the Daraja app has **Lipa Na M-Pesa Online** (STK) enabled for the shortcode — Passkey alone is not enough if the product is missing.
+**Till vs shortcode:** for this Paybill they are the same (`3439153`). Register callback `https://bot.sokonimall.com/api/payments/daraja/callback` on the Daraja app.
 
 **Manual fallback** (Daraja unset): customer pays till + replies `paid` → admin `#payconfirm`. Web checkout shows till details when `GET /api/checkout/meta` reports `darajaConfigured: false`.
 

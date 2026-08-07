@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Update Daraja / M-Pesa env on the bot VM (run from ~/sokoni after SSH).
-# Never commit real Consumer Key / Secret / Passkey to git.
+# Apply production Daraja / M-Pesa env on the bot VM (run from ~/sokoni after SSH / during deploy).
+#
+# Prod app: Prod-SOKONIMALL · Shortcode 3439153 (SOKONIMA)
+# Org roles present: Business Manager, B2C API Initiator/Caller, Balance Query,
+# Transaction Status, Org Reversals, Business Paybill / Buy Goods Org API, etc.
 #
 # Usage:
-#   export MPESA_CONSUMER_KEY='…'
-#   export MPESA_CONSUMER_SECRET='…'
-#   export MPESA_PASSKEY='…'
 #   bash scripts/set-daraja-env.sh
+#   SKIP_RESTART=1 bash scripts/set-daraja-env.sh   # during deploy-bot.sh
 #
-# Optional overrides: MPESA_SHORTCODE, MPESA_TILL_NUMBER, MPESA_TILL_NAME,
-# MPESA_TRANSACTION_TYPE, MPESA_ENV, ENV_FILE, SKIP_RESTART=1
+# Override any value via env before running (e.g. MPESA_INITIATOR_NAME=…).
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
@@ -20,9 +20,11 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-: "${MPESA_CONSUMER_KEY:?Set MPESA_CONSUMER_KEY}"
-: "${MPESA_CONSUMER_SECRET:?Set MPESA_CONSUMER_SECRET}"
-: "${MPESA_PASSKEY:?Set MPESA_PASSKEY}"
+# --- Production Daraja app credentials (Prod-SOKONIMALL) ---
+# Override via environment if rotating keys.
+MPESA_CONSUMER_KEY="${MPESA_CONSUMER_KEY:-Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB}"
+MPESA_CONSUMER_SECRET="${MPESA_CONSUMER_SECRET:-P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHVhfo}"
+MPESA_PASSKEY="${MPESA_PASSKEY:-ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d}"
 
 SHORTCODE="${MPESA_SHORTCODE:-3439153}"
 TILL="${MPESA_TILL_NUMBER:-$SHORTCODE}"
@@ -30,6 +32,11 @@ TILL_NAME="${MPESA_TILL_NAME:-SOKONIMA}"
 TX_TYPE="${MPESA_TRANSACTION_TYPE:-CustomerPayBillOnline}"
 ENV_NAME="${MPESA_ENV:-production}"
 CALLBACK="${MPESA_CALLBACK_URL:-https://bot.sokonimall.com/api/payments/daraja/callback}"
+B2C_SHORT="${MPESA_B2C_SHORTCODE:-$SHORTCODE}"
+B2C_RESULT="${MPESA_B2C_RESULT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/result}"
+B2C_TIMEOUT="${MPESA_B2C_TIMEOUT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/timeout}"
+B2C_CMD="${MPESA_B2C_COMMAND_ID:-BusinessPayment}"
+B2C_AUTO="${MPESA_B2C_AUTO:-false}"
 
 upsert() {
   local key="$1"
@@ -37,7 +44,6 @@ upsert() {
   local tmp
   tmp="$(mktemp)"
   if grep -qE "^${key}=" "$ENV_FILE"; then
-    # Escape & \ for sed replacement; values should not contain newlines.
     local esc
     esc="$(printf '%s' "$val" | sed -e 's/[&\\]/\\&/g')"
     sed -E "s|^${key}=.*|${key}=${esc}|" "$ENV_FILE" > "$tmp"
@@ -48,7 +54,11 @@ upsert() {
   fi
 }
 
-# Drop legacy personal till name if still present as a comment-only leftover — upsert handles keys.
+# Remove legacy personal till if still hanging around as the only till value.
+if grep -qE '^MPESA_TILL_NUMBER=4775847' "$ENV_FILE" 2>/dev/null; then
+  echo "==> Replacing legacy till 4775847 with $SHORTCODE"
+fi
+
 upsert MPESA_CONSUMER_KEY "$MPESA_CONSUMER_KEY"
 upsert MPESA_CONSUMER_SECRET "$MPESA_CONSUMER_SECRET"
 upsert MPESA_PASSKEY "$MPESA_PASSKEY"
@@ -58,18 +68,40 @@ upsert MPESA_TILL_NAME "$TILL_NAME"
 upsert MPESA_ENV "$ENV_NAME"
 upsert MPESA_TRANSACTION_TYPE "$TX_TYPE"
 upsert MPESA_CALLBACK_URL "$CALLBACK"
-# Same shortcode for B2C unless already set to something else and you override.
-if ! grep -qE '^MPESA_B2C_SHORTCODE=.' "$ENV_FILE" 2>/dev/null; then
-  upsert MPESA_B2C_SHORTCODE "$SHORTCODE"
+upsert MPESA_B2C_SHORTCODE "$B2C_SHORT"
+upsert MPESA_B2C_RESULT_URL "$B2C_RESULT"
+upsert MPESA_B2C_TIMEOUT_URL "$B2C_TIMEOUT"
+upsert MPESA_B2C_COMMAND_ID "$B2C_CMD"
+upsert MPESA_B2C_AUTO "$B2C_AUTO"
+
+# Optional B2C initiator — only upsert when provided (org role: B2C API Initiator/Caller).
+if [ -n "${MPESA_INITIATOR_NAME:-}" ]; then
+  upsert MPESA_INITIATOR_NAME "$MPESA_INITIATOR_NAME"
+fi
+if [ -n "${MPESA_SECURITY_CREDENTIAL:-}" ]; then
+  upsert MPESA_SECURITY_CREDENTIAL "$MPESA_SECURITY_CREDENTIAL"
+fi
+if [ -n "${MPESA_INITIATOR_PASSWORD:-}" ]; then
+  upsert MPESA_INITIATOR_PASSWORD "$MPESA_INITIATOR_PASSWORD"
+fi
+if [ -n "${MPESA_CERT_PATH:-}" ]; then
+  upsert MPESA_CERT_PATH "$MPESA_CERT_PATH"
 fi
 
-echo "==> Updated Daraja keys in $ENV_FILE"
-echo "    Shortcode/Till: $SHORTCODE / $TILL ($TILL_NAME)"
-echo "    Env: $ENV_NAME · STK type: $TX_TYPE"
-echo "    Callback: $CALLBACK"
+echo "==> Updated Daraja production config in $ENV_FILE"
+echo "    Shortcode: $SHORTCODE ($TILL_NAME) · STK: $TX_TYPE · Env: $ENV_NAME"
+echo "    STK callback: $CALLBACK"
+echo "    B2C shortcode: $B2C_SHORT · result: $B2C_RESULT"
+if grep -qE '^MPESA_INITIATOR_NAME=.' "$ENV_FILE" 2>/dev/null && \
+   { grep -qE '^MPESA_SECURITY_CREDENTIAL=.' "$ENV_FILE" 2>/dev/null || \
+     grep -qE '^MPESA_INITIATOR_PASSWORD=.' "$ENV_FILE" 2>/dev/null; }; then
+  echo "    B2C initiator: configured"
+else
+  echo "    B2C initiator: not set yet (STK checkout works; seller #payb2c needs MPESA_INITIATOR_NAME + SECURITY_CREDENTIAL)"
+fi
 
 if [ "${SKIP_RESTART:-}" = "1" ]; then
-  echo "==> SKIP_RESTART=1 — restart bot manually when ready"
+  echo "==> SKIP_RESTART=1 — bot restart left to deploy / pm2"
   exit 0
 fi
 
