@@ -251,6 +251,15 @@ export function sellerOrderFulfillment(order) {
   };
 }
 
+function orderBuyerPhone(order) {
+  const direct = normalizePhone(order?.phone || order?.mpesaPhone || "");
+  if (direct) return direct;
+  // WhatsApp chat ids are often 2547…@c.us / @s.whatsapp.net
+  const fromKey = normalizePhone(String(order?.customerKey || order?.chatId || "").split("@")[0] || "");
+  if (fromKey && fromKey.length >= 10) return fromKey;
+  return null;
+}
+
 /** Seller dashboard — paid orders, labels, shipment status (Phases 5–6). */
 export function getSellerOrders(supplierId) {
   return loadAllOrders()
@@ -284,7 +293,7 @@ export function getSellerOrders(supplierId) {
         sellerDispatchedAt: fulfill.sellerDispatchedAt,
         deliveredAt: fulfill.deliveredAt,
         customerName: o.customerName || null,
-        buyerPhone: normalizePhone(o.phone || o.mpesaPhone || "") || null,
+        buyerPhone: orderBuyerPhone(o),
         labelUrl: paid ? sellerLabelUrl(o.id) : null,
         trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
         createdAt: o.createdAt,
@@ -631,27 +640,26 @@ export async function updateSellerListingStock({ phone, productId, stockQuantity
 
   const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
   let updated = null;
+  const sellerDigits = normalizePhone(phone);
 
   for (const file of paths) {
     try {
       const products = JSON.parse(await readFile(file, "utf-8"));
-      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      const idx = products.findIndex((p) => {
+        if (p.id !== productId) return false;
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerDigits && normalizePhone(p.sellerPhone) === sellerDigits) return true;
+        return false;
+      });
       if (idx === -1) continue;
 
       const current = products[idx];
-      const { assertCanRestock, applyStockQuantityFields, isSkuSold } = await import(
-        "./product-availability.js"
-      );
+      const { applyStockQuantityFields, clearSoldSku } = await import("./product-availability.js");
 
-      // Permanent unique sold items cannot return; soft OOS / live multi-unit can.
-      if (qty > 0 && (await isSkuSold(productId))) {
-        const gate = await assertCanRestock(productId, current);
-        return {
-          error: gate.error || "product_sold",
-          message:
-            gate.message ||
-            "This unique item already sold — list a fresh one to restock.",
-        };
+      // Seller-owned inventory update wins: clear permanent tombstone so multi-unit restock works
+      // after older builds wrongly sold-locked every payment.
+      if (qty > 0) {
+        await clearSoldSku(productId);
       }
 
       const next = applyStockQuantityFields({ ...current }, qty);
