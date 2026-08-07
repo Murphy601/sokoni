@@ -10,6 +10,9 @@
  * Usage (on bot VM):
  *   node scripts/zero-seller-earnings.mjs --seller adiv_thrift          # dry-run
  *   node scripts/zero-seller-earnings.mjs --seller adiv_thrift --apply  # write
+ *
+ * --apply stops sokoni-bot first so in-memory settlements cannot overwrite
+ * the cleared Ready balance, then restarts it. Use --skip-pm2 to disable.
  */
 import {
   readFileSync,
@@ -20,6 +23,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, "..");
@@ -29,12 +33,25 @@ const TRANSIT_STATUSES = new Set(["in_transit", "at_pickup_point", "label_ready"
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
+const skipPm2 = args.includes("--skip-pm2");
 const sellerArgIdx = args.indexOf("--seller");
 const sellerQuery = sellerArgIdx >= 0 ? String(args[sellerArgIdx + 1] || "").trim() : "adiv_thrift";
 
 if (!sellerQuery) {
   console.error("Usage: node scripts/zero-seller-earnings.mjs --seller adiv_thrift [--apply]");
   process.exit(1);
+}
+
+function pm2(cmd) {
+  if (skipPm2) {
+    console.log(`(skip pm2 ${cmd})`);
+    return;
+  }
+  try {
+    execSync(`pm2 ${cmd} sokoni-bot`, { stdio: "inherit" });
+  } catch (err) {
+    console.warn(`WARN: pm2 ${cmd} sokoni-bot failed:`, err.message);
+  }
 }
 
 function loadJson(file, fallback) {
@@ -201,10 +218,16 @@ console.log(`  Heal risk orders (would recreate Ready): ${wouldHeal.length}`);
 if (!apply) {
   console.log("\nDRY-RUN complete. Re-run with --apply to zero ALL three buckets.");
   console.log("  node scripts/zero-seller-earnings.mjs --seller adiv_thrift --apply");
+  console.log("  (--apply stops/starts sokoni-bot so Ready cannot be overwritten from memory)");
   process.exit(0);
 }
 
 if (!existsSync(DATA)) mkdirSync(DATA, { recursive: true });
+
+// Stop bot BEFORE writing — in-memory settlements/orders would otherwise
+// persist() and put Ready for M-Pesa (e.g. KES 1,344) right back on disk.
+console.log("\n==> Stopping sokoni-bot (prevents memory overwrite of Ready balance)");
+pm2("stop");
 
 const backups = {
   settlements: backup(settlementsFile),
@@ -236,13 +259,13 @@ for (const o of orders) {
   const escrow = String(o.escrowStatus || "").toLowerCase();
   let touched = false;
 
-  // Ready heal latch — any paid/released/payout-tagged order
+  // Ready heal latch — ANY order that could recreate a settlement line
   const needsLatch =
-    !o.isPaidOut &&
     escrow !== "refunded" &&
     (escrow === "released" ||
       Boolean(o.escrowReleasedAt) ||
       o.customerPaymentStatus === "confirmed" ||
+      Boolean(o.sellerNetKes || o.sellerPayoutKes || o.sourcePriceKes) ||
       ["owed", "paid", "b2c_failed", "disbursing", "scheduled"].includes(
         String(o.payoutStatus || "").toLowerCase()
       ));
@@ -292,13 +315,26 @@ if (Array.isArray(ordersStore)) {
   writeFileSync(ordersFile, JSON.stringify(ordersStore, null, 2) + "\n");
 }
 
+// Verify Ready is actually gone on disk before starting the bot again
+const verify = loadJson(settlementsFile, { entries: [] });
+const leftover = (verify.entries || []).filter((e) => e.supplierId === supplierId);
+const leftoverKes = leftover.reduce((s, e) => s + kes(e.payoutAmountKes), 0);
+if (leftover.length) {
+  console.error(`\nERROR: ${leftover.length} settlements still on disk (KES ${leftoverKes}) — aborting bot start.`);
+  process.exit(1);
+}
+
 console.log("\nApplied — Seller Hub should show KES 0 / 0 / 0:");
 console.log(`  removed settlements:     ${sellerEntries.length}`);
 console.log(`  removed withdrawals:     ${sellerWithdrawals.length}`);
 console.log(`  orders latched isPaidOut:${latched}`);
 console.log(`  pending-escrow cleared:  ${pendingCleared}`);
 console.log(`  in-transit cleared:      ${transitCleared}`);
+console.log(`  disk verify Ready:       KES 0 (${leftover.length} settlements)`);
 console.log(
   `  other sellers untouched: settlements ${otherEntries.length}, withdrawals ${otherWithdrawals.length}`
 );
-console.log("\nHard refresh Seller Hub (Refresh), or: pm2 restart sokoni-bot");
+
+console.log("\n==> Starting sokoni-bot");
+pm2("start");
+console.log("Hard refresh Seller Hub (Refresh). Ready for M-Pesa must be KES 0.");
