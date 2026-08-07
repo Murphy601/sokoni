@@ -71,9 +71,9 @@ export function formatPrepaidCheckoutPrompt(order) {
     `Total: *${priceLine}*\n` +
     `Your money stays in Sokoni escrow until delivery is confirmed.\n\n` +
     `Configure Daraja STK for instant auto-confirm, or pay manually:\n\n` +
-    `🏢 *Buy Goods Till:* ${till}\n` +
-    `👤 *Registered to:* ${tillName}\n` +
-    `📝 *Reference:* ${ref}\n\n` +
+    `🏢 *Paybill:* ${till}\n` +
+    `📛 *Name:* ${tillName}\n` +
+    `📝 *Account / reference:* ${ref}\n\n` +
     (order?.id ? `🌐 Pay on web: ${checkoutUrlForOrder(order.id)}\n\n` : "") +
     `Reply *paid* after M-Pesa (manual verify until Daraja is live).`
   );
@@ -106,7 +106,7 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
       stkAvailable: false,
       till: config.store.mpesaTill,
       tillName: config.store.mpesaTillName,
-      message: "Pay Buy Goods till with your order number as reference, then reply paid on WhatsApp.",
+      message: "Pay Paybill 3439153 (SOKONIMA) with your order number as account reference, then reply paid on WhatsApp.",
     };
   }
 

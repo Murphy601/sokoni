@@ -4,17 +4,19 @@ Staff, rider, and admin reference templates. Customer-facing copy lives in `what
 
 ## Rider delivery protocol
 
-1. **Digital only** — Never collect cash or personal M-Pesa from customers. Customer pays Buy Goods Till **4775847** (David Thuku Muiruri) only.
-2. **Inspect before payment** — Hand package to customer; allow unpack and verification before pointing to Till on delivery slip.
-3. **Verify payment** — Customer replies *paid* on WhatsApp or shows M-Pesa SMS. Do not leave until admin confirms or customer shows valid receipt.
-4. **Rejections** — If damaged/wrong item, pack safely and return. Customer owes nothing (zero upfront deposit policy).
+1. **Digital only** — Never collect cash or personal M-Pesa from customers. Customer pays Paybill **3439153** (SOKONIMA) only.
+2. **Inspect before payment** — Hand package to customer; allow unpack and verification before pointing to Paybill on delivery slip.
+3. **Order ID** — Every paid order has an **SKN-####** (or older **SK-####**). Quote it on every handoff.
+4. **No side deals** — Do not accept personal Till or Send Money for Sokoni orders.
+5. **Verify payment** — Customer replies *paid* on WhatsApp or shows M-Pesa SMS. Do not leave until admin confirms or customer shows valid receipt.
+6. **Rejections** — If damaged/wrong item, pack safely and return. Customer owes nothing for COD; prepaid disputes go through escrow / admin.
 
-## Admin M-Pesa verification (Till 4775847)
+## Admin M-Pesa verification (Paybill 3439153)
 
-1. Open Safaricom M-Pesa Business portal for Till **4775847** (David Thuku Muiruri).
-2. Match inbound amount to order `priceKes` when rider marks delivered.
-3. Validate customer code (UK… / UL…) against ledger; confirm date matches delivery.
-4. Run `#payconfirm SK-xxxx` then `#notify-store SK-xxxx` when verified.
+1. Open Safaricom M-Pesa Business portal for shortcode **3439153** (SOKONIMA).
+2. Match amount + account reference (order id) to the pending claim.
+3. Validate customer code (UK… / UL…) against ledger; confirm date matches.
+4. Confirm in WhatsApp admin with `#payconfirm SKN-…` when STK callback did not auto-confirm.
 5. Never confirm from screenshots alone if ledger shows no entry within 5 minutes.
 
 ## Fraud & prank orders
@@ -29,4 +31,4 @@ All customer promotions are capped at **3% off** (code **SOKONI3**). No free-del
 
 - WhatsApp / calls: **+254 117 422 428** (`254117422428`)
 - Email: **support@sokonimall.com**
-- Till: **4775847** (David Thuku Muiruri)
+- Paybill: **3439153** (SOKONIMA)
