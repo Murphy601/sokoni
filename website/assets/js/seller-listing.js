@@ -5910,7 +5910,7 @@ function writeJsonStorage(key, value) {
 function getSellerDefaultHub() {
   return (
     localStorage.getItem(sellerStorageKey(HUB_DEFAULT_HUB_KEY)) ||
-    "Nairobi CBD — Archways Mall Hub"
+    "Countrywide delivery — Sokoni Mashinani hub network"
   );
 }
 
@@ -5946,16 +5946,50 @@ function setSellerPromoCode(code) {
   );
 }
 
-function sellerPublicShopUrl() {
-  const handle = String(sellerProfile?.shopHandle || sellerProfile?.handle || "")
+function sellerShopHandle() {
+  return String(sellerProfile?.shopHandle || sellerProfile?.handle || "")
     .replace(/^@+/, "")
     .trim();
+}
+
+function sellerPublicShopUrl() {
+  const handle = sellerShopHandle();
   const origin =
     window.location.origin && window.location.origin !== "null"
       ? window.location.origin
       : "https://sokonimall.com";
   if (handle) return `${origin}/shop.html?handle=${encodeURIComponent(handle)}`;
   return `${origin}/shop.html`;
+}
+
+/** Always the public mall home — promoter share keeps handle separate. */
+function sellerMallHomeUrl() {
+  return "https://sokonimall.com";
+}
+
+function waDigits(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9) d = `254${d}`;
+  return d;
+}
+
+/** Deep-link chat to a number when known; otherwise draft-only (no recipient). */
+function waChatUrl(phone, text) {
+  const digits = waDigits(phone);
+  const q = encodeURIComponent(String(text || ""));
+  if (digits && digits.length >= 10) return `https://wa.me/${digits}?text=${q}`;
+  return `https://wa.me/?text=${q}`;
+}
+
+function listingStockQty(item, notes = getStockNotes()) {
+  const pid = item?.id || item?.productId;
+  if (item?.stockQuantity != null && Number.isFinite(Number(item.stockQuantity))) {
+    return Math.max(0, Math.round(Number(item.stockQuantity)));
+  }
+  if (pid && notes[pid] != null) return Math.max(0, Math.round(Number(notes[pid]) || 0));
+  if (item?.isSold || item?.inStock === false) return 0;
+  return 1;
 }
 
 function hubDropOffOrders(orders = hubCache.orders) {
@@ -6020,16 +6054,15 @@ function updateLogisticsBodaLink() {
   const a = el("logistics-boda-btn");
   if (!a) return;
   const hub = getSellerDefaultHub();
-  const ids = hubDropOffOrders()
-    .map((o) => o.orderId)
-    .filter(Boolean)
-    .slice(0, 8);
+  const handle = sellerShopHandle();
+  const pending = hubDropOffOrders().length;
   const msg =
     `Habari Sokoni — ninaomba boda rider pickup.\n` +
-    `Hub: ${hub}\n` +
-    (ids.length ? `Parcels: ${ids.join(", ")}\n` : "") +
-    `Shop: ${sellerPublicShopUrl()}`;
-  a.href = `https://wa.me/${SOKONI_SUPPORT_WA}?text=${encodeURIComponent(msg)}`;
+    (handle ? `Shop: @${handle}\n` : "") +
+    `Hub preference: ${hub}\n` +
+    (pending ? `I have ${pending} parcel${pending === 1 ? "" : "s"} ready for drop-off.\n` : "") +
+    `Please confirm which order + my exact pickup location — I'll reply with details.`;
+  a.href = waChatUrl(SOKONI_SUPPORT_WA, msg);
 }
 
 function generateHubManifest() {
@@ -6043,6 +6076,7 @@ function generateHubManifest() {
     "SOKONI MASHINANI — HUB DROP-OFF MANIFEST",
     `Hub: ${hub}`,
     `Seller: ${sellerProfile?.shopName || sellerProfile?.name || apiPhone() || "—"}`,
+    sellerShopHandle() ? `Handle: @${sellerShopHandle()}` : "",
     `Date: ${new Date().toLocaleString()}`,
     "",
     ...rows.map(
@@ -6051,21 +6085,50 @@ function generateHubManifest() {
     ),
     "",
     `Scan / track: ${rows.map((o) => o.trackUrl || o.orderId).join(" | ")}`,
-  ];
+  ].filter((l) => l !== "");
+  const safe = lines
+    .map((l) =>
+      String(l)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+    )
+    .join("\n");
   const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Sokoni Hub Manifest</title>
-    <style>body{font-family:ui-monospace,monospace;padding:24px;color:#111}h1{font-size:16px}pre{white-space:pre-wrap;font-size:12px}</style></head>
-    <body><h1>Sokoni hub drop-off manifest</h1><pre>${lines
-      .map((l) =>
-        String(l)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-      )
-      .join("\n")}</pre>
-    <script>window.onload=()=>window.print()<\/script></body></html>`;
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (w) {
-    w.document.write(html);
-    w.document.close();
+    <style>body{font-family:ui-monospace,Menlo,monospace;padding:24px;color:#111;background:#fff}h1{font-size:16px;margin:0 0 12px}pre{white-space:pre-wrap;font-size:12px;line-height:1.45;margin:0}</style></head>
+    <body><h1>Sokoni hub drop-off manifest</h1><pre>${safe}</pre>
+    <script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},120)});<\/script></body></html>`;
+
+  // Blob URL avoids blank tabs from window.open(..., "noopener") + document.write.
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, "_blank");
+  if (!w) {
+    // Popup blocked — same-tab iframe print fallback
+    let frame = document.getElementById("hub-manifest-print-frame");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.id = "hub-manifest-print-frame";
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText =
+        "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none";
+      document.body.appendChild(frame);
+    }
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      } catch {}
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    };
+    frame.src = url;
+    if (el("logistics-status")) {
+      el("logistics-status").textContent = "Popup blocked — printing via hidden frame.";
+    }
+    return;
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  if (el("logistics-status")) {
+    el("logistics-status").textContent = `Manifest ready — ${rows.length} parcel${rows.length === 1 ? "" : "s"}.`;
   }
 }
 
@@ -6092,26 +6155,34 @@ function renderHubStockAlerts() {
   live.forEach((item) => {
     const pid = item.id || item.productId;
     if (!pid) return;
-    const qty = notes[pid] != null ? Number(notes[pid]) : 1;
+    const qty = listingStockQty(item, notes);
     const low = qty > 0 && qty <= 2;
     const soldOut = qty <= 0;
     cards.push(`
       <div class="sell-order-card sell-order-card--static" data-stock-id="${escapeHtml(pid)}">
         <div class="sell-order-card-head">
-          <p class="font-semibold text-sm sell-order-card__title">${escapeHtml(item.name || item.title || pid)}</p>
+          <p class="font-semibold text-sm sell-order-card__title">${escapeHtml(item.name || item.title || item.draft?.name || pid)}</p>
           <span class="sell-order-badge ${soldOut ? "sell-order-badge--transit" : low ? "sell-order-badge--action" : "sell-order-badge--done"}">${
             soldOut ? "Out of stock" : low ? "Low stock" : "In stock"
           }</span>
         </div>
-        <label class="block text-xs text-zinc-400 mt-2">Units on hand
-          <input type="number" min="0" max="9999" value="${qty}" data-stock-qty="${escapeHtml(pid)}" class="sell-form-input mt-1 max-w-[8rem]" />
-        </label>
-        <p class="text-xs text-zinc-500 mt-1">${
+        <p class="text-xs text-zinc-500 mt-1 font-mono">${escapeHtml(pid)}</p>
+        <div class="flex items-end gap-2 mt-2 flex-wrap">
+          <label class="block text-xs text-zinc-400">Units on hand
+            <input type="number" min="0" max="9999" value="${qty}" data-stock-qty="${escapeHtml(pid)}" class="sell-form-input mt-1 max-w-[8rem]" />
+          </label>
+          <div class="flex gap-1 pb-0.5">
+            <button type="button" class="sell-order-action" data-stock-step="${escapeHtml(pid)}" data-delta="-1" aria-label="Decrease units">−</button>
+            <button type="button" class="sell-order-action" data-stock-step="${escapeHtml(pid)}" data-delta="1" aria-label="Increase units">+</button>
+            <button type="button" class="sell-order-action sell-order-action--primary" data-stock-save="${escapeHtml(pid)}">Save</button>
+          </div>
+        </div>
+        <p class="text-xs text-zinc-500 mt-1" data-stock-hint="${escapeHtml(pid)}">${
           soldOut
-            ? "Pause WhatsApp selling until you restock."
+            ? "Add units and Save — listing returns to the main menu."
             : low
-              ? "Only a few left — update before the next order."
-              : "Looks healthy."
+              ? "Only a few left — bump units before the next order."
+              : "Sales only remove the listing when units hit zero."
         }</p>
       </div>`);
   });
@@ -6120,10 +6191,21 @@ function renderHubStockAlerts() {
     wrap.innerHTML = `<p class="text-sm text-zinc-500">No live listings yet. List an item, then track units here.</p>`;
   } else {
     wrap.innerHTML = cards.join("");
-    wrap.querySelectorAll("[data-stock-qty]").forEach((input) => {
-      input.addEventListener("change", () => {
-        setStockNote(input.getAttribute("data-stock-qty"), input.value);
-        renderHubStockAlerts();
+    wrap.querySelectorAll("[data-stock-step]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pid = btn.getAttribute("data-stock-step");
+        const input = wrap.querySelector(`[data-stock-qty="${CSS.escape(pid)}"]`);
+        if (!input) return;
+        const delta = Number(btn.getAttribute("data-delta") || 0);
+        const next = Math.max(0, Math.min(9999, (Number(input.value) || 0) + delta));
+        input.value = String(next);
+      });
+    });
+    wrap.querySelectorAll("[data-stock-save]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pid = btn.getAttribute("data-stock-save");
+        const input = wrap.querySelector(`[data-stock-qty="${CSS.escape(pid)}"]`);
+        void saveListingStock(pid, input?.value, btn);
       });
     });
     wrap.querySelectorAll("[data-hub-jump]").forEach((btn) => {
@@ -6131,26 +6213,73 @@ function renderHubStockAlerts() {
     });
   }
   if (el("stock-status")) {
-    const lowCount = live.filter((item) => {
-      const pid = item.id || item.productId;
-      const qty = notes[pid] != null ? Number(notes[pid]) : 1;
-      return qty <= 2;
-    }).length;
+    const lowCount = live.filter((item) => listingStockQty(item, notes) <= 2).length;
     el("stock-status").textContent = lowCount
       ? `${lowCount} listing${lowCount === 1 ? "" : "s"} at low or zero stock`
       : "";
   }
 }
 
+async function saveListingStock(productId, rawQty, btn) {
+  const phone = apiPhone();
+  const qty = Math.max(0, Math.min(9999, Math.round(Number(rawQty) || 0)));
+  const hint = document.querySelector(`[data-stock-hint="${CSS.escape(productId)}"]`);
+  if (!phone || !productId) return;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+  }
+  setStockNote(productId, qty);
+  try {
+    const res = await fetch(`${ONBOARD_API}/stock`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone,
+          productId,
+          stockQuantity: qty,
+        })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      if (hint) hint.textContent = data.message || data.error || "Could not save stock.";
+      if (el("stock-status")) el("stock-status").textContent = data.message || "Stock update failed.";
+      return;
+    }
+    const listing = (hubCache.listings || []).find((l) => (l.id || l.productId) === productId);
+    if (listing) {
+      listing.stockQuantity = data.stockQuantity ?? qty;
+      listing.inStock = data.inStock !== false;
+      listing.isSold = Boolean(data.isSold);
+    }
+    if (hint) hint.textContent = data.message || `Saved — ${qty} unit${qty === 1 ? "" : "s"} on hand.`;
+    if (el("stock-status")) el("stock-status").textContent = data.message || "";
+    renderHubStockAlerts();
+  } catch {
+    if (hint) hint.textContent = "Network error — try Save again.";
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Save";
+    }
+  }
+}
+
 function buildMarketingShareMessage() {
   const code = getSellerPromoCode();
-  const shop = sellerPublicShopUrl();
-  const link = `${shop}${shop.includes("?") ? "&" : "?"}promo=${encodeURIComponent(code)}`;
+  const handle = sellerShopHandle();
   return (
     `✨ *NEW ON SOKONI*\n\n` +
     `Check my verified shop — pay safe with M-Pesa escrow:\n\n` +
-    `👉 ${link}\n\n` +
-    `Promo code: *${code}* (mention it in chat)`
+    `👉 ${sellerMallHomeUrl()}\n` +
+    (handle ? `Shop: @${handle}\n` : "") +
+    `\nPromo code: *${code}* (mention it in chat)`
   );
 }
 
@@ -6171,7 +6300,7 @@ function renderHubMarketing() {
 
   const msg = buildMarketingShareMessage();
   if (preview) preview.textContent = msg;
-  if (waBtn) waBtn.href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  if (waBtn) waBtn.href = waChatUrl("", msg);
 
   const buyersWrap = el("marketing-buyers");
   if (!buyersWrap) return;
@@ -6179,7 +6308,7 @@ function renderHubMarketing() {
   (hubCache.orders || [])
     .filter((o) => o.paid)
     .forEach((o) => {
-      const key = String(o.buyerPhone || o.customerName || o.orderId || "");
+      const key = waDigits(o.buyerPhone) || String(o.customerName || "").trim() || String(o.orderId || "");
       if (!key || seen.has(key)) return;
       seen.set(key, o);
     });
@@ -6188,18 +6317,38 @@ function renderHubMarketing() {
     buyersWrap.innerHTML = `<p class="text-sm text-zinc-500">Paid buyers appear here after your first sales.</p>`;
     return;
   }
+  const handle = sellerShopHandle();
+  const code = getSellerPromoCode();
   buyersWrap.innerHTML = buyers
     .map((o) => {
       const name = o.customerName || o.buyerName || "Buyer";
-      const thank = `Asante ${name}! Thanks for shopping my Sokoni store 🙏\n${sellerPublicShopUrl()}`;
-      const restock = `Habari ${name} — fresh stock just landed on Sokoni:\n${sellerPublicShopUrl()}?promo=${encodeURIComponent(getSellerPromoCode())}`;
+      const productId = o.productId || "";
+      const productName = o.productName || "your item";
+      const productRef = productId || productName;
+      const thank =
+        `Asante ${name}! Thanks for buying *${productName}* (${productRef}) from my Sokoni shop 🙏\n\n` +
+        `${sellerMallHomeUrl()}\n` +
+        (handle ? `Shop: @${handle}` : "");
+      const restock =
+        `Habari ${name} — *${productName}* (${productRef}) has fresh stock on Sokoni:\n\n` +
+        `${sellerMallHomeUrl()}\n` +
+        (handle ? `Shop: @${handle}\n` : "") +
+        `\nPromo: *${code}* — mention it in chat`;
+      const phone = waDigits(o.buyerPhone);
+      const thankHref = phone ? waChatUrl(phone, thank) : "#";
+      const restockHref = phone ? waChatUrl(phone, restock) : "#";
+      const disabled = phone
+        ? ""
+        : ` aria-disabled="true" onclick="return false;" title="Buyer phone missing on this order"`;
       return `
         <div class="sell-order-card sell-order-card--static">
           <p class="font-semibold text-sm text-white">${escapeHtml(name)}</p>
-          <p class="text-xs text-zinc-500 mt-1 font-mono">${escapeHtml(o.orderId || "")}</p>
+          <p class="text-xs text-zinc-500 mt-1">${escapeHtml(productName)}${
+            productId ? ` · <span class="font-mono">${escapeHtml(productId)}</span>` : ""
+          }</p>
           <div class="sell-order-actions">
-            <a class="sell-order-action sell-order-action--primary" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(thank)}">Thank you</a>
-            <a class="sell-order-action" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(restock)}">Restock notice</a>
+            <a class="sell-order-action sell-order-action--primary" target="_blank" rel="noopener" href="${thankHref}"${disabled}>Thank you</a>
+            <a class="sell-order-action" target="_blank" rel="noopener" href="${restockHref}"${disabled}>Restock notice</a>
           </div>
         </div>`;
     })

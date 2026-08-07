@@ -27,11 +27,23 @@ export function isProductSold(product) {
   return false;
 }
 
-/** Shopper-visible: in stock and not sold. */
+/** Shopper-visible: in stock, not sold, and units remaining when tracked. */
 export function isProductAvailable(product) {
   if (!product || typeof product !== "object") return false;
   if (isProductSold(product)) return false;
-  return product.inStock !== false;
+  if (product.inStock === false) return false;
+  if (product.stockQuantity != null && Number(product.stockQuantity) <= 0) return false;
+  return true;
+}
+
+/** Units on hand — defaults to 1 for classic thrift/single SKUs. */
+export function productStockOnHand(product) {
+  if (!product || typeof product !== "object") return 0;
+  if (product.stockQuantity != null && Number.isFinite(Number(product.stockQuantity))) {
+    return Math.max(0, Math.round(Number(product.stockQuantity)));
+  }
+  if (isProductSold(product) || product.inStock === false) return 0;
+  return 1;
 }
 
 /** Stamp sold fields onto a product object (mutates and returns). */
@@ -40,8 +52,65 @@ export function markProductSoldFields(product, { orderId = null, soldAt = Date.n
   product.inStock = false;
   product.isSold = true;
   product.soldAt = product.soldAt || soldAt;
+  product.stockQuantity = 0;
   if (orderId) product.soldOrderId = String(orderId);
   return product;
+}
+
+/** Soft out-of-stock (multi-unit sold out) — restockable, not a permanent tombstone. */
+export function markProductSoftOutOfStock(product) {
+  if (!product || typeof product !== "object") return product;
+  product.inStock = false;
+  product.isSold = false;
+  product.stockQuantity = 0;
+  delete product.soldAt;
+  delete product.soldOrderId;
+  return product;
+}
+
+/** Apply a seller stock update (units). Clears soft OOS when qty > 0. */
+export function applyStockQuantityFields(product, qty) {
+  if (!product || typeof product !== "object") return product;
+  const n = Math.max(0, Math.round(Number(qty) || 0));
+  product.stockQuantity = n;
+  if (n > 0) {
+    product.inStock = true;
+    product.isSold = false;
+    delete product.soldAt;
+    delete product.soldOrderId;
+  } else {
+    product.inStock = false;
+  }
+  return product;
+}
+
+/**
+ * Decrement stock after a paid order.
+ * Multi-unit stays live until units hit 0 (soft OOS, restockable).
+ * Unique 1-of-1 thrift gets a permanent sold tombstone.
+ */
+export function consumeStockForSale(product, { qty = 1, orderId = null, soldAt = Date.now() } = {}) {
+  if (!product || typeof product !== "object") {
+    return { product, depleted: true, tombstone: false, remaining: 0, onHand: 0 };
+  }
+  const bought = Math.max(1, Math.round(Number(qty) || 1));
+  const onHand = productStockOnHand(product);
+  const remaining = Math.max(0, onHand - bought);
+  const next = { ...product, stockQuantity: remaining };
+
+  if (remaining > 0) {
+    next.inStock = true;
+    return { product: next, depleted: false, tombstone: false, remaining, onHand };
+  }
+
+  // Depleted: permanent sold only for classic single-unit listings.
+  if (onHand <= 1) {
+    markProductSoldFields(next, { orderId, soldAt });
+    return { product: next, depleted: true, tombstone: true, remaining: 0, onHand };
+  }
+
+  markProductSoftOutOfStock(next);
+  return { product: next, depleted: true, tombstone: false, remaining: 0, onHand };
 }
 
 /**

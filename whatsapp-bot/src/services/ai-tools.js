@@ -442,9 +442,16 @@ function toolStoreInfo() {
       track: `${publicSite}/track.html`,
       browse: `${publicSite}/`,
       sell: `${publicSite}/sell.html`,
+      sellerHub: `${publicSite}/suppliers/list.html`,
     },
+    sellerHub:
+      "Seller Hub (sokonimall.com/suppliers/list.html): Hub Drop-Offs (countrywide + city hubs, rider pickup), Inventory alerts (set units — multi-stock stays on menu until 0), WhatsApp Promo (share sokonimall.com + @handle separately), Orders, Offers, Grow, M-Pesa Ledger.",
+    stockNote:
+      "Multi-unit listings decrement on each sale and stay visible until stock hits zero. Unique 1-of-1 thrift locks sold after purchase.",
+    pickupRiderNote:
+      "When a seller requests boda pickup, ask which order and the exact pickup location. Shop @handle is enough to identify them — do not list every pending order unless asked.",
     note:
-      "100% prepaid upfront for local items. Funds held in escrow until delivery confirmed. Sellers handle dispatch — no platform shipping calculator. Browse categories on sokonimall.com; checkout on WhatsApp.",
+      "100% prepaid upfront for local items. Funds held in escrow until delivery confirmed. Sellers dispatch via Sokoni Mashinani hubs (countrywide). Browse on sokonimall.com; checkout on WhatsApp.",
   };
 }
 
@@ -560,6 +567,10 @@ export function formatToolResultsForPrompt(toolResults) {
         `Site: ${r.siteUrls?.home}\n` +
         `Ask: ${r.siteUrls?.ask}\n` +
         `Track: ${r.siteUrls?.track}\n` +
+        `Seller Hub: ${r.siteUrls?.sellerHub || ""}\n` +
+        `Seller Hub tip: ${r.sellerHub || ""}\n` +
+        `Stock: ${r.stockNote || ""}\n` +
+        `Pickup rider: ${r.pickupRiderNote || ""}\n` +
         `How it works:\n${r.howItWorks}\n` +
         `Trust:\n${r.paymentTrust}\n` +
         `${r.note}`

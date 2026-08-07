@@ -158,7 +158,13 @@ export function rowToCatalogProduct(row, imageUrls = []) {
  */
 export function jsonToDbProduct(json, sellerId = null) {
   const isIntl = json.scope === "international";
-  const stockQty = json.fulfillment === "store" && !isIntl ? 1 : Math.max(1, Number(json.stockQuantity) || 1);
+  // Respect explicit multi-unit stock; default thrift/store SKUs to 1.
+  const rawStock = Number(json.stockQuantity);
+  const stockQty = Number.isFinite(rawStock)
+    ? Math.max(0, Math.round(rawStock))
+    : json.fulfillment === "store" && !isIntl
+      ? 1
+      : Math.max(1, Number(json.stockQuantity) || 1);
 
   return {
     id: json.id,

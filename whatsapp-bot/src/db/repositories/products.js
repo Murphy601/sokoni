@@ -646,9 +646,35 @@ export async function markProductSold(productId, orderId) {
   if (!productId) return false;
   await query(
     `UPDATE products
-     SET in_stock = false, is_sold = true, tracking_code = COALESCE(tracking_code, $2), updated_at = NOW()
+     SET in_stock = false, is_sold = true, stock_quantity = 0,
+         tracking_code = COALESCE(tracking_code, $2), updated_at = NOW()
      WHERE id = $1`,
     [productId, orderId ? String(orderId) : null]
+  );
+  return true;
+}
+
+/** Sync units / availability after a sale or seller restock (multi-unit aware). */
+export async function updateProductInventory(
+  productId,
+  { stockQuantity = 0, inStock = true, isSold = false, orderId = null } = {}
+) {
+  if (!productId) return false;
+  const qty = Math.max(0, Math.round(Number(stockQuantity) || 0));
+  const sold = Boolean(isSold);
+  const live = Boolean(inStock) && !sold && qty > 0;
+  await query(
+    `UPDATE products
+     SET stock_quantity = $2,
+         in_stock = $3,
+         is_sold = $4,
+         tracking_code = CASE
+           WHEN $4::boolean THEN COALESCE(tracking_code, $5)
+           ELSE tracking_code
+         END,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [productId, qty, live, sold, orderId ? String(orderId) : null]
   );
   return true;
 }
