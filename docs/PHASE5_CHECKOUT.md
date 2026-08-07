@@ -51,15 +51,17 @@ MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline
 MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
 
-**Ops on the bot VM:** keys are **not** in git. After copying from the portal:
+**Ops on the bot VM:** keys are **not** in git. Prefer portal **Copy** into a file (avoids chat/OCR typos):
 
 ```bash
-export MPESA_CONSUMER_KEY='…' MPESA_CONSUMER_SECRET='…' MPESA_PASSKEY='…'
-bash scripts/set-daraja-env.sh
+# /tmp/daraja-keys.txt — 3 lines: Consumer Key, Consumer Secret, Passkey
+bash scripts/apply-daraja-keys-from-file.sh /tmp/daraja-keys.txt
 bash scripts/test-daraja-oauth.sh
 ```
 
-Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcode/till mapping and **keeps** existing keys in `.env`. HTTP 400 on OAuth means Safaricom rejected Key/Secret — regenerate/re-copy; org API roles do not fix OAuth.
+Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcode/till mapping and **keeps** existing keys in `.env`.
+
+**HTTP 400 on OAuth** (even with Key len 48 / Secret 64) means Safaricom does not accept that Key:Secret pair. Re-Copy from the portal, regenerate keys, confirm Lipa Na M-Pesa Online / M-Pesa Express is on the app, or contact `apisupport@safaricom.co.ke`. Org API roles do not fix OAuth.
 
 **Seller B2C:** with org roles (Business Manager, ORG B2C API initiator, etc.) enabled in the Safaricom org portal, set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
 
