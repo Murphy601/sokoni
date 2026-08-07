@@ -2,14 +2,12 @@
 # Apply production Daraja / M-Pesa env on the bot VM (run from ~/sokoni after SSH / during deploy).
 #
 # Prod app: Prod-SOKONIMALL · Shortcode 3439153 (SOKONIMA)
-# Org roles present: Business Manager, B2C API Initiator/Caller, Balance Query,
-# Transaction Status, Org Reversals, Business Paybill / Buy Goods Org API, etc.
 #
-# Usage:
+# Usage (recommended — uses baked-in Prod-SOKONIMALL keys):
+#   unset MPESA_CONSUMER_KEY MPESA_CONSUMER_SECRET
 #   bash scripts/set-daraja-env.sh
-#   SKIP_RESTART=1 bash scripts/set-daraja-env.sh   # during deploy-bot.sh
 #
-# Override any value via env before running (e.g. MPESA_INITIATOR_NAME=…).
+# Do NOT export placeholder dots like '…' — that overwrites real keys with 1-char junk.
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
@@ -21,10 +19,35 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # --- Production Daraja app credentials (Prod-SOKONIMALL / Paybill 3439153) ---
-# Override via environment if rotating keys.
-MPESA_CONSUMER_KEY="${MPESA_CONSUMER_KEY:-Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB}"
-MPESA_CONSUMER_SECRET="${MPESA_CONSUMER_SECRET:-P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHAVhfo}"
-MPESA_PASSKEY="${MPESA_PASSKEY:-ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d}"
+DEFAULT_KEY="Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB"
+DEFAULT_SECRET="P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHAVhfo"
+DEFAULT_PASSKEY="ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d"
+
+# Accept an override only if it looks like a real key (not '…', '...', empty, or tiny).
+pick_cred() {
+  local raw="$1"
+  local fallback="$2"
+  local label="$3"
+  # Strip whitespace / surrounding quotes
+  raw="$(printf '%s' "$raw" | tr -d '[:space:]' | sed -e 's/^["'\'']//' -e 's/["'\'']$//')"
+  case "$raw" in
+    ""|"…"|"..."|"…"|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX")
+      echo "==> Ignoring invalid ${label} override (placeholder) — using production default" >&2
+      printf '%s' "$fallback"
+      return
+      ;;
+  esac
+  if [ "${#raw}" -lt 16 ]; then
+    echo "==> Ignoring invalid ${label} override (len=${#raw}, need ≥16) — using production default" >&2
+    printf '%s' "$fallback"
+    return
+  fi
+  printf '%s' "$raw"
+}
+
+MPESA_CONSUMER_KEY="$(pick_cred "${MPESA_CONSUMER_KEY:-}" "$DEFAULT_KEY" "MPESA_CONSUMER_KEY")"
+MPESA_CONSUMER_SECRET="$(pick_cred "${MPESA_CONSUMER_SECRET:-}" "$DEFAULT_SECRET" "MPESA_CONSUMER_SECRET")"
+MPESA_PASSKEY="$(pick_cred "${MPESA_PASSKEY:-}" "$DEFAULT_PASSKEY" "MPESA_PASSKEY")"
 
 SHORTCODE="${MPESA_SHORTCODE:-3439153}"
 TILL="${MPESA_TILL_NUMBER:-$SHORTCODE}"
@@ -54,7 +77,6 @@ upsert() {
   fi
 }
 
-# Remove legacy personal till if still hanging around as the only till value.
 if grep -qE '^MPESA_TILL_NUMBER=4775847' "$ENV_FILE" 2>/dev/null; then
   echo "==> Replacing legacy till 4775847 with $SHORTCODE"
 fi
@@ -74,7 +96,6 @@ upsert MPESA_B2C_TIMEOUT_URL "$B2C_TIMEOUT"
 upsert MPESA_B2C_COMMAND_ID "$B2C_CMD"
 upsert MPESA_B2C_AUTO "$B2C_AUTO"
 
-# Optional B2C initiator — only upsert when provided (org role: B2C API Initiator/Caller).
 if [ -n "${MPESA_INITIATOR_NAME:-}" ]; then
   upsert MPESA_INITIATOR_NAME "$MPESA_INITIATOR_NAME"
 fi
@@ -89,6 +110,7 @@ if [ -n "${MPESA_CERT_PATH:-}" ]; then
 fi
 
 echo "==> Updated Daraja production config in $ENV_FILE"
+echo "    Key len=${#MPESA_CONSUMER_KEY}  Secret len=${#MPESA_CONSUMER_SECRET}  Passkey len=${#MPESA_PASSKEY}"
 echo "    Shortcode: $SHORTCODE ($TILL_NAME) · STK: $TX_TYPE · Env: $ENV_NAME"
 echo "    STK callback: $CALLBACK"
 echo "    B2C shortcode: $B2C_SHORT · result: $B2C_RESULT"
