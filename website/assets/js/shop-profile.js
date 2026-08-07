@@ -834,7 +834,25 @@ function productCard(product, shop) {
             )}</p>`
           : ""
       }
-      <p class="text-base font-bold mt-2">${escapeHtml(formatKes(product.priceKsh ?? product.priceKes))}</p>
+      <p class="text-base font-bold mt-2">${escapeHtml(formatKes(product.priceKsh ?? product.priceKes))}${
+        (() => {
+          const onPromo =
+            product.onPromo ||
+            product.promo?.active ||
+            (product.originalPriceKes &&
+              Number(product.originalPriceKes) > Number(product.priceKes || product.priceKsh || 0));
+          if (!onPromo) return "";
+          const original = Math.round(Number(product.originalPriceKes) || 0);
+          const pct = product.discountPct != null ? Math.round(Number(product.discountPct)) : 0;
+          return `${
+            original
+              ? ` <span class="text-xs font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span>`
+              : ""
+          } <span class="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
+            pct ? `-${pct}% promo` : "Promo"
+          }</span>`;
+        })()
+      }</p>
       <div class="mt-3 flex items-center justify-between gap-2">
         ${
           sold

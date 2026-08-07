@@ -18,6 +18,7 @@ import { toggleProductLike, listLikedProductIds } from "../db/repositories/socia
 import { CONDITION_LABELS } from "../db/product-mapper.js";
 import { resolveStorefrontImageUrl, resolveStorefrontVideoUrl } from "../lib/catalog-images.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
+import { publicPromoFields } from "../lib/public-promo.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
 import { notifySellerProductLiked } from "../services/social-notifications.js";
@@ -50,6 +51,7 @@ function getBrowseMenuSync() {
 function toPublicProduct(p) {
   if (!p) return null;
   const totals = computeProductTotals(p);
+  const promoFields = publicPromoFields(p, { totalKes: totals.totalKes });
   const pub = {
     id: p.id,
     name: p.name,
@@ -69,7 +71,10 @@ function toPublicProduct(p) {
     stockQuantity: p.stockQuantity,
     priceKes: totals.totalKes,
     priceUsd: p.priceUsd,
-    originalPriceKes: p.originalPriceKes,
+    originalPriceKes: promoFields.originalPriceKes,
+    onPromo: promoFields.onPromo || undefined,
+    discountPct: promoFields.discountPct || undefined,
+    promo: promoFields.promo,
     rating: p.rating,
     reviews: p.reviews,
     source: p.scope === "international" ? p.source : "Sokoni",

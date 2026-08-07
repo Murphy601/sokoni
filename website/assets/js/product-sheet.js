@@ -389,16 +389,36 @@
       <div class="product-sheet-meta">
         <p class="product-sheet-price">${escapeHtml(formatPrice(product))}${
           (() => {
+            const onPromo =
+              product.onPromo ||
+              product.promo?.active ||
+              (product.originalPriceKes &&
+                Math.round(Number(product.originalPriceKes)) >
+                  Math.round(Number(product.priceKes || product.totalKes) || 0));
+            if (!onPromo) return "";
             const original = Math.round(Number(product.originalPriceKes) || 0);
-            const now =
-              product.totalKes != null
-                ? Math.round(Number(product.totalKes) || 0)
-                : Math.round(Number(product.priceKes) || 0);
-            if (!original || !now || original <= now) return "";
-            return ` <span class="text-sm font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span>`;
+            const pct =
+              product.discountPct != null
+                ? Math.round(Number(product.discountPct))
+                : original
+                  ? Math.max(
+                      1,
+                      Math.round(
+                        (1 - Math.round(Number(product.priceKes || product.totalKes) || 0) / original) * 100
+                      )
+                    )
+                  : 0;
+            return `${
+              original > 0
+                ? ` <span class="text-sm font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span>`
+                : ""
+            } <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">${
+              pct ? `-${pct}% promo` : "Promo"
+            }</span>`;
           })()
         }</p>
         ${
+          product.onPromo ||
           product.promo?.active ||
           (product.originalPriceKes &&
             Math.round(Number(product.originalPriceKes)) > Math.round(Number(product.priceKes) || 0))

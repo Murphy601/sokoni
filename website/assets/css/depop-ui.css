@@ -258,18 +258,72 @@ html.dark .depop-card-placeholder {
   border-radius: 9999px;
 }
 
-.depop-card-condition {
+.depop-card-promo {
   position: absolute;
   top: 0.35rem;
   left: 0.35rem;
+  z-index: 4;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(27, 16, 53, 0.2);
+  max-width: calc(100% - 3rem);
+}
+
+.depop-card-condition {
+  position: absolute;
+  top: 0.35rem;
+  right: 2.6rem;
+  left: auto;
   font-size: 0.5625rem;
   font-weight: 800;
   padding: 0.2rem 0.45rem;
   border-radius: 9999px;
-  max-width: calc(100% - 2.5rem);
+  max-width: 42%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.depop-card-price--promo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+}
+
+.depop-card-price-now {
+  color: #1b1035;
+}
+
+html.dark .depop-card-price-now {
+  color: #fff8f0;
+}
+
+.depop-card-price-was {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(27, 16, 53, 0.4);
+  text-decoration: line-through;
+}
+
+html.dark .depop-card-price-was {
+  color: rgba(255, 248, 240, 0.4);
+}
+
+.depop-card-price-save {
+  font-size: 0.625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #146c3a;
+  background: rgba(37, 211, 102, 0.2);
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
 }
 
 .depop-card-condition--new {
