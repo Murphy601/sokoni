@@ -142,6 +142,24 @@ export const config = {
         trim(process.env.MPESA_B2C_TIMEOUT_URL) || `${botBase}/api/payments/daraja/b2c/timeout`,
       /** When true, owed settlements are auto-sent via B2C after escrow hold. */
       b2cAuto: /^(1|true|yes)$/i.test(trim(process.env.MPESA_B2C_AUTO) || ""),
+      /**
+       * Business days after delivery before Ready for M-Pesa.
+       * 0 = credit seller dashboard wallet immediately on delivery / buyer confirm.
+       * Set ESCROW_HOLD_BUSINESS_DAYS=3 for a Depop-style hold.
+       */
+      escrowHoldBusinessDays: (() => {
+        const raw = trim(process.env.ESCROW_HOLD_BUSINESS_DAYS);
+        if (raw === "") return 0;
+        const n = Number(raw);
+        return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+      })(),
+      /**
+       * When true (default) and B2C is configured, seller Withdraw triggers Daraja B2C
+       * immediately for Ready balances. If B2C is not configured, withdraw stays manual.
+       */
+      withdrawInstantB2c: !/^(0|false|no)$/i.test(
+        trim(process.env.SELLER_WITHDRAW_INSTANT_B2C) || "true"
+      ),
     };
   })(),
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",

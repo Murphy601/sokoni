@@ -88,8 +88,39 @@
     return `<span class="inline-flex items-center min-h-[28px] px-2.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${cls}">${escapeHtml(label)}</span>`;
   }
 
+  async function runPayB2C(orderId) {
+    if (!orderId) return;
+    if (!token()) {
+      setStatus("Enter admin token.", true);
+      return;
+    }
+    setStatus(`Sending B2C for ${orderId}…`);
+    try {
+      const res = await fetch(`${CMD_API}/escrow/${encodeURIComponent(orderId)}/payb2c`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ adminLabel: "admin-command" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || `B2C failed (${res.status})`, true);
+        return;
+      }
+      setStatus(
+        data.message ||
+          (data.success
+            ? `B2C submitted for ${orderId} — waiting Safaricom result.`
+            : `B2C response for ${orderId}.`)
+      );
+      await loadDashboard();
+    } catch (err) {
+      setStatus(err.message || "B2C request failed", true);
+    }
+  }
+
   function renderEscrow(tank) {
     const totals = tank?.totals || {};
+    const policy = tank?.payoutPolicy || {};
     if (el("stat-held-buyer")) el("stat-held-buyer").textContent = formatKes(totals.heldBuyerKes);
     if (el("stat-held-seller")) el("stat-held-seller").textContent = formatKes(totals.heldSellerNetKes);
     if (el("stat-held-count")) el("stat-held-count").textContent = String(totals.heldOrders ?? "—");
@@ -98,6 +129,20 @@
     }
     if (el("stat-paused")) {
       el("stat-paused").textContent = `${totals.pausedCount || 0} / ${totals.disputeHoldCount || 0}`;
+    }
+    if (el("stat-ready-kes")) el("stat-ready-kes").textContent = formatKes(totals.settlementOwedKes);
+    if (el("stat-ready-count")) {
+      el("stat-ready-count").textContent = `${totals.settlementOwedCount || 0} order(s) on seller wallets`;
+    }
+    if (el("stat-scheduled-kes")) {
+      el("stat-scheduled-kes").textContent = formatKes(totals.settlementScheduledKes);
+    }
+    if (el("stat-disbursing")) {
+      el("stat-disbursing").textContent = String(totals.settlementDisbursingCount ?? 0);
+    }
+    if (el("stat-failed")) el("stat-failed").textContent = String(totals.settlementFailedCount ?? 0);
+    if (el("payout-policy-note")) {
+      el("payout-policy-note").textContent = policy.note || "";
     }
     if (el("till-note")) {
       const till = tank?.till || {};
@@ -109,6 +154,53 @@
       el("escrow-delivery-hint").textContent =
         `${totals.deliveredCount || 0} delivered (prefer Release here) · ${totals.notDeliveredCount || 0} not delivered yet · paused ${totals.pausedCount || 0} · dispute holds ${totals.disputeHoldCount || 0}`;
     }
+
+    const readyWrap = el("ready-payouts");
+    if (readyWrap) {
+      const ready = tank?.readyPayouts || [];
+      const failed = tank?.failedPayouts || [];
+      if (!ready.length && !failed.length) {
+        readyWrap.innerHTML = `<p class="text-sm text-brand-purple/60 rounded-3xl border border-black/5 bg-white p-5">No Ready for M-Pesa balances yet. Deliver + buyer confirm (or Release) credits seller wallets.</p>`;
+      } else {
+        const readyHtml = ready
+          .map(
+            (e) => `
+          <article class="rounded-3xl border border-emerald-200 bg-white p-4 space-y-2">
+            <div class="flex flex-wrap justify-between gap-2">
+              <div>
+                <h3 class="font-bold font-mono text-sm">${escapeHtml(e.orderId)}</h3>
+                <p class="text-sm text-brand-purple/70 mt-1">${escapeHtml(e.supplierName || "Seller")} · ${escapeHtml(e.productName || "Item")}</p>
+              </div>
+              <p class="font-semibold text-emerald-800 shrink-0">${formatKes(e.payoutAmountKes)}</p>
+            </div>
+            <p class="text-xs text-brand-purple/55">Status ${escapeHtml(e.status || "owed")} · M-Pesa ${escapeHtml(e.mpesaPhone || "—")}</p>
+            <button type="button" class="min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold" data-payb2c="${escapeHtml(e.orderId)}">Pay B2C now</button>
+          </article>`
+          )
+          .join("");
+        const failedHtml = failed
+          .map(
+            (e) => `
+          <article class="rounded-3xl border border-red-200 bg-white p-4 space-y-2">
+            <div class="flex flex-wrap justify-between gap-2">
+              <div>
+                <h3 class="font-bold font-mono text-sm">${escapeHtml(e.orderId)}</h3>
+                <p class="text-sm text-brand-purple/70 mt-1">${escapeHtml(e.supplierName || "Seller")}</p>
+              </div>
+              <p class="font-semibold text-red-800 shrink-0">${formatKes(e.payoutAmountKes)}</p>
+            </div>
+            <p class="text-xs text-red-800">${escapeHtml(e.resultDesc || "B2C failed")}</p>
+            <button type="button" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-800 text-xs font-bold" data-payb2c="${escapeHtml(e.orderId)}">Retry B2C</button>
+          </article>`
+          )
+          .join("");
+        readyWrap.innerHTML = readyHtml + failedHtml;
+        readyWrap.querySelectorAll("[data-payb2c]").forEach((btn) => {
+          btn.addEventListener("click", () => void runPayB2C(btn.getAttribute("data-payb2c")));
+        });
+      }
+    }
+
     const wrap = el("escrow-orders");
     if (!wrap) return;
     const orders = tank?.orders || [];
@@ -155,7 +247,7 @@
             <button type="button" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-800 text-xs font-bold" data-quick-override="refund" data-order="${escapeHtml(o.orderId)}">Refund</button>
             <button type="button" class="min-h-[40px] px-3 rounded-full text-xs font-bold ${releaseCls}" data-quick-override="release" data-order="${escapeHtml(o.orderId)}" title="${escapeHtml(
               o.releaseHint || ""
-            )}">Release</button>
+            )}">Release → Ready</button>
           </div>
         </article>`;
       })

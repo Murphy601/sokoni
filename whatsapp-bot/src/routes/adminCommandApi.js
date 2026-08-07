@@ -13,6 +13,8 @@ import {
   refundEscrowOrder,
   releaseEscrowOrder,
 } from "../services/platform-command.js";
+import { initiateSettlementB2C } from "../services/settlements.js";
+import { isB2CReady, b2cMeta } from "../services/daraja-mpesa.js";
 import { listAdminDisputes, resolveDispute } from "../services/disputes.js";
 import { smartSearch, smartSuggest } from "../services/smart-search.js";
 
@@ -62,6 +64,28 @@ router.post("/escrow/:orderId/release", (req, res) => {
   });
   if (result.error) return res.status(404).json(result);
   res.json(result);
+});
+
+/** POST /admin/command/escrow/:orderId/payb2c — send Ready/owed settlement via Daraja B2C */
+router.post("/escrow/:orderId/payb2c", async (req, res) => {
+  if (!isB2CReady()) {
+    return res.status(503).json({
+      error: "b2c_not_configured",
+      message:
+        "Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (initiator SOKONIMA) then restart the bot.",
+      b2c: b2cMeta(),
+    });
+  }
+  try {
+    const result = await initiateSettlementB2C(req.params.orderId, {
+      force: Boolean(req.body?.force),
+    });
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (result.error) return res.status(400).json(result);
+    res.json({ ok: true, ...result, b2c: b2cMeta() });
+  } catch (err) {
+    res.status(500).json({ error: "payb2c_failed", message: err.message });
+  }
 });
 
 /** GET /admin/command/hubs?days=30 */

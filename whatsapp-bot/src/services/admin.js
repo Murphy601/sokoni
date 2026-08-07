@@ -494,9 +494,12 @@ async function handleStatusCommand(adminChatId, args) {
     advanceShipmentStatus(result.order.id, "delivered", { actor: "admin_status", note: "#status delivered" });
     onOrderDelivered(getOrder(result.order.id) || result.order);
   }
+  const holdDays = Number(config.mpesa?.escrowHoldBusinessDays);
   const payoutNote =
     result.status === "delivered" && result.order.sourcePriceKes
-      ? `\nSeller payout scheduled (2–3 business days). Check #payouts.`
+      ? holdDays > 0
+        ? `\nSeller payout scheduled (${holdDays} business day hold). Check #payouts.`
+        : `\nSeller wallet credited → Ready for M-Pesa. Check #payouts.`
       : "";
   return sendText(
     adminChatId,

@@ -99,6 +99,9 @@ B2C_RESULT="${MPESA_B2C_RESULT_URL:-https://bot.sokonimall.com/api/payments/dara
 B2C_TIMEOUT="${MPESA_B2C_TIMEOUT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/timeout}"
 B2C_CMD="${MPESA_B2C_COMMAND_ID:-BusinessPayment}"
 B2C_AUTO="${MPESA_B2C_AUTO:-false}"
+# Instant Seller Hub Ready on delivery (0). Set 3 for Depop-style hold.
+HOLD_DAYS="${ESCROW_HOLD_BUSINESS_DAYS:-0}"
+WITHDRAW_B2C="${SELLER_WITHDRAW_INSTANT_B2C:-true}"
 
 upsert() {
   local key="$1"
@@ -131,6 +134,8 @@ upsert MPESA_B2C_RESULT_URL "$B2C_RESULT"
 upsert MPESA_B2C_TIMEOUT_URL "$B2C_TIMEOUT"
 upsert MPESA_B2C_COMMAND_ID "$B2C_CMD"
 upsert MPESA_B2C_AUTO "$B2C_AUTO"
+upsert ESCROW_HOLD_BUSINESS_DAYS "$HOLD_DAYS"
+upsert SELLER_WITHDRAW_INSTANT_B2C "$WITHDRAW_B2C"
 
 if [ -n "${MPESA_INITIATOR_NAME:-}" ]; then
   upsert MPESA_INITIATOR_NAME "$MPESA_INITIATOR_NAME"

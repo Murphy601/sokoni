@@ -63,7 +63,11 @@ Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcod
 
 **HTTP 400 on OAuth** (even with Key len 48 / Secret 64) means Safaricom does not accept that Key:Secret pair. Re-Copy from the portal, regenerate keys, confirm Lipa Na M-Pesa Online / M-Pesa Express is on the app, or contact `apisupport@safaricom.co.ke`. Org API roles do not fix OAuth.
 
-**Seller B2C:** with org roles (Business Manager, ORG B2C API initiator, etc.) enabled in the Safaricom org portal, set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
+**Seller wallet / withdraw:**
+- `ESCROW_HOLD_BUSINESS_DAYS=0` (default) — on delivery / buyer confirm, credit **Ready for M-Pesa** on the Seller Hub immediately.
+- Seller **Withdraw** triggers Daraja B2C instantly when `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
+- Admin Command Center shows Ready / scheduled / B2C failed and can **Pay B2C** or **Release → Ready**.
+- Buyer STK does not need the initiator. Leave `MPESA_B2C_AUTO=false` until the first manual/withdraw B2C succeeds.
 
 **Till vs shortcode (Buy Goods — Sokoni live):**
 - `MPESA_SHORTCODE=3439153` — Daraja / org H.O. → STK `BusinessShortCode` + password

@@ -18,7 +18,7 @@ import {
 import { planFulfillment, applyFulfillmentPlan } from "./fulfillment.js";
 import { getSupplier } from "./suppliers.js";
 import { invalidateProductCache } from "./catalog.js";
-import { scheduleSellerPayoutAfterDelivery, addBusinessDays } from "./settlements.js";
+import { addBusinessDays } from "./settlements.js";
 import { advanceShipmentStatus } from "./shipments.js";
 import { recordPurchaseFeedEvent } from "./feed-ranking.js";
 import { isDbEnabled } from "../db/pool.js";
@@ -427,15 +427,20 @@ export async function onOrderDelivered(order) {
     console.warn("[escrow] dispute check skipped:", err.message);
   }
 
-  const eligibleAt = addBusinessDays(Date.now(), 3);
+  const { creditSellerWalletAfterDelivery, escrowHoldBusinessDays } = await import(
+    "./settlements.js"
+  );
+  const holdDays = escrowHoldBusinessDays();
+  const eligibleAt = holdDays === 0 ? Date.now() : addBusinessDays(Date.now(), holdDays);
   updateOrderMeta(order.id, {
     escrowStatus: "released",
     deliveredAt: Date.now(),
     payoutEligibleAt: eligibleAt,
-    payoutStatus: "scheduled",
+    payoutStatus: holdDays === 0 ? "owed" : "scheduled",
   });
-  // sellerPayoutKes already nets per-item platform commission (never cart-level).
-  scheduleSellerPayoutAfterDelivery(getOrder(order.id) || { ...order, payoutEligibleAt: eligibleAt });
+  // Credit Seller Hub Ready immediately when hold days = 0 (default).
+  const fresh = getOrder(order.id) || { ...order, payoutEligibleAt: eligibleAt };
+  creditSellerWalletAfterDelivery(fresh);
 
   if (order.parentOrderId || order.kind === "cart_child") {
     try {
