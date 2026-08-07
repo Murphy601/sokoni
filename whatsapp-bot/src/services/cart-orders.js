@@ -21,6 +21,7 @@ import {
   updateOrderMeta,
   updateOrderStatus,
   getOrder,
+  allocateSknParentId,
 } from "./orders.js";
 
 export const CART_PARENT_KIND = "cart_parent";
@@ -115,11 +116,6 @@ export function computeCartParentTotals(lines) {
   };
 }
 
-function nextSknSeq(store) {
-  store.sknSeq = Math.max(1000, Number(store.sknSeq) || 1000) + 1;
-  return store.sknSeq;
-}
-
 /**
  * Create parent + children from catalog products.
  * @param {object} opts
@@ -142,8 +138,7 @@ export function createCartOrder({ customerKey, chatId, lines, details }) {
   const store = getOrderStore();
   if (!store.cartOrders) store.cartOrders = {};
 
-  const seq = nextSknSeq(store);
-  const parentId = `SKN-${seq}`;
+  const parentId = allocateSknParentId(store);
   const now = Date.now();
   const prepaid = isPrepaidOnlyEffective();
 

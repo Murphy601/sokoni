@@ -12,7 +12,8 @@ export const ORDER_ID_CAPTURE = "(SKN-\\d+(?:-\\d+)?|SK-\\d+)";
 
 /**
  * Normalize SK-####, SKN-####, SKN-####-n (and missing-hyphen variants).
- * Bare digits still map to legacy SK-#### (historical single-item seq).
+ * Bare digits map to SKN-#### (current single-item + cart parent prefix).
+ * Explicit SK-#### remains valid for legacy orders.
  */
 export function normalizeOrderId(id) {
   if (id == null || id === "") return null;
@@ -30,7 +31,7 @@ export function normalizeOrderId(id) {
 
   const digits = raw.replace(/\D/g, "");
   if (!digits) return null;
-  return `SK-${digits}`;
+  return `SKN-${digits}`;
 }
 
 /** First order id found in free text, or null. */
