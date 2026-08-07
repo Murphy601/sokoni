@@ -193,6 +193,22 @@
       .join("");
   }
 
+  function dashboardLoadError(res, data) {
+    if (res.status === 404) {
+      return (
+        "Bot API missing this dashboard (404). Redeploy bot.sokonimall.com: " +
+        "cd ~/sokoni && git fetch origin main && git checkout -B main origin/main && bash scripts/deploy-bot.sh"
+      );
+    }
+    if (res.status === 401 || res.status === 403) {
+      return data.message || data.error || "Admin token rejected — check ADMIN_SETUP_TOKEN.";
+    }
+    if (res.status === 0 || res.type === "opaque") {
+      return "Could not reach bot.sokonimall.com — check network / CORS.";
+    }
+    return data.message || data.error || `Could not load dashboard (${res.status}).`;
+  }
+
   async function loadDashboard() {
     const t = token();
     if (!t) {
@@ -210,7 +226,7 @@
       const dash = await dashRes.json().catch(() => ({}));
       const hubs = await hubRes.json().catch(() => ({}));
       if (!dashRes.ok) {
-        setStatus(dash.message || dash.error || "Could not load dashboard.", true);
+        setStatus(dashboardLoadError(dashRes, dash), true);
         return;
       }
       renderEscrow(dash.escrow);
@@ -219,8 +235,13 @@
       setStatus(
         `Tank ${dash.escrow?.totals?.heldOrders || 0} orders · ${dash.disputes?.openCount || 0} open disputes · updated ${new Date().toLocaleTimeString()}`
       );
-    } catch {
-      setStatus("Network error loading command center.", true);
+    } catch (err) {
+      setStatus(
+        /Failed to fetch|NetworkError/i.test(String(err?.message || err))
+          ? "Network error reaching bot.sokonimall.com. If the site loaded but this fails, the bot may be down or blocking the browser."
+          : "Network error loading command center.",
+        true
+      );
     }
   }
 
