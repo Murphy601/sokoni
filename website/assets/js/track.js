@@ -16,6 +16,7 @@
   const loadingEl = document.getElementById("track-loading");
 
   let currentOrderId = "";
+  let trackPollTimer = null;
 
   function normalizeOrderId(raw) {
     return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
@@ -227,11 +228,45 @@
     renderDisputePanel(t);
   }
 
-  async function fetchTracking(orderId) {
-    errorEl.classList.add("hidden");
-    statusEl.classList.add("hidden");
-    disputeEl?.classList.add("hidden");
-    loadingEl.classList.remove("hidden");
+  function isTerminalTracking(t) {
+    if (!t) return false;
+    const ship = String(t.shipmentStatus || t.shipmentStatusLabel || "").toLowerCase();
+    const escrow = String(t.escrowStatus || "").toLowerCase();
+    const status = String(t.status || "").toLowerCase();
+    return (
+      escrow === "released" ||
+      escrow === "refunded" ||
+      status === "delivered" ||
+      status === "cancelled" ||
+      ship === "delivered" ||
+      ship.includes("delivered") ||
+      ship.includes("complete")
+    );
+  }
+
+  function stopTrackPolling() {
+    if (trackPollTimer) {
+      window.clearInterval(trackPollTimer);
+      trackPollTimer = null;
+    }
+  }
+
+  function startTrackPolling(orderId) {
+    stopTrackPolling();
+    if (!orderId) return;
+    trackPollTimer = window.setInterval(() => {
+      if (document.hidden || !currentOrderId) return;
+      void fetchTracking(currentOrderId, { silent: true });
+    }, 30000);
+  }
+
+  async function fetchTracking(orderId, { silent = false } = {}) {
+    if (!silent) {
+      errorEl.classList.add("hidden");
+      statusEl.classList.add("hidden");
+      disputeEl?.classList.add("hidden");
+      loadingEl.classList.remove("hidden");
+    }
 
     try {
       const res = await fetch(`${API_BASE}/${encodeURIComponent(orderId)}`);
@@ -240,11 +275,15 @@
         throw new Error(data.error === "order_not_found" ? "Order not found. Check your SKN-#### number." : "Could not load tracking.");
       }
       renderTracking(data);
+      if (isTerminalTracking(data.tracking)) stopTrackPolling();
+      else startTrackPolling(orderId);
     } catch (err) {
-      errorEl.textContent = err.message || "Tracking unavailable. Try WhatsApp instead.";
-      errorEl.classList.remove("hidden");
+      if (!silent) {
+        errorEl.textContent = err.message || "Tracking unavailable. Try WhatsApp instead.";
+        errorEl.classList.remove("hidden");
+      }
     } finally {
-      loadingEl.classList.add("hidden");
+      if (!silent) loadingEl.classList.add("hidden");
     }
   }
 
@@ -257,6 +296,11 @@
     url.searchParams.set("order", id);
     window.history.replaceState({}, "", url);
     fetchTracking(id);
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !currentOrderId) return;
+    void fetchTracking(currentOrderId, { silent: true });
   });
 
   const params = new URLSearchParams(window.location.search);
