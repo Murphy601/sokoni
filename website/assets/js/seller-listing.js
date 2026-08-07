@@ -5822,7 +5822,19 @@ function renderWithdrawPanel(data) {
         .join("")
     : `<p class="text-brand-purple/50 dark:text-white/50">No withdrawals yet.</p>`;
 
-  window.__sokoniWithdrawExport = { breakdown: items, history, availableKes: data.availableKes || 0 };
+  window.__sokoniWithdrawExport = {
+    breakdown: items,
+    history,
+    availableKes: data.availableKes || 0,
+    pendingEscrowKes: Number(ledgerData?.pendingEscrow?.totalKes || 0),
+    inTransitKes: Number(ledgerData?.inTransit?.totalKes || 0),
+    mpesa: data.maskedMpesa || data.mpesaNumber || "",
+    pendingRequest: data.pendingRequest || null,
+    shopName: sellerProfile?.shopName || sellerProfile?.name || "",
+    shopHandle: sellerShopHandle(),
+    sellerPhone: apiPhone() || "",
+    exportedAt: Date.now(),
+  };
 }
 
 async function loadWithdrawPanel() {
@@ -6435,21 +6447,158 @@ function renderHubMarketing() {
     .join("");
 }
 
-function exportPayoutCsv() {
+/** Minimal multi-page text PDF (Helvetica) — no external libs. */
+function buildSimplePdf(lines, { title = "Sokoni statement" } = {}) {
+  const pageWidth = 595.28; // A4
+  const pageHeight = 841.89;
+  const marginX = 48;
+  const marginTop = 56;
+  const lineHeight = 14;
+  const fontSize = 10;
+  const maxLines = Math.floor((pageHeight - marginTop - 48) / lineHeight);
+
+  const escapePdf = (text) =>
+    String(text ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)")
+      .replace(/[^\x20-\x7E]/g, (ch) => {
+        // Keep statement readable: drop non-latin1 control chars, map common kes symbols.
+        if (ch === "—") return "-";
+        if (ch === "•") return "*";
+        if (ch === "→") return "->";
+        return "?";
+      });
+
+  const pages = [];
+  for (let i = 0; i < lines.length; i += maxLines) {
+    pages.push(lines.slice(i, i + maxLines));
+  }
+  if (!pages.length) pages.push([title]);
+
+  const objects = [];
+  const addObj = (body) => {
+    objects.push(body);
+    return objects.length;
+  };
+
+  const fontId = addObj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const pageIds = [];
+
+  pages.forEach((pageLines) => {
+    let y = pageHeight - marginTop;
+    const ops = ["BT", `/F1 ${fontSize} Tf`, `${marginX} ${y} Td`];
+    pageLines.forEach((line, idx) => {
+      if (idx === 0) {
+        ops.push(`(${escapePdf(line)}) Tj`);
+      } else {
+        ops.push(`0 -${lineHeight} Td (${escapePdf(line)}) Tj`);
+      }
+    });
+    ops.push("ET");
+    const stream = ops.join("\n");
+    const contentId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    const pageId = addObj(
+      `<< /Type /Page /Parent 0 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] ` +
+        `/Contents ${contentId} 0 R /Resources << /Font << /F1 ${fontId} 0 R >> >> >>`
+    );
+    pageIds.push(pageId);
+  });
+
+  const kids = pageIds.map((id) => `${id} 0 R`).join(" ");
+  const pagesId = addObj(`<< /Type /Pages /Kids [${kids}] /Count ${pageIds.length} >>`);
+  // Patch page Parent refs to real pages object id
+  pageIds.forEach((id) => {
+    objects[id - 1] = objects[id - 1].replace("/Parent 0 0 R", `/Parent ${pagesId} 0 R`);
+  });
+  const catalogId = addObj(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((body, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let i = 1; i <= objects.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\n`;
+  pdf += `startxref\n${xrefStart}\n%%EOF`;
+  return pdf;
+}
+
+function exportPayoutPdf() {
   const payload = window.__sokoniWithdrawExport || {};
-  const rows = [["type", "id", "status", "amountKes"]];
-  (payload.breakdown || []).forEach((item) => {
-    rows.push(["order", item.orderId || "", "available", String(item.amountKes || 0)]);
-  });
-  (payload.history || []).forEach((h) => {
-    rows.push(["withdrawal", h.id || "", h.status || "", String(h.amountKes || 0)]);
-  });
-  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const shop =
+    payload.shopName ||
+    (payload.shopHandle ? `@${payload.shopHandle}` : "") ||
+    payload.sellerPhone ||
+    "Seller";
+  const handle = payload.shopHandle ? `@${payload.shopHandle}` : "";
+  const dateStr = new Date(payload.exportedAt || Date.now()).toLocaleString();
+  const lines = [
+    "SOKONI MALL — M-PESA PAYOUT STATEMENT",
+    "sokonimall.com",
+    "",
+    `Shop: ${shop}${handle && shop !== handle ? ` (${handle})` : ""}`,
+    `Seller WhatsApp: ${payload.sellerPhone || "—"}`,
+    `Payout M-Pesa: ${payload.mpesa || "—"}`,
+    `Generated: ${dateStr}`,
+    "",
+    `Available for payout: ${formatKes(payload.availableKes || 0)}`,
+    `Pending escrow: ${formatKes(payload.pendingEscrowKes || 0)}`,
+    `In transit: ${formatKes(payload.inTransitKes || 0)}`,
+  ];
+
+  if (payload.pendingRequest) {
+    lines.push(
+      "",
+      `Pending withdrawal: ${payload.pendingRequest.id} — ${formatKes(payload.pendingRequest.amountKes || 0)}`
+    );
+  }
+
+  lines.push("", "AVAILABLE ORDERS (ready for M-Pesa)", "-".repeat(52));
+  const orders = payload.breakdown || [];
+  if (!orders.length) {
+    lines.push("(none yet)");
+  } else {
+    orders.forEach((item, i) => {
+      const name = String(item.productName || "Order").slice(0, 36);
+      lines.push(
+        `${String(i + 1).padStart(2, " ")}. ${item.orderId || "—"}  ${name}  ${formatKes(item.amountKes || 0)}`
+      );
+    });
+  }
+
+  lines.push("", "WITHDRAWAL HISTORY", "-".repeat(52));
+  const history = payload.history || [];
+  if (!history.length) {
+    lines.push("(none yet)");
+  } else {
+    history.forEach((h, i) => {
+      lines.push(
+        `${String(i + 1).padStart(2, " ")}. ${h.id || "—"}  ${h.status || "—"}  ${formatKes(h.amountKes || 0)}`
+      );
+    });
+  }
+
+  lines.push(
+    "",
+    "Notes",
+    "- Funds pay out after delivery is confirmed and escrow releases.",
+    "- Manual M-Pesa transfer usually within 1-2 business days of request.",
+    "- This statement is for your records — not a bank advice slip."
+  );
+
+  const pdf = buildSimplePdf(lines, { title: "Sokoni M-Pesa statement" });
+  const blob = new Blob([pdf], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `sokoni-payout-statement-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `sokoni-mpesa-statement-${new Date().toISOString().slice(0, 10)}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -6469,7 +6618,9 @@ function bindSellerCommandCenterUi() {
       if (el("marketing-status")) el("marketing-status").textContent = "Could not copy — select the preview text manually.";
     }
   });
-  el("payout-export-csv-btn")?.addEventListener("click", exportPayoutCsv);
+  el("payout-export-pdf-btn")?.addEventListener("click", exportPayoutPdf);
+  // Back-compat if an older cached HTML still has the CSV button id.
+  el("payout-export-csv-btn")?.addEventListener("click", exportPayoutPdf);
 }
 
 function isSellerDashView(view) {
