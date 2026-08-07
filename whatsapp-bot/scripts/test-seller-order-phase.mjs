@@ -53,6 +53,15 @@ const paidBase = {
 }
 
 {
+  const f = sellerOrderFulfillment({
+    ...paidBase,
+    shipmentStatus: "in_transit",
+    sellerDispatchedAt: Date.now(),
+  });
+  assert("shipped badge is short", f.phaseLabel === "Shipped");
+}
+
+{
   // Buyer confirmed but shipment field lagged — still Received, never Print label
   const f = sellerOrderFulfillment({
     ...paidBase,

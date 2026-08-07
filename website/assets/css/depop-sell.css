@@ -1961,3 +1961,92 @@ body.sell-depop-page #listing-wizard:not(.hidden) #seller-profile-bar {
   max-width: none;
   flex-direction: column;
 }
+
+/* Orders panel — settled vertical column, no sideways rail / page drag */
+#hub-panel-orders,
+#hub-panel-orders .sell-dash-group,
+#hub-panel-orders .sell-orders-section {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.sell-orders-section__head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .sell-orders-section__head {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+}
+
+.sell-orders-section__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sell-orders-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  touch-action: pan-y;
+}
+
+.sell-orders-stack > * {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.sell-order-card--static {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sell-order-card--static .sell-order-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  max-width: 100%;
+}
+
+.sell-order-card__title {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sell-order-card__meta {
+  overflow-wrap: anywhere;
+}
+
+.sell-order-card--static .sell-order-badge {
+  flex: 0 1 auto;
+  white-space: normal;
+  text-align: right;
+  max-width: 100%;
+  line-height: 1.25;
+}
