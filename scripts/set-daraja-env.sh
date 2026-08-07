@@ -69,10 +69,21 @@ upsert() {
   local val="$2"
   local tmp
   tmp="$(mktemp)"
+  # Drop ALL existing lines for this key (sed -i replaces every match, but
+  # duplicate keys from past bad deploys confuse humans and some loaders).
   if grep -qE "^${key}=" "$ENV_FILE"; then
     local esc
     esc="$(printf '%s' "$val" | sed -e 's/[&\\]/\\&/g')"
-    sed -E "s|^${key}=.*|${key}=${esc}|" "$ENV_FILE" > "$tmp"
+    # Keep first occurrence rewritten; delete later duplicates.
+    awk -v k="${key}" -v v="${key}=${esc}" '
+      BEGIN { done=0 }
+      index($0, k "=") == 1 {
+        if (!done) { print v; done=1 }
+        next
+      }
+      { print }
+      END { if (!done) print v }
+    ' "$ENV_FILE" > "$tmp"
     mv "$tmp" "$ENV_FILE"
   else
     printf '\n%s=%s\n' "$key" "$val" >> "$ENV_FILE"
