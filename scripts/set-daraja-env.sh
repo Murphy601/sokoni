@@ -21,9 +21,13 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # --- Production Daraja app credentials (Prod-SOKONIMALL) ---
-# Override via environment if rotating keys.
-MPESA_CONSUMER_KEY="${MPESA_CONSUMER_KEY:-Vqd6UhRdqlEai2qBfsnwZQ9I725JuQgYcud9C85s2IHS9DvB}"
-MPESA_CONSUMER_SECRET="${MPESA_CONSUMER_SECRET:-P2ht5y63CZcAOHLc8jDSbuxu4KbTdkWmebF6DyWAKz9owJh393eseGduGaHVhfo}"
+# Must be passed in — do not rely on OCR'd screenshot values (invalid keys → OAuth 400).
+#   export MPESA_CONSUMER_KEY='…'
+#   export MPESA_CONSUMER_SECRET='…'
+#   export MPESA_PASSKEY='…'
+#   bash scripts/set-daraja-env.sh
+: "${MPESA_CONSUMER_KEY:?Set MPESA_CONSUMER_KEY from Daraja portal (exact copy)}"
+: "${MPESA_CONSUMER_SECRET:?Set MPESA_CONSUMER_SECRET from Daraja portal (exact copy)}"
 MPESA_PASSKEY="${MPESA_PASSKEY:-ea9d0b4e609cc9ecc51aaa3c5973a0e8890efca311df7ac28af8cdafdc67285d}"
 
 SHORTCODE="${MPESA_SHORTCODE:-3439153}"
