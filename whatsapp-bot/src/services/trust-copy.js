@@ -23,7 +23,7 @@ function tillName() {
 
 export function tillExplainLine() {
   return (
-    `🏢 *M-Pesa Till:* ${till()} — registered to Sokoni Mall founder *${tillName()}* (named, accountable checkout)\n` +
+    `🏢 *M-Pesa Paybill:* ${till()} — *${tillName()}*\n` +
     `📞 *WhatsApp / calls:* ${formatPhoneDisplay()}`
   );
 }
@@ -31,8 +31,7 @@ export function tillExplainLine() {
 export function paymentTrustDisclosure() {
   return (
     `Countrywide *100% prepaid* checkout — funds held in Sokoni escrow until delivery is confirmed.\n` +
-    `Pay via M-Pesa (STK push via Safaricom Daraja coming soon; manual till until then).\n\n` +
-    `During our founder-led launch phase, payments go to Buy Goods Till *${till()}* — registered to *${tillName()}*.\n\n` +
+    `Pay via M-Pesa STK push (Safaricom Daraja) or manually to Paybill *${till()}* (*${tillName()}*).\n\n` +
     `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
     `✅ *Verify:* call or WhatsApp us before paying to confirm your SKN-#### (or older SK-####) order number.\n` +
     `_No pay-on-delivery. No COD._`
@@ -74,7 +73,7 @@ export function welcomeBackMessage(customerName = "") {
     `Great to see you again — our catalog has fresh local deals.\n\n` +
     `🛡️ *Your safety checklist:*\n` +
     `• 100% prepaid — escrow until delivery confirmed\n` +
-    `• Official checkout: Till *${till()}* (*${tillName()}*)\n` +
+    `• Official checkout: Paybill *${till()}* (*${tillName()}*)\n` +
     `• ${offerLine("this week")}\n\n` +
     `What can our AI find for you today?`
   );
@@ -85,7 +84,7 @@ export function broadcastReEngageMessage() {
     `Habari! It's the *Sokoni Mall* team 👋\n` +
     `We've upgraded our WhatsApp shopping assistant!\n\n` +
     `• 100% prepaid escrow — pay before dispatch\n` +
-    `• Till *${till()}* — founder *${tillName()}* (named, accountable checkout)\n` +
+    `• Paybill *${till()}* — *${tillName()}*\n` +
     `• ${offerLine()}\n\n` +
     `Text us what you need in English, Kiswahili, or Sheng! 👇`
   );
@@ -147,8 +146,8 @@ export function paymentVerificationPrompt(amountKes = null) {
     `Payment — prepaid escrow 🔑\n\n` +
     `Complete payment *before* we dispatch your order:\n\n` +
     amountLine +
-    `🏢 *Buy Goods Till:* ${till()}\n` +
-    `👤 *Registered to:* ${tillName()} (Sokoni Mall founder)\n\n` +
+    `🏢 *Paybill:* ${till()}\n` +
+    `📛 *Name:* ${tillName()}\n\n` +
     `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your SKN-#### (or older SK-####) order number.\n` +
     `After paying, paste your M-Pesa confirmation or reply *paid* with the transaction code. 🧾`
   );
@@ -270,8 +269,8 @@ export function mpesaTroubleshootMessage({ orderId, amountKes }) {
   return (
     `M-Pesa Transaction Error? Let's Fix It! 🛠️📱\n\n` +
     `Order *${orderId}* payment didn't go through — usually a quick network glitch.\n\n` +
-    `1️⃣ Confirm Till *${till()}* (name: *${tillName()}*)\n` +
-    `2️⃣ Try SIM Tool Kit: Lipa Na M-Pesa → Buy Goods → Till ${till()}\n` +
+    `1️⃣ Confirm Paybill *${till()}* (name: *${tillName()}*)\n` +
+    `2️⃣ Try SIM Tool Kit: Lipa Na M-Pesa → Pay Bill → ${till()} (account = order id)\n` +
     `3️⃣ Ensure balance covers *${priceLine}* plus Safaricom fees\n` +
     `4️⃣ Show the rider any error message on screen\n\n` +
     `Reply *paid* with your confirmation code once it goes through. 🙏`

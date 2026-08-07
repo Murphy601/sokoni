@@ -289,7 +289,7 @@
         "M-Pesa STK is live — tap Pay, enter PIN on your phone. Payment confirms automatically.";
     } else {
       readinessEl.textContent =
-        "STK not live yet — pay Buy Goods till with your SK number as reference, then reply paid on WhatsApp.";
+        "STK not live yet — pay Paybill 3439153 (SOKONIMA) with your SKN number as account reference, then reply paid on WhatsApp.";
     }
   }
 

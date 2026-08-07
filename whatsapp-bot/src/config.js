@@ -78,7 +78,7 @@ export const config = {
     phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
     phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "+254 117 422 428",
     email: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
-    founderName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+    founderName: process.env.FOUNDER_NAME || "David Thuku Muiruri",
     location: process.env.BUSINESS_LOCATION || "Sokoni Mall Startup Hub, Nairobi, Kenya",
   },
   offers: {
@@ -99,15 +99,16 @@ export const config = {
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
       "Countrywide via Sokoni Mashinani hubs + courier. Sellers dispatch after prepaid escrow. Funds held until delivery confirmed.",
-    mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
-    mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+    /** Production Daraja shortcode / PartyB (SOKONIMA). Legacy personal till 4775847 retired. */
+    mpesaTill: process.env.MPESA_TILL_NUMBER || "3439153",
+    mpesaTillName: process.env.MPESA_TILL_NAME || "SOKONIMA",
   },
   /** Safaricom Daraja — STK push + B2C seller payouts. */
   mpesa: (() => {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
-    const shortcode = trim(process.env.MPESA_SHORTCODE);
-    // Buy Goods: BusinessShortCode is often H.O.; PartyB is the store/till (can differ).
+    const shortcode = trim(process.env.MPESA_SHORTCODE) || "3439153";
+    // Paybill: BusinessShortCode === PartyB. Buy Goods: H.O. shortcode + store till as PartyB.
     const partyB =
       trim(process.env.MPESA_PARTY_B) ||
       trim(process.env.MPESA_TILL_NUMBER) ||
@@ -124,7 +125,7 @@ export const config = {
       callbackUrl:
         trim(process.env.MPESA_CALLBACK_URL) || `${botBase}/api/payments/daraja/callback`,
       env: envRaw === "production" || envRaw === "prod" ? "production" : "sandbox",
-      transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerBuyGoodsOnline",
+      transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerPayBillOnline",
       /** B2C (BusinessPayment) — seller escrow disbursement. */
       b2cShortcode,
       initiatorName: trim(process.env.MPESA_INITIATOR_NAME),

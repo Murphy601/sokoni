@@ -1,6 +1,6 @@
 /**
  * Variable M-Pesa transaction fees by amount band.
- * Sokoni checkout uses Buy Goods Till / Lipa na M-Pesa (STK).
+ * Sokoni checkout uses Paybill / Lipa na M-Pesa (STK).
  *
  * Tariffs change — this table is an estimate shown at listing/checkout so buyers
  * see that fees are NOT a flat rate. Update bands when Safaricom publishes new rates.

@@ -39,20 +39,23 @@ Buyer checkout → STK push → funds held in escrow
 Set in `whatsapp-bot/.env`:
 
 ```env
-MPESA_CONSUMER_KEY=
+MPESA_CONSUMER_KEY=           # VM only — never commit
 MPESA_CONSUMER_SECRET=
 MPESA_PASSKEY=
-MPESA_SHORTCODE=            # BusinessShortCode / H.O. (used in STK password)
-MPESA_TILL_NUMBER=          # Store/till → STK PartyB (can differ from SHORTCODE)
-# MPESA_PARTY_B=            # optional override for PartyB
+MPESA_SHORTCODE=3439153       # BusinessShortCode (SOKONIMA)
+MPESA_TILL_NUMBER=3439153     # PartyB / account display (same for this Paybill)
+MPESA_TILL_NAME=SOKONIMA
+# MPESA_PARTY_B=              # optional override for PartyB
 MPESA_ENV=production
-MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline   # Paybill → CustomerPayBillOnline
+MPESA_TRANSACTION_TYPE=CustomerPayBillOnline   # Till → CustomerBuyGoodsOnline
 MPESA_CALLBACK_URL=https://bot.sokonimall.com/api/payments/daraja/callback
 ```
 
-**Till vs shortcode:** for a simple till they are often the same. For many Buy Goods merchants, Daraja **Short Code** is the **H.O.** number (`MPESA_SHORTCODE` / `BusinessShortCode`) and the **store/till** is `MPESA_TILL_NUMBER` (`PartyB`). If STK fails with “Agent number and Store number … do not match”, set those two correctly from Safaricom Business (don’t force them equal).
+**Ops on the bot VM:** `SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh` applies `scripts/set-daraja-env.sh` (Prod-SOKONIMALL keys + Paybill 3439153). Or run `bash scripts/set-daraja-env.sh` alone. Retires leftover `4775847` values.
 
-Register the callback URL in the [Safaricom Daraja portal](https://developer.safaricom.co.ke/). Prefer `/daraja/callback` — URLs containing `mpesa` are often rejected. Trim keys/secrets (no quotes/spaces) and match `MPESA_ENV=production` to production Consumer Key/Secret.
+**Seller B2C:** org roles include B2C API Initiator — set `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` (or initiator password + production cert) before `#payb2c`. Buyer STK does not need the initiator.
+
+**Till vs shortcode:** for this Paybill they are the same (`3439153`). Register callback `https://bot.sokonimall.com/api/payments/daraja/callback` on the Daraja app.
 
 **Manual fallback** (Daraja unset): customer pays till + replies `paid` → admin `#payconfirm`. Web checkout shows till details when `GET /api/checkout/meta` reports `darajaConfigured: false`.
 
