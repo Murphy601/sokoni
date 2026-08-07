@@ -187,20 +187,12 @@ else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
 fi
 
-# Production Daraja (SOKONIMA 3439153) — only when Consumer Key/Secret are exported.
-#   export MPESA_CONSUMER_KEY=… MPESA_CONSUMER_SECRET=… MPESA_PASSKEY=…
-#   SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh
-# Or run: bash scripts/set-daraja-env.sh after setting those exports.
-# Skip with: SKIP_DARAJA_ENV=1
+# Production Daraja (SOKONIMA 3439153) — STK + B2C shortcode/callbacks.
+# Skip with: SKIP_DARAJA_ENV=1 bash scripts/deploy-bot.sh
 if [ "${SKIP_DARAJA_ENV:-}" != "1" ] && [ -f "$ENV_FILE" ] && [ -x "$REPO/scripts/set-daraja-env.sh" ]; then
-  if [ -n "${MPESA_CONSUMER_KEY:-}" ] && [ -n "${MPESA_CONSUMER_SECRET:-}" ]; then
-    echo "==> Applying production Daraja env (Paybill 3439153 / SOKONIMA)"
-    ENV_FILE="$ENV_FILE" SKIP_RESTART=1 bash "$REPO/scripts/set-daraja-env.sh" || \
-      echo "WARN: set-daraja-env.sh failed — check MPESA_* in $ENV_FILE"
-  else
-    echo "==> Daraja keys not in shell env — leaving existing MPESA_* in $ENV_FILE unchanged"
-    echo "    To refresh: export MPESA_CONSUMER_KEY/SECRET/PASSKEY then bash scripts/set-daraja-env.sh"
-  fi
+  echo "==> Applying production Daraja env (Paybill 3439153 / SOKONIMA)"
+  ENV_FILE="$ENV_FILE" SKIP_RESTART=1 bash "$REPO/scripts/set-daraja-env.sh" || \
+    echo "WARN: set-daraja-env.sh failed — check MPESA_* in $ENV_FILE"
 fi
 
 npm install --omit=dev 2>/dev/null || npm install
