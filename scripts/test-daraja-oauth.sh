@@ -37,26 +37,16 @@ echo "Host: $HOST"
 echo "Key length: ${#KEY}  Secret length: ${#SECRET}  Passkey length: ${#PASSKEY}  Shortcode: ${SHORTCODE:-unset}"
 echo "Key fingerprint (sha256…16): $KEY_FP"
 
-if [ "${#KEY}" -lt 16 ] || [ "${#SECRET}" -lt 16 ]; then
-  echo "ERROR: Consumer Key/Secret in .env look wrong (too short)." >&2
-  echo "  Fix with portal Copy buttons:" >&2
-  echo "    export MPESA_CONSUMER_KEY='…'" >&2
-  echo "    export MPESA_CONSUMER_SECRET='…'" >&2
-  echo "    export MPESA_PASSKEY='…'" >&2
-  echo "    bash scripts/set-daraja-env.sh" >&2
-  echo "    bash scripts/test-daraja-oauth.sh" >&2
-  exit 1
-fi
-
-if [ "$KEY_FP" = "24df15d590a14320" ]; then
-  echo "ERROR: .env still has the screenshot/OCR Consumer Key Safaricom rejects." >&2
-  echo "  On developer.safaricom.co.ke → Prod-SOKONIMALL → regenerate or Copy Key + Secret, then export + set-daraja-env." >&2
+if [ "${#KEY}" -lt 32 ] || [ "${#SECRET}" -lt 32 ]; then
+  echo "ERROR: Consumer Key/Secret in .env look wrong (Key len=${#KEY}, Secret len=${#SECRET})." >&2
+  echo "  If you see len 22, you pasted the instruction text paste-from-portal-copy." >&2
+  echo "  Use the portal Copy buttons — Key should be ~48 chars, Secret ~64." >&2
   exit 1
 fi
 
 echo "Requesting access_token…"
 
-RESP="$(curl -sS -w '\nHTTP:%{http_code}' -u "${KEY}:${SECRET}" \
+RESP="$(curl -sS -w '\nHTTP:%{http_code}' -X GET -u "${KEY}:${SECRET}" \
   "${HOST}/oauth/v1/generate?grant_type=client_credentials")"
 BODY="$(printf '%s' "$RESP" | sed '$d')"
 CODE="$(printf '%s' "$RESP" | tail -1 | sed 's/HTTP://')"
@@ -77,8 +67,7 @@ fi
 echo "FAIL — no access_token from Safaricom." >&2
 if [ "$CODE" = "400" ]; then
   echo "  HTTP 400 = Consumer Key/Secret rejected (wrong, revoked, or wrong app)." >&2
-  echo "  Org portal roles (Business Manager, B2C initiator, etc.) do NOT fix OAuth." >&2
-  echo "  Fix: developer.safaricom.co.ke → Prod-SOKONIMALL → Copy/regenerate Keys → export → set-daraja-env." >&2
+  echo "  Org portal roles do NOT fix OAuth. Re-copy Key+Secret from Prod-SOKONIMALL." >&2
 else
   echo "  Confirm MPESA_ENV=production and network can reach $HOST." >&2
 fi
