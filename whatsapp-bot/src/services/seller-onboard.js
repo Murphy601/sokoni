@@ -283,6 +283,8 @@ export function getSellerOrders(supplierId) {
         buyerConfirmedAt: fulfill.buyerConfirmedAt,
         sellerDispatchedAt: fulfill.sellerDispatchedAt,
         deliveredAt: fulfill.deliveredAt,
+        customerName: o.customerName || null,
+        buyerPhone: normalizePhone(o.phone || o.mpesaPhone || "") || null,
         labelUrl: paid ? sellerLabelUrl(o.id) : null,
         trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
         createdAt: o.createdAt,
@@ -605,6 +607,106 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
       : raise
         ? `Price raised — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`
         : `Price updated — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`,
+  };
+}
+
+/**
+ * Update live listing units on hand (multi-unit inventory).
+ * Soft out-of-stock items can be restocked; permanent sold tombstones cannot.
+ */
+export async function updateSellerListingStock({ phone, productId, stockQuantity, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const qty = Math.round(Number(stockQuantity));
+  if (!Number.isFinite(qty) || qty < 0 || qty > 9999) {
+    return {
+      error: "invalid_stock",
+      message: "Enter units on hand between 0 and 9999.",
+    };
+  }
+  if (!productId) {
+    return { error: "missing_product_id", message: "Missing product id." };
+  }
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const { assertCanRestock, applyStockQuantityFields, isSkuSold } = await import(
+        "./product-availability.js"
+      );
+
+      // Permanent unique sold items cannot return; soft OOS / live multi-unit can.
+      if (qty > 0 && (await isSkuSold(productId))) {
+        const gate = await assertCanRestock(productId, current);
+        return {
+          error: gate.error || "product_sold",
+          message:
+            gate.message ||
+            "This unique item already sold — list a fresh one to restock.",
+        };
+      }
+
+      const next = applyStockQuantityFields({ ...current }, qty);
+      next.stockUpdatedAt = Date.now();
+      products[idx] = next;
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = next;
+    } catch (err) {
+      console.warn("[seller-onboard] stock update failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    const { updateProductInventory, upsertCatalogProduct } = await import(
+      "../db/repositories/products.js"
+    );
+    if (isDbEnabled()) {
+      await upsertCatalogProduct(updated);
+      await updateProductInventory(productId, {
+        stockQuantity: updated.stockQuantity,
+        inStock: updated.inStock !== false && !updated.isSold,
+        isSold: Boolean(updated.isSold),
+      });
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB stock update skipped:", err.message);
+  }
+
+  try {
+    const { invalidateProductCache } = await import("./catalog.js");
+    invalidateProductCache();
+  } catch {}
+
+  try {
+    const { syncPublicCatalog } = await import("./catalog-ops.js");
+    await syncPublicCatalog();
+  } catch (err) {
+    console.warn("[seller-onboard] catalog sync after stock:", err.message);
+  }
+
+  return {
+    success: true,
+    productId,
+    stockQuantity: Math.max(0, Math.round(Number(updated.stockQuantity) || 0)),
+    inStock: updated.inStock !== false && !updated.isSold,
+    isSold: Boolean(updated.isSold),
+    message:
+      qty > 0
+        ? `Units on hand set to ${qty} — listing stays on the main menu while stock remains.`
+        : "Marked out of stock — buyers won't see it until you add units again.",
   };
 }
 

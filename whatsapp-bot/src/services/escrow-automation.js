@@ -57,9 +57,12 @@ export function generateDropoffLabel(order) {
 async function lockProductForOrder(order) {
   if (!order?.productId) return;
 
+  const qtyBought = Math.max(1, Math.round(Number(order.quantity) || 1));
+  let finalProduct = null;
+  let shouldTombstone = false;
+
   try {
-    const { recordSoldSku, markProductSoldFields } = await import("./product-availability.js");
-    await recordSoldSku(order.productId, { orderId: order.id, soldAt: Date.now() });
+    const { recordSoldSku, consumeStockForSale } = await import("./product-availability.js");
 
     const paths = [PRODUCTS_PATH, REPO_PRODUCTS].filter((p) => existsSync(p));
     for (const file of paths) {
@@ -68,36 +71,53 @@ async function lockProductForOrder(order) {
         const products = JSON.parse(raw);
         const idx = products.findIndex((p) => p.id === order.productId);
         if (idx === -1) continue;
-        products[idx] = markProductSoldFields(
+        const result = consumeStockForSale(
           { ...products[idx] },
-          { orderId: order.id, soldAt: Date.now() }
+          { qty: qtyBought, orderId: order.id, soldAt: Date.now() }
         );
+        products[idx] = result.product;
+        finalProduct = result.product;
+        shouldTombstone = result.tombstone;
         await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
       } catch (err) {
         console.warn("[escrow] lock product failed:", file, err.message);
       }
     }
+
+    if (shouldTombstone) {
+      await recordSoldSku(order.productId, { orderId: order.id, soldAt: Date.now() });
+    }
   } catch (err) {
-    console.warn("[escrow] sold registry failed:", err.message);
+    console.warn("[escrow] stock consume failed:", err.message);
   }
 
   invalidateProductCache();
 
   if (isDbEnabled()) {
     try {
-      const { markProductSold } = await import("../db/repositories/products.js");
-      await markProductSold(order.productId, order.id);
+      if (shouldTombstone) {
+        const { markProductSold } = await import("../db/repositories/products.js");
+        await markProductSold(order.productId, order.id);
+      } else if (finalProduct) {
+        const { updateProductInventory } = await import("../db/repositories/products.js");
+        await updateProductInventory(order.productId, {
+          stockQuantity: finalProduct.stockQuantity,
+          inStock: finalProduct.inStock !== false && !finalProduct.isSold,
+          isSold: Boolean(finalProduct.isSold),
+          orderId: order.id,
+        });
+      }
     } catch (err) {
-      console.warn("[escrow] DB mark sold failed:", err.message);
+      console.warn("[escrow] DB inventory update failed:", err.message);
     }
   }
 
-  // Drop the SKU from the public website catalog immediately (no wait for next admin publish).
+  // Keep public website catalog in sync immediately (no wait for next admin publish).
   try {
     const { syncPublicCatalog } = await import("./catalog-ops.js");
     await syncPublicCatalog();
   } catch (err) {
-    console.warn("[escrow] public catalog sync after sold:", err.message);
+    console.warn("[escrow] public catalog sync after stock change:", err.message);
   }
 }
 

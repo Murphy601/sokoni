@@ -498,6 +498,7 @@ async function buildProduct(supplier, enriched, media, productId) {
     fulfillment: "store",
     payment: "prepaid",
     inStock: true,
+    stockQuantity: Math.max(1, Math.round(Number(enriched.stockQuantity) || 1)),
     imageUrl: media.imageUrl,
     images: media.images,
     videoUrl: media.videoUrl,
@@ -1036,7 +1037,18 @@ export async function listSellerListings(phone, sessionToken) {
         return {
           id: p.id,
           productId: p.id,
+          name: p.name,
+          title: p.name,
           status: moderationSummary.status === "hidden" ? "hidden" : "live",
+          stockQuantity: (() => {
+            if (p.stockQuantity != null && Number.isFinite(Number(p.stockQuantity))) {
+              return Math.max(0, Math.round(Number(p.stockQuantity)));
+            }
+            if (p.isSold || p.inStock === false) return 0;
+            return 1;
+          })(),
+          inStock: p.inStock !== false && !p.isSold,
+          isSold: Boolean(p.isSold),
           draft: {
             name: p.name,
             sourcePriceKes: p.sourcePriceKes,

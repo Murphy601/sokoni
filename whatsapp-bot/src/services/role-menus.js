@@ -229,10 +229,11 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
         customerKey,
         `➕ *Sell on Sokoni*\n\n` +
           `Open sokonimall.com/suppliers/list.html\n\n` +
-          `1. Upload up to 4 photos (+ optional video)\n` +
-          `2. Add title, tags, category & price\n` +
-          `3. Tap *Post listing* — live instantly\n\n` +
-          `_Like Depop — no waiting for admin approval._`
+          `1. Upload photos (+ optional video) → Post listing\n` +
+          `2. Hub Drop-Offs — countrywide or city hub + rider pickup\n` +
+          `3. Inventory alerts — set units so multi-stock stays on the menu\n` +
+          `4. WhatsApp Promo — share sokonimall.com + your @handle\n\n` +
+          `_Live instantly — no waiting for admin approval._`
       );
       return true;
     case "vendor_contact":

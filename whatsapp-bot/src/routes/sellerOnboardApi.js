@@ -6,6 +6,7 @@ import {
   getSellerOrdersByPhone,
   refreshSellerListing,
   updateSellerListingPrice,
+  updateSellerListingStock,
 } from "../services/seller-onboard.js";
 import {
   getSellerWithdrawSummaryByPhone,
@@ -153,6 +154,27 @@ router.post("/price", async (req, res) => {
   });
   if (result.error === "not_found") return res.status(404).json(result);
   if (result.error === "invalid_price") return res.status(400).json(result);
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/stock — update live listing units on hand */
+router.post("/stock", async (req, res) => {
+  const { phone, productId, stockQuantity, quantity } = req.body || {};
+  const result = await updateSellerListingStock({
+    phone,
+    productId,
+    stockQuantity: stockQuantity ?? quantity,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "invalid_stock" || result.error === "missing_product_id") {
+    return res.status(400).json(result);
+  }
+  if (result.error === "product_sold") return res.status(409).json(result);
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
   }
