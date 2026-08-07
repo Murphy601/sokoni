@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
 # Configure Daraja B2C initiator on the bot VM (SOKONIMA).
 #
-# Does NOT commit secrets. Run on the VM after downloading ProductionCertificate.cer
-# from developer.safaricom.co.ke → Prod-SOKONIMALL → APIs / certificates.
+# Does NOT commit secrets.
 #
-# Usage:
-#   # 1) Place cert (required to encrypt SecurityCredential):
+# Option A — portal already gave you an encrypted SecurityCredential:
+#   export MPESA_SECURITY_CREDENTIAL='…long base64…'
+#   bash scripts/configure-b2c-initiator.sh
+#
+# Option B — encrypt locally with ProductionCertificate.cer from Daraja:
+#   # Download the .cer from developer.safaricom.co.ke (NOT the Postman JSON)
 #   mkdir -p ~/sokoni/whatsapp-bot/certs
-#   # download ProductionCertificate.cer from Daraja portal → save as:
-#   #   ~/sokoni/whatsapp-bot/certs/ProductionCertificate.cer
-#
-#   # 2) Apply initiator (password from your org portal — not web login):
+#   # save as: ~/sokoni/whatsapp-bot/certs/ProductionCertificate.cer
 #   export MPESA_INITIATOR_PASSWORD='your-initiator-password'
 #   bash scripts/configure-b2c-initiator.sh
 #
-# Optional overrides:
-#   MPESA_INITIATOR_NAME=SOKONIMA
-#   MPESA_CERT_PATH=/path/to/ProductionCertificate.cer
-#   SKIP_RESTART=1
+# Note: Old GitHub/npm "production-cert.cer" files expired in 2018 — reject them.
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
@@ -27,60 +24,16 @@ CERT_PATH="${MPESA_CERT_PATH:-$CERT_DEFAULT}"
 INITIATOR_NAME="${MPESA_INITIATOR_NAME:-SOKONIMA}"
 B2C_SHORT="${MPESA_B2C_SHORTCODE:-3439153}"
 PASSWORD="${MPESA_INITIATOR_PASSWORD:-}"
+PREMADE_CRED="${MPESA_SECURITY_CREDENTIAL:-}"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "ERROR: missing $ENV_FILE" >&2
   exit 1
 fi
 
-if [ -z "$PASSWORD" ]; then
-  echo "ERROR: export MPESA_INITIATOR_PASSWORD first (API initiator password for $INITIATOR_NAME)." >&2
-  echo "  This is NOT the Business Manager web login password." >&2
-  exit 1
-fi
-
-# Strip accidental whitespace / surrounding quotes
-PASSWORD="$(printf '%s' "$PASSWORD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
 INITIATOR_NAME="$(printf '%s' "$INITIATOR_NAME" | tr -d '[:space:]')"
-
-if [ ! -f "$CERT_PATH" ]; then
-  echo "ERROR: production certificate not found at:" >&2
-  echo "  $CERT_PATH" >&2
-  echo "" >&2
-  echo "Download ProductionCertificate.cer from developer.safaricom.co.ke" >&2
-  echo "(Prod-SOKONIMALL → APIs / Certificates), save it there, then re-run." >&2
-  exit 1
-fi
-
-# Detect HTML/error pages mistaken for a cert
-if head -c 20 "$CERT_PATH" | grep -qiE '<!DOCTYPE|html'; then
-  echo "ERROR: $CERT_PATH looks like an HTML page, not a .cer certificate." >&2
-  exit 1
-fi
-
-echo "==> Encrypting SecurityCredential for initiator $INITIATOR_NAME"
-TMP_PUB="$(mktemp)"
-TMP_CRED="$(mktemp)"
-cleanup() { rm -f "$TMP_PUB" "$TMP_CRED"; }
-trap cleanup EXIT
-
-# Support PEM or DER .cer
-if grep -q 'BEGIN CERTIFICATE' "$CERT_PATH"; then
-  openssl x509 -in "$CERT_PATH" -pubkey -noout > "$TMP_PUB"
-else
-  openssl x509 -inform DER -in "$CERT_PATH" -pubkey -noout > "$TMP_PUB"
-fi
-
-# Critical: printf (not echo) — no trailing newline inside the ciphertext
-printf '%s' "$PASSWORD" \
-  | openssl pkeyutl -encrypt -pubin -inkey "$TMP_PUB" -pkeyopt rsa_padding_mode:pkcs1 \
-  | base64 -w0 > "$TMP_CRED"
-
-CRED="$(cat "$TMP_CRED")"
-if [ "${#CRED}" -lt 80 ]; then
-  echo "ERROR: encrypted SecurityCredential looks too short (len=${#CRED})." >&2
-  exit 1
-fi
+PASSWORD="$(printf '%s' "$PASSWORD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
+PREMADE_CRED="$(printf '%s' "$PREMADE_CRED" | tr -d '[:space:]')"
 
 upsert() {
   local key="$1"
@@ -92,6 +45,77 @@ upsert() {
   mv "$tmp" "$ENV_FILE"
 }
 
+CRED=""
+
+if [ "${#PREMADE_CRED}" -ge 80 ]; then
+  echo "==> Using pre-generated MPESA_SECURITY_CREDENTIAL (len=${#PREMADE_CRED})"
+  CRED="$PREMADE_CRED"
+else
+  if [ -z "$PASSWORD" ]; then
+    echo "ERROR: need either:" >&2
+    echo "  export MPESA_SECURITY_CREDENTIAL='…'   # from Daraja portal Security Credential tool" >&2
+    echo "  OR" >&2
+    echo "  export MPESA_INITIATOR_PASSWORD='…' + ProductionCertificate.cer on disk" >&2
+    exit 1
+  fi
+
+  if [ ! -f "$CERT_PATH" ]; then
+    echo "ERROR: production certificate not found at:" >&2
+    echo "  $CERT_PATH" >&2
+    echo "" >&2
+    echo "The Postman collection JSON is NOT the certificate." >&2
+    echo "Download ProductionCertificate.cer from developer.safaricom.co.ke:" >&2
+    echo "  Apps → Prod-SOKONIMALL → APIs / go-live docs → Production Certificate" >&2
+    echo "Save it exactly as:" >&2
+    echo "  $CERT_PATH" >&2
+    echo "Then re-run this script." >&2
+    exit 1
+  fi
+
+  # Detect wrong file types (HTML, Postman JSON, etc.)
+  if head -c 40 "$CERT_PATH" | grep -qiE '<!DOCTYPE|html|postman_collection|\{'; then
+    echo "ERROR: $CERT_PATH is not a certificate file (looks like HTML/JSON)." >&2
+    echo "  You need the .cer from Daraja, not the Postman collection." >&2
+    exit 1
+  fi
+
+  TMP_PUB="$(mktemp)"
+  TMP_CRED="$(mktemp)"
+  cleanup() { rm -f "$TMP_PUB" "$TMP_CRED"; }
+  trap cleanup EXIT
+
+  if grep -q 'BEGIN CERTIFICATE' "$CERT_PATH"; then
+    OPENSSL_IN=(-in "$CERT_PATH")
+  else
+    OPENSSL_IN=(-inform DER -in "$CERT_PATH")
+  fi
+
+  # Reject expired / ancient tutorial certs (common 2017–2018 npm copies)
+  END_DATE="$(openssl x509 "${OPENSSL_IN[@]}" -noout -enddate 2>/dev/null | cut -d= -f2 || true)"
+  if [ -n "$END_DATE" ]; then
+    END_EPOCH="$(date -d "$END_DATE" +%s 2>/dev/null || true)"
+    NOW_EPOCH="$(date +%s)"
+    if [ -n "$END_EPOCH" ] && [ "$END_EPOCH" -lt "$NOW_EPOCH" ]; then
+      echo "ERROR: certificate expired on $END_DATE — will cause B2C error 2001." >&2
+      echo "  Download a FRESH ProductionCertificate.cer from the Daraja portal (not GitHub/npm)." >&2
+      exit 1
+    fi
+    echo "==> Cert valid until: $END_DATE"
+  fi
+
+  openssl x509 "${OPENSSL_IN[@]}" -pubkey -noout > "$TMP_PUB"
+  echo "==> Encrypting SecurityCredential for initiator $INITIATOR_NAME"
+  printf '%s' "$PASSWORD" \
+    | openssl pkeyutl -encrypt -pubin -inkey "$TMP_PUB" -pkeyopt rsa_padding_mode:pkcs1 \
+    | base64 -w0 > "$TMP_CRED"
+  CRED="$(cat "$TMP_CRED")"
+fi
+
+if [ "${#CRED}" -lt 80 ]; then
+  echo "ERROR: SecurityCredential looks too short (len=${#CRED})." >&2
+  exit 1
+fi
+
 upsert MPESA_INITIATOR_NAME "$INITIATOR_NAME"
 upsert MPESA_SECURITY_CREDENTIAL "$CRED"
 upsert MPESA_CERT_PATH "$CERT_PATH"
@@ -101,33 +125,18 @@ upsert MPESA_B2C_RESULT_URL "${MPESA_B2C_RESULT_URL:-https://bot.sokonimall.com/
 upsert MPESA_B2C_TIMEOUT_URL "${MPESA_B2C_TIMEOUT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/timeout}"
 upsert ESCROW_HOLD_BUSINESS_DAYS "${ESCROW_HOLD_BUSINESS_DAYS:-0}"
 upsert SELLER_WITHDRAW_INSTANT_B2C "${SELLER_WITHDRAW_INSTANT_B2C:-true}"
-# Keep plaintext password out of .env once credential exists (safer).
 grep -vE '^MPESA_INITIATOR_PASSWORD=' "$ENV_FILE" > "${ENV_FILE}.tmp" || true
 mv "${ENV_FILE}.tmp" "$ENV_FILE"
 
 echo "==> B2C initiator written to $ENV_FILE"
 echo "    Initiator: $INITIATOR_NAME"
 echo "    SecurityCredential len=${#CRED}"
-echo "    Cert: $CERT_PATH"
-echo "    B2C shortcode: $B2C_SHORT"
-echo "    B2C URL (bot): /mpesa/b2c/v1/paymentrequest (then v3 fallback)"
-echo "    Result: https://bot.sokonimall.com/api/payments/daraja/b2c/result"
+echo "    B2C shortcode: $B2C_SHORT · URL: /mpesa/b2c/v1/paymentrequest"
 
-if [ "${SKIP_RESTART:-}" = "1" ]; then
-  echo "==> SKIP_RESTART=1 — restart bot yourself"
-  exit 0
-fi
-
-if command -v pm2 >/dev/null 2>&1; then
+if [ "${SKIP_RESTART:-}" != "1" ] && command -v pm2 >/dev/null 2>&1; then
   echo "==> Restarting sokoni-bot"
   pm2 restart sokoni-bot --update-env
   pm2 save >/dev/null 2>&1 || true
-else
-  echo "WARN: pm2 not found — restart the bot process yourself"
 fi
 
-echo ""
-echo "Next:"
-echo "  bash scripts/test-daraja-oauth.sh"
-echo "  # Then from admin WhatsApp: #payouts  then  #payb2c SKN-… for a Ready order"
-echo "  # Or seller Hub → Request withdrawal (instant B2C when Ready > 0)"
+echo "Next: bash scripts/test-daraja-b2c-ready.sh && bash scripts/test-daraja-oauth.sh"
