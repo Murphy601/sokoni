@@ -108,7 +108,8 @@ export const config = {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
     const shortcode = trim(process.env.MPESA_SHORTCODE) || "3439153";
-    // Buy Goods Till: BusinessShortCode + PartyB are usually the same till number + CustomerBuyGoodsOnline.
+    // Buy Goods: SHORTCODE = Daraja H.O. / password BusinessShortCode;
+    // TILL_NUMBER (PartyB) = store till where funds land — may differ from SHORTCODE.
     const partyB =
       trim(process.env.MPESA_PARTY_B) ||
       trim(process.env.MPESA_TILL_NUMBER) ||
