@@ -85,11 +85,11 @@
       "assets/images/products/hb-tlom7-001.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1786053519674,
+    "publishedAt": 1786056154640,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1786053519674,
+    "refreshedAt": 1786056154640,
     "isSold": true,
     "soldAt": 1785172670111,
     "soldOrderId": "SK-1011",
@@ -128,7 +128,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/fa-tlom7-001.jpg",
     "images": [
       "assets/images/products/fa-tlom7-001.jpg"
@@ -141,7 +141,10 @@
     "transactionFeeKes": 5,
     "sellerPayoutKes": 110,
     "refreshedAt": 1786053496312,
-    "priceUpdatedAt": 1786053496312
+    "priceUpdatedAt": 1786053496312,
+    "isSold": true,
+    "soldAt": 1786056463628,
+    "soldOrderId": "SKN-1003-1"
   },
   {
     "id": "hb-tlom7-002",
@@ -181,7 +184,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/hb-tlom7-002.jpg",
     "images": [
       "assets/images/products/hb-tlom7-002.jpg",
@@ -195,7 +198,10 @@
       "status": "pending_scan"
     },
     "refreshedAt": 1786053425216,
-    "priceUpdatedAt": 1786053425216
+    "priceUpdatedAt": 1786053425216,
+    "isSold": true,
+    "soldAt": 1786056463749,
+    "soldOrderId": "SKN-1003-2"
   },
   {
     "id": "hb-tlom7-003",
@@ -245,12 +251,12 @@
       "assets/images/products/hb-tlom7-003.jpg"
     ],
     "videoUrl": null,
-    "publishedAt": 1786053415309,
+    "publishedAt": 1786073402106,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1786053415309,
-    "priceUpdatedAt": 1786053415309
+    "refreshedAt": 1786073402106,
+    "priceUpdatedAt": 1786073402106
   },
   {
     "id": "fa-tlom7-002",
