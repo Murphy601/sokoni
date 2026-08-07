@@ -1480,6 +1480,19 @@ html.dark .bulk-studio-remove:hover {
   color: #25d366;
 }
 
+.seller-hub-drawer__meta {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 248, 240, 0.35);
+}
+
+.seller-hub-drawer__link.is-active .seller-hub-drawer__meta {
+  color: rgba(37, 211, 102, 0.85);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .seller-hub-drawer {
     transition: none;

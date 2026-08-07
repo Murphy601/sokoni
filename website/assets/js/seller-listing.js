@@ -3323,10 +3323,7 @@ function renderHubGuidesCarousel() {
       const guide = HUB_SELLER_GUIDES[Number(btn.getAttribute("data-hub-guide"))];
       if (!guide) return;
       if (guide.action === "bulk") {
-        showSellerView("dashboard");
-        const bulk = el("bulk-draft-studio");
-        if (bulk && "open" in bulk) bulk.open = true;
-        bulk?.scrollIntoView({ behavior: "smooth", block: "start" });
+        showSellerView("tools");
       } else if (guide.action === "orders") {
         el("seller-orders")?.closest("section")?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else {
@@ -3521,12 +3518,7 @@ function renderSellerHubOverview() {
 }
 
 function bindSellerHubUi() {
-  el("hub-bulk-studio-btn")?.addEventListener("click", () => {
-    showSellerView("overview");
-    const bulk = el("bulk-draft-studio");
-    if (bulk && "open" in bulk) bulk.open = true;
-    bulk?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  el("hub-bulk-studio-btn")?.addEventListener("click", () => showSellerView("tools"));
   el("hub-create-drop-btn")?.addEventListener("click", () => showSellerView("listing"));
   el("hub-view-all-drafts-btn")?.addEventListener("click", () => {
     showSellerView("listings");
@@ -5807,7 +5799,7 @@ function showSellerView(view) {
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
 
-  const dashPanels = ["overview", "orders", "listings", "analytics", "settings"];
+  const dashPanels = ["overview", "orders", "listings", "tools", "analytics", "settings"];
   const showDash = dashPanels.includes(view);
   const showWithdraw = view === "payouts";
   const showListing = view === "listing";
