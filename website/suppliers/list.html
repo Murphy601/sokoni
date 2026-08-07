@@ -33,15 +33,15 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/design-tokens.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
-<link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-stack-1" />
+<link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-analytics-1" />
 <link rel="stylesheet" href="../assets/css/inbox-disputes.css" />
-<link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-stack-1" />
+<link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-analytics-1" />
 </head>
 <body class="sell-depop-page depop-surface-page font-sans antialiased text-white min-h-screen">
   <header class="sell-page-header border-b border-zinc-900 bg-black/95 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
-      <a href="../index.html" class="text-sm font-medium text-zinc-400 hover:text-white transition">← Shop</a>
-      <span class="text-xs font-semibold text-[#FF2300]">Seller Hub</span>
+    <div class="max-w-6xl mx-auto px-5 py-3.5 flex items-center justify-between gap-4">
+      <a href="../index.html" class="text-sm font-medium text-zinc-400 hover:text-white transition inline-flex items-center gap-1">← Shop</a>
+      <span class="sell-page-header__pill">Seller Hub</span>
     </div>
   </header>
 
@@ -198,6 +198,10 @@
               <span>Orders</span>
               <span id="tab-dashboard-offers-badge" class="seller-hub-nav__badge hidden" aria-live="polite"></span>
             </button>
+            <button type="button" class="seller-hub-drawer__link" data-hub-nav="disputes">
+              <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <span>Disputes</span>
+            </button>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="listings">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
               <span>Listings</span>
@@ -274,18 +278,21 @@
         <section id="seller-analytics" class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Seller performance analytics" data-analytics-root="overview">
           <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
             <div>
-              <h2 class="font-bold text-lg text-white">Performance</h2>
+              <h2 class="font-bold text-lg text-white font-sans tracking-tight">Performance</h2>
               <p class="text-sm text-zinc-400">Where your money sits, and how price changes affect sales.</p>
             </div>
-            <p class="text-[11px] font-mono text-zinc-500" data-analytics-sync>Synced from paid orders</p>
+            <div class="text-[11px] font-mono text-zinc-500" data-analytics-sync>Synced from paid orders</div>
           </div>
 
           <div class="seller-analytics-grid">
             <div class="seller-analytics-panel seller-analytics-panel--wide">
               <div class="seller-analytics-panel__head">
                 <div>
-                  <h3 class="text-sm font-bold text-white">Sales volume vs unit price</h3>
-                  <p class="text-xs text-zinc-500 mt-0.5">Bars = units sold · Line = avg payout per unit (KES)</p>
+                  <h3 class="seller-analytics-panel__title">Sales volume vs unit price</h3>
+                  <div class="seller-analytics-legend seller-analytics-legend--inline" aria-hidden="true">
+                    <span><i style="background:#25D366"></i> Units sold</span>
+                    <span><i class="seller-analytics-legend-line" style="background:#F59E0B"></i> Avg price</span>
+                  </div>
                 </div>
                 <span class="seller-analytics-chip" data-analytics-period>Last weeks</span>
               </div>
@@ -296,8 +303,8 @@
             <div class="seller-analytics-panel">
               <div class="seller-analytics-panel__head">
                 <div>
-                  <h3 class="text-sm font-bold text-white">Escrow &amp; cash flow</h3>
-                  <p class="text-xs text-zinc-500 mt-0.5">Live snapshot of your earnings pipeline</p>
+                  <h3 class="seller-analytics-panel__title">Escrow &amp; cash flow</h3>
+                  <p class="text-xs text-zinc-500 mt-1">Live snapshot of your earnings pipeline</p>
                 </div>
               </div>
               <div id="seller-analytics-escrow" class="seller-analytics-donut-wrap" data-analytics-escrow role="img" aria-label="Escrow cash flow breakdown"></div>
@@ -322,7 +329,7 @@
             </div>
             <button id="load-orders-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
-          <div id="seller-orders" class="seller-hub-carousel flex gap-3 overflow-x-auto pb-1" role="list"></div>
+          <div id="seller-orders" class="seller-hub-stack" role="list"></div>
         </section>
 
         <section class="sell-depop-section p-6 space-y-4">
@@ -403,18 +410,6 @@
           </p>
           <div id="seller-offers" class="space-y-3"></div>
         </section>
-
-        <section class="sell-depop-section p-6 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <h2 class="font-bold text-lg text-white">Disputes</h2>
-              <p class="text-sm text-zinc-400">Respond when a buyer opens a ticket. Escrow stays held until admin decides.</p>
-            </div>
-            <button id="load-seller-disputes-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
-          </div>
-          <div id="seller-disputes" class="space-y-3"></div>
-          <p id="seller-disputes-status" class="text-sm text-zinc-400"></p>
-        </section>
         </div><!-- /needs action -->
 
         <div class="sell-dash-group space-y-4">
@@ -482,21 +477,40 @@
         </div><!-- /listings panel -->
 
         <!-- ANALYTICS (same charts as overview — second mount) -->
+        <!-- DISPUTES -->
+        <div data-hub-panel="disputes" id="hub-panel-disputes" class="space-y-8 hidden">
+          <section class="sell-depop-section p-6 space-y-4">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="depop-label">Disputes</p>
+                <h2 class="font-bold text-lg text-white mt-0.5">Open tickets</h2>
+                <p class="text-sm text-zinc-400 mt-0.5">Respond when a buyer opens a ticket. Escrow stays held until admin decides.</p>
+              </div>
+              <button id="load-seller-disputes-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
+            </div>
+            <div id="seller-disputes" class="space-y-3"></div>
+            <p id="seller-disputes-status" class="text-sm text-zinc-400"></p>
+          </section>
+        </div><!-- /disputes panel -->
+
         <div data-hub-panel="analytics" id="hub-panel-analytics" class="space-y-8 hidden">
         <section class="sell-depop-section p-5 sm:p-6 space-y-5" aria-label="Full seller analytics" data-analytics-root="analytics">
           <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
             <div>
-              <h2 class="font-bold text-lg text-white">Analytics</h2>
-              <p class="text-sm text-zinc-400">Price vs volume and escrow cash flow — same live numbers as Overview.</p>
+              <h2 class="font-bold text-2xl text-white font-sans tracking-tight">Analytics</h2>
+              <p class="text-sm text-zinc-400 mt-1">Price vs volume and escrow cash flow</p>
             </div>
-            <p class="text-[11px] font-mono text-zinc-500" data-analytics-sync>Synced from paid orders</p>
+            <div class="text-[11px] font-mono text-zinc-500" data-analytics-sync>Synced from paid orders</div>
           </div>
           <div class="seller-analytics-grid">
             <div class="seller-analytics-panel seller-analytics-panel--wide">
               <div class="seller-analytics-panel__head">
                 <div>
-                  <h3 class="text-sm font-bold text-white">Sales volume vs unit price</h3>
-                  <p class="text-xs text-zinc-500 mt-0.5">Bars = units sold · Line = avg payout per unit (KES)</p>
+                  <h3 class="seller-analytics-panel__title">Sales volume vs unit price</h3>
+                  <div class="seller-analytics-legend seller-analytics-legend--inline" aria-hidden="true">
+                    <span><i style="background:#25D366"></i> Units sold</span>
+                    <span><i class="seller-analytics-legend-line" style="background:#F59E0B"></i> Avg price</span>
+                  </div>
                 </div>
                 <span class="seller-analytics-chip" data-analytics-period>Last weeks</span>
               </div>
@@ -506,8 +520,8 @@
             <div class="seller-analytics-panel">
               <div class="seller-analytics-panel__head">
                 <div>
-                  <h3 class="text-sm font-bold text-white">Escrow &amp; cash flow</h3>
-                  <p class="text-xs text-zinc-500 mt-0.5">Live snapshot of your earnings pipeline</p>
+                  <h3 class="seller-analytics-panel__title">Escrow &amp; cash flow</h3>
+                  <p class="text-xs text-zinc-500 mt-1">Live snapshot of your earnings pipeline</p>
                 </div>
               </div>
               <div class="seller-analytics-donut-wrap" data-analytics-escrow role="img" aria-label="Escrow cash flow breakdown"></div>

@@ -1,20 +1,21 @@
 /**
  * Seller Hub analytics — SVG charts (no React / Recharts).
- * 1) Sales volume vs avg unit price (bars + line)
+ * 1) Sales volume vs avg unit price (bars + smooth line)
  * 2) Escrow & cash-flow donut
  */
 (function (global) {
   "use strict";
 
   const COLORS = {
-    units: "#25D366",
+    units: "#10B981",
     price: "#F59E0B",
     available: "#25D366",
     pending: "#FACC15",
     transit: "#F87171",
     paidOut: "#60A5FA",
-    axis: "rgba(255,255,255,0.35)",
+    axis: "rgba(255,255,255,0.38)",
     grid: "rgba(255,255,255,0.08)",
+    emptyBand: "rgba(255,255,255,0.03)",
     text: "rgba(255,248,240,0.72)",
   };
 
@@ -86,6 +87,15 @@
     return { buckets, paidCount };
   }
 
+  /** Drop long empty leading weeks so real data isn’t squeezed to the right. */
+  function focusActiveBuckets(buckets, minWeeks = 3) {
+    if (!buckets.length) return buckets;
+    const first = buckets.findIndex((b) => b.unitsSold > 0);
+    if (first < 0) return buckets.slice(-minWeeks);
+    const from = Math.max(0, Math.min(first, buckets.length - minWeeks));
+    return buckets.slice(from);
+  }
+
   function topProductsByRevenue(orders, limit = 3) {
     const map = new Map();
     for (const o of orders || []) {
@@ -144,16 +154,39 @@
     ];
   }
 
-  function volumeChartHtml(buckets) {
+  /** Catmull-Rom → cubic Bezier path (smooth “monotone-like” curve). */
+  function smoothLinePath(points) {
+    if (!points.length) return "";
+    if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+    if (points.length === 2) {
+      return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+    }
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const p0 = points[i - 1] || points[i];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2] || p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+    }
+    return d;
+  }
+
+  function volumeChartHtml(rawBuckets) {
+    const buckets = focusActiveBuckets(rawBuckets, 3);
     const w = 560;
     const h = 220;
-    const pad = { top: 16, right: 44, bottom: 36, left: 36 };
+    const pad = { top: 18, right: 18, left: 28, bottom: 34 };
     const innerW = w - pad.left - pad.right;
     const innerH = h - pad.top - pad.bottom;
     const n = buckets.length || 1;
     const maxUnits = Math.max(1, ...buckets.map((b) => b.unitsSold));
     const maxPrice = Math.max(1, ...buckets.map((b) => b.avgPrice));
-    const barW = Math.min(36, (innerW / n) * 0.55);
+    const barW = Math.min(28, (innerW / n) * 0.48);
     const gap = innerW / n;
 
     const yUnits = (v) => pad.top + innerH - (v / maxUnits) * innerH;
@@ -167,49 +200,55 @@
       })
       .join("");
 
+    const emptyBands = buckets
+      .map((b, i) => {
+        if (b.unitsSold > 0) return "";
+        const x = pad.left + gap * i + 2;
+        return `<rect x="${x}" y="${pad.top}" width="${Math.max(4, gap - 4)}" height="${innerH}" fill="${COLORS.emptyBand}" stroke="${COLORS.grid}" stroke-width="1" stroke-dasharray="3 4" rx="4" />`;
+      })
+      .join("");
+
     const bars = buckets
       .map((b, i) => {
+        if (!b.unitsSold) return "";
         const x = xCenter(i) - barW / 2;
         const y = yUnits(b.unitsSold);
-        const bh = Math.max(b.unitsSold > 0 ? 3 : 0, pad.top + innerH - y);
+        const bh = Math.max(4, pad.top + innerH - y);
         return `
           <rect class="seller-analytics-bar" x="${x}" y="${y}" width="${barW}" height="${bh}"
-            rx="6" fill="${COLORS.units}" opacity="0.92">
+            rx="6" fill="${COLORS.units}" opacity="0.95">
             <title>${escapeHtml(b.period)}: ${b.unitsSold} sold · avg ${formatKes(b.avgPrice)}</title>
           </rect>`;
       })
       .join("");
 
-    const points = buckets.map((b, i) => `${xCenter(i)},${yPrice(b.avgPrice)}`).join(" ");
-    const dots = buckets
-      .map((b, i) => {
-        if (!b.unitsSold && !b.avgPrice) return "";
-        return `<circle class="seller-analytics-dot" cx="${xCenter(i)}" cy="${yPrice(b.avgPrice)}" r="4.5" fill="${COLORS.price}" stroke="#0b0b0f" stroke-width="1.5" />`;
-      })
+    const pricePts = buckets
+      .map((b, i) => (b.avgPrice > 0 ? { x: xCenter(i), y: yPrice(b.avgPrice), period: b.period, price: b.avgPrice } : null))
+      .filter(Boolean);
+    const linePath = smoothLinePath(pricePts);
+    const dots = pricePts
+      .map(
+        (p) =>
+          `<circle class="seller-analytics-dot" cx="${p.x}" cy="${p.y}" r="4.5" fill="${COLORS.price}" stroke="#0b0b0f" stroke-width="1.5"><title>${escapeHtml(p.period)}: ${formatKes(p.price)}</title></circle>`
+      )
       .join("");
 
     const labels = buckets
       .map(
         (b, i) =>
-          `<text x="${xCenter(i)}" y="${h - 12}" text-anchor="middle" fill="${COLORS.axis}" font-size="11" font-family="DM Sans, sans-serif">${escapeHtml(b.period)}</text>`
+          `<text x="${xCenter(i)}" y="${h - 10}" text-anchor="middle" fill="${COLORS.axis}" font-size="11" font-family="DM Sans, sans-serif">${escapeHtml(b.period)}</text>`
       )
       .join("");
 
     return `
       <svg viewBox="0 0 ${w} ${h}" class="seller-analytics-svg" role="presentation" aria-hidden="true">
         ${gridLines}
+        ${emptyBands}
         ${bars}
-        <polyline class="seller-analytics-line" fill="none" stroke="${COLORS.price}" stroke-width="3"
-          stroke-linecap="round" stroke-linejoin="round" points="${points}" />
+        ${linePath ? `<path class="seller-analytics-line" fill="none" stroke="${COLORS.price}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="${linePath}" />` : ""}
         ${dots}
-        <text x="${pad.left}" y="12" fill="${COLORS.units}" font-size="10" font-family="DM Sans, sans-serif">Units</text>
-        <text x="${w - pad.right}" y="12" text-anchor="end" fill="${COLORS.price}" font-size="10" font-family="DM Sans, sans-serif">KES</text>
         ${labels}
-      </svg>
-      <div class="seller-analytics-legend">
-        <span><i style="background:${COLORS.units}"></i> Units sold</span>
-        <span><i class="seller-analytics-legend-line" style="background:${COLORS.price}"></i> Avg unit price</span>
-      </div>`;
+      </svg>`;
   }
 
   function escrowDonutHtml(segments) {
@@ -273,22 +312,43 @@
     if (!products.length) return "";
     const total = products.reduce((s, p) => s + p.revenueKes, 0) || 1;
     return `
-      <p class="seller-analytics-top-label">Top earners</p>
+      <div class="seller-analytics-top-head">
+        <p class="seller-analytics-top-label">Top earners</p>
+      </div>
       <ul class="seller-analytics-top-list">
         ${products
-          .map((p) => {
+          .map((p, idx) => {
             const pct = Math.round((p.revenueKes / total) * 100);
-            return `<li>
+            return `<li class="seller-analytics-top-card">
               <div class="seller-analytics-top-row">
-                <span class="truncate">${escapeHtml(p.productName)}</span>
-                <span class="font-mono shrink-0">${formatKes(p.revenueKes)}</span>
+                <div class="seller-analytics-top-name">
+                  <span class="seller-analytics-top-rank">#${idx + 1}</span>
+                  <span class="truncate">${escapeHtml(p.productName)}</span>
+                </div>
+                <span class="seller-analytics-top-kes font-mono shrink-0">${formatKes(p.revenueKes)}</span>
               </div>
               <div class="seller-analytics-top-bar"><span style="width:${pct}%"></span></div>
-              <p class="seller-analytics-top-meta">${p.units} sold${p.productId ? ` · ${escapeHtml(p.productId)}` : ""} · ${pct}%</p>
+              <div class="seller-analytics-top-meta">
+                <span>${p.units} sold</span>
+                <span>${pct}% revenue</span>
+              </div>
             </li>`;
           })
           .join("")}
       </ul>`;
+  }
+
+  function syncStatusHtml(paidCount) {
+    if (paidCount <= 0) {
+      return `<span class="seller-analytics-sync-plain">Synced from paid orders</span>`;
+    }
+    const time = new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
+    return `<span class="seller-analytics-live">
+      <span class="seller-analytics-live__dot" aria-hidden="true"></span>
+      <span>${paidCount} paid order${paidCount === 1 ? "" : "s"}</span>
+      <span class="seller-analytics-live__sep">·</span>
+      <span>Updated ${escapeHtml(time)}</span>
+    </span>`;
   }
 
   function paintAll(selector, html) {
@@ -316,12 +376,7 @@
     const hasSales = buckets.some((b) => b.unitsSold > 0);
 
     setTextAll("[data-analytics-period]", "Last 6 weeks");
-    setTextAll(
-      "[data-analytics-sync]",
-      paidCount > 0
-        ? `${paidCount} paid order${paidCount === 1 ? "" : "s"} · updated ${new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}`
-        : "Synced from paid orders"
-    );
+    paintAll("[data-analytics-sync]", syncStatusHtml(paidCount));
 
     const emptyMsg =
       "Not enough paid sales yet — this chart unlocks after a few orders so you can see how price changes affect volume.";
@@ -346,5 +401,6 @@
     buildSalesVsPriceSeries,
     buildEscrowSegments,
     topProductsByRevenue,
+    focusActiveBuckets,
   };
 })(typeof window !== "undefined" ? window : globalThis);

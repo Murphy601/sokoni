@@ -5798,7 +5798,7 @@ function showSellerView(view) {
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
 
-  const dashPanels = ["overview", "orders", "listings", "tools", "analytics", "settings"];
+  const dashPanels = ["overview", "orders", "disputes", "listings", "tools", "analytics", "settings"];
   const showDash = dashPanels.includes(view);
   const showWithdraw = view === "payouts";
   const showListing = view === "listing";
