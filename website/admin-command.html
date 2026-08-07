@@ -55,7 +55,7 @@
         <div>
           <h1 class="font-display text-3xl font-bold">Admin Command Center</h1>
           <p class="text-sm text-brand-purple/65 mt-1 max-w-2xl">
-            Escrow holding tank, dispute overrides, hub volume, and smart catalog search — one desk for the platform owner.
+            Escrow holding tank, earned commissions, dispute overrides, hub volume, and smart catalog search — one desk for the platform owner.
           </p>
         </div>
         <button id="refresh-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
@@ -75,6 +75,7 @@
       <p id="cmd-status" class="text-sm text-brand-purple/60" role="status"></p>
       <div class="flex flex-wrap gap-2" role="tablist" aria-label="Command center sections">
         <button type="button" class="cmd-tab is-active min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="escrow">Escrow tank</button>
+        <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="commissions">Commissions</button>
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="resolve">Overrides &amp; disputes</button>
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="hubs">Hub performance</button>
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="search">Smart search</button>
@@ -104,6 +105,60 @@
       <p id="till-note" class="text-xs text-brand-purple/55"></p>
       <p id="escrow-delivery-hint" class="text-xs text-brand-purple/55"></p>
       <div id="escrow-orders" class="space-y-3"></div>
+    </section>
+
+    <!-- SYSTEM COMMISSIONS -->
+    <section data-panel="commissions" class="space-y-4 hidden">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Earned (window)</p>
+          <p id="stat-comm-earned" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Still held</p>
+          <p id="stat-comm-held" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">All-time earned</p>
+          <p id="stat-comm-alltime" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Orders (earned / held)</p>
+          <p id="stat-comm-counts" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+      </div>
+      <div class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="font-display text-xl font-bold">System commissions</h2>
+            <p class="text-sm text-brand-purple/65 mt-1">
+              Sokoni’s 10% fee. Counted as earned when escrow is released to the seller.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <label class="text-sm font-medium">
+              Window
+              <select id="comm-days" class="mt-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+                <option value="7">7 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="90">90 days</option>
+                <option value="365">365 days</option>
+              </select>
+            </label>
+            <label class="text-sm font-medium">
+              Show
+              <select id="comm-status" class="mt-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+                <option value="all" selected>All</option>
+                <option value="earned">Earned only</option>
+                <option value="held">Held only</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <p id="comm-note" class="text-xs text-brand-purple/55"></p>
+        <div id="comm-list" class="space-y-3"></div>
+      </div>
     </section>
 
     <!-- MANUAL OVERRIDE & DISPUTES -->

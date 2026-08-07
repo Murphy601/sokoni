@@ -307,10 +307,166 @@ export function getHubPerformanceStats({ days = 30 } = {}) {
   };
 }
 
+function orderPlatformFeeKes(order) {
+  const stored = Math.round(Number(order?.platformFeeKes));
+  if (Number.isFinite(stored) && stored >= 0) return stored;
+  const buyerTotal = orderBuyerTotal(order);
+  const sellerNet = resolveSellerPayoutKes(order) || 0;
+  return Math.max(0, Math.round(buyerTotal - sellerNet));
+}
+
+function orderTransactionFeeKes(order) {
+  const stored = Math.round(Number(order?.transactionFeeKes));
+  return Number.isFinite(stored) && stored > 0 ? stored : 0;
+}
+
+function commissionFeeStatus(order) {
+  const escrow = String(order?.escrowStatus || "").toLowerCase();
+  if (escrow === "refunded" || order?.refundPendingManual || order?.status === "cancelled") {
+    const wasPaid =
+      order?.customerPaymentStatus === "confirmed" ||
+      Boolean(order?.paidAt) ||
+      Boolean(order?.refundedAt);
+    return wasPaid ? "refunded" : null;
+  }
+  if (escrow === "released") return "earned";
+  if (isHeldEscrow(order)) return "held";
+  return null;
+}
+
+function commissionEarnedAt(order) {
+  return (
+    order?.escrowReleasedAt ||
+    order?.buyerConfirmedAt ||
+    order?.deliveredAt ||
+    order?.shipmentDeliveredAt ||
+    order?.paidAt ||
+    order?.createdAt ||
+    null
+  );
+}
+
+function summarizeCommissionRow(order) {
+  const feeStatus = commissionFeeStatus(order);
+  const buyerTotal = orderBuyerTotal(order);
+  const sellerPayout = resolveSellerPayoutKes(order) || 0;
+  return {
+    orderId: order.id,
+    productName: order.productName || null,
+    supplierId: order.supplierId || null,
+    hub: orderHubLabel(order),
+    buyerTotalKes: buyerTotal,
+    sellerPayoutKes: sellerPayout,
+    platformFeeKes: orderPlatformFeeKes(order),
+    transactionFeeKes: orderTransactionFeeKes(order),
+    escrowStatus: order.escrowStatus || null,
+    feeStatus,
+    paidAt: order.paidAt || null,
+    earnedAt: feeStatus === "earned" ? commissionEarnedAt(order) : null,
+  };
+}
+
+/**
+ * System commission / Sokoni fee ledger.
+ * Earned = escrow released (Sokoni keeps platformFeeKes).
+ * Held = paid, still in tank. Refunded = fee never kept.
+ */
+export function getPlatformCommissions({ days = 30, limit = 80, status = "all" } = {}) {
+  const windowDays = Math.max(1, Number(days) || 30);
+  const windowMs = windowDays * 24 * 60 * 60 * 1000;
+  const since = Date.now() - windowMs;
+  const statusFilter = String(status || "all").toLowerCase();
+  const safeLimit = Math.min(Math.max(Number(limit) || 80, 1), 200);
+
+  const totals = {
+    earnedPlatformFeeKes: 0,
+    earnedTransactionFeeKes: 0,
+    heldPlatformFeeKes: 0,
+    heldTransactionFeeKes: 0,
+    refundedPlatformFeeKes: 0,
+    earnedCount: 0,
+    heldCount: 0,
+    refundedCount: 0,
+    earnedAllTimeKes: 0,
+    earnedAllTimeCount: 0,
+  };
+
+  const rows = [];
+
+  for (const order of listAllOrders()) {
+    if (!order || order.kind === "cart_parent") continue;
+    const feeStatus = commissionFeeStatus(order);
+    if (!feeStatus) continue;
+
+    const platformFeeKes = orderPlatformFeeKes(order);
+    const transactionFeeKes = orderTransactionFeeKes(order);
+    const earnedAt = commissionEarnedAt(order);
+    const paidAt = order.paidAt || order.createdAt || 0;
+
+    if (feeStatus === "earned") {
+      totals.earnedAllTimeKes += platformFeeKes;
+      totals.earnedAllTimeCount += 1;
+      if (!earnedAt || earnedAt >= since) {
+        totals.earnedPlatformFeeKes += platformFeeKes;
+        totals.earnedTransactionFeeKes += transactionFeeKes;
+        totals.earnedCount += 1;
+        if (statusFilter === "all" || statusFilter === "earned") {
+          rows.push(summarizeCommissionRow(order));
+        }
+      }
+      continue;
+    }
+
+    if (feeStatus === "held") {
+      totals.heldPlatformFeeKes += platformFeeKes;
+      totals.heldTransactionFeeKes += transactionFeeKes;
+      totals.heldCount += 1;
+      if (statusFilter === "all" || statusFilter === "held") {
+        rows.push(summarizeCommissionRow(order));
+      }
+      continue;
+    }
+
+    if (feeStatus === "refunded") {
+      if (paidAt && paidAt < since && !order.refundedAt) continue;
+      const refundTs = order.refundedAt || paidAt || 0;
+      if (refundTs && refundTs < since) continue;
+      totals.refundedPlatformFeeKes += platformFeeKes;
+      totals.refundedCount += 1;
+      if (statusFilter === "all" || statusFilter === "refunded") {
+        rows.push(summarizeCommissionRow(order));
+      }
+    }
+  }
+
+  rows.sort((a, b) => {
+    const rank = { earned: 0, held: 1, refunded: 2 };
+    const ra = rank[a.feeStatus] ?? 9;
+    const rb = rank[b.feeStatus] ?? 9;
+    if (ra !== rb) return ra - rb;
+    const ta = a.earnedAt || a.paidAt || 0;
+    const tb = b.earnedAt || b.paidAt || 0;
+    return tb - ta;
+  });
+
+  return {
+    ok: true,
+    days: windowDays,
+    since,
+    status: statusFilter,
+    note:
+      "Sokoni commission is 10% (platformFeeKes) kept when escrow is released. Held fees are still in the till until Release. Refunded fees are not earned.",
+    totals,
+    fees: rows.slice(0, safeLimit),
+    generatedAt: Date.now(),
+  };
+}
+
 /** Combined dashboard payload for Admin Command Center. */
 export async function getPlatformCommandDashboard() {
   const tank = getEscrowHoldingTank({ limit: 40 });
   const hubs = getHubPerformanceStats({ days: 30 });
+  const commissions = getPlatformCommissions({ days: 30, limit: 40, status: "all" });
   let openDisputes = { count: 0, disputes: [] };
   try {
     const { listAdminDisputes } = await import("./disputes.js");
@@ -324,6 +480,7 @@ export async function getPlatformCommandDashboard() {
     ok: true,
     escrow: tank,
     hubs,
+    commissions,
     disputes: {
       openCount: openDisputes.count || openDisputes.disputes?.length || 0,
       disputes: (openDisputes.disputes || []).slice(0, 12),
