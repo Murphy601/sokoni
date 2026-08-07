@@ -3581,12 +3581,18 @@ function bindSellerHubUi() {
   });
   document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      showSellerView(btn.dataset.hubNav || "overview");
+      showSellerView(btn.dataset.hubNav || "overview", {
+        anchor: btn.dataset.hubAnchor || "",
+      });
       setSellerHubDrawerOpen(false);
     });
   });
   document.querySelectorAll("[data-hub-jump]").forEach((btn) => {
-    btn.addEventListener("click", () => showSellerView(btn.dataset.hubJump || "overview"));
+    btn.addEventListener("click", () =>
+      showSellerView(btn.dataset.hubJump || "overview", {
+        anchor: btn.dataset.hubAnchor || "",
+      })
+    );
   });
   renderHubTrendingCarousel();
   renderHubGuidesCarousel();
@@ -5865,6 +5871,7 @@ function isSellerDashView(view) {
     "listings",
     "tools",
     "analytics",
+    "grow",
     "settings",
   ].includes(view);
 }
@@ -5875,12 +5882,49 @@ function normalizeSellerHubView(view) {
   if (raw === "withdraw") return "payouts";
   if (raw === "list" || raw === "list-item" || raw === "create") return "listing";
   if (raw === "offer" || raw === "price-offers") return "offers";
+  if (
+    raw === "grow-your-shop" ||
+    raw === "grow_shop" ||
+    raw === "trending" ||
+    raw === "guides" ||
+    raw === "seller-level" ||
+    raw === "shop-activity" ||
+    raw === "rate-buyers"
+  ) {
+    return "grow";
+  }
   return raw;
 }
 
-function showSellerView(view) {
+function syncSellerHubNavActive(view, anchor = "") {
+  document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
+    const key = btn.dataset.hubNav;
+    const btnAnchor = btn.dataset.hubAnchor || "";
+    const isSub = Boolean(btnAnchor);
+    const active = isSub
+      ? key === view && btnAnchor === anchor
+      : key === view && !btn.hasAttribute("data-hub-anchor");
+    btn.classList.toggle("is-active", active);
+  });
+  document.querySelectorAll("[data-hub-group]").forEach((group) => {
+    const key = group.getAttribute("data-hub-group");
+    group.classList.toggle("is-open", key === view);
+  });
+}
+
+function scrollSellerHubAnchor(anchor) {
+  if (!anchor) return;
+  const node = document.getElementById(anchor);
+  if (!node) return;
+  window.requestAnimationFrame(() => {
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function showSellerView(view, opts = {}) {
   view = normalizeSellerHubView(view);
   currentSellerView = view;
+  const anchor = String(opts.anchor || "").trim();
 
   const dashboard = el("view-dashboard");
   const withdraw = el("view-withdraw");
@@ -5900,11 +5944,7 @@ function showSellerView(view) {
     panel.classList.toggle("hidden", !visible);
   });
 
-  document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
-    const key = btn.dataset.hubNav;
-    const active = key === view;
-    btn.classList.toggle("is-active", active);
-  });
+  syncSellerHubNavActive(view, anchor);
 
   if (showDash) {
     loadSellerOrders();
@@ -5913,6 +5953,12 @@ function showSellerView(view) {
     loadMyListings();
     void loadSellerBuyerReviews();
     void loadSellerDisputes();
+    if (view === "grow" || view === "overview") {
+      void loadSellerActivity();
+      renderHubTrendingCarousel();
+      renderHubGuidesCarousel();
+      renderSellerHubOverview();
+    }
     startSellerOffersPolling();
     ensureReminderCooldownTicker();
     refreshSellerAnalytics();
@@ -5923,6 +5969,10 @@ function showSellerView(view) {
   } else {
     stopSellerOffersPolling();
     stopReminderCooldownTicker();
+  }
+
+  if (anchor) {
+    window.setTimeout(() => scrollSellerHubAnchor(anchor), 40);
   }
 }
 

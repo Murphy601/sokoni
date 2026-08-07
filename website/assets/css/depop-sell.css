@@ -1548,6 +1548,52 @@ html.dark .bulk-studio-remove:hover {
   color: rgba(37, 211, 102, 0.85);
 }
 
+.seller-hub-drawer__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.seller-hub-drawer__subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0 0 0.2rem 2.35rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid rgba(255, 248, 240, 0.12);
+}
+
+.seller-hub-drawer__sublink {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: rgba(255, 248, 240, 0.55);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.seller-hub-drawer__sublink:hover {
+  color: #fff8f0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.seller-hub-drawer__sublink.is-active {
+  color: #fff8f0;
+  background: rgba(37, 211, 102, 0.1);
+  border-color: rgba(37, 211, 102, 0.28);
+}
+
+.seller-hub-drawer__group.is-open .seller-hub-drawer__link {
+  color: #fff8f0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .seller-hub-drawer {
     transition: none;
