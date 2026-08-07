@@ -7,7 +7,12 @@ ENV_FILE="${ENV_FILE:-$REPO/whatsapp-bot/.env}"
 
 env_get() {
   local key="$1"
-  grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+  local line=""
+  # Missing keys must not abort under set -euo pipefail (grep exit 1).
+  if [ -f "$ENV_FILE" ]; then
+    line="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 || true)"
+  fi
+  printf '%s' "$line" | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
 }
 
 NAME="$(env_get MPESA_INITIATOR_NAME)"
