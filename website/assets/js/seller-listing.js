@@ -3446,16 +3446,36 @@ function updateSellerHubNavIdentity() {
   }
 }
 
-function moveSellerHubNavPill(activeBtn) {
-  const pill = el("seller-hub-nav-pill");
-  const nav = document.querySelector(".seller-hub-nav__tabs");
-  if (!pill || !nav || !activeBtn) return;
-  const navRect = nav.getBoundingClientRect();
-  const btnRect = activeBtn.getBoundingClientRect();
-  pill.style.width = `${btnRect.width}px`;
-  pill.style.height = `${btnRect.height}px`;
-  pill.style.transform = `translate(${btnRect.left - navRect.left + nav.scrollLeft}px, ${btnRect.top - navRect.top + nav.scrollTop}px)`;
-  pill.classList.add("is-ready");
+function isSellerHubDrawerOpen() {
+  const root = el("seller-hub-drawer-root");
+  return Boolean(root && !root.hasAttribute("hidden"));
+}
+
+function setSellerHubDrawerOpen(open) {
+  const root = el("seller-hub-drawer-root");
+  const btn = el("seller-hub-menu-btn");
+  if (!root) return;
+  if (open) {
+    root.hidden = false;
+    // Next frame so CSS can animate from closed → open.
+    requestAnimationFrame(() => root.classList.add("is-open"));
+    btn?.setAttribute("aria-expanded", "true");
+    btn?.setAttribute("aria-label", "Close seller menu");
+    document.body.classList.add("seller-hub-drawer-open");
+    el("seller-hub-drawer-close")?.focus({ preventScroll: true });
+  } else {
+    root.classList.remove("is-open");
+    btn?.setAttribute("aria-expanded", "false");
+    btn?.setAttribute("aria-label", "Open seller menu");
+    document.body.classList.remove("seller-hub-drawer-open");
+    window.setTimeout(() => {
+      if (!root.classList.contains("is-open")) root.hidden = true;
+    }, 220);
+  }
+}
+
+function toggleSellerHubDrawer() {
+  setSellerHubDrawerOpen(!isSellerHubDrawerOpen());
 }
 
 function renderSellerHubOverview() {
@@ -3512,15 +3532,22 @@ function bindSellerHubUi() {
     showSellerView("listings");
     el("section-my-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+  el("seller-hub-menu-btn")?.addEventListener("click", () => toggleSellerHubDrawer());
+  el("seller-hub-drawer-close")?.addEventListener("click", () => setSellerHubDrawerOpen(false));
+  el("seller-hub-drawer-backdrop")?.addEventListener("click", () => setSellerHubDrawerOpen(false));
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && isSellerHubDrawerOpen()) {
+      setSellerHubDrawerOpen(false);
+    }
+  });
   document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
-    btn.addEventListener("click", () => showSellerView(btn.dataset.hubNav || "overview"));
+    btn.addEventListener("click", () => {
+      showSellerView(btn.dataset.hubNav || "overview");
+      setSellerHubDrawerOpen(false);
+    });
   });
   document.querySelectorAll("[data-hub-jump]").forEach((btn) => {
     btn.addEventListener("click", () => showSellerView(btn.dataset.hubJump || "overview"));
-  });
-  window.addEventListener("resize", () => {
-    const active = document.querySelector(".seller-hub-nav__tab.is-active");
-    if (active) moveSellerHubNavPill(active);
   });
   renderHubTrendingCarousel();
   renderHubGuidesCarousel();
@@ -3796,11 +3823,6 @@ function setDashboardOfferBadge(pendingCount = 0) {
       "aria-label",
       `${badgeCount} item${badgeCount === 1 ? "" : "s"} needing attention`
     );
-  }
-
-  const bottomDot = el("bottom-badge-orders");
-  if (bottomDot) {
-    bottomDot.classList.toggle("hidden", !badgeCount);
   }
 }
 
@@ -5804,23 +5826,7 @@ function showSellerView(view) {
     const key = btn.dataset.hubNav;
     const active = key === view;
     btn.classList.toggle("is-active", active);
-    if (btn.getAttribute("role") === "tab") {
-      btn.setAttribute("aria-selected", active ? "true" : "false");
-    }
-    if (btn.classList.contains("seller-hub-bottom-menu__item")) {
-      if (active) btn.setAttribute("aria-current", "page");
-      else btn.removeAttribute("aria-current");
-    }
   });
-
-  // Keep sticky menu + section content in view after a jump.
-  const hubNav = el("seller-hub-nav");
-  if (hubNav && !hubNav.closest(".hidden")) {
-    const navTop = hubNav.getBoundingClientRect().top;
-    if (navTop < 64 || navTop > window.innerHeight * 0.45) {
-      hubNav.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
 
   if (showDash) {
     loadSellerOrders();
