@@ -3866,26 +3866,29 @@ function setOffersStatus(message, isError = false) {
   node.classList.toggle("text-emerald-400", !isError && Boolean(message));
 }
 
-function setDashboardOfferBadge(pendingCount = 0) {
-  const count = Math.max(0, Number(pendingCount) || 0);
-  const awaitingShip = hubOrdersAwaitingShip().length;
-  const badgeCount = Math.max(count, awaitingShip);
-
-  const badges = [el("nav-badge-orders"), el("tab-dashboard-offers-badge")].filter(Boolean);
-  for (const badge of badges) {
-    if (!badgeCount) {
-      badge.textContent = "";
-      badge.classList.add("hidden");
-      badge.removeAttribute("aria-label");
-      continue;
-    }
-    badge.textContent = badgeCount > 99 ? "99+" : String(badgeCount);
-    badge.classList.remove("hidden");
-    badge.setAttribute(
-      "aria-label",
-      `${badgeCount} item${badgeCount === 1 ? "" : "s"} needing attention`
-    );
+function setNavBadge(node, count, labelSingular, labelPlural) {
+  if (!node) return;
+  const n = Math.max(0, Number(count) || 0);
+  if (!n) {
+    node.textContent = "";
+    node.classList.add("hidden");
+    node.removeAttribute("aria-label");
+    return;
   }
+  node.textContent = n > 99 ? "99+" : String(n);
+  node.classList.remove("hidden");
+  node.setAttribute("aria-label", `${n} ${n === 1 ? labelSingular : labelPlural}`);
+}
+
+function setDashboardOfferBadge(pendingCount = 0) {
+  const offerCount = Math.max(0, Number(pendingCount) || 0);
+  const awaitingShip = hubOrdersAwaitingShip().length;
+
+  // Top Menu button + Orders drawer row: orders awaiting ship
+  setNavBadge(el("nav-badge-orders"), awaitingShip, "order to ship", "orders to ship");
+  setNavBadge(el("nav-badge-orders-menu"), awaitingShip, "order to ship", "orders to ship");
+  // Offers drawer row: pending offers only
+  setNavBadge(el("tab-dashboard-offers-badge"), offerCount, "pending offer", "pending offers");
 }
 
 function normalizeOfferFilter(value) {
@@ -4484,7 +4487,7 @@ function stopReminderCooldownTicker() {
 function ensureReminderCooldownTicker() {
   const nowMs = Date.now();
   const stats = reminderCooldownStats(nowMs);
-  const shouldRun = currentSellerView === "dashboard" && stats.count > 0;
+  const shouldRun = isSellerDashView(currentSellerView) && stats.count > 0;
   syncReminderCooldownButtonsUi(nowMs);
   updateReminderCooldownHint(stats);
   updateAcceptedTriageHint(sellerOffersCache);
@@ -4494,7 +4497,7 @@ function ensureReminderCooldownTicker() {
   }
   if (reminderCooldownTickTimer) return;
   reminderCooldownTickTimer = window.setInterval(() => {
-    if (currentSellerView !== "dashboard") {
+    if (!isSellerDashView(currentSellerView)) {
       stopReminderCooldownTicker();
       return;
     }
@@ -5644,7 +5647,7 @@ function startSellerOffersPolling() {
   stopSellerOffersPolling();
   if (!sellerProfile) return;
   sellerOffersPollTimer = window.setInterval(() => {
-    if (currentSellerView !== "dashboard") return;
+    if (!isSellerDashView(currentSellerView)) return;
     void loadSellerOffers({ silent: true });
   }, SELLER_OFFERS_POLL_MS);
 }
@@ -5853,11 +5856,25 @@ async function requestWithdrawal() {
   }
 }
 
+function isSellerDashView(view) {
+  return [
+    "overview",
+    "orders",
+    "offers",
+    "disputes",
+    "listings",
+    "tools",
+    "analytics",
+    "settings",
+  ].includes(view);
+}
+
 function normalizeSellerHubView(view) {
   const raw = String(view || "overview").trim().toLowerCase();
   if (raw === "dashboard" || raw === "home") return "overview";
   if (raw === "withdraw") return "payouts";
   if (raw === "list" || raw === "list-item" || raw === "create") return "listing";
+  if (raw === "offer" || raw === "price-offers") return "offers";
   return raw;
 }
 
@@ -5869,8 +5886,7 @@ function showSellerView(view) {
   const withdraw = el("view-withdraw");
   const listing = el("view-listing");
 
-  const dashPanels = ["overview", "orders", "disputes", "listings", "tools", "analytics", "settings"];
-  const showDash = dashPanels.includes(view);
+  const showDash = isSellerDashView(view);
   const showWithdraw = view === "payouts";
   const showListing = view === "listing";
 
