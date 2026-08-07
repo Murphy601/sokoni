@@ -387,7 +387,24 @@
         ${galleryHtml(product)}
       </div>
       <div class="product-sheet-meta">
-        <p class="product-sheet-price">${escapeHtml(formatPrice(product))}</p>
+        <p class="product-sheet-price">${escapeHtml(formatPrice(product))}${
+          (() => {
+            const original = Math.round(Number(product.originalPriceKes) || 0);
+            const now =
+              product.totalKes != null
+                ? Math.round(Number(product.totalKes) || 0)
+                : Math.round(Number(product.priceKes) || 0);
+            if (!original || !now || original <= now) return "";
+            return ` <span class="text-sm font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span>`;
+          })()
+        }</p>
+        ${
+          product.promo?.active ||
+          (product.originalPriceKes &&
+            Math.round(Number(product.originalPriceKes)) > Math.round(Number(product.priceKes) || 0))
+            ? `<p class="text-xs font-semibold text-emerald-700 mt-1">Seller promo — M-Pesa STK uses this price</p>`
+            : ""
+        }
         <p class="product-sheet-dispatch text-xs font-semibold mt-1">Seller handles dispatch (direct delivery)</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
         ${

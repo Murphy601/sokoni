@@ -724,12 +724,13 @@ function renderDepopCard(product) {
       <div class="depop-card-image-wrap"${videoSrc ? ' data-has-clip="1"' : ""}>
         ${imageInner}
         ${clipInner}
+        ${discountBadge(product)}
         ${conditionBadgeHtml(product)}
         <button type="button" class="depop-card-heart${saved ? " is-saved" : ""}" data-save-id="${id}" aria-label="${saved ? "Remove from saved" : "Save item"}">${saved ? "♥" : "♡"}</button>
         <span class="depop-card-badge">PREPAID</span>
       </div>
       <div class="depop-card-body">
-        <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
+        ${promoPriceHtml(product)}
         <p class="depop-card-title">${name}</p>
         ${
           handle
@@ -1089,9 +1090,23 @@ function renderStoreGrid() {
 }
 
 function discountBadge(product) {
-  if (!product.originalPriceKes) return "";
-  const pct = Math.round((1 - product.priceKes / product.originalPriceKes) * 100);
-  return `<span class="absolute top-3 left-3 bg-brand-green text-brand-purple text-xs font-bold px-2 py-1 rounded-full">-${pct}%</span>`;
+  const original = Math.round(Number(product.originalPriceKes) || 0);
+  const current = buyerPriceKes(product);
+  if (!original || !current || original <= current) return "";
+  if (product.promo && product.promo.active === false) return "";
+  const pct = Math.round((1 - current / original) * 100);
+  if (pct < 1) return "";
+  return `<span class="absolute top-3 left-3 z-[5] bg-brand-green text-brand-purple text-xs font-bold px-2 py-1 rounded-full">-${pct}%</span>`;
+}
+
+function promoPriceHtml(product) {
+  const current = formatPrice(product);
+  const original = Math.round(Number(product.originalPriceKes) || 0);
+  const now = buyerPriceKes(product);
+  if (!original || !now || original <= now) {
+    return `<p class="depop-card-price">${escapeHtml(current)}</p>`;
+  }
+  return `<p class="depop-card-price"><span>${escapeHtml(current)}</span> <span class="text-xs font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span></p>`;
 }
 
 function setupBrowseNudge() {

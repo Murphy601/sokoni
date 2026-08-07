@@ -646,6 +646,295 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
   };
 }
 
+function resolvePromoSellerNet(listNet, type, value) {
+  const list = Math.round(Number(listNet) || 0);
+  const v = Number(value);
+  if (!Number.isFinite(list) || list < 50) return { error: "invalid_list_price" };
+  if (!Number.isFinite(v) || v <= 0) return { error: "invalid_promo_value" };
+  let next = list;
+  const t = String(type || "percent").toLowerCase();
+  if (t === "percent" || t === "pct" || t === "%") {
+    if (v > 70) return { error: "promo_too_steep", message: "Max promo is 70% off." };
+    next = Math.round(list * (1 - v / 100));
+  } else if (t === "kes_off" || t === "off" || t === "kes") {
+    if (v >= list) return { error: "promo_too_steep", message: "KES off must be less than your list price." };
+    next = Math.round(list - v);
+  } else if (t === "sale_net" || t === "sale" || t === "net") {
+    next = Math.round(v);
+  } else {
+    return { error: "invalid_promo_type", message: "Use percent, kes_off, or sale_net." };
+  }
+  if (next < 50) return { error: "invalid_promo_value", message: "Promo seller net must stay at least KES 50." };
+  if (next >= list) {
+    return { error: "promo_not_lower", message: "Promo must be lower than your current list price." };
+  }
+  return { nextNet: next, type: t === "pct" || t === "%" ? "percent" : t === "off" || t === "kes" ? "kes_off" : t === "sale" || t === "net" ? "sale_net" : t };
+}
+
+/**
+ * Start an item promo. Lowers seller net → recomputes fees → buyer STK uses new priceKes.
+ * Only this product is discounted — no cart-wide codes.
+ */
+export async function setSellerListingPromo({
+  phone,
+  productId,
+  type = "percent",
+  value,
+  sessionToken,
+}) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  let listSellerNet = null;
+  let listBuyerTotal = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const existingPromo = current.promo && typeof current.promo === "object" ? current.promo : null;
+      listSellerNet =
+        listSellerNet ??
+        Math.round(
+          Number(
+            existingPromo?.active && existingPromo?.listSellerNetKes
+              ? existingPromo.listSellerNetKes
+              : current.sellerNetKes ?? current.sourcePriceKes
+          ) || 0
+        );
+      listBuyerTotal =
+        listBuyerTotal ??
+        Math.round(
+          Number(
+            existingPromo?.active && existingPromo?.listPriceKes
+              ? existingPromo.listPriceKes
+              : current.priceKes
+          ) || 0
+        );
+
+      const resolved = resolvePromoSellerNet(listSellerNet, type, value);
+      if (resolved.error) return resolved;
+
+      const fees = computeFeeBreakdown(resolved.nextNet, current.shippingKes, {
+        freeShipping: Boolean(current.freeShipping),
+        deliveryMethod: current.deliveryMethod || "hub",
+      });
+
+      const { preserveSoldState, assertCanRestock } = await import("./product-availability.js");
+      const gate = await assertCanRestock(productId, current);
+      if (!gate.ok) {
+        return {
+          error: gate.error,
+          message: gate.message || "Sold listings cannot take a promo.",
+        };
+      }
+
+      const promo = {
+        active: true,
+        type: resolved.type,
+        value: Number(value),
+        listSellerNetKes: listSellerNet,
+        listPriceKes: listBuyerTotal || fees.buyerTotalKes,
+        startedAt: Date.now(),
+        endedAt: null,
+      };
+
+      products[idx] = preserveSoldState(current, {
+        ...current,
+        sellerNetKes: fees.sellerNetKes,
+        sourcePriceKes: fees.sellerNetKes,
+        priceKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        transactionFeeKes: fees.transactionFeeKes,
+        sellerPayoutKes: fees.sellerPayoutKes,
+        shippingKes: fees.shippingKes,
+        freeShipping: Boolean(fees.freeShipping),
+        originalPriceKes: promo.listPriceKes,
+        promo,
+        publishedAt: Date.now(),
+        refreshedAt: Date.now(),
+        priceUpdatedAt: Date.now(),
+        promoUpdatedAt: Date.now(),
+      });
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = products[idx];
+    } catch (err) {
+      console.warn("[seller-onboard] promo set failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  await syncListingPriceToDb(updated);
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("node scripts/build-site-catalog.mjs", {
+      cwd: path.join(__dirname, "..", "..", ".."),
+      stdio: "pipe",
+    });
+  } catch {}
+
+  const buyerPays = Math.round(Number(updated.priceKes) || 0);
+  const youGet = Math.round(Number(updated.sellerNetKes) || 0);
+  return {
+    success: true,
+    productId,
+    promo: updated.promo,
+    sellerNetKes: youGet,
+    priceKes: buyerPays,
+    originalPriceKes: updated.originalPriceKes,
+    message: `Promo live — buyers pay KES ${buyerPays.toLocaleString()} (was KES ${Math.round(Number(updated.originalPriceKes) || 0).toLocaleString()}). You receive KES ${youGet.toLocaleString()}. STK uses this price. End anytime from My listings.`,
+  };
+}
+
+/** End item promo and restore list seller net / buyer price. */
+export async function endSellerListingPromo({ phone, productId, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const existingPromo = current.promo && typeof current.promo === "object" ? current.promo : null;
+      if (!existingPromo?.active) {
+        return { error: "no_active_promo", message: "This listing has no active promo." };
+      }
+
+      const restoreNet = Math.round(
+        Number(existingPromo.listSellerNetKes ?? current.sellerNetKes ?? current.sourcePriceKes) || 0
+      );
+      if (restoreNet < 50) {
+        return { error: "invalid_list_price", message: "Could not restore list price — set price manually." };
+      }
+
+      const fees = computeFeeBreakdown(restoreNet, current.shippingKes, {
+        freeShipping: Boolean(current.freeShipping),
+        deliveryMethod: current.deliveryMethod || "hub",
+      });
+
+      const { preserveSoldState, assertCanRestock } = await import("./product-availability.js");
+      const gate = await assertCanRestock(productId, current);
+      if (!gate.ok) {
+        return {
+          error: gate.error,
+          message: gate.message || "Sold listings cannot end a promo onto the live grid.",
+        };
+      }
+
+      products[idx] = preserveSoldState(current, {
+        ...current,
+        sellerNetKes: fees.sellerNetKes,
+        sourcePriceKes: fees.sellerNetKes,
+        priceKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        transactionFeeKes: fees.transactionFeeKes,
+        sellerPayoutKes: fees.sellerPayoutKes,
+        shippingKes: fees.shippingKes,
+        freeShipping: Boolean(fees.freeShipping),
+        originalPriceKes: undefined,
+        promo: {
+          ...existingPromo,
+          active: false,
+          endedAt: Date.now(),
+        },
+        publishedAt: Date.now(),
+        refreshedAt: Date.now(),
+        priceUpdatedAt: Date.now(),
+        promoUpdatedAt: Date.now(),
+      });
+      // Drop undefined originalPriceKes from JSON
+      delete products[idx].originalPriceKes;
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = products[idx];
+    } catch (err) {
+      console.warn("[seller-onboard] promo end failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  await syncListingPriceToDb(updated);
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("node scripts/build-site-catalog.mjs", {
+      cwd: path.join(__dirname, "..", "..", ".."),
+      stdio: "pipe",
+    });
+  } catch {}
+
+  const buyerPays = Math.round(Number(updated.priceKes) || 0);
+  const youGet = Math.round(Number(updated.sellerNetKes) || 0);
+  return {
+    success: true,
+    productId,
+    promo: updated.promo,
+    sellerNetKes: youGet,
+    priceKes: buyerPays,
+    originalPriceKes: null,
+    message: `Promo ended — list price restored. Buyers pay KES ${buyerPays.toLocaleString()}, you receive KES ${youGet.toLocaleString()}.`,
+  };
+}
+
+async function syncListingPriceToDb(updated) {
+  if (!updated?.id) return;
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    const { upsertCatalogProduct } = await import("../db/repositories/products.js");
+    if (!isDbEnabled()) return;
+    await upsertCatalogProduct(updated);
+    const promo = updated.promo && typeof updated.promo === "object" ? updated.promo : null;
+    await query(
+      `UPDATE products
+          SET price_kes = $2,
+              source_price_kes = $3,
+              shipping_kes = $4,
+              original_price_kes = $5,
+              updated_at = NOW(),
+              legacy_json = CASE
+                WHEN legacy_json IS NULL THEN $6::jsonb
+                ELSE legacy_json || $6::jsonb
+              END
+        WHERE id = $1`,
+      [
+        updated.id,
+        Math.round(Number(updated.priceKes) || 0),
+        Math.round(Number(updated.sellerNetKes) || 0),
+        Math.round(Number(updated.shippingKes) || 0),
+        updated.originalPriceKes != null ? Math.round(Number(updated.originalPriceKes)) : null,
+        JSON.stringify({
+          sellerNetKes: Math.round(Number(updated.sellerNetKes) || 0),
+          priceKes: Math.round(Number(updated.priceKes) || 0),
+          platformFeeKes: Math.round(Number(updated.platformFeeKes) || 0),
+          transactionFeeKes: Math.round(Number(updated.transactionFeeKes) || 0),
+          originalPriceKes: updated.originalPriceKes != null ? Math.round(Number(updated.originalPriceKes)) : null,
+          promo: promo,
+          refreshedAt: Number(updated.refreshedAt || Date.now()),
+          priceUpdatedAt: Number(updated.priceUpdatedAt || Date.now()),
+          promoUpdatedAt: Number(updated.promoUpdatedAt || Date.now()),
+        }),
+      ]
+    );
+  } catch (err) {
+    console.warn("[seller-onboard] DB promo sync skipped:", err.message);
+  }
+}
+
 /**
  * Update live listing units on hand (multi-unit inventory).
  * Soft out-of-stock items can be restocked; permanent sold tombstones cannot.
