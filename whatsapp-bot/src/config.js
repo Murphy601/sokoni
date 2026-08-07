@@ -99,21 +99,21 @@ export const config = {
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
       "Countrywide via Sokoni Mashinani hubs + courier. Sellers dispatch after prepaid escrow. Funds held until delivery confirmed.",
-    /** Production Daraja shortcode / PartyB (SOKONIMA). Legacy personal till 4775847 retired. */
-    mpesaTill: process.env.MPESA_TILL_NUMBER || "3439153",
-    mpesaTillName: process.env.MPESA_TILL_NAME || "SOKONIMA",
+    /** Buy Goods Till (PartyB). Org/Daraja H.O. is config.mpesa.shortcode (3439153). */
+    mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
+    mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },
   /** Safaricom Daraja — STK push + B2C seller payouts. */
   mpesa: (() => {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
     const shortcode = trim(process.env.MPESA_SHORTCODE) || "3439153";
-    // Buy Goods: SHORTCODE = Daraja H.O. / password BusinessShortCode;
-    // TILL_NUMBER (PartyB) = store till where funds land — may differ from SHORTCODE.
+    // SHORTCODE 3439153 = org/Daraja H.O. (password). TILL 4775847 = PartyB.
+    // Merchant store 4421485 is not used in STK.
     const partyB =
       trim(process.env.MPESA_PARTY_B) ||
       trim(process.env.MPESA_TILL_NUMBER) ||
-      shortcode;
+      "4775847";
     const botBase = "https://bot.sokonimall.com";
     const b2cShortcode = trim(process.env.MPESA_B2C_SHORTCODE) || shortcode;
     return {

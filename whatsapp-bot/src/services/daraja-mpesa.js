@@ -192,10 +192,11 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   const amt = Math.round(Number(amount));
   if (!Number.isFinite(amt) || amt < 1) throw new Error("Invalid STK amount");
 
-  // Buy Goods STK:
-  //   BusinessShortCode = MPESA_SHORTCODE (Daraja Short Code / H.O., used in password)
-  //   PartyB            = MPESA_TILL_NUMBER (store till) — set separately if H.O. ≠ till
-  // Web portal login / B2C initiator username are NOT used here.
+  // Buy Goods STK (Sokoni live mapping):
+  //   BusinessShortCode = MPESA_SHORTCODE 3439153 (Daraja / org H.O. — password + passkey)
+  //   PartyB            = MPESA_TILL_NUMBER 4775847 (Buy Goods till)
+  //   Merchant store shortcode 4421485 is portal hierarchy only — not sent on STK
+  // Org portal "Web" operator is for viewing balances — NOT STK auth.
   const businessShortCode = String(config.mpesa.shortcode || "").trim();
   const partyB = String(config.mpesa.partyB || businessShortCode).trim();
   const transactionType = config.mpesa.transactionType || "CustomerBuyGoodsOnline";
@@ -213,15 +214,19 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
     AccountReference: String(accountReference).slice(0, 12),
     TransactionDesc: String(description).slice(0, 13),
   };
-  console.log("[daraja] STK request", {
-    env: config.mpesa.env,
-    transactionType,
-    businessShortCode,
-    partyB,
-    amount: amt,
-    phone: partyPhone,
-    accountReference: body.AccountReference,
-  });
+  console.log(
+    "[daraja] STK request",
+    JSON.stringify({
+      env: config.mpesa.env,
+      transactionType,
+      businessShortCode,
+      partyB,
+      amount: amt,
+      phone: partyPhone,
+      accountReference: body.AccountReference,
+      callbackUrl: body.CallBackURL,
+    })
+  );
 
   const res = await fetch(`${baseUrl()}/mpesa/stkpush/v1/processrequest`, {
     method: "POST",
@@ -234,9 +239,34 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ResponseCode !== "0") {
-    const msg = data.errorMessage || data.ResponseDescription || JSON.stringify(data).slice(0, 300);
+    const msg =
+      data.errorMessage ||
+      data.ResponseDescription ||
+      data.errorCode ||
+      JSON.stringify(data).slice(0, 300);
+    console.error(
+      "[daraja] STK failed",
+      JSON.stringify({
+        http: res.status,
+        responseCode: data.ResponseCode ?? null,
+        errorCode: data.errorCode ?? null,
+        message: msg,
+        businessShortCode,
+        partyB,
+        transactionType,
+      })
+    );
     throw new Error(`STK push failed: ${msg}`);
   }
+
+  console.log(
+    "[daraja] STK accepted",
+    JSON.stringify({
+      checkoutRequestId: data.CheckoutRequestID,
+      merchantRequestId: data.MerchantRequestID,
+      customerMessage: data.CustomerMessage,
+    })
+  );
 
   return {
     merchantRequestId: data.MerchantRequestID,
