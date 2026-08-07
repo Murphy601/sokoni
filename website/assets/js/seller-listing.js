@@ -3368,7 +3368,6 @@ function renderHubDraftsCarousel() {
 
   const draftById = new Map();
   wrap.innerHTML = drafts
-    .slice(0, 12)
     .map((item) => {
       const pid = item.productId || item.id;
       draftById.set(String(pid), item);
