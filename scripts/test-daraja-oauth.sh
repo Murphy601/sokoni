@@ -8,10 +8,11 @@ ENV_FILE="${ENV_FILE:-$REPO/whatsapp-bot/.env}"
 
 env_get() {
   local key="$1"
-  if [ ! -f "$ENV_FILE" ]; then
-    return 0
+  local line=""
+  if [ -f "$ENV_FILE" ]; then
+    line="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 || true)"
   fi
-  grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+  printf '%s' "$line" | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
 }
 
 KEY="$(env_get MPESA_CONSUMER_KEY)"
