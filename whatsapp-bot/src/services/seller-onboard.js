@@ -177,16 +177,93 @@ function sellerLabelUrl(orderId) {
   return labelPageUrlForOrder(orderId);
 }
 
+/**
+ * Seller-facing fulfillment phase for hub UI.
+ * Aligns with buyer YES / auto-release / #status delivered — not just shipmentStatus alone.
+ */
+export function sellerOrderFulfillment(order) {
+  const paid =
+    order?.customerPaymentStatus === "confirmed" ||
+    order?.escrowStatus === "held" ||
+    order?.escrowStatus === "released";
+  const shipmentStatus = order?.shipmentStatus || "pending";
+  const status = String(order?.status || "").toLowerCase();
+  const escrow = String(order?.escrowStatus || "").toLowerCase();
+
+  const received = Boolean(
+    status === "delivered" ||
+      shipmentStatus === "delivered" ||
+      order?.buyerConfirmedAt ||
+      order?.shipmentDeliveredAt ||
+      order?.deliveredAt ||
+      escrow === "released"
+  );
+
+  const dispatched = Boolean(
+    received ||
+      order?.sellerDispatchedAt ||
+      order?.inTransitAt ||
+      ["dropped_off", "in_transit", "at_pickup_point", "delivered"].includes(shipmentStatus) ||
+      ["out_for_delivery", "delivered"].includes(status)
+  );
+
+  /** Paid, not yet handed off — show Print label. */
+  const needsDropOff =
+    paid &&
+    !received &&
+    !dispatched &&
+    ["pending", "label_ready"].includes(shipmentStatus);
+
+  let phase = "unpaid";
+  if (paid && received) phase = "received";
+  else if (paid && dispatched) phase = "shipped";
+  else if (paid) phase = "awaiting_ship";
+
+  const phaseLabel =
+    phase === "received"
+      ? "Received"
+      : phase === "shipped"
+        ? "Shipped · awaiting buyer"
+        : phase === "awaiting_ship"
+          ? needsDropOff
+            ? "Awaiting ship"
+            : shipmentStatusLabel(shipmentStatus)
+          : "Unpaid";
+
+  return {
+    paid: Boolean(paid && order?.customerPaymentStatus === "confirmed"),
+    shipmentStatus,
+    shipmentStatusLabel:
+      phase === "received"
+        ? "Received"
+        : phase === "shipped"
+          ? "Shipped · awaiting buyer"
+          : shipmentStatusLabel(shipmentStatus),
+    status: order?.status || null,
+    needsDropOff,
+    received,
+    dispatched,
+    phase,
+    phaseLabel,
+    buyerConfirmedAt: order?.buyerConfirmedAt || null,
+    sellerDispatchedAt: order?.sellerDispatchedAt || null,
+    deliveredAt: order?.deliveredAt || order?.shipmentDeliveredAt || null,
+  };
+}
+
 /** Seller dashboard — paid orders, labels, shipment status (Phases 5–6). */
 export function getSellerOrders(supplierId) {
   return loadAllOrders()
-    .filter((o) => o.supplierId === supplierId && o.status !== "cancelled")
+    .filter(
+      (o) =>
+        o.supplierId === supplierId &&
+        o.status !== "cancelled" &&
+        o.kind !== "cart_parent"
+    )
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
     .map((o) => {
-      const paid = o.customerPaymentStatus === "confirmed";
-      const shipmentStatus = o.shipmentStatus || "pending";
-      const needsDropOff =
-        paid && ["pending", "label_ready"].includes(shipmentStatus) && o.status !== "delivered";
+      const fulfill = sellerOrderFulfillment(o);
+      const paid = fulfill.paid;
 
       return {
         orderId: o.id,
@@ -195,9 +272,17 @@ export function getSellerOrders(supplierId) {
         quantity: Math.max(1, Math.round(Number(o.quantity) || 1)),
         sellerNetKes: sellerOrderNet(o),
         paid,
-        shipmentStatus,
-        shipmentStatusLabel: shipmentStatusLabel(shipmentStatus),
-        needsDropOff,
+        status: fulfill.status,
+        shipmentStatus: fulfill.shipmentStatus,
+        shipmentStatusLabel: fulfill.shipmentStatusLabel,
+        needsDropOff: fulfill.needsDropOff,
+        received: fulfill.received,
+        dispatched: fulfill.dispatched,
+        phase: fulfill.phase,
+        phaseLabel: fulfill.phaseLabel,
+        buyerConfirmedAt: fulfill.buyerConfirmedAt,
+        sellerDispatchedAt: fulfill.sellerDispatchedAt,
+        deliveredAt: fulfill.deliveredAt,
         labelUrl: paid ? sellerLabelUrl(o.id) : null,
         trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
         createdAt: o.createdAt,

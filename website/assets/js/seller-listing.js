@@ -3260,14 +3260,58 @@ function renderLedgerDetail() {
     .join("");
 }
 
-function shipmentBadgeClass(status) {
-  if (status === "label_ready" || status === "pending") return "sell-order-badge--action";
-  if (status === "delivered") return "sell-order-badge--done";
+function orderPhase(o) {
+  if (o?.phase) return o.phase;
+  if (o?.received || o?.shipmentStatus === "delivered" || o?.status === "delivered" || o?.buyerConfirmedAt) {
+    return "received";
+  }
+  if (o?.dispatched || o?.sellerDispatchedAt) return "shipped";
+  if (o?.paid) return "awaiting_ship";
+  return "unpaid";
+}
+
+function shipmentBadgeClass(orderOrStatus) {
+  const phase =
+    typeof orderOrStatus === "string"
+      ? orderOrStatus === "delivered"
+        ? "received"
+        : orderOrStatus === "label_ready" || orderOrStatus === "pending"
+          ? "awaiting_ship"
+          : "shipped"
+      : orderPhase(orderOrStatus);
+  if (phase === "awaiting_ship") return "sell-order-badge--action";
+  if (phase === "received") return "sell-order-badge--done";
   return "sell-order-badge--transit";
 }
 
+function orderPhaseLabel(o) {
+  if (o?.phaseLabel) return o.phaseLabel;
+  if (o?.shipmentStatusLabel) return o.shipmentStatusLabel;
+  const phase = orderPhase(o);
+  if (phase === "received") return "Received";
+  if (phase === "shipped") return "Shipped · awaiting buyer";
+  if (phase === "awaiting_ship") return "Awaiting ship";
+  return "Order";
+}
+
+/** Needs seller action (print / drop-off / DISPATCH). */
+function hubOrdersAwaitingShip(orders = hubCache.orders) {
+  return (orders || []).filter((o) => o?.paid && orderPhase(o) === "awaiting_ship");
+}
+
+/** Active fulfillment: awaiting ship + shipped (not yet buyer-confirmed). */
 function hubOrdersToShip(orders = hubCache.orders) {
-  return (orders || []).filter((o) => o.paid && o.shipmentStatus !== "delivered");
+  return (orders || []).filter((o) => {
+    if (!o?.paid) return false;
+    const phase = orderPhase(o);
+    return phase === "awaiting_ship" || phase === "shipped";
+  });
+}
+
+function hubOrdersReceived(orders = hubCache.orders) {
+  return (orders || [])
+    .filter((o) => o?.paid && orderPhase(o) === "received")
+    .slice(0, 20);
 }
 
 function hubGrossSalesKes(orders = hubCache.orders) {
@@ -3481,14 +3525,15 @@ function renderSellerHubOverview() {
   }
   updateSellerHubNavIdentity();
 
-  const toShip = hubOrdersToShip();
+  const awaitingShip = hubOrdersAwaitingShip();
+  const activeFulfillment = hubOrdersToShip();
   const gross = hubGrossSalesKes();
   const live = hubCache.liveCount || 0;
   const drafts = hubCache.draftCount || 0;
   const escrow = ledgerData?.available?.totalKes || 0;
 
   if (el("hub-stat-gross")) el("hub-stat-gross").textContent = formatKes(gross);
-  if (el("hub-stat-orders")) el("hub-stat-orders").textContent = String(toShip.length);
+  if (el("hub-stat-orders")) el("hub-stat-orders").textContent = String(awaitingShip.length);
   if (el("hub-stat-live")) el("hub-stat-live").textContent = String(live);
   if (el("hub-stat-drafts-meta")) {
     el("hub-stat-drafts-meta").textContent = `Drafts pending: ${drafts}`;
@@ -3506,7 +3551,10 @@ function renderSellerHubOverview() {
   if (checklist) {
     const items = checklist.querySelectorAll("li");
     items[0]?.classList.toggle("seller-hub-level-done", live >= goal);
-    items[1]?.classList.toggle("seller-hub-level-done", toShip.length === 0 && hubCache.orders.some((o) => o.paid));
+    items[1]?.classList.toggle(
+      "seller-hub-level-done",
+      activeFulfillment.length === 0 && hubCache.orders.some((o) => o.paid)
+    );
     // Ratings: soft milestone when they have live listings (full ratings API later)
     items[2]?.classList.toggle("seller-hub-level-done", live >= 5);
   }
@@ -3545,41 +3593,64 @@ function bindSellerHubUi() {
   renderSellerHubOverview();
 }
 
+function renderSellerOrderCard(o, { allowPrintLabel = true } = {}) {
+  const phase = orderPhase(o);
+  const actions = [];
+  if (allowPrintLabel && phase === "awaiting_ship" && o.needsDropOff && o.labelUrl) {
+    actions.push(
+      `<a href="${o.labelUrl}" target="_blank" rel="noopener" class="sell-order-action sell-order-action--primary">Print label</a>`
+    );
+  }
+  if (phase === "shipped" && o.trackUrl) {
+    actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
+  }
+  if (phase === "received" && o.trackUrl) {
+    actions.push(`<a href="${o.trackUrl}" class="sell-order-action">View tracking</a>`);
+  }
+  const hint =
+    phase === "shipped"
+      ? "Waiting for buyer to reply YES on WhatsApp"
+      : phase === "received"
+        ? "Buyer confirmed — marked received"
+        : "Print label, drop off, then DISPATCH on WhatsApp";
+  return `
+    <div class="sell-order-card sell-hub-rail-card" role="listitem" data-order-phase="${escapeHtml(phase)}">
+      <div class="sell-order-card-head">
+        <p class="font-semibold text-sm truncate">${escapeHtml(o.productName || "Order")}</p>
+        <span class="sell-order-badge ${shipmentBadgeClass(o)}">${escapeHtml(orderPhaseLabel(o))}</span>
+      </div>
+      <p class="text-xs text-zinc-500 mt-1"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
+      <p class="text-xs text-zinc-500 mt-1">${escapeHtml(hint)}</p>
+      ${actions.length ? `<div class="sell-order-actions">${actions.join("")}</div>` : ""}
+    </div>`;
+}
+
 function renderSellerOrders(orders) {
   const wrap = el("seller-orders");
+  const receivedWrap = el("seller-orders-received");
   if (!wrap) return;
   hubCache.orders = Array.isArray(orders) ? orders : [];
   renderSellerHubOverview();
   refreshSellerAnalytics();
 
   const active = hubOrdersToShip(hubCache.orders);
+  const received = hubOrdersReceived(hubCache.orders);
+
   if (!active.length) {
-    wrap.innerHTML = `<p class="text-sm text-zinc-500">No active orders — when someone buys, it shows here so you can arrange dispatch.</p>`;
-    return;
+    wrap.innerHTML = `<p class="text-sm text-zinc-500">No orders waiting to ship — paid sales show here until the buyer confirms receipt.</p>`;
+  } else {
+    wrap.innerHTML = active.map((o) => renderSellerOrderCard(o)).join("");
   }
 
-  wrap.innerHTML = active
-    .map((o) => {
-      const actions = [];
-      if (o.needsDropOff && o.labelUrl) {
-        actions.push(
-          `<a href="${o.labelUrl}" target="_blank" rel="noopener" class="sell-order-action sell-order-action--primary">Print label</a>`
-        );
-      }
-      if (o.trackUrl) {
-        actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
-      }
-      return `
-        <div class="sell-order-card sell-hub-rail-card" role="listitem">
-          <div class="sell-order-card-head">
-            <p class="font-semibold text-sm truncate">${escapeHtml(o.productName || "Order")}</p>
-            <span class="sell-order-badge ${shipmentBadgeClass(o.shipmentStatus)}">${escapeHtml(o.shipmentStatusLabel || "")}</span>
-          </div>
-          <p class="text-xs text-zinc-500 mt-1"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
-          <div class="sell-order-actions">${actions.join("")}</div>
-        </div>`;
-    })
-    .join("");
+  if (receivedWrap) {
+    if (!received.length) {
+      receivedWrap.innerHTML = `<p class="text-sm text-zinc-500">When a buyer confirms with YES on WhatsApp, the order moves here as Received.</p>`;
+    } else {
+      receivedWrap.innerHTML = received
+        .map((o) => renderSellerOrderCard(o, { allowPrintLabel: false }))
+        .join("");
+    }
+  }
 }
 
 function setBuyerReviewStatus(message, isError = false) {
@@ -3797,8 +3868,8 @@ function setOffersStatus(message, isError = false) {
 
 function setDashboardOfferBadge(pendingCount = 0) {
   const count = Math.max(0, Number(pendingCount) || 0);
-  const toShip = hubOrdersToShip().length;
-  const badgeCount = Math.max(count, toShip);
+  const awaitingShip = hubOrdersAwaitingShip().length;
+  const badgeCount = Math.max(count, awaitingShip);
 
   const badges = [el("nav-badge-orders"), el("tab-dashboard-offers-badge")].filter(Boolean);
   for (const badge of badges) {
