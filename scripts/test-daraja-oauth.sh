@@ -45,6 +45,13 @@ if [ "${#KEY}" -lt 32 ] || [ "${#SECRET}" -lt 32 ]; then
   exit 1
 fi
 
+# Known OCR typo: l/I swapped in Consumer Key (HTTP 400 empty body).
+if [ "$KEY_FP" = "24df15d590a14320" ]; then
+  echo "ERROR: .env has the OCR typo Consumer Key (l/I swapped)." >&2
+  echo "  Need …RdqIEa… and …s2lHS9DvB (not RdqlEa / s2IHS9DvB)." >&2
+  exit 1
+fi
+
 URL="${HOST}/oauth/v1/generate?grant_type=client_credentials"
 echo "Requesting access_token…"
 echo "URL: $URL"
