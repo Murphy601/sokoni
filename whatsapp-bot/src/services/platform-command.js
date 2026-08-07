@@ -9,6 +9,7 @@ import {
   cancelSettlementPayout,
   reinstateSettlementPayout,
   scheduleSellerPayoutAfterDelivery,
+  processDuePayouts,
 } from "./settlements.js";
 import { listLandmarkHubs } from "../lib/landmark-hubs.js";
 import { config } from "../config.js";
@@ -223,6 +224,24 @@ export function refundEscrowOrder(orderId, { reason = "", adminLabel = "admin" }
 export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" } = {}) {
   const order = getOrder(orderId);
   if (!order) return { error: "not_found", message: "Order not found." };
+  if (order.isPaidOut) {
+    return {
+      ok: true,
+      action: "release",
+      order: summarizeOrder(order),
+      message: `${order.id} already paid out to seller.`,
+    };
+  }
+
+  const buyerTotal = orderBuyerTotal(order);
+  const netAmount =
+    resolveSellerPayoutKes(order) ||
+    Math.round(Number(order.sellerNetKes ?? order.sourcePriceKes) || 0) ||
+    Math.round(buyerTotal * 0.9);
+  // Admin Release is an override — make payout eligible immediately so Seller Hub
+  // "Available" updates (settlements only count status=owed toward withdrawable).
+  const eligibleAt = Date.now();
+
   updateOrderMeta(order.id, {
     escrowStatus: "released",
     escrowPaused: false,
@@ -231,18 +250,48 @@ export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" 
     escrowReleasedAt: Date.now(),
     escrowReleasedBy: String(adminLabel).slice(0, 80),
     escrowReleaseReason: String(reason || "Admin release").slice(0, 500),
+    payoutEligibleAt: eligibleAt,
+    payoutStatus: "scheduled",
+    sellerNetKes: order.sellerNetKes ?? netAmount,
+    sellerPayoutKes: order.sellerPayoutKes ?? netAmount,
+    sourcePriceKes: order.sourcePriceKes ?? netAmount,
   });
-  reinstateSettlementPayout(order.id);
+
+  reinstateSettlementPayout(order.id, { payoutEligibleAt: eligibleAt });
   const fresh = getOrder(order.id) || order;
-  if (!fresh.isPaidOut) {
-    scheduleSellerPayoutAfterDelivery(fresh);
-  }
+  const scheduled = scheduleSellerPayoutAfterDelivery(
+    {
+      ...fresh,
+      sellerNetKes: netAmount,
+      sellerPayoutKes: fresh.sellerPayoutKes || netAmount,
+      sourcePriceKes: fresh.sourcePriceKes || netAmount,
+      payoutEligibleAt: eligibleAt,
+    },
+    { refreshEligibleAt: true }
+  );
+  const promoted = processDuePayouts();
+
   return {
     ok: true,
     action: "release",
     order: summarizeOrder(getOrder(order.id) || order),
-    message: `Escrow released for ${order.id}. Seller payout scheduled.`,
+    payout: scheduled
+      ? {
+          orderId: scheduled.orderId,
+          payoutAmountKes: scheduled.payoutAmountKes,
+          status: scheduled.status,
+          payoutEligibleAt: scheduled.payoutEligibleAt,
+        }
+      : null,
+    promoted,
+    message: scheduled
+      ? `Escrow released for ${order.id}. Seller payout ${formatKesShort(scheduled.payoutAmountKes)} is now on their available balance (withdraw when ready).`
+      : `Escrow released for ${order.id}, but no seller payout line was created — check supplierId / seller net on the order.`,
   };
+}
+
+function formatKesShort(n) {
+  return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
 }
 
 /** Volume by drop-off hub / landmark from paid + scanned orders. */

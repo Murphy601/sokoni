@@ -8,7 +8,9 @@ import {
   cancelSettlementPayout,
   reinstateSettlementPayout,
   scheduleSellerPayoutAfterDelivery,
+  processDuePayouts,
 } from "./settlements.js";
+import { resolveSellerPayoutKes, orderBuyerTotal } from "./shipping-tiers.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
 
 const OPEN_STATUSES = new Set(["open", "under_review"]);
@@ -523,17 +525,33 @@ export async function resolveDispute({
         refundPendingManual: true,
       });
     } else {
+      const eligibleAt = order.payoutEligibleAt || Date.now();
       updateOrderMeta(order.id, {
         disputeHold: false,
         disputeResolvedAt: Date.now(),
         disputeResolution: "release",
         escrowStatus: "released",
-        payoutEligibleAt: order.payoutEligibleAt || Date.now(),
+        payoutEligibleAt: eligibleAt,
+        payoutStatus: "scheduled",
       });
       const fresh = getOrder(order.id);
-      reinstateSettlementPayout(order.id);
+      reinstateSettlementPayout(order.id, { payoutEligibleAt: eligibleAt });
       if (fresh && !fresh.isPaidOut) {
-        scheduleSellerPayoutAfterDelivery(fresh);
+        const net =
+          resolveSellerPayoutKes(fresh) ||
+          Math.round(Number(fresh.sellerNetKes ?? fresh.sourcePriceKes) || 0) ||
+          Math.round(orderBuyerTotal(fresh) * 0.9);
+        scheduleSellerPayoutAfterDelivery(
+          {
+            ...fresh,
+            sellerNetKes: net,
+            sellerPayoutKes: fresh.sellerPayoutKes || net,
+            sourcePriceKes: fresh.sourcePriceKes || net,
+            payoutEligibleAt: eligibleAt,
+          },
+          { refreshEligibleAt: true }
+        );
+        processDuePayouts();
       }
     }
   }
