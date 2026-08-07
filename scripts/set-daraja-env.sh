@@ -33,8 +33,10 @@ pick_cred() {
   # Strip whitespace / surrounding quotes
   raw="$(printf '%s' "$raw" | tr -d '[:space:]' | sed -e 's/^["'\'']//' -e 's/["'\'']$//')"
   case "$raw" in
-    ""|"…"|"..."|"…"|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX")
-      echo "==> Ignoring invalid ${label} override (placeholder) — using production default" >&2
+    ""|"…"|"..."|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX")
+      if [ -n "$raw" ]; then
+        echo "==> Ignoring invalid ${label} override (placeholder) — using production default" >&2
+      fi
       printf '%s' "$fallback"
       return
       ;;
@@ -69,15 +71,11 @@ upsert() {
   local val="$2"
   local tmp
   tmp="$(mktemp)"
-  if grep -qE "^${key}=" "$ENV_FILE"; then
-    local esc
-    esc="$(printf '%s' "$val" | sed -e 's/[&\\]/\\&/g')"
-    sed -E "s|^${key}=.*|${key}=${esc}|" "$ENV_FILE" > "$tmp"
-    mv "$tmp" "$ENV_FILE"
-  else
-    printf '\n%s=%s\n' "$key" "$val" >> "$ENV_FILE"
-    rm -f "$tmp"
-  fi
+  # Remove every existing line for this key, then append once.
+  # Do NOT use awk -v for values — gawk can mangle backslashes / long secrets.
+  grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true
+  printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  mv "$tmp" "$ENV_FILE"
 }
 
 if grep -qE '^MPESA_TILL_NUMBER=3439153$' "$ENV_FILE" 2>/dev/null; then
