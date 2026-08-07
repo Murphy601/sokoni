@@ -118,6 +118,7 @@
     }
     wrap.innerHTML = orders
       .map((o) => {
+        const delivered = orderIsDelivered(o);
         const flags = [
           o.escrowPaused ? "Paused" : "",
           o.disputeHold ? "Dispute hold" : "",
@@ -125,12 +126,15 @@
         ]
           .filter(Boolean)
           .join(" · ");
-        const releaseCls = o.delivered
+        const releaseCls = delivered
           ? "bg-brand-green text-brand-purple"
           : "border border-brand-purple/20 text-brand-purple/50";
+        const hint =
+          o.releaseHint ||
+          (delivered ? "Delivered — release when ready" : "Not delivered yet — wait before releasing");
         return `
         <article class="rounded-3xl border border-black/5 bg-white p-4 space-y-2 ${
-          o.delivered ? "ring-1 ring-emerald-200" : ""
+          delivered ? "ring-1 ring-emerald-200" : ""
         }">
           <div class="flex flex-wrap justify-between gap-2">
             <div class="min-w-0">
@@ -145,9 +149,7 @@
           <p class="text-xs text-brand-purple/55">${escapeHtml(o.hub || "—")} · escrow ${escapeHtml(o.escrowStatus || "—")}${
             flags ? ` · ${escapeHtml(flags)}` : ""
           }</p>
-          <p class="text-xs font-semibold ${o.delivered ? "text-emerald-800" : "text-amber-800"}">${escapeHtml(
-            o.releaseHint || (o.delivered ? "Delivered — release when ready" : "Not delivered yet")
-          )}</p>
+          <p class="text-xs font-semibold ${delivered ? "text-emerald-800" : "text-amber-800"}">${escapeHtml(hint)}</p>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="min-h-[40px] px-3 rounded-full border border-amber-400 text-amber-900 text-xs font-bold" data-quick-override="pause" data-order="${escapeHtml(o.orderId)}">Pause</button>
             <button type="button" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-800 text-xs font-bold" data-quick-override="refund" data-order="${escapeHtml(o.orderId)}">Refund</button>
