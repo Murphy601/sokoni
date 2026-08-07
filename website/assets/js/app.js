@@ -770,8 +770,11 @@ function renderStoreCard(product) {
       <div class="flex items-baseline gap-2 mb-1 flex-wrap">
         <span class="font-extrabold text-lg">${formatPrice(product)}</span>
         ${
-          product.originalPriceKes && product.priceKes && product.originalPriceKes > product.priceKes
-            ? `<span class="text-xs text-brand-purple/40 line-through">KES ${product.originalPriceKes.toLocaleString()}</span>`
+          productOnPromo(product) && product.originalPriceKes
+            ? `<span class="text-xs text-brand-purple/40 line-through">KES ${Number(product.originalPriceKes).toLocaleString()}</span>
+               <span class="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
+                 promoDiscountPct(product) ? `-${promoDiscountPct(product)}% promo` : "Promo"
+               }</span>`
             : ""
         }
       </div>
@@ -1089,24 +1092,44 @@ function renderStoreGrid() {
   revealCatalogSections();
 }
 
-function discountBadge(product) {
+function productOnPromo(product) {
+  if (!product) return false;
+  if (product.onPromo) return true;
+  if (product.promo && product.promo.active) return true;
   const original = Math.round(Number(product.originalPriceKes) || 0);
   const current = buyerPriceKes(product);
-  if (!original || !current || original <= current) return "";
-  if (product.promo && product.promo.active === false) return "";
-  const pct = Math.round((1 - current / original) * 100);
-  if (pct < 1) return "";
-  return `<span class="absolute top-3 left-3 z-[5] bg-brand-green text-brand-purple text-xs font-bold px-2 py-1 rounded-full">-${pct}%</span>`;
+  return Boolean(original && current && original > current);
+}
+
+function promoDiscountPct(product) {
+  if (product?.discountPct != null && Number(product.discountPct) > 0) {
+    return Math.round(Number(product.discountPct));
+  }
+  const original = Math.round(Number(product?.originalPriceKes) || 0);
+  const current = buyerPriceKes(product);
+  if (!original || !current || original <= current) return 0;
+  return Math.max(1, Math.round((1 - current / original) * 100));
+}
+
+function discountBadge(product) {
+  if (!productOnPromo(product)) return "";
+  const pct = promoDiscountPct(product);
+  const label = pct >= 1 ? `-${pct}% PROMO` : "PROMO";
+  return `<span class="depop-card-promo" aria-label="On promotion">${escapeHtml(label)}</span>`;
 }
 
 function promoPriceHtml(product) {
   const current = formatPrice(product);
-  const original = Math.round(Number(product.originalPriceKes) || 0);
-  const now = buyerPriceKes(product);
-  if (!original || !now || original <= now) {
+  if (!productOnPromo(product)) {
     return `<p class="depop-card-price">${escapeHtml(current)}</p>`;
   }
-  return `<p class="depop-card-price"><span>${escapeHtml(current)}</span> <span class="text-xs font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span></p>`;
+  const original = Math.round(Number(product.originalPriceKes) || 0);
+  const pct = promoDiscountPct(product);
+  return `<p class="depop-card-price depop-card-price--promo">
+      <span class="depop-card-price-now">${escapeHtml(current)}</span>
+      ${original > 0 ? `<span class="depop-card-price-was">KES ${original.toLocaleString()}</span>` : ""}
+      ${pct >= 1 ? `<span class="depop-card-price-save">Save ${pct}%</span>` : `<span class="depop-card-price-save">Promo</span>`}
+    </p>`;
 }
 
 function setupBrowseNudge() {
@@ -1517,6 +1540,10 @@ window.SokoniApp = {
   formatBuyerTotal,
   resolveProductImage,
   resolveProductVideo,
+  productOnPromo,
+  promoDiscountPct,
+  discountBadge,
+  promoPriceHtml,
   runSearch,
   setCatalogFilter,
   renderDepopCard,

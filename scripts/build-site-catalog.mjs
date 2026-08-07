@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { CATEGORY_TAXONOMY } from "./catalog-taxonomy.mjs";
 import { computeProductTotals } from "../whatsapp-bot/src/services/shipping-tiers.js";
+import { publicPromoFields } from "../whatsapp-bot/src/lib/public-promo.js";
 import {
   applySoldLocks,
   enforceSoldLocksOnMaster,
@@ -62,11 +63,16 @@ function toPublic(product) {
   // Store items: pay-on-delivery. Never expose cost price or supplier.
   if (product.fulfillment === "store") {
     const totals = computeProductTotals(product);
+    const promoFields = publicPromoFields(product, { totalKes: totals.totalKes });
     return {
       id: product.id,
       name: product.name,
       category: product.category,
       priceKes: totals.totalKes,
+      ...(promoFields.originalPriceKes ? { originalPriceKes: promoFields.originalPriceKes } : {}),
+      ...(promoFields.onPromo ? { onPromo: true } : {}),
+      ...(promoFields.discountPct ? { discountPct: promoFields.discountPct } : {}),
+      ...(promoFields.promo ? { promo: promoFields.promo } : {}),
       rating: product.rating,
       reviews: product.reviews,
       source: "Sokoni",
@@ -90,6 +96,9 @@ function toPublic(product) {
       ...(product.color ? { color: product.color } : {}),
       ...(product.tags?.length ? { tags: product.tags } : {}),
       ...(product.description ? { description: product.description } : {}),
+      ...(product.shopHandle || product.sellerHandle
+        ? { shopHandle: product.shopHandle || product.sellerHandle, sellerHandle: product.sellerHandle || product.shopHandle }
+        : {}),
     };
   }
 

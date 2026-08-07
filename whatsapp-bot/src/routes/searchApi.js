@@ -6,6 +6,7 @@
 import { Router } from "express";
 import { smartSearch, smartSuggest } from "../services/smart-search.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
+import { publicPromoFields } from "../lib/public-promo.js";
 import { resolveStorefrontImageUrl } from "../lib/catalog-images.js";
 
 const router = Router();
@@ -13,11 +14,15 @@ const router = Router();
 function toPublic(p) {
   if (!p) return null;
   const totals = computeProductTotals(p);
+  const promoFields = publicPromoFields(p, { totalKes: totals.totalKes });
   return {
     id: p.id,
     name: p.name,
     priceKes: totals.totalKes,
-    originalPriceKes: p.originalPriceKes,
+    originalPriceKes: promoFields.originalPriceKes,
+    onPromo: promoFields.onPromo || undefined,
+    discountPct: promoFields.discountPct || undefined,
+    promo: promoFields.promo,
     browseCategory: p.browseCategory,
     browseSubCategory: p.browseSubCategory,
     category: p.category,
