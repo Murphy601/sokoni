@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getSupplier } from "./suppliers.js";
@@ -12,13 +12,27 @@ const SETTLEMENTS_FILE = path.join(DATA_DIR, "settlements.json");
 
 let store = { entries: [] };
 let loaded = false;
+let loadedMtimeMs = 0;
+
+function fileMtimeMs(file) {
+  try {
+    return existsSync(file) ? statSync(file).mtimeMs : 0;
+  } catch {
+    return 0;
+  }
+}
 
 function load() {
-  if (loaded) return;
+  const mtime = fileMtimeMs(SETTLEMENTS_FILE);
+  // Re-read when ops scripts rewrite the file on disk (mtime change).
+  if (loaded && mtime === loadedMtimeMs) return;
   loaded = true;
+  loadedMtimeMs = mtime;
   try {
     if (existsSync(SETTLEMENTS_FILE)) {
       store = { entries: [], ...JSON.parse(readFileSync(SETTLEMENTS_FILE, "utf-8")) };
+    } else {
+      store = { entries: [] };
     }
   } catch (err) {
     console.error("[settlements] failed to load:", err.message);
@@ -29,6 +43,7 @@ function persist() {
   try {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
     writeFileSync(SETTLEMENTS_FILE, JSON.stringify(store, null, 2));
+    loadedMtimeMs = fileMtimeMs(SETTLEMENTS_FILE);
   } catch (err) {
     console.error("[settlements] failed to persist:", err.message);
   }
