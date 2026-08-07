@@ -268,6 +268,12 @@ const QUERY_EXPANSIONS = {
   shoe: ["shoes", "fashion"],
   shoes: ["shoes", "fashion"],
   lotion: ["lotion", "skincare", "body", "health-beauty"],
+  kiondo: ["kiondo", "handwoven", "bag", "bags", "basket", "artisan", "sisal"],
+  basket: ["basket", "kiondo", "handwoven", "woven", "bags"],
+  leso: ["leso", "khanga", "kitenge", "wrap", "fashion"],
+  kitenge: ["kitenge", "ankara", "wax", "print", "dress", "fashion"],
+  sneakers: ["sneakers", "shoes", "trainers", "kicks", "footwear"],
+  denim: ["denim", "jeans", "jacket", "fashion"],
 };
 
 function expandKeywordTokens(raw) {
