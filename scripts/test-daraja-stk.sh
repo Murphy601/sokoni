@@ -47,16 +47,28 @@ case "$PHONE" in
 esac
 
 echo "Host: $HOST"
+echo "Key len=${#KEY} Secret len=${#SECRET} Passkey len=${#PASSKEY}"
+echo "Secret tail: …$(printf '%s' "$SECRET" | tail -c 8)"
 echo "SHORTCODE(BusinessShortCode)=$SHORTCODE  PARTY_B=$PARTY_B  TILL=$TILL  TX=$TX"
 echo "Phone=$PHONE Amount=$AMOUNT Callback=$CALLBACK"
 echo
 
+if [ "${#KEY}" -lt 16 ] || [ "${#SECRET}" -lt 16 ] || [ "${#PASSKEY}" -lt 16 ]; then
+  echo "FAIL: credentials in $ENV_FILE look truncated" >&2
+  exit 1
+fi
+
 echo "==> OAuth"
-TOKEN_JSON="$(curl -sS -u "${KEY}:${SECRET}" "${HOST}/oauth/v1/generate?grant_type=client_credentials")"
-echo "$TOKEN_JSON" | head -c 200; echo
+OA_TMP="$(mktemp)"
+OA_CODE="$(curl -sS -o "$OA_TMP" -w '%{http_code}' -u "${KEY}:${SECRET}" \
+  "${HOST}/oauth/v1/generate?grant_type=client_credentials" || true)"
+TOKEN_JSON="$(cat "$OA_TMP")"
+rm -f "$OA_TMP"
+echo "HTTP $OA_CODE"
+echo "$TOKEN_JSON" | head -c 300; echo
 TOKEN="$(printf '%s' "$TOKEN_JSON" | sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
 if [ -z "$TOKEN" ]; then
-  echo "FAIL: no access_token" >&2
+  echo "FAIL: no access_token (credentials rejected or network issue)" >&2
   exit 1
 fi
 
