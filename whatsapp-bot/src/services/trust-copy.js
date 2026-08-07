@@ -23,7 +23,7 @@ function tillName() {
 
 export function tillExplainLine() {
   return (
-    `🏢 *M-Pesa Paybill:* ${till()} — *${tillName()}*\n` +
+    `🏢 *M-Pesa Till:* ${till()} — *${tillName()}*\n` +
     `📞 *WhatsApp / calls:* ${formatPhoneDisplay()}`
   );
 }
@@ -31,7 +31,7 @@ export function tillExplainLine() {
 export function paymentTrustDisclosure() {
   return (
     `Countrywide *100% prepaid* checkout — funds held in Sokoni escrow until delivery is confirmed.\n` +
-    `Pay via M-Pesa STK push (Safaricom Daraja) or manually to Paybill *${till()}* (*${tillName()}*).\n\n` +
+    `Pay via M-Pesa STK push (Safaricom Daraja) or manually to Buy Goods Till *${till()}* (*${tillName()}*).\n\n` +
     `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
     `✅ *Verify:* call or WhatsApp us before paying to confirm your SKN-#### (or older SK-####) order number.\n` +
     `_No pay-on-delivery. No COD._`
@@ -84,7 +84,7 @@ export function broadcastReEngageMessage() {
     `Habari! It's the *Sokoni Mall* team 👋\n` +
     `We've upgraded our WhatsApp shopping assistant!\n\n` +
     `• 100% prepaid escrow — pay before dispatch\n` +
-    `• Paybill *${till()}* — *${tillName()}*\n` +
+    `• Till *${till()}* — *${tillName()}*\n` +
     `• ${offerLine()}\n\n` +
     `Text us what you need in English, Kiswahili, or Sheng! 👇`
   );
@@ -146,7 +146,7 @@ export function paymentVerificationPrompt(amountKes = null) {
     `Payment — prepaid escrow 🔑\n\n` +
     `Complete payment *before* we dispatch your order:\n\n` +
     amountLine +
-    `🏢 *Paybill:* ${till()}\n` +
+    `🏢 *Till:* ${till()}\n` +
     `📛 *Name:* ${tillName()}\n\n` +
     `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your SKN-#### (or older SK-####) order number.\n` +
     `After paying, paste your M-Pesa confirmation or reply *paid* with the transaction code. 🧾`
