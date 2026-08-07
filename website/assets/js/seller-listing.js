@@ -3797,6 +3797,11 @@ function setDashboardOfferBadge(pendingCount = 0) {
       `${badgeCount} item${badgeCount === 1 ? "" : "s"} needing attention`
     );
   }
+
+  const bottomDot = el("bottom-badge-orders");
+  if (bottomDot) {
+    bottomDot.classList.toggle("hidden", !badgeCount);
+  }
 }
 
 function normalizeOfferFilter(value) {
@@ -5797,15 +5802,25 @@ function showSellerView(view) {
 
   document.querySelectorAll("[data-hub-nav]").forEach((btn) => {
     const key = btn.dataset.hubNav;
-    const active = key === view || (view === "listing" && key === "listings");
+    const active = key === view;
     btn.classList.toggle("is-active", active);
-    btn.setAttribute("aria-selected", active ? "true" : "false");
+    if (btn.getAttribute("role") === "tab") {
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    if (btn.classList.contains("seller-hub-bottom-menu__item")) {
+      if (active) btn.setAttribute("aria-current", "page");
+      else btn.removeAttribute("aria-current");
+    }
   });
 
-  const activeNav =
-    document.querySelector(`.seller-hub-nav__tab[data-hub-nav="${view}"]`) ||
-    document.querySelector(".seller-hub-nav__tab.is-active");
-  requestAnimationFrame(() => moveSellerHubNavPill(activeNav));
+  // Keep sticky menu + section content in view after a jump.
+  const hubNav = el("seller-hub-nav");
+  if (hubNav && !hubNav.closest(".hidden")) {
+    const navTop = hubNav.getBoundingClientRect().top;
+    if (navTop < 64 || navTop > window.innerHeight * 0.45) {
+      hubNav.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
 
   if (showDash) {
     loadSellerOrders();
