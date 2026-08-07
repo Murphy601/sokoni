@@ -10,6 +10,7 @@ import {
   reinstateSettlementPayout,
   scheduleSellerPayoutAfterDelivery,
   processDuePayouts,
+  markSettlementReadyForMpesa,
 } from "./settlements.js";
 import { listLandmarkHubs } from "../lib/landmark-hubs.js";
 import { config } from "../config.js";
@@ -200,9 +201,9 @@ async function fanOutEscrowSync(orderId, action, { reason = "", payoutAmountKes 
       sellerMessage =
         `💰 *Escrow released — ${order.id}*\n\n` +
         (amt != null
-          ? `KES ${Number(amt).toLocaleString()} is now on your *available* balance.\n`
-          : `Payout is now on your available balance.\n`) +
-        `Open Seller Hub → Payouts to withdraw, or WhatsApp *balance*.`;
+          ? `KES ${Number(amt).toLocaleString()} is now *Ready for M-Pesa* (not pending escrow).\n`
+          : `Payout is now *Ready for M-Pesa* (not pending escrow).\n`) +
+        `Seller Hub → Payouts to withdraw, or WhatsApp *balance* / *WITHDRAW*.`;
       eventType = "ESCROW_RELEASED";
     } else if (action === "pause") {
       buyerMessage =
@@ -398,16 +399,17 @@ export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" 
   // Align buyer track + seller order lists without re-entering onOrderDelivered
   // (that path would reset eligibility to +3 business days).
   markOrderCompleteOnRelease(getOrder(order.id) || order);
-  // Re-assert immediate eligibility after status/meta patches.
+  // Re-assert release after status/meta patches.
   updateOrderMeta(order.id, {
     payoutEligibleAt: eligibleAt,
-    payoutStatus: "scheduled",
+    payoutStatus: "owed",
     escrowStatus: "released",
   });
 
   reinstateSettlementPayout(order.id, { payoutEligibleAt: eligibleAt });
   const fresh = getOrder(order.id) || order;
-  const scheduled = scheduleSellerPayoutAfterDelivery(
+  // Ensure a settlement line exists, then force Ready for M-Pesa (owed) — never pending escrow.
+  scheduleSellerPayoutAfterDelivery(
     {
       ...fresh,
       sellerNetKes: netAmount,
@@ -417,28 +419,31 @@ export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" 
     },
     { refreshEligibleAt: true }
   );
-  const promoted = processDuePayouts();
+  processDuePayouts();
+  const ready = markSettlementReadyForMpesa(getOrder(order.id) || fresh, {
+    payoutAmountKes: netAmount,
+  });
+  updateOrderMeta(order.id, { payoutStatus: ready?.status === "owed" ? "owed" : "scheduled" });
 
   void fanOutEscrowSync(order.id, "release", {
     reason,
-    payoutAmountKes: scheduled?.payoutAmountKes ?? netAmount,
+    payoutAmountKes: ready?.payoutAmountKes ?? netAmount,
   });
 
   return {
     ok: true,
     action: "release",
     order: summarizeOrder(getOrder(order.id) || order),
-    payout: scheduled
+    payout: ready
       ? {
-          orderId: scheduled.orderId,
-          payoutAmountKes: scheduled.payoutAmountKes,
-          status: scheduled.status,
-          payoutEligibleAt: scheduled.payoutEligibleAt,
+          orderId: ready.orderId,
+          payoutAmountKes: ready.payoutAmountKes,
+          status: ready.status,
+          payoutEligibleAt: ready.payoutEligibleAt,
         }
       : null,
-    promoted,
-    message: scheduled
-      ? `Escrow released for ${order.id}. Seller payout ${formatKesShort(scheduled.payoutAmountKes)} is now on their available balance. Buyer & seller notified on WhatsApp.`
+    message: ready
+      ? `Escrow released for ${order.id}. Seller payout ${formatKesShort(ready.payoutAmountKes)} moved to Ready for M-Pesa (not pending escrow). Buyer & seller notified.`
       : `Escrow released for ${order.id}, but no seller payout line was created — check supplierId / seller net on the order.`,
   };
 }

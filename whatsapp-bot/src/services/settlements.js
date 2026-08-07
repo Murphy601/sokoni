@@ -131,6 +131,49 @@ export function processDuePayouts() {
   return promoted;
 }
 
+/**
+ * Admin / dispute Release → Ready for M-Pesa immediately (status=owed).
+ * Never leave released funds stuck as scheduled (or miscounted as pending escrow).
+ */
+export function markSettlementReadyForMpesa(order, { payoutAmountKes = null } = {}) {
+  if (!order?.id || !order?.supplierId) return null;
+  load();
+
+  const amount =
+    Math.round(Number(payoutAmountKes)) ||
+    resolveSellerPayoutKes(order) ||
+    Math.round(Number(order.sellerNetKes ?? order.sourcePriceKes) || 0);
+  if (!amount) return null;
+
+  const existing = store.entries.find(
+    (e) => e.orderId === order.id && e.status !== "cancelled" && e.status !== "paid"
+  );
+  if (existing) {
+    // Already sending / already ready — just refresh amount if needed.
+    if (existing.status === "disbursing") {
+      if (amount > 0) existing.payoutAmountKes = amount;
+      persist();
+      return existing;
+    }
+    existing.status = "owed";
+    existing.payoutEligibleAt = Date.now();
+    existing.payoutAmountKes = amount;
+    existing.readyForMpesaAt = Date.now();
+    persist();
+    return existing;
+  }
+
+  const entry = buildPayoutEntry(
+    { ...order, sellerPayoutKes: amount, sellerNetKes: amount, sourcePriceKes: amount },
+    { status: "owed", payoutEligibleAt: Date.now() }
+  );
+  entry.readyForMpesaAt = Date.now();
+  store.entries.unshift(entry);
+  if (store.entries.length > 500) store.entries.length = 500;
+  persist();
+  return entry;
+}
+
 /** Record supplier payout owed immediately (legacy / manual). */
 export function recordDeliveryPayout(order) {
   if (!order?.supplierId || !order.sourcePriceKes) return null;

@@ -9,6 +9,7 @@ import {
   reinstateSettlementPayout,
   scheduleSellerPayoutAfterDelivery,
   processDuePayouts,
+  markSettlementReadyForMpesa,
 } from "./settlements.js";
 import { resolveSellerPayoutKes, orderBuyerTotal } from "./shipping-tiers.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
@@ -537,7 +538,7 @@ export async function resolveDispute({
         disputeResolution: "release",
         escrowStatus: "released",
         payoutEligibleAt: eligibleAt,
-        payoutStatus: "scheduled",
+        payoutStatus: "owed",
         shipmentStatus: "delivered",
         deliveredAt: order.deliveredAt || Date.now(),
         shipmentDeliveredAt: order.shipmentDeliveredAt || Date.now(),
@@ -550,10 +551,9 @@ export async function resolveDispute({
       } catch {
         /* ignore */
       }
-      // Keep immediate eligibility after status patch.
       updateOrderMeta(order.id, {
         payoutEligibleAt: eligibleAt,
-        payoutStatus: "scheduled",
+        payoutStatus: "owed",
         escrowStatus: "released",
       });
       const fresh = getOrder(order.id);
@@ -574,6 +574,7 @@ export async function resolveDispute({
           { refreshEligibleAt: true }
         );
         processDuePayouts();
+        markSettlementReadyForMpesa(getOrder(order.id) || fresh, { payoutAmountKes: net });
       }
       try {
         const { ensureOrderSellerUserId, creditSellerSaleReview } = await import(
