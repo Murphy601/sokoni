@@ -137,18 +137,17 @@ upsert MPESA_B2C_AUTO "$B2C_AUTO"
 upsert ESCROW_HOLD_BUSINESS_DAYS "$HOLD_DAYS"
 upsert SELLER_WITHDRAW_INSTANT_B2C "$WITHDRAW_B2C"
 
-if [ -n "${MPESA_INITIATOR_NAME:-}" ]; then
-  upsert MPESA_INITIATOR_NAME "$MPESA_INITIATOR_NAME"
-fi
+# Initiator username is not secret — default SOKONIMA (Prod org). Password/credential
+# must come from configure-b2c-initiator.sh (never bake into git).
+upsert MPESA_INITIATOR_NAME "${MPESA_INITIATOR_NAME:-SOKONIMA}"
 if [ -n "${MPESA_SECURITY_CREDENTIAL:-}" ]; then
   upsert MPESA_SECURITY_CREDENTIAL "$MPESA_SECURITY_CREDENTIAL"
 fi
 if [ -n "${MPESA_INITIATOR_PASSWORD:-}" ]; then
   upsert MPESA_INITIATOR_PASSWORD "$MPESA_INITIATOR_PASSWORD"
 fi
-if [ -n "${MPESA_CERT_PATH:-}" ]; then
-  upsert MPESA_CERT_PATH "$MPESA_CERT_PATH"
-fi
+CERT_DEFAULT="$REPO/whatsapp-bot/certs/ProductionCertificate.cer"
+upsert MPESA_CERT_PATH "${MPESA_CERT_PATH:-$CERT_DEFAULT}"
 
 echo "==> Updated Daraja production config in $ENV_FILE"
 echo "    Key len=${#MPESA_CONSUMER_KEY}  Secret len=${#MPESA_CONSUMER_SECRET}  Passkey len=${#MPESA_PASSKEY}"

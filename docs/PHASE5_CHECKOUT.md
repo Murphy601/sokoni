@@ -65,9 +65,14 @@ Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcod
 
 **Seller wallet / withdraw:**
 - `ESCROW_HOLD_BUSINESS_DAYS=0` (default) — on delivery / buyer confirm, credit **Ready for M-Pesa** on the Seller Hub immediately.
-- Seller **Withdraw** triggers Daraja B2C instantly when `MPESA_INITIATOR_NAME` + `MPESA_SECURITY_CREDENTIAL` are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
+- Seller **Withdraw** triggers Daraja B2C instantly when initiator `SOKONIMA` + SecurityCredential are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
+- Configure B2C on the VM (password never committed):
+  1. Download `ProductionCertificate.cer` from Daraja → `whatsapp-bot/certs/`
+  2. `export MPESA_INITIATOR_PASSWORD='…'` then `bash scripts/configure-b2c-initiator.sh`
+  3. `bash scripts/test-daraja-b2c-ready.sh`
+- Bot calls production B2C at `https://api.safaricom.co.ke/mpesa/b2c/v1/paymentrequest` (Safaricom go-live list).
 - Admin Command Center shows Ready / scheduled / B2C failed and can **Pay B2C** or **Release → Ready**.
-- Buyer STK does not need the initiator. Leave `MPESA_B2C_AUTO=false` until the first manual/withdraw B2C succeeds.
+- Leave `MPESA_B2C_AUTO=false` until the first `#payb2c` / withdraw B2C succeeds.
 
 **Till vs shortcode (Buy Goods — Sokoni live):**
 - `MPESA_SHORTCODE=3439153` — Daraja / org H.O. → STK `BusinessShortCode` + password
