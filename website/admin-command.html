@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Command Center — Sokoni</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<style>
+  .cmd-tab.is-active { background: #25D366; color: #1B1035; }
+  .cmd-bar { height: 8px; border-radius: 9999px; background: rgba(27,16,53,0.08); overflow: hidden; }
+  .cmd-bar > span { display: block; height: 100%; background: #25D366; border-radius: inherit; }
+</style>
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
+  <header class="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-6xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <a href="index.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
+        <p class="text-xs text-brand-purple/55 mt-0.5">Platform Manager · Command Center</p>
+      </div>
+      <nav class="flex flex-wrap gap-2 text-xs font-semibold">
+        <a href="admin-command.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Command</a>
+        <a href="admin-disputes.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Disputes</a>
+        <a href="admin-support.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Support</a>
+        <a href="admin-seller-listings.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Listings</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-5 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="font-display text-3xl font-bold">Admin Command Center</h1>
+          <p class="text-sm text-brand-purple/65 mt-1 max-w-2xl">
+            Escrow holding tank, dispute overrides, hub volume, and smart catalog search — one desk for the platform owner.
+          </p>
+        </div>
+        <button id="refresh-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          Refresh dashboard
+        </button>
+      </div>
+      <label class="block text-sm font-medium max-w-md">
+        Admin token
+        <input
+          id="admin-token"
+          type="password"
+          autocomplete="off"
+          class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+          placeholder="ADMIN_SETUP_TOKEN"
+        />
+      </label>
+      <p id="cmd-status" class="text-sm text-brand-purple/60" role="status"></p>
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Command center sections">
+        <button type="button" class="cmd-tab is-active min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="escrow">Escrow tank</button>
+        <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="resolve">Overrides &amp; disputes</button>
+        <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="hubs">Hub performance</button>
+        <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="search">Smart search</button>
+      </div>
+    </section>
+
+    <!-- ESCROW HOLDING TANK -->
+    <section data-panel="escrow" class="space-y-4">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Held (buyer totals)</p>
+          <p id="stat-held-buyer" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Seller net inside</p>
+          <p id="stat-held-seller" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Orders in tank</p>
+          <p id="stat-held-count" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+        <article class="rounded-3xl border border-black/5 bg-white p-4">
+          <p class="text-[11px] uppercase tracking-wide text-brand-purple/50">Paused / disputes</p>
+          <p id="stat-paused" class="font-display text-2xl font-bold mt-1">—</p>
+        </article>
+      </div>
+      <p id="till-note" class="text-xs text-brand-purple/55"></p>
+      <div id="escrow-orders" class="space-y-3"></div>
+    </section>
+
+    <!-- MANUAL OVERRIDE & DISPUTES -->
+    <section data-panel="resolve" class="space-y-4 hidden">
+      <div class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+        <h2 class="font-display text-xl font-bold">Manual override</h2>
+        <p class="text-sm text-brand-purple/65">Pause payout, refund buyer (manual Till), or release to seller when a parcel is damaged or abandoned.</p>
+        <div class="grid gap-3 md:grid-cols-3">
+          <label class="block text-sm font-medium md:col-span-1">
+            Order ID
+            <input id="override-order-id" type="text" class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm font-mono" placeholder="SKN-1002-1" />
+          </label>
+          <label class="block text-sm font-medium md:col-span-2">
+            Reason
+            <input id="override-reason" type="text" class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm" placeholder="Damaged goods / buyer no-show" />
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-override="pause" class="min-h-[44px] px-4 rounded-full border border-amber-400 text-amber-900 text-sm font-bold">Pause escrow</button>
+          <button type="button" data-override="refund" class="min-h-[44px] px-4 rounded-full border border-red-300 text-red-800 text-sm font-bold">Refund buyer</button>
+          <button type="button" data-override="release" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Release to seller</button>
+        </div>
+        <p id="override-status" class="text-sm text-brand-purple/60" role="status"></p>
+      </div>
+      <div class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="font-display text-xl font-bold">Open disputes</h2>
+          <a href="admin-disputes.html" class="text-xs font-semibold text-brand-purple/60 hover:text-brand-green">Full dispute desk →</a>
+        </div>
+        <div id="dispute-list" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- HUB PERFORMANCE -->
+    <section data-panel="hubs" class="space-y-4 hidden">
+      <div class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="font-display text-xl font-bold">Hub performance tracker</h2>
+            <p class="text-sm text-brand-purple/65 mt-1">Which Mashinani drop-off hubs move the most parcels.</p>
+          </div>
+          <label class="text-sm font-medium">
+            Window
+            <select id="hub-days" class="mt-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+              <option value="7">7 days</option>
+              <option value="30" selected>30 days</option>
+              <option value="90">90 days</option>
+            </select>
+          </label>
+        </div>
+        <p id="hub-top" class="text-sm font-semibold text-brand-purple/80"></p>
+        <div id="hub-list" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- SMART SEARCH -->
+    <section data-panel="search" class="space-y-4 hidden">
+      <div class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+        <h2 class="font-display text-xl font-bold">Smart search &amp; categorization</h2>
+        <p class="text-sm text-brand-purple/65">
+          Typo-tolerant catalog search with synonym suggestions (e.g. <em>kiondo</em> → Handwoven Bags).
+          Buyers can also send a product photo on WhatsApp for similar-item match.
+        </p>
+        <label class="block text-sm font-medium">
+          Try a query
+          <input id="smart-q" type="search" class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm" placeholder="Kiondo, sneakers, leso…" autocomplete="off" />
+        </label>
+        <div id="smart-suggestions" class="flex flex-wrap gap-2"></div>
+        <div id="smart-results" class="space-y-2"></div>
+        <p class="text-xs text-brand-purple/50">
+          Public API: <code class="font-mono">GET /api/search?q=</code> · Suggest: <code class="font-mono">GET /api/search/suggest?q=</code>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script src="assets/js/admin-command.js"></script>
+</body>
+</html>

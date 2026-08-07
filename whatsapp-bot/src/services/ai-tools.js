@@ -239,15 +239,30 @@ async function toolSearchProducts({
   browseLabel = null,
 }) {
   const keywords = normalizeShopperQuery(query);
-  let products = await searchProducts({
-    keywords,
-    browseCategory: browseCategory || undefined,
-    browseSubCategory: browseSubCategory || undefined,
-    fulfillment: "store",
-    scope: "local",
-    maxPriceKes: maxPriceKes && Number.isFinite(Number(maxPriceKes)) ? Number(maxPriceKes) : undefined,
-    limit: Math.min(Number(limit) || 5, 8),
-  });
+  let products = [];
+  let suggestions = [];
+  try {
+    const { smartSearch } = await import("./smart-search.js");
+    const smart = await smartSearch({
+      q: keywords,
+      browseCategory: browseCategory || undefined,
+      browseSubCategory: browseSubCategory || undefined,
+      maxPriceKes: maxPriceKes && Number.isFinite(Number(maxPriceKes)) ? Number(maxPriceKes) : undefined,
+      limit: Math.min(Number(limit) || 5, 8),
+    });
+    products = smart.products || [];
+    suggestions = smart.suggestions || [];
+  } catch {
+    products = await searchProducts({
+      keywords,
+      browseCategory: browseCategory || undefined,
+      browseSubCategory: browseSubCategory || undefined,
+      fulfillment: "store",
+      scope: "local",
+      maxPriceKes: maxPriceKes && Number.isFinite(Number(maxPriceKes)) ? Number(maxPriceKes) : undefined,
+      limit: Math.min(Number(limit) || 5, 8),
+    });
+  }
 
   if (secondhandOnly) {
     products = products.filter((p) => p.isSecondhand || p.condition !== "brand_new_with_tags");
@@ -269,6 +284,7 @@ async function toolSearchProducts({
     tool: "search_products",
     ok: true,
     query: keywords,
+    suggestions,
     browseCategory: browseCategory || null,
     browseSubCategory: browseSubCategory || null,
     browseLabel: browseLabel || null,
@@ -510,15 +526,16 @@ function formatProductLines(products) {
 export function formatToolResultsForPrompt(toolResults) {
   if (!toolResults?.length) return null;
   const blocks = toolResults.map((r) => {
-    if (r.tool === "search_products" && r.products?.length) {
+    if (r.tool === "search_products" && (r.products?.length || r.suggestions?.length)) {
       const path =
         r.browseLabel ||
         (r.browseCategory
           ? `${r.browseCategory}${r.browseSubCategory ? `/${r.browseSubCategory}` : ""}`
           : "");
       return (
-        `TOOL search_products (${r.count} hits for "${r.query}"${path ? `; aisle ${path}` : ""}):\n` +
-        formatProductLines(r.products).join("\n")
+        `TOOL search_products (${r.count || 0} hits for "${r.query}"${path ? `; aisle ${path}` : ""}):\n` +
+        (r.suggestions?.length ? `Suggestions: ${r.suggestions.join(", ")}\n` : "") +
+        (formatProductLines(r.products).join("\n") || "(no products)")
       );
     }
     if (r.tool === "browse_products" && r.products?.length) {

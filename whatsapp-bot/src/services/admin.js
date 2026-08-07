@@ -401,7 +401,8 @@ function adminHelpText() {
     `📦 *#fulfill SKN-1002-1 share* — supplier delivers (with address)\n` +
     `💰 *#payouts* — supplier amounts owed / B2C status\n` +
     `💸 *#payb2c SKN-1002-1* — send seller payout via M-Pesa B2C\n` +
-    `✅ *#paid SKN-1002-1* — mark supplier paid (manual transfer)\n\n` +
+    `✅ *#paid SKN-1002-1* — mark supplier paid (manual transfer)\n` +
+    `🖥️ *Command Center* — sokonimall.com/admin-command.html (escrow tank, disputes, hub stats)\n\n` +
     `📣 *Customer comms & offers*\n` +
     `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +

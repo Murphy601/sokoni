@@ -571,6 +571,32 @@ export async function handleIncomingMessage(
     if (pendingAgain) return;
   }
 
+  // Buyer photo → similar listings (skip when supplier onboarding already consumed media).
+  if (hasMedia && !isInSupplierOnboarding(customerKey)) {
+    try {
+      const { tryHandleBuyerImageSearch } = await import("../services/image-search.js");
+      const imageHit = await tryHandleBuyerImageSearch(customerKey, {
+        hasMedia,
+        mediaUrl,
+        mediaMimetype,
+        messageId,
+        chatId,
+        session: wahaSession,
+        text: combinedText || text,
+      });
+      if (imageHit) {
+        if (imageHit === true) return;
+        if (imageHit.handled) {
+          if (imageHit.reply) await sendText(customerKey, imageHit.reply);
+          if (imageHit.products?.length) await sendPlugProductPicker(customerKey, imageHit.products);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("[webhook] image search skipped:", err.message);
+    }
+  }
+
   // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
   try {
     const agent = await runAiAgent(customerKey, combinedText, phone);

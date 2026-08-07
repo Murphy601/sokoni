@@ -1152,15 +1152,87 @@ function setupBrowseNudge() {
 
 // ---------- Init ----------
 
+function smartSearchApiBase() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001/api/search"
+    : "https://bot.sokonimall.com/api/search";
+}
+
+function ensureSearchSuggestBox(input) {
+  if (!input) return null;
+  let box = document.getElementById("hero-search-suggest");
+  if (box) return box;
+  const host = input.closest("form") || input.parentElement;
+  if (!host) return null;
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  box = document.createElement("div");
+  box.id = "hero-search-suggest";
+  box.className =
+    "hidden absolute left-0 right-0 top-full mt-2 z-30 rounded-2xl border border-black/10 bg-white shadow-lg overflow-hidden";
+  box.setAttribute("role", "listbox");
+  host.appendChild(box);
+  return box;
+}
+
+let smartSuggestTimer = null;
+async function refreshSmartSuggestions(query) {
+  const input = document.getElementById("hero-search");
+  const box = ensureSearchSuggestBox(input);
+  if (!box) return;
+  const q = String(query || "").trim();
+  if (q.length < 2) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  try {
+    const res = await fetch(`${smartSearchApiBase()}/suggest?q=${encodeURIComponent(q)}&limit=6`);
+    const data = await res.json().catch(() => ({}));
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    if (!suggestions.length) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = suggestions
+      .map(
+        (s) =>
+          `<button type="button" class="w-full text-left px-4 py-3 text-sm hover:bg-[#FFF8F0] border-b border-black/5 last:border-0" data-smart-suggest="${String(s)
+            .replace(/"/g, "&quot;")}">${String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")}</button>`
+      )
+      .join("");
+    box.classList.remove("hidden");
+    box.querySelectorAll("[data-smart-suggest]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.getAttribute("data-smart-suggest") || "";
+        if (input) input.value = value;
+        box.classList.add("hidden");
+        runSearch(value);
+      });
+    });
+  } catch {
+    box.classList.add("hidden");
+  }
+}
+
 function bindSearch() {
   const form = document.getElementById("hero-search-form");
   const input = document.getElementById("hero-search");
   form?.addEventListener("submit", (e) => {
     e.preventDefault();
+    document.getElementById("hero-search-suggest")?.classList.add("hidden");
     runSearch(input?.value || "");
   });
   input?.addEventListener("input", () => {
-    if (!(input.value || "").trim()) runSearch("");
+    const q = input.value || "";
+    if (!q.trim()) runSearch("");
+    clearTimeout(smartSuggestTimer);
+    smartSuggestTimer = setTimeout(() => refreshSmartSuggestions(q), 220);
+  });
+  input?.addEventListener("blur", () => {
+    setTimeout(() => document.getElementById("hero-search-suggest")?.classList.add("hidden"), 180);
   });
   document.getElementById("search-hint-link")?.addEventListener("click", (e) => {
     e.preventDefault();
