@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getSupplier } from "./suppliers.js";
 import { orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
-import { getOrder, updateOrderMeta } from "./orders.js";
+import { getOrder, updateOrderMeta, listAllOrders } from "./orders.js";
 import { config } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -172,6 +172,30 @@ export function markSettlementReadyForMpesa(order, { payoutAmountKes = null } = 
   if (store.entries.length > 500) store.entries.length = 500;
   persist();
   return entry;
+}
+
+/**
+ * Heal historical admin Releases that left funds as scheduled / missing.
+ * Safe to call on every seller ledger / withdraw load.
+ */
+export function healReleasedSellerPayouts(supplierId) {
+  if (!supplierId) return 0;
+  let healed = 0;
+  for (const order of listAllOrders()) {
+    if (!order || order.supplierId !== supplierId) continue;
+    if (order.kind === "cart_parent" || order.isPaidOut) continue;
+    if (order.status === "cancelled") continue;
+    const escrow = String(order.escrowStatus || "").toLowerCase();
+    if (escrow === "refunded") continue;
+    const released =
+      escrow === "released" ||
+      Boolean(order.escrowReleasedAt) ||
+      String(order.payoutStatus || "").toLowerCase() === "owed";
+    if (!released) continue;
+    const entry = markSettlementReadyForMpesa(order);
+    if (entry && (entry.status === "owed" || entry.status === "disbursing")) healed += 1;
+  }
+  return healed;
 }
 
 /** Record supplier payout owed immediately (legacy / manual). */

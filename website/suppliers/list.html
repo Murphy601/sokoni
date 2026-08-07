@@ -374,16 +374,19 @@
         <div class="sell-dash-group space-y-4">
           <div class="sell-dash-group__head">
             <p class="sell-dash-group__label">Money</p>
-            <p class="sell-dash-group__hint">Escrow ledger — withdraw from Payouts</p>
+            <p class="sell-dash-group__hint">In transit → Pending escrow → Ready for M-Pesa → Withdraw</p>
           </div>
         <section class="sell-depop-section p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <h2 class="font-bold text-lg text-white">Earnings</h2>
             <button id="load-ledger-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
+          <p class="text-xs text-zinc-400">
+            After admin <strong class="text-white">Release</strong>, money moves to <strong class="text-emerald-400">Ready for M-Pesa</strong> — not pending escrow.
+          </p>
           <div class="flex gap-2">
             <button type="button" class="sell-ledger-tab is-active" data-ledger="available">
-              <span class="sell-ledger-dot available"></span>Available
+              <span class="sell-ledger-dot available"></span>Ready for M-Pesa
               <p id="ledger-available-total" class="text-lg font-bold mt-1">—</p>
             </button>
             <button type="button" class="sell-ledger-tab" data-ledger="pending">
@@ -396,7 +399,7 @@
             </button>
           </div>
           <div id="ledger-detail" class="text-sm space-y-2"></div>
-          <button type="button" class="depop-btn-accent text-sm mt-2" data-hub-jump="payouts">Go to Payouts / Withdraw</button>
+          <button type="button" class="depop-btn-accent text-sm mt-2" data-hub-jump="payouts">Withdraw Ready for M-Pesa</button>
         </section>
         </div>
         </div><!-- /orders panel -->
@@ -983,28 +986,31 @@
             <div>
               <p class="depop-label">M-Pesa Ledger</p>
               <h2 class="font-bold text-lg text-white mt-0.5">Escrow &amp; withdraw</h2>
-              <p class="text-sm text-brand-purple/60 dark:text-white/60">See locked vs ready funds, then request M-Pesa payout.</p>
+              <p class="text-sm text-brand-purple/60 dark:text-white/60">Released escrow lands in Ready for M-Pesa. Pending escrow is still held.</p>
             </div>
             <button id="load-withdraw-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="payout-pipeline">
             <div class="rounded-2xl border border-zinc-800 bg-black p-4">
-              <p class="text-[11px] uppercase tracking-wide text-zinc-500">Locked in transit</p>
+              <p class="text-[11px] uppercase tracking-wide text-zinc-500">1 · Locked in transit</p>
               <p id="payout-pipeline-transit" class="text-xl font-bold font-mono text-white mt-1">—</p>
+              <p class="text-[10px] text-zinc-500 mt-1">Parcel still moving</p>
             </div>
             <div class="rounded-2xl border border-zinc-800 bg-black p-4">
-              <p class="text-[11px] uppercase tracking-wide text-zinc-500">Pending escrow</p>
+              <p class="text-[11px] uppercase tracking-wide text-zinc-500">2 · Pending escrow</p>
               <p id="payout-pipeline-pending" class="text-xl font-bold font-mono text-amber-300 mt-1">—</p>
+              <p class="text-[10px] text-zinc-500 mt-1">Paid — waiting release</p>
             </div>
             <div class="rounded-2xl border border-emerald-800/50 bg-emerald-950/30 p-4">
-              <p class="text-[11px] uppercase tracking-wide text-emerald-400/80">Ready for M-Pesa</p>
+              <p class="text-[11px] uppercase tracking-wide text-emerald-400/80">3 · Ready for M-Pesa</p>
               <p id="payout-pipeline-available" class="text-xl font-bold font-mono text-emerald-400 mt-1">—</p>
+              <p class="text-[10px] text-emerald-500/80 mt-1">Withdraw here after Release</p>
             </div>
           </div>
 
           <div class="rounded-2xl bg-black border border-zinc-800 p-5">
-            <p class="text-xs uppercase tracking-wide text-brand-purple/50 mb-1">Available to withdraw</p>
+            <p class="text-xs uppercase tracking-wide text-emerald-400/80 mb-1">Ready for M-Pesa (withdraw now)</p>
             <p id="withdraw-available" class="text-3xl font-bold text-[#FF2300]">—</p>
             <p class="text-sm text-brand-purple/60 dark:text-white/60 mt-2">
               Payout M-Pesa: <strong id="withdraw-mpesa">—</strong>

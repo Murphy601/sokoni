@@ -3245,21 +3245,32 @@ function renderLedgerDetail() {
 
   const items = section?.items || [];
   if (!items.length) {
-    node.innerHTML = `<p class="text-brand-purple/50 dark:text-white/50">Nothing here yet.</p>`;
+    const empty =
+      tab === "available"
+        ? "No Ready for M-Pesa funds yet. After escrow Release, seller net appears here for withdraw."
+        : tab === "pending"
+          ? "No pending escrow. Paid orders still held show here until Release."
+          : "No parcels in transit right now.";
+    node.innerHTML = `<p class="text-brand-purple/50 dark:text-white/50">${empty}</p>`;
     return;
   }
 
   node.innerHTML = items
     .map((item) => {
-      const statusLine = item.shipmentStatusLabel ? `<span class="text-xs text-zinc-500">${item.shipmentStatusLabel}</span>` : "";
+      const readyLine = item.readyLabel
+        ? `<span class="text-xs text-emerald-400">${escapeHtml(item.readyLabel)}</span>`
+        : "";
+      const statusLine = item.shipmentStatusLabel
+        ? `<span class="text-xs text-zinc-500">${escapeHtml(item.shipmentStatusLabel)}</span>`
+        : "";
       const trackLink = item.trackUrl
-        ? `<a href="${item.trackUrl}" class="text-xs font-semibold text-[#FF2300] hover:underline shrink-0">Track</a>`
+        ? `<a href="${escapeHtml(item.trackUrl)}" class="text-xs font-semibold text-[#FF2300] hover:underline shrink-0">Track</a>`
         : "";
       return `<div class="flex flex-wrap justify-between gap-2 py-2 border-b border-brand-purple/5 dark:border-white/5">
           <div class="min-w-0">
-            <span class="block truncate">${item.productName || item.orderId}</span>
-            ${item.orderId ? `<span class="text-xs text-zinc-500">${item.orderId}</span>` : ""}
-            ${statusLine}
+            <span class="block truncate">${escapeHtml(item.productName || item.orderId)}</span>
+            ${item.orderId ? `<span class="text-xs text-zinc-500">${escapeHtml(item.orderId)}</span>` : ""}
+            ${readyLine || statusLine}
           </div>
           <div class="text-right shrink-0">
             <span class="font-semibold block">${formatKes(item.amountKes)}</span>
@@ -5828,7 +5839,7 @@ function renderWithdrawPanel(data) {
             </div>`
         )
         .join("")
-    : `<p class="text-brand-purple/50 dark:text-white/50">No delivered orders ready for payout yet.</p>`;
+    : `<p class="text-brand-purple/50 dark:text-white/50">Nothing in Ready for M-Pesa yet. Released escrow shows here — pending escrow does not.</p>`;
 
   const historyEl = el("withdraw-history");
   const history = data.history || [];
