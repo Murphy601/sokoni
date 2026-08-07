@@ -13,7 +13,7 @@ Staff, rider, and admin reference templates. Customer-facing copy lives in `what
 
 ## Admin M-Pesa verification (Till 3439153)
 
-1. Open Safaricom M-Pesa Business portal for shortcode **3439153** (SOKONIMA).
+1. Open Safaricom M-Pesa Business portal for Buy Goods Till **3439153** (SOKONIMA).
 2. Match amount + account reference (order id) to the pending claim.
 3. Validate customer code (UK… / UL…) against ledger; confirm date matches.
 4. Confirm in WhatsApp admin with `#payconfirm SKN-…` when STK callback did not auto-confirm.
