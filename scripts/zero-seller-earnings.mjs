@@ -79,14 +79,23 @@ if (!existsSync(suppliersFile)) {
   process.exit(1);
 }
 
-const suppliersStore = loadJson(suppliersFile, { suppliers: [] });
+function asList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "object") return Object.values(value);
+  return [];
+}
+
+const suppliersStore = loadJson(suppliersFile, { suppliers: {} });
+// Live shape: { suppliers: { "seller-…": { id, … } } } (not an array).
 const suppliers = Array.isArray(suppliersStore)
   ? suppliersStore
-  : suppliersStore.suppliers || suppliersStore.items || [];
+  : asList(suppliersStore.suppliers || suppliersStore.items);
 
 const matches = suppliers.filter((s) => matchSeller(s, sellerQuery));
 if (matches.length === 0) {
   console.error(`ERROR: no supplier matched --seller ${sellerQuery}`);
+  console.error(`Loaded ${suppliers.length} suppliers from ${suppliersFile}`);
   process.exit(1);
 }
 if (matches.length > 1) {
@@ -108,10 +117,12 @@ console.log(`  data dir:     ${DATA}`);
 
 const settlements = loadJson(settlementsFile, { entries: [] });
 const withdrawals = loadJson(withdrawalsFile, { seq: 0, requests: [] });
-const ordersStore = loadJson(ordersFile, { orders: [] });
-const orders = Array.isArray(ordersStore)
-  ? ordersStore
-  : ordersStore.orders || [];
+// Live shape: { seq, orders: { "SKN-…": {…} }, cartOrders: {…}, … }
+const ordersStore = loadJson(ordersFile, { orders: {}, cartOrders: {} });
+const orders = [
+  ...asList(Array.isArray(ordersStore) ? ordersStore : ordersStore.orders),
+  ...asList(ordersStore.cartOrders),
+];
 
 const sellerEntries = (settlements.entries || []).filter((e) => e.supplierId === supplierId);
 const otherEntries = (settlements.entries || []).filter((e) => e.supplierId !== supplierId);
@@ -238,10 +249,10 @@ for (const o of orders) {
   }
 }
 
+// Orders were mutated in place (object-map values). Persist the store shape as-is.
 if (Array.isArray(ordersStore)) {
   writeFileSync(ordersFile, JSON.stringify(orders, null, 2) + "\n");
 } else {
-  ordersStore.orders = orders;
   writeFileSync(ordersFile, JSON.stringify(ordersStore, null, 2) + "\n");
 }
 
