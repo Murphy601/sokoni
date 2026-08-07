@@ -6,16 +6,16 @@
 # Credentials are NEVER baked into this repo. Provide them once from the portal
 # Copy buttons, then deploy keeps whatever is already in whatsapp-bot/.env.
 #
-# First-time / after regenerate (paste from developer.safaricom.co.ke → Prod-SOKONIMALL):
-#   export MPESA_CONSUMER_KEY='…paste…'
-#   export MPESA_CONSUMER_SECRET='…paste…'
-#   export MPESA_PASSKEY='…paste…'   # Lipa Na M-Pesa Online passkey for shortcode 3439153
-#   bash scripts/set-daraja-env.sh
-#   bash scripts/test-daraja-oauth.sh
+# First-time / after regenerate — paste the REAL values from the portal Copy buttons
+# (Key ~48 chars, Secret ~64, Passkey ~64). Example shape only:
+#   export MPESA_CONSUMER_KEY='Vqd6…9DvB'          # full 48-char key from portal
+#   export MPESA_CONSUMER_SECRET='P2ht…Vhfo'       # full 64-char secret
+#   export MPESA_PASSKEY='ea9d…285d'               # full 64-char passkey for 3439153
+#   bash scripts/set-daraja-env.sh && bash scripts/test-daraja-oauth.sh
 #
 # Later deploys: just run this script (or deploy-bot.sh) — it keeps existing keys.
 #
-# Do NOT export placeholder dots like '…' alone — that overwrites real keys with junk.
+# Do NOT export instruction text like paste-from-portal-copy (that is len 22 junk).
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
@@ -29,10 +29,6 @@ fi
 # --- Production Daraja (org H.O. 3439153) + Buy Goods Till 4775847 ---
 # Hierarchy: org/Daraja 3439153 → merchant store 4421485 → till 4775847
 # STK uses SHORTCODE (password) + TILL (PartyB). Store 4421485 is not sent on STK.
-#
-# Known-bad Consumer Key (screenshot OCR) — Safaricom returns HTTP 400 empty body.
-# sha256 prefix of that key; refuse to write it again.
-BAD_KEY_SHA16="24df15d590a14320"
 
 env_get() {
   local key="$1"
@@ -47,8 +43,11 @@ is_placeholder() {
   local raw="$1"
   case "$raw" in
     ""|"…"|"..."|"<"*|*"your"*|*"YOUR"*|"changeme"|"TODO"|"xxx"|"XXX") return 0 ;;
+    # Instruction text people paste by mistake (not real portal keys)
+    paste-from-portal*|paste-passkey*|*portal-copy*|*from-portal*) return 0 ;;
   esac
-  [ "${#raw}" -lt 16 ]
+  # Real Prod-SOKONIMALL Consumer Key is 48 chars; Secret/Passkey 64. Reject short junk.
+  [ "${#raw}" -lt 32 ]
 }
 
 cred_sha16() {
@@ -70,20 +69,14 @@ resolve_cred() {
   elif ! is_placeholder "$from_file"; then
     picked="$from_file"
   else
-    echo "ERROR: ${label} missing." >&2
-    echo "  On developer.safaricom.co.ke → Apps → Prod-SOKONIMALL → Keys:" >&2
-    echo "  use the Copy button (do not retype from a screenshot), then:" >&2
-    echo "    export MPESA_CONSUMER_KEY='…'" >&2
-    echo "    export MPESA_CONSUMER_SECRET='…'" >&2
-    echo "    export MPESA_PASSKEY='…'" >&2
-    echo "    bash scripts/set-daraja-env.sh" >&2
-    echo "    bash scripts/test-daraja-oauth.sh" >&2
-    exit 1
-  fi
-
-  if [ "$label" = "MPESA_CONSUMER_KEY" ] && [ "$(cred_sha16 "$picked")" = "$BAD_KEY_SHA16" ]; then
-    echo "ERROR: ${label} is the old screenshot/OCR value Safaricom rejects (HTTP 400)." >&2
-    echo "  Regenerate or re-copy Consumer Key + Secret from Prod-SOKONIMALL, then export and re-run." >&2
+    echo "ERROR: ${label} missing or still a placeholder (len=${#from_env})." >&2
+    echo "  Do NOT paste the words paste-from-portal-copy — paste the real values" >&2
+    echo "  from developer.safaricom.co.ke → Apps → Prod-SOKONIMALL (Copy buttons)." >&2
+    echo "  Expect Key len≈48, Secret len≈64, Passkey len≈64, then:" >&2
+    echo "    export MPESA_CONSUMER_KEY='…real key…'" >&2
+    echo "    export MPESA_CONSUMER_SECRET='…real secret…'" >&2
+    echo "    export MPESA_PASSKEY='…real passkey…'" >&2
+    echo "    bash scripts/set-daraja-env.sh && bash scripts/test-daraja-oauth.sh" >&2
     exit 1
   fi
 
