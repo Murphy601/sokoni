@@ -494,8 +494,23 @@ html.dark .sell-order-card {
 }
 
 .sell-order-badge--done {
-  background: rgba(27, 16, 53, 0.08);
-  color: rgba(27, 16, 53, 0.6);
+  background: rgba(37, 211, 102, 0.18);
+  color: #14532d;
+}
+
+html.dark .sell-order-badge--done {
+  background: rgba(37, 211, 102, 0.22);
+  color: #bbf7d0;
+}
+
+html.dark .sell-order-badge--action {
+  background: rgba(37, 211, 102, 0.2);
+  color: #fff8f0;
+}
+
+html.dark .sell-order-badge--transit {
+  background: rgba(248, 113, 113, 0.22);
+  color: #fecaca;
 }
 
 .sell-order-badge--reminded {

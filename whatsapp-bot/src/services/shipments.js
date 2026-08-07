@@ -45,6 +45,17 @@ export function shipmentStatusLabel(status) {
 
 export function getEffectiveShipmentStatus(order) {
   if (!order) return "pending";
+  // Buyer YES / auto-release / delivery confirm — treat as delivered even if a
+  // legacy write left shipmentStatus on label_ready.
+  if (
+    order.buyerConfirmedAt ||
+    order.shipmentDeliveredAt ||
+    order.deliveredAt ||
+    order.status === "delivered" ||
+    String(order.escrowStatus || "").toLowerCase() === "released"
+  ) {
+    return "delivered";
+  }
   return order.shipmentStatus || "pending";
 }
 

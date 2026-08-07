@@ -33,9 +33,9 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/design-tokens.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
-<link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-analytics-2" />
+<link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-received-1" />
 <link rel="stylesheet" href="../assets/css/inbox-disputes.css" />
-<link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-analytics-2" />
+<link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-received-1" />
 </head>
 <body class="sell-depop-page depop-surface-page font-sans antialiased text-white min-h-screen">
   <header class="sell-page-header border-b border-zinc-900 bg-black/95 backdrop-blur sticky top-0 z-50">
@@ -325,11 +325,19 @@
           <div class="flex items-center justify-between gap-4">
             <div>
               <h2 class="font-bold text-lg text-white">Orders to ship</h2>
-              <p class="text-sm text-zinc-400">Paid sales — arrange delivery with the buyer after payment.</p>
+              <p class="text-sm text-zinc-400">Awaiting ship first — then shipped until the buyer confirms on WhatsApp.</p>
             </div>
             <button id="load-orders-btn" type="button" class="text-sm font-semibold text-[#FF2300] hover:underline">Refresh</button>
           </div>
           <div id="seller-orders" class="seller-hub-stack" role="list"></div>
+        </section>
+
+        <section class="sell-depop-section p-6 space-y-4">
+          <div>
+            <h2 class="font-bold text-lg text-white">Received</h2>
+            <p class="text-sm text-zinc-400">Buyer confirmed on WhatsApp (or delivery marked complete) — payout path started.</p>
+          </div>
+          <div id="seller-orders-received" class="seller-hub-stack" role="list"></div>
         </section>
 
         <section class="sell-depop-section p-6 space-y-4">
@@ -1052,7 +1060,7 @@
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
   <script src="../assets/js/seller-analytics.js?v=analytics-5"></script>
-  <script src="../assets/js/seller-listing.js?v=hub-analytics-2"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-received-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
