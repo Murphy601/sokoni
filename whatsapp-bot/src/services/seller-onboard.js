@@ -13,6 +13,7 @@ import { config } from "../config.js";
 import { labelPageUrlForOrder } from "./prepaid-checkout.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
 import { validateSellerSession } from "./seller-verification.js";
+import { healReleasedSellerPayouts } from "./settlements.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SETTLEMENTS_FILE = path.join(__dirname, "..", "..", "data", "settlements.json");
@@ -309,6 +310,13 @@ export async function getSellerOrdersByPhone(phone, sessionToken) {
 
 /** Escrow ledger: available / pending / in transit for seller dashboard. */
 export function getSellerEscrowLedger(supplierId) {
+  // Move any already-released orders into Ready for M-Pesa (fixes pre-fix Releases).
+  try {
+    healReleasedSellerPayouts(supplierId);
+  } catch (err) {
+    console.warn("[seller-onboard] payout heal skipped:", err?.message || err);
+  }
+
   const settlements = loadSettlements();
   const orders = loadAllOrders().filter((o) => o.supplierId === supplierId);
 
@@ -322,6 +330,12 @@ export function getSellerEscrowLedger(supplierId) {
       amountKes: e.payoutAmountKes,
       status: e.status === "paid" ? "paid" : e.status === "b2c_failed" ? "b2c_failed" : "available",
       productName: e.productName,
+      readyLabel:
+        e.status === "paid"
+          ? "Paid out"
+          : e.status === "b2c_failed"
+            ? "Ready — retry withdraw"
+            : "Ready for M-Pesa",
     }));
 
   // Sending to M-Pesa — show under Ready list as in-flight, but not withdrawable again.
@@ -332,6 +346,7 @@ export function getSellerEscrowLedger(supplierId) {
       amountKes: e.payoutAmountKes,
       status: "disbursing",
       productName: e.productName,
+      readyLabel: "Sending to M-Pesa",
     }));
 
   // Pending escrow = buyer paid, still held. Released money must NEVER land here.
@@ -339,7 +354,8 @@ export function getSellerEscrowLedger(supplierId) {
     .filter(
       (o) =>
         o.customerPaymentStatus === "confirmed" &&
-        o.escrowStatus === "held" &&
+        String(o.escrowStatus || "").toLowerCase() === "held" &&
+        !o.escrowReleasedAt &&
         o.status !== "delivered" &&
         o.status !== "cancelled"
     )

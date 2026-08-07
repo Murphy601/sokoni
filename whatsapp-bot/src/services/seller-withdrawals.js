@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
+import { healReleasedSellerPayouts } from "./settlements.js";
 import { config } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +50,11 @@ function nextWithdrawId(store) {
 
 /** Settlement lines eligible for manual withdraw (Ready for M-Pesa). */
 export function getWithdrawableEntries(supplierId) {
+  try {
+    healReleasedSellerPayouts(supplierId);
+  } catch (err) {
+    console.warn("[withdrawals] payout heal skipped:", err?.message || err);
+  }
   const settlements = loadSettlements();
   return (settlements.entries || []).filter(
     (e) =>
