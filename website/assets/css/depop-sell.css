@@ -1651,13 +1651,19 @@ body.sell-depop-page #listing-wizard:not(.hidden) #seller-profile-bar {
 }
 
 .seller-analytics-chart {
-  min-height: 220px;
+  min-height: 0;
+  height: auto;
+  max-height: 12.5rem; /* ~200px — keep Top Earners tight under the chart */
+  margin: 0;
+  padding: 0;
 }
 
 .seller-analytics-svg {
   width: 100%;
-  height: auto;
+  height: 100%;
+  max-height: 12.5rem;
   display: block;
+  margin: 0;
 }
 
 .seller-analytics-bar {

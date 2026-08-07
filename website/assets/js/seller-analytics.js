@@ -13,8 +13,8 @@
     pending: "#FACC15",
     transit: "#F87171",
     paidOut: "#60A5FA",
-    axis: "rgba(255,255,255,0.38)",
-    grid: "rgba(255,255,255,0.08)",
+    axis: "rgba(255,255,255,0.55)",
+    grid: "#262626",
     emptyBand: "rgba(255,255,255,0.03)",
     text: "rgba(255,248,240,0.72)",
   };
