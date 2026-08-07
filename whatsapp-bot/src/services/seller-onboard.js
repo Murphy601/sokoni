@@ -323,7 +323,7 @@ export function getSellerEscrowLedger(supplierId) {
       productName: e.productName,
     }));
 
-  const pendingEscrow = orders
+  const heldPending = orders
     .filter(
       (o) =>
         o.customerPaymentStatus === "confirmed" &&
@@ -340,6 +340,28 @@ export function getSellerEscrowLedger(supplierId) {
       shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus || "pending"),
       trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
     }));
+
+  // Settlements in clearing (scheduled / sending) used to vanish from the ledger
+  // between escrow release and owed — keep them visible under pending.
+  const releasingPending = sellerEntries
+    .filter((e) => e.status === "scheduled" || e.status === "disbursing" || e.status === "b2c_failed")
+    .map((e) => ({
+      orderId: e.orderId,
+      amountKes: e.payoutAmountKes,
+      status:
+        e.status === "disbursing" ? "disbursing" : e.status === "b2c_failed" ? "b2c_failed" : "releasing",
+      productName: e.productName,
+      trackingCode: e.orderId,
+      shipmentStatusLabel:
+        e.status === "disbursing"
+          ? "Payout sending"
+          : e.status === "b2c_failed"
+            ? "Payout failed — retry"
+            : "Released — payout clearing",
+      trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(e.orderId)}`,
+    }));
+
+  const pendingEscrow = [...heldPending, ...releasingPending];
 
   const inTransit = orders
     .filter(

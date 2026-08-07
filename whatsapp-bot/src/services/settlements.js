@@ -76,15 +76,31 @@ function buildPayoutEntry(order, { status, payoutEligibleAt = null } = {}) {
 
 /**
  * Schedule seller payout 3 business days after delivery (Depop-style escrow release).
+ * Pass refreshEligibleAt when an admin/dispute override needs to pull forward eligibility.
  */
-export function scheduleSellerPayoutAfterDelivery(order) {
+export function scheduleSellerPayoutAfterDelivery(order, { refreshEligibleAt = false } = {}) {
   if (!order?.supplierId) return null;
   const payoutBase = resolveSellerPayoutKes(order);
   if (!payoutBase) return null;
   load();
 
   const existing = store.entries.find((e) => e.orderId === order.id && e.status !== "cancelled");
-  if (existing) return existing;
+  if (existing) {
+    if (
+      refreshEligibleAt &&
+      order.payoutEligibleAt != null &&
+      (existing.status === "scheduled" || existing.status === "owed")
+    ) {
+      const nextEligible = Number(order.payoutEligibleAt) || Date.now();
+      if (!existing.payoutEligibleAt || nextEligible < existing.payoutEligibleAt) {
+        existing.payoutEligibleAt = nextEligible;
+      }
+      if (payoutBase > 0) existing.payoutAmountKes = payoutBase;
+      existing.refreshedAt = Date.now();
+      persist();
+    }
+    return existing;
+  }
 
   const eligibleAt = order.payoutEligibleAt || addBusinessDays(Date.now(), 3);
   const entry = buildPayoutEntry(order, { status: "scheduled", payoutEligibleAt: eligibleAt });
@@ -374,11 +390,14 @@ export function cancelSettlementPayout(orderId, reason = "dispute") {
   return entry;
 }
 
-export function reinstateSettlementPayout(orderId) {
+export function reinstateSettlementPayout(orderId, { payoutEligibleAt = null } = {}) {
   load();
   const entry = store.entries.find((e) => e.orderId === orderId && e.status === "cancelled");
   if (!entry) return null;
-  const eligibleAt = entry.payoutEligibleAt || addBusinessDays(Date.now(), 1);
+  const eligibleAt =
+    payoutEligibleAt != null
+      ? Number(payoutEligibleAt) || Date.now()
+      : entry.payoutEligibleAt || addBusinessDays(Date.now(), 1);
   entry.status = "scheduled";
   entry.payoutEligibleAt = eligibleAt;
   entry.reinstatedAt = Date.now();
