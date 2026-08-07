@@ -52,11 +52,50 @@
     });
   }
 
+  function orderIsDelivered(o) {
+    return Boolean(
+      o?.delivered ||
+        o?.buyerConfirmed ||
+        o?.shipmentStatus === "delivered" ||
+        o?.status === "delivered"
+    );
+  }
+
+  function orderInTransit(o) {
+    if (orderIsDelivered(o)) return false;
+    if (o?.inTransit) return true;
+    const ship = String(o?.shipmentStatus || "").toLowerCase();
+    return ["dropped_off", "in_transit", "at_pickup_point", "out_for_delivery"].includes(ship);
+  }
+
+  function deliveryBadge(o) {
+    const delivered = orderIsDelivered(o);
+    const inTransit = orderInTransit(o);
+    const label =
+      o.deliveryLabel ||
+      (delivered && o.buyerConfirmed
+        ? "Delivered · buyer confirmed"
+        : delivered
+          ? "Delivered"
+          : inTransit
+            ? "In transit"
+            : "Not delivered");
+    const cls = delivered
+      ? "bg-emerald-100 text-emerald-900 border-emerald-200"
+      : inTransit
+        ? "bg-amber-100 text-amber-900 border-amber-200"
+        : "bg-zinc-100 text-zinc-700 border-zinc-200";
+    return `<span class="inline-flex items-center min-h-[28px] px-2.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${cls}">${escapeHtml(label)}</span>`;
+  }
+
   function renderEscrow(tank) {
     const totals = tank?.totals || {};
     if (el("stat-held-buyer")) el("stat-held-buyer").textContent = formatKes(totals.heldBuyerKes);
     if (el("stat-held-seller")) el("stat-held-seller").textContent = formatKes(totals.heldSellerNetKes);
     if (el("stat-held-count")) el("stat-held-count").textContent = String(totals.heldOrders ?? "—");
+    if (el("stat-delivery")) {
+      el("stat-delivery").textContent = `${totals.deliveredCount ?? 0} / ${totals.notDeliveredCount ?? 0}`;
+    }
     if (el("stat-paused")) {
       el("stat-paused").textContent = `${totals.pausedCount || 0} / ${totals.disputeHoldCount || 0}`;
     }
@@ -65,6 +104,10 @@
       el("till-note").textContent = till.number
         ? `Till ${till.number}${till.name ? ` · ${till.name}` : ""}. ${till.note || ""}`
         : till.note || "";
+    }
+    if (el("escrow-delivery-hint")) {
+      el("escrow-delivery-hint").textContent =
+        `${totals.deliveredCount || 0} delivered (prefer Release here) · ${totals.notDeliveredCount || 0} not delivered yet · paused ${totals.pausedCount || 0} · dispute holds ${totals.disputeHoldCount || 0}`;
     }
     const wrap = el("escrow-orders");
     if (!wrap) return;
@@ -82,22 +125,35 @@
         ]
           .filter(Boolean)
           .join(" · ");
+        const releaseCls = o.delivered
+          ? "bg-brand-green text-brand-purple"
+          : "border border-brand-purple/20 text-brand-purple/50";
         return `
-        <article class="rounded-3xl border border-black/5 bg-white p-4 space-y-2">
+        <article class="rounded-3xl border border-black/5 bg-white p-4 space-y-2 ${
+          o.delivered ? "ring-1 ring-emerald-200" : ""
+        }">
           <div class="flex flex-wrap justify-between gap-2">
-            <div>
-              <h3 class="font-bold font-mono text-sm">${escapeHtml(o.orderId)}</h3>
-              <p class="text-sm text-brand-purple/70">${escapeHtml(o.productName || "Item")}</p>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="font-bold font-mono text-sm">${escapeHtml(o.orderId)}</h3>
+                ${deliveryBadge(o)}
+              </div>
+              <p class="text-sm text-brand-purple/70 mt-1">${escapeHtml(o.productName || "Item")}</p>
             </div>
-            <p class="font-semibold">${formatKes(o.buyerTotalKes)}</p>
+            <p class="font-semibold shrink-0">${formatKes(o.buyerTotalKes)}</p>
           </div>
           <p class="text-xs text-brand-purple/55">${escapeHtml(o.hub || "—")} · escrow ${escapeHtml(o.escrowStatus || "—")}${
             flags ? ` · ${escapeHtml(flags)}` : ""
           }</p>
+          <p class="text-xs font-semibold ${o.delivered ? "text-emerald-800" : "text-amber-800"}">${escapeHtml(
+            o.releaseHint || (o.delivered ? "Delivered — release when ready" : "Not delivered yet")
+          )}</p>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="min-h-[40px] px-3 rounded-full border border-amber-400 text-amber-900 text-xs font-bold" data-quick-override="pause" data-order="${escapeHtml(o.orderId)}">Pause</button>
             <button type="button" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-800 text-xs font-bold" data-quick-override="refund" data-order="${escapeHtml(o.orderId)}">Refund</button>
-            <button type="button" class="min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold" data-quick-override="release" data-order="${escapeHtml(o.orderId)}">Release</button>
+            <button type="button" class="min-h-[40px] px-3 rounded-full text-xs font-bold ${releaseCls}" data-quick-override="release" data-order="${escapeHtml(o.orderId)}" title="${escapeHtml(
+              o.releaseHint || ""
+            )}">Release</button>
           </div>
         </article>`;
       })
