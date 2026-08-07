@@ -136,8 +136,8 @@ function offlineReply(toolResults, channel) {
     }
   }
   return channel === "web"
-    ? "Tell me what you want (e.g. denim under KES 3,000) or paste an SK-#### to track."
-    : "Type *menu* to browse, or send your *SK-####* to track.";
+    ? "Tell me what you want (e.g. denim under KES 3,000) or paste an SKN-#### to track."
+    : "Type *menu* to browse, or send your *SKN-####* (or older *SK-####*) to track.";
 }
 
 async function callLLM(messages, { channel = "whatsapp" } = {}) {

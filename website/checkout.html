@@ -113,7 +113,7 @@
 
     <form id="checkout-lookup" class="flex flex-col sm:flex-row gap-3 mb-8">
       <label for="order-id" class="sr-only">Order number</label>
-      <input id="order-id" type="text" placeholder="SK-1042" autocomplete="off"
+      <input id="order-id" type="text" placeholder="SKN-1002" autocomplete="off"
         class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-base text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]" />
       <button type="submit" class="depop-btn-accent min-h-[48px] px-6">Load</button>
     </form>
@@ -145,7 +145,7 @@
         <p class="font-semibold text-white">Pay Buy Goods till</p>
         <p class="text-zinc-400">Till: <strong id="checkout-till" class="text-white">—</strong></p>
         <p class="text-zinc-400">Name: <strong id="checkout-till-name" class="text-white">—</strong></p>
-        <p class="text-zinc-400">Reference: <strong id="checkout-till-ref" class="text-white">SK-####</strong></p>
+        <p class="text-zinc-400">Reference: <strong id="checkout-till-ref" class="text-white">SKN-####</strong></p>
         <p class="text-xs text-zinc-500">After paying, reply <strong class="text-zinc-300">paid</strong> on WhatsApp so we can verify and start dispatch.</p>
       </div>
 
@@ -159,7 +159,8 @@
   <script src="assets/js/account-auth.js"></script>
   <script src="assets/js/account-gate.js"></script>
   <script src="assets/js/buyer-auth.js"></script>
-  <script src="assets/js/checkout.js"></script>
+  <script src="assets/js/order-id.js?v=skn-1"></script>
+  <script src="assets/js/checkout.js?v=skn-1"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>

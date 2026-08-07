@@ -3,7 +3,7 @@
  * Used by WhatsApp Sokoni Plug and website Ask (POST /api/agent/chat).
  */
 import { searchProducts, getProductById, listBrowseProducts } from "./catalog.js";
-import { getOrder, getOrdersForCustomer } from "./orders.js";
+import { getOrder, getOrdersForCustomer, extractOrderIdFromText, isSokoniOrderId } from "./orders.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
 import { checkoutMeta } from "./prepaid-checkout.js";
 import { normalizeShopperQuery, isShopperFillerOnly } from "./shopper-language.js";
@@ -31,8 +31,7 @@ export const TOOL_NAMES = [
 ];
 
 function extractOrderId(text) {
-  const m = String(text || "").match(/\b(SK-\d+)\b/i);
-  return m ? m[1].toUpperCase() : null;
+  return extractOrderIdFromText(text);
 }
 
 function extractBudget(text) {
@@ -50,7 +49,7 @@ function wantsNew(text) {
 }
 
 function isTrackOnlyQuery(text, lower) {
-  if (/^SK-\d+$/i.test(text)) return true;
+  if (isSokoniOrderId(text)) return true;
   return (
     /\b(track|tracking|status|wapi order|order yangu)\b/i.test(lower) &&
     !/\b(buy|want|need|find|search|show|looking|nataka)\b/i.test(lower)

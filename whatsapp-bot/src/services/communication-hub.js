@@ -1,7 +1,7 @@
 /**
  * Order-state communication hub (WAHA).
  *
- * Lifecycle: PAY → DISPATCH SK-#### → YES SK-#### → escrow release path.
+ * Lifecycle: PAY → DISPATCH SKN-####(-n)|SK-#### → YES … → escrow release path.
  * HELP → ADMIN_TAKE_OVER (bot silent relay to admin).
  *
  * Stack: JSON orders + WAHA (not Twilio / Mongo / Socket.io).
@@ -14,6 +14,9 @@ import {
   getContactPhone,
   listAllOrders,
   updateOrderMeta,
+  normalizeOrderId,
+  extractOrderIdFromText,
+  ORDER_ID_CAPTURE,
 } from "./orders.js";
 import { findSupplierByPhone, getSupplier, listSuppliers } from "./suppliers.js";
 import { advanceShipmentStatus, getEffectiveShipmentStatus } from "./shipments.js";
@@ -48,17 +51,8 @@ function phonesMatch(a, b) {
   return x === y || x.slice(-9) === y.slice(-9);
 }
 
-function normalizeOrderId(raw) {
-  const t = String(raw || "").trim().toUpperCase();
-  if (!t) return "";
-  // Accept "SK-1019", "SK1019", or bare digits from regex capture groups ("1019").
-  const m = t.match(/^(?:SK-?)?(\d{3,})$/i) || t.match(/SK-?(\d{3,})/i);
-  return m ? `SK-${m[1]}` : "";
-}
-
-function extractOrderIdFromText(text) {
-  const m = String(text || "").match(/\bSK-?(\d{3,})\b/i);
-  return m ? `SK-${m[1]}` : "";
+function orderIdOrEmpty(raw) {
+  return normalizeOrderId(raw) || "";
 }
 
 export function buyerOwnsOrder(order, customerKey, phone) {
@@ -510,7 +504,7 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
 }
 
 /* -------------------------------------------------------------------------- */
-/* Templates (expected lifecycle wording, SK-####)                            */
+/* Templates (expected lifecycle wording, SKN-#### / SK-####)                 */
 /* -------------------------------------------------------------------------- */
 
 export function msgSellerPaid(order) {
@@ -759,7 +753,7 @@ async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) 
 
 /**
  * End ADMIN_TAKE_OVER — bot resumes; escrow unfreeze only if no open DB dispute.
- * Admin WhatsApp: *#done SK-####* (alias *#resolve*). Buyer/seller: *DONE*.
+ * Admin WhatsApp: *#done SKN-####* (alias *#resolve*). Buyer/seller: *DONE*.
  */
 export async function resolveAdminTakeOver(orderId, { note = "", notifyParties = true } = {}) {
   const id = normalizeOrderId(orderId) || String(orderId || "").toUpperCase();
@@ -851,7 +845,7 @@ export function recordAdminOutbound(orderId, message, { setTakeOver = true } = {
  */
 function isSupportDoneCommand(text) {
   const t = String(text || "").trim();
-  return /^(DONE|END|CLOSE|BYE)\b(?:\s+SK-?\d{3,})?$/i.test(t);
+  return new RegExp(`^(DONE|END|CLOSE|BYE)\\b(?:\\s+${ORDER_ID_CAPTURE})?$`, "i").test(t);
 }
 
 /**
@@ -943,27 +937,27 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
     return tryRelayAdminTakeOver(customerKey, text, { phone });
   }
 
-  const linkMatch = trimmed.match(/^LINKSELLER\s+SK-?(\d{3,})\s+(\d{4})\b/i);
+  const linkMatch = trimmed.match(new RegExp(`^LINKSELLER\\s+${ORDER_ID_CAPTURE}\\s+(\\d{4})\\b`, "i"));
   if (linkMatch) {
-    await flowLinkSeller(customerKey, phone, normalizeOrderId(linkMatch[1]), linkMatch[2]);
+    await flowLinkSeller(customerKey, phone, orderIdOrEmpty(linkMatch[1]), linkMatch[2]);
     return true;
   }
 
-  const dispatchMatch = trimmed.match(/^DISPATCH\s+SK-?(\d{3,})\b/i);
+  const dispatchMatch = trimmed.match(new RegExp(`^DISPATCH\\s+${ORDER_ID_CAPTURE}\\b`, "i"));
   if (dispatchMatch) {
-    await flowSellerDispatch(customerKey, phone, normalizeOrderId(dispatchMatch[1]));
+    await flowSellerDispatch(customerKey, phone, orderIdOrEmpty(dispatchMatch[1]));
     return true;
   }
 
-  const yesMatch = trimmed.match(/^YES\s+SK-?(\d{3,})\b/i);
+  const yesMatch = trimmed.match(new RegExp(`^YES\\s+${ORDER_ID_CAPTURE}\\b`, "i"));
   if (yesMatch) {
-    await flowBuyerYes(customerKey, phone, normalizeOrderId(yesMatch[1]));
+    await flowBuyerYes(customerKey, phone, orderIdOrEmpty(yesMatch[1]));
     return true;
   }
 
-  const helpMatch = trimmed.match(/^(HELP|PROBLEM|CANCEL)\b(?:\s+SK-?(\d{3,}))?/i);
+  const helpMatch = trimmed.match(new RegExp(`^(HELP|PROBLEM|CANCEL)\\b(?:\\s+${ORDER_ID_CAPTURE})?`, "i"));
   if (helpMatch) {
-    const id = helpMatch[2] ? normalizeOrderId(helpMatch[2]) : extractOrderIdFromText(trimmed);
+    const id = helpMatch[2] ? orderIdOrEmpty(helpMatch[2]) : extractOrderIdFromText(trimmed) || "";
     await flowHelp(customerKey, phone, id, trimmed);
     return true;
   }
@@ -1235,7 +1229,7 @@ async function flowHelp(customerKey, phone, orderId, rawText) {
   if (!order) {
     await sendSafeWhatsApp(
       customerKey,
-      `No active Sokoni order found.\nReply HELP SK-1042 with your order id, or type *track*.`
+      `No active Sokoni order found.\nReply HELP SKN-1002-1 (or older SK-1042) with your order id, or type *track*.`
     );
     return;
   }
@@ -1245,7 +1239,7 @@ async function flowHelp(customerKey, phone, orderId, rawText) {
   if (!asBuyer && !asSeller) {
     await sendSafeWhatsApp(
       customerKey,
-      `*${order.id}* is not linked to this WhatsApp. Reply HELP SK-#### on the order number.`
+      `*${order.id}* is not linked to this WhatsApp. Reply *HELP ${order.id}* on the order number.`
     );
     return;
   }

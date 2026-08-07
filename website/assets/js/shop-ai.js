@@ -104,7 +104,7 @@
     sendMessage(q);
   } else {
     bubble(
-      "Poa! 👋 I can walk Sokoni Mall with you — categories & subs, live deals, prepaid/escrow, delivery, or track SK-####. Try a chip below or type what you need.",
+      "Poa! 👋 I can walk Sokoni Mall with you — categories & subs, live deals, prepaid/escrow, delivery, or track SKN-####. Try a chip below or type what you need.",
       "assistant"
     );
   }

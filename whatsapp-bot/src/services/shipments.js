@@ -1,5 +1,5 @@
 /**
- * Phase 6 — Shipment status, hub scans, and public SK-#### tracking.
+ * Phase 6 — Shipment status, hub scans, and public SKN-#### / SK-#### tracking.
  */
 import { getOrder, updateOrderMeta, updateOrderStatus, statusLabel } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";

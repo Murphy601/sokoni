@@ -310,7 +310,7 @@ async function submitShopReview(ev) {
   const comment = String(el("shop-review-comment")?.value || "").trim();
 
   if (!orderRef) {
-    setReviewStatus("Enter or select your delivered order number (SK-xxxx).", true);
+    setReviewStatus("Enter or select your delivered order number (SKN-xxxx).", true);
     return;
   }
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {

@@ -3,6 +3,14 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
 import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
+export {
+  normalizeOrderId,
+  extractOrderIdFromText,
+  ORDER_ID_RE,
+  ORDER_ID_CAPTURE,
+  isSokoniOrderId,
+} from "../lib/order-id.js";
+import { normalizeOrderId } from "../lib/order-id.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -103,23 +111,6 @@ export function persistOrderStore() {
 export function getOrderStore() {
   load();
   return store;
-}
-
-/**
- * Normalize SK-####, SKN-#### (parent), or SKN-####-n (child).
- * Must not coerce SKN-8921-1 → SK-89211.
- */
-export function normalizeOrderId(id) {
-  if (id == null || id === "") return null;
-  const raw = String(id).trim().toUpperCase();
-  if (/^SKN-\d+-\d+$/.test(raw)) return raw;
-  if (/^SKN-\d+$/.test(raw)) return raw;
-  if (/^SK-\d+$/.test(raw)) return raw;
-  if (raw.startsWith("SKN-")) return raw;
-  if (raw.startsWith("SK-")) return raw;
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return null;
-  return `SK-${digits}`;
 }
 
 export function normalizeStatus(input) {

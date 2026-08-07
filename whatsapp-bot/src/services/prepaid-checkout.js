@@ -48,7 +48,7 @@ export function formatPrepaidCheckoutPrompt(order) {
     ship > 0
       ? `Item KES ${item.toLocaleString()} + shipping KES ${ship.toLocaleString()} = *${priceLine}*\n`
       : "";
-  const ref = order?.id || "SK-####";
+  const ref = order?.id || "SKN-####";
 
   if (isDarajaConfigured()) {
     return (

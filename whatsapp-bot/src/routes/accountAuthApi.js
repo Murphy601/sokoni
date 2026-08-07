@@ -11,7 +11,7 @@ import {
   signupAccount,
   updateSignedInProfile,
 } from "../services/account-auth.js";
-import { claimOrderForAccount, getPurchasesForAccount } from "../services/orders.js";
+import { claimOrderForAccount, getPurchasesForAccount, normalizeOrderId } from "../services/orders.js";
 
 const router = Router();
 
@@ -142,12 +142,17 @@ router.post("/link-whatsapp", async (req, res) => {
   res.json(result);
 });
 
-/** POST /api/account/auth/claim-order — link SK-#### when phone matches */
+/** POST /api/account/auth/claim-order — link SKN-####(-n) or legacy SK-#### when phone matches */
 router.post("/claim-order", async (req, res) => {
   const auth = await resolveAccountFromRequest(req);
   if (auth.error) return res.status(auth.error === "session_required" ? 401 : 403).json(auth);
-  const orderId = String(req.body?.orderId || "").trim().toUpperCase();
-  if (!orderId) return res.status(400).json({ error: "missing_order_id", message: "Send orderId like SK-1022." });
+  const orderId = normalizeOrderId(req.body?.orderId);
+  if (!orderId) {
+    return res.status(400).json({
+      error: "missing_order_id",
+      message: "Send orderId like SKN-1002-1 (or older SK-1022).",
+    });
+  }
   if (!auth.user.phone) {
     return res.status(400).json({
       error: "phone_required",

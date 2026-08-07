@@ -49,7 +49,7 @@
       kicker: "Prepaid escrow · Buyer protection",
       title: "Shop with peace of mind.",
       sub:
-        "Your M-Pesa stays in Sokoni escrow until you receive the order. Track every purchase with SK-####.",
+        "Your M-Pesa stays in Sokoni escrow until you receive the order. Track every purchase with SKN-####.",
       primaryText: "How escrow works",
       primaryHref: "faq.html",
       secondaryText: "Track an order",
@@ -133,7 +133,7 @@
       kicker: "Drop-off hubs · Across Kenya",
       title: "Hand it in at a Sokoni hub.",
       sub:
-        "Sellers drop parcels at partner counters in Nairobi CBD and major towns — couriers pick up, buyers track with SK-####.",
+        "Sellers drop parcels at partner counters in Nairobi CBD and major towns — couriers pick up, buyers track with SKN-####.",
       primaryText: "Start selling",
       primaryHref: "suppliers/list.html",
       secondaryText: "How it works",

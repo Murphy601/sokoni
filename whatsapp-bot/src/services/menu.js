@@ -631,7 +631,7 @@ function renderOrderCard(order) {
   );
 }
 
-/** Show a specific order by ID (customer typed e.g. SK-1042). */
+/** Show a specific order by ID (customer typed e.g. SKN-1002-1). */
 export async function sendOrderStatus(to, orderId, phone = "") {
   const order = getOrder(orderId);
   if (!orderBelongsToCustomer(order, to, phone)) {
@@ -697,7 +697,7 @@ export async function sendTrackOrderMenu(to, phone = "") {
       to,
       `📦 *Your Sokoni orders*\n\n` +
         blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
-        `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
+        `\n\n_Type an order number (e.g. ${orders[0]?.id || "SKN-1001"}) for details, or *menu* to shop._`
     );
     await sendPaymentReminderSafe(to, pickPaymentReminderOrder(orders));
     return true;

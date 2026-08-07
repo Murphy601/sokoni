@@ -13,6 +13,7 @@ import {
   restoreListing,
 } from "../services/seller-listings.js";
 import { requireAdminToken } from "../lib/admin-auth.js";
+import { normalizeOrderId } from "../lib/order-id.js";
 
 const router = Router();
 
@@ -51,9 +52,8 @@ router.get("/payouts", (_req, res) => {
 });
 
 router.post("/payouts/:orderId/paid", (req, res) => {
-  const orderId = req.params.orderId.toUpperCase().startsWith("SK-")
-    ? req.params.orderId.toUpperCase()
-    : `SK-${req.params.orderId.replace(/\D/g, "")}`;
+  const orderId = normalizeOrderId(req.params.orderId);
+  if (!orderId) return res.status(400).json({ error: "invalid_order_id" });
   const entry = markPayoutPaid(orderId);
   if (!entry) return res.status(404).json({ error: "not_found" });
   res.json({ entry });

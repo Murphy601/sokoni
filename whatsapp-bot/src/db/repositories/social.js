@@ -5,7 +5,7 @@ import {
 } from "../../services/shipping-tiers.js";
 import { resolveStorefrontImageUrl } from "../../lib/catalog-images.js";
 import { CONDITION_LABELS } from "../product-mapper.js";
-import { getOrder, getOrdersForCustomer } from "../../services/orders.js";
+import { getOrder, getOrdersForCustomer, normalizeOrderId } from "../../services/orders.js";
 import { getProductById } from "../../services/catalog.js";
 import { getSupplier } from "../../services/suppliers.js";
 import { sellerTrustPayload } from "../../lib/seller-badges.js";
@@ -449,9 +449,10 @@ function jsonOrderBuyerMatches(order, buyerUserId, buyerPhone = "") {
 async function getOrderByReference(orderRef) {
   const raw = String(orderRef || "").trim();
   if (!raw) return null;
+  const normalized = normalizeOrderId(raw) || raw;
 
-  // Prepaid marketplace orders live in JSON as SK-####.
-  const jsonOrder = getOrder(raw);
+  // Prepaid marketplace orders live in JSON as SKN-####(-n) or legacy SK-####.
+  const jsonOrder = getOrder(normalized);
   if (jsonOrder) {
     const sellerUserId = await resolveSellerUserIdForJsonOrder(jsonOrder);
     return {
@@ -466,7 +467,7 @@ async function getOrderByReference(orderRef) {
     };
   }
 
-  return getPostgresOrderByReference(raw);
+  return getPostgresOrderByReference(normalized);
 }
 
 async function reviewAlreadyExists({ orderId = null, orderRef = null, direction = "buyer_to_seller" } = {}) {
@@ -2940,7 +2941,7 @@ export async function createOrderReview({
   if (!orderRefInput || !buyerId || !sellerId || !Number.isFinite(score)) {
     return {
       error: "invalid_review_payload",
-      message: "Order number (SK-xxxx), buyer, seller, and rating are required.",
+      message: "Order number (SKN-xxxx or SK-xxxx), buyer, seller, and rating are required.",
     };
   }
   if (!Number.isInteger(score) || score < 1 || score > 5) {
@@ -2963,7 +2964,7 @@ export async function createOrderReview({
   if (!order) {
     return {
       error: "order_not_found",
-      message: "Order not found. Use your Sokoni order number (e.g. SK-1042).",
+      message: "Order not found. Use your Sokoni order number (e.g. SKN-1002-1 or SK-1042).",
     };
   }
 
@@ -3267,7 +3268,7 @@ export async function listReviewableOrdersForSeller({
 
   const out = [];
 
-  // JSON prepaid orders (SK-*) — match by ownership, not fragile resolved id equality.
+  // JSON prepaid orders (SKN-* / SK-*) — match by ownership, not fragile resolved id equality.
   const customerKey = `web:buyer:${buyerId}`;
   const jsonOrders = getOrdersForCustomer(customerKey, buyerPhone);
   for (const order of jsonOrders) {

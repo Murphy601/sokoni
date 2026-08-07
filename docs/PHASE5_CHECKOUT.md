@@ -31,7 +31,7 @@ Buyer checkout → STK push → funds held in escrow
 2. Order is created as `awaiting_payment` with `escrowStatus: pending`.
 3. **Daraja live:** STK push sent automatically; customer enters M-Pesa PIN.
 4. **Daraja callback** (`ResultCode === 0`) → order payment confirmed, product locked, label generated, buyer + seller notified, fulfillment starts.
-5. On delivery (`#status SK-#### delivered`), escrow releases and seller payout is **scheduled** for 3 business days later.
+5. On delivery (`#status SKN-####-n delivered` or older `#status SK-#### delivered`), escrow releases and seller payout is **scheduled** for 3 business days later.
 6. Hourly cron promotes due payouts to `owed` (`#payouts`).
 
 ## Daraja configuration
@@ -76,9 +76,9 @@ Register the callback URL in the [Safaricom Daraja portal](https://developer.saf
 | Customer | `pay` | Retry STK push |
 | Customer | `paid` | Manual till fallback only |
 | Admin | `#payments` | Unpaid orders or manual claims |
-| Admin | `#payconfirm SK-####` | Manual verify (fallback) |
-| Admin | `#fulfill SK-####` | Blocked until payment confirmed |
-| Admin | `#status SK-#### delivered` | Triggers escrow release + payout schedule |
+| Admin | `#payconfirm SKN-####-n` | Manual verify (fallback) |
+| Admin | `#fulfill SKN-####-n` | Blocked until payment confirmed |
+| Admin | `#status SKN-####-n delivered` | Triggers escrow release + payout schedule |
 
 ## Files
 
@@ -105,10 +105,10 @@ curl -s https://bot.sokonimall.com/api/checkout/meta | python3 -m json.tool
 ```
 
 Manual web:
-1. Open `/checkout.html?order=SK-####`
+1. Open `/checkout.html?order=SKN-####` (or older SK-####)
 2. Without `MPESA_*`: till block + readiness copy (no fake STK)
 3. With Daraja: Pay → STK → page polls until `paymentStatus === confirmed`
-4. After pay: seller dashboard **Print label** → `/label.html?order=SK-####` (QR + print)
+4. After pay: seller dashboard **Print label** → `/label.html?order=SKN-####-n` (QR + print)
 
 ## Deploy
 

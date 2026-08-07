@@ -15,6 +15,10 @@ import {
   statusLabel,
   ORDER_STATUSES,
   normalizeStatus,
+  extractOrderIdFromText,
+  ORDER_ID_CAPTURE,
+  ORDER_ID_RE,
+  normalizeOrderId,
 } from "./orders.js";
 import { getSupplier } from "./suppliers.js";
 import { planFulfillment, applyFulfillmentPlan } from "./fulfillment.js";
@@ -218,7 +222,7 @@ export function registerAdminChatId(chatId, phone = "") {
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
   if (/^#(?:help|orders|status|broadcast|fulfill|payouts|payb2c|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit|resolve|done)\b/i.test(t)) return true;
-  if (/^#SK-\d+\s+/i.test(t)) return true;
+  if (new RegExp(`^#${ORDER_ID_CAPTURE}\\s+`, "i").test(t)) return true;
   return false;
 }
 
@@ -351,7 +355,7 @@ async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quote
   if (!canRunAdminCommands(fromChatId, fromPhone, { allowBusinessOwner })) return false;
 
   const statusInput = String(text || "").trim();
-  let orderId = quotedText?.match(/\bSK-\d+\b/i)?.[0];
+  let orderId = extractOrderIdFromText(quotedText || "");
   if (!orderId) {
     const customerKey = customerKeyFromChatId(toChatId);
     const orders = getOrdersForCustomer(customerKey);
@@ -373,38 +377,39 @@ function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
     `Type *admin* or *#help* anytime for this menu.\n` +
-    `Customers: *menu* · Suppliers: *vendor menu*\n\n` +
+    `Customers: *menu* · Suppliers: *vendor menu*\n` +
+    `_IDs: *SKN-####* / *SKN-####-n* (cart) · older *SK-####* still works_\n\n` +
     `📋 *#orders* — recent orders\n` +
     `💰 *#payments* — unpaid prepaid orders (or manual *paid* claims)\n` +
-    `✅ *#payconfirm SK-1042* — manual payment verify (Daraja auto-confirms when live)\n` +
-    `📦 *#notify-store SK-1042* — tell store/pickup point to release parcel\n` +
-    `📍 *#pickup SK-1042 pp-xxxx* — assign / override pickup point\n` +
-    `🔎 *#nearby SK-1042* — suggest pickup partners near customer\n` +
-    `📦 *#scan SK-1042* — hub drop-off scan (advances shipment status)\n` +
-    `   _Or #scan SK-1042 in_transit hub:Umoja · #scan SK-1042 delivered_\n` +
-    `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
-    `   _(or *#SK-1042 confirmed* — same as #status)_\n\n` +
+    `✅ *#payconfirm SKN-1002-1* — manual payment verify (Daraja auto-confirms when live)\n` +
+    `📦 *#notify-store SKN-1002-1* — tell store/pickup point to release parcel\n` +
+    `📍 *#pickup SKN-1002-1 pp-xxxx* — assign / override pickup point\n` +
+    `🔎 *#nearby SKN-1002-1* — suggest pickup partners near customer\n` +
+    `📦 *#scan SKN-1002-1* — hub drop-off scan (advances shipment status)\n` +
+    `   _Or #scan SKN-1002-1 in_transit hub:Umoja · #scan SK-1042 delivered_\n` +
+    `🔄 *#status SKN-1002-1 delivered* — update status + notify customer\n` +
+    `   _(or *#SKN-1002-1 confirmed* — same as #status)_\n\n` +
     `🙏 *Customer issue commands*\n` +
-    `• *#apolog SK-1042* — wrong-item apology (customer replies REPLACE/CANCEL)\n` +
-    `• *#wrong SK-1042 ordered:sandals received:perfume* — same as #apolog with details\n` +
-    `• *#damage SK-1042* — damaged/wrong variant return at door\n` +
-    `• *#recover SK-1042* — post-delivery damage (ask for photo)\n` +
-    `• *#delay SK-1042 later today* — delivery delay apology\n` +
-    `• *#oos SK-1042* — out of stock → cancel + notify customer\n` +
-    `• *#transit SK-1042 rider:John phone:0712… eta:2 hours* — rider on the way alert\n\n` +
-    `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
-    `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
+    `• *#apolog SKN-1002-1* — wrong-item apology (customer replies REPLACE/CANCEL)\n` +
+    `• *#wrong SKN-1002-1 ordered:sandals received:perfume* — same as #apolog with details\n` +
+    `• *#damage SKN-1002-1* — damaged/wrong variant return at door\n` +
+    `• *#recover SKN-1002-1* — post-delivery damage (ask for photo)\n` +
+    `• *#delay SKN-1002-1 later today* — delivery delay apology\n` +
+    `• *#oos SKN-1002-1* — out of stock → cancel + notify customer\n` +
+    `• *#transit SKN-1002-1 rider:John phone:0712… eta:2 hours* — rider on the way alert\n\n` +
+    `📦 *#fulfill SKN-1002-1* — notify supplier (no customer contact)\n` +
+    `📦 *#fulfill SKN-1002-1 share* — supplier delivers (with address)\n` +
     `💰 *#payouts* — supplier amounts owed / B2C status\n` +
-    `💸 *#payb2c SK-1042* — send seller payout via M-Pesa B2C\n` +
-    `✅ *#paid SK-1042* — mark supplier paid (manual transfer)\n\n` +
+    `💸 *#payb2c SKN-1002-1* — send seller payout via M-Pesa B2C\n` +
+    `✅ *#paid SKN-1002-1* — mark supplier paid (manual transfer)\n\n` +
     `📣 *Customer comms & offers*\n` +
     `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
-    `🆔 *#SK-1042 <message>* — message buyer/seller (starts ADMIN_TAKE_OVER / silent bot)\n` +
-    `✅ *#done SK-1042* — end dispute/help takeover, resume bot\n` +
-    `   _(alias: *#resolve SK-1042* · or *#done* alone if only one open thread)_\n` +
+    `🆔 *#SKN-1002-1 <message>* — message buyer/seller (starts ADMIN_TAKE_OVER / silent bot)\n` +
+    `✅ *#done SKN-1002-1* — end dispute/help takeover, resume bot\n` +
+    `   _(alias: *#resolve SKN-1002-1* · or *#done* alone if only one open thread)_\n` +
     `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
     `🖥️ Support inbox — https://sokonimall.com/admin-support.html?token=...\n` +
     `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
@@ -452,7 +457,7 @@ async function handleStatusCommand(adminChatId, args) {
   if (!orderId || !statusInput) {
     return sendText(
       adminChatId,
-      `Usage: #status SK-1042 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
+      `Usage: #status SKN-1002-1 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
     );
   }
   const order = getOrder(orderId);
@@ -503,7 +508,7 @@ async function handleFulfillCommand(adminChatId, args) {
   const orderId = parts[0];
   const share = parts[1]?.toLowerCase() === "share";
   if (!orderId) {
-    return sendText(adminChatId, "Usage: #fulfill SK-1042\nOr: #fulfill SK-1042 share (includes customer address)");
+    return sendText(adminChatId, "Usage: #fulfill SKN-1002-1\nOr: #fulfill SK-1042 share (includes customer address)");
   }
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
@@ -619,7 +624,7 @@ async function handlePayoutsCommand(adminChatId) {
 }
 
 async function handlePayB2CCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #payb2c SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #payb2c SKN-1002-1");
   if (!isB2CReady()) {
     return sendText(
       adminChatId,
@@ -680,7 +685,7 @@ async function handlePaymentsCommand(adminChatId) {
 }
 
 async function handlePayconfirmCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #payconfirm SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #payconfirm SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -709,18 +714,18 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
 }
 
 async function handleScanCommand(adminChatId, args) {
-  const orderId = args.trim().match(/\b(SK-\d+)\b/i)?.[1]?.toUpperCase();
+  const orderId = extractOrderIdFromText(args);
   if (!orderId) {
     return sendText(
       adminChatId,
-      "Usage: #scan SK-1042\nOr: #scan SK-1042 in_transit hub:Umoja\nOr: #scan SK-1042 delivered"
+      "Usage: #scan SKN-1002-1\nOr: #scan SKN-1002-1 in_transit hub:Umoja\nOr: #scan SK-1042 delivered"
     );
   }
 
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
-  const tail = args.replace(/\bSK-\d+\b/i, "").trim();
+  const tail = args.replace(ORDER_ID_RE, "").trim();
   const forceMatch = tail.match(/\b(label_ready|dropped_off|in_transit|at_pickup_point|delivered)\b/i);
   const hubMatch = tail.match(/\bhub:(\S+)/i);
   const courierMatch = tail.match(/\bcourier:(\S+)/i);
@@ -760,7 +765,7 @@ function renderShipmentTimelineFromPayload(tracking) {
 }
 
 async function handleNotifyStoreCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #notify-store SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #notify-store SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -786,7 +791,7 @@ async function handleNotifyStoreCommand(adminChatId, orderId) {
 }
 
 async function handleNearbyCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #nearby SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #nearby SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -813,7 +818,7 @@ async function handleAssignPickupCommand(adminChatId, args) {
   const orderId = parts[0];
   const pointId = parts[1];
   if (!orderId || !pointId) {
-    return sendText(adminChatId, "Usage: #pickup SK-1042 pp-xxxx");
+    return sendText(adminChatId, "Usage: #pickup SKN-1002-1 pp-xxxx");
   }
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
@@ -837,7 +842,7 @@ async function handleAssignPickupCommand(adminChatId, args) {
 }
 
 async function handlePaidCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #paid SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #paid SKN-1002-1");
   const entry = markPayoutPaid(orderId);
   if (!entry) return sendText(adminChatId, `⚠️ No owed payout for *${orderId}*.`);
   updateOrderMeta(orderId, { payoutStatus: "paid" });
@@ -906,7 +911,7 @@ function normalizeAdminCommand(text) {
     /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|resolve|done)\b[\s\S]*/i
   );
   if (embedded) return embedded[0].trim();
-  const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
+  const sk = t.match(new RegExp(`#${ORDER_ID_CAPTURE}\\s+[\\s\\S]+`, "i"));
   if (sk) return sk[0].trim();
   if (/^orders?\b/i.test(t)) return "#orders";
   return t;
@@ -969,16 +974,13 @@ function listOpenTakeOverOrders(limit = 20) {
  */
 async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } = {}) {
   const raw = String(rest || "").trim();
-  let orderId = null;
-  const m = raw.match(/SK-?(\d{3,})/i);
-  if (m) {
-    orderId = `SK-${m[1]}`;
-  } else if (!raw) {
+  let orderId = extractOrderIdFromText(raw);
+  if (!orderId && !raw) {
     const open = listOpenTakeOverOrders();
     if (open.length === 1) {
       orderId = open[0].id;
     } else if (open.length === 0) {
-      return sendText(adminChatId, "No open support/dispute takeovers. Usage: *#done SK-1042*");
+      return sendText(adminChatId, "No open support/dispute takeovers. Usage: *#done SKN-1002-1* (or older *#done SK-1042*)");
     } else {
       const lines = open.slice(0, 10).map((o) => `• *#done ${o.id}* — ${o.productName || "order"}`);
       return sendText(
@@ -987,8 +989,8 @@ async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } =
           (open.length > 10 ? `\n…+${open.length - 10} more` : "")
       );
     }
-  } else {
-    return sendText(adminChatId, "Usage: *#done SK-1042* (or *#resolve SK-1042*)");
+  } else if (!orderId) {
+    return sendText(adminChatId, "Usage: *#done SKN-1002-1* (or *#resolve SK-1042*)");
   }
 
   const { resolveAdminTakeOver } = await import("./communication-hub.js");
@@ -1126,9 +1128,9 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
     return true;
   }
 
-  const targeted = t.match(/^#(SK-\d+)\s+([\s\S]+)/i);
+  const targeted = t.match(new RegExp(`^#${ORDER_ID_CAPTURE}\\s+([\\s\\S]+)`, "i"));
   if (targeted) {
-    const orderId = targeted[1].toUpperCase();
+    const orderId = normalizeOrderId(targeted[1]);
     const msg = targeted[2].trim();
     if (isAdminQuickStatusText(msg)) {
       await handleStatusCommand(adminChatId, `${orderId} ${msg}`);

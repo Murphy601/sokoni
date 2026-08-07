@@ -316,7 +316,7 @@ export async function handleIncomingMessage(
     if (await tryRelayAdminTakeOver(customerKey, text, { phone })) return;
   }
 
-  // Order-state bus: DISPATCH / YES / HELP SK-#### (before generic SK track).
+  // Order-state bus: DISPATCH / YES / HELP (before generic track-by-id).
   {
     const { tryHandleWaDeliveryConfirm } = await import("../services/wa-delivery-confirm.js");
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
@@ -333,12 +333,12 @@ export async function handleIncomingMessage(
   }
 
   // Track always works — even during human handoff (admin may have replied manually)
-  const orderIdMatch =
-    !containsAdminCommand(text) &&
-    !isAdminSender(customerKey, phone) &&
-    text.trim().match(/\bSK-?(\d{3,})\b/i);
-  if (orderIdMatch) {
-    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`, phone);
+  if (!containsAdminCommand(text) && !isAdminSender(customerKey, phone)) {
+    const { extractOrderIdFromText } = await import("../services/orders.js");
+    const trackId = extractOrderIdFromText(text.trim());
+    if (trackId) {
+      return sendOrderStatus(customerKey, trackId, phone);
+    }
   }
   if (
     /^track\b/i.test(normalized) ||

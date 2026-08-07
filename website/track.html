@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Track Order — Sokoni Mall</title>
-<meta name="description" content="Track your Sokoni Mall order with SK-#### — live shipment status across Kenya." />
+<meta name="description" content="Track your Sokoni Mall order with SKN-#### — live shipment status across Kenya." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -28,7 +28,7 @@
   <main class="depop-main-content max-w-2xl mx-auto w-full px-5 py-10 flex-1">
     <p class="depop-label mb-2">Tracking</p>
     <h1 class="text-3xl font-black tracking-tight text-white mb-2">Track your order</h1>
-    <p class="text-zinc-400 mb-8">Enter your <strong class="text-zinc-200">SK-####</strong> order number for live shipment status.</p>
+    <p class="text-zinc-400 mb-8">Enter your <strong class="text-zinc-200">SKN-####</strong> tracking number (or older <strong class="text-zinc-200">SK-####</strong>) for live shipment status.</p>
 
     <form id="track-form" class="flex flex-col sm:flex-row gap-3 mb-10">
       <label for="order-id" class="sr-only">Order number</label>
@@ -38,7 +38,7 @@
         type="text"
         inputmode="text"
         autocomplete="off"
-        placeholder="SK-1042"
+        placeholder="SKN-1002-1"
         class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-black px-4 text-base text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
         required
       />
@@ -72,7 +72,8 @@
   <script src="assets/js/shell-chrome.js"></script>
   <script src="assets/js/depop-nav.js"></script>
   <script src="assets/js/buyer-auth.js"></script>
-  <script src="assets/js/track.js"></script>
+  <script src="assets/js/order-id.js?v=skn-1"></script>
+  <script src="assets/js/track.js?v=skn-1"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->

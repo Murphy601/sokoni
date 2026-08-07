@@ -22,7 +22,7 @@ async function pingAdminSimple(title, customerKey, { chatId, displayName, phone,
     `Chat: \`${chatId || customerKey}\`\n` +
     (detail ? `${detail}\n\n` : "\n") +
     `Open their chat in WhatsApp to reply, or use:\n` +
-    `*#SK-xxxx <message>* after an order alert · *#help* for commands`;
+    `*#SKN-xxxx <message>* after an order alert · *#help* for commands`;
 
   console.log(`[handoff] ${label}`);
 
@@ -108,12 +108,12 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
     `Phone: ${details.phone}\n\n` +
     `${formatAdminFulfillmentBlock(order, details.location)}\n\n` +
     `*Next steps:*\n` +
-    `${order?.id ? `#fulfill ${order.id}` : "#fulfill SK-xxxx"} — ping supplier (no customer contact)\n` +
-    `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SK-xxxx share"} — supplier delivers (includes address)\n` +
+    `${order?.id ? `#fulfill ${order.id}` : "#fulfill SKN-xxxx"} — ping supplier (no customer contact)\n` +
+    `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SKN-xxxx share"} — supplier delivers (includes address)\n` +
     `#status ${order?.id || "<id>"} confirmed\n` +
-    `#pickup ${order?.id || "SK-xxxx"} <pp-id> — assign pickup point\n` +
+    `#pickup ${order?.id || "SKN-xxxx"} <pp-id> — assign pickup point\n` +
     `Till: *${config.store.mpesaTill}* (${config.store.mpesaTillName})\n` +
-    `#payconfirm ${order?.id || "SK-xxxx"} — after M-Pesa verified\n` +
-    `#${order?.id || "SK-xxxx"} Message to customer`
+    `#payconfirm ${order?.id || "SKN-xxxx"} — after M-Pesa verified\n` +
+    `#${order?.id || "SKN-xxxx"} Message to customer`
   );
 }
