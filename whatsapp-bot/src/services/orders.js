@@ -194,6 +194,21 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     marginKes,
     offerId: offerKey,
     offerAmountKes: offerKey ? totalKes : null,
+    /** Item promo snapshot — only when seller set an active promo on this product. */
+    promoApplied:
+      product.promo?.active === true
+        ? {
+            type: product.promo.type || null,
+            value: product.promo.value != null ? Number(product.promo.value) : null,
+            listPriceKes:
+              product.promo.listPriceKes != null
+                ? Number(product.promo.listPriceKes)
+                : product.originalPriceKes != null
+                  ? Number(product.originalPriceKes)
+                  : null,
+            chargedKes: totalKes,
+          }
+        : null,
     supplierId: product.supplierId || null,
     supplierSku: product.supplierSku || null,
     /** Social shop user id — sticky for reviews / sale ratings. */

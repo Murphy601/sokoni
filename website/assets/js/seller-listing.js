@@ -2367,6 +2367,12 @@ async function loadMyListings() {
                 <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline refresh-listing-btn" data-id="${escapeHtml(pid)}">↻ Refresh listing</button>
                 <button type="button" class="text-xs font-semibold text-[#FF2300] hover:underline drop-price-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">↓ Drop price</button>
                 <button type="button" class="text-xs font-semibold text-emerald-400 hover:underline raise-price-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">↑ Raise price</button>
+                ${
+                  item.promoActive || item.draft?.promo?.active
+                    ? `<button type="button" class="text-xs font-semibold text-amber-300 hover:underline end-promo-btn" data-id="${escapeHtml(pid)}">End promo</button>
+                       <span class="text-[10px] text-emerald-400 font-semibold self-center">Promo live${item.originalPriceKes || item.draft?.originalPriceKes ? ` · was ${formatKes(item.originalPriceKes || item.draft.originalPriceKes)}` : ""}</span>`
+                    : `<button type="button" class="text-xs font-semibold text-emerald-300 hover:underline set-promo-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">% Set promo</button>`
+                }
                 <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-[#FF2300] hover:underline">Share to WhatsApp</a>
               </div>` : ""}
             </div>
@@ -2385,6 +2391,16 @@ async function loadMyListings() {
     wrap.querySelectorAll(".raise-price-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         void updateListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "raise");
+      });
+    });
+    wrap.querySelectorAll(".set-promo-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void setListingPromo(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal);
+      });
+    });
+    wrap.querySelectorAll(".end-promo-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void endListingPromo(btn.dataset.id);
       });
     });
     wrap.querySelectorAll(".continue-draft-btn").forEach((btn) => {
@@ -3229,6 +3245,87 @@ async function updateListingPrice(productId, currentSellerNet, currentBuyerTotal
 /** @deprecated use updateListingPrice(..., "drop") */
 async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) {
   return updateListingPrice(productId, currentSellerNet, currentBuyerTotal, "drop");
+}
+
+async function setListingPromo(productId, currentSellerNet, currentBuyerTotal) {
+  const phone = apiPhone();
+  if (!phone || !productId) return;
+  const currentNet = Math.round(Number(currentSellerNet) || 0);
+  const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+  const typeRaw = window.prompt(
+    `Promo type for this item only:\n` +
+      `• percent — e.g. 15 for 15% off your receive amount\n` +
+      `• kes_off — e.g. 100 to take KES 100 off what you receive\n` +
+      `• sale_net — e.g. 800 as the promo amount you receive\n\n` +
+      `Current: you receive KES ${currentNet.toLocaleString()}${
+        currentBuyer ? ` (buyer pays ${formatKes(currentBuyer)})` : ""
+      }`,
+    "percent"
+  );
+  if (typeRaw == null) return;
+  const type = String(typeRaw).trim().toLowerCase() || "percent";
+  const valueRaw = window.prompt(
+    type.startsWith("sale")
+      ? "Promo amount you receive (KES):"
+      : type.includes("kes") || type === "off"
+        ? "KES to take off what you receive:"
+        : "Percent off (e.g. 15):",
+    type.startsWith("sale") ? String(Math.max(50, currentNet - 100)) : type.includes("kes") ? "100" : "15"
+  );
+  if (valueRaw == null) return;
+  const value = Number(String(valueRaw).replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(value) || value <= 0) {
+    setStatus("Enter a valid promo value.", true);
+    return;
+  }
+  setStatus("Starting promo…");
+  try {
+    const res = await fetch(`${ONBOARD_API}/promo`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, productId, type, value })),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      setStatus(data.message || data.error || "Could not start promo.", true);
+      return;
+    }
+    setStatus(data.message || "Promo live — site + STK use the promo price.");
+    await loadMyListings();
+  } catch {
+    setStatus("Network error.", true);
+  }
+}
+
+async function endListingPromo(productId) {
+  const phone = apiPhone();
+  if (!phone || !productId) return;
+  if (!window.confirm("End promo and restore list price on the site?")) return;
+  setStatus("Ending promo…");
+  try {
+    const res = await fetch(`${ONBOARD_API}/promo/end`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, productId })),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      setStatus(data.message || data.error || "Could not end promo.", true);
+      return;
+    }
+    setStatus(data.message || "Promo ended.");
+    await loadMyListings();
+  } catch {
+    setStatus("Network error.", true);
+  }
 }
 
 function renderLedgerDetail() {

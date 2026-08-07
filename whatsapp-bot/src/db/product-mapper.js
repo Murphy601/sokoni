@@ -100,7 +100,20 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     sellerPhone: legacy.sellerPhone ? String(legacy.sellerPhone) : undefined,
     priceUsd: row.price_usd != null ? Number(row.price_usd) : undefined,
     sourcePriceKes: row.source_price_kes != null ? Number(row.source_price_kes) : undefined,
-    originalPriceKes: row.original_price_kes != null ? Number(row.original_price_kes) : undefined,
+    originalPriceKes: row.original_price_kes != null ? Number(row.original_price_kes) : legacy.originalPriceKes != null ? Number(legacy.originalPriceKes) : undefined,
+    promo:
+      legacy.promo && typeof legacy.promo === "object"
+        ? {
+            active: Boolean(legacy.promo.active),
+            type: legacy.promo.type || null,
+            value: legacy.promo.value != null ? Number(legacy.promo.value) : null,
+            listSellerNetKes:
+              legacy.promo.listSellerNetKes != null ? Number(legacy.promo.listSellerNetKes) : null,
+            listPriceKes: legacy.promo.listPriceKes != null ? Number(legacy.promo.listPriceKes) : null,
+            startedAt: legacy.promo.startedAt != null ? Number(legacy.promo.startedAt) : null,
+            endedAt: legacy.promo.endedAt != null ? Number(legacy.promo.endedAt) : null,
+          }
+        : undefined,
     retailPerMlKes: row.retail_per_ml_kes != null ? Number(row.retail_per_ml_kes) : undefined,
     volumeMl: row.volume_ml != null ? Number(row.volume_ml) : undefined,
 

@@ -7,6 +7,8 @@ import {
   refreshSellerListing,
   updateSellerListingPrice,
   updateSellerListingStock,
+  setSellerListingPromo,
+  endSellerListingPromo,
 } from "../services/seller-onboard.js";
 import {
   getSellerWithdrawSummaryByPhone,
@@ -204,6 +206,52 @@ router.post("/price", async (req, res) => {
     });
   }
 
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/promo — start item promo (STK uses new priceKes) */
+router.post("/promo", async (req, res) => {
+  const { phone, productId, type, value } = req.body || {};
+  const result = await setSellerListingPromo({
+    phone,
+    productId,
+    type,
+    value,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (
+    result.error === "invalid_promo_value" ||
+    result.error === "invalid_promo_type" ||
+    result.error === "promo_too_steep" ||
+    result.error === "promo_not_lower" ||
+    result.error === "invalid_list_price"
+  ) {
+    return res.status(400).json(result);
+  }
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/promo/end — restore list price */
+router.post("/promo/end", async (req, res) => {
+  const { phone, productId } = req.body || {};
+  const result = await endSellerListingPromo({
+    phone,
+    productId,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "no_active_promo" || result.error === "invalid_list_price") {
+    return res.status(400).json(result);
+  }
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error) return res.status(403).json(result);
   res.json(result);
 });
 
