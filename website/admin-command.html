@@ -72,7 +72,11 @@
           placeholder="ADMIN_SETUP_TOKEN"
         />
       </label>
-      <p id="cmd-status" class="text-sm text-brand-purple/60" role="status"></p>
+      <p id="cmd-status" class="text-sm text-brand-purple/60 whitespace-pre-wrap break-words" role="status"></p>
+      <p class="text-xs text-brand-purple/50">
+        This page talks to <code class="font-mono">bot.sokonimall.com/admin/command</code>.
+        If Refresh fails with 404, redeploy the WhatsApp bot on the VM (website deploy alone is not enough).
+      </p>
       <div class="flex flex-wrap gap-2" role="tablist" aria-label="Command center sections">
         <button type="button" class="cmd-tab is-active min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="escrow">Escrow tank</button>
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="resolve">Overrides &amp; disputes</button>
