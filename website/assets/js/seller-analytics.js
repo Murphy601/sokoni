@@ -13,8 +13,8 @@
     pending: "#FACC15",
     transit: "#F87171",
     paidOut: "#60A5FA",
-    axis: "rgba(255,255,255,0.38)",
-    grid: "rgba(255,255,255,0.08)",
+    axis: "rgba(255,255,255,0.55)",
+    grid: "#262626",
     emptyBand: "rgba(255,255,255,0.03)",
     text: "rgba(255,248,240,0.72)",
   };
@@ -179,8 +179,8 @@
   function volumeChartHtml(rawBuckets) {
     const buckets = focusActiveBuckets(rawBuckets, 3);
     const w = 560;
-    const h = 220;
-    const pad = { top: 18, right: 18, left: 28, bottom: 34 };
+    const h = 180;
+    const pad = { top: 12, right: 12, left: 22, bottom: 28 };
     const innerW = w - pad.left - pad.right;
     const innerH = h - pad.top - pad.bottom;
     const n = buckets.length || 1;
@@ -193,10 +193,10 @@
     const yPrice = (v) => pad.top + innerH - (v / maxPrice) * innerH;
     const xCenter = (i) => pad.left + gap * i + gap / 2;
 
-    const gridLines = [0, 0.5, 1]
+    const gridLines = [0, 0.25, 0.5, 0.75, 1]
       .map((t) => {
         const y = pad.top + innerH * (1 - t);
-        return `<line x1="${pad.left}" y1="${y}" x2="${w - pad.right}" y2="${y}" stroke="${COLORS.grid}" stroke-width="1" />`;
+        return `<line x1="${pad.left}" y1="${y}" x2="${w - pad.right}" y2="${y}" stroke="${COLORS.grid}" stroke-width="1" stroke-dasharray="3 3" />`;
       })
       .join("");
 
@@ -236,12 +236,12 @@
     const labels = buckets
       .map(
         (b, i) =>
-          `<text x="${xCenter(i)}" y="${h - 10}" text-anchor="middle" fill="${COLORS.axis}" font-size="11" font-family="DM Sans, sans-serif">${escapeHtml(b.period)}</text>`
+          `<text x="${xCenter(i)}" y="${h - 6}" text-anchor="middle" fill="${COLORS.axis}" font-size="12" font-family="DM Sans, sans-serif" font-weight="600">${escapeHtml(b.period)}</text>`
       )
       .join("");
 
     return `
-      <svg viewBox="0 0 ${w} ${h}" class="seller-analytics-svg" role="presentation" aria-hidden="true">
+      <svg viewBox="0 0 ${w} ${h}" class="seller-analytics-svg" role="presentation" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
         ${gridLines}
         ${emptyBands}
         ${bars}
@@ -320,12 +320,10 @@
           .map((p, idx) => {
             const pct = Math.round((p.revenueKes / total) * 100);
             return `<li class="seller-analytics-top-card">
-              <div class="seller-analytics-top-row">
-                <div class="seller-analytics-top-name">
-                  <span class="seller-analytics-top-rank">#${idx + 1}</span>
-                  <span class="truncate">${escapeHtml(p.productName)}</span>
-                </div>
-                <span class="seller-analytics-top-kes font-mono shrink-0">${formatKes(p.revenueKes)}</span>
+              <div class="seller-analytics-top-headrow">
+                <span class="seller-analytics-top-rank">#${idx + 1}</span>
+                <p class="seller-analytics-top-title">${escapeHtml(p.productName)}</p>
+                <span class="seller-analytics-top-kes font-mono">${formatKes(p.revenueKes)}</span>
               </div>
               <div class="seller-analytics-top-bar"><span style="width:${pct}%"></span></div>
               <div class="seller-analytics-top-meta">
