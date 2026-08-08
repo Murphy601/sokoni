@@ -14,13 +14,20 @@ const SCHEMA_PHASE13_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE14_PATH = path.join(__dirname, "..", "..", "db", "schema-phase14-account-auth.sql");
 const SCHEMA_PHASE15_PATH = path.join(__dirname, "..", "..", "db", "schema-phase15-hybrid-logistics.sql");
 
-async function applySchemaFile(label, filePath) {
+async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
     const sql = await readFile(filePath, "utf-8");
     await query(sql);
     console.log(`[db] ${label} applied:`, filePath);
+    return { ok: true, label };
   } catch (err) {
-    if (err.code !== "ENOENT") throw err;
+    if (err.code === "ENOENT") {
+      if (required) throw err;
+      console.warn(`[db] ${label} skipped (file missing):`, filePath);
+      return { ok: true, label, skipped: true };
+    }
+    console.error(`[db] ${label} FAILED:`, err.message);
+    return { ok: false, label, error: err.message };
   }
 }
 
@@ -28,26 +35,43 @@ export async function runMigrations() {
   if (!isDbEnabled()) {
     throw new Error("DATABASE_URL is not set — cannot run migrations");
   }
-  const sql = await readFile(SCHEMA_PATH, "utf-8");
-  await query(sql);
-  console.log("[db] schema applied:", SCHEMA_PATH);
+  const results = [];
 
-  await applySchemaFile("phase2 browse schema", SCHEMA_PHASE2_PATH);
-  await applySchemaFile("phase5 shipping schema", SCHEMA_PHASE5_PATH);
-  await applySchemaFile("phase10 social schema", SCHEMA_PHASE10_PATH);
-  await applySchemaFile("phase11 shop reviews", SCHEMA_PHASE11_PATH);
-  await applySchemaFile("phase12 depop expansion", SCHEMA_PHASE12_PATH);
-  await applySchemaFile("phase13 reviews disputes", SCHEMA_PHASE13_PATH);
-  await applySchemaFile("phase14 account auth", SCHEMA_PHASE14_PATH);
-  await applySchemaFile("phase15 hybrid logistics", SCHEMA_PHASE15_PATH);
+  const base = await applySchemaFile("phase1 base schema", SCHEMA_PATH, { required: true });
+  results.push(base);
+  if (!base.ok) throw new Error(base.error || "base schema failed");
+
+  const phases = [
+    ["phase2 browse schema", SCHEMA_PHASE2_PATH],
+    ["phase5 shipping schema", SCHEMA_PHASE5_PATH],
+    ["phase10 social schema", SCHEMA_PHASE10_PATH],
+    ["phase11 shop reviews", SCHEMA_PHASE11_PATH],
+    ["phase12 depop expansion", SCHEMA_PHASE12_PATH],
+    ["phase13 reviews disputes", SCHEMA_PHASE13_PATH],
+    ["phase14 account auth", SCHEMA_PHASE14_PATH],
+    ["phase15 hybrid logistics", SCHEMA_PHASE15_PATH],
+  ];
+
+  for (const [label, filePath] of phases) {
+    results.push(await applySchemaFile(label, filePath));
+  }
 
   try {
     const { seedCountiesToDb } = await import("../services/kenya-locations.js");
     const seeded = await seedCountiesToDb();
     if (seeded.ok) console.log("[db] kenya counties seeded:", seeded.counties);
+    else console.log("[db] kenya counties seed:", seeded.reason || seeded);
   } catch (err) {
     console.warn("[db] county seed skipped:", err.message);
+    results.push({ ok: false, label: "county seed", error: err.message });
   }
+
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length) {
+    const summary = failed.map((f) => `${f.label}: ${f.error}`).join("; ");
+    throw new Error(`${failed.length} migration step(s) failed — ${summary}`);
+  }
+  return results;
 }
 
 async function main() {
@@ -55,6 +79,7 @@ async function main() {
     await runMigrations();
     const { rows } = await query("SELECT name, applied_at FROM schema_migrations ORDER BY id");
     console.log("[db] migrations:", rows);
+    console.log("[db] all migration steps OK");
   } finally {
     await closePool();
   }

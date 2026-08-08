@@ -19,13 +19,42 @@ END $$;
 ALTER TABLE order_reviews DROP CONSTRAINT IF EXISTS order_reviews_order_id_key;
 DROP INDEX IF EXISTS idx_order_reviews_order_ref_unique;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_order_reviews_ref_direction
-  ON order_reviews (UPPER(order_ref), direction)
-  WHERE order_ref IS NOT NULL AND BTRIM(order_ref) <> '';
+-- Direction-aware uniqueness (skip if legacy duplicates block creation).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_order_reviews_ref_direction') THEN
+    IF EXISTS (
+      SELECT 1 FROM order_reviews
+      WHERE order_ref IS NOT NULL AND BTRIM(order_ref) <> ''
+      GROUP BY UPPER(order_ref), direction
+      HAVING COUNT(*) > 1
+    ) THEN
+      RAISE NOTICE 'phase13: skipping idx_order_reviews_ref_direction (duplicate UPPER(order_ref)+direction)';
+    ELSE
+      CREATE UNIQUE INDEX idx_order_reviews_ref_direction
+        ON order_reviews (UPPER(order_ref), direction)
+        WHERE order_ref IS NOT NULL AND BTRIM(order_ref) <> '';
+    END IF;
+  END IF;
+END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_order_reviews_order_id_direction
-  ON order_reviews (order_id, direction)
-  WHERE order_id IS NOT NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_order_reviews_order_id_direction') THEN
+    IF EXISTS (
+      SELECT 1 FROM order_reviews
+      WHERE order_id IS NOT NULL
+      GROUP BY order_id, direction
+      HAVING COUNT(*) > 1
+    ) THEN
+      RAISE NOTICE 'phase13: skipping idx_order_reviews_order_id_direction (duplicate order_id+direction)';
+    ELSE
+      CREATE UNIQUE INDEX idx_order_reviews_order_id_direction
+        ON order_reviews (order_id, direction)
+        WHERE order_id IS NOT NULL;
+    END IF;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_order_reviews_buyer_subject
   ON order_reviews (buyer_user_id, created_at DESC)
