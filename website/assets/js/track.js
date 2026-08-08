@@ -17,6 +17,28 @@
 
   let currentOrderId = "";
   let trackPollTimer = null;
+  let riderPollTimer = null;
+  let liveMap = null;
+  let riderMarker = null;
+  let dropMarker = null;
+  let leafletReady = null;
+
+  function loadLeaflet() {
+    if (leafletReady) return leafletReady;
+    leafletReady = new Promise((resolve, reject) => {
+      if (window.L) return resolve(window.L);
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+      const s = document.createElement("script");
+      s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      s.onload = () => resolve(window.L);
+      s.onerror = () => reject(new Error("Leaflet failed"));
+      document.head.appendChild(s);
+    });
+    return leafletReady;
+  }
 
   function normalizeOrderId(raw) {
     return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
@@ -211,6 +233,12 @@
           ${stepper || `<p class="text-sm">Status: ${escapeHtml(t.shipmentStatusLabel || "Pending")}</p>`}
         </div>
 
+        <div id="track-live-map-wrap" class="hidden space-y-2">
+          <p class="track-kicker">Live map</p>
+          <div id="track-live-map" class="w-full h-56 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 z-0"></div>
+          <p id="track-live-map-hint" class="text-xs text-zinc-500">Shows your drop-off pin and rider when GPS is available.</p>
+        </div>
+
         ${history}
 
         <p class="track-updated">Updated ${t.updatedAt ? new Date(t.updatedAt).toLocaleString() : "recently"}</p>
@@ -226,6 +254,122 @@
     `;
     statusEl.classList.remove("hidden");
     renderDisputePanel(t);
+    void setupLiveMap(data);
+  }
+
+  function stopRiderPolling() {
+    if (riderPollTimer) {
+      window.clearInterval(riderPollTimer);
+      riderPollTimer = null;
+    }
+  }
+
+  async function setupLiveMap(data) {
+    const t = data.tracking || {};
+    const rider = data.rider || {};
+    const wrap = document.getElementById("track-live-map-wrap");
+    const mapEl = document.getElementById("track-live-map");
+    if (!wrap || !mapEl) return;
+
+    const hasDrop = t.buyerLat != null && t.buyerLng != null;
+    const hasRider = rider.hasRider && rider.lat != null && rider.lng != null;
+    if (!hasDrop && !hasRider) {
+      wrap.classList.add("hidden");
+      stopRiderPolling();
+      return;
+    }
+    wrap.classList.remove("hidden");
+
+    try {
+      const L = await loadLeaflet();
+      if (!liveMap) {
+        liveMap = L.map(mapEl).setView(
+          hasRider ? [rider.lat, rider.lng] : [t.buyerLat, t.buyerLng],
+          13
+        );
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap",
+          maxZoom: 18,
+        }).addTo(liveMap);
+      }
+      setTimeout(() => liveMap.invalidateSize(), 60);
+
+      if (hasDrop) {
+        if (dropMarker) dropMarker.setLatLng([t.buyerLat, t.buyerLng]);
+        else dropMarker = L.marker([t.buyerLat, t.buyerLng], { title: "Drop-off" }).addTo(liveMap);
+      }
+      if (hasRider) {
+        if (riderMarker) riderMarker.setLatLng([rider.lat, rider.lng]);
+        else {
+          riderMarker = L.circleMarker([rider.lat, rider.lng], {
+            radius: 8,
+            color: "#25D366",
+            fillColor: "#25D366",
+            fillOpacity: 0.9,
+          }).addTo(liveMap);
+        }
+      }
+
+      const bounds = [];
+      if (hasDrop) bounds.push([t.buyerLat, t.buyerLng]);
+      if (hasRider) bounds.push([rider.lat, rider.lng]);
+      if (bounds.length) liveMap.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+
+      stopRiderPolling();
+      if (!isTerminalTracking(t)) {
+        riderPollTimer = window.setInterval(() => {
+          if (document.hidden || !currentOrderId) return;
+          void refreshRider(currentOrderId);
+        }, 8000);
+      }
+
+      // Optional Socket.io when bot exposes it (fail-soft).
+      try {
+        if (window.io && currentOrderId) {
+          const socket = window.io(
+            API_BASE.replace(/\/api\/tracking$/, ""),
+            { path: "/socket.io", transports: ["websocket", "polling"] }
+          );
+          socket.emit("order:subscribe", currentOrderId);
+          socket.on("rider:location-update", (loc) => {
+            if (!loc?.hasRider || !liveMap || !window.L) return;
+            if (riderMarker) riderMarker.setLatLng([loc.lat, loc.lng]);
+            else {
+              riderMarker = window.L.circleMarker([loc.lat, loc.lng], {
+                radius: 8,
+                color: "#25D366",
+                fillColor: "#25D366",
+                fillOpacity: 0.9,
+              }).addTo(liveMap);
+            }
+          });
+        }
+      } catch {
+        /* poll only */
+      }
+    } catch {
+      wrap.classList.add("hidden");
+    }
+  }
+
+  async function refreshRider(orderId) {
+    try {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(orderId)}/rider`);
+      const data = await res.json().catch(() => ({}));
+      const loc = data.location;
+      if (!loc?.hasRider || !liveMap || !window.L) return;
+      if (riderMarker) riderMarker.setLatLng([loc.lat, loc.lng]);
+      else {
+        riderMarker = window.L.circleMarker([loc.lat, loc.lng], {
+          radius: 8,
+          color: "#25D366",
+          fillColor: "#25D366",
+          fillOpacity: 0.9,
+        }).addTo(liveMap);
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   function isTerminalTracking(t) {
@@ -249,6 +393,7 @@
       window.clearInterval(trackPollTimer);
       trackPollTimer = null;
     }
+    stopRiderPolling();
   }
 
   function startTrackPolling(orderId) {

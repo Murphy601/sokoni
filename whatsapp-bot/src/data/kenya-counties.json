@@ -1,0 +1,93 @@
+{
+  "tiers": {
+    "1": { "label": "Nairobi Metropolitan", "defaultFeeKes": 200, "estimatedHours": 4 },
+    "2": { "label": "Major hubs", "defaultFeeKes": 350, "estimatedHours": 24 },
+    "3": { "label": "Standard upcountry", "defaultFeeKes": 450, "estimatedHours": 48 },
+    "4": { "label": "Remote / ASAL", "defaultFeeKes": 750, "estimatedHours": 96 }
+  },
+  "counties": [
+    { "name": "Nairobi", "tier": 1, "towns": [
+      { "name": "Westlands", "areas": ["Parklands", "Highridge", "Kangemi", "Mountain View"] },
+      { "name": "Kasarani", "areas": ["Clay City", "Mwiki", "Kahawa West", "Githurai 44"] },
+      { "name": "CBD", "areas": ["Kencom", "City Market", "Tom Mboya"] },
+      { "name": "Kilimani", "areas": ["Yaya", "Adams Arcade", "State House"] },
+      { "name": "Eastlands", "areas": ["Umoja", "Kayole", "Donholm", "Buruburu"] }
+    ]},
+    { "name": "Kiambu", "tier": 1, "towns": [
+      { "name": "Ruiru", "areas": ["Gateway", "Membley", "Kwihota"] },
+      { "name": "Thika", "areas": ["Makongeni", "Ngoigwa"] },
+      { "name": "Kikuyu", "areas": ["Regen", "Sigona"] },
+      { "name": "Limuru", "areas": ["Tigoni", "Bibirioni"] }
+    ]},
+    { "name": "Machakos", "tier": 1, "towns": [
+      { "name": "Athi River", "areas": ["Daystar", "Mavoko"] },
+      { "name": "Syokimau", "areas": ["Katani", "Mlolongo"] },
+      { "name": "Machakos Town", "areas": ["Kenyatta Avenue", "Katelembo"] }
+    ]},
+    { "name": "Kajiado", "tier": 1, "towns": [
+      { "name": "Kitengela", "areas": ["Acacia", "EPZ"] },
+      { "name": "Ngong", "areas": ["Olepolos", "Kibiko"] },
+      { "name": "Ongata Rongai", "areas": ["Gallery", "Nkoroi"] }
+    ]},
+    { "name": "Mombasa", "tier": 2, "towns": [
+      { "name": "Mombasa Island", "areas": ["Digo Road", "Nyali ferry"] },
+      { "name": "Nyali", "areas": ["Nyali Centre", "Mkomani"] },
+      { "name": "Likoni", "areas": ["Ferry terminal"] }
+    ]},
+    { "name": "Nakuru", "tier": 2, "towns": [
+      { "name": "Nakuru Town", "areas": ["CBD", "Section 58", "Lanet"] },
+      { "name": "Naivasha", "areas": ["Mirera", "Karagita"] }
+    ]},
+    { "name": "Kisumu", "tier": 2, "towns": [
+      { "name": "Kisumu Town", "areas": ["Oginga Odinga", "Milimani", "Nyalenda"] }
+    ]},
+    { "name": "Uasin Gishu", "tier": 2, "towns": [
+      { "name": "Eldoret Town", "areas": ["Elgon View", "Kapsoya", "Langas", "West Indies"] }
+    ]},
+    { "name": "Nyeri", "tier": 2, "towns": [{ "name": "Nyeri Town", "areas": ["Ruring'u", "King'ong'o"] }] },
+    { "name": "Kilifi", "tier": 2, "towns": [
+      { "name": "Kilifi Town", "areas": ["Mtwapa", "Sokoni"] },
+      { "name": "Malindi", "areas": ["Shella", "Casuarina"] }
+    ]},
+    { "name": "Meru", "tier": 2, "towns": [{ "name": "Meru Town", "areas": ["Makutano", "Gakoromone"] }] },
+    { "name": "Kakamega", "tier": 2, "towns": [{ "name": "Kakamega Town", "areas": ["Amalemba", "Lurambi"] }] },
+    { "name": "Bungoma", "tier": 2, "towns": [{ "name": "Bungoma Town", "areas": ["Municipality", "Kanduyi"] }] },
+    { "name": "Kisii", "tier": 2, "towns": [{ "name": "Kisii Town", "areas": ["Daraja Mbili", "Mwembe"] }] },
+    { "name": "Kericho", "tier": 2, "towns": [{ "name": "Kericho Town", "areas": ["Township", "Nyagacho"] }] },
+    { "name": "Trans Nzoia", "tier": 2, "towns": [{ "name": "Kitale", "areas": ["Milimani", "Lessos"] }] },
+    { "name": "Laikipia", "tier": 2, "towns": [
+      { "name": "Nanyuki", "areas": ["Town centre"] },
+      { "name": "Nyahururu", "areas": ["Town centre"] }
+    ]},
+    { "name": "Kwale", "tier": 3, "towns": [{ "name": "Kwale Town", "areas": ["Ukunda", "Diani"] }] },
+    { "name": "Taita-Taveta", "tier": 3, "towns": [{ "name": "Voi", "areas": ["Town centre"] }, { "name": "Taveta", "areas": ["Town centre"] }] },
+    { "name": "Nyandarua", "tier": 3, "towns": [{ "name": "Ol Kalou", "areas": ["Town centre"] }] },
+    { "name": "Kirinyaga", "tier": 3, "towns": [{ "name": "Kerugoya", "areas": ["Town centre"] }, { "name": "Sagana", "areas": ["Town centre"] }] },
+    { "name": "Murang'a", "tier": 3, "towns": [{ "name": "Murang'a Town", "areas": ["Town centre"] }] },
+    { "name": "Embu", "tier": 3, "towns": [{ "name": "Embu Town", "areas": ["Town centre"] }] },
+    { "name": "Tharaka-Nithi", "tier": 3, "towns": [{ "name": "Chuka", "areas": ["Town centre"] }] },
+    { "name": "Kitui", "tier": 3, "towns": [{ "name": "Kitui Town", "areas": ["Town centre"] }] },
+    { "name": "Makueni", "tier": 3, "towns": [{ "name": "Wote", "areas": ["Town centre"] }] },
+    { "name": "Narok", "tier": 3, "towns": [{ "name": "Narok Town", "areas": ["Town centre"] }] },
+    { "name": "Bomet", "tier": 3, "towns": [{ "name": "Bomet Town", "areas": ["Town centre"] }] },
+    { "name": "Nandi", "tier": 3, "towns": [{ "name": "Kapsabet", "areas": ["Town centre"] }] },
+    { "name": "Baringo", "tier": 3, "towns": [{ "name": "Kabarnet", "areas": ["Town centre"] }] },
+    { "name": "Elgeyo-Marakwet", "tier": 3, "towns": [{ "name": "Iten", "areas": ["Town centre"] }] },
+    { "name": "Vihiga", "tier": 3, "towns": [{ "name": "Mbale", "areas": ["Town centre"] }] },
+    { "name": "Busia", "tier": 3, "towns": [{ "name": "Busia Town", "areas": ["Town centre"] }] },
+    { "name": "Siaya", "tier": 3, "towns": [{ "name": "Siaya Town", "areas": ["Town centre"] }] },
+    { "name": "Homa Bay", "tier": 3, "towns": [{ "name": "Homa Bay Town", "areas": ["Town centre"] }] },
+    { "name": "Migori", "tier": 3, "towns": [{ "name": "Migori Town", "areas": ["Town centre"] }] },
+    { "name": "Nyamira", "tier": 3, "towns": [{ "name": "Nyamira Town", "areas": ["Town centre"] }] },
+    { "name": "Garissa", "tier": 4, "towns": [{ "name": "Garissa Town", "areas": ["Town centre"] }] },
+    { "name": "Wajir", "tier": 4, "towns": [{ "name": "Wajir Town", "areas": ["Town centre"] }] },
+    { "name": "Mandera", "tier": 4, "towns": [{ "name": "Mandera Town", "areas": ["Town centre"] }] },
+    { "name": "Marsabit", "tier": 4, "towns": [{ "name": "Marsabit Town", "areas": ["Town centre"] }] },
+    { "name": "Isiolo", "tier": 4, "towns": [{ "name": "Isiolo Town", "areas": ["Town centre"] }] },
+    { "name": "Turkana", "tier": 4, "towns": [{ "name": "Lodwar", "areas": ["Town centre"] }] },
+    { "name": "West Pokot", "tier": 4, "towns": [{ "name": "Kapenguria", "areas": ["Town centre"] }] },
+    { "name": "Samburu", "tier": 4, "towns": [{ "name": "Maralal", "areas": ["Town centre"] }] },
+    { "name": "Tana River", "tier": 4, "towns": [{ "name": "Hola", "areas": ["Town centre"] }] },
+    { "name": "Lamu", "tier": 4, "towns": [{ "name": "Lamu Town", "areas": ["Town centre"] }] }
+  ]
+}

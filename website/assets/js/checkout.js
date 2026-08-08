@@ -483,6 +483,24 @@
   document.getElementById("offer-checkout-form")?.addEventListener("submit", placeOfferOrder);
   bindLandmarkUi();
 
+  /** Bridge for Path B hybrid delivery selector → Daraja STK totals. */
+  window.SokoniCheckoutDelivery = {
+    getOrderId: () => currentOrderId || normalizeOrderId(input?.value || ""),
+    getVendorId: () => null,
+    onApplied: (data) => {
+      if (data?.order?.amountKes != null) {
+        const totalEl = document.getElementById("checkout-total");
+        if (totalEl) totalEl.textContent = formatKes(data.order.amountKes);
+      }
+      if (data?.orderId) void loadOrder(data.orderId, { quiet: true });
+    },
+  };
+  try {
+    window.SokoniCheckoutDeliverySelector?.init?.();
+  } catch {
+    /* fail-soft */
+  }
+
   loadMeta().then(() => {
     const params = new URLSearchParams(window.location.search);
     const offerId = params.get("offerId");

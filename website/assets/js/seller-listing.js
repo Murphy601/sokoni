@@ -6856,7 +6856,14 @@ function showSellerView(view, opts = {}) {
       renderHubGuidesCarousel();
       renderSellerHubOverview();
     }
-    if (view === "logistics") renderHubLogistics();
+    if (view === "logistics") {
+      renderHubLogistics();
+      try {
+        window.SokoniVendorShippingManager?.init?.();
+      } catch {
+        /* fail-soft */
+      }
+    }
     if (view === "stock") renderHubStockAlerts();
     if (view === "marketing") renderHubMarketing();
     startSellerOffersPolling();
@@ -7024,5 +7031,11 @@ function init() {
     if (apiPhone()) await onSendCode();
   });
 }
+
+/** Bridge for Path B logistics modules (vendor shipping manager). */
+window.SokoniSellerAuth = {
+  getPhone: () => apiPhone(),
+  getSessionToken: () => getSessionToken(),
+};
 
 document.addEventListener("DOMContentLoaded", init);

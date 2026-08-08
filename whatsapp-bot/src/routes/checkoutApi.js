@@ -11,17 +11,74 @@ import { getOrder } from "../services/orders.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
 import { config } from "../config.js";
 import { listLandmarkHubs, formatLandmarkLine } from "../lib/landmark-hubs.js";
+import { calculateShipping } from "../services/calculate-shipping.js";
+import { applyShippingToOrder } from "../services/apply-order-shipping.js";
+import { listCounties, listTownsForCounty, loadKenyaLocations } from "../services/kenya-locations.js";
 
 const router = Router();
 
 router.get("/meta", (_req, res) => {
-  res.json(checkoutMeta());
+  res.json({
+    ...checkoutMeta(),
+    hybridLogistics: true,
+    paymentRail: "daraja_mpesa",
+  });
 });
 
 /** Curated Kenyan hubs / landmarks for checkout dropdowns. */
 router.get("/landmarks", (_req, res) => {
   const data = listLandmarkHubs();
   res.json({ success: true, ...data });
+});
+
+/** 47 counties + 4 tiers (public). */
+router.get("/locations/counties", (_req, res) => {
+  const data = loadKenyaLocations();
+  res.json({ success: true, tiers: data.tiers, counties: listCounties() });
+});
+
+router.get("/locations/towns", (req, res) => {
+  const county = String(req.query.county || "").trim();
+  if (!county) return res.status(400).json({ error: "county_required" });
+  res.json({ success: true, county, towns: listTownsForCounty(county) });
+});
+
+/** POST /api/checkout/calculate-shipping — hybrid fee engine (no Paystack). */
+router.post("/calculate-shipping", async (req, res) => {
+  try {
+    const result = await calculateShipping(req.body || {});
+    const status = result.error === "empty_cart" ? 400 : result.ok ? 200 : 422;
+    res.status(status).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: "calc_failed", message: err.message });
+  }
+});
+
+/** POST /api/checkout/:orderId/apply-shipping — mutate order shipping before Daraja STK. */
+router.post("/:orderId/apply-shipping", async (req, res) => {
+  try {
+    const result = await applyShippingToOrder(req.params.orderId, {
+      deliveryMethod: req.body?.deliveryMethod,
+      buyerCoordinates: req.body?.buyerCoordinates,
+      buyerCounty: req.body?.buyerCounty,
+      buyerTown: req.body?.buyerTown,
+      isPickupStation: req.body?.isPickupStation,
+      landmarkNote: req.body?.landmarkNote || req.body?.instructions,
+      deliveryType: req.body?.deliveryType,
+    });
+    if (!result.ok) {
+      const code =
+        result.error === "order_not_found"
+          ? 404
+          : result.error === "already_paid"
+            ? 409
+            : 422;
+      return res.status(code).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: "apply_failed", message: err.message });
+  }
 });
 
 /** Prepaid drop-off label / QR payload for seller. */

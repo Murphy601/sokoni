@@ -16,6 +16,7 @@
     "test:listing-moderation": "node scripts/test-listing-moderation.mjs",
     "test:listing-studio": "node scripts/test-listing-studio.mjs",
     "test:daraja-checkout": "node scripts/test-daraja-checkout.mjs",
+    "test:hybrid-shipping": "node scripts/test-hybrid-shipping.mjs",
     "test:gemini": "node scripts/test-gemini-vision.mjs",
     "test:nvidia": "node scripts/test-nvidia-vision.mjs",
     "verify:cloudinary": "node scripts/verify-cloudinary.mjs",
@@ -36,12 +37,15 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@turf/boolean-point-in-polygon": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.1",
     "openai": "^4.77.0",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "eslint": "^9.17.0"

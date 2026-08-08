@@ -12,6 +12,7 @@ const SCHEMA_PHASE11_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE12_PATH = path.join(__dirname, "..", "..", "db", "schema-phase12-depop-expansion.sql");
 const SCHEMA_PHASE13_PATH = path.join(__dirname, "..", "..", "db", "schema-phase13-reviews-disputes.sql");
 const SCHEMA_PHASE14_PATH = path.join(__dirname, "..", "..", "db", "schema-phase14-account-auth.sql");
+const SCHEMA_PHASE15_PATH = path.join(__dirname, "..", "..", "db", "schema-phase15-hybrid-logistics.sql");
 
 async function applySchemaFile(label, filePath) {
   try {
@@ -38,6 +39,15 @@ export async function runMigrations() {
   await applySchemaFile("phase12 depop expansion", SCHEMA_PHASE12_PATH);
   await applySchemaFile("phase13 reviews disputes", SCHEMA_PHASE13_PATH);
   await applySchemaFile("phase14 account auth", SCHEMA_PHASE14_PATH);
+  await applySchemaFile("phase15 hybrid logistics", SCHEMA_PHASE15_PATH);
+
+  try {
+    const { seedCountiesToDb } = await import("../services/kenya-locations.js");
+    const seeded = await seedCountiesToDb();
+    if (seeded.ok) console.log("[db] kenya counties seeded:", seeded.counties);
+  } catch (err) {
+    console.warn("[db] county seed skipped:", err.message);
+  }
 }
 
 async function main() {

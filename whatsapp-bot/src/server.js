@@ -27,6 +27,8 @@ import checkoutApiRouter from "./routes/checkoutApi.js";
 import cartApiRouter from "./routes/cartApi.js";
 import paymentsApiRouter from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
+import vendorShippingApiRouter from "./routes/vendorShippingApi.js";
+import { attachRiderSocket } from "./services/rider-tracking.js";
 import adminShipmentsRouter from "./routes/adminShipments.js";
 import agentApiRouter from "./routes/agentApi.js";
 import adminOpsApiRouter from "./routes/adminOpsApi.js";
@@ -256,6 +258,7 @@ app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/cart", cartApiRouter);
 app.use("/api/payments", paymentsApiRouter);
 app.use("/api/tracking", trackingApiRouter);
+app.use("/api/vendor", vendorShippingApiRouter);
 app.use("/api/agent", agentApiRouter);
 app.use("/api/feed", feedApiRouter);
 app.use("/api/search", searchApiRouter);
@@ -284,8 +287,9 @@ app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) =>
   }
 });
 
-app.listen(config.port, "0.0.0.0", () => {
+const httpServer = app.listen(config.port, "0.0.0.0", () => {
   console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port} (build ${BUILD_ID})`);
+  attachRiderSocket(httpServer);
   if (!config.waha.apiUrl) {
     console.log("⚠️ WAHA_API_URL not set — running in dry-run mode (messages will be logged, not sent).");
   } else {
