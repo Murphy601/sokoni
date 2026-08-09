@@ -1307,21 +1307,74 @@ async function loadProductsFromApi() {
   return all.map((p) => (window.SokoniBrowse?.enrichProduct(p) || p));
 }
 
+function normalizeShopHandle(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+}
+
+/** Merge API + static JSON so wrong/default DB ownership can't hide real shops. */
+function mergeCatalogProducts(apiProducts, staticProducts) {
+  const byId = new Map();
+  for (const p of apiProducts || []) {
+    if (p?.id) byId.set(String(p.id), p);
+  }
+  for (const p of staticProducts || []) {
+    if (!p?.id) continue;
+    const id = String(p.id);
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, p);
+      continue;
+    }
+    const apiHandle = normalizeShopHandle(existing.shopHandle || existing.sellerHandle);
+    const staticHandle = normalizeShopHandle(p.shopHandle || p.sellerHandle);
+    const apiIsDefault = !apiHandle || apiHandle === "sokoni-store";
+    const staticIsPeer = staticHandle && staticHandle !== "sokoni-store";
+    if (staticIsPeer && apiIsDefault) {
+      byId.set(id, {
+        ...existing,
+        ...p,
+        shopHandle: staticHandle,
+        sellerHandle: staticHandle,
+        businessName: p.shopName || p.businessName || existing.businessName,
+      });
+    }
+  }
+  return [...byId.values()];
+}
+
+async function loadStaticProducts() {
+  const response = await fetch(dataUrl("data/products.json"));
+  const json = await response.json();
+  const list = Array.isArray(json) ? json : json.products || [];
+  return list.map((p) => window.SokoniBrowse?.enrichProduct(p) || p);
+}
+
 async function loadProducts() {
   if (await isCatalogPaused()) {
     return [];
   }
   await window.SokoniBrowse?.loadMenu?.();
+  let fromApi = [];
+  let apiOk = false;
   try {
-    const fromApi = await loadProductsFromApi();
-    if (fromApi.length) return fromApi;
+    fromApi = await loadProductsFromApi();
+    apiOk = true;
   } catch (err) {
     console.warn("Products API unavailable, falling back to JSON:", err.message);
   }
-  const response = await fetch(dataUrl("data/products.json"));
-  const json = await response.json();
-  const list = Array.isArray(json) ? json : json.products || [];
-  return list.map((p) => window.SokoniBrowse?.enrichProduct(p) || p);
+  let fromStatic = [];
+  try {
+    fromStatic = await loadStaticProducts();
+  } catch (err) {
+    console.warn("Static products.json unavailable:", err.message);
+  }
+  if (apiOk && fromApi.length) {
+    return mergeCatalogProducts(fromApi, fromStatic);
+  }
+  return fromStatic;
 }
 
 async function loadStoreMeta() {
