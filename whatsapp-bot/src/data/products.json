@@ -45,7 +45,10 @@
     "sellerPayoutKes": 76,
     "shippingKes": 0,
     "freeShipping": true,
-    "priceUpdatedAt": 1786053452275
+    "priceUpdatedAt": 1786053452275,
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "sellerPhone": "254748879579"
   },
   {
     "id": "hb-tlom7-001",
@@ -95,7 +98,10 @@
     "soldOrderId": "SK-1011",
     "transactionFeeKes": 5,
     "sellerPayoutKes": 50,
-    "priceUpdatedAt": 1786053519674
+    "priceUpdatedAt": 1786053519674,
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "sellerPhone": "254748879579"
   },
   {
     "id": "fa-tlom7-001",
@@ -144,7 +150,10 @@
     "priceUpdatedAt": 1786053496312,
     "isSold": true,
     "soldAt": 1786056463628,
-    "soldOrderId": "SKN-1003-1"
+    "soldOrderId": "SKN-1003-1",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "sellerPhone": "254748879579"
   },
   {
     "id": "hb-tlom7-002",
@@ -201,7 +210,8 @@
     "priceUpdatedAt": 1786053425216,
     "isSold": true,
     "soldAt": 1786056463749,
-    "soldOrderId": "SKN-1003-2"
+    "soldOrderId": "SKN-1003-2",
+    "sellerHandle": "adiv_thrift"
   },
   {
     "id": "hb-tlom7-003",
@@ -256,7 +266,8 @@
       "status": "pending_scan"
     },
     "refreshedAt": 1786073402106,
-    "priceUpdatedAt": 1786073402106
+    "priceUpdatedAt": 1786073402106,
+    "sellerHandle": "adiv_thrift"
   },
   {
     "id": "fa-tlom7-002",
@@ -310,6 +321,7 @@
     "soldAt": 1786052956948,
     "soldOrderId": "SKN-1002-1",
     "refreshedAt": 1786053395785,
-    "priceUpdatedAt": 1786053395785
+    "priceUpdatedAt": 1786053395785,
+    "sellerHandle": "adiv_thrift"
   }
 ]

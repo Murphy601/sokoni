@@ -26,7 +26,10 @@
     "isSecondhand": false,
     "brand": "Delamere",
     "color": "white",
-    "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack."
+    "description": "Creamy premium yoghurt infused with real lemon biscuit flavor. Perfect for a refreshing snack.",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "shopName": "Adiv's Mini Mart"
   },
   {
     "id": "hb-tlom7-003",
@@ -57,6 +60,9 @@
       "plant-based",
       "paraben-free"
     ],
-    "description": "A clear bottle of Sedoso Massage Oil, labeled as all-natural, plant-based, and paraben-free. The label indicates it is Sweet Almond oil."
+    "description": "A clear bottle of Sedoso Massage Oil, labeled as all-natural, plant-based, and paraben-free. The label indicates it is Sweet Almond oil.",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "shopName": "Adiv's Mini Mart"
   }
 ]
