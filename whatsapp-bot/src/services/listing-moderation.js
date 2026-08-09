@@ -149,7 +149,11 @@ export async function hideListing(productId, { flags = [], reason = "" } = {}) {
   await saveMaster(master);
 
   if (dbProductsAvailable()) {
-    await upsertCatalogProduct(product);
+    try {
+      await upsertCatalogProduct(product);
+    } catch (err) {
+      console.warn("[listing-moderation] hideListing upsert skipped:", err.message);
+    }
   }
 
   return { product };

@@ -190,10 +190,10 @@ if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(env_get "$ENV_FILE" OPENAI_MODEL)"
   FREE_MODEL="openrouter/free"
   FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free"
-  # Seller photos only — WhatsApp chat stays on FREE_MODEL above.
-  # Primary = multimodal vision; two OpenRouter fallbacks keep krea (image-gen — skipped for photo→JSON).
-  PHOTO_VISION_MODEL="google/gemini-2.5-flash"
-  PHOTO_VISION_FALLBACKS="google/gemini-2.0-flash-001,krea/krea-2-medium-turbo"
+  # Seller photos — free OpenRouter VLMs (NVIDIA NIM is a code fallback after these).
+  # Do NOT force paid google/gemini-* on OpenRouter; those burn credits / expire.
+  PHOTO_VISION_MODEL="openrouter/free"
+  PHOTO_VISION_FALLBACKS="nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   DEPRECATED_MODELS='nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|gemini-2\.0-flash-exp|deepseek-r1|gemini-2\.5-pro|gemini-2\.5-flash|gemini-2\.5-flash-lite|gemma-4-31b-it:free|qwen/qwen3-next-80b|llama-3\.3-70b-instruct:free|llama-3\.2-3b-instruct:free|qwen/qwen3-coder:free'
   if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE "$DEPRECATED_MODELS"; then
     echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
@@ -205,36 +205,28 @@ if [ -f "$ENV_FILE" ]; then
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
   CURRENT_VISION="$(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"
-  # Migrate away from image-gen / free-chat models as the photo primary (krea stays in FALLBACKS).
-  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE '^(krea/|openrouter/free$)|gemini-2\.0-flash-exp|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
+  # Prefer free OpenRouter vision; migrate away from image-gen / paid OpenRouter Gemini primaries.
+  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE '^(krea/)|google/gemini-|openai/gpt-|anthropic/|gemini-2\.0-flash-exp|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_MODEL" "$PHOTO_VISION_MODEL"
-    echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (was: ${CURRENT_VISION:-unset}; seller photos only; chat stays ${FREE_MODEL})"
+    echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (was: ${CURRENT_VISION:-unset}; free seller photos; chat stays ${FREE_MODEL})"
   fi
   CURRENT_VISION_FB="$(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
-  if [ -z "$CURRENT_VISION_FB" ] || ! echo "$CURRENT_VISION_FB" | grep -q 'krea/krea-2-medium-turbo' || echo "$CURRENT_VISION_FB" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|nvidia/nemotron'; then
+  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'google/gemini-|krea/krea|gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_FALLBACKS" "$PHOTO_VISION_FALLBACKS"
     echo "==> Set CATALOG_VISION_FALLBACKS → ${PHOTO_VISION_FALLBACKS}"
   fi
   echo "==> AI model: $(env_get "$ENV_FILE" OPENAI_MODEL)"
   echo "==> Vision: $(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"
   echo "==> Vision fallbacks: $(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
-  # Always ensure a non-empty GEMINI_API_KEY (rotate later). Actions override wins when set.
-  DEFAULT_GEMINI_API_KEY="AQ.Ab8RN6JKsaorEvw8bvKc277LHDh3lL3HMWNbPhrz_LJxDKkhKQ"
+  # Optional Gemini only — never seed an expired hardcoded key on deploy.
   CURRENT_GEMINI="$(env_get "$ENV_FILE" GEMINI_API_KEY)"
   if [ -n "${SOKONI_GEMINI_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$SOKONI_GEMINI_API_KEY"
     echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY"
-  elif [ -z "$CURRENT_GEMINI" ]; then
-    set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$DEFAULT_GEMINI_API_KEY"
-    echo "==> Seeded GEMINI_API_KEY into $ENV_FILE (was empty/missing — rotate when ready)"
+  elif [ -n "$CURRENT_GEMINI" ]; then
+    echo "==> Gemini vision: GEMINI_API_KEY present (${#CURRENT_GEMINI} chars) — optional last fallback"
   else
-    echo "==> Gemini vision: GEMINI_API_KEY present (${#CURRENT_GEMINI} chars)"
-  fi
-  # Hard verify — never leave deploy without a key when we have a default.
-  VERIFY_GEMINI="$(env_get "$ENV_FILE" GEMINI_API_KEY)"
-  if [ -z "$VERIFY_GEMINI" ]; then
-    echo "GEMINI_API_KEY=$DEFAULT_GEMINI_API_KEY" >> "$ENV_FILE"
-    echo "==> Appended GEMINI_API_KEY (set_env_kv missed — forced append)"
+    echo "==> Gemini vision: GEMINI_API_KEY unset (OK — OpenRouter free + NVIDIA NIM cover seller photos)"
   fi
 else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
@@ -260,6 +252,11 @@ npm install --omit=dev 2>/dev/null || npm install
     else
       npm run db:backfill-browse || echo "WARN: db:backfill-browse failed"
     fi
+  fi
+  # Storefront /shop reads Postgres — keep it aligned with master products.json after deploys.
+  if [ -f "$REPO/whatsapp-bot/scripts/resync-catalog-db.mjs" ]; then
+    echo "==> Syncing master catalog → Postgres (fixes missing seller posts on /shop)..."
+    (cd "$REPO/whatsapp-bot" && node scripts/resync-catalog-db.mjs) || echo "WARN: resync-catalog-db failed — run: cd ~/sokoni/whatsapp-bot && node scripts/resync-catalog-db.mjs"
   fi
 fi
 

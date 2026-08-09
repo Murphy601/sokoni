@@ -139,13 +139,21 @@ async function getTaxonomy() {
   return taxonomyModule;
 }
 
+/** Free OpenRouter VLMs tried first so paid Gemini keys can't block seller drafts. */
+const FREE_OPENROUTER_VISION = [
+  "openrouter/free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+];
+
 function visionModelChain() {
   const primary = config.catalog.visionModel?.trim();
   const fallbacks = config.catalog.visionFallbacks || [];
-  const chain = [...new Set([primary, ...fallbacks].filter(Boolean))];
+  // Free models first, then configured CATALOG_VISION_* (paid Gemini etc. as last resort).
+  const chain = [...new Set([...FREE_OPENROUTER_VISION, primary, ...fallbacks].filter(Boolean))];
   if (chain.some((m) => /^krea\//i.test(m) || /image-gen|flux|dall-e|stable-diffusion/i.test(m))) {
     console.warn(
-      "[listing-generator] image-gen models (e.g. krea) stay in CATALOG_VISION_FALLBACKS but are skipped for photo→JSON — Gemini / multimodal chat models handle listing drafts."
+      "[listing-generator] image-gen models (e.g. krea) stay in CATALOG_VISION_FALLBACKS but are skipped for photo→JSON — free OpenRouter / NVIDIA / Gemini handle listing drafts."
     );
   }
   return chain;

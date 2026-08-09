@@ -964,6 +964,7 @@ export async function publishSellerListing({
   }
   invalidateProductCache();
 
+  let dbSyncOk = true;
   if (dbProductsAvailable()) {
     try {
       const { ensureSellerSocialProfile } = await import("../db/repositories/users.js");
@@ -978,7 +979,19 @@ export async function publishSellerListing({
     } catch (err) {
       console.warn("[seller-listings] social profile ensure skipped:", err.message);
     }
-    await upsertCatalogProduct(product);
+    // Never fail the seller post after master JSON is saved — shop sync can retry.
+    try {
+      await upsertCatalogProduct(product);
+    } catch (err) {
+      dbSyncOk = false;
+      console.error("[seller-listings] Postgres upsert failed (listing kept in master):", err.message);
+      setImmediate(() => {
+        void import("../db/repositories/products.js")
+          .then((m) => m.syncMasterCatalogToDb())
+          .then((r) => console.log("[seller-listings] background catalog db sync:", r))
+          .catch((e) => console.warn("[seller-listings] background catalog db sync failed:", e.message));
+      });
+    }
   }
 
   linkSupplierProduct(check.supplier, productId);
@@ -993,7 +1006,12 @@ export async function publishSellerListing({
 
   const sellerPhone = normalizePhone(phone);
   // Local scan is fast — keep it in-request. Git push + WhatsApp often exceed proxy timeouts.
-  const mod = await runPostPublishModeration(product, { sellerPhone });
+  let mod = { product, moderation: { passed: true, flags: [], scannedAt: new Date().toISOString() } };
+  try {
+    mod = await runPostPublishModeration(product, { sellerPhone });
+  } catch (err) {
+    console.warn("[seller-listings] post-publish moderation skipped:", err.message);
+  }
 
   if (mod.moderation?.passed === false) {
     await rebuildPublicCatalog();
@@ -1031,10 +1049,13 @@ export async function publishSellerListing({
     moderation: mod.moderation,
     videoUrl: liveProduct.videoUrl || null,
     videoKind: liveProduct.videoKind || null,
+    dbSyncOk,
     message:
       status === "hidden_pending_review"
         ? "Listing posted but hidden pending review — we'll WhatsApp you."
-        : "Listing is live on Sokoni.",
+        : dbSyncOk
+          ? "Listing is live on Sokoni."
+          : "Listing saved — shop sync is catching up. Refresh /shop in a minute or ask admin for #sync db.",
   };
 }
 

@@ -208,7 +208,25 @@ export function jsonToDbProduct(json, sellerId = null) {
         ? String(json.genderFit).trim().toLowerCase() || null
         : null,
     is_secondhand: Boolean(json.isSecondhand),
-    condition: json.condition || "brand_new_without_tags",
+    // Postgres item_condition enum — never pass raw AI strings that would abort seller publish.
+    condition: (() => {
+      const allowed = new Set([
+        "brand_new_with_tags",
+        "brand_new_without_tags",
+        "like_new",
+        "gently_used",
+        "fair_condition",
+      ]);
+      const raw = String(json.condition || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_");
+      if (allowed.has(raw)) return raw;
+      if (raw === "brand_new" || raw === "new") return "brand_new_without_tags";
+      if (raw === "good" || raw === "used" || raw === "preloved") return "gently_used";
+      if (raw === "fair") return "fair_condition";
+      return json.isSecondhand ? "gently_used" : "brand_new_without_tags";
+    })(),
     stock_quantity: stockQty,
     price_kes: json.priceKes ?? null,
     shipping_kes: json.shippingKes ?? null,
