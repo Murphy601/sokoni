@@ -85,7 +85,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": true,
+    "inStock": false,
     "imageUrl": "assets/images/products/hb-tlom7-001.jpg",
     "images": [
       "assets/images/products/hb-tlom7-001.jpg"
@@ -96,15 +96,17 @@
       "status": "pending_scan"
     },
     "refreshedAt": 1786056154640,
-    "isSold": false,
+    "isSold": true,
     "transactionFeeKes": 5,
     "sellerPayoutKes": 50,
     "priceUpdatedAt": 1786053519674,
     "shopHandle": "adiv_thrift",
     "sellerHandle": "adiv_thrift",
     "sellerPhone": "254748879579",
-    "stockQuantity": 1,
-    "stockUpdatedAt": 1786248557506
+    "stockQuantity": 0,
+    "stockUpdatedAt": 1786249762540,
+    "soldAt": 1785172670111,
+    "soldOrderId": "SK-1011"
   },
   {
     "id": "fa-tlom7-001",
@@ -156,7 +158,8 @@
     "soldOrderId": "SKN-1003-1",
     "shopHandle": "adiv_thrift",
     "sellerHandle": "adiv_thrift",
-    "sellerPhone": "254748879579"
+    "sellerPhone": "254748879579",
+    "stockQuantity": 0
   },
   {
     "id": "hb-tlom7-002",
@@ -214,7 +217,8 @@
     "isSold": true,
     "soldAt": 1786056463749,
     "soldOrderId": "SKN-1003-2",
-    "sellerHandle": "adiv_thrift"
+    "sellerHandle": "adiv_thrift",
+    "stockQuantity": 0
   },
   {
     "id": "hb-tlom7-003",
@@ -328,7 +332,8 @@
     "soldOrderId": "SKN-1002-1",
     "refreshedAt": 1786053395785,
     "priceUpdatedAt": 1786053395785,
-    "sellerHandle": "adiv_thrift"
+    "sellerHandle": "adiv_thrift",
+    "stockQuantity": 0
   },
   {
     "id": "ho-tlom7-001",
@@ -337,12 +342,12 @@
     "subcategory": "kitchen",
     "browseCategory": "home",
     "browseSubCategory": "kitchen",
-    "sellerNetKes": 200,
-    "sourcePriceKes": 200,
-    "priceKes": 225,
-    "platformFeeKes": 20,
-    "transactionFeeKes": 5,
-    "sellerPayoutKes": 200,
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 55,
+    "platformFeeKes": 5,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 50,
     "deliveryMethod": "seller_express",
     "shippingRecipient": "seller",
     "description": "A white ceramic mug with 'COFFEE' written on it in blue and red accents. The mug appears to have some residue inside.",
@@ -380,12 +385,14 @@
     ],
     "videoUrl": "https://res.cloudinary.com/rztynxme/image/upload/c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264/f_mp4/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.mp4",
     "videoKind": "preview",
-    "publishedAt": 1786240731807,
+    "publishedAt": 1786249704991,
     "moderation": {
       "status": "pending_scan"
     },
     "isSold": false,
-    "stockUpdatedAt": 1786248543895
+    "stockUpdatedAt": 1786248543895,
+    "refreshedAt": 1786249704991,
+    "priceUpdatedAt": 1786249704991
   },
   {
     "id": "ho-tlom7-002",
@@ -434,6 +441,63 @@
     "videoUrl": "https://bot.sokonimall.com/catalog-images/ho-tlom7-002.mp4",
     "videoKind": "seller",
     "publishedAt": 1786248867988,
+    "moderation": {
+      "status": "pending_scan"
+    }
+  },
+  {
+    "id": "sm-tlom7-002",
+    "name": "Clear glass with yellow liquid",
+    "category": "supermarket",
+    "subcategory": "glass",
+    "browseCategory": "home",
+    "browseSubCategory": "kitchen",
+    "sellerNetKes": 50,
+    "sourcePriceKes": 50,
+    "priceKes": 55,
+    "platformFeeKes": 5,
+    "transactionFeeKes": 0,
+    "sellerPayoutKes": 50,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A clear drinking glass containing a small amount of yellow liquid, placed on a table next to a laptop.",
+    "color": "clear",
+    "size": "",
+    "era": "",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "location": "Mombasa",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "🛒",
+    "tags": [
+      "vintage",
+      "kitchen",
+      "drink",
+      "used",
+      "cheap"
+    ],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "stockQuantity": 1,
+    "imageUrl": "assets/images/products/sm-tlom7-002.jpg",
+    "images": [
+      "assets/images/products/sm-tlom7-002.jpg"
+    ],
+    "videoUrl": "https://bot.sokonimall.com/catalog-images/sm-tlom7-002.mp4",
+    "videoKind": "seller",
+    "publishedAt": 1786253047657,
     "moderation": {
       "status": "pending_scan"
     }
