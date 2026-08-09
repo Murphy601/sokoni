@@ -8,7 +8,7 @@
     home: { href: "index.html", label: "Home", icon: "🏠" },
     explore: { href: "index.html#deals", label: "Explore", icon: "🧭" },
     sell: { href: "suppliers/list.html", label: "Sell", icon: "➕", sell: true },
-    ask: { href: "ask.html", label: "ASK AI", icon: "💬" },
+    inbox: { href: "inbox.html", label: "Inbox", icon: "💬" },
     profile: { href: "profile.html", label: "Account", icon: "👤" },
   };
 
@@ -18,10 +18,10 @@
     const path = (window.location.pathname || "").toLowerCase();
     if (path.includes("profile")) return "profile";
     if (path.includes("inbox")) return "inbox";
-    if (path.includes("ask")) return "ask";
     if (path.includes("disputes")) return "disputes";
     if (path.includes("activity")) return "activity";
     if (path.includes("track")) return "track";
+    if (path.includes("ask")) return "ask";
     if (path.includes("shop")) return "shop";
     if (path.includes("suppliers/list")) return "sell";
     if (path.includes("about")) return "about";
@@ -50,7 +50,7 @@
   function headerLinks(page) {
     const account = { href: accountNavHref(), label: accountNavLabel(), account: true };
     if (page === "activity") {
-      return [{ href: "ask.html", label: "Ask" }, account];
+      return [{ href: "ask.html", label: "ASK AI" }, account];
     }
     if (page === "inbox") {
       return [{ href: "activity.html", label: "Activity" }, account];
@@ -59,7 +59,7 @@
       return [{ href: "track.html", label: "Track" }, account];
     }
     if (page === "shop") {
-      return [{ href: "ask.html", label: "Ask" }, account];
+      return [{ href: "ask.html", label: "ASK AI" }, account];
     }
     if (page === "track") {
       return [{ href: "disputes.html", label: "Disputes" }, account];
@@ -75,18 +75,17 @@
     }
     // profile + login/signup + default
     return [
-      { href: "ask.html", label: "Ask Plug" },
+      { href: "ask.html", label: "ASK AI" },
       account,
     ];
   }
 
   function navActiveKey(page) {
-    if (page === "ask") return "ask";
     if (
       page === "activity" ||
       page === "track" ||
       page === "shop" ||
-      page === "inbox" ||
+      page === "ask" ||
       page === "disputes" ||
       page === "about" ||
       page === "faq" ||
