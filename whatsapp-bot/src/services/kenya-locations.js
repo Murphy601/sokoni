@@ -72,6 +72,70 @@ export function platformDefaultFeeForCounty(countyName) {
   return county ? Math.round(Number(county.defaultFeeKes) || 0) : 0;
 }
 
+/**
+ * Infer Kenyan county (+ optional town) from free-text delivery location
+ * (WhatsApp “Umoja 1 near the market”, “Nakuru Naivas”, etc.).
+ */
+export function inferCountyFromText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const hay = ` ${raw.toLowerCase().replace(/[^a-z0-9'\s-]/g, " ")} `;
+
+  const data = loadKenyaLocations();
+  /** @type {Array<{ county: string, town: string|null, score: number }>} */
+  const hits = [];
+
+  for (const c of data.counties) {
+    const countyName = String(c.name || "");
+    const countyKey = countyName.toLowerCase();
+    if (countyKey && hay.includes(` ${countyKey} `)) {
+      hits.push({ county: countyName, town: null, score: 100 + countyKey.length });
+    }
+    // Common shorthand: "Muranga" without apostrophe
+    const loose = countyKey.replace(/'/g, "");
+    if (loose !== countyKey && hay.includes(` ${loose} `)) {
+      hits.push({ county: countyName, town: null, score: 95 + loose.length });
+    }
+    for (const t of c.towns || []) {
+      const townName = String(t.name || "");
+      const townKey = townName.toLowerCase().replace(/\s+town$/i, "").trim();
+      if (townKey.length >= 3 && hay.includes(` ${townKey} `)) {
+        hits.push({ county: countyName, town: townName, score: 80 + townKey.length });
+      }
+      for (const area of t.areas || []) {
+        const areaKey = String(area || "").toLowerCase().trim();
+        if (areaKey.length >= 3 && hay.includes(` ${areaKey} `)) {
+          hits.push({ county: countyName, town: townName, score: 60 + areaKey.length });
+        }
+      }
+    }
+  }
+
+  // Extra aliases buyers type often
+  const aliases = [
+    { needle: "eldoret", county: "Uasin Gishu", town: "Eldoret Town", score: 90 },
+    { needle: "rongai", county: "Kajiado", town: "Ongata Rongai", score: 85 },
+    { needle: "kitengela", county: "Kajiado", town: "Kitengela", score: 88 },
+    { needle: "syokimau", county: "Machakos", town: "Syokimau", score: 88 },
+    { needle: "ruiru", county: "Kiambu", town: "Ruiru", score: 88 },
+    { needle: "thika", county: "Kiambu", town: "Thika", score: 88 },
+    { needle: "kitale", county: "Trans Nzoia", town: "Kitale", score: 88 },
+    { needle: "nanyuki", county: "Laikipia", town: "Nanyuki", score: 88 },
+    { needle: "malindi", county: "Kilifi", town: "Malindi", score: 88 },
+    { needle: "diani", county: "Kwale", town: "Kwale Town", score: 88 },
+    { needle: "ukunda", county: "Kwale", town: "Kwale Town", score: 85 },
+  ];
+  for (const a of aliases) {
+    if (hay.includes(` ${a.needle} `)) {
+      hits.push({ county: a.county, town: a.town, score: a.score });
+    }
+  }
+
+  if (!hits.length) return null;
+  hits.sort((a, b) => b.score - a.score);
+  return { county: hits[0].county, town: hits[0].town };
+}
+
 /** Seed counties into Postgres when DB is enabled (idempotent). */
 export async function seedCountiesToDb() {
   if (!isDbEnabled()) return { ok: false, reason: "db_disabled" };

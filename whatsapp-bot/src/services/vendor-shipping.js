@@ -52,6 +52,17 @@ export function normalizeVendorKey(raw) {
     .replace(/^@/, "");
 }
 
+/** True when the seller explicitly saved rates (not an auto-created shell). */
+export function isConfiguredShippingProfile(profile) {
+  if (!profile) return false;
+  if (profile.sellerConfigured === true) return true;
+  if (profile.sellerConfigured === false) return false;
+  // Legacy: getOrCreate writes equal timestamps; a real save bumps updatedAt.
+  return Boolean(
+    profile.updatedAt && profile.createdAt && profile.updatedAt !== profile.createdAt
+  );
+}
+
 function defaultProfile(vendorKey) {
   return {
     id: randomUUID(),
@@ -67,6 +78,7 @@ function defaultProfile(vendorKey) {
     localCounties: [],
     isFreeShippingEnabled: false,
     localExpressEnabled: false,
+    sellerConfigured: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -119,6 +131,7 @@ export function upsertVendorShippingProfile(vendorKeyRaw, patch = {}) {
       : prev.localCounties || [],
     isFreeShippingEnabled: boolOr(patch.isFreeShippingEnabled, prev.isFreeShippingEnabled),
     localExpressEnabled: boolOr(patch.localExpressEnabled, prev.localExpressEnabled),
+    sellerConfigured: true,
     updatedAt: new Date().toISOString(),
   };
   store.profiles[vendorKey] = next;
@@ -226,7 +239,8 @@ export function resolveVendorShippingFee({
   zones: zonesIn,
 } = {}) {
   const key = normalizeVendorKey(vendorKey);
-  const profile = profileIn || (key ? getVendorShippingProfile(key) : null);
+  const rawProfile = profileIn || (key ? getVendorShippingProfile(key) : null);
+  const profile = isConfiguredShippingProfile(rawProfile) ? rawProfile : null;
   const zones = zonesIn || (key ? listVendorZones(key) : []);
 
   if (!profile) {

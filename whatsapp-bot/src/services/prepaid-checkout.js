@@ -1,8 +1,9 @@
 import { config } from "../config.js";
-import { updateOrderMeta } from "./orders.js";
+import { getOrder, updateOrderMeta } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isDarajaReady, initiateStkPush } from "./daraja-mpesa.js";
 import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
+import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
 
 export const ESCROW_STATUSES = ["pending", "held", "released", "refunded"];
 
@@ -41,8 +42,10 @@ export function labelPageUrlForOrder(orderId) {
 
 export function formatPrepaidCheckoutPrompt(order) {
   const total = orderBuyerTotal(order);
-  const item = Math.round(Number(order?.priceKes) || 0);
   const ship = Math.round(Number(order?.shippingKes) || 0);
+  const item = Math.round(
+    Number(order?.sellerNetKes ?? order?.priceKes) || Math.max(0, total - ship)
+  );
   const priceLine = Number.isFinite(total) ? `KES ${total.toLocaleString()}` : "—";
   const breakdown =
     ship > 0
@@ -115,16 +118,27 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     return { ok: false, method: "missing_phone", message: "No phone for STK push" };
   }
 
+  // Hybrid logistics: fold seller county/tier rates into total before Daraja STK.
+  let payOrder = order;
   try {
-    updateOrderMeta(order.id, { paymentStatus: "processing" });
+    const ensured = await ensureHybridShippingBeforePayment(order);
+    if (ensured?.order) payOrder = ensured.order;
+    else payOrder = getOrder(order.id) || order;
+  } catch (err) {
+    console.warn("[checkout] hybrid shipping ensure skipped:", err?.message || err);
+    payOrder = getOrder(order.id) || order;
+  }
+
+  try {
+    updateOrderMeta(payOrder.id, { paymentStatus: "processing" });
     const stk = await initiateStkPush({
       phone: payPhone,
-      amount: orderBuyerTotal(order),
-      accountReference: order.id,
-      description: `Order ${order.id}`,
+      amount: orderBuyerTotal(payOrder),
+      accountReference: payOrder.id,
+      description: `Order ${payOrder.id}`,
     });
 
-    updateOrderMeta(order.id, {
+    updateOrderMeta(payOrder.id, {
       checkoutRequestId: stk.checkoutRequestId,
       merchantRequestId: stk.merchantRequestId,
       paymentStatus: "processing",
@@ -137,9 +151,11 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
       stkAvailable: true,
       checkoutRequestId: stk.checkoutRequestId,
       customerMessage: stk.customerMessage,
+      amountKes: orderBuyerTotal(payOrder),
+      shippingKes: Math.round(Number(payOrder.shippingKes) || 0),
     };
   } catch (err) {
-    updateOrderMeta(order.id, {
+    updateOrderMeta(payOrder.id, {
       paymentStatus: "failed",
       lastPaymentError: err.message,
     });

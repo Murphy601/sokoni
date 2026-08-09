@@ -308,7 +308,7 @@
             </div>
           </div>
 
-          <button type="button" id="vsm-save-rates" class="depop-btn-accent min-h-[48px] px-6 text-sm font-bold w-full sm:w-auto">
+          <button type="button" id="vsm-save-rates" class="depop-btn-accent min-h-[48px] px-6 text-sm font-bold w-full sm:w-auto" data-vsm-save-state="dirty">
             Save all-Kenya shipping rates
           </button>
         </section>
@@ -332,6 +332,54 @@
   let heatMap = null;
   let leafletReady = null;
   let savingRates = false;
+  /** JSON snapshot of last loaded/saved payload — button shows Saved until edited. */
+  let baselinePayloadJson = "";
+  let profileConfigured = false;
+
+  function payloadFingerprint(payload) {
+    try {
+      return JSON.stringify(payload);
+    } catch {
+      return "";
+    }
+  }
+
+  function isDirty() {
+    if (!baselinePayloadJson) return true;
+    return payloadFingerprint(buildSavePayload()) !== baselinePayloadJson;
+  }
+
+  function syncSaveButton() {
+    const btn = document.getElementById("vsm-save-rates");
+    if (!btn) return;
+    const dirty = isDirty();
+    if (!dirty && profileConfigured) {
+      btn.textContent = "Saved";
+      btn.disabled = true;
+      btn.dataset.vsmSaveState = "saved";
+      btn.classList.remove("depop-btn-accent");
+      btn.classList.add("depop-btn-ghost", "opacity-90");
+      btn.setAttribute("aria-label", "Shipping rates saved");
+    } else {
+      btn.textContent = "Save all-Kenya shipping rates";
+      btn.disabled = false;
+      btn.dataset.vsmSaveState = "dirty";
+      btn.classList.add("depop-btn-accent");
+      btn.classList.remove("depop-btn-ghost", "opacity-90");
+      btn.setAttribute("aria-label", "Save all-Kenya shipping rates");
+    }
+  }
+
+  function markBaselineFromProfile(profile) {
+    profileConfigured = Boolean(
+      profile &&
+        (profile.sellerConfigured === true ||
+          (profile.updatedAt && profile.createdAt && profile.updatedAt !== profile.createdAt))
+    );
+    fillProfile(profile);
+    baselinePayloadJson = payloadFingerprint(buildSavePayload());
+    syncSaveButton();
+  }
 
   function loadLeaflet() {
     if (leafletReady) return leafletReady;
@@ -377,6 +425,7 @@
     document.getElementById("vsm-fields-flat")?.classList.toggle("hidden", mode !== "SIMPLE_FLAT");
     document.getElementById("vsm-fields-free")?.classList.toggle("hidden", mode !== "FREE_SHIPPING");
     updateCoverageSummary();
+    syncSaveButton();
   }
 
   function updateCoverageSummary() {
@@ -608,6 +657,11 @@
 
   async function saveRates() {
     if (savingRates) return;
+    if (!isDirty() && profileConfigured) {
+      setStatus("Already saved.");
+      syncSaveButton();
+      return;
+    }
     savingRates = true;
     const btn = document.getElementById("vsm-save-rates");
     if (btn) btn.disabled = true;
@@ -621,14 +675,15 @@
       if (!data?.success || !data?.profile) {
         throw new Error(data?.message || "Save did not confirm — try again.");
       }
-      fillProfile(data.profile);
+      markBaselineFromProfile(data.profile);
       updateCoverageSummary();
       setStatus("Saved. All 47 counties use these rates at checkout.");
     } catch (err) {
       setStatus(err.message || "Could not save — try again.", true);
+      syncSaveButton();
     } finally {
       savingRates = false;
-      if (btn) btn.disabled = false;
+      syncSaveButton();
     }
   }
 
@@ -644,9 +699,13 @@
     }
     try {
       const data = await api("/shipping-rules");
-      fillProfile(data.profile);
+      markBaselineFromProfile(data.profile);
       renderZones(data.zones || []);
-      setStatus("Delivery fees loaded — edit and save anytime.");
+      if (profileConfigured) {
+        setStatus("Saved — edit any price to update.");
+      } else {
+        setStatus("Choose your rates, then save to use them at checkout.");
+      }
     } catch (err) {
       setStatus(err.message, true);
     }
@@ -662,15 +721,22 @@
     });
 
     host.querySelectorAll('input[name="vsm-mode"]').forEach((r) => {
-      r.addEventListener("change", syncModeUi);
+      r.addEventListener("change", () => {
+        syncModeUi();
+        syncSaveButton();
+      });
     });
 
     ["vsm-t1", "vsm-t2", "vsm-t3", "vsm-t4", "vsm-flat-local", "vsm-flat-up"].forEach((id) => {
-      document.getElementById(id)?.addEventListener("input", updateCoverageSummary);
+      document.getElementById(id)?.addEventListener("input", () => {
+        updateCoverageSummary();
+        syncSaveButton();
+      });
     });
 
     document.getElementById("vsm-advanced-map")?.addEventListener("change", (e) => {
       toggleAdvancedMap(Boolean(e.target.checked));
+      syncSaveButton();
     });
 
     document.getElementById("vsm-save-rates")?.addEventListener("click", () => {

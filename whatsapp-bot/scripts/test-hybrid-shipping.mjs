@@ -2,12 +2,13 @@
  * Smoke test: county seed count + zone PIP + fee engine (no network).
  */
 import assert from "node:assert/strict";
-import { listCounties, getCounty, loadKenyaLocations } from "../src/services/kenya-locations.js";
+import { listCounties, getCounty, loadKenyaLocations, inferCountyFromText } from "../src/services/kenya-locations.js";
 import {
   upsertVendorShippingProfile,
   saveVendorZone,
   pointInPolygon,
   resolveVendorShippingFee,
+  isConfiguredShippingProfile,
 } from "../src/services/vendor-shipping.js";
 import { calculateShipping } from "../src/services/calculate-shipping.js";
 
@@ -77,5 +78,9 @@ const noProfile = await calculateShipping({
   buyerCounty: "Nairobi",
 });
 assert.equal(noProfile.totalShippingFee, 0, "no profile must keep KES 0 shipping");
+
+assert.equal(inferCountyFromText("Jane, Umoja 1 near the market, 0712345678")?.county, "Nairobi");
+assert.equal(inferCountyFromText("Nakuru Naivas")?.county, "Nakuru");
+assert.equal(isConfiguredShippingProfile(upsertVendorShippingProfile(vendor, {}).profile), true);
 
 console.log("OK hybrid shipping smoke tests passed");
