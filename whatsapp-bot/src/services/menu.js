@@ -45,6 +45,7 @@ import {
   prepaidPaymentLine,
   checkoutUrlForOrder,
 } from "./prepaid-checkout.js";
+import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
 import {
   renderShipmentTimelineText,
   getEffectiveShipmentStatus,
@@ -1103,7 +1104,15 @@ export async function confirmCartOrder(to, parsed) {
     return true;
   }
 
-  const { parent, children } = created;
+  let { parent, children } = created;
+  try {
+    const ensured = await ensureHybridShippingBeforePayment(parent);
+    if (ensured?.order) parent = ensured.order;
+    children = (parent.itemIds || []).map((id) => getOrder(id)).filter(Boolean);
+  } catch (err) {
+    console.warn("[cart] hybrid shipping ensure skipped:", err?.message || err);
+  }
+
   const childLines = children
     .map((c) => `• *${c.id}* — ${c.productName}`)
     .join("\n");
@@ -1121,10 +1130,16 @@ export async function confirmCartOrder(to, parsed) {
     console.error("[cart] admin notify failed:", err.message);
   }
 
+  const shipLine =
+    Math.round(Number(parent.shippingKes) || 0) > 0
+      ? `🚚 Shipping: KES ${Math.round(Number(parent.shippingKes)).toLocaleString()}\n`
+      : "";
+
   await sendText(
     to,
     `✅ *Cart placed — ${parent.id}*\n\n` +
       `${childLines}\n\n` +
+      shipLine +
       `💰 Total: *KES ${orderBuyerTotal(parent).toLocaleString()}*\n` +
       `(Includes 10% Sokoni fee *per item* + one M-Pesa fee)\n` +
       `📍 ${details.location}\n\n` +
@@ -1187,6 +1202,15 @@ export async function confirmPrepaidOrder(to, parsed) {
     console.error("[order] createOrder failed (continuing):", err.message);
   }
 
+  if (order) {
+    try {
+      const ensured = await ensureHybridShippingBeforePayment(order);
+      if (ensured?.order) order = ensured.order;
+    } catch (err) {
+      console.warn("[order] hybrid shipping ensure skipped:", err?.message || err);
+    }
+  }
+
   const summary = buildOrderAdminSummary({
     customerKey: to,
     pending,
@@ -1220,7 +1244,7 @@ export async function confirmPrepaidOrder(to, parsed) {
       orderId: orderRef || "pending",
       productName: pending.name,
       amountKes: order ? orderBuyerTotal(order) : pending.totalKes ?? pending.priceKes,
-      itemKes: order?.priceKes ?? pending.priceKes,
+      itemKes: order?.sellerNetKes ?? order?.priceKes ?? pending.priceKes,
       shippingKes: order?.shippingKes ?? pending.shippingKes,
       customerName: details.name,
       location: details.location,
