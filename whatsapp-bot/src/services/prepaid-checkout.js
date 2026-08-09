@@ -43,42 +43,20 @@ export function labelPageUrlForOrder(orderId) {
 export function formatPrepaidCheckoutPrompt(order) {
   const total = orderBuyerTotal(order);
   const ship = Math.round(Number(order?.shippingKes) || 0);
-  const item = Math.round(
-    Number(order?.sellerNetKes ?? order?.priceKes) || Math.max(0, total - ship)
-  );
   const priceLine = Number.isFinite(total) ? `KES ${total.toLocaleString()}` : "—";
-  const breakdown =
-    ship > 0
-      ? `Item KES ${item.toLocaleString()} + shipping KES ${ship.toLocaleString()} = *${priceLine}*\n`
-      : "";
   const ref = order?.id || "SKN-####";
+  const shipBit = ship > 0 ? ` · delivery KES ${ship.toLocaleString()}` : "";
 
   if (isDarajaConfigured()) {
-    return (
-      `💳 *Pay upfront — ${ref}*\n\n` +
-      breakdown +
-      `Total: *${priceLine}*\n` +
-      `🔒 Funds stay in Sokoni escrow until delivery is confirmed.\n\n` +
-      `📱 Check your phone — M-Pesa STK push sent.\n` +
-      `Enter your PIN to complete payment.\n\n` +
-      `_Payment confirms automatically — no admin step needed._` +
-      (order?.id ? `\n\n🌐 Pay on web: ${checkoutUrlForOrder(order.id)}` : "")
-    );
+    return `💳 *${ref}* — *${priceLine}*${shipBit}\nSTK sent — enter M-Pesa PIN.`;
   }
 
   const till = config.store.mpesaTill;
-  const tillName = config.store.mpesaTillName;
   return (
-    `💳 *Pay upfront — ${ref}*\n\n` +
-    breakdown +
-    `Total: *${priceLine}*\n` +
-    `Your money stays in Sokoni escrow until delivery is confirmed.\n\n` +
-    `Configure Daraja STK for instant auto-confirm, or pay manually:\n\n` +
-    `🏢 *Till:* ${till}\n` +
-    `📛 *Name:* ${tillName}\n` +
-    `📝 *Account / reference:* ${ref}\n\n` +
-    (order?.id ? `🌐 Pay on web: ${checkoutUrlForOrder(order.id)}\n\n` : "") +
-    `Reply *paid* after M-Pesa (manual verify until Daraja is live).`
+    `💳 *${ref}* — *${priceLine}*${shipBit}\n` +
+    `Pay Till *${till}* · account *${ref}*\n` +
+    `Then reply *paid*.` +
+    (order?.id ? `\n${checkoutUrlForOrder(order.id)}` : "")
   );
 }
 

@@ -101,23 +101,15 @@ export function prepaidOrderPlacedMessage({
   phone,
 }) {
   const total = Number(amountKes);
-  const item = Number(itemKes);
   const ship = Number(shippingKes);
   const priceLine = Number.isFinite(total) ? `KES ${total.toLocaleString()}` : "—";
-  const breakdown =
-    Number.isFinite(ship) && ship > 0 && Number.isFinite(item)
-      ? `Item KES ${item.toLocaleString()} + shipping KES ${ship.toLocaleString()} = *${priceLine}*\n`
-      : `💰 *${priceLine}* — pay upfront (escrow protected)\n`;
+  const shipBit = Number.isFinite(ship) && ship > 0 ? ` (incl. delivery KES ${ship.toLocaleString()})` : "";
   return (
-    `Order received! 🎉\n` +
-    `Your order number is *${orderId}*.\n\n` +
-    `🛍️ *${productName}*\n` +
-    breakdown +
-    `📍 ${customerName} — ${location}\n` +
-    `📞 ${phone}\n\n` +
-    `🔒 *Next step:* complete M-Pesa payment to activate your order.\n` +
-    `We pack & dispatch only after payment is verified.\n` +
-    `Track anytime: type *track* or *${orderId}*. Thank you for shopping with Sokoni! 🙏`
+    `✅ *${orderId}*\n` +
+    `${productName}\n` +
+    `*${priceLine}*${shipBit}\n` +
+    `${customerName} · ${location}\n` +
+    `${phone}`
   );
 }
 
@@ -128,14 +120,13 @@ export function orderConfirmedMessage(args) {
 
 export function howItWorksMessage() {
   return (
-    `*How Sokoni Mall works* 🛍️\n\n` +
-    `1️⃣ Chat us on WhatsApp (${formatPhoneDisplay()}) or browse sokonimall.com.\n` +
-    `2️⃣ Our AI finds products from our *prepaid* local catalog.\n` +
-    `3️⃣ Reply *1* to order — send name, location & phone in one message.\n` +
-    `4️⃣ *Pay upfront:* M-Pesa to Till *${till()}* (escrow held until delivery). Daraja STK push coming soon.\n` +
-    `5️⃣ Track with your *SKN-####* / *SKN-####-n* (or older *SK-####*) anytime.\n\n` +
-    `${config.store.deliveryNote}\n\n` +
-    `Type *menu* anytime to start again.`
+    `*How Sokoni works*\n\n` +
+    `1. Browse WhatsApp or sokonimall.com\n` +
+    `2. Reply *1* to order\n` +
+    `3. Send county → confirm fee → name + phone\n` +
+    `4. Pay M-Pesa (escrow)\n` +
+    `5. Track with *SKN-####*\n\n` +
+    `Type *menu* anytime.`
   );
 }
 
