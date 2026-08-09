@@ -97,7 +97,13 @@ function toPublic(product) {
       ...(product.tags?.length ? { tags: product.tags } : {}),
       ...(product.description ? { description: product.description } : {}),
       ...(product.shopHandle || product.sellerHandle
-        ? { shopHandle: product.shopHandle || product.sellerHandle, sellerHandle: product.sellerHandle || product.shopHandle }
+        ? {
+            shopHandle: product.shopHandle || product.sellerHandle,
+            sellerHandle: product.sellerHandle || product.shopHandle,
+            ...(product.source && product.source !== "Sokoni"
+              ? { shopName: product.source }
+              : {}),
+          }
         : {}),
     };
   }

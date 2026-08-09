@@ -31,13 +31,28 @@
       .toLowerCase();
   }
 
+  function slugFromSource(raw) {
+    return String(raw || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 40);
+  }
+
   function sellerHandle(product) {
-    return normalizeHandle(
+    const direct = normalizeHandle(
       product?.sellerHandle ||
         product?.shopHandle ||
         product?.seller?.handle ||
         product?.handle
     );
+    if (direct) return direct;
+    // Fallback so shops don't vanish when a listing forgot shopHandle
+    const fromSource = slugFromSource(product?.source);
+    if (fromSource && fromSource !== "sokoni") return fromSource;
+    return "";
   }
 
   function sellerName(product) {
@@ -46,6 +61,7 @@
       product?.seller?.shopName ||
       product?.sellerName ||
       product?.seller?.name ||
+      (product?.source && product.source !== "Sokoni" ? product.source : "") ||
       ""
     );
   }

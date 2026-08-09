@@ -486,11 +486,26 @@ async function buildProduct(supplier, enriched, media, productId) {
     reviews: 0,
     source: supplier.businessName,
     supplierId: supplier.id,
-    shopHandle:
-      String(supplier.shopHandle || supplier.businessName || "")
-        .replace(/^@+/, "")
-        .trim()
-        .toLowerCase() || undefined,
+    shopHandle: (() => {
+      const raw = String(supplier.shopHandle || "").replace(/^@+/, "").trim();
+      if (raw) return raw.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_|_$/g, "");
+      const fromName = String(supplier.businessName || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 40);
+      return fromName || undefined;
+    })(),
+    sellerHandle: (() => {
+      const raw = String(supplier.shopHandle || "").replace(/^@+/, "").trim();
+      if (raw) return raw.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_|_$/g, "");
+      const fromName = String(supplier.businessName || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 40);
+      return fromName || undefined;
+    })(),
     sellerPhone: supplier.phone || undefined,
     emoji: CATEGORY_EMOJI[enriched.category] || "🛍️",
     tags,
