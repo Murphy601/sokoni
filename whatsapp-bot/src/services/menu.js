@@ -870,14 +870,21 @@ export async function startPrepaidOrder(to, productId, { offerId = null, totalsO
 
 /** Handle messages while customer is mid-order (before confirm). */
 export async function tryHandlePendingOrder(to, text) {
+  const raw = String(text || "");
+  const lower = raw.trim().toLowerCase();
+
+  // Blank / media-only messages are not delivery answers — let photo match (etc.) run.
+  // Still allow cancel when they typed it.
+  const hasTypedAnswer = Boolean(raw.trim());
+
   const pendingCart = getPendingCart(to);
   if (pendingCart?.lines?.length) {
-    const lower = text.toLowerCase();
     if (/^(cancel|stop|nevermind|abort)(\s+order)?$/i.test(lower) || /cancel order/i.test(lower)) {
       clearPendingCart(to);
       await sendText(to, "Cart cancelled. Type *menu*.");
       return true;
     }
+    if (!hasTypedAnswer) return false;
     const parsed = parseDeliveryDetails(text);
     if (!parsed) {
       await sendText(
@@ -893,13 +900,13 @@ export async function tryHandlePendingOrder(to, text) {
   const pending = getPendingOrder(to);
   if (!pending) return false;
 
-  const lower = String(text || "").trim().toLowerCase();
-
   if (/^(cancel|stop|nevermind|abort)(\s+order)?$/i.test(lower) || /cancel order/i.test(lower)) {
     clearPendingOrder(to);
     await sendText(to, "Cancelled. Type *menu*.");
     return true;
   }
+
+  if (!hasTypedAnswer) return false;
 
   // Legacy pending orders without step → start at location
   const step = pending.step || ORDER_STEPS.LOCATION;
