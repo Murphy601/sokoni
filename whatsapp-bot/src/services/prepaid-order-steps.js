@@ -179,7 +179,7 @@ export function contactPrompt() {
   return (
     `Your details for delivery + M-Pesa:\n` +
     `Reply: *First Last, 07xxxxxxxx*\n` +
-    `_e.g. Peter Mwangi, 0757764009_`
+    `_e.g. Jane Wanjiru, 0712345678_`
   );
 }
 
