@@ -554,6 +554,11 @@ function orderTransactionFeeKes(order) {
   return Number.isFinite(stored) && stored > 0 ? stored : 0;
 }
 
+function orderShippingCommissionKes(order) {
+  const stored = Math.round(Number(order?.shippingCommissionKes));
+  return Number.isFinite(stored) && stored > 0 ? stored : 0;
+}
+
 function commissionFeeStatus(order) {
   const escrow = String(order?.escrowStatus || "").toLowerCase();
   if (escrow === "refunded" || order?.refundPendingManual || order?.status === "cancelled") {
@@ -584,6 +589,9 @@ function summarizeCommissionRow(order) {
   const feeStatus = commissionFeeStatus(order);
   const buyerTotal = orderBuyerTotal(order);
   const sellerPayout = resolveSellerPayoutKes(order) || 0;
+  const platformFeeKes = orderPlatformFeeKes(order);
+  const transactionFeeKes = orderTransactionFeeKes(order);
+  const shippingCommissionKes = orderShippingCommissionKes(order);
   return {
     orderId: order.id,
     productName: order.productName || null,
@@ -591,8 +599,10 @@ function summarizeCommissionRow(order) {
     hub: orderHubLabel(order),
     buyerTotalKes: buyerTotal,
     sellerPayoutKes: sellerPayout,
-    platformFeeKes: orderPlatformFeeKes(order),
-    transactionFeeKes: orderTransactionFeeKes(order),
+    platformFeeKes,
+    shippingCommissionKes,
+    transactionFeeKes,
+    platformRetainKes: platformFeeKes + transactionFeeKes + shippingCommissionKes,
     escrowStatus: order.escrowStatus || null,
     feeStatus,
     paidAt: order.paidAt || null,
@@ -614,10 +624,13 @@ export function getPlatformCommissions({ days = 30, limit = 80, status = "all" }
 
   const totals = {
     earnedPlatformFeeKes: 0,
+    earnedShippingCommissionKes: 0,
     earnedTransactionFeeKes: 0,
     heldPlatformFeeKes: 0,
+    heldShippingCommissionKes: 0,
     heldTransactionFeeKes: 0,
     refundedPlatformFeeKes: 0,
+    refundedShippingCommissionKes: 0,
     earnedCount: 0,
     heldCount: 0,
     refundedCount: 0,
@@ -634,14 +647,17 @@ export function getPlatformCommissions({ days = 30, limit = 80, status = "all" }
 
     const platformFeeKes = orderPlatformFeeKes(order);
     const transactionFeeKes = orderTransactionFeeKes(order);
+    const shippingCommissionKes = orderShippingCommissionKes(order);
+    const retained = platformFeeKes + transactionFeeKes + shippingCommissionKes;
     const earnedAt = commissionEarnedAt(order);
     const paidAt = order.paidAt || order.createdAt || 0;
 
     if (feeStatus === "earned") {
-      totals.earnedAllTimeKes += platformFeeKes;
+      totals.earnedAllTimeKes += retained;
       totals.earnedAllTimeCount += 1;
       if (!earnedAt || earnedAt >= since) {
         totals.earnedPlatformFeeKes += platformFeeKes;
+        totals.earnedShippingCommissionKes += shippingCommissionKes;
         totals.earnedTransactionFeeKes += transactionFeeKes;
         totals.earnedCount += 1;
         if (statusFilter === "all" || statusFilter === "earned") {
@@ -653,6 +669,7 @@ export function getPlatformCommissions({ days = 30, limit = 80, status = "all" }
 
     if (feeStatus === "held") {
       totals.heldPlatformFeeKes += platformFeeKes;
+      totals.heldShippingCommissionKes += shippingCommissionKes;
       totals.heldTransactionFeeKes += transactionFeeKes;
       totals.heldCount += 1;
       if (statusFilter === "all" || statusFilter === "held") {
@@ -666,6 +683,7 @@ export function getPlatformCommissions({ days = 30, limit = 80, status = "all" }
       const refundTs = order.refundedAt || paidAt || 0;
       if (refundTs && refundTs < since) continue;
       totals.refundedPlatformFeeKes += platformFeeKes;
+      totals.refundedShippingCommissionKes += shippingCommissionKes;
       totals.refundedCount += 1;
       if (statusFilter === "all" || statusFilter === "refunded") {
         rows.push(summarizeCommissionRow(order));
@@ -689,7 +707,7 @@ export function getPlatformCommissions({ days = 30, limit = 80, status = "all" }
     since,
     status: statusFilter,
     note:
-      "Sokoni commission is 10% (platformFeeKes) kept when escrow is released. Held fees are still in the till until Release. Refunded fees are not earned.",
+      "Sokoni keeps 10% item fee + banded M-Pesa txn fee + 5% shipping commission when escrow is released. Buyer still pays the full shipping rate; seller B2C is item net + 95% shipping. Held fees stay in the till until Release.",
     totals,
     fees: rows.slice(0, safeLimit),
     generatedAt: Date.now(),

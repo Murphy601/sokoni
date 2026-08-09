@@ -946,7 +946,11 @@ export async function tryHandlePendingOrder(to, text) {
       shippingKes: quote.shippingKes,
       totalKes: quote.totalKes,
       platformFeeKes: quote.platformFeeKes,
+      shippingCommissionKes: quote.shippingCommissionKes ?? 0,
+      transactionFeeKes: quote.transactionFeeKes ?? 0,
       sellerNetKes: quote.sellerNetKes,
+      sellerPayoutKes: quote.sellerPayoutKes,
+      shippingRecipient: "seller",
     });
     await sendText(to, feeBreakdownPrompt(pending.name, quote));
     return true;
@@ -1265,11 +1269,13 @@ export async function confirmPrepaidOrder(to, parsed) {
         shippingKes: quote.shippingKes,
         totalKes: quote.totalKes,
         platformFeeKes: quote.platformFeeKes,
+        shippingCommissionKes: quote.shippingCommissionKes ?? 0,
         transactionFeeKes: quote.transactionFeeKes,
         sellerNetKes: quote.sellerNetKes,
         sellerPayoutKes: quote.sellerPayoutKes,
         freeShipping: quote.freeShipping,
         deliveryMethod: "seller_express",
+        shippingRecipient: "seller",
       }
     : pending.offerId && pending.totalKes != null
       ? {

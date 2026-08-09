@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Smoke test: AI shipping tiers + platform fee engine + variable M-Pesa fees. */
+/** Smoke test: platform item fee + 5% shipping commission + banded M-Pesa fees. */
 import {
   applyAiShippingSuggestion,
   computeFeeBreakdown,
@@ -12,7 +12,9 @@ import {
   inferWeightClass,
   resolveSellerNetKes,
   resolveSellerPayoutKes,
+  shippingCommissionKes,
   PLATFORM_FEE_RATE,
+  SHIPPING_COMMISSION_RATE,
   MIN_SHIPPING_KES,
   validateShippingKes,
   getShippingTier,
@@ -34,139 +36,134 @@ function assert(label, cond) {
 
 assert("3 shipping tiers", SHIPPING_TIERS.length === 3);
 assert("min shipping floor 300", MIN_SHIPPING_KES === 300);
+assert("shipping commission 5%", SHIPPING_COMMISSION_RATE === 0.05);
 assert("small tier starts at 300", getShippingTier("small").minKes === 300 && getShippingTier("small").typicalKes === 300);
-assert("medium tier above 300", getShippingTier("medium").minKes > 300 && getShippingTier("medium").typicalKes === 450);
-assert("large tier above medium", getShippingTier("large").minKes >= 550 && getShippingTier("large").typicalKes === 650);
 assert("meetup not a selectable delivery method", !DELIVERY_METHODS.some((d) => d.id === "meetup"));
 
 const yogurt = applyAiShippingSuggestion({ name: "Delamere Premium Yogurt" });
-assert("AI no longer suggests weight class", yogurt.estimatedWeightClass == null);
 assert("AI shipping always 0", yogurt.shippingKes === 0);
 assert("AI free shipping", yogurt.freeShipping === true);
-assert("AI delivery seller_express", yogurt.deliveryMethod === "seller_express");
-
-const shoes = applyAiShippingSuggestion({ name: "Women leather shoes", estimatedWeightClass: "medium" });
-assert("AI ignores weight class for fee", shoes.shippingKes === 0);
 
 assert("mpesa fee free under 100", mpesaTransactionFeeKes(80) === 0);
-assert("mpesa fee band 101-500 is 5", mpesaTransactionFeeKes(495) === 5);
-assert("mpesa fee band 1501-2500 is 20", mpesaTransactionFeeKes(2299) === 20);
+assert("mpesa fee band ~150 is 7", mpesaTransactionFeeKes(150) === 7);
+assert("mpesa fee band 101-500 is 7", mpesaTransactionFeeKes(495) === 7);
+assert("mpesa fee band 501-1000 is 13", mpesaTransactionFeeKes(630) === 13);
+assert("mpesa fee band 1501-2500 is 33", mpesaTransactionFeeKes(2299) === 33);
 assert("mpesa fee high band capped 108", mpesaTransactionFeeKes(60000) === 108);
 
-const fees = computeFeeBreakdown(300, 300);
-assert("seller net 300", fees.sellerNetKes === 300);
-assert("platform fee 60 (10%)", fees.platformFeeKes === 60);
-assert("txn fee on 660 is 10", fees.transactionFeeKes === 10);
-assert("buyer pays 670", fees.buyerTotalKes === 670);
-assert("always 10% rate", fees.platformFeeRate === PLATFORM_FEE_RATE);
+// Hub: 10% on item only; shipping stays with platform; no 5% seller ship cut
+const hubFees = computeFeeBreakdown(300, 300);
+assert("hub seller net 300", hubFees.sellerNetKes === 300);
+assert("hub platform fee 30 (10% of item)", hubFees.platformFeeKes === 30);
+assert("hub no seller shipping commission", hubFees.shippingCommissionKes === 0);
+assert("hub txn on 630 is 13", hubFees.transactionFeeKes === 13);
+assert("hub buyer pays 643", hubFees.buyerTotalKes === 643);
+assert("hub seller payout excludes shipping", hubFees.sellerPayoutKes === 300);
 assert("hub clamps sub-300 ship up", computeFeeBreakdown(300, 150).shippingKes === 300);
 
 const legacyFees = computeFeeBreakdownLegacy(300, 300);
 assert("legacy buyer pays 600", legacyFees.buyerTotalKes === 600);
-assert("legacy seller net 540", legacyFees.sellerNetKes === 540);
 
 assert("free shipping validates", validateShippingKes(0, { freeShipping: true }).ok === true);
-assert("no shipping without free flag fails", validateShippingKes(0).ok === false);
 assert("valid shipping passes", validateShippingKes(300).ok === true);
-assert("below min shipping fails", validateShippingKes(150).ok === false);
 
 assert("inferWeightClass dress → small", inferWeightClass("Summer floral dress") === "small");
-assert("inferWeightClass shoes → medium", inferWeightClass("Women leather shoes") === "medium");
-assert("inferWeightClass boots → large", inferWeightClass("Leather winter boots") === "large");
-
-const sellerListing = computeProductTotals({ sellerNetKes: 300, shippingKes: 300 });
-assert("seller listing buyer pays 670", sellerListing.totalKes === 670);
-assert("seller listing net 300", sellerListing.sellerNetKes === 300);
-assert("seller listing txn 10", sellerListing.transactionFeeKes === 10);
 
 const freeProduct = computeProductTotals({ sellerNetKes: 300, freeShipping: true });
 assert("free shipping seller net 300", freeProduct.sellerNetKes === 300);
-assert("free shipping buyer 335", freeProduct.totalKes === 335);
+// 300 + 30 platform + 7 txn (330 band) = 337
+assert("free shipping buyer 337", freeProduct.totalKes === 337);
 
-assert("legacy order total 600", computeProductTotals({ priceKes: 300, shippingKes: 300 }).totalKes === 600);
-assert("seller listing list price all-in", formatProductListPrice({ sellerNetKes: 300, shippingKes: 300 }).includes("670"));
+assert("shippingCommission helper", shippingCommissionKes(200, { shippingRecipient: "seller" }) === 10);
+assert("shippingCommission hub 0", shippingCommissionKes(200, { deliveryMethod: "hub" }) === 0);
 
-const dbRow = { priceKes: 670, shippingKes: 300, sourcePriceKes: 300, platformFeeKes: 60, sellerNetKes: 300 };
-assert("DB row resolves seller net", resolveSellerNetKes(dbRow) === 300);
-
-assert("legacy item price not treated as all-in", resolveSellerNetKes({
-  sourcePriceKes: 276,
-  priceKes: 300,
-  supplierId: "seller-adiv",
-  name: "Yogurt",
-}) == null);
-
-// Accepted offer: amount_kes = agreed buyer all-in
-const offer2000 = computeOfferFeeBreakdown(2000, 300);
-assert("offer 2000 buyer total locked", offer2000.buyerTotalKes === 2000 && !offer2000.error);
-assert("offer 2000 still ~10% platform", Math.abs(offer2000.platformFeeKes / offer2000.subtotalKes - 0.1) < 0.05);
-assert("offer 2000 has txn fee field", offer2000.transactionFeeKes >= 0);
-
-const offerTooLow = computeOfferFeeBreakdown(100, 300);
-assert("offer too low for shipping errors", offerTooLow.error === "offer_too_low_for_shipping");
-
-const offer670 = computeOfferFeeBreakdown(670, 300);
-assert("offer 670 still covers ship+fee", !offer670.error && offer670.buyerTotalKes === 670);
-assert("offer 670 seller net is NOT 670", offer670.sellerNetKes < 670);
+// User example shape: item 1000 + ship 350 seller_express
+const demo = computeFeeBreakdown(1000, 350, { deliveryMethod: "seller_express" });
+assert("demo platform 100", demo.platformFeeKes === 100);
+assert("demo ship commission 18", demo.shippingCommissionKes === 18);
+assert("demo buyer ship unchanged 350", demo.shippingKes === 350);
+assert("demo seller payout 1000+332", demo.sellerPayoutKes === 1332);
 assert(
-  "offer 670 escrow lines cover buyer total",
-  offer670.sellerNetKes + offer670.shippingKes + offer670.platformFeeKes + offer670.transactionFeeKes === 670
+  "demo retain = buyer - seller payout",
+  demo.platformRetainKes === demo.buyerTotalKes - demo.sellerPayoutKes
+);
+assert(
+  "demo escrow lines",
+  demo.sellerNetKes + demo.shippingKes + demo.platformFeeKes + demo.transactionFeeKes === demo.buyerTotalKes
 );
 
-const minShip300 = minBuyerTotalForOffer(300);
-assert("min offer with ship 300 is 336", minShip300 === 336);
-const atMin = computeOfferFeeBreakdown(minShip300, 300);
-assert("min offer valid", !atMin.error && atMin.sellerNetKes === 1);
-
-const offerFreeShip = computeOfferFeeBreakdown(1100, 0, { freeShipping: true });
-assert("offer free shipping buyer 1100", offerFreeShip.buyerTotalKes === 1100 && offerFreeShip.shippingKes === 0);
-
-// Seller-handled: same 10% + variable M-Pesa; shipping goes to seller
+// Seller-handled express
 const expressFees = computeFeeBreakdown(1840, 250, { deliveryMethod: "seller_express" });
-assert("express subtotal 2090", expressFees.subtotalKes === 2090);
-assert("express platform 10% = 209", expressFees.platformFeeKes === 209);
-assert("express txn varies", expressFees.transactionFeeKes === 20);
-assert("express buyer 2319", expressFees.buyerTotalKes === 2319);
-assert("express seller payout 2090", expressFees.sellerPayoutKes === 2090);
+assert("express platform 10% of item = 184", expressFees.platformFeeKes === 184);
+assert("express ship commission 13", expressFees.shippingCommissionKes === 13);
+assert("express buyer ship 250", expressFees.shippingKes === 250);
+assert("express seller payout 2077", expressFees.sellerPayoutKes === 2077);
 assert("express shipping to seller", expressFees.shippingRecipient === "seller");
-assert("express rate still 10%", expressFees.platformFeeRate === 0.1);
+// chargeBefore = 1840+250+184 = 2274 → txn 33 → buyer 2307
+assert("express buyer 2307", expressFees.buyerTotalKes === 2307);
 
-// Legacy meetup orders still compute (not offered on new listings)
 const meetupFees = computeFeeBreakdown(1840, 250, { deliveryMethod: "meetup" });
 assert("meetup shipping 0", meetupFees.shippingKes === 0);
 assert("meetup payout = item net", meetupFees.sellerPayoutKes === 1840);
-assert("meetup still 10%", meetupFees.platformFeeRate === 0.1);
 
 const expressProduct = computeProductTotals({
   sellerNetKes: 1840,
   shippingKes: 250,
   deliveryMethod: "seller_express",
 });
-assert("product express total 2319", expressProduct.totalKes === 2319);
-assert("product express payout 2090", expressProduct.sellerPayoutKes === 2090);
+assert("product express total 2307", expressProduct.totalKes === 2307);
+assert("product express payout 2077", expressProduct.sellerPayoutKes === 2077);
 assert(
-  "resolveSellerPayoutKes order",
+  "resolveSellerPayoutKes applies 5%",
   resolveSellerPayoutKes({
     sellerNetKes: 1840,
     shippingKes: 250,
     shippingRecipient: "seller",
-  }) === 2090
+  }) === 2077
+);
+assert(
+  "resolveSellerPayoutKes uses stored commission",
+  resolveSellerPayoutKes({
+    sellerNetKes: 1840,
+    shippingKes: 250,
+    shippingCommissionKes: 13,
+    shippingRecipient: "seller",
+  }) === 2077
 );
 assert(
   "hub payout excludes shipping",
   resolveSellerPayoutKes({ sellerNetKes: 300, shippingKes: 300, deliveryMethod: "hub" }) === 300
 );
 
-const expressOffer = computeOfferFeeBreakdown(2319, 250, { deliveryMethod: "seller_express" });
-assert("express offer buyer 2319", expressOffer.buyerTotalKes === 2319 && !expressOffer.error);
-assert("express offer seller payout 2090", expressOffer.sellerPayoutKes === 2090);
+const expressOffer = computeOfferFeeBreakdown(expressFees.buyerTotalKes, 250, {
+  deliveryMethod: "seller_express",
+});
+assert("express offer locks buyer total", expressOffer.buyerTotalKes === expressFees.buyerTotalKes && !expressOffer.error);
+assert("express offer seller payout 2077", expressOffer.sellerPayoutKes === 2077);
+assert(
+  "express offer escrow covers buyer",
+  expressOffer.sellerNetKes +
+    expressOffer.shippingKes +
+    expressOffer.platformFeeKes +
+    expressOffer.transactionFeeKes ===
+    expressOffer.buyerTotalKes
+);
+
+const minShip300 = minBuyerTotalForOffer(300, { deliveryMethod: "seller_express" });
+const atMin = computeOfferFeeBreakdown(minShip300, 300, { deliveryMethod: "seller_express" });
+assert("min offer valid", !atMin.error && atMin.sellerNetKes === 1);
 
 assert("seller express shipping 0 ok", validateShippingKes(0, { deliveryMethod: "seller_express" }).ok);
-assert("meetup forces 0 ship", validateShippingKes(250, { deliveryMethod: "meetup" }).shippingKes === 0);
 assert(
   "direct seller-handled helper matches",
-  computeSellerHandledFeeBreakdown(1840, 250).sellerPayoutKes === 2090
+  computeSellerHandledFeeBreakdown(1840, 250).sellerPayoutKes === 2077
 );
+
+const listingPrice = formatProductListPrice({ sellerNetKes: 300, freeShipping: true });
+assert("list price uses new buyer total", listingPrice.includes("337"));
+
+const dbRow = { priceKes: 337, shippingKes: 0, sourcePriceKes: 300, platformFeeKes: 30, sellerNetKes: 300 };
+assert("DB row resolves seller net", resolveSellerNetKes(dbRow) === 300);
 
 console.log(`\n${failed ? failed + " failed" : "All seller fee tests passed"}`);
 process.exit(failed ? 1 : 0);

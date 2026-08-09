@@ -141,6 +141,7 @@ export function quoteShippingForPending(pendingOrProduct, location) {
     itemKes: fees.itemKes,
     sellerNetKes: fees.sellerNetKes,
     platformFeeKes: fees.platformFeeKes,
+    shippingCommissionKes: fees.shippingCommissionKes,
     transactionFeeKes: fees.transactionFeeKes,
     sellerPayoutKes: fees.sellerPayoutKes,
     totalKes: fees.buyerTotalKes,

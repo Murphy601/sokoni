@@ -282,9 +282,18 @@
             Free shipping is on — buyers won’t be charged a delivery fee. Make sure your product price covers courier cost.
           </p>
 
+          <div id="vsm-ship-payout" class="rounded-2xl border border-zinc-700 bg-black/50 px-4 py-4 space-y-2">
+            <p class="text-sm font-semibold text-white">Your shipping payout breakdown</p>
+            <p class="text-xs text-zinc-400 leading-relaxed">
+              Buyers pay the exact rate you set. Sokoni keeps a <strong class="text-zinc-200">5% service fee</strong> on shipping
+              (logistics processing). You receive <strong class="text-zinc-200">95%</strong> of that shipping fee with your item payout after delivery.
+            </p>
+            <dl id="vsm-ship-payout-lines" class="text-sm text-zinc-300 space-y-1.5 pt-1"></dl>
+          </div>
+
           <div id="vsm-coverage" class="rounded-2xl border border-zinc-700 bg-black/50 px-4 py-4 space-y-2">
             <p class="text-sm font-semibold text-white">Nationwide coverage summary</p>
-            <p class="text-xs text-zinc-500">All 47 counties included in one save.</p>
+            <p class="text-xs text-zinc-500">Buyer pays your rate · you receive 95% of shipping.</p>
             <ul id="vsm-coverage-list" class="space-y-1.5 text-sm text-zinc-300"></ul>
           </div>
 
@@ -431,9 +440,45 @@
     syncSaveButton();
   }
 
+  const SHIPPING_COMMISSION_RATE = 0.05;
+
+  function netShipPayout(buyerRate) {
+    const rate = Math.max(0, Math.round(Number(buyerRate) || 0));
+    const fee = Math.round(rate * SHIPPING_COMMISSION_RATE);
+    return { rate, fee, net: Math.max(0, rate - fee) };
+  }
+
+  function shipLine(label, buyerRate) {
+    const { rate, net } = netShipPayout(buyerRate);
+    return `✓ ${label}: buyer pays <strong class="text-white">KES ${rate.toLocaleString()}</strong> · you receive <strong class="text-emerald-300">KES ${net.toLocaleString()}</strong>`;
+  }
+
+  function updateShipPayoutBreakdown() {
+    const box = document.getElementById("vsm-ship-payout");
+    const lines = document.getElementById("vsm-ship-payout-lines");
+    if (!box || !lines) return;
+    const mode = selectedMode();
+    if (mode === "FREE_SHIPPING") {
+      box.classList.add("hidden");
+      return;
+    }
+    box.classList.remove("hidden");
+    const sample =
+      mode === "SIMPLE_FLAT"
+        ? numVal("vsm-flat-local", DEFAULTS.flatLocal)
+        : numVal("vsm-t1", DEFAULTS.tier1);
+    const { rate, fee, net } = netShipPayout(sample);
+    lines.innerHTML = `
+      <div class="flex justify-between gap-3"><dt>Selected sample rate</dt><dd class="text-white font-medium">KES ${rate.toLocaleString()}</dd></div>
+      <div class="flex justify-between gap-3"><dt>Buyer pays at checkout</dt><dd class="text-white font-medium">KES ${rate.toLocaleString()}</dd></div>
+      <div class="flex justify-between gap-3"><dt>Sokoni platform fee (5%)</dt><dd class="text-zinc-400">− KES ${fee.toLocaleString()}</dd></div>
+      <div class="flex justify-between gap-3 border-t border-zinc-800 pt-2"><dt class="font-semibold text-white">Net shipping payout to you</dt><dd class="font-semibold text-emerald-300">KES ${net.toLocaleString()}</dd></div>`;
+  }
+
   function updateCoverageSummary() {
     const list = document.getElementById("vsm-coverage-list");
     if (!list) return;
+    updateShipPayoutBreakdown();
     const mode = selectedMode();
     if (mode === "FREE_SHIPPING") {
       list.innerHTML = `<li class="text-emerald-300">✓ Free shipping nationwide — buyers pay KES 0 delivery</li>`;
@@ -443,8 +488,8 @@
       const local = numVal("vsm-flat-local", DEFAULTS.flatLocal);
       const rest = numVal("vsm-flat-up", DEFAULTS.flatUpcountry);
       list.innerHTML = `
-        <li>✓ Local / Nairobi &amp; nearby: <strong class="text-white">KES ${local.toLocaleString()}</strong></li>
-        <li>✓ Rest of Kenya: <strong class="text-white">KES ${rest.toLocaleString()}</strong></li>`;
+        <li>${shipLine("Local / Nairobi &amp; nearby", local)}</li>
+        <li>${shipLine("Rest of Kenya", rest)}</li>`;
       return;
     }
     const t1 = numVal("vsm-t1", DEFAULTS.tier1);
@@ -452,10 +497,10 @@
     const t3 = numVal("vsm-t3", DEFAULTS.tier3);
     const t4 = numVal("vsm-t4", DEFAULTS.tier4);
     list.innerHTML = `
-      <li>✓ ${escapeHtml(TIER_COPY[1].summary)}: <strong class="text-white">KES ${t1.toLocaleString()}</strong></li>
-      <li>✓ ${escapeHtml(TIER_COPY[2].summary)}: <strong class="text-white">KES ${t2.toLocaleString()}</strong></li>
-      <li>✓ ${escapeHtml(TIER_COPY[3].summary)}: <strong class="text-white">KES ${t3.toLocaleString()}</strong></li>
-      <li>✓ ${escapeHtml(TIER_COPY[4].summary)}: <strong class="text-white">KES ${t4.toLocaleString()}</strong></li>`;
+      <li>${shipLine(escapeHtml(TIER_COPY[1].summary), t1)}</li>
+      <li>${shipLine(escapeHtml(TIER_COPY[2].summary), t2)}</li>
+      <li>${shipLine(escapeHtml(TIER_COPY[3].summary), t3)}</li>
+      <li>${shipLine(escapeHtml(TIER_COPY[4].summary), t4)}</li>`;
   }
 
   function setMode(mode) {

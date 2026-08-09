@@ -184,6 +184,7 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
   const totalKes = totals.totalKes;
   const platformFeeKes = totals.platformFeeKes;
   const transactionFeeKes = totals.transactionFeeKes ?? 0;
+  const shippingCommissionKes = totals.shippingCommissionKes ?? 0;
   const sellerNetKes = totals.sellerNetKes;
   const sellerPayoutKes = totals.sellerPayoutKes ?? resolveSellerPayoutKes({ ...totals, ...product });
   const deliveryMethod = totals.deliveryMethod || product.deliveryMethod || "hub";
@@ -205,6 +206,7 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     shippingKes,
     totalKes,
     platformFeeKes,
+    shippingCommissionKes,
     transactionFeeKes,
     sellerNetKes,
     sellerPayoutKes,
