@@ -13,17 +13,10 @@ export function formatWhatsAppLink() {
   return `https://wa.me/${n}`;
 }
 
-function till() {
-  return config.store.mpesaTill;
-}
-
-function tillName() {
-  return config.store.mpesaTillName;
-}
-
+/** Customer-facing payment line — never expose till numbers or till account names. */
 export function tillExplainLine() {
   return (
-    `🏢 *M-Pesa Till:* ${till()} — *${tillName()}*\n` +
+    `💳 *Pay:* M-Pesa STK on WhatsApp / sokonimall.com\n` +
     `📞 *WhatsApp / calls:* ${formatPhoneDisplay()}`
   );
 }
@@ -31,16 +24,16 @@ export function tillExplainLine() {
 export function paymentTrustDisclosure() {
   return (
     `Countrywide *100% prepaid* checkout — funds held in Sokoni escrow until delivery is confirmed.\n` +
-    `Pay via M-Pesa STK push (Safaricom Daraja) or manually to Buy Goods Till *${till()}* (*${tillName()}*).\n\n` +
+    `Pay via *M-Pesa STK push* on WhatsApp or the website (PIN on your phone).\n\n` +
     `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
     `✅ *Verify:* call or WhatsApp us before paying to confirm your SKN-#### (or older SK-####) order number.\n` +
-    `_No pay-on-delivery. No COD._`
+    `_No pay-on-delivery. No COD. Never pay riders or personal numbers._`
   );
 }
 
 export function founderLedSafetyBlock() {
   return (
-    `🛡️ *Sokoni Mall* — founded by *${tillName()}*\n` +
+    `🛡️ *Sokoni Mall* — Kenya prepaid marketplace\n` +
     `We're a young, growing Kenyan business onboarding our first customers.\n\n` +
     paymentTrustDisclosure()
   );
@@ -73,7 +66,7 @@ export function welcomeBackMessage(customerName = "") {
     `Great to see you again — our catalog has fresh local deals.\n\n` +
     `🛡️ *Your safety checklist:*\n` +
     `• 100% prepaid — escrow until delivery confirmed\n` +
-    `• Official checkout: Paybill *${till()}* (*${tillName()}*)\n` +
+    `• Official checkout: M-Pesa STK on WhatsApp / the site\n` +
     `• ${offerLine("this week")}\n\n` +
     `What can our AI find for you today?`
   );
@@ -84,7 +77,7 @@ export function broadcastReEngageMessage() {
     `Habari! It's the *Sokoni Mall* team 👋\n` +
     `We've upgraded our WhatsApp shopping assistant!\n\n` +
     `• 100% prepaid escrow — pay before dispatch\n` +
-    `• Till *${till()}* — *${tillName()}*\n` +
+    `• Pay via M-Pesa STK only — never to personal numbers\n` +
     `• ${offerLine()}\n\n` +
     `Text us what you need in English, Kiswahili, or Sheng! 👇`
   );
@@ -137,10 +130,9 @@ export function paymentVerificationPrompt(amountKes = null) {
     `Payment — prepaid escrow 🔑\n\n` +
     `Complete payment *before* we dispatch your order:\n\n` +
     amountLine +
-    `🏢 *Till:* ${till()}\n` +
-    `📛 *Name:* ${tillName()}\n\n` +
+    `💳 Complete *M-Pesa STK* (PIN on your phone) — funds stay in escrow until delivery.\n\n` +
     `✅ *Verify first:* WhatsApp ${formatPhoneDisplay()} to confirm your SKN-#### (or older SK-####) order number.\n` +
-    `After paying, paste your M-Pesa confirmation or reply *paid* with the transaction code. 🧾`
+    `If STK fails, reply *pay* to retry, or *paid* with your M-Pesa code. 🧾`
   );
 }
 
@@ -157,7 +149,7 @@ export function outOfOfficeMessage() {
     `🛑 *Human support & new dispatches:* our team rests overnight (9 PM–7:30 AM EAT). ` +
     `Human requests are prioritized from 7:30 AM.\n\n` +
     `⚠️ *Scam alert:* Sokoni will *never* ask for commitment or delivery fees upfront. ` +
-    `Only pay Till *${till()}* (*${tillName()}*) after you hold and inspect your item.\n\n` +
+    `Never pay riders or personal numbers — only M-Pesa STK through Sokoni.\n\n` +
     `Keep chatting with the AI — what can we look up for you? 👇`
   );
 }
@@ -170,7 +162,7 @@ export function humanHandoffAck(isAfterHours = false) {
     `You're connected with our team 👋\n` +
     `${hours}\n\n` +
     `Not just a bot — we're here to verify orders, answer payment questions, or help you shop with confidence.\n` +
-    `🛡️ Till *${till()}* (${tillName()}). Verify on ${formatPhoneDisplay()} before paying.\n` +
+    `🛡️ Pay only via M-Pesa STK through Sokoni. Verify on ${formatPhoneDisplay()} before paying.\n` +
     `Type *menu* anytime to return to the shopping bot.`
   );
 }
@@ -192,7 +184,7 @@ export function cartAbandonmentMessage({ productName }) {
     `Still interested in *${name}*? 🤔🛍️\n\n` +
     `Our AI noticed you were browsing but didn't finish ordering.\n\n` +
     `• No deposits upfront\n` +
-    `• Pay on delivery to Till *${till()}* (*${tillName()}*)\n` +
+    `• 100% prepaid escrow — M-Pesa STK before dispatch\n` +
     `• ${offerLine()}\n\n` +
     `Reply *Check Out* to continue, or *menu* to browse.`
   );
@@ -214,7 +206,7 @@ export function outForDeliveryMessage({ orderId, productName, customerName, ride
     (riderName ? `👤 Rider: ${riderName}\n` : "") +
     (riderPhone ? `📞 Rider phone: ${riderPhone}\n` : "") +
     (timeWindow ? `⏳ ETA: ${timeWindow}\n\n` : "\n") +
-    `🛡️ Inspect first, then pay Till *${till()}* (*${tillName()}*). No upfront fees!`
+    `🛡️ Order is prepaid via M-Pesa STK — inspect on arrival. Contact us if anything is wrong.`
   );
 }
 
@@ -256,11 +248,10 @@ export function mpesaTroubleshootMessage({ orderId, amountKes }) {
   return (
     `M-Pesa Transaction Error? Let's Fix It! 🛠️📱\n\n` +
     `Order *${orderId}* payment didn't go through — usually a quick network glitch.\n\n` +
-    `1️⃣ Confirm Paybill *${till()}* (name: *${tillName()}*)\n` +
-    `2️⃣ Try SIM Tool Kit: Lipa Na M-Pesa → Pay Bill → ${till()} (account = order id)\n` +
-    `3️⃣ Ensure balance covers *${priceLine}* plus Safaricom fees\n` +
-    `4️⃣ Show the rider any error message on screen\n\n` +
-    `Reply *paid* with your confirmation code once it goes through. 🙏`
+    `1️⃣ Reply *pay* to resend the M-Pesa STK prompt\n` +
+    `2️⃣ Ensure balance covers *${priceLine}* plus Safaricom fees\n` +
+    `3️⃣ Stay on network until PIN confirms\n\n` +
+    `Reply *paid* with your confirmation code if it went through another way. 🙏`
   );
 }
 
@@ -282,7 +273,7 @@ export function priceNegotiationMessage() {
     `💡 Save more today:\n` +
     `• ${offerLine()}\n` +
     `• Order 2+ of the same item — ask us about bundle pricing on WhatsApp\n\n` +
-    `🛡️ Zero deposits upfront. Pay Till *${till()}* only after inspection.\n` +
+    `🛡️ Pay only via M-Pesa STK through Sokoni — never to personal numbers.\n` +
     `Reply *YES* to apply *${PROMO_CODE}* (${OFFER_PERCENT}% off) to your order.`
   );
 }
@@ -295,7 +286,7 @@ export function referralProgramMessage({ referralCode = "" }) {
     `Invite friends to shop risk-free on Pay-on-Delivery:\n` +
     `1️⃣ Share: ${site}?ref=${code}\n` +
     `2️⃣ Friends get *${OFFER_PERCENT}% off* their first local order (code *${PROMO_CODE}*)\n` +
-    `3️⃣ You earn *${OFFER_PERCENT}% credit* on your next order when they pay via Till *${till()}*\n\n` +
+    `3️⃣ You earn *${OFFER_PERCENT}% credit* on your next order when they complete prepaid checkout\n\n` +
     `Let's build safer shopping together. 🚀`
   );
 }
@@ -306,7 +297,7 @@ export function vendorOnboardingMessage() {
     `Sell to thousands via our WhatsApp AI marketplace.\n\n` +
     `• Zero listing fees\n` +
     `• Customers order through Sokoni only\n` +
-    `• Pay-on-Delivery via Till *${till()}* — we remit your payout after delivery\n\n` +
+    `• Buyers pay prepaid escrow — we remit your payout after delivery\n\n` +
     `Reply with: *Company Name*, *Product Category*, and *Town/Location*.\n` +
     `Our vendor team responds within 24 hours. 🤝`
   );
@@ -320,7 +311,7 @@ export function proformaInvoiceMessage() {
     `• Physical/postal address\n` +
     `• Attention (Procurement/Finance)\n` +
     `• Email for the PDF\n\n` +
-    `Settlements reconcile via Till *${till()}* (*${tillName()}*).\n` +
+    `Settlements reconcile via Sokoni prepaid escrow.\n` +
     `Our finance desk emails your invoice within 30 minutes. 🧾`
   );
 }
@@ -330,7 +321,7 @@ export function giftWrapMessage() {
     `Sending a Gift or Surprise? 🎁💝\n\n` +
     `Yes — we can ship surprises countrywide with gift wrapping (KES 250 add-on).\n` +
     `Includes wrapping, ribbon, and a custom greeting card. Pricing hidden from recipient.\n\n` +
-    `🛡️ Surprise orders paid by sender: pay Till *${till()}* before dispatch.\n` +
+    `🛡️ Surprise orders paid by sender: complete M-Pesa STK before dispatch.\n` +
     `Recipient-paid surprises use standard Pay-on-Delivery.\n\n` +
     `Reply *WRAP* and your card message below! 👇`
   );
@@ -343,7 +334,7 @@ export function addressChangeMessage() {
     `• New Town/Area: e.g. Kilimani, Nairobi\n` +
     `• Landmark: e.g. Opposite Yaya Centre, House 4\n\n` +
     `⏳ Different zones may reschedule to tomorrow morning.\n` +
-    `🛡️ No rerouting fees. Pay only on delivery to Till *${till()}*.\n` +
+    `🛡️ No rerouting fees. Prepaid escrow still applies.\n` +
     `Type your new details below! 👇`
   );
 }
@@ -354,7 +345,7 @@ export function outOfZoneMessage() {
     `We can still ship via countrywide courier partners (G4S, Fargo, etc.).\n` +
     `• Package to your nearest hub — 2–3 business days outside Nairobi\n\n` +
     `Reply *SHIPPING* and our ops desk will quote delivery cost and collection point.\n` +
-    `Official Till remains *${till()}* (*${tillName()}*). Never pay unverified personal lines.`
+    `Pay only via Sokoni M-Pesa STK. Never pay unverified personal lines.`
   );
 }
 
@@ -374,7 +365,7 @@ export function weekendDeliveryMessage({ orderId }) {
     `Order *${orderId}* received — it's the weekend!\n` +
     `Reply *1* for weekend delivery (today/tomorrow)\n` +
     `Reply *2* for Monday office-hours delivery\n\n` +
-    `🛡️ Pay on delivery to Till *${till()}* either way. No upfront fees!`
+    `🛡️ Prepaid via M-Pesa STK either way — escrow until delivery.`
   );
 }
 
@@ -385,7 +376,7 @@ export function pickupReadyMessage({ orderId, stationName, hours, customerName }
     `📍 *${stationName || "Partner hub"}*\n` +
     `⏰ ${hours || "8:00 AM – 6:30 PM"}\n` +
     `⏳ Collect within 48 hours.\n\n` +
-    `🛡️ Inspect first, then pay Till *${till()}* (*${tillName()}*). No storage fees to agents.`
+    `🛡️ Prepaid via M-Pesa STK — inspect on pickup. No storage fees to agents.`
   );
 }
 
@@ -396,7 +387,7 @@ export function corporateBulkMessage() {
     `• Pro-forma invoices & delivery notes\n` +
     `• Split deliveries to multiple offices\n\n` +
     `Reply: *Company Name*, *Item*, *Quantity* for a quote within 30 minutes.\n` +
-    `Payments via Till *${till()}* (*${tillName()}*).`
+    `Payments via Sokoni M-Pesa STK (escrow).`
   );
 }
 
@@ -428,7 +419,7 @@ export function holidayHoursMessage() {
     `Our AI stays active 24/7 to browse and place orders.\n` +
     `🛵 Deliveries: 8:00 AM – 2:00 PM on the holiday; after 2 PM → next morning.\n` +
     `👥 Human desk: closed on the holiday.\n\n` +
-    `🛡️ Zero deposits upfront. Pay Till *${till()}* after inspection. Happy shopping! 🚀`
+    `🛡️ Prepaid via M-Pesa STK only — never pay personal numbers. Happy shopping! 🚀`
   );
 }
 
@@ -437,7 +428,7 @@ export function weatherAdvisoryMessage({ orderId }) {
     `Weather Advisory 🌧️🛵\n\n` +
     `Order *${orderId}* may be delayed due to heavy rain / poor roads in your area.\n` +
     `Rider safety first — your package is on the way carefully.\n\n` +
-    `🛡️ No upfront deposits regardless of weather. Pay Till *${till()}* after inspection. 🙏`
+    `🛡️ Prepaid escrow still holds — never pay riders or personal numbers. 🙏`
   );
 }
 
@@ -446,7 +437,7 @@ export function offlineTrackingMessage() {
     `Tracking Under Maintenance 🛠️📊\n\n` +
     `Our tracking database is briefly upgrading. Your package is safe and moving.\n\n` +
     `Reply *HUMAN* for a manual status lookup.\n` +
-    `🛡️ Zero deposits upfront — pay Till *${till()}* only on delivery.`
+    `🛡️ Prepaid via M-Pesa STK — never pay outside Sokoni checkout.`
   );
 }
 
@@ -454,10 +445,9 @@ export function scamWarningMessage() {
   return (
     `🛡️ *Sokoni Anti-Scam Reminder*\n\n` +
     `• Official WhatsApp: *${formatPhoneDisplay()}*\n` +
-    `• Official Till: *${till()}* (*${tillName()}*)\n` +
     `• Email: ${config.contact?.email || "support@sokonimall.com"}\n\n` +
     `We *never* ask for commitment fees, delivery deposits, or payment to personal numbers.\n` +
-    `Inspect your item first, then pay Till *${till()}* yourself. Stay safe! 🇰🇪`
+    `Pay only via M-Pesa STK through Sokoni. Stay safe! 🇰🇪`
   );
 }
 
@@ -479,7 +469,7 @@ export function locationValidationMessage({ orderId, area, street, landmark }) {
     `• Street: ${street || "—"}\n` +
     `• Landmark: ${landmark || "—"}\n\n` +
     `Or type your corrected address below.\n` +
-    `🛡️ Verification is free — no commitment fees. Pay Till *${till()}* on delivery only.`
+    `🛡️ Verification is free — no commitment fees. Pay only via Sokoni M-Pesa STK.`
   );
 }
 
@@ -488,7 +478,7 @@ export function sizeExchangeMessage({ orderId }) {
     `Need a Different Size or Color? 🔄👕\n\n` +
     `Order *${orderId || "—"}* — reply with the new size/color you need.\n` +
     `Our rider brings the replacement; hand back the original in clean packaging.\n\n` +
-    `🛡️ Exchanges are free of extra product cost. Any rider fee paid to Till *${till()}* at the door only.`
+    `🛡️ Exchanges are free of extra product cost — settle only through Sokoni checkout.`
   );
 }
 
@@ -496,7 +486,7 @@ export function backInStockMessage({ productName, customerName }) {
   return (
     `Good News — Back in Stock! 🎉📱\n\n` +
     `Habari${customerName ? ` *${customerName}*` : ""}! *${productName}* is back on our shelves.\n\n` +
-    `🛡️ Pay on delivery to Till *${till()}*. Reply *BUY NOW* to order. 🚀`
+    `🛡️ 100% prepaid via M-Pesa STK. Reply *BUY NOW* to order. 🚀`
   );
 }
 

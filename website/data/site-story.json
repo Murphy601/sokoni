@@ -2,8 +2,6 @@
   "tagline": "Kenya's #1 Prepaid Marketplace for Brand New & Pre-Loved Fits",
   "whatsappNumber": "254117422428",
   "whatsappDisplay": "+254 117 422 428",
-  "mpesaTill": "4775847",
-  "mpesaTillName": "David Thuku Muiruri",
   "promoCode": "SOKONI3",
   "offerPercent": 3,
   "supportEmail": "support@sokonimall.com",
@@ -12,7 +10,7 @@
     "{{storeCount}}+ prepaid listings across Kenya",
     "Order in English, Kiswahili, or Sheng — same bot",
     "100% escrow protection until delivery is confirmed",
-    "Verify on {{whatsappDisplay}} before paying Till {{mpesaTill}}",
+    "Verify on {{whatsappDisplay}} before paying via M-Pesa STK",
     "Privacy: your WhatsApp number is for your order only"
   ],
   "trustChips": [

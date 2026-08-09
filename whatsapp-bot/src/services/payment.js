@@ -27,14 +27,14 @@ export function formatShortPaymentReminder(order) {
   if (order.status === "awaiting_payment" || order.customerPaymentStatus === "unpaid") {
     return (
       `💳 *Payment due — ${order.id}*\n\n` +
-      `Pay *KES ${priceLine}* upfront to activate your order (escrow protected).\n` +
-      `Use Till *${config.store.mpesaTill}* (*${config.store.mpesaTillName}*) with account *${order.id}*.\n\n` +
+      `Pay *KES ${priceLine}* upfront via M-Pesa STK to activate your order (escrow protected).\n` +
+      `Reply *pay* to get the STK prompt again.\n\n` +
       `Reply *paid* after M-Pesa. We dispatch only after verification.`
     );
   }
   return (
     `💳 *Payment reminder — ${order.id}*\n\n` +
-    `Complete payment of *KES ${priceLine}* to Buy Goods Till *${config.store.mpesaTill}* (*${config.store.mpesaTillName}*).\n\n` +
+    `Complete payment of *KES ${priceLine}* via M-Pesa STK (reply *pay* to resend).\n\n` +
     `Reply *paid* after you send payment.`
   );
 }
@@ -178,7 +178,7 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
 
   await sendText(
     customerKey,
-    `Asante! 🙏 We received your payment notice for *${order.id}* (KES ${orderBuyerTotal(order).toLocaleString()}).\n\nOur team will verify your M-Pesa payment to Buy Goods Till *${config.store.mpesaTill}* (*${config.store.mpesaTillName}*) and confirm shortly.`
+    `Asante! 🙏 We received your payment notice for *${order.id}* (KES ${orderBuyerTotal(order).toLocaleString()}).\n\nOur team will verify your M-Pesa STK payment and confirm shortly.`
   );
 
   if (config.admin.primary) {
@@ -209,7 +209,7 @@ export async function notifyStorePaymentConfirmed(order) {
   const storeChat = `${String(store.phone).replace(/\D/g, "")}@c.us`;
   const msg =
     `✅ *Payment confirmed — ${order.id}*\n\n` +
-    `Customer *${order.customerName}* (+${String(order.phone).replace(/\D/g, "")}) has paid *KES ${orderBuyerTotal(order).toLocaleString()}* to Sokoni Till *${config.store.mpesaTill}* (*${config.store.mpesaTillName}*).\n\n` +
+    `Customer *${order.customerName}* (+${String(order.phone).replace(/\D/g, "")}) has paid *KES ${orderBuyerTotal(order).toLocaleString()}* via Sokoni prepaid escrow.\n\n` +
     `*Product:* ${order.productName}\n` +
     `Release the parcel to the customer after verifying their order ID.\n\n` +
     `_Sokoni admin_`;

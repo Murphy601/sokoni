@@ -441,15 +441,13 @@ function toolStoreInfo() {
     darajaConfigured: meta.darajaConfigured,
     autoConfirm: meta.autoConfirm,
     escrow: meta.escrow,
-    till: meta.till,
-    tillName: meta.tillName,
     phoneDisplay: formatPhoneDisplay(),
     whatsappLink: formatWhatsAppLink(),
     promoCode: PROMO_CODE,
     offerPercent: OFFER_PERCENT,
     offerLine: offerLine(),
     deliveryNote: config.store.deliveryNote,
-    tillLine: tillExplainLine().replace(/\*/g, ""),
+    paymentLine: tillExplainLine().replace(/\*/g, ""),
     howItWorks: howItWorksMessage().replace(/\*/g, ""),
     paymentTrust: paymentTrustDisclosure().replace(/\*/g, ""),
     siteUrls: {
@@ -575,8 +573,8 @@ export function formatToolResultsForPrompt(toolResults) {
         `Brand: ${r.brand}\n` +
         `Prepaid only: ${r.prepaidOnly}\n` +
         `Escrow: ${r.escrow}\n` +
-        `Payment: ${(r.paymentMethods || []).join(", ")}\n` +
-        `Till: ${r.till} (${r.tillName})\n` +
+        `Payment: ${(r.paymentMethods || []).join(", ") || "mpesa_stk"}\n` +
+        `Pay how: ${r.paymentLine || "M-Pesa STK on WhatsApp / site"}\n` +
         `Phone: ${r.phoneDisplay}\n` +
         `WhatsApp: ${r.whatsappLink}\n` +
         `Promo: ${r.offerLine}\n` +

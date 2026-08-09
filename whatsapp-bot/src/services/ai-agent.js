@@ -131,8 +131,7 @@ function offlineReply(toolResults, channel) {
         : `Aisles include ${top}. Type a category or *menu*.`;
     }
     if (r.tool === "store_info") {
-      const till = r.till ? ` Till *${r.till}*` : "";
-      return `Sokoni is *100% prepaid* via M-Pesa${till} — escrow until you confirm delivery. No COD.`;
+      return `Sokoni is *100% prepaid* via M-Pesa STK — escrow until you confirm delivery. No COD. Never pay personal numbers.`;
     }
   }
   return channel === "web"
