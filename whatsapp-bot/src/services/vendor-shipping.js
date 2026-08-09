@@ -4,7 +4,7 @@
  * Default: no profile → shipping stays 0 (existing seller-handled behaviour).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,10 @@ function readStore() {
 
 function writeStore(store) {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(STORE_FILE, JSON.stringify(store, null, 2) + "\n", "utf8");
+  const payload = JSON.stringify(store, null, 2) + "\n";
+  const tmp = `${STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, payload, "utf8");
+  renameSync(tmp, STORE_FILE);
 }
 
 export function normalizeVendorKey(raw) {

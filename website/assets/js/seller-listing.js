@@ -7056,7 +7056,7 @@ window.SokoniSellerAuth = {
       if (!raw) return "";
       if (raw.trim().startsWith("{")) {
         const parsed = JSON.parse(raw);
-        if (parsed.expiresAt != null && Number(parsed.expiresAt) <= Date.now()) return "";
+        // Do not blank on client expiresAt — bot validates the session.
         return String(parsed.token || "").trim();
       }
       return String(raw).trim();

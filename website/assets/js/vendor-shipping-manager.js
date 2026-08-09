@@ -2,13 +2,16 @@
  * Path B VendorShippingManager — simplified for everyday Kenyan sellers.
  * 3 choices: Standard Kenya rates / Simple flat / Free shipping.
  * Map zones stay behind Advanced. API payload unchanged (TIERED / FLAT_RATE).
+ *
+ * Auth: uses /api/seller/onboard/* (same OTP session as ledger/orders).
  */
 (function () {
   const API_BASE =
     window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       ? "http://localhost:3001"
       : "https://bot.sokonimall.com";
-  const VENDOR_API = `${API_BASE}/api/vendor`;
+  /** Same auth surface as Seller Hub ledger / orders / withdraw. */
+  const ONBOARD_API = `${API_BASE}/api/seller/onboard`;
   const MARKER = "data-sokoni-vendor-shipping";
 
   const DEFAULTS = {
@@ -46,7 +49,18 @@
     },
   };
 
-  /** Session is stored as JSON `{ phone, token, expiresAt }` — never send the raw blob. */
+  function normalizePhone(phone) {
+    let d = String(phone || "").replace(/\D/g, "");
+    if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+    if (d.length === 9) d = `254${d}`;
+    return d;
+  }
+
+  /**
+   * Session is stored as JSON `{ phone, token, expiresAt }`.
+   * Never send the raw blob. Do not drop tokens for client-side expiry —
+   * the bot decides session validity (Seller Hub keeps the in-memory token).
+   */
   function readStoredSellerSession() {
     try {
       const raw =
@@ -55,29 +69,26 @@
         "";
       if (!raw) {
         return {
-          phone: String(localStorage.getItem("sokoni-seller-phone") || "").trim(),
+          phone: normalizePhone(localStorage.getItem("sokoni-seller-phone") || ""),
           sessionToken: "",
         };
       }
       if (raw.trim().startsWith("{")) {
         const parsed = JSON.parse(raw);
-        const token = String(parsed.token || "").trim();
-        const expired = parsed.expiresAt != null && Number(parsed.expiresAt) <= Date.now();
         return {
-          phone: String(
+          phone: normalizePhone(
             parsed.phone || localStorage.getItem("sokoni-seller-phone") || ""
-          ).trim(),
-          sessionToken: expired ? "" : token,
+          ),
+          sessionToken: String(parsed.token || "").trim(),
         };
       }
-      // Legacy: bare token string
       return {
-        phone: String(localStorage.getItem("sokoni-seller-phone") || "").trim(),
+        phone: normalizePhone(localStorage.getItem("sokoni-seller-phone") || ""),
         sessionToken: String(raw).trim(),
       };
     } catch {
       return {
-        phone: String(localStorage.getItem("sokoni-seller-phone") || "").trim(),
+        phone: normalizePhone(localStorage.getItem("sokoni-seller-phone") || ""),
         sessionToken: "",
       };
     }
@@ -85,7 +96,7 @@
 
   function auth() {
     const stored = readStoredSellerSession();
-    const bridgePhone = String(window.SokoniSellerAuth?.getPhone?.() || "").trim();
+    const bridgePhone = normalizePhone(window.SokoniSellerAuth?.getPhone?.() || "");
     const bridgeToken = String(window.SokoniSellerAuth?.getSessionToken?.() || "").trim();
     return {
       phone: bridgePhone || stored.phone,
@@ -107,13 +118,18 @@
       throw new Error("Sign in with your WhatsApp code first, then save again.");
     }
     const q = qsAuth();
-    const url = `${VENDOR_API}${path}${path.includes("?") ? "&" : "?"}${q}`;
+    const url = `${ONBOARD_API}${path}${path.includes("?") ? "&" : "?"}${q}`;
     const init = {
       method: opts.method || "GET",
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      headers: { ...(opts.headers || {}) },
     };
     if (opts.body) {
-      init.body = JSON.stringify({ ...opts.body, phone: creds.phone, sessionToken: creds.sessionToken });
+      init.headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify({
+        ...opts.body,
+        phone: creds.phone,
+        sessionToken: creds.sessionToken,
+      });
     }
     const res = await fetch(url, init);
     const data = await res.json().catch(() => ({}));
@@ -121,6 +137,11 @@
       if (res.status === 401) {
         throw new Error(
           data.message || "Session expired — verify WhatsApp again in Seller Hub, then save."
+        );
+      }
+      if (res.status === 403) {
+        throw new Error(
+          data.message || "Finish seller setup (shop + M-Pesa) before setting delivery fees."
         );
       }
       throw new Error(data.message || data.error || `HTTP ${res.status}`);
@@ -310,6 +331,7 @@
   let draftLayer = null;
   let heatMap = null;
   let leafletReady = null;
+  let savingRates = false;
 
   function loadLeaflet() {
     if (leafletReady) return leafletReady;
@@ -559,7 +581,7 @@
     }
     setTimeout(() => heatMap.invalidateSize(), 50);
     try {
-      const data = await api("/analytics/locations");
+      const data = await api("/shipping-analytics/locations");
       document.getElementById("vsm-heat-total").textContent = String(data.stats?.totalMapped || 0);
       document.getElementById("vsm-heat-top").textContent = data.stats?.topLocation || "—";
       document.getElementById("vsm-heat-share").textContent = `${data.stats?.topSharePct || 0}%`;
@@ -581,6 +603,32 @@
       }
     } catch (err) {
       setStatus(err.message, true);
+    }
+  }
+
+  async function saveRates() {
+    if (savingRates) return;
+    savingRates = true;
+    const btn = document.getElementById("vsm-save-rates");
+    if (btn) btn.disabled = true;
+    setStatus("Saving…");
+    try {
+      const payload = buildSavePayload();
+      const data = await api("/shipping-rules", {
+        method: "POST",
+        body: payload,
+      });
+      if (!data?.success || !data?.profile) {
+        throw new Error(data?.message || "Save did not confirm — try again.");
+      }
+      fillProfile(data.profile);
+      updateCoverageSummary();
+      setStatus("Saved. All 47 counties use these rates at checkout.");
+    } catch (err) {
+      setStatus(err.message || "Could not save — try again.", true);
+    } finally {
+      savingRates = false;
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -625,24 +673,8 @@
       toggleAdvancedMap(Boolean(e.target.checked));
     });
 
-    document.getElementById("vsm-save-rates")?.addEventListener("click", async () => {
-      const btn = document.getElementById("vsm-save-rates");
-      if (btn) btn.disabled = true;
-      setStatus("Saving…");
-      try {
-        const payload = buildSavePayload();
-        const data = await api("/shipping-rules", {
-          method: "POST",
-          body: payload,
-        });
-        if (data.profile) fillProfile(data.profile);
-        updateCoverageSummary();
-        setStatus("Saved. All 47 counties use these rates at checkout.");
-      } catch (err) {
-        setStatus(err.message || "Could not save — try again.", true);
-      } finally {
-        if (btn) btn.disabled = false;
-      }
+    document.getElementById("vsm-save-rates")?.addEventListener("click", () => {
+      void saveRates();
     });
 
     document.getElementById("vsm-zone-undo")?.addEventListener("click", () => {
@@ -671,6 +703,19 @@
         setStatus("Map zone saved.");
       } catch (err) {
         setStatus(err.message, true);
+      }
+    });
+  }
+
+  // Document-level save — survives re-renders / missed bind races.
+  if (!window.__sokoniVsmSaveBound) {
+    window.__sokoniVsmSaveBound = true;
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.id === "vsm-save-rates" || t.closest?.("#vsm-save-rates")) {
+        e.preventDefault();
+        void saveRates();
       }
     });
   }
