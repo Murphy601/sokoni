@@ -209,6 +209,17 @@ async function handleActiveProductMenu(customerKey, text) {
   const menuState = getMenuState(customerKey);
   if (menuState?.type !== "product" || !menuState.productId) return false;
 
+  // Checkout already in progress — never restart "Order" from this menu.
+  const pending = getPendingOrder(customerKey);
+  if (
+    pending &&
+    ["location", "confirm_fees", "contact", "awaiting_delivery_location", "awaiting_customer_details"].includes(
+      String(pending.step || "")
+    )
+  ) {
+    return tryHandlePendingOrder(customerKey, text);
+  }
+
   const choice = parseNumericChoice(text);
   if (!choice || !menuState.options?.[choice - 1]) return false;
 
@@ -442,7 +453,15 @@ export async function handleIncomingMessage(
     );
   }
 
-  if (await handleActiveProductMenu(customerKey, text)) return;
+  {
+    const pendingCheckout = getPendingOrder(customerKey);
+    const checkoutBusy =
+      pendingCheckout &&
+      ["location", "confirm_fees", "contact", "awaiting_delivery_location", "awaiting_customer_details"].includes(
+        String(pendingCheckout.step || "")
+      );
+    if (!checkoutBusy && (await handleActiveProductMenu(customerKey, text))) return;
+  }
 
   if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
     const product = await findProductFromMessage(combinedText);
