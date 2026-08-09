@@ -153,42 +153,50 @@ router.post("/upload-video", async (req, res) => {
 
 /** POST /api/seller/listings/publish — instant live (Depop-style) */
 router.post("/publish", async (req, res) => {
-  const {
-    phone,
-    draft,
-    images,
-    imageBase64,
-    imageUrls,
-    videoBase64,
-    videoUrl,
-    videoKind,
-    draftId,
-    clientPublishId,
-  } = req.body || {};
-  const imageList = Array.isArray(images)
-    ? images
-    : imageBase64
-      ? [imageBase64]
-      : [];
-  const result = await publishSellerListing({
-    phone,
-    draft,
-    images: imageList,
-    imageUrls: Array.isArray(imageUrls) ? imageUrls : [],
-    videoBase64,
-    videoUrl: videoUrl || null,
-    videoKind,
-    draftId,
-    clientPublishId: clientPublishId || null,
-    sessionToken: sellerSessionFromReq(req),
-  });
-  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
-    return res.status(401).json(result);
+  try {
+    const {
+      phone,
+      draft,
+      images,
+      imageBase64,
+      imageUrls,
+      videoBase64,
+      videoUrl,
+      videoKind,
+      draftId,
+      clientPublishId,
+    } = req.body || {};
+    const imageList = Array.isArray(images)
+      ? images
+      : imageBase64
+        ? [imageBase64]
+        : [];
+    const result = await publishSellerListing({
+      phone,
+      draft,
+      images: imageList,
+      imageUrls: Array.isArray(imageUrls) ? imageUrls : [],
+      videoBase64,
+      videoUrl: videoUrl || null,
+      videoKind,
+      draftId,
+      clientPublishId: clientPublishId || null,
+      sessionToken: sellerSessionFromReq(req),
+    });
+    if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+      return res.status(401).json(result);
+    }
+    if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (result.error) return res.status(400).json(result);
+    return res.status(201).json(result);
+  } catch (err) {
+    console.error("[seller-listings/publish]", err);
+    return res.status(500).json({
+      error: "publish_failed",
+      message: "Could not finish posting — try again with fewer photos, or post without a long video.",
+    });
   }
-  if (result.error === "not_onboarded" || result.error === "not_approved") return res.status(403).json(result);
-  if (result.error === "not_found") return res.status(404).json(result);
-  if (result.error) return res.status(400).json(result);
-  res.status(201).json(result);
 });
 
 /** POST /api/seller/listings/draft — save / update draft for later */
