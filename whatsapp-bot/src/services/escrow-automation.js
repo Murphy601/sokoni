@@ -35,7 +35,6 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
-const REPO_PRODUCTS = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
 
 /** Generate prepaid drop-off QR / label metadata (Depop-style). */
 export function generateDropoffLabel(order) {
@@ -64,13 +63,13 @@ async function lockProductForOrder(order) {
   try {
     const { recordSoldSku, consumeStockForSale } = await import("./product-availability.js");
 
-    const paths = [PRODUCTS_PATH, REPO_PRODUCTS].filter((p) => existsSync(p));
-    for (const file of paths) {
-      try {
-        const raw = await readFile(file, "utf-8");
-        const products = JSON.parse(raw);
-        const idx = products.findIndex((p) => p.id === order.productId);
-        if (idx === -1) continue;
+    // Consume stock on MASTER only. Public catalog omits/strips stockQuantity historically,
+    // so decrementing it treated every SKU as 1-of-1 and permanently tombstoned multi-unit stock.
+    if (existsSync(PRODUCTS_PATH)) {
+      const raw = await readFile(PRODUCTS_PATH, "utf-8");
+      const products = JSON.parse(raw);
+      const idx = products.findIndex((p) => p.id === order.productId);
+      if (idx !== -1) {
         const result = consumeStockForSale(
           { ...products[idx] },
           { qty: qtyBought, orderId: order.id, soldAt: Date.now() }
@@ -78,9 +77,7 @@ async function lockProductForOrder(order) {
         products[idx] = result.product;
         finalProduct = result.product;
         shouldTombstone = result.tombstone;
-        await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
-      } catch (err) {
-        console.warn("[escrow] lock product failed:", file, err.message);
+        await writeFile(PRODUCTS_PATH, JSON.stringify(products, null, 2) + "\n", "utf-8");
       }
     }
 
