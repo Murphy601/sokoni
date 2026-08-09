@@ -81,6 +81,9 @@ function toPublic(product) {
       fulfillment: "store",
       payment: "prepaid",
       inStock: product.inStock !== false,
+      ...(product.stockQuantity != null && Number.isFinite(Number(product.stockQuantity))
+        ? { stockQuantity: Math.max(0, Math.round(Number(product.stockQuantity))) }
+        : {}),
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
       ...(product.images?.length ? { images: product.images } : {}),
       ...(product.videoUrl ? { videoUrl: product.videoUrl } : {}),

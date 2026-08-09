@@ -1332,15 +1332,37 @@ function mergeCatalogProducts(apiProducts, staticProducts) {
     const staticHandle = normalizeShopHandle(p.shopHandle || p.sellerHandle);
     const apiIsDefault = !apiHandle || apiHandle === "sokoni-store";
     const staticIsPeer = staticHandle && staticHandle !== "sokoni-store";
+    let merged = existing;
     if (staticIsPeer && apiIsDefault) {
-      byId.set(id, {
+      merged = {
         ...existing,
         ...p,
         shopHandle: staticHandle,
         sellerHandle: staticHandle,
         businessName: p.shopName || p.businessName || existing.businessName,
-      });
+      };
     }
+    // Keep seller/preview clips when API/legacy_json omitted them.
+    if (!merged.videoUrl && p.videoUrl) {
+      merged = {
+        ...merged,
+        videoUrl: p.videoUrl,
+        videoKind: merged.videoKind || p.videoKind || null,
+      };
+    } else if (!merged.videoKind && p.videoKind) {
+      merged = { ...merged, videoKind: p.videoKind };
+    }
+    // Prefer higher known stock from static when API omitted units.
+    const apiQty = Number(merged.stockQuantity);
+    const staticQty = Number(p.stockQuantity);
+    if (
+      Number.isFinite(staticQty) &&
+      staticQty > 0 &&
+      (!Number.isFinite(apiQty) || apiQty < staticQty)
+    ) {
+      merged = { ...merged, stockQuantity: staticQty, inStock: true };
+    }
+    byId.set(id, merged);
   }
   return [...byId.values()];
 }

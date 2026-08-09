@@ -47,6 +47,17 @@
     }
     const raw = product?.videoUrl;
     if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+    if (raw) {
+      const file = String(raw)
+        .replace(/^\/?assets\/images\/products\//i, "")
+        .replace(/^\/?catalog-images\//i, "");
+      if (file) {
+        return `https://bot.sokonimall.com/catalog-images/${encodeURIComponent(file.split("/").pop())}`;
+      }
+    }
+    if (product?.id && (product.videoKind === "seller" || product.videoKind === "preview")) {
+      return `https://bot.sokonimall.com/catalog-images/${encodeURIComponent(product.id)}.mp4`;
+    }
     return null;
   }
 

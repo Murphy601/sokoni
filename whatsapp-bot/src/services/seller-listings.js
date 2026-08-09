@@ -285,9 +285,10 @@ async function saveMediaFiles(productId, imageSources = [], videoSource = null, 
           label: "video",
         });
         if (buffer?.length) {
-          const rel = `assets/images/products/${productId}.mp4`;
           await writeFile(path.join(IMAGES_DIR, `${productId}.mp4`), buffer);
-          videoUrl = rel;
+          // Absolute bot URL so Cloudflare/static + API cards can play seller clips.
+          const botBase = String(config.botPublicUrl || "https://bot.sokonimall.com").replace(/\/$/, "");
+          videoUrl = `${botBase}/catalog-images/${encodeURIComponent(productId)}.mp4`;
           savedVideoKind =
             videoKind === "seller" || videoKind === "preview" ? videoKind : "seller";
           // Drop staging file after copy (best-effort).
@@ -301,6 +302,11 @@ async function saveMediaFiles(productId, imageSources = [], videoSource = null, 
               /* ignore */
             }
           }
+        } else if (isBotStaging) {
+          // Fetch failed — keep staged HTTPS URL so publish still has a playable clip.
+          videoUrl = src.split("?")[0];
+          savedVideoKind =
+            videoKind === "seller" || videoKind === "preview" ? videoKind : "seller";
         }
       }
     }

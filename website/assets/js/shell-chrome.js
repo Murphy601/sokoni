@@ -8,7 +8,7 @@
     home: { href: "index.html", label: "Home", icon: "🏠" },
     explore: { href: "index.html#deals", label: "Explore", icon: "🧭" },
     sell: { href: "suppliers/list.html", label: "Sell", icon: "➕", sell: true },
-    inbox: { href: "inbox.html", label: "Inbox", icon: "💬" },
+    ask: { href: "ask.html", label: "ASK AI", icon: "💬" },
     profile: { href: "profile.html", label: "Account", icon: "👤" },
   };
 
@@ -18,10 +18,10 @@
     const path = (window.location.pathname || "").toLowerCase();
     if (path.includes("profile")) return "profile";
     if (path.includes("inbox")) return "inbox";
+    if (path.includes("ask")) return "ask";
     if (path.includes("disputes")) return "disputes";
     if (path.includes("activity")) return "activity";
     if (path.includes("track")) return "track";
-    if (path.includes("ask")) return "ask";
     if (path.includes("shop")) return "shop";
     if (path.includes("suppliers/list")) return "sell";
     if (path.includes("about")) return "about";
@@ -81,11 +81,12 @@
   }
 
   function navActiveKey(page) {
+    if (page === "ask") return "ask";
     if (
       page === "activity" ||
       page === "track" ||
       page === "shop" ||
-      page === "ask" ||
+      page === "inbox" ||
       page === "disputes" ||
       page === "about" ||
       page === "faq" ||
