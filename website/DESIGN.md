@@ -174,7 +174,7 @@ Use exact WhatsApp background and bubble colours from tokens. Copy must sound li
 - Write like a helpful person texting back — "Sawa", "Karibu", "pay when it arrives".
 - Hero headline: "Shop while texting a trusted local AI agent assistant." Phone column: "Your Market, On WhatsApp."
 - Mention **countrywide** delivery and **pickup partners** where relevant — not one city.
-- Keep M-Pesa Till details factual (4775847, David Thuku Muiruri) when discussing payment.
+- Discuss payment as M-Pesa STK escrow only — never publish till numbers or till account names on the storefront.
 - Show real order IDs (SKN-xxxx / SK-xxxx) and tracking timelines in examples.
 - Prefer short paragraphs and one idea per feature card.
 

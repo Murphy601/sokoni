@@ -51,11 +51,9 @@ export function formatPrepaidCheckoutPrompt(order) {
     return `💳 *${ref}* — *${priceLine}*${shipBit}\nSTK sent — enter M-Pesa PIN.`;
   }
 
-  const till = config.store.mpesaTill;
   return (
     `💳 *${ref}* — *${priceLine}*${shipBit}\n` +
-    `Pay Till *${till}* · account *${ref}*\n` +
-    `Then reply *paid*.` +
+    `Open checkout to pay via M-Pesa STK, then reply *paid* if needed.` +
     (order?.id ? `\n${checkoutUrlForOrder(order.id)}` : "")
   );
 }
@@ -85,9 +83,8 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
       ok: true,
       method: "manual_till",
       stkAvailable: false,
-      till: config.store.mpesaTill,
-      tillName: config.store.mpesaTillName,
-      message: "Pay Buy Goods Till 4775847 (David Thuku Muiruri) with your order number as account reference, then reply paid on WhatsApp.",
+      message:
+        "M-Pesa STK is briefly unavailable — open your checkout link on sokonimall.com or reply *paid* with your M-Pesa code on WhatsApp.",
     };
   }
 
@@ -150,15 +147,10 @@ export function checkoutMeta() {
     autoConfirm: isDarajaConfigured(),
     multiSellerCart: isMultiSellerCartEnabled(),
     cartIdFormat: "SKN-#### (+ SKN-####-n children)",
-    paymentMethods: isDarajaConfigured() ? ["mpesa_stk"] : ["manual_till"],
-    till: config.mpesa.partyB || config.store.mpesaTill || null,
-    tillName: config.store.mpesaTillName || null,
-    shortcode: config.mpesa.shortcode || null,
-    partyB: config.mpesa.partyB || null,
-    transactionType: config.mpesa.transactionType || null,
-    callbackUrl: config.mpesa.callbackUrl || null,
+    paymentMethods: isDarajaConfigured() ? ["mpesa_stk"] : ["whatsapp_paid"],
+    // Do not expose till / till account name on public checkout meta.
     note: isDarajaConfigured()
       ? "Daraja STK auto-confirms payment via webhook — no admin #payconfirm needed."
-      : "Set MPESA_* env vars for automated STK. Manual till + #payconfirm until then.",
+      : "STK env not configured — buyers retry STK or reply paid on WhatsApp.",
   };
 }

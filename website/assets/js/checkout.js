@@ -291,20 +291,14 @@
         "M-Pesa STK is live — tap Pay, enter PIN on your phone. Payment confirms automatically.";
     } else {
       readinessEl.textContent =
-        "STK not live yet — pay Buy Goods Till 4775847 (David Thuku Muiruri) with your SKN number as account reference, then reply paid on WhatsApp.";
+        "STK is briefly unavailable — open WhatsApp and reply paid with your M-Pesa code, or try Pay again in a moment.";
     }
   }
 
   function renderTillBlock(meta, orderId) {
+    // Never show till numbers or till account names on the public checkout page.
     if (!tillBlock) return;
-    const useTill = meta && !meta.darajaConfigured;
-    tillBlock.classList.toggle("hidden", !useTill);
-    if (!useTill) return;
-    const till = meta.till || "—";
-    const tillName = meta.tillName || "Sokoni Mall";
-    document.getElementById("checkout-till").textContent = till;
-    document.getElementById("checkout-till-name").textContent = tillName;
-    document.getElementById("checkout-till-ref").textContent = orderId || "SKN-####";
+    tillBlock.classList.add("hidden");
   }
 
   function renderOrderSummary(data) {

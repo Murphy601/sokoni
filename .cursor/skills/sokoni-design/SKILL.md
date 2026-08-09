@@ -50,7 +50,7 @@ After injecting HTML via JS, call `SokoniComponents.upgradeIn(container)` so pro
 
 - concise, confident, helpful
 - Prefer "pay when it arrives" over "cashless seamless checkout"
-- Mention pay on delivery, M-Pesa Till 4775847 (David Thuku Muiruri), and pickup where payment is discussed
+- Mention prepaid M-Pesa STK escrow and pickup where payment is discussed — never publish till numbers or till account names
 
 ## Rules: Do
 
