@@ -171,5 +171,10 @@ export async function calculateShipping(body = {}) {
     isPickupStation,
     vendorBreakdown,
     totalShippingFee,
+    /** Explicit aliases for checkout UI / STK wiring */
+    shippingFee: totalShippingFee,
+    appliedTier: vendorBreakdown
+      .map((v) => (v.tier != null ? `Tier ${v.tier}` : v.methodUsed))
+      .filter(Boolean),
   };
 }

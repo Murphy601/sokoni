@@ -118,11 +118,28 @@ router.get("/:orderId", (req, res) => {
   if (!order) {
     return res.status(404).json({ error: "order_not_found" });
   }
+  const shippingKes = Math.round(Number(order.shippingKes) || 0);
+  const totalKes = orderBuyerTotal(order);
+  const itemKes = Math.round(
+    Number(order.sellerNetKes ?? order.priceKes) || Math.max(0, totalKes - shippingKes)
+  );
+  const shopHandle = order.shopHandle || null;
+  const supplierId = order.supplierId || order.sellerId || null;
   res.json({
     orderId: order.id,
     productName: order.productName,
-    amountKes: orderBuyerTotal(order),
-    totalKes: orderBuyerTotal(order),
+    itemKes,
+    shippingKes,
+    amountKes: totalKes,
+    totalKes,
+    deliveryCounty: order.deliveryCounty || null,
+    deliveryTown: order.deliveryTown || null,
+    shopHandle,
+    supplierId,
+    vendorId: String(shopHandle || supplierId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "") || null,
     paymentStatus: order.customerPaymentStatus,
     paymentStatusDetail: order.paymentStatus,
     escrowStatus: order.escrowStatus || "pending",
@@ -136,7 +153,7 @@ router.get("/:orderId", (req, res) => {
   });
 });
 
-/** POST /api/checkout/:orderId/stk — Daraja STK push */
+/** POST /api/checkout/:orderId/stk — Daraja STK push (amount = item + shipping). */
 router.post("/:orderId/stk", async (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {
@@ -147,18 +164,24 @@ router.post("/:orderId/stk", async (req, res) => {
   }
   const phone = req.body?.phone || order.phone;
   const result = await initiateMpesaCheckout(order, { phone });
+  const fresh = getOrder(order.id) || order;
   if (!result.ok) {
     return res.status(502).json({
       error: result.method || "checkout_failed",
       message: result.message,
-      fallback: formatPrepaidCheckoutPrompt(order),
+      fallback: formatPrepaidCheckoutPrompt(fresh),
+      amountKes: orderBuyerTotal(fresh),
+      shippingKes: Math.round(Number(fresh.shippingKes) || 0),
       meta: checkoutMeta(),
     });
   }
   res.json({
     ok: true,
     ...result,
-    instructions: formatPrepaidCheckoutPrompt(getOrder(order.id)),
+    amountKes: result.amountKes ?? orderBuyerTotal(fresh),
+    shippingKes: result.shippingKes ?? Math.round(Number(fresh.shippingKes) || 0),
+    totalKes: orderBuyerTotal(fresh),
+    instructions: formatPrepaidCheckoutPrompt(fresh),
     meta: checkoutMeta(),
   });
 });
