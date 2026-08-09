@@ -37,8 +37,9 @@ Studio / reel videos are Cloudinary-compressed (`q_auto:eco`, `w_720`). Raw sell
 
 - `maxVideoSeconds`: 30  
 - `maxVideoBytes`: 15 × 1024 × 1024 (hard); sell page soft-caps own video at **8MB** for mobile reliability  
-- Binary upload limit: 16mb on `/upload-video-bin`  
-- JSON body limit remains 25mb (legacy `/upload-video` only)
+- Chunk upload: 512KB parts on `/upload-video-chunk` (required when nginx `client_max_body_size` is ~1m)  
+- Binary upload limit: 16mb on `/upload-video-bin` (needs nginx ≥25m — run `scripts/ensure-nginx-upload-limit.sh`)  
+- JSON body limit remains 25mb (legacy `/upload-video` only; avoid on mobile)
 
 ## Related
 
