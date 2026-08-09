@@ -996,6 +996,26 @@ function renderProducts(payload) {
   if (tab !== "sold") bindLikeButtons();
 }
 
+async function loadStaticShopProducts(handle) {
+  const clean = normalizeHandle(handle);
+  if (!clean) return [];
+  try {
+    const res = await fetch(`/data/products.json?v=${Date.now()}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    const list = Array.isArray(json) ? json : json.products || [];
+    return list.filter((p) => {
+      const h = normalizeHandle(p.shopHandle || p.sellerHandle);
+      if (h !== clean) return false;
+      if (p.inStock === false || p.isSold === true) return false;
+      if (p.stockQuantity != null && Number(p.stockQuantity) <= 0) return false;
+      return true;
+    });
+  } catch {
+    return [];
+  }
+}
+
 async function loadShop(handle, { tab = state.listingsTab || "active", soft = false } = {}) {
   const clean = normalizeHandle(handle);
   if (!clean) {
@@ -1022,6 +1042,32 @@ async function loadShop(handle, { tab = state.listingsTab || "active", soft = fa
     if (!res.ok) {
       statusMessage(data?.message || "Could not load that shop handle.", true);
       return;
+    }
+
+    // Fail-soft: if Postgres active listings are empty, show static catalog for this handle.
+    if (state.listingsTab === "active") {
+      const apiProducts = Array.isArray(data.products) ? data.products : [];
+      if (!apiProducts.length) {
+        const fallback = await loadStaticShopProducts(clean);
+        if (fallback.length) {
+          data.products = fallback.map((p) => ({
+            ...p,
+            title: p.title || p.name,
+            shopHandle: clean,
+            sellerHandle: clean,
+          }));
+          data.pagination = {
+            ...(data.pagination || {}),
+            total: fallback.length,
+            limit: fallback.length,
+            offset: 0,
+          };
+          data.stats = {
+            ...(data.stats || {}),
+            listingsCount: fallback.length,
+          };
+        }
+      }
     }
 
     statusMessage("");

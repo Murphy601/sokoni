@@ -102,6 +102,22 @@ export async function syncPublicCatalog() {
   return getOpsStatus();
 }
 
+/** Push master products.json ownership + stock into Postgres (storefront /shop source). */
+export async function syncMasterCatalogToDb() {
+  if (!isDbEnabled()) {
+    return { ok: false, upserted: 0, errors: ["database_not_configured"] };
+  }
+  const { syncMasterCatalogToDb: syncDb } = await import("../db/repositories/products.js");
+  const result = await syncDb();
+  invalidateProductCache();
+  try {
+    await refreshFeedCache();
+  } catch (err) {
+    console.warn("[catalog-ops] feed refresh after DB sync:", err.message);
+  }
+  return result;
+}
+
 /** Full publish: build + git commit/push (VM only). */
 export async function publishCatalogToGit() {
   const script = path.join(REPO_ROOT, "scripts", "publish-catalog-now.mjs");

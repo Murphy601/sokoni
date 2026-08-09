@@ -483,9 +483,14 @@ const UPSERT_CATALOG_SQL = `
     price_usd = EXCLUDED.price_usd,
     source_price_kes = EXCLUDED.source_price_kes,
     original_price_kes = EXCLUDED.original_price_kes,
-    -- Never clear sold / never restock a sold row via JSON upsert races.
-    is_sold = products.is_sold OR EXCLUDED.is_sold,
+    -- Prefer authoritative catalog upsert: restock/clear sold when master says live stock.
+    -- Keep sticky sold only when the incoming row is also sold/out (race-safe for paid sales).
+    is_sold = CASE
+      WHEN EXCLUDED.in_stock = TRUE AND COALESCE(EXCLUDED.stock_quantity, 0) > 0 THEN EXCLUDED.is_sold
+      ELSE (products.is_sold OR EXCLUDED.is_sold)
+    END,
     in_stock = CASE
+      WHEN EXCLUDED.in_stock = TRUE AND COALESCE(EXCLUDED.stock_quantity, 0) > 0 THEN TRUE
       WHEN products.is_sold OR EXCLUDED.is_sold THEN FALSE
       ELSE EXCLUDED.in_stock
     END,
@@ -498,18 +503,17 @@ const UPSERT_CATALOG_SQL = `
 `;
 
 /**
- * Upsert one catalog product from the legacy JSON shape into PostgreSQL.
- * @param {Record<string, unknown>} catalogProduct
+ * Resolve the Postgres seller row for a master-catalog product.
+ * Never silently attribute peer-seller listings to the default Sokoni store.
  */
-export async function upsertCatalogProduct(catalogProduct) {
-  if (!isDbEnabled()) return null;
-
-  let sellerId = await ensureDefaultSeller();
-  let sellerUserId = null;
+async function resolveCatalogSeller(catalogProduct) {
   const handle = String(catalogProduct.shopHandle || catalogProduct.sellerHandle || "")
     .replace(/^@+/, "")
     .trim()
     .toLowerCase();
+
+  let sellerId = null;
+  let sellerUserId = null;
 
   if (handle && handle !== "sokoni-store") {
     try {
@@ -522,17 +526,54 @@ export async function upsertCatalogProduct(catalogProduct) {
           location: catalogProduct.location || null,
         });
         if (!ensured.error) {
-          sellerId = ensured.seller?.id || sellerId;
-          sellerUserId = ensured.user?.id || null;
+          sellerId = ensured.seller?.id || null;
+          sellerUserId =
+            ensured.user?.id != null && Number.isInteger(Number(ensured.user.id))
+              ? Number(ensured.user.id)
+              : null;
+        } else {
+          console.warn(
+            "[products] ensureSellerSocialProfile failed:",
+            ensured.error,
+            ensured.message || "",
+            handle
+          );
         }
-      } else {
+      }
+
+      if (!sellerId) {
         const existing = await getSellerBySlug(handle);
         if (existing) {
           sellerId = existing.id;
           sellerUserId =
             existing.user_id != null && Number.isInteger(Number(existing.user_id))
               ? Number(existing.user_id)
-              : null;
+              : sellerUserId;
+        }
+      }
+
+      if (!sellerId || !sellerUserId) {
+        const { rows } = await query(
+          `SELECT id, handle FROM users
+            WHERE LOWER(REPLACE(handle, '@', '')) = $1
+            LIMIT 1`,
+          [handle]
+        );
+        const user = rows[0];
+        const uid =
+          user?.id != null && Number.isInteger(Number(user.id)) ? Number(user.id) : null;
+        if (uid) {
+          sellerUserId = sellerUserId || uid;
+          const { ensureSellerLinkedToUser } = await import("./sellers.js");
+          const linked = await ensureSellerLinkedToUser({
+            userId: uid,
+            slug: handle,
+            businessName: catalogProduct.source || handle,
+            city: catalogProduct.location || null,
+          });
+          if (!linked.error && linked.seller?.id) {
+            sellerId = linked.seller.id;
+          }
         }
       }
     } catch (err) {
@@ -540,18 +581,91 @@ export async function upsertCatalogProduct(catalogProduct) {
     }
   }
 
-  // Preserve sold tombstones even when callers omit isSold on the JSON patch.
+  if (!sellerId) {
+    // Keep an existing non-default owner if resolve failed (do not steal listings).
+    try {
+      const { rows } = await query(
+        `SELECT seller_id, seller_user_id, s.slug
+           FROM products p
+           LEFT JOIN sellers s ON s.id = p.seller_id
+          WHERE p.id = $1
+          LIMIT 1`,
+        [catalogProduct.id]
+      );
+      const prev = rows[0];
+      const prevSlug = String(prev?.slug || "")
+        .replace(/^@+/, "")
+        .trim()
+        .toLowerCase();
+      if (prev?.seller_id && prevSlug && prevSlug !== "sokoni-store") {
+        return {
+          sellerId: prev.seller_id,
+          sellerUserId:
+            prev.seller_user_id != null && Number.isInteger(Number(prev.seller_user_id))
+              ? Number(prev.seller_user_id)
+              : null,
+          handle,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+    sellerId = await ensureDefaultSeller();
+    if (handle && handle !== "sokoni-store") {
+      console.warn(
+        "[products] upsert falling back to default seller for",
+        catalogProduct.id,
+        "handle=",
+        handle
+      );
+    }
+  }
+
+  if (sellerId && !sellerUserId) {
+    try {
+      const seller = await getSellerById(sellerId);
+      if (seller?.user_id != null && Number.isInteger(Number(seller.user_id))) {
+        sellerUserId = Number(seller.user_id);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { sellerId, sellerUserId, handle };
+}
+
+/**
+ * Upsert one catalog product from the legacy JSON shape into PostgreSQL.
+ * @param {Record<string, unknown>} catalogProduct
+ */
+export async function upsertCatalogProduct(catalogProduct) {
+  if (!isDbEnabled()) return null;
+
+  const { sellerId, sellerUserId } = await resolveCatalogSeller(catalogProduct);
+
+  // Preserve permanent sold tombstones from the sold-skus registry / master flags.
+  // If master says the SKU is live with stock, allow restock (clears sticky DB sold).
   let productForUpsert = catalogProduct;
   try {
-    const { preserveSoldState, isSkuSold, isProductSold } = await import(
-      "../../services/product-availability.js"
-    );
-    const { rows: existingRows } = await query(
-      `SELECT is_sold, in_stock, tracking_code, legacy_json FROM products WHERE id = $1`,
-      [catalogProduct.id]
-    );
-    const existing = existingRows[0];
-    if (existing?.is_sold || (await isSkuSold(catalogProduct.id)) || isProductSold(catalogProduct)) {
+    const {
+      preserveSoldState,
+      isSkuSold,
+      isProductSold,
+      isProductAvailable,
+      productStockOnHand,
+    } = await import("../../services/product-availability.js");
+    const masterLive =
+      isProductAvailable(catalogProduct) && productStockOnHand(catalogProduct) > 0;
+    const registrySold = await isSkuSold(catalogProduct.id);
+    const masterSold = isProductSold(catalogProduct);
+
+    if (!masterLive && (registrySold || masterSold)) {
+      const { rows: existingRows } = await query(
+        `SELECT is_sold, in_stock, tracking_code, legacy_json FROM products WHERE id = $1`,
+        [catalogProduct.id]
+      );
+      const existing = existingRows[0];
       const legacy =
         existing?.legacy_json && typeof existing.legacy_json === "object"
           ? existing.legacy_json
@@ -566,6 +680,10 @@ export async function upsertCatalogProduct(catalogProduct) {
         },
         catalogProduct
       );
+    } else if (masterLive && registrySold) {
+      // Seller restocked in master but registry still tombstoned — clear registry.
+      const { clearSoldSku } = await import("../../services/product-availability.js");
+      await clearSoldSku(catalogProduct.id);
     }
   } catch (err) {
     console.warn("[products] sold-preserve on upsert skipped:", err.message);
@@ -639,6 +757,48 @@ export async function upsertCatalogProduct(catalogProduct) {
   }
 
   return catalogProduct.id;
+}
+
+/**
+ * Re-upsert every master catalog product into Postgres (fixes wrong seller / sticky sold).
+ * @returns {{ ok: boolean, upserted: number, errors: string[] }}
+ */
+export async function syncMasterCatalogToDb() {
+  if (!isDbEnabled()) {
+    return { ok: false, upserted: 0, errors: ["database_not_configured"] };
+  }
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const masterPath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "data",
+    "products.json"
+  );
+  let master = [];
+  try {
+    master = JSON.parse(await readFile(masterPath, "utf-8"));
+  } catch (err) {
+    return { ok: false, upserted: 0, errors: [err.message || "read_master_failed"] };
+  }
+  if (!Array.isArray(master)) {
+    return { ok: false, upserted: 0, errors: ["master_not_array"] };
+  }
+
+  let upserted = 0;
+  const errors = [];
+  for (const product of master) {
+    if (!product?.id) continue;
+    try {
+      await upsertCatalogProduct(product);
+      upserted += 1;
+    } catch (err) {
+      errors.push(`${product.id}: ${err.message || err}`);
+    }
+  }
+  return { ok: errors.length === 0, upserted, errors, total: master.length };
 }
 
 /** Mark catalog row sold after prepaid escrow payment confirms. */

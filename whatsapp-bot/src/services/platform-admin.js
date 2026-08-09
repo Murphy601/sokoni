@@ -7,6 +7,7 @@ import {
   pauseCatalog,
   unpauseCatalog,
   syncPublicCatalog,
+  syncMasterCatalogToDb,
   publishCatalogToGit,
   setProductStock,
   markProductSoldAndSync,
@@ -35,6 +36,7 @@ export async function handleOpsCommand(adminChatId) {
     `${formatOpsStatus(status)}\n\n` +
       `#catalog live · #catalog pause\n` +
       `#sync — rebuild public catalog\n` +
+      `#sync db — master JSON → Postgres (fixes /shop + homepage)\n` +
       `#sync push — build + git push\n` +
       `#stock <id> in|out\n` +
       `#flags prepaid on|off`
@@ -43,7 +45,23 @@ export async function handleOpsCommand(adminChatId) {
 
 export async function handleSyncCommand(adminChatId, args) {
   const push = /\bpush\b/i.test(args);
+  const dbSync = /\bdb\b/i.test(args);
   try {
+    if (dbSync) {
+      const result = await syncMasterCatalogToDb();
+      if (!result.ok && result.errors?.[0] === "database_not_configured") {
+        return sendText(adminChatId, "⚠️ Postgres not configured — storefront uses JSON only.");
+      }
+      const errNote = result.errors?.length
+        ? `\n⚠️ ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}`
+        : "";
+      return sendText(
+        adminChatId,
+        `✅ Master → Postgres: ${result.upserted}/${result.total || result.upserted} products.` +
+          `\nHomepage + /shop now read this DB.` +
+          errNote
+      );
+    }
     if (push) {
       await publishCatalogToGit();
       return sendText(adminChatId, "✅ Catalog published (build + git push). Cloudflare deploys in ~1–2 min.");
