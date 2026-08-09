@@ -52,12 +52,48 @@ fi
 
 echo "==> Syncing to origin/${DEPLOY_REF} (always deploy from this ref, not a leftover feature branch)..."
 git fetch origin "$DEPLOY_REF"
+
+# When SKIP_CATALOG_PUBLISH=1, keep the VM's live catalog across the hard reset.
+CATALOG_BAK=""
+CATALOG_KEEP=(
+  "whatsapp-bot/src/data/products.json"
+  "website/data/products.json"
+  "website/data/catalog-version.json"
+  "website/data/catalog-menu.json"
+  "website/data/catalog-paused.json"
+)
+if [ "${SKIP_CATALOG_PUBLISH:-}" = "1" ]; then
+  CATALOG_BAK="$(mktemp -d /tmp/sokoni-catalog-bak.XXXXXX)"
+  for f in "${CATALOG_KEEP[@]}"; do
+    if [ -f "$f" ]; then
+      mkdir -p "$CATALOG_BAK/$(dirname "$f")"
+      cp -a "$f" "$CATALOG_BAK/$f"
+    fi
+  done
+  echo "==> Backed up VM catalog under $CATALOG_BAK"
+fi
+
+# Unfinished merge/rebase blocks stash + checkout ("needs merge" / "resolve your current index").
+if [ -f .git/MERGE_HEAD ] || [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ] || [ -f .git/CHERRY_PICK_HEAD ]; then
+  echo "==> Aborting unfinished merge/rebase/cherry-pick so deploy can sync..."
+  git merge --abort 2>/dev/null || true
+  git rebase --abort 2>/dev/null || true
+  git cherry-pick --abort 2>/dev/null || true
+fi
+if git diff --name-only --diff-filter=U 2>/dev/null | grep -q .; then
+  echo "==> Clearing unmerged index paths..."
+  git reset --merge 2>/dev/null || git reset --mixed HEAD || true
+fi
+
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
   echo "==> Stashing dirty tracked files so checkout can proceed..."
   # Do NOT use `git stash -u` — that removes untracked listing photos under
   # website/assets/images/products/ and breaks /catalog-images until re-upload.
-  git stash push -m "deploy-bot-$(date +%s)" || true
-  STASHED=1
+  if git stash push -m "deploy-bot-$(date +%s)"; then
+    STASHED=1
+  else
+    echo "WARN: stash failed (often a stuck merge) — continuing with hard reset to origin/${DEPLOY_REF}"
+  fi
 fi
 # Keep noisy untracked bak files from blocking nothing; leave product images alone.
 mkdir -p /tmp/sokoni-vm-scratch
@@ -68,10 +104,27 @@ done
 shopt -u nullglob
 # Force local main (or override) onto the remote tip — avoids "pull --rebase" staying on a feature branch.
 if ! git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"; then
-  echo "ERROR: could not checkout origin/${DEPLOY_REF}"
+  echo "==> checkout -B failed — hard-resetting to origin/${DEPLOY_REF}"
+  git reset --hard "origin/${DEPLOY_REF}"
+  git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"
+fi
+if ! git rev-parse --verify "origin/${DEPLOY_REF}" >/dev/null 2>&1; then
+  echo "ERROR: origin/${DEPLOY_REF} missing after fetch"
   exit 1
 fi
+# Ensure working tree matches remote tip even if checkout left conflicted paths.
+git reset --hard "origin/${DEPLOY_REF}"
 echo "==> Git at: $(git log -1 --oneline) (branch $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown))"
+
+if [ -n "$CATALOG_BAK" ]; then
+  echo "==> Restoring VM catalog files (SKIP_CATALOG_PUBLISH=1)"
+  for f in "${CATALOG_KEEP[@]}"; do
+    if [ -f "$CATALOG_BAK/$f" ]; then
+      mkdir -p "$(dirname "$f")"
+      cp -a "$CATALOG_BAK/$f" "$f"
+    fi
+  done
+fi
 
 if [ "$STASHED" = "1" ]; then
   echo "==> Keeping deploy stash (not auto-popped onto main) — restore later with: git stash list"
