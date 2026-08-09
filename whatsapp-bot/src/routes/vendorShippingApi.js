@@ -76,9 +76,17 @@ router.post("/shipping-rules", async (req, res) => {
   const check = await authedSeller(req, res);
   if (!check) return;
   const vendorKey = vendorKeyFromSeller(check);
-  const result = upsertVendorShippingProfile(vendorKey, req.body || {});
-  if (!result.ok) return res.status(400).json(result);
-  res.json({ success: true, profile: result.profile, zones: listVendorZones(vendorKey) });
+  if (!vendorKey) {
+    return res.status(400).json({ error: "vendor_required", message: "Complete seller profile first." });
+  }
+  try {
+    const result = upsertVendorShippingProfile(vendorKey, req.body || {});
+    if (!result.ok) return res.status(400).json(result);
+    res.json({ success: true, profile: result.profile, zones: listVendorZones(vendorKey) });
+  } catch (err) {
+    console.error("[vendor-shipping] shipping-rules save failed:", err?.message || err);
+    res.status(500).json({ error: "save_failed", message: "Could not save shipping rates — try again." });
+  }
 });
 
 router.post("/shipping-zones", async (req, res) => {

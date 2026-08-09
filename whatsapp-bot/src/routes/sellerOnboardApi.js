@@ -9,6 +9,7 @@ import {
   updateSellerListingStock,
   setSellerListingPromo,
   endSellerListingPromo,
+  requireAuthenticatedSeller,
 } from "../services/seller-onboard.js";
 import {
   getSellerWithdrawSummaryByPhone,
@@ -20,8 +21,50 @@ import {
   revokeSellerSession,
   sellerSessionFromReq,
 } from "../services/seller-verification.js";
+import {
+  deleteVendorZone,
+  getOrCreateVendorShippingProfile,
+  listVendorZones,
+  upsertVendorShippingProfile,
+  saveVendorZone,
+} from "../services/vendor-shipping.js";
+import { vendorOrderLocations } from "../services/rider-tracking.js";
 
 const router = Router();
+
+function phoneFromReq(req) {
+  return String(req.body?.phone || req.query?.phone || req.headers["x-seller-phone"] || "").trim();
+}
+
+function vendorKeyFromSeller(check) {
+  return String(check.supplier?.shopHandle || check.supplier?.id || check.supplier?.phone || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, "");
+}
+
+function sessionAuthStatus(result) {
+  if (
+    result.error === "session_required" ||
+    result.error === "session_invalid" ||
+    result.error === "session_expired"
+  ) {
+    return 401;
+  }
+  if (result.error === "not_onboarded" || result.error === "not_approved") return 403;
+  return 400;
+}
+
+async function authedSeller(req, res) {
+  const phone = phoneFromReq(req);
+  const sessionToken = sellerSessionFromReq(req);
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) {
+    res.status(sessionAuthStatus(check)).json({ error: check.error, message: check.message });
+    return null;
+  }
+  return check;
+}
 
 /** POST /api/seller/onboard/send-code — WhatsApp OTP (free via WAHA) */
 router.post("/send-code", async (req, res) => {
@@ -274,6 +317,73 @@ router.post("/stock", async (req, res) => {
   }
   if (result.error) return res.status(403).json(result);
   res.json(result);
+});
+
+/**
+ * Shipping rates — same OTP session auth as ledger/orders/withdraw.
+ * Prefer this path from Seller Hub (Cloudflare → bot.sokonimall.com).
+ */
+router.get("/shipping-rules", async (req, res) => {
+  const check = await authedSeller(req, res);
+  if (!check) return;
+  const vendorKey = vendorKeyFromSeller(check);
+  if (!vendorKey) {
+    return res.status(400).json({ error: "vendor_required", message: "Complete seller profile first." });
+  }
+  const profile = getOrCreateVendorShippingProfile(vendorKey);
+  const zones = listVendorZones(vendorKey);
+  res.json({ success: true, vendorKey, profile, zones });
+});
+
+router.post("/shipping-rules", async (req, res) => {
+  const check = await authedSeller(req, res);
+  if (!check) return;
+  const vendorKey = vendorKeyFromSeller(check);
+  if (!vendorKey) {
+    return res.status(400).json({ error: "vendor_required", message: "Complete seller profile first." });
+  }
+  try {
+    const result = upsertVendorShippingProfile(vendorKey, req.body || {});
+    if (!result.ok) return res.status(400).json(result);
+    res.json({ success: true, profile: result.profile, zones: listVendorZones(vendorKey) });
+  } catch (err) {
+    console.error("[seller-onboard] shipping-rules save failed:", err?.message || err);
+    res.status(500).json({ error: "save_failed", message: "Could not save shipping rates — try again." });
+  }
+});
+
+router.post("/shipping-zones", async (req, res) => {
+  const check = await authedSeller(req, res);
+  if (!check) return;
+  const vendorKey = vendorKeyFromSeller(check);
+  if (!vendorKey) {
+    return res.status(400).json({ error: "vendor_required", message: "Complete seller profile first." });
+  }
+  const result = saveVendorZone(vendorKey, {
+    id: req.body?.id,
+    zoneName: req.body?.zoneName || req.body?.zone_name,
+    priceKes: req.body?.priceKes ?? req.body?.price_kes,
+    boundary: req.body?.boundary || req.body?.boundary_geojson,
+  });
+  if (!result.ok) return res.status(400).json(result);
+  res.json({ success: true, zone: result.zone, zones: listVendorZones(vendorKey) });
+});
+
+router.delete("/shipping-zones/:zoneId", async (req, res) => {
+  const check = await authedSeller(req, res);
+  if (!check) return;
+  const vendorKey = vendorKeyFromSeller(check);
+  const result = deleteVendorZone(vendorKey, req.params.zoneId);
+  if (!result.ok) return res.status(404).json(result);
+  res.json({ success: true, zones: listVendorZones(vendorKey) });
+});
+
+router.get("/shipping-analytics/locations", async (req, res) => {
+  const check = await authedSeller(req, res);
+  if (!check) return;
+  const vendorKey = vendorKeyFromSeller(check);
+  const data = vendorOrderLocations(vendorKey);
+  res.json({ success: true, vendorKey, ...data });
 });
 
 export default router;
