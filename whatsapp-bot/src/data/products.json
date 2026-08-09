@@ -323,5 +323,60 @@
     "refreshedAt": 1786053395785,
     "priceUpdatedAt": 1786053395785,
     "sellerHandle": "adiv_thrift"
+  },
+  {
+    "id": "ho-tlom7-001",
+    "name": "White Coffee Mug",
+    "category": "home-office",
+    "subcategory": "kitchen",
+    "browseCategory": "home",
+    "browseSubCategory": "kitchen",
+    "sellerNetKes": 200,
+    "sourcePriceKes": 200,
+    "priceKes": 225,
+    "platformFeeKes": 20,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 200,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A white ceramic mug with 'COFFEE' written on it in blue and red accents. The mug appears to have some residue inside.",
+    "color": "white",
+    "size": "",
+    "era": "",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "location": "Nairobi",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "🏠",
+    "tags": [
+      "mug",
+      "coffee",
+      "kitchenware"
+    ],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "stockQuantity": 1,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/upload/c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264/f_mp4/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.mp4",
+    "videoKind": "preview",
+    "publishedAt": 1786240731807,
+    "moderation": {
+      "status": "pending_scan"
+    }
   }
 ]

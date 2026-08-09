@@ -13,6 +13,12 @@
       ]
     },
     {
+      "id": "home-office",
+      "label": "Home & Office",
+      "emoji": "🏠",
+      "subcategories": []
+    },
+    {
       "id": "supermarket",
       "label": "Supermarket",
       "emoji": "🛒",
