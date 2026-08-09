@@ -1,6 +1,7 @@
 /**
- * Path B VendorShippingManager — countrywide rates + Leaflet zone drawer.
- * Progressive enhancement for Seller Hub logistics (no Next.js).
+ * Path B VendorShippingManager — simplified for everyday Kenyan sellers.
+ * 3 choices: Standard Kenya rates / Simple flat / Free shipping.
+ * Map zones stay behind Advanced. API payload unchanged (TIERED / FLAT_RATE).
  */
 (function () {
   const API_BASE =
@@ -9,6 +10,41 @@
       : "https://bot.sokonimall.com";
   const VENDOR_API = `${API_BASE}/api/vendor`;
   const MARKER = "data-sokoni-vendor-shipping";
+
+  const DEFAULTS = {
+    tier1: 200,
+    tier2: 350,
+    tier3: 450,
+    tier4: 750,
+    flatLocal: 200,
+    flatUpcountry: 400,
+  };
+
+  const TIER_COPY = {
+    1: {
+      title: "Nairobi & Nearby",
+      counties: "Nairobi, Kiambu, Machakos, Kajiado (4 counties)",
+      summary: "Nairobi Metropolitan (4 counties)",
+    },
+    2: {
+      title: "Major Cities",
+      counties:
+        "Mombasa, Nakuru, Kisumu, Uasin Gishu (Eldoret), Nyeri, Kilifi, Meru, Kakamega, Bungoma, Kisii, Kericho, Trans Nzoia, Laikipia (13 counties)",
+      summary: "Major hubs & cities (13 counties)",
+    },
+    3: {
+      title: "Standard Upcountry Towns",
+      counties:
+        "Nyandarua, Kirinyaga, Murang'a, Embu, Tharaka-Nithi, Kitui, Makueni, Narok, Bomet, Nandi, Baringo, Elgeyo-Marakwet, Vihiga, Busia, Siaya, Homa Bay, Migori, Nyamira, Kwale, Taita-Taveta (20 counties)",
+      summary: "Upcountry towns (20 counties)",
+    },
+    4: {
+      title: "Far / Remote Areas",
+      counties:
+        "Garissa, Wajir, Mandera, Marsabit, Isiolo, Turkana, West Pokot, Samburu, Tana River, Lamu (10 counties)",
+      summary: "Remote & ASAL counties (10 counties)",
+    },
+  };
 
   function auth() {
     if (typeof window.SokoniSellerAuth?.getPhone === "function") {
@@ -50,6 +86,23 @@
     return data;
   }
 
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function numVal(id, fallback) {
+    const n = Math.round(Number(document.getElementById(id)?.value));
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  }
+
+  function selectedMode() {
+    return document.querySelector('input[name="vsm-mode"]:checked')?.value || "STANDARD_KENYA";
+  }
+
   function ensureShell() {
     const host = document.getElementById("vendor-shipping-manager");
     if (!host || host.getAttribute(MARKER)) return host;
@@ -57,67 +110,154 @@
     host.innerHTML = `
       <div class="sell-dash-group space-y-4">
         <div class="sell-dash-group__head">
-          <p class="sell-dash-group__label">Shipping rates</p>
-          <p class="sell-dash-group__hint">Countrywide tiers + optional local boda zones. Buyers pay via M-Pesa (Daraja). Leave unset to keep today’s “seller arranges delivery” flow.</p>
+          <p class="sell-dash-group__label">Delivery fees across Kenya</p>
+          <p class="sell-dash-group__hint">Set once — Sokoni charges the right fee from the buyer’s county at checkout (M-Pesa / Daraja). Most sellers pick Standard rates and save.</p>
         </div>
-        <div class="flex flex-wrap gap-2" role="tablist" aria-label="Shipping config">
-          <button type="button" class="min-h-[44px] px-4 rounded-full bg-[#25D366] text-[#1B1035] text-sm font-semibold" data-ship-tab="rates">Countrywide rates</button>
-          <button type="button" class="min-h-[44px] px-4 rounded-full border border-white/20 text-sm font-semibold" data-ship-tab="zones">Local boda map</button>
-          <button type="button" class="min-h-[44px] px-4 rounded-full border border-white/20 text-sm font-semibold" data-ship-tab="heat">Demand heatmap</button>
+
+        <div class="flex flex-wrap gap-2" role="tablist" aria-label="Shipping sections">
+          <button type="button" class="min-h-[44px] px-4 rounded-full bg-[#25D366] text-[#1B1035] text-sm font-semibold" data-ship-tab="rates">Shipping rates</button>
+          <button type="button" class="min-h-[44px] px-4 rounded-full border border-white/20 text-sm font-semibold" data-ship-tab="heat">Buyer demand map</button>
         </div>
         <p id="vsm-status" class="text-xs text-zinc-500" role="status"></p>
 
-        <section id="vsm-panel-rates" class="sell-depop-section p-5 space-y-4">
-          <label class="block text-sm text-zinc-300">Pricing mode
-            <select id="vsm-type" class="sell-form-input mt-1 w-full">
-              <option value="FLAT_RATE">Flat local + upcountry</option>
-              <option value="TIERED">4 regional tiers</option>
-              <option value="LOCAL_ONLY">Local counties only</option>
-              <option value="CUSTOM_ZONES">Zones + tier fallback</option>
-            </select>
-          </label>
-          <div class="grid sm:grid-cols-2 gap-3">
-            <label class="block text-sm text-zinc-300">Local rate (KES)<input id="vsm-flat-local" type="number" min="0" class="sell-form-input mt-1" /></label>
-            <label class="block text-sm text-zinc-300">Upcountry rate (KES)<input id="vsm-flat-up" type="number" min="0" class="sell-form-input mt-1" /></label>
+        <section id="vsm-panel-rates" class="sell-depop-section p-5 space-y-5">
+          <div class="rounded-2xl border border-emerald-800/40 bg-emerald-950/20 px-4 py-3 text-sm text-zinc-300">
+            Setting these rates covers <strong class="text-white">all 47 counties</strong>. Buyers are charged automatically from their delivery county — you don’t pick a region per order.
           </div>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <label class="block text-xs text-zinc-400">Tier 1<input id="vsm-t1" type="number" min="0" class="sell-form-input mt-1" /></label>
-            <label class="block text-xs text-zinc-400">Tier 2<input id="vsm-t2" type="number" min="0" class="sell-form-input mt-1" /></label>
-            <label class="block text-xs text-zinc-400">Tier 3<input id="vsm-t3" type="number" min="0" class="sell-form-input mt-1" /></label>
-            <label class="block text-xs text-zinc-400">Tier 4<input id="vsm-t4" type="number" min="0" class="sell-form-input mt-1" /></label>
-          </div>
-          <label class="inline-flex items-center gap-2 min-h-[44px] text-sm text-zinc-300">
-            <input id="vsm-free" type="checkbox" class="h-5 w-5 accent-[#25D366]" /> Free shipping (absorb fee)
-          </label>
-          <label class="inline-flex items-center gap-2 min-h-[44px] text-sm text-zinc-300">
-            <input id="vsm-express" type="checkbox" class="h-5 w-5 accent-[#25D366]" /> Enable local express map pins
-          </label>
-          <button type="button" id="vsm-save-rates" class="depop-btn-accent min-h-[44px] px-5 text-sm font-semibold">Save shipping profile</button>
-        </section>
 
-        <section id="vsm-panel-zones" class="sell-depop-section p-5 space-y-3 hidden">
-          <p class="text-xs text-zinc-400">Click the map to add polygon corners. Double-click / Finish to close the zone. OpenStreetMap tiles — no Google bill.</p>
-          <div id="vsm-map" class="w-full h-72 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 z-0"></div>
-          <div class="grid sm:grid-cols-2 gap-3">
-            <label class="block text-sm text-zinc-300">Zone name<input id="vsm-zone-name" class="sell-form-input mt-1" placeholder="Westlands &amp; Kilimani" /></label>
-            <label class="block text-sm text-zinc-300">Delivery fee (KES)<input id="vsm-zone-price" type="number" min="0" class="sell-form-input mt-1" value="150" /></label>
+          <details class="rounded-2xl border border-zinc-800 bg-black/40 px-4 py-3">
+            <summary class="cursor-pointer text-sm font-semibold text-white min-h-[44px] flex items-center">
+              How are the 47 counties grouped? (tap to view)
+            </summary>
+            <ul class="mt-3 space-y-2 text-xs text-zinc-400 leading-relaxed">
+              <li><strong class="text-zinc-200">Nairobi &amp; Nearby:</strong> ${escapeHtml(TIER_COPY[1].counties)}</li>
+              <li><strong class="text-zinc-200">Major Cities:</strong> ${escapeHtml(TIER_COPY[2].counties)}</li>
+              <li><strong class="text-zinc-200">Upcountry Towns:</strong> ${escapeHtml(TIER_COPY[3].counties)}</li>
+              <li><strong class="text-zinc-200">Far / Remote:</strong> ${escapeHtml(TIER_COPY[4].counties)}</li>
+            </ul>
+          </details>
+
+          <fieldset class="space-y-3" aria-label="How you charge for shipping">
+            <legend class="text-sm font-semibold text-white mb-1">How do you want to charge for shipping?</legend>
+
+            <label class="block rounded-2xl border border-zinc-700 p-4 cursor-pointer has-[:checked]:border-[#25D366] has-[:checked]:bg-emerald-950/30">
+              <span class="flex gap-3 items-start">
+                <input type="radio" name="vsm-mode" value="STANDARD_KENYA" checked class="mt-1 h-5 w-5 accent-[#25D366]" />
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold text-white">Standard Sokoni rates <span class="text-[#25D366] font-bold">(Recommended)</span></span>
+                  <span class="block text-xs text-zinc-400 mt-1">Auto fees across Kenya. Edit any number if you need to.</span>
+                  <ul class="mt-2 text-xs text-zinc-400 space-y-0.5">
+                    <li>• Local / Nairobi metro: KES 200</li>
+                    <li>• Major cities (Mombasa, Kisumu, Nakuru, Eldoret…): KES 350</li>
+                    <li>• Other upcountry towns: KES 450</li>
+                    <li>• Remote areas (Lodwar, Garissa, Mandera…): KES 750</li>
+                  </ul>
+                </span>
+              </span>
+            </label>
+
+            <label class="block rounded-2xl border border-zinc-700 p-4 cursor-pointer has-[:checked]:border-[#25D366] has-[:checked]:bg-emerald-950/30">
+              <span class="flex gap-3 items-start">
+                <input type="radio" name="vsm-mode" value="SIMPLE_FLAT" class="mt-1 h-5 w-5 accent-[#25D366]" />
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold text-white">Simple flat rate</span>
+                  <span class="block text-xs text-zinc-400 mt-1">One price for local, one for the rest of Kenya.</span>
+                </span>
+              </span>
+            </label>
+
+            <label class="block rounded-2xl border border-zinc-700 p-4 cursor-pointer has-[:checked]:border-[#25D366] has-[:checked]:bg-emerald-950/30">
+              <span class="flex gap-3 items-start">
+                <input type="radio" name="vsm-mode" value="FREE_SHIPPING" class="mt-1 h-5 w-5 accent-[#25D366]" />
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold text-white">Free shipping</span>
+                  <span class="block text-xs text-zinc-400 mt-1">You cover delivery — buyers pay KES 0 shipping at checkout.</span>
+                </span>
+              </span>
+            </label>
+          </fieldset>
+
+          <div id="vsm-fields-standard" class="space-y-4">
+            <div class="grid sm:grid-cols-2 gap-4">
+              ${[1, 2, 3, 4]
+                .map(
+                  (t) => `
+                <label class="block rounded-2xl border border-zinc-800 p-3 space-y-1">
+                  <span class="block text-sm font-semibold text-white">${escapeHtml(TIER_COPY[t].title)}</span>
+                  <span class="flex items-center gap-2">
+                    <span class="text-xs text-zinc-500">KES</span>
+                    <input id="vsm-t${t}" type="number" min="0" value="${DEFAULTS["tier" + t]}" class="sell-form-input flex-1" />
+                  </span>
+                  <span class="block text-xs text-zinc-500 leading-snug">Includes: ${escapeHtml(TIER_COPY[t].counties)}</span>
+                </label>`
+                )
+                .join("")}
+            </div>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" id="vsm-zone-undo" class="depop-btn-ghost text-sm">Undo point</button>
-            <button type="button" id="vsm-zone-clear" class="depop-btn-ghost text-sm">Clear draft</button>
-            <button type="button" id="vsm-zone-save" class="depop-btn-accent text-sm font-semibold">Save zone</button>
+
+          <div id="vsm-fields-flat" class="grid sm:grid-cols-2 gap-4 hidden">
+            <label class="block rounded-2xl border border-zinc-800 p-3 space-y-1">
+              <span class="block text-sm font-semibold text-white">Local delivery (Nairobi &amp; nearby)</span>
+              <span class="flex items-center gap-2">
+                <span class="text-xs text-zinc-500">KES</span>
+                <input id="vsm-flat-local" type="number" min="0" value="${DEFAULTS.flatLocal}" class="sell-form-input flex-1" />
+              </span>
+            </label>
+            <label class="block rounded-2xl border border-zinc-800 p-3 space-y-1">
+              <span class="block text-sm font-semibold text-white">Rest of Kenya</span>
+              <span class="flex items-center gap-2">
+                <span class="text-xs text-zinc-500">KES</span>
+                <input id="vsm-flat-up" type="number" min="0" value="${DEFAULTS.flatUpcountry}" class="sell-form-input flex-1" />
+              </span>
+            </label>
           </div>
-          <ul id="vsm-zone-list" class="space-y-2 text-sm text-zinc-300"></ul>
+
+          <p id="vsm-fields-free" class="hidden text-sm text-emerald-300/90 rounded-2xl border border-emerald-800/50 bg-emerald-950/20 px-4 py-3">
+            Free shipping is on — buyers won’t be charged a delivery fee. Make sure your product price covers courier cost.
+          </p>
+
+          <div id="vsm-coverage" class="rounded-2xl border border-zinc-700 bg-black/50 px-4 py-4 space-y-2">
+            <p class="text-sm font-semibold text-white">Nationwide coverage summary</p>
+            <p class="text-xs text-zinc-500">All 47 counties included in one save.</p>
+            <ul id="vsm-coverage-list" class="space-y-1.5 text-sm text-zinc-300"></ul>
+          </div>
+
+          <div class="rounded-2xl border border-zinc-800 p-4 space-y-3">
+            <label class="inline-flex items-center gap-3 min-h-[44px] text-sm text-zinc-200 cursor-pointer">
+              <input id="vsm-advanced-map" type="checkbox" class="h-5 w-5 accent-[#25D366]" />
+              <span><strong class="text-white">Advanced (optional):</strong> Draw custom express boda zones on a map</span>
+            </label>
+            <div id="vsm-advanced-map-panel" class="hidden space-y-3 pt-2 border-t border-zinc-800">
+              <p class="text-xs text-zinc-400 rounded-xl border border-amber-900/40 bg-amber-950/20 px-3 py-2">
+                Optional: draw neighbourhoods for same-day boda pricing. If you skip this, standard local rates above still apply.
+              </p>
+              <div id="vsm-map" class="w-full h-72 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 z-0"></div>
+              <div class="grid sm:grid-cols-2 gap-3">
+                <label class="block text-sm text-zinc-300">Zone name<input id="vsm-zone-name" class="sell-form-input mt-1" placeholder="e.g. CBD &amp; Industrial Area" /></label>
+                <label class="block text-sm text-zinc-300">Express fee (KES)<input id="vsm-zone-price" type="number" min="0" class="sell-form-input mt-1" value="150" /></label>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" id="vsm-zone-undo" class="depop-btn-ghost text-sm">Undo point</button>
+                <button type="button" id="vsm-zone-clear" class="depop-btn-ghost text-sm">Clear draft</button>
+                <button type="button" id="vsm-zone-save" class="depop-btn-accent text-sm font-semibold">Save map zone</button>
+              </div>
+              <ul id="vsm-zone-list" class="space-y-2 text-sm text-zinc-300"></ul>
+            </div>
+          </div>
+
+          <button type="button" id="vsm-save-rates" class="depop-btn-accent min-h-[48px] px-6 text-sm font-bold w-full sm:w-auto">
+            Save all-Kenya shipping rates
+          </button>
         </section>
 
         <section id="vsm-panel-heat" class="sell-depop-section p-5 space-y-3 hidden">
+          <p class="text-sm text-zinc-400">Where paid orders with a pin or county have come from. Empty until buyers start checking out with location.</p>
           <div class="grid grid-cols-3 gap-3 text-center">
             <div><p class="text-[11px] uppercase text-zinc-500">Mapped</p><p id="vsm-heat-total" class="text-xl font-bold text-white">0</p></div>
             <div><p class="text-[11px] uppercase text-zinc-500">Top area</p><p id="vsm-heat-top" class="text-sm font-semibold text-white">—</p></div>
             <div><p class="text-[11px] uppercase text-zinc-500">Share</p><p id="vsm-heat-share" class="text-xl font-bold text-white">0%</p></div>
           </div>
           <div id="vsm-heat-map" class="w-full h-72 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 z-0"></div>
-          <p class="text-xs text-zinc-500">Shows paid order pins once buyers use map/county checkout. Empty until location data exists.</p>
         </section>
       </div>`;
     return host;
@@ -163,52 +303,147 @@
       btn.classList.toggle("border-white/20", !on);
     });
     document.getElementById("vsm-panel-rates")?.classList.toggle("hidden", name !== "rates");
-    document.getElementById("vsm-panel-zones")?.classList.toggle("hidden", name !== "zones");
     document.getElementById("vsm-panel-heat")?.classList.toggle("hidden", name !== "heat");
-    if (name === "zones") void initMap();
     if (name === "heat") void initHeat();
   }
 
+  function syncModeUi() {
+    const mode = selectedMode();
+    document.getElementById("vsm-fields-standard")?.classList.toggle("hidden", mode !== "STANDARD_KENYA");
+    document.getElementById("vsm-fields-flat")?.classList.toggle("hidden", mode !== "SIMPLE_FLAT");
+    document.getElementById("vsm-fields-free")?.classList.toggle("hidden", mode !== "FREE_SHIPPING");
+    updateCoverageSummary();
+  }
+
+  function updateCoverageSummary() {
+    const list = document.getElementById("vsm-coverage-list");
+    if (!list) return;
+    const mode = selectedMode();
+    if (mode === "FREE_SHIPPING") {
+      list.innerHTML = `<li class="text-emerald-300">✓ Free shipping nationwide — buyers pay KES 0 delivery</li>`;
+      return;
+    }
+    if (mode === "SIMPLE_FLAT") {
+      const local = numVal("vsm-flat-local", DEFAULTS.flatLocal);
+      const rest = numVal("vsm-flat-up", DEFAULTS.flatUpcountry);
+      list.innerHTML = `
+        <li>✓ Local / Nairobi &amp; nearby: <strong class="text-white">KES ${local.toLocaleString()}</strong></li>
+        <li>✓ Rest of Kenya: <strong class="text-white">KES ${rest.toLocaleString()}</strong></li>`;
+      return;
+    }
+    const t1 = numVal("vsm-t1", DEFAULTS.tier1);
+    const t2 = numVal("vsm-t2", DEFAULTS.tier2);
+    const t3 = numVal("vsm-t3", DEFAULTS.tier3);
+    const t4 = numVal("vsm-t4", DEFAULTS.tier4);
+    list.innerHTML = `
+      <li>✓ ${escapeHtml(TIER_COPY[1].summary)}: <strong class="text-white">KES ${t1.toLocaleString()}</strong></li>
+      <li>✓ ${escapeHtml(TIER_COPY[2].summary)}: <strong class="text-white">KES ${t2.toLocaleString()}</strong></li>
+      <li>✓ ${escapeHtml(TIER_COPY[3].summary)}: <strong class="text-white">KES ${t3.toLocaleString()}</strong></li>
+      <li>✓ ${escapeHtml(TIER_COPY[4].summary)}: <strong class="text-white">KES ${t4.toLocaleString()}</strong></li>`;
+  }
+
+  function setMode(mode) {
+    const radio = document.querySelector(`input[name="vsm-mode"][value="${mode}"]`);
+    if (radio) radio.checked = true;
+    syncModeUi();
+  }
+
   function fillProfile(profile) {
-    if (!profile) return;
-    const set = (id, v) => {
+    if (!profile) {
+      setMode("STANDARD_KENYA");
+      return;
+    }
+    const set = (id, v, fallback) => {
       const n = document.getElementById(id);
-      if (n) n.value = v ?? "";
+      if (!n) return;
+      const num = v == null || v === "" ? fallback : Math.round(Number(v));
+      n.value = Number.isFinite(num) ? num : fallback;
     };
-    set("vsm-type", profile.shippingType || "FLAT_RATE");
-    set("vsm-flat-local", profile.flatLocalRateKes);
-    set("vsm-flat-up", profile.flatUpcountryRateKes);
-    set("vsm-t1", profile.tier1RateKes);
-    set("vsm-t2", profile.tier2RateKes);
-    set("vsm-t3", profile.tier3RateKes);
-    set("vsm-t4", profile.tier4RateKes);
-    const free = document.getElementById("vsm-free");
-    const expr = document.getElementById("vsm-express");
-    if (free) free.checked = Boolean(profile.isFreeShippingEnabled);
-    if (expr) expr.checked = Boolean(profile.localExpressEnabled);
+    set("vsm-flat-local", profile.flatLocalRateKes, DEFAULTS.flatLocal);
+    set("vsm-flat-up", profile.flatUpcountryRateKes, DEFAULTS.flatUpcountry);
+    set("vsm-t1", profile.tier1RateKes, DEFAULTS.tier1);
+    set("vsm-t2", profile.tier2RateKes, DEFAULTS.tier2);
+    set("vsm-t3", profile.tier3RateKes, DEFAULTS.tier3);
+    set("vsm-t4", profile.tier4RateKes, DEFAULTS.tier4);
+
+    if (profile.isFreeShippingEnabled) setMode("FREE_SHIPPING");
+    else if (profile.shippingType === "FLAT_RATE") setMode("SIMPLE_FLAT");
+    else setMode("STANDARD_KENYA");
+
+    const adv = document.getElementById("vsm-advanced-map");
+    if (adv && profile.localExpressEnabled) {
+      adv.checked = true;
+      toggleAdvancedMap(true);
+    }
+  }
+
+  function buildSavePayload() {
+    const mode = selectedMode();
+    if (mode === "FREE_SHIPPING") {
+      return {
+        shippingType: "TIERED",
+        isFreeShippingEnabled: true,
+        localExpressEnabled: Boolean(document.getElementById("vsm-advanced-map")?.checked),
+        tier1RateKes: numVal("vsm-t1", DEFAULTS.tier1),
+        tier2RateKes: numVal("vsm-t2", DEFAULTS.tier2),
+        tier3RateKes: numVal("vsm-t3", DEFAULTS.tier3),
+        tier4RateKes: numVal("vsm-t4", DEFAULTS.tier4),
+        flatLocalRateKes: numVal("vsm-flat-local", DEFAULTS.flatLocal),
+        flatUpcountryRateKes: numVal("vsm-flat-up", DEFAULTS.flatUpcountry),
+        supportedTiers: [1, 2, 3, 4],
+      };
+    }
+    if (mode === "SIMPLE_FLAT") {
+      return {
+        shippingType: "FLAT_RATE",
+        isFreeShippingEnabled: false,
+        localExpressEnabled: Boolean(document.getElementById("vsm-advanced-map")?.checked),
+        flatLocalRateKes: numVal("vsm-flat-local", DEFAULTS.flatLocal),
+        flatUpcountryRateKes: numVal("vsm-flat-up", DEFAULTS.flatUpcountry),
+        tier1RateKes: numVal("vsm-flat-local", DEFAULTS.flatLocal),
+        tier2RateKes: numVal("vsm-flat-up", DEFAULTS.flatUpcountry),
+        tier3RateKes: numVal("vsm-flat-up", DEFAULTS.flatUpcountry),
+        tier4RateKes: numVal("vsm-flat-up", DEFAULTS.flatUpcountry),
+        supportedTiers: [1, 2, 3, 4],
+      };
+    }
+    return {
+      shippingType: "TIERED",
+      isFreeShippingEnabled: false,
+      localExpressEnabled: Boolean(document.getElementById("vsm-advanced-map")?.checked),
+      tier1RateKes: numVal("vsm-t1", DEFAULTS.tier1),
+      tier2RateKes: numVal("vsm-t2", DEFAULTS.tier2),
+      tier3RateKes: numVal("vsm-t3", DEFAULTS.tier3),
+      tier4RateKes: numVal("vsm-t4", DEFAULTS.tier4),
+      flatLocalRateKes: numVal("vsm-t1", DEFAULTS.tier1),
+      flatUpcountryRateKes: numVal("vsm-t3", DEFAULTS.tier3),
+      supportedTiers: [1, 2, 3, 4],
+    };
   }
 
   function renderZones(zones) {
     const list = document.getElementById("vsm-zone-list");
     if (!list) return;
     if (!zones?.length) {
-      list.innerHTML = `<li class="text-zinc-500">No zones yet.</li>`;
+      list.innerHTML = `<li class="text-zinc-500">No custom map zones yet.</li>`;
       return;
     }
     list.innerHTML = zones
       .map(
         (z) => `<li class="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 px-3 py-2">
           <span><strong class="text-white">${escapeHtml(z.zoneName)}</strong> · KES ${Math.round(z.priceKes || 0)}</span>
-          <button type="button" class="text-xs text-red-400 font-semibold" data-del-zone="${escapeHtml(z.id)}">Remove</button>
+          <button type="button" class="text-xs text-red-400 font-semibold min-h-[44px] px-2" data-del-zone="${escapeHtml(z.id)}">Remove</button>
         </li>`
       )
       .join("");
     list.querySelectorAll("[data-del-zone]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         try {
-          const data = await api(`/shipping-zones/${btn.getAttribute("data-del-zone")}`, { method: "DELETE" });
+          const data = await api(`/shipping-zones/${btn.getAttribute("data-del-zone")}`, {
+            method: "DELETE",
+          });
           renderZones(data.zones || []);
-          setStatus("Zone removed.");
+          setStatus("Map zone removed.");
         } catch (err) {
           setStatus(err.message, true);
         }
@@ -216,12 +451,10 @@
     });
   }
 
-  function escapeHtml(s) {
-    return String(s || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  function toggleAdvancedMap(on) {
+    const panel = document.getElementById("vsm-advanced-map-panel");
+    panel?.classList.toggle("hidden", !on);
+    if (on) void initMap();
   }
 
   async function initMap() {
@@ -268,7 +501,7 @@
     if (first[0] !== last[0] || first[1] !== last[1]) {
       draftPoints.push([first[0], first[1]]);
     }
-    setStatus(`Draft zone ready (${draftPoints.length - 1} corners). Save to keep.`);
+    setStatus(`Draft zone ready (${draftPoints.length - 1} corners). Tap Save map zone.`);
   }
 
   async function initHeat() {
@@ -299,7 +532,10 @@
           .addTo(heatMap);
       });
       if (data.points?.length) {
-        heatMap.fitBounds(data.points.map((p) => [p.lat, p.lng]), { padding: [24, 24] });
+        heatMap.fitBounds(
+          data.points.map((p) => [p.lat, p.lng]),
+          { padding: [24, 24] }
+        );
       }
     } catch (err) {
       setStatus(err.message, true);
@@ -310,16 +546,17 @@
     const host = ensureShell();
     if (!host) return;
     bind();
+    syncModeUi();
     const { phone, sessionToken } = auth();
     if (!phone || !sessionToken) {
-      setStatus("Sign in to the Seller Hub to edit shipping rates.", true);
+      setStatus("Sign in to the Seller Hub to set delivery fees.", true);
       return;
     }
     try {
       const data = await api("/shipping-rules");
       fillProfile(data.profile);
       renderZones(data.zones || []);
-      setStatus("Shipping profile loaded.");
+      setStatus("Delivery fees loaded — edit and save anytime.");
     } catch (err) {
       setStatus(err.message, true);
     }
@@ -329,30 +566,36 @@
     const host = document.getElementById("vendor-shipping-manager");
     if (!host || host.dataset.bound) return;
     host.dataset.bound = "1";
+
     host.querySelectorAll("[data-ship-tab]").forEach((btn) => {
       btn.addEventListener("click", () => showTab(btn.getAttribute("data-ship-tab")));
     });
+
+    host.querySelectorAll('input[name="vsm-mode"]').forEach((r) => {
+      r.addEventListener("change", syncModeUi);
+    });
+
+    ["vsm-t1", "vsm-t2", "vsm-t3", "vsm-t4", "vsm-flat-local", "vsm-flat-up"].forEach((id) => {
+      document.getElementById(id)?.addEventListener("input", updateCoverageSummary);
+    });
+
+    document.getElementById("vsm-advanced-map")?.addEventListener("change", (e) => {
+      toggleAdvancedMap(Boolean(e.target.checked));
+    });
+
     document.getElementById("vsm-save-rates")?.addEventListener("click", async () => {
       try {
         await api("/shipping-rules", {
           method: "POST",
-          body: {
-            shippingType: document.getElementById("vsm-type")?.value,
-            flatLocalRateKes: document.getElementById("vsm-flat-local")?.value,
-            flatUpcountryRateKes: document.getElementById("vsm-flat-up")?.value,
-            tier1RateKes: document.getElementById("vsm-t1")?.value,
-            tier2RateKes: document.getElementById("vsm-t2")?.value,
-            tier3RateKes: document.getElementById("vsm-t3")?.value,
-            tier4RateKes: document.getElementById("vsm-t4")?.value,
-            isFreeShippingEnabled: document.getElementById("vsm-free")?.checked,
-            localExpressEnabled: document.getElementById("vsm-express")?.checked,
-          },
+          body: buildSavePayload(),
         });
-        setStatus("Shipping profile saved.");
+        updateCoverageSummary();
+        setStatus("All-Kenya shipping rates saved. Buyers get the right fee from their county.");
       } catch (err) {
         setStatus(err.message, true);
       }
     });
+
     document.getElementById("vsm-zone-undo")?.addEventListener("click", () => {
       draftPoints.pop();
       if (window.L && draftLayer) redrawDraft(window.L);
@@ -376,7 +619,7 @@
         draftPoints = [];
         draftLayer?.clearLayers();
         renderZones(data.zones || []);
-        setStatus("Zone saved.");
+        setStatus("Map zone saved.");
       } catch (err) {
         setStatus(err.message, true);
       }
