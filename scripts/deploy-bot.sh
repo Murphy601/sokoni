@@ -314,5 +314,12 @@ else
   echo "WARN: https://bot.sokonimall.com still unreachable (502 = nginx or Cloudflare)"
   echo "      If local health OK: sudo nginx -t && sudo systemctl reload nginx"
 fi
+
+# Seller own-video uploads need >1m bodies (default nginx was rejecting at ~1MB).
+if [ -x "$REPO/scripts/ensure-nginx-upload-limit.sh" ]; then
+  echo "==> Ensuring nginx client_max_body_size for seller videos..."
+  bash "$REPO/scripts/ensure-nginx-upload-limit.sh" || echo "WARN: nginx upload-limit script failed (chunked uploads still work)"
+fi
+
 echo ""
 echo "Done."

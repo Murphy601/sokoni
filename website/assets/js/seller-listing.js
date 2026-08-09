@@ -1464,14 +1464,64 @@ async function postListingRequest(media, clientPublishId, draft) {
   return parseApiResponse(res);
 }
 
+/** XHR POST raw bytes; returns { ok, status, data, message }. */
+function xhrPostBinary(url, blob, { contentType = "application/octet-stream", timeoutMs = 120_000, onProgress } = {}) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.timeout = timeoutMs;
+    xhr.responseType = "text";
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (ev) => {
+      if (typeof onProgress === "function") onProgress(ev);
+    };
+    xhr.onload = () => {
+      let data = null;
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = null;
+      }
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        data,
+        message:
+          data?.message ||
+          (xhr.status === 413
+            ? "Video is too large for the server right now — trim under 8MB and try again."
+            : xhr.status === 0
+              ? "Video upload dropped — check your connection."
+              : "Could not upload your video."),
+      });
+    };
+    xhr.onerror = () =>
+      resolve({
+        ok: false,
+        status: 0,
+        data: null,
+        message: "Video upload dropped — check your connection and try again.",
+      });
+    xhr.ontimeout = () =>
+      resolve({
+        ok: false,
+        status: 0,
+        data: null,
+        message: "Video upload timed out — trim to under 8MB / ~15s and try again.",
+      });
+    xhr.send(blob);
+  });
+}
+
 /**
- * Upload seller phone video as raw bytes (not JSON base64) so mobile posts survive.
- * Falls back to legacy JSON /upload-video only if binary fails hard.
+ * Upload seller phone video in ≤512KB chunks.
+ * Live nginx was rejecting bodies over ~1MB (413) — single-shot uploads died ~50%
+ * then fell through to JSON base64 and showed "Failed to fetch".
  */
 async function stageSellerVideoUpload(file) {
   if (!file) return { ok: false, message: "Choose a video first." };
   const maxBytes = Number(meta.maxVideoBytes) || 15 * 1024 * 1024;
-  // Soft cap for Kenya mobile — 15MB base64 (~20MB JSON) routinely times out.
+  // Soft cap for Kenya mobile — keep posts reliable.
   const softCap = Math.min(maxBytes, 8 * 1024 * 1024);
   if (file.size > maxBytes) {
     return {
@@ -1490,80 +1540,87 @@ async function stageSellerVideoUpload(file) {
   }
 
   const phone = apiPhone();
-  const params = new URLSearchParams({ phone: normalizePhoneInput(phone) });
   const token = getSessionToken();
-  if (token) params.set("sessionToken", token);
-  const url = `${LISTINGS_API}/upload-video-bin?${params}`;
+  const chunkBytes = 512 * 1024;
+  const chunkCount = Math.max(1, Math.ceil(file.size / chunkBytes));
+  const uploadId = `vu_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 
-  try {
-    const staged = await new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", url);
-      xhr.timeout = 180_000;
-      xhr.responseType = "text";
-      xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-      xhr.upload.onprogress = (ev) => {
-        if (!ev.lengthComputable || ev.total <= 0) return;
-        const pct = Math.min(99, Math.round((ev.loaded / ev.total) * 100));
-        setStatus(`Uploading your video… ${pct}%`);
-      };
-      xhr.onload = () => {
-        let data = null;
-        try {
-          data = JSON.parse(xhr.responseText || "{}");
-        } catch {
-          data = null;
-        }
-        resolve({
-          ok: xhr.status >= 200 && xhr.status < 300,
-          status: xhr.status,
-          data,
-          message:
-            data?.message ||
-            (xhr.status === 413
-              ? "Video is too large — trim it and try again."
-              : "Could not upload your video."),
-        });
-      };
-      xhr.onerror = () =>
-        resolve({
-          ok: false,
-          status: 0,
-          data: null,
-          message: "Video upload dropped — check your connection and try again.",
-        });
-      xhr.ontimeout = () =>
-        resolve({
-          ok: false,
-          status: 0,
-          data: null,
-          message: "Video upload timed out — trim to under 8MB / ~15s and try again.",
-        });
-      xhr.send(file);
+  setStatus(`Uploading your video… 0%`);
+
+  for (let i = 0; i < chunkCount; i += 1) {
+    const start = i * chunkBytes;
+    const end = Math.min(file.size, start + chunkBytes);
+    const blob = file.slice(start, end);
+    const params = new URLSearchParams({
+      phone: normalizePhoneInput(phone),
+      uploadId,
+      chunkIndex: String(i),
+      chunkCount: String(chunkCount),
+      totalBytes: String(file.size),
     });
-    if (staged.ok || staged.status === 401 || staged.status === 413) return staged;
-  } catch (err) {
-    console.warn("[sell] binary video upload failed:", err);
+    if (token) params.set("sessionToken", token);
+    const url = `${LISTINGS_API}/upload-video-chunk?${params}`;
+
+    let attempt = 0;
+    let staged = null;
+    while (attempt < 3) {
+      attempt += 1;
+      staged = await xhrPostBinary(url, blob, {
+        contentType: file.type || "video/mp4",
+        timeoutMs: 90_000,
+        onProgress: (ev) => {
+          if (!ev.lengthComputable || ev.total <= 0) return;
+          const overall = Math.min(
+            99,
+            Math.round(((i + ev.loaded / ev.total) / chunkCount) * 100)
+          );
+          setStatus(`Uploading your video… ${overall}%`);
+        },
+      });
+      if (staged.ok || staged.status === 401 || staged.status === 403) break;
+      // Retry only network drops / 5xx — not 413 validation errors.
+      if (staged.status === 413) break;
+      if (staged.status !== 0 && staged.status < 500) break;
+      await sleepMs(400 * attempt);
+    }
+
+    if (staged.status === 401) return staged;
+    if (!staged.ok) {
+      return {
+        ok: false,
+        status: staged.status,
+        data: staged.data,
+        message:
+          staged.message ||
+          (staged.status === 413
+            ? "Video rejected by server size limit — trim under 8MB and try again."
+            : "Video upload failed — check your connection and try again."),
+      };
+    }
+
+    // Last chunk returns staged videoUrl; intermediate chunks return incomplete.
+    if (staged.data?.videoUrl) {
+      setStatus("Video uploaded — finishing post…");
+      return {
+        ok: true,
+        status: staged.status || 201,
+        data: staged.data,
+        message: staged.data.message || "Video uploaded.",
+      };
+    }
+    const pct =
+      staged.data?.percent != null
+        ? Number(staged.data.percent)
+        : Math.round(((i + 1) / chunkCount) * 100);
+    setStatus(`Uploading your video… ${Math.min(99, pct)}%`);
   }
 
-  // Legacy JSON base64 path (desktop / small clips only).
-  try {
-    setStatus("Uploading your video…");
-    const videoBase64 = await readFileAsDataUrl(file);
-    const res = await fetch(`${LISTINGS_API}/upload-video`, {
-      method: "POST",
-      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(jsonAuthBody({ phone, videoBase64 })),
-    });
-    return parseApiResponse(res);
-  } catch (err) {
-    return {
-      ok: false,
-      status: 0,
-      data: null,
-      message: err?.message || "Could not upload your video — try a shorter clip.",
-    };
-  }
+  return {
+    ok: false,
+    status: 0,
+    data: null,
+    message: "Video upload did not finish — try a shorter clip under 8MB.",
+  };
 }
 
 async function onPublish() {

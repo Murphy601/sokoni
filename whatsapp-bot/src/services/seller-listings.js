@@ -2,7 +2,7 @@
  * Phase 4 — Depop-style seller listings: photo → details → post → live instantly.
  * Post-publish moderation runs after go-live (flag/hide, not pre-approval).
  */
-import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, readdir, rm } from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -60,6 +60,13 @@ export const MAX_BRANDS = 2;
 export const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
 /** Client-enforced; server trusts size. AI previews stay 3–5s separately. */
 export const MAX_VIDEO_SECONDS = 30;
+/**
+ * Chunk size for resumable seller video uploads.
+ * Live nginx was stuck at ~1m client_max_body_size — chunks must stay under that.
+ */
+export const VIDEO_UPLOAD_CHUNK_BYTES = 512 * 1024;
+const VIDEO_CHUNK_DIR = path.join(DATA_DIR, "video-upload-chunks");
+const VIDEO_CHUNK_TTL_MS = 45 * 60_000;
 
 const CATEGORY_PREFIX = {
   "phones-tablets": "pt",
@@ -1132,6 +1139,190 @@ export async function listSellerListings(phone, sessionToken) {
   return { drafts, listings: live };
 }
 
+async function persistStagedSellerVideo(check, buffer) {
+  if (!existsSync(IMAGES_DIR)) await mkdir(IMAGES_DIR, { recursive: true });
+  const sellerSlug = String(check.supplier.id || "seller")
+    .slice(-8)
+    .replace(/[^a-z0-9]/gi, "") || "seller";
+  const file = `stage_${sellerSlug}_${Date.now().toString(36)}.mp4`;
+  await writeFile(path.join(IMAGES_DIR, file), buffer);
+  const base = String(config.botPublicUrl || "https://bot.sokonimall.com").replace(/\/$/, "");
+  const videoUrl = `${base}/catalog-images/${file}`;
+  console.log("[seller-listings] staged seller video", {
+    bytes: buffer.length,
+    file,
+    seller: check.supplier.id,
+  });
+  return {
+    ok: true,
+    videoUrl,
+    videoKind: "seller",
+    bytes: buffer.length,
+    message: "Video uploaded — tap Post listing.",
+  };
+}
+
+function safeUploadId(raw) {
+  const id = String(raw || "").trim();
+  if (!/^[a-zA-Z0-9_-]{8,80}$/.test(id)) return null;
+  return id;
+}
+
+async function cleanupStaleVideoChunks() {
+  if (!existsSync(VIDEO_CHUNK_DIR)) return;
+  try {
+    const entries = await readdir(VIDEO_CHUNK_DIR, { withFileTypes: true });
+    const now = Date.now();
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const dir = path.join(VIDEO_CHUNK_DIR, ent.name);
+      const metaPath = path.join(dir, "meta.json");
+      let stale = true;
+      try {
+        if (existsSync(metaPath)) {
+          const meta = JSON.parse(await readFile(metaPath, "utf-8"));
+          stale = now - Number(meta.updatedAt || meta.createdAt || 0) > VIDEO_CHUNK_TTL_MS;
+        }
+      } catch {
+        stale = true;
+      }
+      if (stale) {
+        await rm(dir, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn("[seller-listings] chunk cleanup skipped:", err.message);
+  }
+}
+
+/**
+ * Accept one chunk of a seller phone video (works when nginx body limit is ~1MB).
+ * Final chunk assembles and stages the full MP4.
+ */
+export async function stageSellerVideoChunk({
+  phone,
+  sessionToken,
+  uploadId,
+  chunkIndex,
+  chunkCount,
+  totalBytes,
+  chunkBuffer,
+}) {
+  const check = await requireApprovedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const id = safeUploadId(uploadId);
+  if (!id) {
+    return { error: "invalid_upload", message: "Video upload session invalid — try again." };
+  }
+
+  const index = Number(chunkIndex);
+  const count = Number(chunkCount);
+  const total = Number(totalBytes);
+  if (!Number.isInteger(index) || index < 0 || !Number.isInteger(count) || count < 1 || count > 64) {
+    return { error: "invalid_chunk", message: "Bad video chunk — try posting again." };
+  }
+  if (index >= count) {
+    return { error: "invalid_chunk", message: "Bad video chunk index — try posting again." };
+  }
+  if (!Number.isFinite(total) || total < 1 || total > MAX_VIDEO_BYTES) {
+    return {
+      error: "video_too_large",
+      message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
+    };
+  }
+
+  const buf = Buffer.isBuffer(chunkBuffer) ? chunkBuffer : Buffer.from(chunkBuffer || []);
+  if (!buf.length) {
+    return { error: "missing_video", message: "Empty video chunk — try again." };
+  }
+  if (buf.length > VIDEO_UPLOAD_CHUNK_BYTES + 64 * 1024) {
+    return {
+      error: "chunk_too_large",
+      message: "Video chunk too large for this server — refresh the sell page and try again.",
+    };
+  }
+
+  await cleanupStaleVideoChunks();
+  const dir = path.join(VIDEO_CHUNK_DIR, id);
+  await mkdir(dir, { recursive: true });
+  const metaPath = path.join(dir, "meta.json");
+  const sellerKey = String(check.supplier.id || normalizePhone(phone));
+  let meta = null;
+  if (existsSync(metaPath)) {
+    try {
+      meta = JSON.parse(await readFile(metaPath, "utf-8"));
+    } catch {
+      meta = null;
+    }
+  }
+  if (meta && meta.sellerKey && meta.sellerKey !== sellerKey) {
+    return { error: "forbidden", message: "Video upload belongs to another seller session." };
+  }
+  if (meta && (Number(meta.chunkCount) !== count || Number(meta.totalBytes) !== total)) {
+    return { error: "invalid_upload", message: "Video upload mismatch — start the upload again." };
+  }
+
+  const now = Date.now();
+  meta = {
+    sellerKey,
+    chunkCount: count,
+    totalBytes: total,
+    createdAt: meta?.createdAt || now,
+    updatedAt: now,
+    received: Array.isArray(meta?.received) ? meta.received : [],
+  };
+  await writeFile(path.join(dir, `part-${index}`), buf);
+  if (!meta.received.includes(index)) meta.received.push(index);
+  meta.received.sort((a, b) => a - b);
+  await writeFile(metaPath, JSON.stringify(meta), "utf-8");
+
+  const receivedCount = meta.received.length;
+  if (receivedCount < count) {
+    return {
+      ok: true,
+      incomplete: true,
+      uploadId: id,
+      received: receivedCount,
+      chunkCount: count,
+      percent: Math.round((receivedCount / count) * 100),
+      message: `Uploading video… ${Math.round((receivedCount / count) * 100)}%`,
+    };
+  }
+
+  // Assemble in order
+  const parts = [];
+  let assembled = 0;
+  for (let i = 0; i < count; i += 1) {
+    const partPath = path.join(dir, `part-${i}`);
+    if (!existsSync(partPath)) {
+      return { error: "incomplete_upload", message: "Video upload incomplete — try again." };
+    }
+    const part = await readFile(partPath);
+    assembled += part.length;
+    if (assembled > MAX_VIDEO_BYTES) {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      return {
+        error: "video_too_large",
+        message: `Video must be ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB or smaller.`,
+      };
+    }
+    parts.push(part);
+  }
+  const buffer = Buffer.concat(parts, assembled);
+  if (buffer.length !== total) {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    return {
+      error: "invalid_upload",
+      message: "Video size mismatch after upload — try a shorter clip.",
+    };
+  }
+
+  const staged = await persistStagedSellerVideo(check, buffer);
+  await rm(dir, { recursive: true, force: true }).catch(() => {});
+  return staged;
+}
+
 /**
  * Pre-upload a seller phone video so /publish stays under nginx body/time limits.
  * Accepts a Buffer (binary upload) or data-URL / base64 string (legacy JSON path).
@@ -1171,26 +1362,7 @@ export async function stageSellerVideo({ phone, videoBase64 = null, videoBuffer 
     return { error: "missing_video", message: "Could not read that video — try another MP4." };
   }
 
-  if (!existsSync(IMAGES_DIR)) await mkdir(IMAGES_DIR, { recursive: true });
-  const sellerSlug = String(check.supplier.id || "seller")
-    .slice(-8)
-    .replace(/[^a-z0-9]/gi, "") || "seller";
-  const file = `stage_${sellerSlug}_${Date.now().toString(36)}.mp4`;
-  await writeFile(path.join(IMAGES_DIR, file), buffer);
-  const base = String(config.botPublicUrl || "https://bot.sokonimall.com").replace(/\/$/, "");
-  const videoUrl = `${base}/catalog-images/${file}`;
-  console.log("[seller-listings] staged seller video", {
-    bytes: buffer.length,
-    file,
-    seller: check.supplier.id,
-  });
-  return {
-    ok: true,
-    videoUrl,
-    videoKind: "seller",
-    bytes: buffer.length,
-    message: "Video uploaded — tap Post listing.",
-  };
+  return persistStagedSellerVideo(check, buffer);
 }
 
 export async function getSellerListingMeta() {
@@ -1209,6 +1381,7 @@ export async function getSellerListingMeta() {
     maxPhotos: MAX_PHOTOS,
     maxVideoBytes: MAX_VIDEO_BYTES,
     maxVideoSeconds: MAX_VIDEO_SECONDS,
+    videoUploadChunkBytes: VIDEO_UPLOAD_CHUNK_BYTES,
     maxTags: MAX_TAGS,
     maxBrands: MAX_BRANDS,
     browseTaxonomy,

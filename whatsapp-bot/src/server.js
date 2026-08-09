@@ -16,7 +16,7 @@ import { listReviews, addReview } from "./services/reviews.js";
 import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
-import { stageSellerVideo } from "./services/seller-listings.js";
+import { stageSellerVideo, stageSellerVideoChunk, VIDEO_UPLOAD_CHUNK_BYTES } from "./services/seller-listings.js";
 import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
 import socialApiRouter from "./routes/socialApi.js";
 import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
@@ -72,10 +72,73 @@ const BUILD_ID = resolveBuildId();
 
 app.use(corsAllowlist);
 
+function sellerVideoAuthStatus(result) {
+  if (
+    result.error === "session_required" ||
+    result.error === "session_invalid" ||
+    result.error === "session_expired"
+  ) {
+    return 401;
+  }
+  if (result.error === "not_onboarded" || result.error === "not_approved" || result.error === "forbidden") {
+    return 403;
+  }
+  if (result.error === "video_too_large" || result.error === "chunk_too_large") return 413;
+  if (
+    result.error === "invalid_phone" ||
+    result.error === "missing_video" ||
+    result.error === "invalid_upload" ||
+    result.error === "invalid_chunk" ||
+    result.error === "incomplete_upload"
+  ) {
+    return 400;
+  }
+  return 0;
+}
+
+/**
+ * Chunked seller-video staging — works when nginx client_max_body_size is stuck at ~1m.
+ * Must run BEFORE express.json. Auth via query phone + sessionToken.
+ */
+app.post(
+  "/api/seller/listings/upload-video-chunk",
+  express.raw({
+    type: () => true,
+    limit: "1mb",
+  }),
+  async (req, res) => {
+    try {
+      const phone = String(req.query.phone || req.headers["x-seller-phone"] || "").trim();
+      const sessionToken = String(
+        req.query.sessionToken || req.headers["x-seller-session"] || ""
+      ).trim();
+      const chunkBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+      const result = await stageSellerVideoChunk({
+        phone,
+        sessionToken,
+        uploadId: req.query.uploadId,
+        chunkIndex: req.query.chunkIndex,
+        chunkCount: req.query.chunkCount,
+        totalBytes: req.query.totalBytes,
+        chunkBuffer,
+      });
+      const authStatus = sellerVideoAuthStatus(result);
+      if (authStatus) return res.status(authStatus).json(result);
+      if (result.error) return res.status(400).json(result);
+      if (result.incomplete) return res.status(200).json(result);
+      return res.status(201).json(result);
+    } catch (err) {
+      console.warn("[upload-video-chunk]", err?.message || err);
+      return res.status(500).json({ error: "upload_failed", message: "Video upload failed — try again." });
+    }
+  }
+);
+
 /**
  * Binary seller-video staging — must run BEFORE express.json so the MP4 body
  * is not chewed by the JSON parser (and so we avoid 33% base64 bloat on mobile).
  * Auth: phone + sessionToken query params (same pattern as other seller GETs).
+ * Prefer /upload-video-chunk when nginx body limit is low.
  */
 app.post(
   "/api/seller/listings/upload-video-bin",
@@ -91,25 +154,17 @@ app.post(
       ).trim();
       const videoBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
       const result = await stageSellerVideo({ phone, videoBuffer, sessionToken });
-      if (
-        result.error === "session_required" ||
-        result.error === "session_invalid" ||
-        result.error === "session_expired"
-      ) {
-        return res.status(401).json(result);
-      }
-      if (result.error === "not_onboarded" || result.error === "not_approved") {
-        return res.status(403).json(result);
-      }
-      if (result.error === "video_too_large") return res.status(413).json(result);
-      if (result.error === "invalid_phone" || result.error === "missing_video") {
-        return res.status(400).json(result);
-      }
+      const authStatus = sellerVideoAuthStatus(result);
+      if (authStatus) return res.status(authStatus).json(result);
       if (result.error) return res.status(400).json(result);
       return res.status(201).json(result);
     } catch (err) {
       console.warn("[upload-video-bin]", err?.message || err);
-      return res.status(500).json({ error: "upload_failed", message: "Video upload failed — try again." });
+      return res.status(500).json({
+        error: "upload_failed",
+        message: "Video upload failed — try chunked upload or trim the clip.",
+        chunkBytes: VIDEO_UPLOAD_CHUNK_BYTES,
+      });
     }
   }
 );
