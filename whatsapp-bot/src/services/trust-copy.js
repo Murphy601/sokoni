@@ -147,11 +147,7 @@ export function paymentVerificationPrompt(amountKes = null) {
 export function paymentConfirmedMessage({ orderId, amountKes }) {
   const amt = Number(amountKes);
   const priceLine = Number.isFinite(amt) ? `KES ${amt.toLocaleString()}` : "—";
-  return (
-    `✅ *Payment Confirmed!*\n` +
-    `We received your payment of *${priceLine}* for order *${orderId}*.\n` +
-    `Thank you for shopping with Sokoni Mall! Enjoy your purchase! 🎉`
-  );
+  return `✅ Paid *${priceLine}* for *${orderId}*. We'll pack next.`;
 }
 
 export function outOfOfficeMessage() {
