@@ -5,6 +5,7 @@
 
 import {
   getVendorShippingProfile,
+  isConfiguredShippingProfile,
   listVendorZones,
   normalizeVendorKey,
   pointInPolygon,
@@ -93,10 +94,11 @@ export async function calculateShipping(body = {}) {
   let anyUnsupported = false;
 
   for (const { vendorId, productIds } of byVendor.values()) {
-    const profile = getVendorShippingProfile(vendorId);
+    const rawProfile = getVendorShippingProfile(vendorId);
+    const profile = isConfiguredShippingProfile(rawProfile) ? rawProfile : null;
     const zones = listVendorZones(vendorId);
 
-    if (deliveryMethod === "MAP_PIN" && buyerCoordinates) {
+    if (deliveryMethod === "MAP_PIN" && buyerCoordinates && profile) {
       const turfHit = zones.find(
         (z) =>
           z.isActive !== false &&
