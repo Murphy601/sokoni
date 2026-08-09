@@ -50,8 +50,8 @@ export const config = {
       .filter(Boolean),
   },
   /**
-   * NVIDIA NIM (build.nvidia.com) — OpenAI-compatible VLMs for listing drafts.
-   * Used only as fallback after OpenRouter catalog vision fails / runs out of tokens.
+   * NVIDIA NIM (build.nvidia.com) — OpenAI-compatible VLMs for listing drafts
+   * and buyer WhatsApp photo→stock match (free pool).
    */
   nvidia: {
     apiKey: process.env.NVIDIA_API_KEY || "",
@@ -62,13 +62,27 @@ export const config = {
       .filter(Boolean),
     maxAttempts: Number(process.env.NVIDIA_VISION_MAX_ATTEMPTS) || 4,
   },
+  /**
+   * Buyer WhatsApp photo → similar stock (free vision only).
+   * Order: OpenRouter free VLMs → NVIDIA free VLMs → optional Gemini.
+   * Override with IMAGE_SEARCH_VISION_MODELS (comma list; must stay :free / openrouter/free).
+   */
+  imageSearch: {
+    openrouterModels: (process.env.IMAGE_SEARCH_VISION_MODELS ||
+      "openrouter/free,nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    /** Set IMAGE_SEARCH_ALLOW_GEMINI=false to skip Gemini entirely when keys expire weekly. */
+    allowGemini: process.env.IMAGE_SEARCH_ALLOW_GEMINI !== "false",
+  },
   /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
   catalog: {
-    // Primary must be multimodal vision/chat. Keep krea as a configured OpenRouter fallback
-    // (image-gen — listing-generator skips it for photo→JSON and continues to the next).
-    visionModel: process.env.CATALOG_VISION_MODEL || "google/gemini-2.5-flash",
+    // Prefer free OpenRouter VLMs; code still falls through to NVIDIA NIM → Gemini.
+    // Keep krea only if you add it via env (image-gen — skipped for photo→JSON).
+    visionModel: process.env.CATALOG_VISION_MODEL || "openrouter/free",
     visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS ||
-      "google/gemini-2.0-flash-001,krea/krea-2-medium-turbo")
+      "nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
