@@ -218,7 +218,9 @@ app.use(
 );
 
 app.use("/api/", apiLimiter);
-app.use("/api/seller/onboard", authLimiter);
+/** OTP only — do NOT throttle session-authed Seller Hub routes (ledger/orders/shipping). */
+app.use("/api/seller/onboard/send-code", authLimiter);
+app.use("/api/seller/onboard/verify-code", authLimiter);
 app.use("/api/buyer/auth", authLimiter);
 app.use("/api/account/auth", authLimiter);
 app.use("/api/agent", authLimiter);

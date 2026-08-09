@@ -144,6 +144,9 @@
           data.message || "Finish seller setup (shop + M-Pesa) before setting delivery fees."
         );
       }
+      if (res.status === 429) {
+        throw new Error("Hub is busy — wait a few seconds, then tap Logistics again to reload.");
+      }
       throw new Error(data.message || data.error || `HTTP ${res.status}`);
     }
     return data;

@@ -20,10 +20,12 @@
   const readinessEl = document.getElementById("checkout-readiness");
 
   let currentOrderId = null;
+  let currentOrder = null;
   let checkoutMetaCache = null;
   let pollTimer = null;
   let pollCount = 0;
   let activeOfferId = null;
+  let payBusy = false;
   /** @type {{ towns: string[], hubs: Record<string, string[]>, options: Array<{town:string,spotName:string,id:string}> } | null} */
   let landmarkCatalog = null;
 
@@ -305,13 +307,48 @@
     document.getElementById("checkout-till-ref").textContent = orderId || "SKN-####";
   }
 
+  function renderOrderSummary(data) {
+    const total = Math.round(Number(data.totalKes ?? data.amountKes) || 0);
+    const ship = Math.round(Number(data.shippingKes) || 0);
+    const item = Math.round(
+      Number(data.itemKes) || Math.max(0, total - ship)
+    );
+    const itemEl = document.getElementById("checkout-item");
+    const shipEl = document.getElementById("checkout-shipping");
+    const totalEl = document.getElementById("checkout-total");
+    const noteEl = document.getElementById("checkout-shipping-note");
+    if (itemEl) itemEl.textContent = formatKes(item);
+    if (shipEl) {
+      const place = [data.deliveryCounty, data.deliveryTown].filter(Boolean).join(" · ");
+      shipEl.textContent =
+        ship > 0
+          ? `${formatKes(ship)}${place ? ` (${place})` : ""}`
+          : "KES 0";
+    }
+    if (totalEl) totalEl.textContent = formatKes(total);
+    if (noteEl) {
+      noteEl.textContent =
+        ship > 0
+          ? "Delivery fee is included in the M-Pesa STK amount below."
+          : "Choose county (or map pin) above and apply — delivery is added before M-Pesa.";
+    }
+    if (payBtn && !payBusy) {
+      const paid = data.paymentStatus === "confirmed";
+      if (!paid) {
+        payBtn.textContent =
+          total > 0 ? `Pay with M-Pesa (${formatKes(total)})` : "Pay with M-Pesa";
+      }
+    }
+  }
+
   function renderCheckout(data) {
     currentOrderId = data.orderId;
+    currentOrder = data;
     const meta = data.meta || checkoutMetaCache || {};
     checkoutMetaCache = meta;
     document.getElementById("checkout-order-id").textContent = data.orderId;
     document.getElementById("checkout-product").textContent = data.productName || "Sokoni order";
-    document.getElementById("checkout-total").textContent = formatKes(data.totalKes ?? data.amountKes);
+    renderOrderSummary(data);
 
     const trackLink = document.getElementById("checkout-track-link");
     if (trackLink) trackLink.href = `track.html?order=${encodeURIComponent(data.orderId)}`;
@@ -330,11 +367,11 @@
     } else if (processing && meta.darajaConfigured) {
       statusEl.textContent = "📱 STK sent — enter your M-Pesa PIN. Waiting for confirmation…";
       payBlock.classList.remove("hidden");
-      if (payBtn) payBtn.textContent = "Resend STK";
+      if (payBtn && !payBusy) payBtn.textContent = "Resend STK";
     } else if (meta.darajaConfigured) {
-      statusEl.textContent = "💳 Payment required before dispatch. Tap Pay to get an M-Pesa prompt.";
+      statusEl.textContent =
+        "💳 Set delivery above, then tap Pay — M-Pesa STK uses item + delivery fee.";
       payBlock.classList.remove("hidden");
-      if (payBtn) payBtn.textContent = "Pay with M-Pesa";
     } else {
       statusEl.textContent =
         "💳 Payment required before dispatch. Use the till details below, then reply paid on WhatsApp.";
@@ -418,17 +455,29 @@
   }
 
   async function payOrder() {
-    if (!currentOrderId) return;
+    if (!currentOrderId || payBusy) return;
     const phone = document.getElementById("checkout-phone")?.value.trim();
     if (!phone) {
       showError("Enter the M-Pesa phone number for STK push.");
       return;
     }
     hideError();
+    payBusy = true;
     payBtn.disabled = true;
-    payBtn.textContent = "Sending STK…";
+    payBtn.textContent = "Preparing total…";
 
     try {
+      // Apply county/pin shipping onto the order before Daraja STK so amount includes delivery.
+      try {
+        await window.SokoniCheckoutDeliverySelector?.applyToOrder?.();
+      } catch {
+        /* STK path still runs hybrid ensure on the bot */
+      }
+      const refreshed = await loadOrder(currentOrderId, { quiet: true });
+      const total = Math.round(Number(refreshed?.totalKes ?? refreshed?.amountKes) || 0);
+      payBtn.textContent =
+        total > 0 ? `Sending STK (${formatKes(total)})…` : "Sending STK…";
+
       const res = await fetch(`${CHECKOUT_API}/${encodeURIComponent(currentOrderId)}/stk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -440,6 +489,14 @@
       }
 
       if (data.meta) checkoutMetaCache = data.meta;
+      if (data.amountKes != null || data.totalKes != null || data.shippingKes != null) {
+        renderOrderSummary({
+          ...(refreshed || {}),
+          totalKes: data.totalKes ?? data.amountKes,
+          amountKes: data.amountKes ?? data.totalKes,
+          shippingKes: data.shippingKes,
+        });
+      }
 
       if (data.alreadyPaid || data.method === "already_paid") {
         statusEl.textContent = "✅ Already paid.";
@@ -457,13 +514,18 @@
         return;
       }
 
+      const stkTotal = Math.round(Number(data.amountKes ?? data.totalKes) || total);
       statusEl.textContent =
-        data.customerMessage || "📱 STK sent — check your phone and enter M-Pesa PIN. Waiting…";
+        data.customerMessage ||
+        `📱 STK sent for ${formatKes(stkTotal)} — check your phone and enter M-Pesa PIN. Waiting…`;
       schedulePoll(currentOrderId);
     } catch (err) {
       showError(err.message);
       payBtn.disabled = false;
-      payBtn.textContent = "Pay with M-Pesa";
+      const t = Math.round(Number(currentOrder?.totalKes ?? currentOrder?.amountKes) || 0);
+      payBtn.textContent = t > 0 ? `Pay with M-Pesa (${formatKes(t)})` : "Pay with M-Pesa";
+    } finally {
+      payBusy = false;
     }
   }
 
@@ -486,11 +548,24 @@
   /** Bridge for Path B hybrid delivery selector → Daraja STK totals. */
   window.SokoniCheckoutDelivery = {
     getOrderId: () => currentOrderId || normalizeOrderId(input?.value || ""),
-    getVendorId: () => null,
+    getVendorId: () =>
+      currentOrder?.vendorId ||
+      String(currentOrder?.shopHandle || currentOrder?.supplierId || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, "") ||
+      null,
     onApplied: (data) => {
-      if (data?.order?.amountKes != null) {
-        const totalEl = document.getElementById("checkout-total");
-        if (totalEl) totalEl.textContent = formatKes(data.order.amountKes);
+      if (data?.order) {
+        renderOrderSummary({
+          itemKes: currentOrder?.itemKes,
+          shippingKes: data.order.shippingKes ?? data.shippingKes,
+          totalKes: data.order.amountKes ?? data.totalKes,
+          amountKes: data.order.amountKes ?? data.totalKes,
+          deliveryCounty: data.order.deliveryCounty,
+          deliveryTown: data.order.deliveryTown,
+          paymentStatus: currentOrder?.paymentStatus,
+        });
       }
       if (data?.orderId) void loadOrder(data.orderId, { quiet: true });
     },

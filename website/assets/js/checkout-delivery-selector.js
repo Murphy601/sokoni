@@ -79,8 +79,12 @@
         <label class="block text-sm text-zinc-300">Landmark / note
           <input id="cds-note" type="text" maxlength="280" class="sell-form-input mt-1" placeholder="Near Quickmart, opposite Stage 46" />
         </label>
-        <p id="cds-fee" class="text-sm text-zinc-400">Shipping: calculated when the seller has rates set — otherwise KES 0 (seller arranges).</p>
-        <button type="button" id="cds-apply" class="depop-btn-ghost text-sm font-semibold">Apply location to order</button>
+        <div id="cds-summary" class="rounded-2xl border border-zinc-800 bg-black/50 px-4 py-3 space-y-1 text-sm">
+          <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Delivery estimate</p>
+          <p id="cds-fee" class="text-zinc-300">Choose county or drop a pin to calculate delivery.</p>
+          <p id="cds-grand" class="text-white font-semibold hidden"></p>
+        </div>
+        <button type="button" id="cds-apply" class="depop-btn-ghost text-sm font-semibold min-h-[44px]">Apply location to order</button>
         <p id="cds-status" class="text-xs text-zinc-500" role="status"></p>
       </div>`;
     return host;
@@ -167,11 +171,24 @@
 
   async function previewFee() {
     const feeEl = document.getElementById("cds-fee");
+    const grandEl = document.getElementById("cds-grand");
     const orderId = window.SokoniCheckoutDelivery?.getOrderId?.();
     const vendorId = window.SokoniCheckoutDelivery?.getVendorId?.() || "unknown";
+    const payload = locationPayload();
+    if (
+      (payload.deliveryMethod === "COUNTY_DROPDOWN" && !payload.buyerCounty) ||
+      (payload.deliveryMethod === "MAP_PIN" && !payload.buyerCoordinates)
+    ) {
+      if (feeEl) feeEl.textContent = "Choose county or drop a pin to calculate delivery.";
+      if (grandEl) {
+        grandEl.classList.add("hidden");
+        grandEl.textContent = "";
+      }
+      return { orderId, lastCalc: null };
+    }
     const body = {
       cartItems: [{ productId: "checkout", vendorId, qty: 1 }],
-      ...locationPayload(),
+      ...payload,
     };
     try {
       const res = await fetch(`${CHECKOUT_API}/calculate-shipping`, {
@@ -181,11 +198,19 @@
       });
       lastCalc = await res.json();
       const fee = Math.round(Number(lastCalc.totalShippingFee) || 0);
+      const tierHint = lastCalc.vendorBreakdown?.[0];
+      const place = [payload.buyerCounty, payload.buyerTown].filter(Boolean).join(" · ");
       if (feeEl) {
         feeEl.textContent =
           fee > 0
-            ? `Shipping estimate: KES ${fee.toLocaleString()} (${lastCalc.vendorBreakdown?.[0]?.methodUsed || "calc"})`
-            : "Shipping: KES 0 — seller arranges delivery (no profile rates yet).";
+            ? `Delivery fee${place ? ` (${place})` : ""}: KES ${fee.toLocaleString()}`
+            : "Delivery fee: KES 0 — seller arranges (no saved rates yet).";
+      }
+      if (grandEl && tierHint?.methodUsed) {
+        grandEl.textContent = `Method: ${tierHint.methodUsed.replace(/_/g, " ")}`;
+        grandEl.classList.remove("hidden");
+      } else if (grandEl) {
+        grandEl.classList.add("hidden");
       }
     } catch {
       if (feeEl) feeEl.textContent = "Shipping preview unavailable.";
