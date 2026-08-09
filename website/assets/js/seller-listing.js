@@ -568,7 +568,7 @@ function bindMediaSlots() {
     }
     const durationOk = await assertVideoDuration(file, maxSeconds);
     if (!durationOk) {
-      setStatus(`Keep seller videos to ${maxSeconds} seconds or less (15–30s is ideal).`, true);
+      setStatus(`Keep seller videos to ${maxSeconds} seconds or less.`, true);
       ev.target.value = "";
       return;
     }
