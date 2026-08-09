@@ -31,7 +31,7 @@ import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
 import { handleProductRouter, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
-import { getPendingOrder, getPendingCart } from "../services/session.js";
+import { getPendingOrder, getPendingCart, clearPendingOrder, clearPendingCart } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
 import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
 import { handleSellerWalletMessage } from "../services/seller-wallet.js";
@@ -48,6 +48,15 @@ const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
 function parseNumericChoice(text) {
   const match = text.trim().match(/^(\d{1,2})$/);
   return match ? Number(match[1]) : null;
+}
+
+/** Buyer product photo for stock match (not ID docs / non-images). */
+function looksLikeBuyerProductPhoto(mediaMimetype, text = "") {
+  const mime = String(mediaMimetype || "").toLowerCase();
+  if (mime && !mime.startsWith("image/")) return false;
+  const caption = String(text || "").toLowerCase();
+  if (/\b(id|passport|kra|license|national id)\b/.test(caption)) return false;
+  return true;
 }
 
 function extractQuotedText(payload) {
@@ -431,6 +440,42 @@ export async function handleIncomingMessage(
     if (await startCartFromHandoff(customerKey, combinedText)) return;
   }
 
+  // Product photo → stock match must beat stuck checkout.
+  // Mid-order "County, Town…" was eating image messages (empty caption → re-prompt).
+  if (hasMedia && !isInSupplierOnboarding(customerKey) && looksLikeBuyerProductPhoto(mediaMimetype, combinedText || text)) {
+    const hadCheckout = Boolean(getPendingCart(customerKey) || getPendingOrder(customerKey));
+    if (hadCheckout) {
+      clearPendingCart(customerKey);
+      clearPendingOrder(customerKey);
+      await sendText(
+        customerKey,
+        "Paused checkout — matching your photo instead. (*menu* to order again anytime.)"
+      );
+    }
+    try {
+      const { tryHandleBuyerImageSearch } = await import("../services/image-search.js");
+      const imageHit = await tryHandleBuyerImageSearch(customerKey, {
+        hasMedia,
+        mediaUrl,
+        mediaMimetype,
+        messageId,
+        chatId,
+        session: wahaSession,
+        text: combinedText || text,
+      });
+      if (imageHit) {
+        if (imageHit === true) return;
+        if (imageHit.handled) {
+          if (imageHit.reply) await sendText(customerKey, imageHit.reply);
+          if (imageHit.products?.length) await sendPlugProductPicker(customerKey, imageHit.products);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("[webhook] image search skipped:", err.message);
+    }
+  }
+
   // Cart or single-item checkout awaiting delivery details — before AI
   if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
     const pendingHandledEarly = await tryHandlePendingOrder(customerKey, combinedText);
@@ -588,32 +633,6 @@ export async function handleIncomingMessage(
   if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
     const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText);
     if (pendingAgain) return;
-  }
-
-  // Buyer photo → similar listings (skip when supplier onboarding already consumed media).
-  if (hasMedia && !isInSupplierOnboarding(customerKey)) {
-    try {
-      const { tryHandleBuyerImageSearch } = await import("../services/image-search.js");
-      const imageHit = await tryHandleBuyerImageSearch(customerKey, {
-        hasMedia,
-        mediaUrl,
-        mediaMimetype,
-        messageId,
-        chatId,
-        session: wahaSession,
-        text: combinedText || text,
-      });
-      if (imageHit) {
-        if (imageHit === true) return;
-        if (imageHit.handled) {
-          if (imageHit.reply) await sendText(customerKey, imageHit.reply);
-          if (imageHit.products?.length) await sendPlugProductPicker(customerKey, imageHit.products);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn("[webhook] image search skipped:", err.message);
-    }
   }
 
   // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
