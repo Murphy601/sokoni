@@ -46,19 +46,50 @@
     },
   };
 
-  function auth() {
-    if (typeof window.SokoniSellerAuth?.getPhone === "function") {
-      return {
-        phone: window.SokoniSellerAuth.getPhone(),
-        sessionToken: window.SokoniSellerAuth.getSessionToken?.() || "",
-      };
-    }
-    return {
-      phone: localStorage.getItem("sokoni-seller-phone") || "",
-      sessionToken:
+  /** Session is stored as JSON `{ phone, token, expiresAt }` — never send the raw blob. */
+  function readStoredSellerSession() {
+    try {
+      const raw =
         sessionStorage.getItem("sokoni-seller-verify-token") ||
         localStorage.getItem("sokoni-seller-verify-token") ||
-        "",
+        "";
+      if (!raw) {
+        return {
+          phone: String(localStorage.getItem("sokoni-seller-phone") || "").trim(),
+          sessionToken: "",
+        };
+      }
+      if (raw.trim().startsWith("{")) {
+        const parsed = JSON.parse(raw);
+        const token = String(parsed.token || "").trim();
+        const expired = parsed.expiresAt != null && Number(parsed.expiresAt) <= Date.now();
+        return {
+          phone: String(
+            parsed.phone || localStorage.getItem("sokoni-seller-phone") || ""
+          ).trim(),
+          sessionToken: expired ? "" : token,
+        };
+      }
+      // Legacy: bare token string
+      return {
+        phone: String(localStorage.getItem("sokoni-seller-phone") || "").trim(),
+        sessionToken: String(raw).trim(),
+      };
+    } catch {
+      return {
+        phone: String(localStorage.getItem("sokoni-seller-phone") || "").trim(),
+        sessionToken: "",
+      };
+    }
+  }
+
+  function auth() {
+    const stored = readStoredSellerSession();
+    const bridgePhone = String(window.SokoniSellerAuth?.getPhone?.() || "").trim();
+    const bridgeToken = String(window.SokoniSellerAuth?.getSessionToken?.() || "").trim();
+    return {
+      phone: bridgePhone || stored.phone,
+      sessionToken: bridgeToken || stored.sessionToken,
     };
   }
 
@@ -71,6 +102,10 @@
   }
 
   async function api(path, opts = {}) {
+    const creds = auth();
+    if (!creds.phone || !creds.sessionToken) {
+      throw new Error("Sign in with your WhatsApp code first, then save again.");
+    }
     const q = qsAuth();
     const url = `${VENDOR_API}${path}${path.includes("?") ? "&" : "?"}${q}`;
     const init = {
@@ -78,11 +113,18 @@
       headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
     };
     if (opts.body) {
-      init.body = JSON.stringify({ ...opts.body, ...auth() });
+      init.body = JSON.stringify({ ...opts.body, phone: creds.phone, sessionToken: creds.sessionToken });
     }
     const res = await fetch(url, init);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error(
+          data.message || "Session expired — verify WhatsApp again in Seller Hub, then save."
+        );
+      }
+      throw new Error(data.message || data.error || `HTTP ${res.status}`);
+    }
     return data;
   }
 
@@ -584,15 +626,22 @@
     });
 
     document.getElementById("vsm-save-rates")?.addEventListener("click", async () => {
+      const btn = document.getElementById("vsm-save-rates");
+      if (btn) btn.disabled = true;
+      setStatus("Saving…");
       try {
-        await api("/shipping-rules", {
+        const payload = buildSavePayload();
+        const data = await api("/shipping-rules", {
           method: "POST",
-          body: buildSavePayload(),
+          body: payload,
         });
+        if (data.profile) fillProfile(data.profile);
         updateCoverageSummary();
-        setStatus("All-Kenya shipping rates saved. Buyers get the right fee from their county.");
+        setStatus("Saved. All 47 counties use these rates at checkout.");
       } catch (err) {
-        setStatus(err.message, true);
+        setStatus(err.message || "Could not save — try again.", true);
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
 

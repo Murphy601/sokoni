@@ -7034,8 +7034,36 @@ function init() {
 
 /** Bridge for Path B logistics modules (vendor shipping manager). */
 window.SokoniSellerAuth = {
-  getPhone: () => apiPhone(),
-  getSessionToken: () => getSessionToken(),
+  getPhone: () => {
+    const live = apiPhone();
+    if (live) return live;
+    try {
+      const raw =
+        sessionStorage.getItem(VERIFY_TOKEN_KEY) || localStorage.getItem(VERIFY_TOKEN_KEY);
+      if (raw?.trim().startsWith("{")) {
+        const parsed = JSON.parse(raw);
+        return normalizePhoneInput(parsed.phone || "") || "";
+      }
+    } catch {}
+    return String(localStorage.getItem(PHONE_KEY) || "").trim();
+  },
+  getSessionToken: () => {
+    const live = getSessionToken();
+    if (live) return live;
+    try {
+      const raw =
+        sessionStorage.getItem(VERIFY_TOKEN_KEY) || localStorage.getItem(VERIFY_TOKEN_KEY);
+      if (!raw) return "";
+      if (raw.trim().startsWith("{")) {
+        const parsed = JSON.parse(raw);
+        if (parsed.expiresAt != null && Number(parsed.expiresAt) <= Date.now()) return "";
+        return String(parsed.token || "").trim();
+      }
+      return String(raw).trim();
+    } catch {
+      return "";
+    }
+  },
 };
 
 document.addEventListener("DOMContentLoaded", init);
