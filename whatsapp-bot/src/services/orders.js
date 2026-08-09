@@ -242,9 +242,11 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     phone: details.phone,
     /** Feature 2 — structured landmark / hub (optional; location remains the display string). */
     deliveryType: details.deliveryType || null,
-    landmarkTown: details.landmarkTown || null,
+    deliveryCounty: details.deliveryCounty || details.buyerCounty || null,
+    deliveryTown: details.deliveryTown || details.landmarkTown || null,
+    landmarkTown: details.landmarkTown || details.deliveryTown || null,
     landmarkSpot: details.landmarkSpot || null,
-    landmarkInstructions: details.landmarkInstructions || null,
+    landmarkInstructions: details.landmarkInstructions || details.landmarkNote || null,
     landmarkId: details.landmarkId || null,
     status: prepaid ? "awaiting_payment" : "received",
     paymentModel: prepaid ? "prepaid" : "cod",

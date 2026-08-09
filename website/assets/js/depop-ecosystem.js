@@ -93,7 +93,7 @@
     }
     return [...map.values()]
       .sort((a, b) => b.listings - a.listings || a.handle.localeCompare(b.handle))
-      .slice(0, 3);
+      .slice(0, 12);
   }
 
   function renderShops(shops) {
