@@ -120,6 +120,7 @@ export async function applyShippingToOrder(orderId, location = {}) {
       shippingKes: fees.shippingKes,
       freeShipping: fees.freeShipping,
       platformFeeKes: fees.platformFeeKes,
+      shippingCommissionKes: fees.shippingCommissionKes,
       transactionFeeKes: fees.transactionFeeKes,
       sellerNetKes: fees.sellerNetKes,
       sellerPayoutKes: fees.sellerPayoutKes,
@@ -230,6 +231,7 @@ async function applyShippingToCartParent(orderId, location = {}) {
         shippingKes: fees.shippingKes,
         freeShipping: fees.freeShipping,
         platformFeeKes: fees.platformFeeKes,
+        shippingCommissionKes: fees.shippingCommissionKes,
         transactionFeeKes: 0,
         sellerNetKes: fees.sellerNetKes,
         sellerPayoutKes: fees.sellerPayoutKes,
@@ -251,6 +253,13 @@ async function applyShippingToCartParent(orderId, location = {}) {
     updateOrderMeta(child.id, childPatch);
   }
 
+  // Recompute parent shipping commission from children patches above.
+  let parentShipCommission = 0;
+  for (const childId of children.map((c) => c.id)) {
+    const c = getOrder(childId);
+    parentShipCommission += Math.round(Number(c?.shippingCommissionKes) || 0);
+  }
+
   const chargeBeforeTxn = itemSum + shipSum + platformSum;
   // Parent keeps a single M-Pesa txn fee (same as cart create).
   const txnFee = mpesaTransactionFeeKes(chargeBeforeTxn);
@@ -262,6 +271,7 @@ async function applyShippingToCartParent(orderId, location = {}) {
     shippingKes: shipSum,
     priceKes: itemSum,
     platformFeeKes: platformSum,
+    shippingCommissionKes: parentShipCommission,
     sellerNetKes: sellerNetSum,
     sellerPayoutKes: sellerPayoutSum,
     transactionFeeKes: txnFee,

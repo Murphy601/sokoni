@@ -12,25 +12,22 @@ const VERIFY_TOKEN_KEY = "sokoni-seller-verify-token";
 const PLATFORM_FEE_RATE = 0.1;
 const MIN_SHIPPING_KES = 300;
 
-/** Mirror of bot mpesa-transaction-fees.js — fees vary by amount band (not flat). */
+/** Mirror of bot mpesa-transaction-fees.js — Business Bouquet customer-pays bands. */
 const MPESA_TRANSACTION_FEE_BANDS = [
   { min: 1, max: 100, feeKes: 0 },
-  { min: 101, max: 500, feeKes: 5 },
-  { min: 501, max: 1000, feeKes: 10 },
-  { min: 1001, max: 1500, feeKes: 15 },
-  { min: 1501, max: 2500, feeKes: 20 },
-  { min: 2501, max: 3500, feeKes: 25 },
-  { min: 3501, max: 5000, feeKes: 34 },
-  { min: 5001, max: 7500, feeKes: 42 },
-  { min: 7501, max: 10000, feeKes: 48 },
-  { min: 10001, max: 15000, feeKes: 57 },
-  { min: 15001, max: 20000, feeKes: 62 },
-  { min: 20001, max: 25000, feeKes: 67 },
-  { min: 25001, max: 30000, feeKes: 72 },
-  { min: 30001, max: 35000, feeKes: 83 },
-  { min: 35001, max: 40000, feeKes: 99 },
-  { min: 40001, max: 45000, feeKes: 103 },
-  { min: 45001, max: 250000, feeKes: 108 },
+  { min: 101, max: 500, feeKes: 7 },
+  { min: 501, max: 1000, feeKes: 13 },
+  { min: 1001, max: 1500, feeKes: 23 },
+  { min: 1501, max: 2500, feeKes: 33 },
+  { min: 2501, max: 3500, feeKes: 53 },
+  { min: 3501, max: 5000, feeKes: 57 },
+  { min: 5001, max: 7500, feeKes: 78 },
+  { min: 7501, max: 10000, feeKes: 90 },
+  { min: 10001, max: 15000, feeKes: 100 },
+  { min: 15001, max: 20000, feeKes: 105 },
+  { min: 20001, max: 35000, feeKes: 108 },
+  { min: 35001, max: 50000, feeKes: 108 },
+  { min: 50001, max: 250000, feeKes: 108 },
 ];
 
 function mpesaTransactionFeeKes(amountKes) {
@@ -325,7 +322,7 @@ function isSellerHandledDelivery() {
 
 function computeFeeBreakdown(sellerNetKes) {
   const sellerNet = Math.max(0, Math.round(Number(sellerNetKes) || 0));
-  // No platform shipping — buyer pays item + Sokoni 10% + M-Pesa only.
+  // Listing preview is item-only; shipping (buyer full rate, seller gets 95%) is applied at checkout.
   const shipping = 0;
   const subtotal = sellerNet;
   const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE);
@@ -384,12 +381,12 @@ function renderFeeBreakdown(fees, prefix = "fee") {
   if (prefix === "fee") {
     setFeeLabel("fee-item-label", "You receive (item)");
     setFeeLabel("fee-platform-label", "Sokoni fee (10%)");
-    setFeeLabel("fee-txn-label", "M-Pesa fee (varies by amount)");
+    setFeeLabel("fee-txn-label", "M-Pesa fee (banded — e.g. KES 150 → KES 7)");
     setFeeLabel("fee-net-label", "Your total payout");
   } else if (prefix === "review-fee") {
     setFeeLabel("review-fee-item-label", "You receive (item)");
     setFeeLabel("review-fee-platform-label", "Sokoni fee (10%)");
-    setFeeLabel("review-fee-txn-label", "M-Pesa fee (varies by amount)");
+    setFeeLabel("review-fee-txn-label", "M-Pesa fee (banded — e.g. KES 150 → KES 7)");
     setFeeLabel("review-fee-net-label", "Your total payout");
   }
 
