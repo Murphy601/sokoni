@@ -12,7 +12,7 @@ import { computeFeeBreakdown, orderBuyerTotal } from "./shipping-tiers.js";
 import { mpesaTransactionFeeKes } from "./mpesa-transaction-fees.js";
 import { inferCountyFromText } from "./kenya-locations.js";
 import {
-  getVendorShippingProfile,
+  findConfiguredVendorProfile,
   isConfiguredShippingProfile,
   normalizeVendorKey,
 } from "./vendor-shipping.js";
@@ -42,11 +42,17 @@ export async function applyShippingToOrder(orderId, location = {}) {
     return applyShippingToCartParent(orderId, location);
   }
 
-  const vendorId = normalizeVendorKey(
-    order.shopHandle || order.supplierId || order.sellerId || "unknown"
-  );
-  const profile = getVendorShippingProfile(vendorId);
+  const found = findConfiguredVendorProfile([
+    order.shopHandle,
+    order.supplierId,
+    order.sellerId,
+    order.sellerPhone,
+  ]);
+  const profile = found.profile;
   const configured = isConfiguredShippingProfile(profile);
+  const vendorId =
+    found.vendorKey ||
+    normalizeVendorKey(order.shopHandle || order.supplierId || order.sellerId || "unknown");
 
   const calc = await calculateShipping({
     cartItems: [
@@ -151,11 +157,16 @@ async function applyShippingToCartParent(orderId, location = {}) {
   const children = childIds.map((id) => getOrder(id)).filter(Boolean);
   if (!children.length) return { ok: false, error: "empty_cart" };
 
-  const cartItems = children.map((c) => ({
-    productId: c.productId,
-    vendorId: normalizeVendorKey(c.shopHandle || c.supplierId || c.sellerId || "unknown"),
-    qty: c.quantity || 1,
-  }));
+  const cartItems = children.map((c) => {
+    const found = findConfiguredVendorProfile([c.shopHandle, c.supplierId, c.sellerId, c.sellerPhone]);
+    return {
+      productId: c.productId,
+      vendorId:
+        found.vendorKey ||
+        normalizeVendorKey(c.shopHandle || c.supplierId || c.sellerId || "unknown"),
+      qty: c.quantity || 1,
+    };
+  });
 
   const calc = await calculateShipping({
     cartItems,
@@ -182,11 +193,16 @@ async function applyShippingToCartParent(orderId, location = {}) {
   let anyProfile = false;
 
   for (const child of children) {
-    const vendorId = normalizeVendorKey(
-      child.shopHandle || child.supplierId || child.sellerId || "unknown"
-    );
-    const profile = getVendorShippingProfile(vendorId);
-    const configured = isConfiguredShippingProfile(profile);
+    const found = findConfiguredVendorProfile([
+      child.shopHandle,
+      child.supplierId,
+      child.sellerId,
+      child.sellerPhone,
+    ]);
+    const vendorId =
+      found.vendorKey ||
+      normalizeVendorKey(child.shopHandle || child.supplierId || child.sellerId || "unknown");
+    const configured = isConfiguredShippingProfile(found.profile);
     const line = feeByVendor.get(vendorId) || { shippingFee: 0, methodUsed: "NO_PROFILE" };
     /** @type {Record<string, unknown>} */
     const childPatch = {
@@ -306,12 +322,22 @@ export async function ensureHybridShippingBeforePayment(orderIn) {
     for (const id of order.itemIds || []) {
       const child = getOrder(id);
       if (!child) continue;
-      const key = normalizeVendorKey(child.shopHandle || child.supplierId || "");
-      if (key && isConfiguredShippingProfile(getVendorShippingProfile(key))) vendors.push(key);
+      const found = findConfiguredVendorProfile([
+        child.shopHandle,
+        child.supplierId,
+        child.sellerId,
+        child.sellerPhone,
+      ]);
+      if (found.vendorKey && found.profile) vendors.push(found.vendorKey);
     }
   } else {
-    const key = normalizeVendorKey(order.shopHandle || order.supplierId || order.sellerId || "");
-    if (key && isConfiguredShippingProfile(getVendorShippingProfile(key))) vendors.push(key);
+    const found = findConfiguredVendorProfile([
+      order.shopHandle,
+      order.supplierId,
+      order.sellerId,
+      order.sellerPhone,
+    ]);
+    if (found.vendorKey && found.profile) vendors.push(found.vendorKey);
   }
 
   if (!vendors.length) {

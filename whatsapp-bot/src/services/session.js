@@ -1,15 +1,86 @@
 /**
- * Minimal in-memory session store keyed by WhatsApp phone number.
- * Good enough for local dev / a single-process demo. For production, swap
- * this for Redis (or any small KV store) so sessions survive restarts and
- * work across multiple server instances.
+ * Session store keyed by WhatsApp customer key (phone or @lid).
+ * Pending checkout state is also mirrored to disk so a bot restart
+ * (or brief process recycle) does not restart the order flow mid-way.
  */
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const sessions = new Map();
 const MAX_HISTORY = 20;
 
+const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
+const PENDING_FILE = path.join(DATA_DIR, "pending-checkouts.json");
+const PENDING_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** @type {Record<string, { pendingOrder?: object|null, pendingCart?: object|null, at?: number }>} */
+let pendingDisk = {};
+let pendingLoaded = false;
+
+function loadPendingDisk() {
+  if (pendingLoaded) return;
+  pendingLoaded = true;
+  try {
+    if (!existsSync(PENDING_FILE)) return;
+    const raw = JSON.parse(readFileSync(PENDING_FILE, "utf8"));
+    pendingDisk = raw && typeof raw === "object" ? raw : {};
+    const now = Date.now();
+    for (const [k, v] of Object.entries(pendingDisk)) {
+      if (!v?.at || now - v.at > PENDING_TTL_MS) delete pendingDisk[k];
+    }
+  } catch {
+    pendingDisk = {};
+  }
+}
+
+function writePendingDisk() {
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = `${PENDING_FILE}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(pendingDisk, null, 2) + "\n", "utf8");
+    renameSync(tmp, PENDING_FILE);
+  } catch (err) {
+    console.warn("[session] pending checkout persist failed:", err?.message || err);
+  }
+}
+
+function persistPending(phoneNumber) {
+  loadPendingDisk();
+  const session = sessions.get(phoneNumber);
+  const pendingOrder = session?.pendingOrder || null;
+  const pendingCart = session?.pendingCart || null;
+  if (!pendingOrder && !pendingCart) {
+    if (pendingDisk[phoneNumber]) {
+      delete pendingDisk[phoneNumber];
+      writePendingDisk();
+    }
+    return;
+  }
+  pendingDisk[phoneNumber] = {
+    pendingOrder,
+    pendingCart,
+    at: Date.now(),
+  };
+  writePendingDisk();
+}
+
+function hydratePending(phoneNumber, session) {
+  loadPendingDisk();
+  const saved = pendingDisk[phoneNumber];
+  if (!saved) return;
+  if (saved.at && Date.now() - saved.at > PENDING_TTL_MS) {
+    delete pendingDisk[phoneNumber];
+    writePendingDisk();
+    return;
+  }
+  if (!session.pendingOrder && saved.pendingOrder) session.pendingOrder = saved.pendingOrder;
+  if (!session.pendingCart && saved.pendingCart) session.pendingCart = saved.pendingCart;
+}
+
 export function getSession(phoneNumber) {
   if (!sessions.has(phoneNumber)) {
-    sessions.set(phoneNumber, {
+    const session = {
       history: [],
       lastProductContext: null,
       pendingOrder: null,
@@ -19,7 +90,9 @@ export function getSession(phoneNumber) {
       humanHandoff: null,
       customerMeta: null,
       pendingReview: null,
-    });
+    };
+    sessions.set(phoneNumber, session);
+    hydratePending(phoneNumber, session);
   }
   return sessions.get(phoneNumber);
 }
@@ -38,10 +111,11 @@ export function setProductContext(phoneNumber, product) {
 
 /**
  * Prepaid order state. When a customer taps "Order" we stash the
- * chosen product and wait for their delivery details in the next message.
+ * chosen product and wait for checkout steps in the next messages.
  */
 export function setPendingOrder(phoneNumber, order) {
   getSession(phoneNumber).pendingOrder = order;
+  persistPending(phoneNumber);
 }
 
 export function getPendingOrder(phoneNumber) {
@@ -50,10 +124,12 @@ export function getPendingOrder(phoneNumber) {
 
 export function clearPendingOrder(phoneNumber) {
   getSession(phoneNumber).pendingOrder = null;
+  persistPending(phoneNumber);
 }
 
 export function setPendingCart(phoneNumber, cart) {
   getSession(phoneNumber).pendingCart = cart;
+  persistPending(phoneNumber);
 }
 
 export function getPendingCart(phoneNumber) {
@@ -62,6 +138,7 @@ export function getPendingCart(phoneNumber) {
 
 export function clearPendingCart(phoneNumber) {
   getSession(phoneNumber).pendingCart = null;
+  persistPending(phoneNumber);
 }
 
 /** Numbered menu context for WAHA (no interactive buttons). */

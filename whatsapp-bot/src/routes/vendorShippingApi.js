@@ -5,7 +5,9 @@ import {
   deleteVendorZone,
   getOrCreateVendorShippingProfile,
   listVendorZones,
-  upsertVendorShippingProfile,
+  upsertVendorShippingProfileForSeller,
+  findConfiguredVendorProfile,
+  vendorKeyCandidatesFromSeller,
   saveVendorZone,
 } from "../services/vendor-shipping.js";
 import { listCounties, listTownsForCounty, loadKenyaLocations } from "../services/kenya-locations.js";
@@ -66,23 +68,30 @@ router.get("/locations/towns", (req, res) => {
 router.get("/shipping-rules", async (req, res) => {
   const check = await authedSeller(req, res);
   if (!check) return;
-  const vendorKey = vendorKeyFromSeller(check);
-  const profile = getOrCreateVendorShippingProfile(vendorKey);
-  const zones = listVendorZones(vendorKey);
-  res.json({ success: true, vendorKey, profile, zones });
+  const keys = vendorKeyCandidatesFromSeller(check.supplier);
+  const vendorKey = keys[0] || vendorKeyFromSeller(check);
+  const found = findConfiguredVendorProfile(keys);
+  const profile = found.profile || getOrCreateVendorShippingProfile(vendorKey);
+  const zones = listVendorZones(found.vendorKey || vendorKey);
+  res.json({ success: true, vendorKey: found.vendorKey || vendorKey, profile, zones });
 });
 
 router.post("/shipping-rules", async (req, res) => {
   const check = await authedSeller(req, res);
   if (!check) return;
-  const vendorKey = vendorKeyFromSeller(check);
+  const vendorKey = vendorKeyCandidatesFromSeller(check.supplier)[0] || vendorKeyFromSeller(check);
   if (!vendorKey) {
     return res.status(400).json({ error: "vendor_required", message: "Complete seller profile first." });
   }
   try {
-    const result = upsertVendorShippingProfile(vendorKey, req.body || {});
+    const result = upsertVendorShippingProfileForSeller(check.supplier, req.body || {});
     if (!result.ok) return res.status(400).json(result);
-    res.json({ success: true, profile: result.profile, zones: listVendorZones(vendorKey) });
+    res.json({
+      success: true,
+      profile: result.profile,
+      vendorKey: result.vendorKey || vendorKey,
+      zones: listVendorZones(result.vendorKey || vendorKey),
+    });
   } catch (err) {
     console.error("[vendor-shipping] shipping-rules save failed:", err?.message || err);
     res.status(500).json({ error: "save_failed", message: "Could not save shipping rates — try again." });

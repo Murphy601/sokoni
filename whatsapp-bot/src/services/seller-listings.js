@@ -1045,8 +1045,23 @@ export async function listSellerListings(phone, sessionToken) {
   let live = [];
   try {
     const master = JSON.parse(await readFile(MASTER_CATALOG, "utf-8"));
+    const sellerHandle = String(check.supplier.shopHandle || "")
+      .replace(/^@+/, "")
+      .trim()
+      .toLowerCase();
     live = master
-      .filter((p) => p.supplierId === check.supplier.id)
+      .filter((p) => {
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerHandle) {
+          const ph = String(p.shopHandle || p.sellerHandle || "")
+            .replace(/^@+/, "")
+            .trim()
+            .toLowerCase();
+          if (ph && ph === sellerHandle) return true;
+        }
+        if (digits && normalizePhone(p.sellerPhone) === digits) return true;
+        return false;
+      })
       .map((p) => {
         const moderationSummary = summarizeModeration(p.moderation || {}, { inStock: p.inStock });
         return {

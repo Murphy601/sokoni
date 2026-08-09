@@ -63,6 +63,25 @@ export function isConfiguredShippingProfile(profile) {
   );
 }
 
+/**
+ * Find a configured profile trying several vendor keys (handle, supplier id, phone).
+ * Sellers sometimes saved under id before shopHandle was stamped on products.
+ */
+export function findConfiguredVendorProfile(candidates = []) {
+  const tried = new Set();
+  for (const raw of candidates) {
+    const key = normalizeVendorKey(raw);
+    if (!key || tried.has(key)) continue;
+    tried.add(key);
+    const profile = getVendorShippingProfile(key);
+    if (isConfiguredShippingProfile(profile)) {
+      return { vendorKey: key, profile };
+    }
+  }
+  const fallback = normalizeVendorKey(candidates.find(Boolean) || "");
+  return { vendorKey: fallback || "", profile: null };
+}
+
 function defaultProfile(vendorKey) {
   return {
     id: randomUUID(),
@@ -138,6 +157,39 @@ export function upsertVendorShippingProfile(vendorKeyRaw, patch = {}) {
   writeStore(store);
   void mirrorProfileToDb(next).catch(() => {});
   return { ok: true, profile: next };
+}
+
+/**
+ * Seller keys used for shipping profiles: shop handle (preferred), supplier id, phone.
+ * Products quote by handle; older saves may have used id/phone only.
+ */
+export function vendorKeyCandidatesFromSeller(supplier = {}) {
+  const tried = [];
+  const push = (raw) => {
+    const key = normalizeVendorKey(raw);
+    if (key && !tried.includes(key)) tried.push(key);
+  };
+  push(supplier.shopHandle);
+  push(supplier.id);
+  push(supplier.phone);
+  push(supplier.mpesaNumber);
+  return tried;
+}
+
+/** Save rates under every seller key so WA quotes and hub load agree. */
+export function upsertVendorShippingProfileForSeller(supplier, patch = {}) {
+  const keys = vendorKeyCandidatesFromSeller(supplier);
+  if (!keys.length) return { ok: false, error: "vendor_required" };
+  const primary = keys[0];
+  const first = upsertVendorShippingProfile(primary, patch);
+  if (!first.ok) return first;
+  for (const alias of keys.slice(1)) {
+    upsertVendorShippingProfile(alias, {
+      ...first.profile,
+      vendorKey: alias,
+    });
+  }
+  return { ok: true, profile: first.profile, vendorKey: primary, aliases: keys };
 }
 
 export function listVendorZones(vendorKeyRaw) {

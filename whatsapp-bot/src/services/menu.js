@@ -844,11 +844,14 @@ export async function startPrepaidOrder(to, productId, { offerId = null, totalsO
     sellerNetKes: totals.sellerNetKes,
     shopHandle: product.shopHandle || product.sellerHandle || null,
     supplierId: product.supplierId || null,
+    sellerPhone: product.sellerPhone || null,
     offerId: activeOfferId || null,
     fromOffer: Boolean(activeOfferId),
     step: ORDER_STEPS.LOCATION,
     quote: null,
   });
+  // Leave product menu so reply "1" means Continue on the fee quote, not Order again.
+  clearMenuState(to);
 
   if (activeOfferId) {
     return sendText(
@@ -856,8 +859,8 @@ export async function startPrepaidOrder(to, productId, { offerId = null, totalsO
       `*${product.name}*\n` +
         `Offer: *KES ${Number(totals.totalKes).toLocaleString()}*\n\n` +
         `Where should we deliver?\n` +
-        `Reply: *County, Town, Landmark*\n` +
-        `_e.g. Nakuru, Naivas, blue gate_\n\n` +
+        `Reply: *County, Town, delivery spot*\n` +
+        `_e.g. Kiambu, Ruiru, Quickmart gate_\n\n` +
         `Type *cancel* to stop.`
     );
   }
@@ -880,7 +883,7 @@ export async function tryHandlePendingOrder(to, text) {
       await sendText(
         to,
         `Cart (${pendingCart.lines.length} items) — send: *Name, location, phone*\n` +
-          `_e.g. Jane Wanjiru, Nakuru Naivas, 0712345678_`
+          `_e.g. Jane Wanjiru, Ruiru Quickmart, 0712345678_`
       );
       return true;
     }
@@ -906,7 +909,7 @@ export async function tryHandlePendingOrder(to, text) {
     if (!loc) {
       await sendText(
         to,
-        `Send: *County, Town, Landmark*\n_e.g. Nairobi, Umoja, Stage 46_\n\nType *cancel* to stop.`
+        `Send: *County, Town, delivery spot*\n_e.g. Kiambu, Ruiru, Quickmart gate_\n\nType *cancel* to stop.`
       );
       return true;
     }
@@ -943,7 +946,9 @@ export async function tryHandlePendingOrder(to, text) {
   }
 
   if (step === ORDER_STEPS.CONFIRM_FEES) {
-    if (lower === "2" || /^(change|back|edit|location)$/i.test(lower)) {
+    // Accept bare 1/2 even if WAHA appends quoted card text.
+    const feeChoice = String(text || "").trim().match(/^([12])(?:\b|[^\d]|$)/);
+    if (feeChoice?.[1] === "2" || /^(change|back|edit|location)$/i.test(lower)) {
       setPendingOrder(to, {
         ...pending,
         step: ORDER_STEPS.LOCATION,
@@ -952,8 +957,9 @@ export async function tryHandlePendingOrder(to, text) {
       await sendText(to, locationPrompt(pending.name));
       return true;
     }
-    if (lower === "1" || /^(yes|ok|okay|continue|proceed)$/i.test(lower)) {
+    if (feeChoice?.[1] === "1" || /^(yes|ok|okay|continue|proceed)$/i.test(lower)) {
       setPendingOrder(to, { ...pending, step: ORDER_STEPS.CONTACT });
+      clearMenuState(to);
       await sendText(to, contactPrompt());
       return true;
     }
@@ -1132,7 +1138,7 @@ export async function confirmCartOrder(to, parsed) {
   if (!details) {
     await sendText(
       to,
-      `Send: *Name, location, phone*\n_e.g. Jane Wanjiru, Nakuru Naivas, 0712345678_`
+      `Send: *Name, location, phone*\n_e.g. Jane Wanjiru, Ruiru Quickmart, 0712345678_`
     );
     return true;
   }

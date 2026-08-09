@@ -7,8 +7,7 @@ import { getCounty, inferCountyFromText, listTownsForCounty } from "./kenya-loca
 import { normalizeKenyanPhone } from "./delivery-details.js";
 import { computeFeeBreakdown } from "./shipping-tiers.js";
 import {
-  getVendorShippingProfile,
-  isConfiguredShippingProfile,
+  findConfiguredVendorProfile,
   normalizeVendorKey,
   resolveVendorShippingFee,
 } from "./vendor-shipping.js";
@@ -87,9 +86,15 @@ export function parseContactStep(text) {
  * @param {{ county: string, town?: string }} location
  */
 export function quoteShippingForPending(pendingOrProduct, location) {
-  const vendorKey = vendorKeyFromProduct(pendingOrProduct);
-  const profile = vendorKey ? getVendorShippingProfile(vendorKey) : null;
-  const configured = isConfiguredShippingProfile(profile);
+  const { vendorKey, profile } = findConfiguredVendorProfile([
+    pendingOrProduct.shopHandle,
+    pendingOrProduct.sellerHandle,
+    pendingOrProduct.supplierId,
+    pendingOrProduct.sellerId,
+    pendingOrProduct.sellerPhone,
+    vendorKeyFromProduct(pendingOrProduct),
+  ]);
+  const configured = Boolean(profile);
 
   const sellerNet = Math.round(
     Number(pendingOrProduct.sellerNetKes ?? pendingOrProduct.priceKes) || 0
@@ -148,8 +153,8 @@ export function locationPrompt(productName) {
   return (
     `*${productName}*\n\n` +
     `Where should we deliver?\n` +
-    `Reply: *County, Town, Landmark*\n` +
-    `_e.g. Nakuru, Naivas, blue gate_\n\n` +
+    `Reply: *County, Town, delivery spot*\n` +
+    `_e.g. Kiambu, Ruiru, Quickmart gate_\n\n` +
     `Type *cancel* to stop.`
   );
 }
