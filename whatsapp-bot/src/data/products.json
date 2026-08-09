@@ -48,7 +48,10 @@
     "priceUpdatedAt": 1786053452275,
     "shopHandle": "adiv_thrift",
     "sellerHandle": "adiv_thrift",
-    "sellerPhone": "254748879579"
+    "sellerPhone": "254748879579",
+    "stockQuantity": 1,
+    "isSold": false,
+    "stockUpdatedAt": 1786248565364
   },
   {
     "id": "hb-tlom7-001",
@@ -82,7 +85,7 @@
     "scope": "local",
     "fulfillment": "store",
     "payment": "prepaid",
-    "inStock": false,
+    "inStock": true,
     "imageUrl": "assets/images/products/hb-tlom7-001.jpg",
     "images": [
       "assets/images/products/hb-tlom7-001.jpg"
@@ -93,15 +96,15 @@
       "status": "pending_scan"
     },
     "refreshedAt": 1786056154640,
-    "isSold": true,
-    "soldAt": 1785172670111,
-    "soldOrderId": "SK-1011",
+    "isSold": false,
     "transactionFeeKes": 5,
     "sellerPayoutKes": 50,
     "priceUpdatedAt": 1786053519674,
     "shopHandle": "adiv_thrift",
     "sellerHandle": "adiv_thrift",
-    "sellerPhone": "254748879579"
+    "sellerPhone": "254748879579",
+    "stockQuantity": 1,
+    "stockUpdatedAt": 1786248557506
   },
   {
     "id": "fa-tlom7-001",
@@ -267,7 +270,10 @@
     },
     "refreshedAt": 1786073402106,
     "priceUpdatedAt": 1786073402106,
-    "sellerHandle": "adiv_thrift"
+    "sellerHandle": "adiv_thrift",
+    "stockQuantity": 3,
+    "isSold": false,
+    "stockUpdatedAt": 1786248551332
   },
   {
     "id": "fa-tlom7-002",
@@ -367,7 +373,7 @@
     "fulfillment": "store",
     "payment": "prepaid",
     "inStock": true,
-    "stockQuantity": 1,
+    "stockQuantity": 3,
     "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg",
     "images": [
       "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg"
@@ -375,6 +381,59 @@
     "videoUrl": "https://res.cloudinary.com/rztynxme/image/upload/c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264/f_mp4/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.mp4",
     "videoKind": "preview",
     "publishedAt": 1786240731807,
+    "moderation": {
+      "status": "pending_scan"
+    },
+    "isSold": false,
+    "stockUpdatedAt": 1786248543895
+  },
+  {
+    "id": "ho-tlom7-002",
+    "name": "White Coffee Mug",
+    "category": "home-office",
+    "subcategory": "kitchen",
+    "browseCategory": "home",
+    "browseSubCategory": "kitchen",
+    "sellerNetKes": 100,
+    "sourcePriceKes": 100,
+    "priceKes": 115,
+    "platformFeeKes": 10,
+    "transactionFeeKes": 5,
+    "sellerPayoutKes": 100,
+    "deliveryMethod": "seller_express",
+    "shippingRecipient": "seller",
+    "description": "A white ceramic mug with blue and red 'COFFEE' text on the side. The mug appears to have been used.",
+    "color": "white",
+    "size": "",
+    "era": "",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "location": "Nairobi",
+    "shippingKes": 0,
+    "freeShipping": true,
+    "estimatedWeightClass": null,
+    "shippingNote": "Seller handles dispatch (direct delivery)",
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Adiv's Mini Mart",
+    "supplierId": "seller-adiv-thrift-lom7",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "sellerPhone": "254748879579",
+    "emoji": "🏠",
+    "tags": [],
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "stockQuantity": 1,
+    "imageUrl": "assets/images/products/ho-tlom7-002.jpg",
+    "images": [
+      "assets/images/products/ho-tlom7-002.jpg"
+    ],
+    "videoUrl": "https://bot.sokonimall.com/catalog-images/ho-tlom7-002.mp4",
+    "videoKind": "seller",
+    "publishedAt": 1786248867988,
     "moderation": {
       "status": "pending_scan"
     }

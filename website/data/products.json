@@ -12,6 +12,7 @@
     "fulfillment": "store",
     "payment": "prepaid",
     "inStock": true,
+    "stockQuantity": 1,
     "imageUrl": "assets/images/products/sm-tlom7-001.jpg",
     "images": [
       "assets/images/products/sm-tlom7-001.jpg",
@@ -32,6 +33,36 @@
     "shopName": "Adiv's Mini Mart"
   },
   {
+    "id": "hb-tlom7-001",
+    "name": "Amara For Men Intensive Body Lotion - 200ml",
+    "category": "health-beauty",
+    "priceKes": 390,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "stockQuantity": 1,
+    "imageUrl": "assets/images/products/hb-tlom7-001.jpg",
+    "images": [
+      "assets/images/products/hb-tlom7-001.jpg"
+    ],
+    "subcategory": "skincare",
+    "browseCategory": "men",
+    "browseSubCategory": "t-shirts",
+    "condition": "brand_new_without_tags",
+    "isSecondhand": false,
+    "brand": "Amara",
+    "color": "grey",
+    "description": "Intensive body lotion for men featuring ginseng, castor, and coconut oils for skin repair and hydration with a cooling effect.",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "shopName": "Adiv's Mini Mart"
+  },
+  {
     "id": "hb-tlom7-003",
     "name": "Sedoso Massage Oil",
     "category": "health-beauty",
@@ -44,6 +75,7 @@
     "fulfillment": "store",
     "payment": "prepaid",
     "inStock": true,
+    "stockQuantity": 3,
     "imageUrl": "assets/images/products/hb-tlom7-003.jpg",
     "images": [
       "assets/images/products/hb-tlom7-003.jpg"
@@ -78,6 +110,7 @@
     "fulfillment": "store",
     "payment": "prepaid",
     "inStock": true,
+    "stockQuantity": 3,
     "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg",
     "images": [
       "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg"
@@ -96,6 +129,37 @@
       "kitchenware"
     ],
     "description": "A white ceramic mug with 'COFFEE' written on it in blue and red accents. The mug appears to have some residue inside.",
+    "shopHandle": "adiv_thrift",
+    "sellerHandle": "adiv_thrift",
+    "shopName": "Adiv's Mini Mart"
+  },
+  {
+    "id": "ho-tlom7-002",
+    "name": "White Coffee Mug",
+    "category": "home-office",
+    "priceKes": 115,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "🏠",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "stockQuantity": 1,
+    "imageUrl": "assets/images/products/ho-tlom7-002.jpg",
+    "images": [
+      "assets/images/products/ho-tlom7-002.jpg"
+    ],
+    "videoUrl": "https://bot.sokonimall.com/catalog-images/ho-tlom7-002.mp4",
+    "videoKind": "seller",
+    "subcategory": "kitchen",
+    "browseCategory": "home",
+    "browseSubCategory": "kitchen",
+    "condition": "gently_used",
+    "isSecondhand": true,
+    "color": "white",
+    "description": "A white ceramic mug with blue and red 'COFFEE' text on the side. The mug appears to have been used.",
     "shopHandle": "adiv_thrift",
     "sellerHandle": "adiv_thrift",
     "shopName": "Adiv's Mini Mart"

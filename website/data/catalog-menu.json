@@ -7,6 +7,10 @@
       "emoji": "💄",
       "subcategories": [
         {
+          "id": "skincare",
+          "label": "Skincare"
+        },
+        {
           "id": "personal-care",
           "label": "Personal Care"
         }
