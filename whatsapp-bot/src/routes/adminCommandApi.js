@@ -72,7 +72,7 @@ router.post("/escrow/:orderId/payb2c", async (req, res) => {
     return res.status(503).json({
       error: "b2c_not_configured",
       message:
-        "Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (initiator SOKONIMA) then restart the bot.",
+        "Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (initiator DavidMuiruri) then restart the bot.",
       b2c: b2cMeta(),
     });
   }

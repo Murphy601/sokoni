@@ -22,7 +22,7 @@ if grep -qE '^MPESA_SECURITY_CREDENTIAL=.+' "$ENV_FILE" 2>/dev/null; then
   echo "Buyer: reply pay · Seller payout: Withdraw or #payb2c SKN-…"
 else
   echo "STK OAuth restored. For seller B2C payouts still need SecurityCredential:"
-  echo "  export MPESA_INITIATOR_NAME=SOKONIMA"
+  echo "  export MPESA_INITIATOR_NAME=DavidMuiruri"
   echo "  export MPESA_SECURITY_CREDENTIAL='…from Daraja Copy Credentials…'"
   echo "  bash scripts/configure-b2c-initiator.sh"
 fi

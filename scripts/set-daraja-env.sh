@@ -141,9 +141,17 @@ upsert MPESA_B2C_AUTO "$B2C_AUTO"
 upsert ESCROW_HOLD_BUSINESS_DAYS "$HOLD_DAYS"
 upsert SELLER_WITHDRAW_INSTANT_B2C "$WITHDRAW_B2C"
 
-# Initiator username is not secret — default SOKONIMA (Prod org). Password/credential
-# must come from configure-b2c-initiator.sh (never bake into git).
-upsert MPESA_INITIATOR_NAME "${MPESA_INITIATOR_NAME:-SOKONIMA}"
+# B2C initiator username (not secret). Prefer explicit export → existing .env → DavidMuiruri.
+# SecurityCredential must match THIS username (generate in Daraja for DavidMuiruri).
+EXISTING_INITIATOR="$(env_get MPESA_INITIATOR_NAME)"
+INITIATOR_PICK="$(clean_cred "${MPESA_INITIATOR_NAME:-}")"
+if is_placeholder "$INITIATOR_PICK"; then
+  INITIATOR_PICK="$(clean_cred "$EXISTING_INITIATOR")"
+fi
+if is_placeholder "$INITIATOR_PICK"; then
+  INITIATOR_PICK="DavidMuiruri"
+fi
+upsert MPESA_INITIATOR_NAME "$INITIATOR_PICK"
 # Never clobber a good portal SecurityCredential with instruction/placeholder text
 # left exported in the shell (e.g. PASTE_FROM_PORTAL_COPY_BUTTON).
 SEC_CLEAN="$(clean_cred "${MPESA_SECURITY_CREDENTIAL:-}")"
