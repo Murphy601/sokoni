@@ -156,6 +156,10 @@ fi
 
 cd "$BOT_DIR"
 
+# Seller avatars live under gitignored data/avatars (survive git reset --hard).
+mkdir -p "$BOT_DIR/data/avatars"
+echo "==> Seller avatars dir: $BOT_DIR/data/avatars"
+
 # Ensure .env exists and upgrade legacy/paid chat models → free OpenRouter stack.
 ENV_FILE="$BOT_DIR/.env"
 if [ ! -f "$ENV_FILE" ] && [ -f "$REPO/.env" ]; then
