@@ -6,7 +6,7 @@
 #   Consumer Secret: …
 #   Passkey: …
 #   Short Code: 3439153
-#   USERNAME: SOKONIMA
+#   USERNAME: DavidMuiruri
 #   SECURITY CREDENTIALS: "…"
 #
 # On the VM:
@@ -96,7 +96,7 @@ done < "$FILE"
 
 echo "Parsed portal paste from $FILE:"
 echo "  Key len=${#KEY}  Secret len=${#SECRET}  Passkey len=${#PASSKEY}"
-echo "  Shortcode=${SHORTCODE:-default}  Initiator=${INITIATOR:-SOKONIMA}"
+echo "  Shortcode=${SHORTCODE:-default}  Initiator=${INITIATOR:-DavidMuiruri}"
 echo "  SecurityCredential len=${#SECURITY}"
 echo "  Key fingerprint (sha256…16): $(printf '%s' "$KEY" | sha256sum | cut -c1-16)"
 
@@ -117,12 +117,12 @@ export MPESA_PASSKEY="$PASSKEY"
 if [ -n "$SHORTCODE" ]; then
   export MPESA_SHORTCODE="$SHORTCODE"
 fi
-# Keep B2C auto OFF until the separate B2C initiator username is wired.
+# Keep B2C auto OFF until initiator + matching SecurityCredential are confirmed.
 export MPESA_B2C_AUTO=false
 if [ -n "$INITIATOR" ]; then
   export MPESA_INITIATOR_NAME="$INITIATOR"
 else
-  export MPESA_INITIATOR_NAME=SOKONIMA
+  export MPESA_INITIATOR_NAME=DavidMuiruri
 fi
 if [ "${#SECURITY}" -ge 80 ]; then
   export MPESA_SECURITY_CREDENTIAL="$SECURITY"
@@ -138,7 +138,13 @@ if [ "${#SECURITY}" -ge 80 ]; then
     MPESA_SECURITY_CREDENTIAL="$SECURITY" \
     bash "$REPO/scripts/configure-b2c-initiator.sh"
 else
-  echo "==> No SecurityCredential in paste — STK-only (initiator not updated)"
+  echo "==> No SecurityCredential in paste — STK-only (set initiator name only if provided)"
+  if [ -n "${MPESA_INITIATOR_NAME:-}" ]; then
+    TMP_I="$(mktemp)"
+    grep -vE '^MPESA_INITIATOR_NAME=' "$ENV_FILE" > "$TMP_I" || true
+    printf 'MPESA_INITIATOR_NAME=%s\n' "$MPESA_INITIATOR_NAME" >> "$TMP_I"
+    mv "$TMP_I" "$ENV_FILE"
+  fi
 fi
 
 # Hard-ensure auto B2C stays off for this STK wire-up.

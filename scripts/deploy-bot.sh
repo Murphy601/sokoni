@@ -232,10 +232,11 @@ else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
 fi
 
-# Production Daraja (SOKONIMA 3439153) — STK + B2C shortcode/callbacks.
+# Production Daraja (org 3439153) — STK + B2C shortcode/callbacks.
+# B2C initiator username lives in .env (DavidMuiruri); deploy keeps it.
 # Skip with: SKIP_DARAJA_ENV=1 bash scripts/deploy-bot.sh
 if [ "${SKIP_DARAJA_ENV:-}" != "1" ] && [ -f "$ENV_FILE" ] && [ -x "$REPO/scripts/set-daraja-env.sh" ]; then
-  echo "==> Applying production Daraja env (Till 3439153 / SOKONIMA)"
+  echo "==> Applying production Daraja env (shortcode 3439153 / initiator from .env)"
   ENV_FILE="$ENV_FILE" SKIP_RESTART=1 bash "$REPO/scripts/set-daraja-env.sh" || \
     echo "WARN: set-daraja-env.sh failed — check MPESA_* in $ENV_FILE"
 fi

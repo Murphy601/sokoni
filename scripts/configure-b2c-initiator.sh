@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
-# Configure Daraja B2C initiator on the bot VM (SOKONIMA).
+# Configure Daraja B2C initiator on the bot VM (DavidMuiruri).
 #
 # Does NOT commit secrets.
 #
 # Option A — portal already gave you an encrypted SecurityCredential:
-#   export MPESA_SECURITY_CREDENTIAL='…long base64…'
+#   export MPESA_INITIATOR_NAME=DavidMuiruri
+#   export MPESA_SECURITY_CREDENTIAL='…long base64…'   # generated FOR that username
 #   bash scripts/configure-b2c-initiator.sh
 #
 # Option B — encrypt locally with ProductionCertificate.cer from Daraja:
 #   # Download the .cer from developer.safaricom.co.ke (NOT the Postman JSON)
 #   mkdir -p ~/sokoni/whatsapp-bot/certs
 #   # save as: ~/sokoni/whatsapp-bot/certs/ProductionCertificate.cer
+#   export MPESA_INITIATOR_NAME=DavidMuiruri
 #   export MPESA_INITIATOR_PASSWORD='your-initiator-password'
 #   bash scripts/configure-b2c-initiator.sh
 #
 # Note: Old GitHub/npm "production-cert.cer" files expired in 2018 — reject them.
+# Note: SOKONIMA SecurityCredential will NOT work for DavidMuiruri — regenerate.
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
 ENV_FILE="${ENV_FILE:-$REPO/whatsapp-bot/.env}"
 CERT_DEFAULT="$REPO/whatsapp-bot/certs/ProductionCertificate.cer"
 CERT_PATH="${MPESA_CERT_PATH:-$CERT_DEFAULT}"
-INITIATOR_NAME="${MPESA_INITIATOR_NAME:-SOKONIMA}"
+INITIATOR_NAME="${MPESA_INITIATOR_NAME:-DavidMuiruri}"
 B2C_SHORT="${MPESA_B2C_SHORTCODE:-3439153}"
 PASSWORD="${MPESA_INITIATOR_PASSWORD:-}"
 PREMADE_CRED="${MPESA_SECURITY_CREDENTIAL:-}"

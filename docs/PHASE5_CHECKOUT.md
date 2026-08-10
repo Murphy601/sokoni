@@ -65,7 +65,7 @@ Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcod
 
 **Seller wallet / withdraw:**
 - `ESCROW_HOLD_BUSINESS_DAYS=0` (default) — on delivery / buyer confirm, credit **Ready for M-Pesa** on the Seller Hub immediately.
-- Seller **Withdraw** triggers Daraja B2C instantly when initiator `SOKONIMA` + SecurityCredential are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
+- Seller **Withdraw** triggers Daraja B2C instantly when initiator `DavidMuiruri` + matching SecurityCredential are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
 - Configure B2C on the VM (password never committed):
   1. Download `ProductionCertificate.cer` from Daraja → `whatsapp-bot/certs/`
   2. `export MPESA_INITIATOR_PASSWORD='…'` then `bash scripts/configure-b2c-initiator.sh`
