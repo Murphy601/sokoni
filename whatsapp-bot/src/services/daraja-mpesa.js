@@ -434,16 +434,19 @@ export async function initiateB2CPayout({
     JSON.stringify(data).slice(0, 300) ||
     `HTTP ${lastStatus}`;
   let msg = errCode ? `${rawMsg} (${errCode})` : String(rawMsg);
-  // Safaricom often returns 404.001.03 "Invalid Access Token" when OAuth is fine
-  // but B2C is not whitelisted on the production shortcode / Daraja app.
+  // Safaricom often returns 404.001.03 / 401.002.01 "Invalid Access Token" on B2C
+  // even when OAuth works — usually the Daraja app/shortcode is not entitled for B2C yet
+  // (STK can be live while B2C still needs apisupport whitelist).
   const looksLikeWhitelist =
     String(errCode).includes("404.001.03") ||
+    String(errCode).includes("401.002.01") ||
     /invalid access token/i.test(String(rawMsg));
   if (looksLikeWhitelist) {
     msg +=
-      " — OAuth can still work; usually B2C is not enabled on this production shortcode. " +
-      "Confirm B2C on Prod-SOKONIMALL in Daraja, then email apisupport@safaricom.co.ke " +
-      "to whitelist B2C for shortcode 3439153.";
+      " — OAuth/STK can still work; this usually means B2C is not enabled on Daraja app Prod-SOKONIMALL. " +
+      "M-Pesa Business “B2C Single Payments / No Approval” is separate. " +
+      "Email apisupport@safaricom.co.ke to whitelist B2C Payment API for shortcode 3439153 " +
+      "(include app name, consumer key, shortcode, and this error/request id).";
   }
   console.warn("[daraja] B2C rejected:", { status: lastStatus, errCode, msg, data });
   return {
