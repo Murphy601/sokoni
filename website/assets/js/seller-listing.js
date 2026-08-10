@@ -5970,10 +5970,13 @@ function renderWithdrawPanel(data) {
   if (data.pendingRequest) {
     pendingEl.classList.remove("hidden");
     pendingEl.textContent = `Processing ${data.pendingRequest.id} — ${formatKes(data.pendingRequest.amountKes)} requested ${new Date(data.pendingRequest.requestedAt).toLocaleString()}.`;
-    reqBtn.disabled = true;
+    // Keep clickable so we can explain why nothing new happens (disabled buttons swallow taps).
+    reqBtn.disabled = false;
+    reqBtn.dataset.pendingWithdraw = data.pendingRequest.id || "1";
     reqBtn.textContent = "Withdrawal pending";
   } else {
     pendingEl.classList.add("hidden");
+    delete reqBtn.dataset.pendingWithdraw;
     reqBtn.disabled = !(data.availableKes > 0);
     reqBtn.textContent = "Request withdrawal";
   }
@@ -6045,9 +6048,19 @@ async function requestWithdrawal() {
 
   const statusEl = el("withdraw-status");
   const btn = el("withdraw-request-btn");
+  const pendingId = btn?.dataset?.pendingWithdraw || "";
+  if (pendingId) {
+    statusEl.classList.remove("text-emerald-400", "text-red-600", "dark:text-red-400");
+    statusEl.textContent =
+      `Withdrawal ${pendingId} is already queued. Wait for M-Pesa / admin Pay B2C (or #paid). ` +
+      `You can’t start another withdraw until that one clears.`;
+    statusEl.classList.add("text-amber-700", "dark:text-amber-300");
+    return;
+  }
+
   btn.disabled = true;
   statusEl.textContent = "Submitting withdrawal request…";
-  statusEl.classList.remove("text-red-600", "dark:text-red-400");
+  statusEl.classList.remove("text-red-600", "dark:text-red-400", "text-amber-700", "dark:text-amber-300");
 
   try {
     const res = await fetch(`${ONBOARD_API}/withdraw`, {
@@ -6074,7 +6087,7 @@ async function requestWithdrawal() {
     statusEl.textContent = "Network error — try again.";
     statusEl.classList.add("text-red-600", "dark:text-red-400");
   } finally {
-    btn.disabled = false;
+    if (!btn.dataset.pendingWithdraw) btn.disabled = false;
   }
 }
 
