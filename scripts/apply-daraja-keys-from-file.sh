@@ -12,6 +12,9 @@
 #   nano /tmp/daraja-keys.txt
 #   bash scripts/apply-daraja-keys-from-file.sh /tmp/daraja-keys.txt
 #   bash scripts/test-daraja-oauth.sh
+#
+# For a full portal paste (Key + Secret + Passkey + Username + SecurityCredential):
+#   bash scripts/apply-daraja-portal-paste.sh /tmp/daraja-portal.txt
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
