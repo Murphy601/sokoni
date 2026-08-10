@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { CATALOG_IMAGES_DIR } from "./lib/catalog-images.js";
+import { AVATARS_DIR, LEGACY_AVATARS_DIR, migrateLegacyAvatars } from "./services/seller-avatar.js";
 import { handleWahaWebhook } from "./handlers/webhookHandler.js";
 import { runTiktokPostJob } from "./services/tiktok.js";
 import { startTokenRefreshScheduler, getConnectionStatus } from "./services/tiktok-auth.js";
@@ -259,18 +260,16 @@ app.use("/catalog-images", catalogImageStatic);
 /** Alias so relative assets/images/products/* URLs also hit the VM when proxied. */
 app.use("/assets/images/products", catalogImageStatic);
 
-/** Seller shop avatars — optional profile photos. */
-const avatarsDir = path.join(CATALOG_IMAGES_DIR, "..", "avatars");
-app.use(
-  "/assets/images/avatars",
-  express.static(avatarsDir, {
-    maxAge: "1d",
-    setHeaders(res) {
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-    },
-  })
-);
+/** Seller shop avatars — durable data/avatars, then legacy website path. */
+const avatarStaticOpts = {
+  maxAge: "1d",
+  setHeaders(res) {
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  },
+};
+app.use("/assets/images/avatars", express.static(AVATARS_DIR, avatarStaticOpts));
+app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStaticOpts));
 
 app.use("/api/", apiLimiter);
 /** OTP only — do NOT throttle session-authed Seller Hub routes (ledger/orders/shipping). */
@@ -346,6 +345,7 @@ app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) =>
 
 const httpServer = app.listen(config.port, "0.0.0.0", () => {
   console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port} (build ${BUILD_ID})`);
+  void migrateLegacyAvatars();
   attachRiderSocket(httpServer);
   if (!config.waha.apiUrl) {
     console.log("⚠️ WAHA_API_URL not set — running in dry-run mode (messages will be logged, not sent).");

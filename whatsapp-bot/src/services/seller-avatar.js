@@ -1,8 +1,9 @@
 /**
- * Optional seller shop avatar — stored under website/assets/images/avatars/
- * and served from the bot (same pattern as listing product photos).
+ * Optional seller shop avatar — stored under whatsapp-bot/data/avatars/
+ * (gitignored, survives deploy hard-reset) and served by the bot at
+ * /assets/images/avatars/* — same public URL shape as before.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, copyFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,8 +11,41 @@ import { config } from "../config.js";
 import { updateUserShopProfile } from "../db/repositories/social.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.join(__dirname, "..", "..", "..");
-export const AVATARS_DIR = path.join(REPO_ROOT, "website", "assets", "images", "avatars");
+/** Durable VM path — inside gitignored whatsapp-bot/data/ */
+export const AVATARS_DIR = path.join(__dirname, "..", "..", "data", "avatars");
+/** Legacy path (pre-fix) — still served if a file remains there. */
+export const LEGACY_AVATARS_DIR = path.join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "website",
+  "assets",
+  "images",
+  "avatars"
+);
+
+/** Copy any leftover website/.../avatars files into durable data/avatars. */
+export async function migrateLegacyAvatars() {
+  try {
+    if (!existsSync(LEGACY_AVATARS_DIR)) return { copied: 0 };
+    if (!existsSync(AVATARS_DIR)) await mkdir(AVATARS_DIR, { recursive: true });
+    const names = await readdir(LEGACY_AVATARS_DIR);
+    let copied = 0;
+    for (const name of names) {
+      if (!/\.(jpe?g|png|webp|gif)$/i.test(name)) continue;
+      const dest = path.join(AVATARS_DIR, name);
+      if (existsSync(dest)) continue;
+      await copyFile(path.join(LEGACY_AVATARS_DIR, name), dest);
+      copied += 1;
+    }
+    if (copied) console.log(`[avatars] migrated ${copied} file(s) → ${AVATARS_DIR}`);
+    return { copied };
+  } catch (err) {
+    console.warn("[avatars] legacy migrate skipped:", err?.message || err);
+    return { copied: 0, error: String(err?.message || err) };
+  }
+}
 
 const MAX_AVATAR_BYTES = 2.5 * 1024 * 1024;
 

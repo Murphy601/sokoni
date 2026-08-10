@@ -571,7 +571,9 @@ function renderShopHeader(payload) {
     if (shop.avatarUrl) {
       avatarWrap.innerHTML = `<img src="${escapeHtml(shop.avatarUrl)}" alt="${escapeHtml(
         shop.shopName || "Shop avatar"
-      )}" class="w-full h-full object-cover" />`;
+      )}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl font-bold text-brand-purple/45 dark:text-white/55\\'>${escapeHtml(
+        initial
+      )}</span>'" />`;
     } else {
       avatarWrap.innerHTML = `<span class="text-2xl font-bold text-brand-purple/45 dark:text-white/55">${escapeHtml(
         initial
