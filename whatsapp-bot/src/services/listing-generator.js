@@ -63,6 +63,26 @@ const CATEGORY_KEYWORDS = [
   { category: "gaming", words: ["playstation", "xbox", "game", "controller", "ps5", "ps4"] },
   { category: "supermarket", words: ["rice", "flour", "sugar", "oil", "tea", "coffee", "cereal"] },
   { category: "baby-products", words: ["diaper", "pampers", "baby", "stroller", "formula"] },
+  {
+    category: "power-tools",
+    words: [
+      "drill",
+      "grinder",
+      "welder",
+      "welding",
+      "jigsaw",
+      "circular saw",
+      "chainsaw",
+      "generator",
+      "water pump",
+      "spray gun",
+      "compressor",
+      "makita",
+      "dewalt",
+      "toolset",
+      "hand tool",
+    ],
+  },
   { category: "home-office", words: ["chair", "desk", "bed", "mattress", "curtain", "lamp", "furniture"] },
   {
     category: "wines-spirits",
@@ -353,11 +373,45 @@ export async function resolveBrowsePath({ category, subcategory, browseCategory,
     return { browse: "men", sub: "t-shirts" };
   }
   if (/kid|baby|child|toddler|infant/.test(hay)) {
+    if (/\bbalance\s*bike\b/.test(hay)) return { browse: "kids", sub: "balance-bikes" };
+    if (/\bscooter\b/.test(hay)) return { browse: "kids", sub: "scooters" };
+    if (/\btricycle|tri\s*cycle\b/.test(hay)) return { browse: "kids", sub: "tricycles" };
+    if (/\bride[- ]?on\b/.test(hay)) return { browse: "kids", sub: "ride-ons" };
+    if (/\bhelmet|knee\s*pad|elbow\s*pad\b/.test(hay)) return { browse: "kids", sub: "helmets-pads" };
+    if (/\bbike|bicycle|cycle\b/.test(hay)) return { browse: "kids", sub: "bikes" };
     if (/\bshoe|sneaker|boot|sandal|trainer\b/.test(hay)) return { browse: "kids", sub: "shoes" };
     if (/\btoy|lego|doll|puzzle\b/.test(hay)) return { browse: "kids", sub: "toys" };
-    if (/\bbaby|stroller|pram|cot\b/.test(hay)) return { browse: "kids", sub: "baby-gear" };
+    if (/\bstroller|pram|cot\b/.test(hay)) return { browse: "kids", sub: "strollers" };
+    if (/\bbaby\b/.test(hay)) return { browse: "kids", sub: "baby-gear" };
     if (/\bschool|uniform\b/.test(hay)) return { browse: "kids", sub: "school-wear" };
     return { browse: "kids", sub: "clothing" };
+  }
+  if (/\b(angle\s*grinder|grinder)\b/.test(hay)) return { browse: "power-tools", sub: "grinders" };
+  if (/\b(circular\s*saw|skill\s*saw)\b/.test(hay)) return { browse: "power-tools", sub: "circular-saws" };
+  if (/\b(jigsaw)\b/.test(hay)) return { browse: "power-tools", sub: "jigsaws" };
+  if (/\b(chainsaw|chain\s*saw|power\s*saw)\b/.test(hay)) return { browse: "power-tools", sub: "chain-powersaws" };
+  if (/\b(water\s*pump|borehole\s*pump)\b/.test(hay)) return { browse: "power-tools", sub: "water-pumps" };
+  if (/\b(welding\s*generator)\b/.test(hay)) return { browse: "power-tools", sub: "welding-generators" };
+  if (/\b(welder|welding\s*machine|arc\s*weld)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "welding-machines" };
+  }
+  if (/\b(spray\s*gun|paint\s*gun)\b/.test(hay)) return { browse: "power-tools", sub: "spray-guns" };
+  if (/\b(car\s*wash\s*gun|carwash\s*spray)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "carwash-spray-guns" };
+  }
+  if (/\b(impact\s*driver)\b/.test(hay)) return { browse: "power-tools", sub: "impact-drivers" };
+  if (/\b(air\s*compressor)\b/.test(hay)) return { browse: "power-tools", sub: "air-compressors" };
+  if (/\b(generator|genset)\b/.test(hay) && !/\bwelding\b/.test(hay)) {
+    return { browse: "power-tools", sub: "generators" };
+  }
+  if (/\b(drill\s*set|tool\s*set|toolset|drillset)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "toolsets-drillsets" };
+  }
+  if (/\b(cordless\s*drill|power\s*drill|\bdrill\b|makita|dewalt|bosch\s*tool)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "drills" };
+  }
+  if (/\b(hand\s*tool|spanner|wrench|hammer|screwdriver\s*set)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "hand-tools" };
   }
   if (/\b(tv|television|smart\s*tv)\b/.test(hay)) return { browse: "electronics", sub: "tvs-audio" };
   if (/\b(console|playstation|xbox|nintendo|controller|gaming)\b/.test(hay)) {

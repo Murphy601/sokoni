@@ -26,25 +26,28 @@
 
 1. Women *(expanded: skirts, jumpsuits, activewear, sleepwear, sunglasses)*  
 2. Men *(expanded: trousers, shorts, jackets, bags)*  
-3. Kids *(expanded: school-wear, accessories; shoes image is kids-scoped)*  
-4. Health & Beauty *(+ nail-care, bath-body)*  
-5. Brands  
-6. Sports *(+ basketball, swimming, running)*  
+3. Kids *(+ bikes, balance-bikes, scooters, tricycles, ride-ons, helmets-pads, strollers, nursery; shoes image is kids-scoped)*  
+4. Health & Beauty *(+ nail-care, bath-body, hair-tools, oral-care, wellness)*  
+5. Brands *(+ streetwear-brands, luxury)*  
+6. Sports *(+ basketball, swimming, running, tennis, rugby, boxing, yoga, camping, hiking)*  
 7. Phones & Accessories *(nav alias → electronics/phones)*  
 8. TV & Audio *(nav → electronics/tvs-audio)*  
 9. Computers & Accessories *(nav → electronics/computing)*  
 10. Appliances *(nav → electronics/appliances)*  
-11. Electronics *(+ cameras, smart-home)*  
-12. Home & Living *(+ furniture, lighting, storage)*  
-13. Supermarket  
-14. Automotive  
-15. Pets *(additive)*  
-16. Office & Books *(additive)*  
-17. Garden & Outdoor *(additive)*  
-18. Restaurant *(additive — Kenya meals/diets/dishes: nyama choma, ugali, pilau, chapati, githeri, street bites, vegan/diet bowls, juices, catering)*  
-19. Wines & Spirits *(additive — Kenya liquor aisle: local beer, Kenyan spirits, wine, whisky/gin/vodka, mixers, party packs, non-alcoholic)*  
-20. Trending in Kenya  
-21. Sale & Hot Deals  
+11. Electronics *(+ cameras, smart-home, drones, networking, printers)*  
+12. Home & Living *(+ furniture, lighting, storage, cookware, tableware, bathroom, curtains, rugs)*  
+13. Supermarket *(+ snacks, cooking-oils, baby-food, cleaning)*  
+14. Automotive *(+ spare-parts, batteries, car-electronics, car-care)*  
+15. Power Tools *(additive — drills, grinders, toolsets, water pumps, welding, saws, generators, hand tools)*  
+16. Pets *(additive — dogs, cats, fish, birds)*  
+17. Office & Books *(additive)*  
+18. Garden & Outdoor *(additive — seeds, irrigation, BBQ, solar)*  
+19. Musical Instruments *(additive)*  
+20. Travel & Luggage *(additive)*  
+21. Restaurant *(additive — Kenya meals/diets/dishes)*  
+22. Wines & Spirits *(additive — Kenya liquor aisle)*  
+23. Trending in Kenya  
+24. Sale & Hot Deals  
 
 **Images:** `scripts/browse-category-images.mjs` → rebuild with `node scripts/build-browse-menu.mjs` (runs URL verify). Kids shoes must use path key `kids/shoes`, never women's heels.
 
