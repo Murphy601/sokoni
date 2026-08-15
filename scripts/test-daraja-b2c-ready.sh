@@ -22,6 +22,7 @@ CERT="$(env_get MPESA_CERT_PATH)"
 SHORT="$(env_get MPESA_B2C_SHORTCODE)"
 RESULT="$(env_get MPESA_B2C_RESULT_URL)"
 KEY="$(env_get MPESA_CONSUMER_KEY)"
+B2C_KEY="$(env_get MPESA_B2C_CONSUMER_KEY)"
 
 echo "Env file: $ENV_FILE"
 echo "Initiator: ${NAME:-unset}"
@@ -31,12 +32,18 @@ echo "InitiatorPassword set: $([ -n "$PASS" ] && echo yes || echo no)"
 echo "Cert path: ${CERT:-unset} $([ -n "$CERT" ] && [ -f "$CERT" ] && echo '(exists)' || echo '')"
 echo "Result URL: ${RESULT:-unset}"
 echo "Consumer key len: ${#KEY}"
+echo "B2C consumer key len: ${#B2C_KEY} (0 = reuse STK keys)"
 
 ok=1
 [ -n "$NAME" ] || { echo "FAIL: MPESA_INITIATOR_NAME missing"; ok=0; }
-[ -n "$SHORT" ] || { echo "FAIL: MPESA_B2C_SHORTCODE missing"; ok=0; }
+[ -n "$SHORT" ] || { echo "FAIL: MPESA_B2C_SHORTCODE missing (need B2C/One Account code, not Buy Goods 3439153)"; ok=0; }
+if [ "$SHORT" = "3439153" ]; then
+  echo "FAIL: MPESA_B2C_SHORTCODE=3439153 is C2B/Buy Goods only — cannot B2C"
+  echo "  Apply: https://hub.m-pesaforbusiness.co.ke/merchant-onboarding/self-onboarding"
+  ok=0
+fi
 [ -n "$RESULT" ] || { echo "FAIL: MPESA_B2C_RESULT_URL missing"; ok=0; }
-[ "${#KEY}" -ge 32 ] || { echo "FAIL: OAuth consumer key missing/short"; ok=0; }
+[ "${#KEY}" -ge 32 ] || [ "${#B2C_KEY}" -ge 32 ] || { echo "FAIL: OAuth consumer key missing/short"; ok=0; }
 if [ "${#CRED}" -lt 80 ] && { [ -z "$PASS" ] || [ ! -f "${CERT:-}" ]; }; then
   echo "FAIL: need MPESA_SECURITY_CREDENTIAL or (INITIATOR_PASSWORD + cert file)"
   ok=0
@@ -46,5 +53,5 @@ if [ "$ok" = 1 ]; then
   echo "OK — B2C env looks ready. Send a real payout with #payb2c SKN-… or Seller Withdraw."
   exit 0
 fi
-echo "Fix with: bash scripts/configure-b2c-initiator.sh"
+echo "Fix with: bash scripts/configure-b2c-initiator.sh (after setting MPESA_B2C_SHORTCODE)"
 exit 1

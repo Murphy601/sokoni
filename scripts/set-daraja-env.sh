@@ -98,7 +98,17 @@ PARTY_B="${MPESA_PARTY_B:-$TILL}"
 TX_TYPE="${MPESA_TRANSACTION_TYPE:-CustomerBuyGoodsOnline}"
 ENV_NAME="${MPESA_ENV:-production}"
 CALLBACK="${MPESA_CALLBACK_URL:-https://bot.sokonimall.com/api/payments/daraja/callback}"
-B2C_SHORT="${MPESA_B2C_SHORTCODE:-$SHORTCODE}"
+# Never default B2C shortcode to Buy Goods 3439153 (C2B-only). Keep existing .env or leave empty.
+EXISTING_B2C_SHORT="$(env_get MPESA_B2C_SHORTCODE)"
+B2C_SHORT_RAW="$(clean_cred "${MPESA_B2C_SHORTCODE:-}")"
+if is_placeholder "$B2C_SHORT_RAW"; then
+  B2C_SHORT_RAW="$(clean_cred "$EXISTING_B2C_SHORT")"
+fi
+if [ "$B2C_SHORT_RAW" = "3439153" ]; then
+  echo "==> Clearing MPESA_B2C_SHORTCODE=3439153 (Buy Goods / C2B-only — cannot pay sellers via B2C)"
+  B2C_SHORT_RAW=""
+fi
+B2C_SHORT="$B2C_SHORT_RAW"
 B2C_RESULT="${MPESA_B2C_RESULT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/result}"
 B2C_TIMEOUT="${MPESA_B2C_TIMEOUT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/timeout}"
 B2C_CMD="${MPESA_B2C_COMMAND_ID:-BusinessPayment}"
@@ -133,7 +143,14 @@ upsert MPESA_PARTY_B "$PARTY_B"
 upsert MPESA_ENV "$ENV_NAME"
 upsert MPESA_TRANSACTION_TYPE "$TX_TYPE"
 upsert MPESA_CALLBACK_URL "$CALLBACK"
-upsert MPESA_B2C_SHORTCODE "$B2C_SHORT"
+if [ -n "$B2C_SHORT" ]; then
+  upsert MPESA_B2C_SHORTCODE "$B2C_SHORT"
+else
+  # Remove invalid/empty C2B default so isB2CReady stays false until a real B2C code is set.
+  TMP_B2C="$(mktemp)"
+  grep -vE '^MPESA_B2C_SHORTCODE=' "$ENV_FILE" > "$TMP_B2C" || true
+  mv "$TMP_B2C" "$ENV_FILE"
+fi
 upsert MPESA_B2C_RESULT_URL "$B2C_RESULT"
 upsert MPESA_B2C_TIMEOUT_URL "$B2C_TIMEOUT"
 upsert MPESA_B2C_COMMAND_ID "$B2C_CMD"
@@ -178,16 +195,23 @@ echo "    Org/Daraja SHORTCODE (BusinessShortCode): $SHORTCODE"
 echo "    Buy Goods TILL (PartyB): $TILL ($TILL_NAME) · STK: $TX_TYPE · Env: $ENV_NAME"
 echo "    Merchant store 4421485 is not used in STK payload"
 echo "    STK callback: $CALLBACK"
-echo "    B2C shortcode: $B2C_SHORT · result: $B2C_RESULT"
+if [ -n "$B2C_SHORT" ]; then
+  echo "    B2C shortcode: $B2C_SHORT · result: $B2C_RESULT"
+else
+  echo "    B2C shortcode: NOT SET — Buy Goods 3439153 cannot do B2C."
+  echo "      Apply: https://hub.m-pesaforbusiness.co.ke/merchant-onboarding/self-onboarding"
+  echo "      Then: export MPESA_B2C_SHORTCODE='…' && bash scripts/set-daraja-env.sh"
+fi
 echo "    Org API roles (Business Manager, B2C initiator, Buy Goods Org API, etc.) are"
 echo "    toggled in the Safaricom org portal — not in this .env. Buyer STK only needs"
 echo "    Consumer Key + Secret + Passkey + shortcode/till mapping above."
 if grep -qE '^MPESA_INITIATOR_NAME=.' "$ENV_FILE" 2>/dev/null && \
    { grep -qE '^MPESA_SECURITY_CREDENTIAL=.' "$ENV_FILE" 2>/dev/null || \
-     grep -qE '^MPESA_INITIATOR_PASSWORD=.' "$ENV_FILE" 2>/dev/null; }; then
+     grep -qE '^MPESA_INITIATOR_PASSWORD=.' "$ENV_FILE" 2>/dev/null; } && \
+   [ -n "$B2C_SHORT" ]; then
   echo "    B2C initiator: configured"
 else
-  echo "    B2C initiator: not set yet (STK checkout works; seller #payb2c needs MPESA_INITIATOR_NAME + SECURITY_CREDENTIAL)"
+  echo "    B2C payouts: not ready (need B2C/One Account shortcode + initiator credential)"
 fi
 
 if [ "${SKIP_RESTART:-}" = "1" ]; then
