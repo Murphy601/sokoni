@@ -232,6 +232,20 @@ if [ -f "$ENV_FILE" ]; then
   else
     echo "==> Gemini vision: GEMINI_API_KEY unset (OK — OpenRouter free + NVIDIA NIM cover seller photos)"
   fi
+  # Clip fallbacks: HyperFrames (HeyGen) + local Remotion worker.
+  if [ -n "${SOKONI_HEYGEN_API_KEY:-}" ]; then
+    set_env_kv "$ENV_FILE" "HEYGEN_API_KEY" "$SOKONI_HEYGEN_API_KEY"
+    echo "==> Set HEYGEN_API_KEY from SOKONI_HEYGEN_API_KEY"
+  fi
+  CURRENT_HEYGEN="$(env_get "$ENV_FILE" HEYGEN_API_KEY)"
+  if [ -n "$CURRENT_HEYGEN" ]; then
+    set_env_kv "$ENV_FILE" "STUDIO_CLIP_FALLBACKS" "hyperframes,remotion"
+    set_env_kv "$ENV_FILE" "REMOTION_RENDER_URL" "http://127.0.0.1:${REMOTION_WORKER_PORT:-3105}/render"
+    set_env_kv "$ENV_FILE" "REMOTION_COMPOSITION" "SokoniProduct"
+    echo "==> Clip fallbacks: HyperFrames + Remotion (HEYGEN_API_KEY present, ${#CURRENT_HEYGEN} chars)"
+  else
+    echo "==> Clip fallbacks: HEYGEN_API_KEY unset — run scripts/configure-clip-fallbacks.sh on the VM"
+  fi
 else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
 fi
@@ -286,6 +300,32 @@ pm2 start src/server.js \
   --max-memory-restart 450M \
   --node-args="--max-old-space-size=384"
 pm2 save
+
+# Local Remotion HTTP worker (clip fallback) — fail-soft if install/start fails.
+WORKER_DIR="$REPO/remotion-worker"
+WORKER_NAME="${REMOTION_PM2_NAME:-sokoni-remotion}"
+WORKER_PORT="${REMOTION_WORKER_PORT:-3105}"
+if [ "${SKIP_REMOTION_WORKER:-}" != "1" ] && [ -f "$WORKER_DIR/server.mjs" ]; then
+  echo "==> Installing / starting Remotion worker on :$WORKER_PORT..."
+  if (cd "$WORKER_DIR" && (npm install --omit=dev 2>/dev/null || npm install)); then
+    if pm2 describe "$WORKER_NAME" >/dev/null 2>&1; then
+      pm2 delete "$WORKER_NAME" || true
+    fi
+    pm2 start "$WORKER_DIR/server.mjs" \
+      --name "$WORKER_NAME" \
+      --cwd "$WORKER_DIR" \
+      --update-env \
+      --max-memory-restart 320M \
+      --node-args="--max-old-space-size=280" || echo "WARN: remotion worker pm2 start failed"
+    pm2 save >/dev/null 2>&1 || true
+    sleep 1
+    curl -sf --max-time 4 "http://127.0.0.1:${WORKER_PORT}/health" >/dev/null 2>&1 \
+      && echo "==> Remotion worker health OK" \
+      || echo "WARN: Remotion worker not ready yet (bundle may still be warming; HyperFrames still works)"
+  else
+    echo "WARN: remotion-worker npm install failed — HyperFrames fallback still works if HEYGEN_API_KEY is set"
+  fi
+fi
 
 echo "==> Waiting for bot health (up to 30s)..."
 HEALTH_OK=0

@@ -93,10 +93,18 @@ Optional Cloudinary tweaks:
 | Path | Role |
 |------|------|
 | `whatsapp-bot/src/services/listing-studio.js` | Provider chain + clip-from-clean |
+| `whatsapp-bot/src/services/clip-fallbacks.js` | Soft HyperFrames / Remotion clips after Cloudinary miss |
 | `website/assets/js/seller-listing.js` | Cover + clip toggles; CDN → browser cache |
 | `website/suppliers/list.html` | Studio controls |
 
 Failures keep the original cover. Clip failure is soft — clean image still returns. Bot boots without studio keys.
+
+### Soft clip fallbacks (optional)
+
+Cloudinary remains the primary clip engine. If zoompan / multi returns no URL and `STUDIO_CLIP_ENABLED` is not `false`:
+
+1. **HyperFrames** (HeyGen) — set `HEYGEN_API_KEY` or `HYPERFRAMES_API_KEY`. Bot ships a tiny Ken Burns `index.html` zip unless `HYPERFRAMES_PROJECT_ASSET_ID` / `HYPERFRAMES_PROJECT_URL` points at your template.
+2. **Remotion** — on the Sokoni GCP bot VM we run **`remotion-worker/`** as PM2 `sokoni-remotion` on `127.0.0.1:3105` (Method B). `REMOTION_RENDER_URL=http://127.0.0.1:3105/render`. Configure with `scripts/configure-clip-fallbacks.sh` (also wires HeyGen). If Chromium OOMs on the 1GB VM, the worker soft-falls to a Cloudinary clip so the endpoint still returns a video. Optional Method A Lambda uses `REMOTION_SERVE_URL` + `REMOTION_FUNCTION_NAME` + `REMOTION_REGION` instead.
 
 **Cloudinary note:** first `e_background_removal` / zoompan request can return **423** while the derived file builds. The bot retries automatically (and prefers eager transforms on upload).
 
