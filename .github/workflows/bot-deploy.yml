@@ -6,6 +6,7 @@ name: Bot Deploy
 #   VM_USER          — e.g. daviemuiruri3888
 #   VM_SSH_KEY       — private key with access to the VM
 #   GEMINI_API_KEY   — Google Gemini key for seller photo → listing drafts
+#   HEYGEN_API_KEY   — HeyGen / HyperFrames clip fallback (optional but recommended)
 #
 # Website (sokonimall.com) deploys separately via Cloudflare Workers Builds on main.
 
@@ -14,9 +15,11 @@ on:
     branches: [main]
     paths:
       - "whatsapp-bot/**"
+      - "remotion-worker/**"
       - "scripts/deploy-bot.sh"
       - "scripts/deploy-waha.sh"
       - "scripts/configure-waha-session.sh"
+      - "scripts/configure-clip-fallbacks.sh"
       - "scripts/start-postgres.sh"
       - "scripts/verify-bot-import.mjs"
       - "docker-compose.waha.yml"
@@ -40,6 +43,7 @@ jobs:
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
         run: |
           set -euo pipefail
           missing=0
@@ -57,6 +61,9 @@ jobs:
           fi
           if [ -z "${GEMINI_API_KEY}" ]; then
             echo "::warning title=Missing GEMINI_API_KEY::Set Actions secret GEMINI_API_KEY for best seller photo drafts (or set GEMINI_API_KEY on the VM .env)."
+          fi
+          if [ -z "${HEYGEN_API_KEY}" ]; then
+            echo "::warning title=Missing HEYGEN_API_KEY::Set Actions secret HEYGEN_API_KEY for HyperFrames clip fallbacks (or run scripts/configure-clip-fallbacks.sh on the VM)."
           fi
           if [ "$missing" -ne 0 ]; then
             echo ""
@@ -83,6 +90,7 @@ jobs:
             git checkout main
             git pull --rebase origin main
             export SOKONI_GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}'
+            export SOKONI_HEYGEN_API_KEY='${{ secrets.HEYGEN_API_KEY }}'
             bash scripts/deploy-bot.sh
 
       - name: Smoke-check bot health
