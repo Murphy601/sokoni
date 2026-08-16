@@ -15,6 +15,7 @@
     "test:listing": "node scripts/test-listing-generator.mjs",
     "test:listing-moderation": "node scripts/test-listing-moderation.mjs",
     "test:listing-studio": "node scripts/test-listing-studio.mjs",
+    "test:clip-fallbacks": "node scripts/test-clip-fallbacks.mjs",
     "test:daraja-checkout": "node scripts/test-daraja-checkout.mjs",
     "test:hybrid-shipping": "node scripts/test-hybrid-shipping.mjs",
     "test:gemini": "node scripts/test-gemini-vision.mjs",

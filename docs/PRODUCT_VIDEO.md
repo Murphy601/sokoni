@@ -6,7 +6,7 @@ Short clips raise trust on pre-loved / streetwear listings. They must stay light
 
 | Kind | Length | Source | Where it plays |
 |------|--------|--------|----------------|
-| **`preview`** | 3–5s (1 photo) or ~2s×N (multi-photo reel) | Cloudinary zoompan **or** multi slideshow from cleaned cutouts | Grid hover / ▶ tap; PDP fallback |
+| **`preview`** | 3–5s (1 photo) or ~2s×N (multi-photo reel) | Cloudinary zoompan **or** multi slideshow from cleaned cutouts; soft fallbacks: **HyperFrames** / **Remotion** if Cloudinary clip fails | Grid hover / ▶ tap; PDP fallback |
 | **`seller`** | 15–30s, max 15MB | Phone upload by seller | Product detail page (controls + muted autoplay) |
 
 Product fields:
@@ -28,7 +28,7 @@ Public catalog (`toPublicProduct` + `build-site-catalog`) exposes both. Bot serv
 ## Seller flow
 
 1. Optional phone video → validated client-side (≤30s, ≤8MB soft / 15MB hard) → raw `POST /api/seller/listings/upload-video-bin?phone=&sessionToken=` (binary MP4 body, progress UI) → publish sends only that short `videoUrl` with `videoKind: "seller"` (skips AI reel). Legacy JSON `/upload-video` remains as fallback for tiny clips.
-2. Else studio: clean backgrounds once → **1 photo** zoompan clip, or **2–8 photos** one Cloudinary multi reel → `videoKind: "preview"`.
+2. Else studio: clean backgrounds once → **1 photo** zoompan clip, or **2–8 photos** one Cloudinary multi reel → `videoKind: "preview"`. If Cloudinary clip/reel fails and HyperFrames / Remotion keys are set, those run as soft fallbacks (then re-host to Cloudinary when possible).
 3. Publish saves CDN `videoUrl` (preview) or local `/catalog-images/{id}.mp4` (seller) + cleaned `imageUrl`s; caches a local cover JPEG for WhatsApp.
 
 Studio / reel videos are Cloudinary-compressed (`q_auto:eco`, `w_720`). Raw seller uploads are size-capped.

@@ -29,6 +29,11 @@
  */
 import crypto from "node:crypto";
 import { generateListingFromImage } from "./listing-generator.js";
+import {
+  isClipFallbackConfigured,
+  listConfiguredClipFallbacks,
+  tryClipFallbacks,
+} from "./clip-fallbacks.js";
 
 const PHOTOROOM_SEGMENT = "https://sdk.photoroom.com/v1/segment";
 
@@ -118,12 +123,16 @@ export function isStudioClipEnabled() {
 export function getStudioMeta() {
   const providers = listConfiguredProviders();
   const order = resolveProviderOrder();
+  const clipFallbacks = listConfiguredClipFallbacks();
   return {
     studioEnabled: isStudioConfigured(),
     studioProvider: order[0] || "none",
     studioProviders: providers,
     studioProviderOrder: order,
     studioClipEnabled: isStudioClipEnabled(),
+    /** Soft clip engines tried only after Cloudinary zoompan/multi fails. */
+    studioClipFallbacks: clipFallbacks,
+    studioClipFallbackConfigured: isClipFallbackConfigured(),
   };
 }
 
@@ -1038,7 +1047,7 @@ async function cloudinaryMultiReel(imageUrls, reelTag, opts = {}) {
  * @returns {Promise<{ videoUrl: string, videoKind: "preview" }|null>}
  */
 export async function attachVideoFromCleanImageUrls(imageUrls) {
-  if (!isCloudinaryConfigured() || isStudioClipEnabled() === false) return null;
+  if (isStudioClipEnabled() === false) return null;
   const cloud = env("CLOUDINARY_CLOUD_NAME");
   const list = (imageUrls || [])
     .map((u) => String(u || "").trim().split("?")[0])
@@ -1046,40 +1055,54 @@ export async function attachVideoFromCleanImageUrls(imageUrls) {
     .slice(0, 8);
   if (!list.length) return null;
 
-  if (list.length === 1) {
-    const pid = cloudinaryPublicIdFromUrl(list[0]);
-    if (!pid) return null;
-    const videoUrl = bakedClipUrl(cloud, pid);
-    // Soft wait — keep the URL even if CDN is still warming.
-    await waitCloudinaryDerivedReady(videoUrl, {
-      label: "attach-clip",
-      timeoutMs: 45_000,
-      attempts: 4,
-    }).catch(() => false);
-    return { videoUrl, videoKind: "preview" };
+  if (isCloudinaryConfigured()) {
+    if (list.length === 1) {
+      const pid = cloudinaryPublicIdFromUrl(list[0]);
+      if (pid) {
+        const videoUrl = bakedClipUrl(cloud, pid);
+        // Soft wait — keep the URL even if CDN is still warming (unchanged happy path).
+        await waitCloudinaryDerivedReady(videoUrl, {
+          label: "attach-clip",
+          timeoutMs: 45_000,
+          attempts: 4,
+        }).catch(() => false);
+        return { videoUrl, videoKind: "preview" };
+      }
+    } else {
+      const multi = await cloudinaryMultiByUrls(list, {
+        format: "mp4",
+        transformation: resolveReelTransform(),
+        bakedFlags: list.map(() => true),
+      });
+      let videoUrl = multi?.secure_url || multi?.url || null;
+      if (videoUrl) {
+        await waitCloudinaryDerivedReady(videoUrl, {
+          label: "attach-reel",
+          timeoutMs: 60_000,
+          attempts: 5,
+        }).catch(() => false);
+        return { videoUrl, videoKind: "preview" };
+      }
+
+      // Multi failed — still ship a single-photo zoompan so the listing isn't stills-only.
+      const pid = cloudinaryPublicIdFromUrl(list[0]);
+      if (pid) {
+        videoUrl = bakedClipUrl(cloud, pid);
+        console.warn("[listing-studio] multi attach failed — using cover zoompan", pid);
+        await waitCloudinaryDerivedReady(videoUrl, {
+          label: "attach-zoompan-fallback",
+          timeoutMs: 45_000,
+          attempts: 4,
+        }).catch(() => false);
+        return { videoUrl, videoKind: "preview" };
+      }
+    }
   }
 
-  const multi = await cloudinaryMultiByUrls(list, {
-    format: "mp4",
-    transformation: resolveReelTransform(),
-    bakedFlags: list.map(() => true),
-  });
-  let videoUrl = multi?.secure_url || multi?.url || null;
-  if (videoUrl) {
-    await waitCloudinaryDerivedReady(videoUrl, {
-      label: "attach-reel",
-      timeoutMs: 60_000,
-      attempts: 5,
-    }).catch(() => false);
-    return { videoUrl, videoKind: "preview" };
-  }
-
-  // Multi failed — still ship a single-photo zoompan so the listing isn't stills-only.
-  const pid = cloudinaryPublicIdFromUrl(list[0]);
-  if (!pid) return null;
-  videoUrl = bakedClipUrl(cloud, pid);
-  console.warn("[listing-studio] multi attach failed — using cover zoompan", pid);
-  return { videoUrl, videoKind: "preview" };
+  // No Cloudinary clip URL possible — optional HyperFrames / Remotion.
+  const fallback = await tryClipFallbacks(list);
+  if (fallback?.videoUrl) return { videoUrl: fallback.videoUrl, videoKind: "preview" };
+  return null;
 }
 
 /**
@@ -1243,15 +1266,24 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
   // Single photo: reuse existing clip only if it targets a baked asset (no bg-removal in MP4 chain).
   if (cutouts.length === 1) {
     const existing = String(opts.existingClipUrl || "");
-    const videoUrl =
+    let videoUrl =
       (existing && !/e_background_removal/i.test(existing) ? existing : null) ||
       cutouts[0].clipUrl ||
       null;
+    let clipProvider = videoUrl ? "cloudinary" : null;
+    if (!videoUrl) {
+      const fb = await tryClipFallbacks(imageUrls);
+      if (fb?.videoUrl) {
+        videoUrl = fb.videoUrl;
+        clipProvider = fb.provider;
+      }
+    }
     return {
       imageUrls,
       videoUrl,
       videoKind: videoUrl ? "preview" : null,
       error: videoUrl ? null : "clip_failed",
+      clipProvider,
     };
   }
 
@@ -1264,6 +1296,7 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
   });
   let videoUrl = multi?.secure_url || multi?.url || null;
   let error = null;
+  let clipProvider = videoUrl ? "cloudinary" : null;
 
   if (videoUrl) {
     const ready = await waitCloudinaryDerivedReady(videoUrl, {
@@ -1286,6 +1319,17 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
     const cloud = env("CLOUDINARY_CLOUD_NAME");
     const fallback = await finalizeClipUrl(bakedClipUrl(cloud, cutouts[0].cleanPublicId));
     videoUrl = fallback?.clipUrl || cutouts[0].clipUrl || null;
+    if (videoUrl) clipProvider = "cloudinary";
+  }
+
+  // Soft fallbacks: HyperFrames / Remotion only after Cloudinary paths miss.
+  if (!videoUrl) {
+    const fb = await tryClipFallbacks(imageUrls);
+    if (fb?.videoUrl) {
+      videoUrl = fb.videoUrl;
+      clipProvider = fb.provider;
+      error = null;
+    }
   }
 
   return {
@@ -1296,6 +1340,7 @@ export async function prepareListingShowcaseMedia(sources, opts = {}) {
     error: videoUrl ? (error === "multi_failed" ? null : error) : error || "reel_failed",
     reelTag,
     slideCount: cutouts.length,
+    clipProvider,
   };
 }
 
