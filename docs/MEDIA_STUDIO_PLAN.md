@@ -104,9 +104,15 @@ Failures keep the original cover. Clip failure is soft — clean image still ret
 Cloudinary remains the primary clip engine. If zoompan / multi returns no URL and `STUDIO_CLIP_ENABLED` is not `false`:
 
 1. **HyperFrames** (HeyGen) — set `HEYGEN_API_KEY` or `HYPERFRAMES_API_KEY`. Bot ships a tiny Ken Burns `index.html` zip unless `HYPERFRAMES_PROJECT_ASSET_ID` / `HYPERFRAMES_PROJECT_URL` points at your template.
-2. **Remotion** — set `REMOTION_RENDER_URL` (HTTP worker). Optional Lambda env only if `@remotion/lambda` is installed separately (not a bot dependency).
+2. **Remotion** — best for Sokoni is **Remotion Lambda (Method A)**:
+   - `REMOTION_SERVE_URL` = S3 Serve URL from `npx remotion lambda sites create …`
+   - `REMOTION_FUNCTION_NAME` + `REMOTION_REGION` from `npx remotion lambda functions deploy`
+   - AWS credentials on the bot; optional peer install of `@remotion/lambda` (not a default dep)
+   - Do **not** put the S3 Serve URL in `REMOTION_RENDER_URL` (that var is only for a custom HTTP worker — Method B)
 
 Order: `STUDIO_CLIP_FALLBACKS=hyperframes,remotion`. Ephemeral render URLs are re-uploaded to Cloudinary when possible so catalog links stay durable. Unset keys = no-op (existing Cloudinary path unchanged).
+
+Until Remotion Lambda exists, HyperFrames alone is enough — leave Remotion vars empty.
 
 **Cloudinary note:** first `e_background_removal` / zoompan request can return **423** while the derived file builds. The bot retries automatically (and prefers eager transforms on upload).
 
