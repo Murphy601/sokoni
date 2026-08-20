@@ -149,6 +149,23 @@ function formatProductLine(p) {
   return `• *${p.name}* — KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""} ⭐ ${p.rating || "—"}`;
 }
 
+function extractBudgetFromText(text) {
+  const under = String(text || "").match(/(?:under|chini ya|below|less than)\s*(?:kes\s*)?(\d[\d,]*)\s*k?/i);
+  if (under) return Number(under[1].replace(/,/g, ""));
+  return null;
+}
+
+function emptyCatalogReply(channel, userMessage = "", toolResult = null) {
+  const budget = extractBudgetFromText(userMessage);
+  const aisle = toolResult?.label || toolResult?.browseLabel || toolResult?.browseCategory || "";
+  const budgetBit = Number.isFinite(budget) ? ` under KES ${budget.toLocaleString()}` : "";
+  const aisleBit = aisle ? ` in ${aisle}` : "";
+  if (channel === "web") {
+    return `No live Sokoni listings match that${aisleBit}${budgetBit} right now. Try another keyword or browse sokonimall.com — I only show current stock.`;
+  }
+  return `No live listings match that${aisleBit}${budgetBit} right now. Try different words or type *menu* — I only show current stock.`;
+}
+
 function storeInfoOffline(r, channel, userMessage = "") {
   const lower = String(userMessage || "").toLowerCase();
   if (/\b(deliver|shipping|dispatch|courier|pickup|hub)\b/i.test(lower)) {
@@ -186,19 +203,42 @@ function offlineReply(toolResults, channel, userMessage = "") {
         `\n\nType an order number for details.`
       );
     }
-    if ((r.tool === "search_products" || r.tool === "browse_products") && r.products?.length) {
-      const n = Math.min(3, r.products.length);
-      // WhatsApp: numbered picker follows — keep text tiny to avoid double walls of text.
-      if (channel === "whatsapp") {
-        return `Found *${n}* match${n === 1 ? "" : "es"}. Reply with the *number* to view & order, or *menu*.`;
+  }
+
+  // Catalog tools (including zero hits) — never invent deleted/old stock.
+  for (const r of toolResults) {
+    if (r.tool === "get_product") {
+      if (r.ok && r.product && r.product.inStock !== false) {
+        const p = r.product;
+        return (
+          `*${p.name}* — KES ${Number(p.priceKes).toLocaleString()}` +
+          (p.isSecondhand ? " · pre-loved" : "") +
+          (channel === "web" ? `. Order on WhatsApp from the listing.` : `. Reply *order* or open the picker.`)
+        );
       }
-      const aisle = r.label || r.browseLabel || "";
-      const lines = r.products.slice(0, 3).map(formatProductLine);
-      return (
-        `${aisle ? `In *${aisle}* — ` : ""}Found ${n}:\n${lines.join("\n")}\n` +
-        `Tap *Order on WhatsApp* on an item.`
-      );
+      return channel === "web"
+        ? `That item is not live on Sokoni right now. Search another keyword or browse sokonimall.com.`
+        : `That item is not live right now. Type *menu* to browse current stock.`;
     }
+    if (r.tool === "search_products" || r.tool === "browse_products") {
+      const live = (r.products || []).filter((p) => p && p.inStock !== false);
+      if (live.length) {
+        const n = Math.min(3, live.length);
+        if (channel === "whatsapp") {
+          return `Found *${n}* live match${n === 1 ? "" : "es"}. Reply with the *number* to view & order, or *menu*.`;
+        }
+        const aisle = r.label || r.browseLabel || "";
+        const lines = live.slice(0, 3).map(formatProductLine);
+        return (
+          `${aisle ? `In *${aisle}* — ` : ""}Found ${n} live:\n${lines.join("\n")}\n` +
+          `Tap *Order on WhatsApp* on an item. (Current stock only.)`
+        );
+      }
+      return emptyCatalogReply(channel, userMessage, r);
+    }
+  }
+
+  for (const r of toolResults) {
     if (r.tool === "browse_taxonomy" && r.categories?.length) {
       const top = r.categories
         .filter((c) => !c.navOnly)
@@ -290,6 +330,12 @@ export async function runAgentTurn({
   const toolBlock = formatToolResultsForPrompt(toolResults);
   const policyTurn =
     isPolicyOrTrustQuery(text) && toolResults.some((r) => r.tool === "store_info");
+  const catalogTurn = toolResults.some(
+    (r) =>
+      r.tool === "search_products" ||
+      r.tool === "browse_products" ||
+      r.tool === "get_product"
+  );
 
   const session = channel === "whatsapp" ? getSession(sessionKey) : null;
   const hist = history || session?.history || [];
@@ -298,11 +344,22 @@ export async function runAgentTurn({
     pushMessage(sessionKey, "user", text);
   }
 
-  // Policy / escrow answers: prefer deterministic copy — free models often leak rules or truncate lists.
-  if (policyTurn || !getClient()) {
+  // Policy + catalog: deterministic answers from live tools — free models invent deleted stock.
+  if (policyTurn || catalogTurn || !getClient()) {
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
-    return { reply, tools: toolResults, offline: true, policy: policyTurn };
+    return {
+      reply,
+      tools: toolResults,
+      offline: true,
+      policy: policyTurn,
+      catalog: catalogTurn,
+      products:
+        toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
+        toolResults.find((r) => r.tool === "search_products" && r.products?.length)?.products ||
+        [],
+      tracking: toolResults.find((r) => r.tool === "track_order")?.tracking || null,
+    };
   }
 
   try {

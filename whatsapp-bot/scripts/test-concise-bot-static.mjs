@@ -24,7 +24,10 @@ assert.match(agent, /temperature: 0\.2/);
 assert.match(agent, /frequency_penalty: 0\.5/);
 assert.match(agent, /enforceReplyBrevity/);
 assert.match(agent, /looksLikeInstructionLeak/);
-assert.match(agent, /Found \*\$\{n\}\* match/);
+assert.match(agent, /Found \*\$\{n\}\* live match/);
+assert.match(agent, /catalogTurn/);
+assert.match(agent, /emptyCatalogReply|No live Sokoni listings/);
+assert.match(agent, /Current stock only/);
 assert.match(webhook, /claimInboundMessageId/);
 assert.match(webhook, /duplicate blocked/);
 

@@ -14,7 +14,7 @@ const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
 let cachedProducts = null;
 let cachedAtMs = 0;
 /** Soft TTL so Ask / WhatsApp pick up new listings without waiting for a restart. */
-const CATALOG_CACHE_TTL_MS = 30_000;
+const CATALOG_CACHE_TTL_MS = 10_000;
 
 /** Clear in-memory cache after admin/catalog writes. */
 export function invalidateProductCache() {
@@ -36,7 +36,10 @@ async function loadProducts() {
   }
   if (isDbEnabled()) {
     try {
-      cachedProducts = await listProductsFromDb();
+      // Shopper surfaces: live stock only + sold-sku registry locks.
+      const rows = await listProductsFromDb({ inStockOnly: true });
+      cachedProducts = await applySoldLocks(rows);
+      cachedProducts = cachedProducts.filter((p) => isProductAvailable(p));
       cachedAtMs = now;
       return cachedProducts;
     } catch (err) {
@@ -48,6 +51,9 @@ async function loadProducts() {
   const raw = await readFile(PRODUCTS_PATH, "utf-8");
   const parsed = JSON.parse(raw);
   cachedProducts = Array.isArray(parsed) ? await applySoldLocks(parsed) : parsed;
+  cachedProducts = Array.isArray(cachedProducts)
+    ? cachedProducts.filter((p) => isProductAvailable(p))
+    : cachedProducts;
   cachedAtMs = now;
   return cachedProducts;
 }
