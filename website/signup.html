@@ -2,90 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Sign up — Sokoni Mall</title>
-<meta name="description" content="Create a free Sokoni Mall account with email. Track purchases and shop Kenya's prepaid marketplace." />
+<meta name="description" content="Create a free Sokoni Mall account." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
-<script src="https://cdn.tailwindcss.com"></script>
 <script>
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          brand: { green: "#25D366", purple: "#1B1035", cream: "#FFF8F0" },
-        },
-        fontFamily: {
-          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
-          display: ["Fraunces", "Georgia", "serif"],
-        },
-      },
-    },
-  };
+  (function () {
+    var q = window.location.search || "";
+    var params = new URLSearchParams(q);
+    params.set("modal", "signup");
+    window.location.replace("login.html?" + params.toString());
+  })();
 </script>
-<script>
-  (function () { document.documentElement.classList.add("dark"); })();
-</script>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="assets/css/design-tokens.css" />
-<link rel="stylesheet" href="assets/css/styles.css" />
-<link rel="stylesheet" href="assets/css/depop-shell.css" />
-<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
 </head>
-<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="profile">
-  <div id="sokoni-shell-header"></div>
-
-  <main class="depop-main-content max-w-md mx-auto w-full px-5 py-8 flex-1">
-    <section class="depop-card p-6 space-y-4">
-      <p class="depop-label">Free account</p>
-      <h1 class="font-display text-3xl font-bold tracking-tight text-white">Join Sokoni</h1>
-      <p class="text-sm text-zinc-400">
-        Sign up with email — free. Buyers and sellers use the same account. WhatsApp checkout stays the same.
-      </p>
-
-      <form id="account-signup-form" class="space-y-3" novalidate>
-        <label class="block text-xs font-medium text-zinc-300">
-          Name
-          <input name="displayName" type="text" autocomplete="name" maxlength="120" placeholder="Your name"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
-        </label>
-        <label class="block text-xs font-medium text-zinc-300">
-          Email
-          <input name="email" type="email" required autocomplete="email" placeholder="you@email.com"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
-        </label>
-        <label class="block text-xs font-medium text-zinc-300">
-          Password
-          <input name="password" type="password" required autocomplete="new-password" minlength="8" placeholder="At least 8 characters"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
-        </label>
-        <label class="block text-xs font-medium text-zinc-300">
-          WhatsApp (optional)
-          <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
-        </label>
-        <p class="text-xs text-zinc-500">Phone helps match your prepaid orders to this account later.</p>
-        <p id="account-signup-form-status" class="text-sm text-zinc-400" role="status" aria-live="polite"></p>
-        <button type="submit" class="w-full min-h-[48px] rounded-full bg-[#25D366] text-[#1B1035] font-bold text-sm hover:opacity-90 transition">
-          Create free account
-        </button>
-      </form>
-
-      <p class="text-sm text-zinc-400 text-center">
-        Already on Sokoni?
-        <a href="login.html" class="text-[#25D366] font-semibold hover:underline">Log in</a>
-      </p>
-    </section>
-  </main>
-
-  <div id="sokoni-shell-nav"></div>
-  <script src="assets/js/shell-chrome.js"></script>
-  <script src="assets/js/account-auth.js"></script>
-  <script src="assets/js/account-gate.js"></script>
-
-  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
-  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
+<body style="background:#0c0c0c;color:#fff;font-family:system-ui,sans-serif;padding:2rem;">
+  <p>Opening sign up… <a href="login.html?modal=signup" style="color:#25D366">Continue</a></p>
 </body>
 </html>
