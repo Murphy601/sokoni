@@ -84,15 +84,20 @@
   function bindRoleToggle() {
     const toggle = document.getElementById("auth-role-toggle");
     if (!toggle) return;
-    const buyerFields = document.getElementById("auth-signup-buyer-fields");
     const sellerNote = document.getElementById("auth-signup-seller-note");
+    const roleInput = document.getElementById("auth-signup-role");
     toggle.querySelectorAll("button").forEach((btn) => {
       btn.addEventListener("click", () => {
-        toggle.querySelectorAll("button").forEach((b) => b.classList.remove("is-active"));
+        toggle.querySelectorAll("button").forEach((b) => {
+          b.classList.remove("is-active");
+          b.setAttribute("aria-selected", "false");
+        });
         btn.classList.add("is-active");
-        const role = btn.getAttribute("data-role");
-        if (buyerFields) buyerFields.hidden = role === "seller";
+        btn.setAttribute("aria-selected", "true");
+        const role = btn.getAttribute("data-role") === "seller" ? "seller" : "buyer";
+        // Sellers are shoppers too — keep the same signup form visible.
         if (sellerNote) sellerNote.hidden = role !== "seller";
+        if (roleInput) roleInput.value = role;
       });
     });
   }

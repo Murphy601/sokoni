@@ -131,7 +131,7 @@ async function createSession(user, { ttlMs = ACCOUNT_SESSION_TTL_MS } = {}) {
   };
 }
 
-export async function signupAccount({ email, password, displayName, phone } = {}) {
+export async function signupAccount({ email, password, displayName, phone, role } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured yet — try again later." };
   }
@@ -149,6 +149,7 @@ export async function signupAccount({ email, password, displayName, phone } = {}
     passwordHash,
     displayName,
     phone: phone || null,
+    role: role === "seller" ? "seller" : "buyer",
   });
   if (created.error) return created;
 

@@ -361,12 +361,12 @@
       </div>
 
       <div id="auth-signup-seller-note" class="text-sm text-zinc-300 mb-3 space-y-2" hidden>
-        <p>Sellers list on WhatsApp with prepaid escrow. Open the sell page to start — same account email works after you list.</p>
-        <a href="suppliers/list.html" class="depop-btn-accent inline-flex min-h-[44px] px-4">Start selling →</a>
+        <p>Sellers shop the marketplace too — same account browses the feed, bag, and inbox. After you join, open <strong>Sell</strong> anytime to list with prepaid escrow.</p>
       </div>
 
-      <div id="auth-signup-buyer-fields">
+      <div id="auth-signup-fields">
         <form id="account-signup-form" class="space-y-3" novalidate>
+          <input type="hidden" name="role" id="auth-signup-role" value="buyer" />
           <label class="block text-xs font-medium text-zinc-300">
             Name
             <input name="displayName" type="text" autocomplete="name" maxlength="120" placeholder="Your name"

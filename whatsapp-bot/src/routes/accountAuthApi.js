@@ -17,8 +17,8 @@ const router = Router();
 
 /** POST /api/account/auth/signup */
 router.post("/signup", async (req, res) => {
-  const { email, password, displayName, phone } = req.body || {};
-  const result = await signupAccount({ email, password, displayName, phone });
+  const { email, password, displayName, phone, role } = req.body || {};
+  const result = await signupAccount({ email, password, displayName, phone, role });
   if (result.error === "database_not_configured") return res.status(503).json(result);
   if (result.error === "email_taken") return res.status(409).json(result);
   if (result.error) return res.status(400).json(result);
