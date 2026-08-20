@@ -34,10 +34,33 @@ function getClient() {
   return client;
 }
 
+/** Free models sometimes echo planning / system rules instead of answering. */
+const INSTRUCTION_LEAK =
+  /\b(?:we need to answer|must not add unasked|max(?:imum)?\s*(?:length|of)?\s*2[-–—]?\s*3\s*sentences|under\s*\d+\s*words|no fluff|strict conversational rules|single-message principle|no greeting fluff|provide explanation of escrow|output only the customer|never quote(?:\,| or)? paraphrase|these (?:rules|instructions)|system prompt|as an ai language model)\b/i;
+
+function looksLikeInstructionLeak(text) {
+  const t = String(text || "").trim();
+  if (!t) return true;
+  if (INSTRUCTION_LEAK.test(t)) return true;
+  // Meta-planning about how to answer, not the answer itself
+  if (/^(?:okay[,.]?\s*)?(?:so[,.]?\s*)?(?:i (?:should|must|need to)|let me|the (?:user|customer) asked)/i.test(t) &&
+      /\b(?:concise|brief|sentences?|words?|fluff|follow-?ups?)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
 function sanitizeReply(text) {
   if (!text) return null;
   if (/fruit|vegetable|veggie|produce only|fresh produce/i.test(text)) return null;
   let cleaned = String(text).trim();
+  // Drop planning / rule-echo lines that free models sometimes emit
+  cleaned = cleaned
+    .split(/\n+/)
+    .filter((line) => !looksLikeInstructionLeak(line))
+    .join("\n")
+    .trim();
+  if (!cleaned || looksLikeInstructionLeak(cleaned)) return null;
   if ((cleaned.match(/\*/g) || []).length % 2 !== 0) {
     cleaned = cleaned.replace(/\*+\s*$/, "");
   }
@@ -47,20 +70,48 @@ function sanitizeReply(text) {
 const FLUFF_SENTENCE =
   /^(?:hello[!.,]?\s*)?(?:hi[!.,]?\s*)?(?:i hope (?:this|you|that)[^.!?]*[.!?]|thank you for (?:choosing|contacting|reaching out to) sokoni[^.!?]*[.!?]|i(?:'d| would) be delighted[^.!?]*[.!?]|hope (?:this|that) helps[^.!?]*[.!?]|(?:let me know if you need|is there anything else|would you (?:also )?like)[^.!?]*[.!?])\s*/i;
 
-/** Hard brevity guard after the model (WhatsApp notifications must fit one glance). */
-export function enforceReplyBrevity(text, channel = "whatsapp") {
+function isPolicyOrTrustQuery(text) {
+  return /\b(prepaid|escrow|mpesa|pay(?:ment)?|stk|till|how (?:it|sokoni|does)|delivery|shipping|dispatch|courier|pickup|return|refund|scam|safe|trust|about sokoni|what is sokoni)\b/i.test(
+    String(text || "")
+  );
+}
+
+/**
+ * Hard brevity guard after the model (WhatsApp notifications must fit one glance).
+ * Policy / trust answers get a slightly larger budget so lists are not sliced mid-point.
+ */
+export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = false } = {}) {
   let cleaned = sanitizeReply(text);
   if (!cleaned) return null;
 
-  const maxWords = channel === "web" ? 60 : 40;
-  const maxChars = channel === "web" ? 420 : 280;
+  const maxWords = allowLonger
+    ? channel === "web"
+      ? 110
+      : 70
+    : channel === "web"
+      ? 70
+      : 45;
+  const maxChars = allowLonger
+    ? channel === "web"
+      ? 720
+      : 420
+    : channel === "web"
+      ? 480
+      : 300;
+  const maxSentences = allowLonger ? 5 : 3;
 
   // Strip corporate fluff sentences (leading / trailing / mid-stack).
   let sentences = cleaned
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((s) => !FLUFF_SENTENCE.test(s) && !/let me know if you need|is there anything else|would you also like|hope you are having|thank you for choosing sokoni|delighted to assist/i.test(s));
+    .filter(
+      (s) =>
+        !FLUFF_SENTENCE.test(s) &&
+        !/let me know if you need|is there anything else|would you also like|hope you are having|thank you for choosing sokoni|delighted to assist/i.test(
+          s
+        )
+    );
 
   if (!sentences.length) {
     sentences = cleaned
@@ -70,17 +121,27 @@ export function enforceReplyBrevity(text, channel = "whatsapp") {
       .slice(0, 2);
   }
 
-  cleaned = sentences.slice(0, 3).join(" ").trim();
+  cleaned = sentences.slice(0, maxSentences).join(" ").trim();
 
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) {
-    cleaned = words.slice(0, maxWords).join(" ");
-    if (!/[.!?…]$/.test(cleaned)) cleaned += "…";
+    // Prefer cutting on a sentence boundary when possible
+    let trimmed = "";
+    for (const s of sentences) {
+      const next = trimmed ? `${trimmed} ${s}` : s;
+      if (next.split(/\s+/).filter(Boolean).length > maxWords) break;
+      trimmed = next;
+    }
+    cleaned = trimmed || words.slice(0, maxWords).join(" ");
+    if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
   }
   if (cleaned.length > maxChars) {
-    cleaned = cleaned.slice(0, maxChars - 1).replace(/\s+\S*$/, "").trim();
-    if (!/[.!?…]$/.test(cleaned)) cleaned += "…";
+    const cut = cleaned.slice(0, maxChars);
+    const lastStop = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
+    cleaned = (lastStop > 80 ? cut.slice(0, lastStop + 1) : cut.replace(/\s+\S*$/, "")).trim();
+    if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
   }
+  if (looksLikeInstructionLeak(cleaned)) return null;
   return cleaned || null;
 }
 
@@ -88,7 +149,25 @@ function formatProductLine(p) {
   return `• *${p.name}* — KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""} ⭐ ${p.rating || "—"}`;
 }
 
-function offlineReply(toolResults, channel) {
+function storeInfoOffline(r, channel, userMessage = "") {
+  const lower = String(userMessage || "").toLowerCase();
+  if (/\b(deliver|shipping|dispatch|courier|pickup|hub)\b/i.test(lower)) {
+    const note = String(r?.deliveryNote || "").trim();
+    return note
+      ? `${note} Checkout stays 100% prepaid M-Pesa escrow — never pay riders for the item itself.`
+      : `Sellers dispatch via Sokoni Mashinani hubs countrywide after prepaid M-Pesa escrow. Track with your SKN order ID.`;
+  }
+  if (/\b(refund|return|scam|safe|trust)\b/i.test(lower)) {
+    return `Your M-Pesa payment stays in Sokoni prepaid escrow until delivery is confirmed. If something goes wrong, open a dispute — never pay personal numbers or private tills.`;
+  }
+  // Escrow / prepaid / how it works (default)
+  if (channel === "web") {
+    return `You pay by M-Pesa STK when you order; Sokoni holds that money in prepaid escrow until delivery is confirmed, then releases the seller payout. No COD — never send money to personal tills or numbers.`;
+  }
+  return `Sokoni is *100% prepaid* via M-Pesa STK — escrow until you confirm delivery. No COD. Never pay personal numbers.`;
+}
+
+function offlineReply(toolResults, channel, userMessage = "") {
   for (const r of toolResults) {
     if (r.tool === "track_order" && r.tracking) {
       const t = r.tracking;
@@ -131,7 +210,7 @@ function offlineReply(toolResults, channel) {
         : `Aisles include ${top}. Type a category or *menu*.`;
     }
     if (r.tool === "store_info") {
-      return `Sokoni is *100% prepaid* via M-Pesa STK — escrow until you confirm delivery. No COD. Never pay personal numbers.`;
+      return storeInfoOffline(r, channel, userMessage);
     }
   }
   return channel === "web"
@@ -139,12 +218,18 @@ function offlineReply(toolResults, channel) {
     : "Type *menu* to browse, or send your *SKN-####* (or older *SK-####*) to track.";
 }
 
-async function callLLM(messages, { channel = "whatsapp" } = {}) {
+async function callLLM(messages, { channel = "whatsapp", allowLonger = false } = {}) {
   const openai = getClient();
   if (!openai) throw new Error("No API key");
 
-  // Hard caps: ~40 words WA / ~60 words web — model cannot ramble past this budget.
-  const maxTokens = channel === "web" ? 120 : 80;
+  // Enough headroom to finish a short trust answer without mid-sentence cutoffs.
+  const maxTokens = allowLonger
+    ? channel === "web"
+      ? 280
+      : 180
+    : channel === "web"
+      ? 200
+      : 120;
 
   let lastError = null;
   for (const model of modelChain()) {
@@ -157,17 +242,30 @@ async function callLLM(messages, { channel = "whatsapp" } = {}) {
         presence_penalty: 0,
         frequency_penalty: 0.5,
       });
-      const reply = enforceReplyBrevity(response.choices[0]?.message?.content, channel);
+      const choice = response.choices[0];
+      const raw = choice?.message?.content;
+      if (choice?.finish_reason === "length") {
+        console.warn(`[ai-agent] ${model} hit max_tokens — preferring complete fallback if needed`);
+      }
+      const reply = enforceReplyBrevity(raw, channel, { allowLonger });
       if (reply) {
         console.log(`[ai-agent] replied via ${model} (max_tokens=${maxTokens})`);
         return reply;
       }
+      console.warn(`[ai-agent] ${model} produced empty/leaked reply — trying next model`);
     } catch (err) {
       lastError = err;
       console.warn(`[ai-agent] ${model} failed:`, err.error?.message || err.message);
     }
   }
   throw lastError || new Error("All models failed");
+}
+
+function sanitizeHistory(history = []) {
+  return (history || [])
+    .filter((m) => m && m.content && !looksLikeInstructionLeak(m.content))
+    .slice(-12)
+    .map((m) => ({ role: m.role, content: m.content }));
 }
 
 /**
@@ -190,6 +288,8 @@ export async function runAgentTurn({
 
   const toolResults = await runToolRouter(text, { phone, customerKey: sessionKey });
   const toolBlock = formatToolResultsForPrompt(toolResults);
+  const policyTurn =
+    isPolicyOrTrustQuery(text) && toolResults.some((r) => r.tool === "store_info");
 
   const session = channel === "whatsapp" ? getSession(sessionKey) : null;
   const hist = history || session?.history || [];
@@ -198,21 +298,22 @@ export async function runAgentTurn({
     pushMessage(sessionKey, "user", text);
   }
 
-  if (!getClient()) {
-    const reply = offlineReply(toolResults, channel);
+  // Policy / escrow answers: prefer deterministic copy — free models often leak rules or truncate lists.
+  if (policyTurn || !getClient()) {
+    const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
-    return { reply, tools: toolResults, offline: true };
+    return { reply, tools: toolResults, offline: true, policy: policyTurn };
   }
 
   try {
     const messages = [
       { role: "system", content: channelPrompt(channel) },
       ...(toolBlock ? [{ role: "system", content: toolBlock }] : []),
-      ...hist.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+      ...sanitizeHistory(hist),
       { role: "user", content: text },
     ];
 
-    let reply = await callLLM(messages, { channel });
+    let reply = await callLLM(messages, { channel, allowLonger: false });
 
     if (
       !reply &&
@@ -223,10 +324,11 @@ export async function runAgentTurn({
           r.tool === "store_info"
       )
     ) {
-      reply = offlineReply(toolResults, channel);
+      reply = offlineReply(toolResults, channel, text);
     }
 
-    reply = enforceReplyBrevity(reply || offlineReply(toolResults, channel), channel);
+    reply = enforceReplyBrevity(reply || offlineReply(toolResults, channel, text), channel) ||
+      offlineReply(toolResults, channel, text);
 
     if (persist && channel === "whatsapp" && reply) {
       pushMessage(sessionKey, "assistant", reply);
@@ -245,7 +347,7 @@ export async function runAgentTurn({
     };
   } catch (err) {
     console.error("[ai-agent] error:", err.message);
-    const reply = offlineReply(toolResults, channel);
+    const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return { reply, tools: toolResults, error: err.message };
   }
@@ -272,3 +374,5 @@ export function agentMeta() {
     configured: Boolean(config.openai.apiKey),
   };
 }
+
+export { looksLikeInstructionLeak, storeInfoOffline };

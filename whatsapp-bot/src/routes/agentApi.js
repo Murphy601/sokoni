@@ -55,7 +55,10 @@ router.post("/chat", async (req, res) => {
 
     if (result.reply) {
       pushWebHistory(sessionId, "user", message);
-      pushWebHistory(sessionId, "assistant", result.reply);
+      // Never store leaked instruction text in session history
+      if (!/we need to answer|under \d+ words|strict conversational/i.test(result.reply)) {
+        pushWebHistory(sessionId, "assistant", result.reply);
+      }
     }
 
     res.json({
