@@ -52,13 +52,13 @@
       </nav>
     </div>
     <nav class="auth-subnav" aria-label="Browse categories">
-      <a href="index.html?q=women">Women</a>
-      <a href="index.html?q=men">Men</a>
-      <a href="index.html?q=sneakers">Sneakers</a>
-      <a href="index.html?q=thrift">Thrift &amp; Y2K</a>
-      <a href="index.html?q=local%20brands">Local Brands</a>
-      <a href="index.html?q=tech">Tech</a>
-      <a href="index.html?q=sale">Sale</a>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Women</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Men</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Sneakers</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Thrift &amp; Y2K</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Local Brands</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Tech</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Sale</button>
     </nav>
   </header>
 
@@ -73,7 +73,7 @@
           <h1>Buy preloved. Wear it your way.</h1>
           <p class="auth-hero-lead">Together, we’re keeping Kenyan fashion circular — prepaid on WhatsApp with M-Pesa escrow.</p>
           <div class="auth-hero-cta-row">
-            <a href="index.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Shop now</a>
+            <button type="button" class="depop-btn-accent min-h-[48px] px-6" data-auth-open="signup">Shop now</button>
             <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="ask">Ask AI ✦</button>
           </div>
         </div>
@@ -113,7 +113,7 @@
           <div class="auth-edit-copy">
             <h2>Weekend fits, circular style</h2>
             <p>Discover our edit of stylish weekend looks — thrift classics and streetwear across Kenya.</p>
-            <a href="index.html?q=streetwear" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop now</a>
+            <a href="index.html?q=streetwear" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit" data-auth-open="signup">Shop now</a>
           </div>
           <div class="auth-edit-media"><img src="assets/images/products/fa-002.jpg" alt="" width="900" height="700" loading="lazy" /></div>
         </li>
@@ -121,7 +121,7 @@
           <div class="auth-edit-copy">
             <h2>Sneaker season is on</h2>
             <p>Hunt dunks, runners, and clean pairs from verified local sellers — ask AI if you know the model.</p>
-            <a href="index.html?q=sneakers" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop sneakers</a>
+            <a href="index.html?q=sneakers" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit" data-auth-open="signup">Shop sneakers</a>
           </div>
           <div class="auth-edit-media"><img src="assets/images/products/ap-002.jpg" alt="" width="900" height="700" loading="lazy" /></div>
         </li>
@@ -129,7 +129,7 @@
           <div class="auth-edit-copy">
             <h2>Local creators &amp; makers</h2>
             <p>Support home-grown labels and independent closets — prepaid, escrowed, WhatsApp checkout.</p>
-            <a href="index.html?q=local" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Explore creators</a>
+            <a href="index.html?q=local" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit" data-auth-open="signup">Explore creators</a>
           </div>
           <div class="auth-edit-media"><img src="assets/images/products/co-002.jpg" alt="" width="900" height="700" loading="lazy" /></div>
         </li>
@@ -141,25 +141,25 @@
       <div class="auth-section-head">
         <p class="auth-section-kicker">Start here</p>
         <h2 id="auth-quiz-title">What category do you shop for?</h2>
-        <p class="auth-section-lead">Pick a lane — we’ll open the shop with that search.</p>
+        <p class="auth-section-lead">Pick a lane — create a free account to start shopping.</p>
       </div>
       <div class="auth-quiz-grid">
-        <a class="auth-quiz-card" href="index.html?q=women">
-          <img src="assets/images/products/fa-003.jpg" alt="" width="600" height="800" loading="lazy" />
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="womenswear">
+          <img src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
           <span>Womenswear</span>
-        </a>
-        <a class="auth-quiz-card" href="index.html?q=men">
-          <img src="assets/images/products/fa-004.jpg" alt="" width="600" height="800" loading="lazy" />
+        </button>
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="menswear">
+          <img src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
           <span>Menswear</span>
-        </a>
-        <a class="auth-quiz-card" href="index.html?q=sneakers">
-          <img src="assets/images/products/ap-003.jpg" alt="" width="600" height="800" loading="lazy" />
+        </button>
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="sneakers">
+          <img src="https://images.unsplash.com/photo-1552346154-21d32810aba3?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
           <span>Sneakers &amp; kicks</span>
-        </a>
-        <a class="auth-quiz-card" href="index.html">
-          <img src="assets/images/products/co-003.jpg" alt="" width="600" height="800" loading="lazy" />
+        </button>
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="everything">
+          <img src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
           <span>Everything</span>
-        </a>
+        </button>
       </div>
     </section>
 
@@ -167,15 +167,33 @@
       <div class="auth-section-head">
         <p class="auth-section-kicker">Aesthetic inspo</p>
         <h2 id="auth-styles-title">Shop by style</h2>
-        <p class="auth-section-lead">Curated vibes — not a raw price grid. Tap through to hunt the look.</p>
+        <p class="auth-section-lead">Curated vibes — tap any look to create your account.</p>
       </div>
       <div class="auth-style-grid">
-        <a class="auth-style-tile" href="index.html?q=cargo"><img src="assets/images/products/fa-005.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Y2K cargo</strong></a>
-        <a class="auth-style-tile" href="index.html?q=linen"><img src="assets/images/products/fa-006.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Seaside staples</strong></a>
-        <a class="auth-style-tile" href="index.html?q=party"><img src="assets/images/products/fa-007.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Night out fits</strong></a>
-        <a class="auth-style-tile" href="index.html?q=bags"><img src="assets/images/products/bp-002.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Drip &amp; bags</strong></a>
-        <a class="auth-style-tile" href="index.html?q=chunky"><img src="assets/images/products/ap-004.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Chunky kicks</strong></a>
-        <a class="auth-style-tile" href="index.html?q=tee"><img src="assets/images/products/co-004.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Retro tees</strong></a>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="y2k-cargo">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1594633313593-bab3825d0c9d?w=400&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="400" height="400" loading="lazy" /></span>
+          <strong>Y2K cargo</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="seaside">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="400" height="400" loading="lazy" /></span>
+          <strong>Seaside staples</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="night-out">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=400&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="400" height="400" loading="lazy" /></span>
+          <strong>Night out fits</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="bags">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="400" height="400" loading="lazy" /></span>
+          <strong>Drip &amp; bags</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="chunky-kicks">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="400" height="400" loading="lazy" /></span>
+          <strong>Chunky kicks</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="retro-tees">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="400" height="400" loading="lazy" /></span>
+          <strong>Retro tees</strong>
+        </button>
       </div>
     </section>
 
@@ -185,22 +203,22 @@
         <h2 id="auth-brands-title">Popular brands</h2>
       </div>
       <div class="auth-brand-rail">
-        <a class="auth-brand-chip" href="index.html?q=Nike">Nike</a>
-        <a class="auth-brand-chip" href="index.html?q=Adidas">Adidas</a>
-        <a class="auth-brand-chip" href="index.html?q=Carhartt">Carhartt</a>
-        <a class="auth-brand-chip" href="index.html?q=North%20Face">The North Face</a>
-        <a class="auth-brand-chip" href="index.html?q=Stussy">Stüssy</a>
-        <a class="auth-brand-chip" href="index.html?q=local">Local labels</a>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Nike</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Adidas</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Carhartt</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">The North Face</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Stüssy</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Local labels</button>
       </div>
       <div class="auth-section-head" style="padding-top:1rem">
         <h2>Popular this week</h2>
-        <p class="auth-section-lead">Trending hunts — tap to search the shop.</p>
+        <p class="auth-section-lead">Trending hunts — create an account to start shopping.</p>
       </div>
       <div class="auth-trend-rail">
-        <a class="auth-trend-chip" href="index.html?q=gorpcore">Gorpcore jackets <em>hot</em></a>
-        <a class="auth-trend-chip" href="index.html?q=Levi%20501">Vintage Levi’s 501 <em>hot</em></a>
-        <a class="auth-trend-chip" href="index.html?q=hoodie">Street hoodies <em>rising</em></a>
-        <a class="auth-trend-chip" href="index.html?q=loafers">Chunky loafers <em>rising</em></a>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Gorpcore jackets <em>hot</em></button>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Vintage Levi’s 501 <em>hot</em></button>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Street hoodies <em>rising</em></button>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Chunky loafers <em>rising</em></button>
       </div>
     </section>
 
@@ -210,7 +228,7 @@
         <p>List faster from your phone, track M-Pesa prepaid orders, and never miss a drop. Sokoni runs in your browser and on WhatsApp — no app store required.</p>
         <div class="auth-hero-cta-row">
           <a href="https://wa.me/254117422428" class="depop-btn-accent min-h-[48px] px-5 inline-flex items-center">Open WhatsApp</a>
-          <a href="index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center">Open shop</a>
+          <a href="index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center" data-auth-open="signup">Open shop</a>
         </div>
       </div>
       <div class="auth-mobile-mock" aria-hidden="true">

@@ -190,6 +190,14 @@
     });
   }
 
+  function bindSearchToSignup() {
+    const form = document.getElementById("auth-landing-search");
+    form?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      openModal("signup");
+    });
+  }
+
   function openFromQuery() {
     const params = new URLSearchParams(window.location.search);
     const modal = (params.get("modal") || "").toLowerCase();
@@ -202,8 +210,10 @@
   bindClosers();
   bindPasswordToggles();
   bindRoleToggle();
+  bindModeToggle();
   bindAsk();
-  startCarousel();
+  bindSearchToSignup();
+  startEditorialBanner();
   openFromQuery();
 
   window.SokoniAuthLanding = { openModal, closeModal };
