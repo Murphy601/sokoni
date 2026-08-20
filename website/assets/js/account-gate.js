@@ -8,6 +8,9 @@
  * 4. default: soft
  *
  * Always public: login, signup, forgot-password, track, label, legal, about/faq.
+ *
+ * Role note: sellers are shoppers too. Gate checks signed-in session only —
+ * never block marketplace browse because user.role === "seller".
  */
 (() => {
   const PUBLIC_RE =

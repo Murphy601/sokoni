@@ -113,6 +113,7 @@ export async function createEmailAccountUser({
   passwordHash,
   displayName,
   phone = null,
+  role = "buyer",
 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
@@ -124,6 +125,9 @@ export async function createEmailAccountUser({
   if (!passwordHash) {
     return { error: "invalid_password", message: "Password is required." };
   }
+
+  // Marketplace accounts: sellers still shop. Never accept admin via signup.
+  const accountRole = String(role || "buyer").toLowerCase() === "seller" ? "seller" : "buyer";
 
   let digits = null;
   if (phone) {
@@ -148,9 +152,9 @@ export async function createEmailAccountUser({
   try {
     const { rows } = await query(
       `INSERT INTO users (email, password_hash, display_name, phone, role)
-       VALUES ($1, $2, $3, $4, 'buyer')
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING ${ACCOUNT_USER_COLS}`,
-      [normalized, passwordHash, name, digits]
+      [normalized, passwordHash, name, digits, accountRole]
     );
     return { ok: true, user: mapUserRow(rows[0], { created: true }) };
   } catch (err) {

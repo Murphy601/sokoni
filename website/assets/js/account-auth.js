@@ -68,7 +68,7 @@
     } catch {}
   }
 
-  function consumeNextUrl(fallback = "profile.html") {
+  function consumeNextUrl(fallback = "index.html") {
     try {
       const next = sessionStorage.getItem(NEXT_KEY);
       sessionStorage.removeItem(NEXT_KEY);
@@ -82,11 +82,17 @@
     return { "Content-Type": "application/json", ...extra };
   }
 
-  async function signup({ email, password, displayName, phone } = {}) {
+  async function signup({ email, password, displayName, phone, role } = {}) {
     const res = await fetch(`${AUTH_API}/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, displayName, phone }),
+      body: JSON.stringify({
+        email,
+        password,
+        displayName,
+        phone,
+        role: role === "seller" ? "seller" : "buyer",
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, status: res.status, data };
@@ -305,7 +311,7 @@
   function requireAccount({ next } = {}) {
     const session = readSession();
     if (session) return session;
-    const dest = next || `${window.location.pathname}${window.location.search}` || "profile.html";
+    const dest = next || `${window.location.pathname}${window.location.search}` || "index.html";
     setNextUrl(dest.replace(/^\//, ""));
     window.location.href = loginUrl(dest.replace(/^\//, ""));
     return null;
@@ -313,10 +319,15 @@
 
   function paintNavSlots() {
     const session = readSession();
+    const role = String(session?.user?.role || "").toLowerCase();
+    const isSeller = role === "seller" || role === "admin";
     document.querySelectorAll("[data-account-nav]").forEach((el) => {
       if (session) {
         const label = session.user?.displayName || "Account";
-        el.innerHTML = `<a href="${siteHref("profile.html")}" class="${el.dataset.accountNavClass || ""}" title="${escapeAttr(session.email)}">${escapeHtml(label)}</a>`;
+        const sellerLink = isSeller
+          ? `<a href="${siteHref("suppliers/list.html")}" class="${el.dataset.accountNavClass || ""}" title="Seller tools">Seller studio</a>`
+          : "";
+        el.innerHTML = `${sellerLink}<a href="${siteHref("profile.html")}" class="${el.dataset.accountNavClass || ""}" title="${escapeAttr(session.email)}">${escapeHtml(label)}</a>`;
       } else {
         el.innerHTML = `<a href="${siteHref("login.html")}" class="${el.dataset.accountNavClass || ""}">Log in</a>`;
       }
@@ -339,10 +350,21 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
+  /** Default post-auth destination is the main shop — sellers browse too. */
+  function normalizePostAuthDest(raw) {
+    const fallback = "index.html";
+    const next = String(raw || "").trim();
+    if (!next || /^https?:/i.test(next) || next.startsWith("//")) return fallback;
+    const pathOnly = next.split("?")[0].split("#")[0].replace(/^\.\.\//, "");
+    const file = pathOnly.split("/").pop() || "";
+    if (/^(login|signup|forgot-password|reset-password)\.html$/i.test(file)) return fallback;
+    return next;
+  }
+
   function redirectAfterAuth() {
     paintNavSlots();
     const params = new URLSearchParams(window.location.search);
-    const next = params.get("next") || consumeNextUrl("profile.html");
+    const next = normalizePostAuthDest(params.get("next") || consumeNextUrl("index.html"));
     window.location.href = next;
   }
 
@@ -359,6 +381,7 @@
       const password = String(fd.get("password") || "");
       const displayName = String(fd.get("displayName") || "").trim();
       const phone = String(fd.get("phone") || "").trim();
+      const role = String(fd.get("role") || "buyer").trim().toLowerCase() === "seller" ? "seller" : "buyer";
       const rememberMe = Boolean(fd.get("rememberMe"));
       const token = String(fd.get("token") || "").trim();
 
@@ -377,7 +400,7 @@
 
       let result;
       if (mode === "signup") {
-        result = await signup({ email, password, displayName, phone: phone || undefined });
+        result = await signup({ email, password, displayName, phone: phone || undefined, role });
       } else if (mode === "forgot") {
         result = await forgotPassword(email);
       } else if (mode === "reset") {
@@ -401,6 +424,12 @@
         status.classList.add("text-[#25D366]");
       }
       if (mode === "forgot") return;
+      // Always land on the main marketplace unless a safe ?next= was set.
+      if (!new URLSearchParams(window.location.search).get("next")) {
+        try {
+          sessionStorage.setItem(NEXT_KEY, "index.html");
+        } catch {}
+      }
       redirectAfterAuth();
     });
   }
