@@ -37,135 +37,213 @@
 </head>
 <body class="font-sans antialiased auth-landing has-depop-shell text-white" data-shell-page="profile">
   <header class="auth-landing-header" aria-label="Sokoni Mall">
-    <a href="index.html" class="depop-logo">SOKONI<span class="depop-logo-dot">.</span></a>
-    <nav class="auth-landing-nav" aria-label="Account">
-      <button type="button" class="auth-nav-link" data-auth-open="ask">✦ ASK AI</button>
-      <button type="button" class="auth-nav-link auth-nav-outline" data-auth-open="login">Log in</button>
-      <button type="button" class="auth-nav-link auth-nav-cta" data-auth-open="signup">Create Account</button>
+    <div class="auth-header-row">
+      <a href="index.html" class="depop-logo">SOKONI<span class="depop-logo-dot">.</span></a>
+      <form class="auth-search" id="auth-landing-search" action="index.html" method="get" role="search">
+        <label class="sr-only" for="auth-search-input">Search Sokoni</label>
+        <input id="auth-search-input" name="q" type="search" placeholder='Search for "vintage Nike dunks"' autocomplete="off" />
+        <button type="submit">Search</button>
+      </form>
+      <nav class="auth-landing-nav" aria-label="Account">
+        <button type="button" class="auth-nav-link" data-auth-open="ask">✦ ASK AI</button>
+        <button type="button" class="auth-nav-link auth-nav-outline" data-auth-open="login">Log in</button>
+        <button type="button" class="auth-nav-link auth-nav-cta" data-auth-open="signup">Create Account</button>
+        <a href="suppliers/list.html" class="auth-nav-link auth-nav-outline">Sell now</a>
+      </nav>
+    </div>
+    <nav class="auth-subnav" aria-label="Browse categories">
+      <a href="index.html?q=women">Women</a>
+      <a href="index.html?q=men">Men</a>
+      <a href="index.html?q=sneakers">Sneakers</a>
+      <a href="index.html?q=thrift">Thrift &amp; Y2K</a>
+      <a href="index.html?q=local%20brands">Local Brands</a>
+      <a href="index.html?q=tech">Tech</a>
+      <a href="index.html?q=sale">Sale</a>
     </nav>
   </header>
 
   <main>
-    <section class="auth-hero" aria-label="Welcome">
-      <div class="auth-hero-copy">
-        <p class="auth-hero-kicker">WhatsApp marketplace · Kenya</p>
-        <h1 class="auth-hero-title">Buy, sell &amp; discover rare finds across Kenya.</h1>
-        <p class="auth-hero-lead">
-          Streetwear, thrift, tech, and local makers — prepaid with M-Pesa escrow, chat on WhatsApp.
-        </p>
-        <div class="auth-hero-actions">
-          <button type="button" class="depop-btn-accent min-h-[48px] px-6" data-auth-open="signup">Create free account</button>
-          <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="ask">Ask Sokoni AI ✦</button>
-          <a href="index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center">Browse shop</a>
+    <section class="auth-hero-split" aria-label="Welcome">
+      <div>
+        <div class="auth-mode-toggle" id="auth-mode-toggle" role="tablist" aria-label="Buy or sell">
+          <button type="button" class="is-active" data-mode="buy" role="tab" aria-selected="true">Buy</button>
+          <button type="button" data-mode="sell" role="tab" aria-selected="false">Sell</button>
+        </div>
+        <div id="auth-hero-buy">
+          <h1>Buy preloved. Wear it your way.</h1>
+          <p class="auth-hero-lead">Together, we’re keeping Kenyan fashion circular — prepaid on WhatsApp with M-Pesa escrow.</p>
+          <div class="auth-hero-cta-row">
+            <a href="index.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Shop now</a>
+            <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="ask">Ask AI ✦</button>
+          </div>
+        </div>
+        <div id="auth-hero-sell" hidden>
+          <h1>Sell from your phone. Get paid on M-Pesa.</h1>
+          <p class="auth-hero-lead">Snap, list, and take orders on WhatsApp — prepaid escrow until delivery is confirmed.</p>
+          <div class="auth-hero-cta-row">
+            <a href="suppliers/list.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Start selling</a>
+            <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="signup">Create account</button>
+          </div>
+        </div>
+        <div class="auth-stat-row" aria-label="Why Sokoni">
+          <div class="auth-stat-card">
+            <strong>Live shop</strong>
+            <span>Fresh listings from independent sellers</span>
+          </div>
+          <div class="auth-stat-card">
+            <strong>New drops</strong>
+            <span>Thrift, streetwear, tech &amp; more</span>
+          </div>
+          <div class="auth-stat-card">
+            <strong>Buy safely</strong>
+            <span>Protected with M-Pesa escrow</span>
+          </div>
         </div>
       </div>
-      <div class="auth-hero-visual" aria-hidden="true">
-        <ul class="auth-carousel">
-          <li class="is-active"><img src="assets/images/products/fa-001.jpg" alt="" width="800" height="800" /></li>
-          <li><img src="assets/images/products/fa-002.jpg" alt="" width="800" height="800" /></li>
-          <li><img src="assets/images/products/ap-001.jpg" alt="" width="800" height="800" /></li>
-          <li><img src="assets/images/products/bp-001.jpg" alt="" width="800" height="800" /></li>
-          <li><img src="assets/images/products/co-001.jpg" alt="" width="800" height="800" /></li>
-        </ul>
-        <div class="auth-carousel-fade"></div>
+      <div class="auth-hero-stack" aria-hidden="true">
+        <div class="auth-float-card auth-float-card--1"><img src="assets/images/products/fa-001.jpg" alt="" width="400" height="520" /></div>
+        <div class="auth-float-card auth-float-card--2"><img src="assets/images/products/bp-001.jpg" alt="" width="400" height="520" /></div>
+        <div class="auth-float-card auth-float-card--3"><img src="assets/images/products/ap-001.jpg" alt="" width="400" height="520" /></div>
       </div>
     </section>
 
-    <section class="auth-how" aria-labelledby="auth-how-title">
+    <section class="auth-edit-banner" aria-roledescription="carousel" aria-label="Featured edits">
+      <ul class="auth-edit-slides" id="auth-edit-slides">
+        <li class="is-active">
+          <div class="auth-edit-copy">
+            <h2>Weekend fits, circular style</h2>
+            <p>Discover our edit of stylish weekend looks — thrift classics and streetwear across Kenya.</p>
+            <a href="index.html?q=streetwear" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop now</a>
+          </div>
+          <div class="auth-edit-media"><img src="assets/images/products/fa-002.jpg" alt="" width="900" height="700" loading="lazy" /></div>
+        </li>
+        <li>
+          <div class="auth-edit-copy">
+            <h2>Sneaker season is on</h2>
+            <p>Hunt dunks, runners, and clean pairs from verified local sellers — ask AI if you know the model.</p>
+            <a href="index.html?q=sneakers" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop sneakers</a>
+          </div>
+          <div class="auth-edit-media"><img src="assets/images/products/ap-002.jpg" alt="" width="900" height="700" loading="lazy" /></div>
+        </li>
+        <li>
+          <div class="auth-edit-copy">
+            <h2>Local creators &amp; makers</h2>
+            <p>Support home-grown labels and independent closets — prepaid, escrowed, WhatsApp checkout.</p>
+            <a href="index.html?q=local" class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Explore creators</a>
+          </div>
+          <div class="auth-edit-media"><img src="assets/images/products/co-002.jpg" alt="" width="900" height="700" loading="lazy" /></div>
+        </li>
+      </ul>
+      <div class="auth-edit-dots" id="auth-edit-dots" aria-label="Banner slides"></div>
+    </section>
+
+    <section class="auth-quiz" aria-labelledby="auth-quiz-title">
       <div class="auth-section-head">
-        <p class="auth-section-kicker">The model</p>
-        <h2 id="auth-how-title">How Sokoni works</h2>
-        <p class="auth-section-lead">Hunt rare finds, list from your phone, get paid on M-Pesa — countrywide Kenya.</p>
+        <p class="auth-section-kicker">Start here</p>
+        <h2 id="auth-quiz-title">What category do you shop for?</h2>
+        <p class="auth-section-lead">Pick a lane — we’ll open the shop with that search.</p>
       </div>
-      <div class="auth-how-grid">
-        <article class="auth-how-card">
-          <div class="auth-how-visual">
-            <img src="assets/images/products/fa-001.jpg" alt="" width="640" height="480" loading="lazy" />
-            <span class="auth-how-badge">01 / BUY</span>
-          </div>
-          <h3>Discover &amp; hunt</h3>
-          <p>Find rare vintage pieces, local streetwear, and trending tech from independent sellers across Kenya.</p>
-        </article>
-        <article class="auth-how-card">
-          <div class="auth-how-visual">
-            <img src="assets/images/products/bp-001.jpg" alt="" width="640" height="480" loading="lazy" />
-            <span class="auth-how-badge">02 / SELL</span>
-          </div>
-          <h3>Sell in seconds</h3>
-          <p>Turn your closet or boutique into cash. Snap, list with a price, and start receiving orders on WhatsApp.</p>
-        </article>
-        <article class="auth-how-card">
-          <div class="auth-how-visual auth-how-visual--pay">
-            <img src="assets/images/products/co-001.jpg" alt="" width="640" height="480" loading="lazy" />
-            <span class="auth-how-badge">03 / PAY</span>
-            <div class="auth-how-pay-chip" aria-hidden="true">M-Pesa · Escrow</div>
-          </div>
-          <h3>Secure M-Pesa payouts</h3>
-          <p>Every deal is prepaid with built-in verification. Smooth payouts to your M-Pesa when delivery is confirmed.</p>
-        </article>
+      <div class="auth-quiz-grid">
+        <a class="auth-quiz-card" href="index.html?q=women">
+          <img src="assets/images/products/fa-003.jpg" alt="" width="600" height="800" loading="lazy" />
+          <span>Womenswear</span>
+        </a>
+        <a class="auth-quiz-card" href="index.html?q=men">
+          <img src="assets/images/products/fa-004.jpg" alt="" width="600" height="800" loading="lazy" />
+          <span>Menswear</span>
+        </a>
+        <a class="auth-quiz-card" href="index.html?q=sneakers">
+          <img src="assets/images/products/ap-003.jpg" alt="" width="600" height="800" loading="lazy" />
+          <span>Sneakers &amp; kicks</span>
+        </a>
+        <a class="auth-quiz-card" href="index.html">
+          <img src="assets/images/products/co-003.jpg" alt="" width="600" height="800" loading="lazy" />
+          <span>Everything</span>
+        </a>
       </div>
     </section>
 
-    <section class="auth-culture" aria-labelledby="auth-culture-title">
+    <section class="auth-styles" aria-labelledby="auth-styles-title">
       <div class="auth-section-head">
-        <p class="auth-section-kicker">Culture</p>
-        <h2 id="auth-culture-title">Shop the vibe</h2>
-        <p class="auth-section-lead">Style lanes — not a raw product dump. Dive into the shop when you’re ready.</p>
+        <p class="auth-section-kicker">Aesthetic inspo</p>
+        <h2 id="auth-styles-title">Shop by style</h2>
+        <p class="auth-section-lead">Curated vibes — not a raw price grid. Tap through to hunt the look.</p>
       </div>
-      <div class="auth-culture-grid">
-        <a class="auth-culture-tile" href="index.html">
-          <img src="assets/images/products/fa-002.jpg" alt="" width="800" height="1000" loading="lazy" />
-          <span class="auth-culture-copy">
-            <strong>Vintage &amp; thrift</strong>
-            <span>Pre-loved classics and rare Y2K drops.</span>
-          </span>
-        </a>
-        <a class="auth-culture-tile" href="index.html">
-          <img src="assets/images/products/ap-001.jpg" alt="" width="800" height="1000" loading="lazy" />
-          <span class="auth-culture-copy">
-            <strong>Sneaker heads</strong>
-            <span>Local sellers and custom kicks.</span>
-          </span>
-        </a>
-        <a class="auth-culture-tile" href="index.html">
-          <img src="assets/images/products/co-002.jpg" alt="" width="800" height="1000" loading="lazy" />
-          <span class="auth-culture-copy">
-            <strong>Local creators</strong>
-            <span>Home-grown Kenyan streetwear and makers.</span>
-          </span>
-        </a>
+      <div class="auth-style-grid">
+        <a class="auth-style-tile" href="index.html?q=cargo"><img src="assets/images/products/fa-005.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Y2K cargo</strong></a>
+        <a class="auth-style-tile" href="index.html?q=linen"><img src="assets/images/products/fa-006.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Seaside staples</strong></a>
+        <a class="auth-style-tile" href="index.html?q=party"><img src="assets/images/products/fa-007.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Night out fits</strong></a>
+        <a class="auth-style-tile" href="index.html?q=bags"><img src="assets/images/products/bp-002.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Drip &amp; bags</strong></a>
+        <a class="auth-style-tile" href="index.html?q=chunky"><img src="assets/images/products/ap-004.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Chunky kicks</strong></a>
+        <a class="auth-style-tile" href="index.html?q=tee"><img src="assets/images/products/co-004.jpg" alt="" width="400" height="400" loading="lazy" /><strong>Retro tees</strong></a>
       </div>
     </section>
 
-    <section class="auth-community" aria-label="Community">
-      <p class="auth-community-headline">Built for creators, thrifters, and independent seller culture.</p>
-      <p class="auth-community-sub">Join buyers and sellers trading daily — home delivery and pickup partners across Kenya.</p>
-      <div class="auth-community-actions">
-        <button type="button" class="auth-community-cta" data-auth-open="signup">Create free account</button>
-        <a href="suppliers/list.html" class="auth-community-link">Start selling</a>
+    <section class="auth-discover" aria-labelledby="auth-brands-title">
+      <div class="auth-section-head">
+        <p class="auth-section-kicker">Discover</p>
+        <h2 id="auth-brands-title">Popular brands</h2>
+      </div>
+      <div class="auth-brand-rail">
+        <a class="auth-brand-chip" href="index.html?q=Nike">Nike</a>
+        <a class="auth-brand-chip" href="index.html?q=Adidas">Adidas</a>
+        <a class="auth-brand-chip" href="index.html?q=Carhartt">Carhartt</a>
+        <a class="auth-brand-chip" href="index.html?q=North%20Face">The North Face</a>
+        <a class="auth-brand-chip" href="index.html?q=Stussy">Stüssy</a>
+        <a class="auth-brand-chip" href="index.html?q=local">Local labels</a>
+      </div>
+      <div class="auth-section-head" style="padding-top:1rem">
+        <h2>Popular this week</h2>
+        <p class="auth-section-lead">Trending hunts — tap to search the shop.</p>
+      </div>
+      <div class="auth-trend-rail">
+        <a class="auth-trend-chip" href="index.html?q=gorpcore">Gorpcore jackets <em>hot</em></a>
+        <a class="auth-trend-chip" href="index.html?q=Levi%20501">Vintage Levi’s 501 <em>hot</em></a>
+        <a class="auth-trend-chip" href="index.html?q=hoodie">Street hoodies <em>rising</em></a>
+        <a class="auth-trend-chip" href="index.html?q=loafers">Chunky loafers <em>rising</em></a>
       </div>
     </section>
 
-    <section class="auth-ai-explainer" aria-labelledby="auth-ai-title">
-      <div class="auth-ai-explainer-copy">
-        <p class="auth-section-kicker">Sokoni Plug</p>
-        <h2 id="auth-ai-title">Meet your personal shopping hunting agent</h2>
-        <p>Can’t find that jacket or pair of boots? Tap <strong>ASK AI</strong> in the header and tell our assistant what you’re hunting for.</p>
-        <button type="button" class="depop-btn-accent min-h-[48px] px-5" data-auth-open="ask">Try ASK AI ✦</button>
+    <aside class="auth-mobile-banner">
+      <div>
+        <h2>Shop on the go — WhatsApp + web</h2>
+        <p>List faster from your phone, track M-Pesa prepaid orders, and never miss a drop. Sokoni runs in your browser and on WhatsApp — no app store required.</p>
+        <div class="auth-hero-cta-row">
+          <a href="https://wa.me/254117422428" class="depop-btn-accent min-h-[48px] px-5 inline-flex items-center">Open WhatsApp</a>
+          <a href="index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center">Open shop</a>
+        </div>
       </div>
-      <div class="auth-ai-mock" aria-hidden="true">
-        <p class="auth-ai-mock-label">Example hunt</p>
-        <p class="auth-ai-mock-prompt">Find me vintage cargo pants under KES 2,000 →</p>
+      <div class="auth-mobile-mock" aria-hidden="true">
+        Sokoni · live<br />
+        “Find vintage cargo under KES 2,000” →<br />
+        SKN order · M-Pesa escrow ✓
       </div>
-    </section>
+    </aside>
   </main>
 
-  <footer class="auth-landing-footer">
-    <a href="terms.html">Terms</a>
-    <a href="privacy.html">Privacy</a>
-    <a href="faq.html">Safety &amp; FAQ</a>
-    <a href="about.html">About</a>
-    <a href="https://wa.me/254117422428">WhatsApp</a>
+  <footer class="auth-footer-rich">
+    <div class="auth-footer-grid">
+      <div>
+        <h3>Sokoni</h3>
+        <a href="about.html">About us</a>
+        <a href="faq.html">How it works</a>
+        <a href="index.html">Shop</a>
+      </div>
+      <div>
+        <h3>Sell</h3>
+        <a href="suppliers/list.html">Sell on Sokoni</a>
+        <a href="faq.html">M-Pesa escrow</a>
+        <a href="suppliers/list.html">Seller onboarding</a>
+      </div>
+      <div>
+        <h3>Help</h3>
+        <a href="faq.html">Help center</a>
+        <a href="faq.html">Safety</a>
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+    <p class="auth-footer-bottom">© Sokoni Mall · Kenya WhatsApp marketplace · Prepaid with M-Pesa escrow</p>
   </footer>
 
   <!-- Centered modals -->
