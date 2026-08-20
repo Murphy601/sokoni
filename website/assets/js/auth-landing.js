@@ -97,16 +97,53 @@
     });
   }
 
-  function startCarousel() {
-    const slides = Array.from(document.querySelectorAll(".auth-carousel li"));
+  function bindModeToggle() {
+    const toggle = document.getElementById("auth-mode-toggle");
+    const buy = document.getElementById("auth-hero-buy");
+    const sell = document.getElementById("auth-hero-sell");
+    if (!toggle || !buy || !sell) return;
+    toggle.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        toggle.querySelectorAll("button").forEach((b) => {
+          b.classList.remove("is-active");
+          b.setAttribute("aria-selected", "false");
+        });
+        btn.classList.add("is-active");
+        btn.setAttribute("aria-selected", "true");
+        const mode = btn.getAttribute("data-mode");
+        buy.hidden = mode !== "buy";
+        sell.hidden = mode !== "sell";
+      });
+    });
+  }
+
+  function startEditorialBanner() {
+    const slides = Array.from(document.querySelectorAll("#auth-edit-slides > li"));
+    const dotsMount = document.getElementById("auth-edit-dots");
     if (slides.length < 2) return;
     let i = 0;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    window.setInterval(() => {
-      slides[i].classList.remove("is-active");
-      i = (i + 1) % slides.length;
-      slides[i].classList.add("is-active");
-    }, 4200);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function show(n) {
+      slides.forEach((s, idx) => s.classList.toggle("is-active", idx === n));
+      dotsMount?.querySelectorAll("button").forEach((d, idx) => {
+        d.classList.toggle("is-active", idx === n);
+        d.setAttribute("aria-current", idx === n ? "true" : "false");
+      });
+      i = n;
+    }
+
+    if (dotsMount) {
+      dotsMount.innerHTML = slides
+        .map((_, idx) => `<button type="button" aria-label="Slide ${idx + 1}" ${idx === 0 ? 'class="is-active" aria-current="true"' : ""}></button>`)
+        .join("");
+      dotsMount.querySelectorAll("button").forEach((btn, idx) => {
+        btn.addEventListener("click", () => show(idx));
+      });
+    }
+
+    if (reduce) return;
+    window.setInterval(() => show((i + 1) % slides.length), 5200);
   }
 
   function askBubble(text, role) {
