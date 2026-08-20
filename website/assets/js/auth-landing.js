@@ -1,5 +1,5 @@
 /**
- * Auth landing — centered modals (login / signup / ask AI) + trending rail.
+ * Auth landing — centered modals (login / signup / ask AI) + editorial sections.
  * Keeps #account-login-form / #account-signup-form IDs for account-auth.js.
  */
 (function () {
@@ -18,7 +18,6 @@
       : "https://bot.sokonimall.com/api/agent";
 
   let askSessionId = sessionStorage.getItem("sokoni-ai-session") || "";
-  let carouselTimer = null;
   let lastFocus = null;
 
   function openModal(name) {
@@ -96,6 +95,51 @@
         if (sellerNote) sellerNote.hidden = role !== "seller";
       });
     });
+  }
+
+  function startCarousel() {
+    const slides = Array.from(document.querySelectorAll(".auth-carousel li"));
+    if (slides.length < 2) return;
+    let i = 0;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    window.setInterval(() => {
+      slides[i].classList.remove("is-active");
+      i = (i + 1) % slides.length;
+      slides[i].classList.add("is-active");
+    }, 4200);
+  }
+
+  function askBubble(text, role) {
+    const log = document.getElementById("auth-ask-log");
+    if (!log) return;
+    const b = document.createElement("div");
+    b.className = `auth-ask-bubble auth-ask-bubble--${role === "user" ? "user" : "bot"}`;
+    b.textContent = text;
+    log.appendChild(b);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function sendAsk(message) {
+    const msg = String(message || "").trim();
+    if (!msg) return;
+    askBubble(msg, "user");
+    const input = document.getElementById("auth-ask-input");
+    if (input) input.value = "";
+    try {
+      const res = await fetch(`${AGENT_API}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, sessionId: askSessionId || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.sessionId) {
+        askSessionId = data.sessionId;
+        sessionStorage.setItem("sokoni-ai-session", askSessionId);
+      }
+      askBubble(data.reply || data.message || "Try again in a moment.", "bot");
+    } catch {
+      askBubble("Sokoni Plug is offline right now — try Ask Plug page or WhatsApp.", "bot");
+    }
   }
 
   function bindAsk() {
