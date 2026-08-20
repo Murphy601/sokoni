@@ -198,6 +198,22 @@
     });
   }
 
+  const AUTH_IMG_FALLBACK =
+    "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&q=80";
+
+  function bindImageFallbacks() {
+    const imgs = document.querySelectorAll(
+      "[data-auth-img], .auth-style-media img, .auth-quiz-card img, .auth-float-card img, .auth-edit-media img"
+    );
+    imgs.forEach((img) => {
+      img.addEventListener("error", () => {
+        if (img.dataset.authImgFallbackApplied === "1") return;
+        img.dataset.authImgFallbackApplied = "1";
+        img.src = AUTH_IMG_FALLBACK;
+      });
+    });
+  }
+
   function openFromQuery() {
     const params = new URLSearchParams(window.location.search);
     const modal = (params.get("modal") || "").toLowerCase();
@@ -213,6 +229,7 @@
   bindModeToggle();
   bindAsk();
   bindSearchToSignup();
+  bindImageFallbacks();
   startEditorialBanner();
   openFromQuery();
 
