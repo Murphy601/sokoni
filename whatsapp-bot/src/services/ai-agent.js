@@ -5,7 +5,7 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
 import { getSession, pushMessage, isHumanHandoff } from "./session.js";
-import { channelPrompt } from "./ai-prompts.js";
+import { channelPrompt, offTopicRedirect } from "./ai-prompts.js";
 import {
   runToolRouter,
   formatToolResultsForPrompt,
@@ -13,6 +13,9 @@ import {
   isSupportIntent,
   isGuideIntent,
   isShoppingIntent,
+  isSellerTopic,
+  isOffTopicIntent,
+  isSokoniConversation,
 } from "./ai-tools.js";
 import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
 
@@ -217,6 +220,12 @@ function conversationalReply(channel, userMessage = "", toolResults = []) {
       : `${handoff} WhatsApp ${wa}. Or send your *SKN-####* / ask about escrow — I can help meanwhile.`;
   }
 
+  if (isSellerTopic(userMessage)) {
+    return channel === "web"
+      ? `Seller Hub (sokonimall.com/suppliers/list.html) covers Hub Drop-Offs, stock units, WhatsApp promo, orders, and M-Pesa Ledger. Are you listing, scheduling a drop-off, or checking payouts?`
+      : `*Seller Hub* — drop-offs, stock units, promo, orders, M-Pesa Ledger. Listing, pickup, or payouts?`;
+  }
+
   if (isGuideIntent(userMessage)) {
     const aisleBit = topAisles.length ? ` Popular aisles: ${topAisles.join(", ")}.` : "";
     return channel === "web"
@@ -402,6 +411,7 @@ export async function runAgentTurn({
 
   const toolResults = await runToolRouter(text, { phone, customerKey: sessionKey });
   const toolBlock = formatToolResultsForPrompt(toolResults);
+  const shopping = isShoppingIntent(text);
   const policyTurn =
     isPolicyOrTrustQuery(text) && toolResults.some((r) => r.tool === "store_info");
   const hasLiveCatalogHits = toolResults.some(
@@ -409,17 +419,22 @@ export async function runAgentTurn({
       (r.tool === "search_products" || r.tool === "browse_products") &&
       (r.products || []).some((p) => p && p.inStock !== false)
   );
-  const catalogTurn =
-    hasLiveCatalogHits ||
-    (isShoppingIntent(text) &&
-      toolResults.some(
-        (r) =>
-          r.tool === "search_products" ||
-          r.tool === "browse_products" ||
-          r.tool === "get_product"
-      ));
-  const converseTurn =
-    isGreetingIntent(text) || isSupportIntent(text) || isGuideIntent(text);
+  const ranCatalogTools = toolResults.some(
+    (r) =>
+      r.tool === "search_products" ||
+      r.tool === "browse_products" ||
+      r.tool === "get_product"
+  );
+  // Live hits or empty product hunts stay deterministic — never invent stock.
+  const catalogTurn = hasLiveCatalogHits || (shopping && ranCatalogTools);
+  const sokoniChat =
+    isSokoniConversation(text) ||
+    isGreetingIntent(text) ||
+    isSupportIntent(text) ||
+    isGuideIntent(text) ||
+    isSellerTopic(text) ||
+    policyTurn;
+  const converseTurn = sokoniChat && !catalogTurn;
 
   const session = channel === "whatsapp" ? getSession(sessionKey) : null;
   const hist = history || session?.history || [];
@@ -428,8 +443,27 @@ export async function runAgentTurn({
     pushMessage(sessionKey, "user", text);
   }
 
-  // Policy, live catalog, and clear conversational intents: deterministic (no invented stock).
-  if (policyTurn || catalogTurn || converseTurn || !getClient()) {
+  // Off-topic / non-marketplace chat — hard redirect (Sokoni site only).
+  const hasOrderTools = toolResults.some(
+    (r) => r.tool === "track_order" || r.tool === "list_orders" || r.tool === "get_product"
+  );
+  const onSokoniSite = sokoniChat || shopping || catalogTurn || hasOrderTools;
+  if (isOffTopicIntent(text) || !onSokoniSite) {
+    const reply = offTopicRedirect(channel);
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    return {
+      reply,
+      tools: toolResults,
+      offline: true,
+      offTopic: true,
+      products: [],
+      tracking: null,
+    };
+  }
+
+  // Catalog answers stay offline. Buyer/seller Sokoni conversation uses the LLM when configured.
+  const forceOffline = catalogTurn || !getClient();
+  if (forceOffline) {
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return {
@@ -454,7 +488,9 @@ export async function runAgentTurn({
       { role: "user", content: text },
     ];
 
-    let reply = await callLLM(messages, { channel, allowLonger: false });
+    // Conversational Sokoni turns get a slightly larger budget; product lists stay short.
+    const allowLonger = converseTurn || policyTurn;
+    let reply = await callLLM(messages, { channel, allowLonger });
 
     if (
       !reply &&
@@ -468,8 +504,10 @@ export async function runAgentTurn({
       reply = offlineReply(toolResults, channel, text);
     }
 
-    reply = enforceReplyBrevity(reply || offlineReply(toolResults, channel, text), channel) ||
-      offlineReply(toolResults, channel, text);
+    reply =
+      enforceReplyBrevity(reply || offlineReply(toolResults, channel, text), channel, {
+        allowLonger,
+      }) || offlineReply(toolResults, channel, text);
 
     if (persist && channel === "whatsapp" && reply) {
       pushMessage(sessionKey, "assistant", reply);
@@ -484,6 +522,8 @@ export async function runAgentTurn({
       reply,
       tools: toolResults,
       products,
+      converse: converseTurn,
+      policy: policyTurn,
       tracking: toolResults.find((r) => r.tool === "track_order")?.tracking || null,
     };
   } catch (err) {

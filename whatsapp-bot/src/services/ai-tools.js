@@ -74,16 +74,6 @@ function isTaxonomyQuery(lower) {
   );
 }
 
-/** Greetings / small talk — not product search. */
-export function isGreetingIntent(text) {
-  const t = String(text || "").trim().toLowerCase();
-  if (!t || t.length > 48) return false;
-  if (isSupportIntent(t) || isGuideIntent(t)) return false;
-  return /^(hi|hello|hey|yo|hola|habari|mambo|sasa|niaje|hujambo|good\s*(morning|afternoon|evening)|howdy|sup|ola)(\b|!|\.|,|\s|$)/i.test(
-    t
-  );
-}
-
 /** Human support / agent handoff. */
 export function isSupportIntent(text) {
   const lower = String(text || "").toLowerCase();
@@ -95,8 +85,43 @@ export function isSupportIntent(text) {
 /** How to buy / how can you help / guide me. */
 export function isGuideIntent(text) {
   const lower = String(text || "").toLowerCase();
-  return /\b(how (can|do) (you|i)|help me|guide me|make a purchase|how to (buy|order|shop|pay)|what can you (do|help)|assist me)\b/i.test(
+  return /\b(how (can|do) (you|i)|help me|guide me|make a purchase|how to (buy|order|shop|pay|sell|list)|what can you (do|help)|assist me|what do you (sell|have|offer)|how does (sokoni|this|it) work)\b/i.test(
     lower
+  );
+}
+
+/** Seller-side marketplace topics (listing, payouts, hubs). */
+export function isSellerTopic(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(sell(?:er|ing)?|list(?:ing|ings)?|payout|withdraw(?:al)?|b2c|drop-?offs?|mashinani|inventory|stock units?|m-?pesa ledger|seller hub|onboard(?:ing)?|commission|platform fee|hub drop)\b/i.test(
+    lower
+  );
+}
+
+/**
+ * Clearly off Sokoni (general world chat). Keep narrow so Kenya/commerce questions still pass.
+ */
+export function isOffTopicIntent(text) {
+  const lower = String(text || "").toLowerCase();
+  if (
+    /\b(sokoni|marketplace|order|escrow|mpesa|m-pesa|whatsapp|track|delivery|seller|buyer|listing|kes|thrift|catalog)\b/i.test(
+      lower
+    )
+  ) {
+    return false;
+  }
+  return /\b(weather|forecast|temperature|premier league|champions league|bitcoin|crypto|stock market|write (me )?(a )?code|homework|essay|politics|election|trump|biden|tell me a joke|who won the|chatgpt|girlfriend|boyfriend|horoscope)\b/i.test(
+    lower
+  );
+}
+
+/** Greetings / small talk — not product search. */
+export function isGreetingIntent(text) {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t || t.length > 48) return false;
+  if (isSupportIntent(t) || isGuideIntent(t) || isSellerTopic(t)) return false;
+  return /^(hi|hello|hey|yo|hola|habari|mambo|sasa|niaje|hujambo|good\s*(morning|afternoon|evening)|howdy|sup|ola)(\b|!|\.|,|\s|$)/i.test(
+    t
   );
 }
 
@@ -107,9 +132,9 @@ export function isGuideIntent(text) {
 export function isShoppingIntent(text, { browseMatch = null, budget = null } = {}) {
   const raw = String(text || "").trim();
   if (!raw) return false;
-  if (isGreetingIntent(raw) || isSupportIntent(raw)) return false;
-  // Guide intent without a product keyword is conversational, not a SKU hunt
-  if (isGuideIntent(raw) && !browseMatch && budget == null) {
+  if (isGreetingIntent(raw) || isSupportIntent(raw) || isOffTopicIntent(raw)) return false;
+  // Guide / seller Q without a product keyword is conversational, not a SKU hunt
+  if ((isGuideIntent(raw) || isSellerTopic(raw)) && !browseMatch && budget == null) {
     if (!/\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift)\b/i.test(raw)) {
       return false;
     }
@@ -127,9 +152,32 @@ export function isShoppingIntent(text, { browseMatch = null, budget = null } = {
   // Short keyword-ish queries (e.g. "denim", "kiondo") still shop
   const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length <= 4 && !isGuideIntent(raw) && !/^(please|thanks|thank you|ok|okay|sawa)$/i.test(raw)) {
-    return !isGreetingIntent(raw);
+    return !isGreetingIntent(raw) && !isSellerTopic(raw);
   }
   return false;
+}
+
+/**
+ * Marketplace conversation that may use the LLM (buyer or seller), still Sokoni-only.
+ */
+export function isSokoniConversation(text, { browseMatch = null, budget = null } = {}) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+  if (isOffTopicIntent(raw)) return false;
+  if (isShoppingIntent(raw, { browseMatch, budget })) return true;
+  if (
+    isGreetingIntent(raw) ||
+    isSupportIntent(raw) ||
+    isGuideIntent(raw) ||
+    isSellerTopic(raw) ||
+    isPaymentOrSiteInfoQuery(raw.toLowerCase()) ||
+    isTaxonomyQuery(raw.toLowerCase())
+  ) {
+    return true;
+  }
+  return /\b(sokoni|marketplace|order|escrow|mpesa|m-pesa|whatsapp|track|delivery|pickup|buyer|seller|account|login|log ?in|signup|sign ?up|sign ?in|password|thrift|catalog|listing|kes|shop|bag|checkout|dispute|refund|hub|mashinani|visa|card|fee|commission|withdraw|payout|ship(?:ping|ment)?|boda|courier)\b/i.test(
+    raw
+  );
 }
 
 function normalizeLoose(value) {
@@ -204,15 +252,19 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
   const budget = extractBudget(text);
   const secondhandOnly = wantsSecondhand(text) && !wantsNew(text);
   const shopping = isShoppingIntent(text, { browseMatch, budget });
+  const sokoniChat = isSokoniConversation(text, { browseMatch, budget });
 
-  // Conversational help should still know site facts (escrow, WhatsApp, sell hub).
+  // Buyer/seller conversation should always have live site facts available.
   if (
-    (isGuideIntent(text) || isSupportIntent(text) || isGreetingIntent(text)) &&
+    (sokoniChat || isGuideIntent(text) || isSupportIntent(text) || isGreetingIntent(text) || isSellerTopic(text)) &&
     !results.some((r) => r.tool === "store_info")
   ) {
     results.push(await executeTool("store_info", {}, { phone }));
   }
-  if (isGuideIntent(text) && !results.some((r) => r.tool === "browse_taxonomy")) {
+  if (
+    (isGuideIntent(text) || isSellerTopic(text) || isTaxonomyQuery(lower)) &&
+    !results.some((r) => r.tool === "browse_taxonomy")
+  ) {
     results.push(await executeTool("browse_taxonomy", {}, { phone }));
   }
 
@@ -228,6 +280,8 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
     isShopperFillerOnly(text) ||
     isGreetingIntent(text) ||
     isSupportIntent(text) ||
+    isSellerTopic(text) ||
+    isOffTopicIntent(text) ||
     text.length < 2;
 
   if (!skipSearch) {
