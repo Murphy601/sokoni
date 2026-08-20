@@ -74,6 +74,64 @@ function isTaxonomyQuery(lower) {
   );
 }
 
+/** Greetings / small talk — not product search. */
+export function isGreetingIntent(text) {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t || t.length > 48) return false;
+  if (isSupportIntent(t) || isGuideIntent(t)) return false;
+  return /^(hi|hello|hey|yo|hola|habari|mambo|sasa|niaje|hujambo|good\s*(morning|afternoon|evening)|howdy|sup|ola)(\b|!|\.|,|\s|$)/i.test(
+    t
+  );
+}
+
+/** Human support / agent handoff. */
+export function isSupportIntent(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(support|customer\s*care|help\s*desk|human|agent|speak to|talk to|connect me|representative|complaint|escalate)\b/i.test(
+    lower
+  );
+}
+
+/** How to buy / how can you help / guide me. */
+export function isGuideIntent(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(how (can|do) (you|i)|help me|guide me|make a purchase|how to (buy|order|shop|pay)|what can you (do|help)|assist me)\b/i.test(
+    lower
+  );
+}
+
+/**
+ * True when the shopper is clearly looking for products / aisles / budgets.
+ * Greetings, support, and pure how-to questions should not trigger catalog search.
+ */
+export function isShoppingIntent(text, { browseMatch = null, budget = null } = {}) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
+  if (isGreetingIntent(raw) || isSupportIntent(raw)) return false;
+  // Guide intent without a product keyword is conversational, not a SKU hunt
+  if (isGuideIntent(raw) && !browseMatch && budget == null) {
+    if (!/\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift)\b/i.test(raw)) {
+      return false;
+    }
+  }
+  if (budget != null) return true;
+  if (browseMatch) return true;
+  if (isSokoniOrderId(raw) || extractOrderIdFromText(raw)) return false;
+  if (
+    /\b(show|find|want|need|looking|buy|shop|browse|any|list|nataka|nipee|under|chini|sneakers?|dresses?|phones?|laptops?|shoes?|jeans|hoodie|electronics|fashion|thrift|kicks)\b/i.test(
+      raw
+    )
+  ) {
+    return true;
+  }
+  // Short keyword-ish queries (e.g. "denim", "kiondo") still shop
+  const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length <= 4 && !isGuideIntent(raw) && !/^(please|thanks|thank you|ok|okay|sawa)$/i.test(raw)) {
+    return !isGreetingIntent(raw);
+  }
+  return false;
+}
+
 function normalizeLoose(value) {
   return String(value || "")
     .toLowerCase()
@@ -145,16 +203,31 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
   const browseMatch = await matchBrowseFromText(text);
   const budget = extractBudget(text);
   const secondhandOnly = wantsSecondhand(text) && !wantsNew(text);
+  const shopping = isShoppingIntent(text, { browseMatch, budget });
+
+  // Conversational help should still know site facts (escrow, WhatsApp, sell hub).
+  if (
+    (isGuideIntent(text) || isSupportIntent(text) || isGreetingIntent(text)) &&
+    !results.some((r) => r.tool === "store_info")
+  ) {
+    results.push(await executeTool("store_info", {}, { phone }));
+  }
+  if (isGuideIntent(text) && !results.some((r) => r.tool === "browse_taxonomy")) {
+    results.push(await executeTool("browse_taxonomy", {}, { phone }));
+  }
 
   const alreadyCatalogued = results.some(
     (r) => r.tool === "search_products" || r.tool === "browse_products"
   );
   const skipSearch =
     alreadyCatalogued ||
+    !shopping ||
     isTrackOnlyQuery(text, lower) ||
     isPaymentOrSiteInfoQuery(lower) ||
     isTaxonomyQuery(lower) ||
     isShopperFillerOnly(text) ||
+    isGreetingIntent(text) ||
+    isSupportIntent(text) ||
     text.length < 2;
 
   if (!skipSearch) {
@@ -618,4 +691,8 @@ export function formatToolResultsForPrompt(toolResults) {
 }
 
 /** Exported for tests */
-export { priceTierMaxKes, isTaxonomyQuery, isPaymentOrSiteInfoQuery };
+export {
+  priceTierMaxKes,
+  isTaxonomyQuery,
+  isPaymentOrSiteInfoQuery,
+};

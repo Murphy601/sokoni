@@ -6,7 +6,15 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import { getSession, pushMessage, isHumanHandoff } from "./session.js";
 import { channelPrompt } from "./ai-prompts.js";
-import { runToolRouter, formatToolResultsForPrompt } from "./ai-tools.js";
+import {
+  runToolRouter,
+  formatToolResultsForPrompt,
+  isGreetingIntent,
+  isSupportIntent,
+  isGuideIntent,
+  isShoppingIntent,
+} from "./ai-tools.js";
+import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
 
 const FALLBACK_MODELS = ["google/gemma-4-26b-a4b-it:free"];
 
@@ -192,7 +200,60 @@ function storeInfoOffline(r, channel, userMessage = "") {
   return `Sokoni is *100% prepaid* via M-Pesa STK — escrow until you confirm delivery. No COD. Never pay personal numbers.`;
 }
 
+function conversationalReply(channel, userMessage = "", toolResults = []) {
+  const wa = formatWhatsAppLink();
+  const store = toolResults.find((r) => r.tool === "store_info");
+  const tax = toolResults.find((r) => r.tool === "browse_taxonomy");
+  const topAisles = (tax?.categories || [])
+    .filter((c) => !c.navOnly)
+    .slice(0, 4)
+    .map((c) => c.label)
+    .filter(Boolean);
+
+  if (isSupportIntent(userMessage)) {
+    const handoff = humanHandoffAck(false);
+    return channel === "web"
+      ? `${handoff} Message the team on WhatsApp: ${wa}. I can still help with live stock, escrow, delivery, or tracking an SKN-####.`
+      : `${handoff} WhatsApp ${wa}. Or send your *SKN-####* / ask about escrow — I can help meanwhile.`;
+  }
+
+  if (isGuideIntent(userMessage)) {
+    const aisleBit = topAisles.length ? ` Popular aisles: ${topAisles.join(", ")}.` : "";
+    return channel === "web"
+      ? `Here's how to buy on Sokoni: (1) browse live listings on sokonimall.com or ask me for a category, (2) Order on WhatsApp, (3) pay M-Pesa STK — funds stay in prepaid escrow until delivery is confirmed.${aisleBit} What do you want to shop?`
+      : `To buy: browse (*menu* or ask me), order on WhatsApp, pay M-Pesa STK — escrow until delivery.${aisleBit} What are you looking for?`;
+  }
+
+  if (isGreetingIntent(userMessage)) {
+    return channel === "web"
+      ? `Poa! I can help you find live Sokoni stock, explain prepaid M-Pesa escrow, track SKN-#### orders, or guide a WhatsApp checkout. What are you shopping for?`
+      : `Poa! Ask for an item or category, *track* an SKN-####, or type *menu* to browse.`;
+  }
+
+  if (store) {
+    return storeInfoOffline(store, channel, userMessage);
+  }
+  return null;
+}
+
 function offlineReply(toolResults, channel, userMessage = "") {
+  const chatty = conversationalReply(channel, userMessage, toolResults);
+  if (
+    chatty &&
+    (isGreetingIntent(userMessage) ||
+      isSupportIntent(userMessage) ||
+      isGuideIntent(userMessage) ||
+      !isShoppingIntent(userMessage))
+  ) {
+    // Prefer conversational answers unless this is clearly a product hunt with hits.
+    const hasLiveHits = toolResults.some(
+      (r) =>
+        (r.tool === "search_products" || r.tool === "browse_products") &&
+        (r.products || []).some((p) => p && p.inStock !== false)
+    );
+    if (!hasLiveHits) return chatty;
+  }
+
   for (const r of toolResults) {
     if (r.tool === "track_order" && r.tracking) {
       const t = r.tracking;
@@ -242,9 +303,14 @@ function offlineReply(toolResults, channel, userMessage = "") {
           `Order on WhatsApp from the listing. Current stock only.`
         );
       }
-      return emptyCatalogReply(channel, userMessage, r);
+      // Only show empty-stock when the shopper was actually hunting products
+      if (isShoppingIntent(userMessage)) {
+        return emptyCatalogReply(channel, userMessage, r);
+      }
     }
   }
+
+  if (chatty) return chatty;
 
   for (const r of toolResults) {
     if (r.tool === "browse_taxonomy" && r.categories?.length) {
@@ -262,8 +328,8 @@ function offlineReply(toolResults, channel, userMessage = "") {
     }
   }
   return channel === "web"
-    ? "Tell me what you want (e.g. denim under KES 3,000) or paste an SKN-#### to track."
-    : "Type *menu* to browse, or send your *SKN-####* (or older *SK-####*) to track.";
+    ? "Tell me what you want (e.g. denim under KES 3,000) or paste an SKN-#### to track. I can also explain escrow, delivery, or how to order."
+    : "Type *menu* to browse, send your *SKN-####*, or ask about escrow / delivery.";
 }
 
 async function callLLM(messages, { channel = "whatsapp", allowLonger = false } = {}) {
@@ -338,12 +404,22 @@ export async function runAgentTurn({
   const toolBlock = formatToolResultsForPrompt(toolResults);
   const policyTurn =
     isPolicyOrTrustQuery(text) && toolResults.some((r) => r.tool === "store_info");
-  const catalogTurn = toolResults.some(
+  const hasLiveCatalogHits = toolResults.some(
     (r) =>
-      r.tool === "search_products" ||
-      r.tool === "browse_products" ||
-      r.tool === "get_product"
+      (r.tool === "search_products" || r.tool === "browse_products") &&
+      (r.products || []).some((p) => p && p.inStock !== false)
   );
+  const catalogTurn =
+    hasLiveCatalogHits ||
+    (isShoppingIntent(text) &&
+      toolResults.some(
+        (r) =>
+          r.tool === "search_products" ||
+          r.tool === "browse_products" ||
+          r.tool === "get_product"
+      ));
+  const converseTurn =
+    isGreetingIntent(text) || isSupportIntent(text) || isGuideIntent(text);
 
   const session = channel === "whatsapp" ? getSession(sessionKey) : null;
   const hist = history || session?.history || [];
@@ -352,8 +428,8 @@ export async function runAgentTurn({
     pushMessage(sessionKey, "user", text);
   }
 
-  // Policy + catalog: deterministic answers from live tools — free models invent deleted stock.
-  if (policyTurn || catalogTurn || !getClient()) {
+  // Policy, live catalog, and clear conversational intents: deterministic (no invented stock).
+  if (policyTurn || catalogTurn || converseTurn || !getClient()) {
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return {
