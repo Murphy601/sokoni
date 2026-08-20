@@ -1,5 +1,5 @@
 /**
- * Auth landing — centered modals (login / signup / ask AI) + trending rail.
+ * Auth landing — centered modals (login / signup / ask AI) + editorial sections.
  * Keeps #account-login-form / #account-signup-form IDs for account-auth.js.
  */
 (function () {
@@ -18,7 +18,6 @@
       : "https://bot.sokonimall.com/api/agent";
 
   let askSessionId = sessionStorage.getItem("sokoni-ai-session") || "";
-  let carouselTimer = null;
   let lastFocus = null;
 
   function openModal(name) {
@@ -98,65 +97,12 @@
     });
   }
 
-  function formatKes(n) {
-    const num = Number(n);
-    if (!Number.isFinite(num)) return "";
-    return `KES ${Math.round(num).toLocaleString("en-KE")}`;
-  }
-
-  function productImage(p) {
-    return (
-      p.imageUrl ||
-      p.image ||
-      (Array.isArray(p.images) && p.images[0]) ||
-      "assets/images/products/fa-001.jpg"
-    );
-  }
-
-  async function loadTrending() {
-    const rail = document.getElementById("auth-trending-rail");
-    if (!rail) return;
-    try {
-      const res = await fetch(`data/products.json?v=${Date.now()}`, { cache: "no-store" });
-      const data = await res.json();
-      const list = (Array.isArray(data) ? data : data.products || [])
-        .filter((p) => p && (p.imageUrl || p.image || p.images?.length))
-        .slice(0, 12);
-      if (!list.length) {
-        rail.innerHTML = `<p class="text-sm text-zinc-500 px-1">Browse the shop for live drops.</p>`;
-        return;
-      }
-      rail.innerHTML = list
-        .map((p) => {
-          const title = String(p.title || p.name || "Listing").replace(/</g, "&lt;");
-          const handle = String(p.sellerHandle || p.shopHandle || p.sellerName || "seller")
-            .replace(/^@/, "")
-            .replace(/</g, "&lt;");
-          const price = formatKes(p.price ?? p.priceKes);
-          const href = `index.html#${encodeURIComponent(p.id || "")}`;
-          const img = productImage(p).replace(/"/g, "");
-          return `<a class="auth-drop-card" href="${href}">
-            <img src="${img}" alt="" loading="lazy" width="168" height="168" />
-            <div class="auth-drop-meta">
-              ${price ? `<span class="auth-drop-price">${price}</span>` : ""}
-              <div class="auth-drop-title">${title}</div>
-              <div class="auth-drop-seller">@${handle}</div>
-            </div>
-          </a>`;
-        })
-        .join("");
-    } catch {
-      rail.innerHTML = `<p class="text-sm text-zinc-500 px-1">Couldn’t load drops — open Shop.</p>`;
-    }
-  }
-
   function startCarousel() {
     const slides = Array.from(document.querySelectorAll(".auth-carousel li"));
     if (slides.length < 2) return;
     let i = 0;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return;
-    carouselTimer = window.setInterval(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    window.setInterval(() => {
       slides[i].classList.remove("is-active");
       i = (i + 1) % slides.length;
       slides[i].classList.add("is-active");
@@ -220,7 +166,6 @@
   bindPasswordToggles();
   bindRoleToggle();
   bindAsk();
-  loadTrending();
   startCarousel();
   openFromQuery();
 
