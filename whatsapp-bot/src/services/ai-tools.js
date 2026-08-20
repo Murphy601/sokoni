@@ -243,39 +243,58 @@ const SHOP_STOPWORDS = new Set(
 
 /**
  * True when the shopper is clearly looking for products / aisles / budgets.
- * Greetings, support, and pure how-to questions should not trigger catalog search.
+ * Policy, how-to, seller, and general Sokoni questions must NOT trigger catalog search.
  */
 export function isShoppingIntent(text, { browseMatch = null, budget = null } = {}) {
   const raw = String(text || "").trim();
   if (!raw) return false;
   if (isGreetingIntent(raw) || isSupportIntent(raw) || isOffTopicIntent(raw)) return false;
+  if (isPaymentOrSiteInfoQuery(raw.toLowerCase()) && budget == null && !browseMatch) return false;
   // Guide / seller Q without a product keyword is conversational, not a SKU hunt
   if ((isGuideIntent(raw) || isSellerTopic(raw)) && !browseMatch && budget == null) {
-    if (!/\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift)\b/i.test(raw)) {
+    if (!/\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift|denim|kiondo)\b/i.test(raw)) {
       return false;
     }
   }
   if (budget != null) return true;
   if (browseMatch) return true;
   if (isSokoniOrderId(raw) || extractOrderIdFromText(raw)) return false;
+
+  // Explicit hunt verbs (avoid bare "need" / "any" / "list" — those match escrow help too)
   if (
-    /\b(show|find|want|need|looking|buy|shop|browse|any|list|nataka|nipee|under|chini|sneakers?|dresses?|phones?|laptops?|shoes?|jeans|hoodie|electronics|fashion|thrift|kicks)\b/i.test(
+    /\b(show me|find( me)?|looking for|search( for)?|nataka|nipee|shop for|browse for)\b/i.test(raw)
+  ) {
+    return true;
+  }
+  if (
+    /\b(buy|want|order)\b/i.test(raw) &&
+    /\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift|denim|kiondo|bag|shirt|under|chini|kes)\b/i.test(
       raw
     )
   ) {
     return true;
   }
-  // Short keyword-ish queries (e.g. "denim", "kiondo") still shop — but not "how are you"
+  if (
+    /\b(sneakers?|dresses?|phones?|laptops?|shoes?|jeans|hoodie|electronics|fashion|thrift|kicks|denim|kiondo)\b/i.test(
+      raw
+    ) &&
+    !/\b(how (does|do|to|can)|what is|explain|policy|escrow|fee|commission|refund|dispute|account|login)\b/i.test(
+      raw
+    )
+  ) {
+    return true;
+  }
+
+  // 1–2 token merchandise keywords only (e.g. "denim", "kiondo") — not full questions
   const tokens = raw
     .toLowerCase()
     .replace(/[^a-z0-9'\s-]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
-  if (tokens.length <= 4 && !isGuideIntent(raw) && !isSellerTopic(raw)) {
+  if (tokens.length <= 2 && !isGuideIntent(raw) && !isSellerTopic(raw)) {
     const content = tokens.filter((tok) => !SHOP_STOPWORDS.has(tok.replace(/'/g, "")));
     if (!content.length) return false;
-    // Require at least one token that looks like a merchandise word (3+ letters)
-    return content.some((tok) => /^[a-z][a-z0-9-]{2,}$/i.test(tok));
+    return content.every((tok) => /^[a-z][a-z0-9-]{2,}$/i.test(tok));
   }
   return false;
 }
@@ -375,19 +394,17 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
   const budget = extractBudget(text);
   const secondhandOnly = wantsSecondhand(text) && !wantsNew(text);
   const shopping = isShoppingIntent(text, { browseMatch, budget });
-  const sokoniChat = isSokoniConversation(text, { browseMatch, budget });
 
-  // Buyer/seller conversation should always have live site facts available.
-  // Skip for pure greetings/small talk so the model chats instead of dumping catalog tips.
-  if (
-    (sokoniChat || isGuideIntent(text) || isSupportIntent(text) || isSellerTopic(text)) &&
-    !isGreetingIntent(text) &&
-    !results.some((r) => r.tool === "store_info")
-  ) {
+  // Every Sokoni turn gets live site facts so the LLM can answer any marketplace question.
+  if (!isOffTopicIntent(text) && !results.some((r) => r.tool === "store_info")) {
     results.push(await executeTool("store_info", {}, { phone }));
   }
   if (
-    (isGuideIntent(text) || isSellerTopic(text) || isTaxonomyQuery(lower)) &&
+    (isGuideIntent(text) ||
+      isSellerTopic(text) ||
+      isTaxonomyQuery(lower) ||
+      (shopping && browseMatch) ||
+      /\b(categor|aisle|department|what (can|do) (i|you) (buy|sell|find))\b/i.test(lower)) &&
     !results.some((r) => r.tool === "browse_taxonomy")
   ) {
     results.push(await executeTool("browse_taxonomy", {}, { phone }));
