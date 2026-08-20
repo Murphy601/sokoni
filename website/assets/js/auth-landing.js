@@ -98,104 +98,6 @@
     });
   }
 
-  function formatKes(n) {
-    const num = Number(n);
-    if (!Number.isFinite(num)) return "";
-    return `KES ${Math.round(num).toLocaleString("en-KE")}`;
-  }
-
-  function productImage(p) {
-    return (
-      p.imageUrl ||
-      p.image ||
-      (Array.isArray(p.images) && p.images[0]) ||
-      "assets/images/products/fa-001.jpg"
-    );
-  }
-
-  async function loadTrending() {
-    const rail = document.getElementById("auth-trending-rail");
-    if (!rail) return;
-    try {
-      const res = await fetch(`data/products.json?v=${Date.now()}`, { cache: "no-store" });
-      const data = await res.json();
-      const list = (Array.isArray(data) ? data : data.products || [])
-        .filter((p) => p && (p.imageUrl || p.image || p.images?.length))
-        .slice(0, 12);
-      if (!list.length) {
-        rail.innerHTML = `<p class="text-sm text-zinc-500 px-1">Browse the shop for live drops.</p>`;
-        return;
-      }
-      rail.innerHTML = list
-        .map((p) => {
-          const title = String(p.title || p.name || "Listing").replace(/</g, "&lt;");
-          const handle = String(p.sellerHandle || p.shopHandle || p.sellerName || "seller")
-            .replace(/^@/, "")
-            .replace(/</g, "&lt;");
-          const price = formatKes(p.price ?? p.priceKes);
-          const href = `index.html#${encodeURIComponent(p.id || "")}`;
-          const img = productImage(p).replace(/"/g, "");
-          return `<a class="auth-drop-card" href="${href}">
-            <img src="${img}" alt="" loading="lazy" width="168" height="168" />
-            <div class="auth-drop-meta">
-              ${price ? `<span class="auth-drop-price">${price}</span>` : ""}
-              <div class="auth-drop-title">${title}</div>
-              <div class="auth-drop-seller">@${handle}</div>
-            </div>
-          </a>`;
-        })
-        .join("");
-    } catch {
-      rail.innerHTML = `<p class="text-sm text-zinc-500 px-1">Couldn’t load drops — open Shop.</p>`;
-    }
-  }
-
-  function startCarousel() {
-    const slides = Array.from(document.querySelectorAll(".auth-carousel li"));
-    if (slides.length < 2) return;
-    let i = 0;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return;
-    carouselTimer = window.setInterval(() => {
-      slides[i].classList.remove("is-active");
-      i = (i + 1) % slides.length;
-      slides[i].classList.add("is-active");
-    }, 4200);
-  }
-
-  function askBubble(text, role) {
-    const log = document.getElementById("auth-ask-log");
-    if (!log) return;
-    const b = document.createElement("div");
-    b.className = `auth-ask-bubble auth-ask-bubble--${role === "user" ? "user" : "bot"}`;
-    b.textContent = text;
-    log.appendChild(b);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  async function sendAsk(message) {
-    const msg = String(message || "").trim();
-    if (!msg) return;
-    askBubble(msg, "user");
-    const input = document.getElementById("auth-ask-input");
-    if (input) input.value = "";
-    try {
-      const res = await fetch(`${AGENT_API}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, sessionId: askSessionId || undefined }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.sessionId) {
-        askSessionId = data.sessionId;
-        sessionStorage.setItem("sokoni-ai-session", askSessionId);
-      }
-      askBubble(data.reply || data.message || "Try again in a moment.", "bot");
-    } catch {
-      askBubble("Sokoni Plug is offline right now — try Ask Plug page or WhatsApp.", "bot");
-    }
-  }
-
   function bindAsk() {
     const form = document.getElementById("auth-ask-form");
     form?.addEventListener("submit", (e) => {
@@ -220,7 +122,6 @@
   bindPasswordToggles();
   bindRoleToggle();
   bindAsk();
-  loadTrending();
   startCarousel();
   openFromQuery();
 
