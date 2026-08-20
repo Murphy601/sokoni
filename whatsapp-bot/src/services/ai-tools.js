@@ -85,6 +85,8 @@ export function isSupportIntent(text) {
 /** How to buy / how can you help / guide me. */
 export function isGuideIntent(text) {
   const lower = String(text || "").toLowerCase();
+  // "how are you" is small talk, not a buy guide
+  if (isGreetingIntent(lower, { allowGuideOverlap: true })) return false;
   return /\b(how (can|do) (you|i)|help me|guide me|make a purchase|how to (buy|order|shop|pay|sell|list)|what can you (do|help)|assist me|what do you (sell|have|offer)|how does (sokoni|this|it) work)\b/i.test(
     lower
   );
@@ -100,9 +102,11 @@ export function isSellerTopic(text) {
 
 /**
  * Clearly off Sokoni (general world chat). Keep narrow so Kenya/commerce questions still pass.
+ * Greetings / "how are you" are NOT off-topic — they are normal shop-assistant chat.
  */
 export function isOffTopicIntent(text) {
   const lower = String(text || "").toLowerCase();
+  if (isGreetingIntent(lower, { allowGuideOverlap: true })) return false;
   if (
     /\b(sokoni|marketplace|order|escrow|mpesa|m-pesa|whatsapp|track|delivery|seller|buyer|listing|kes|thrift|catalog)\b/i.test(
       lower
@@ -115,15 +119,127 @@ export function isOffTopicIntent(text) {
   );
 }
 
-/** Greetings / small talk — not product search. */
-export function isGreetingIntent(text) {
-  const t = String(text || "").trim().toLowerCase();
-  if (!t || t.length > 48) return false;
-  if (isSupportIntent(t) || isGuideIntent(t) || isSellerTopic(t)) return false;
-  return /^(hi|hello|hey|yo|hola|habari|mambo|sasa|niaje|hujambo|good\s*(morning|afternoon|evening)|howdy|sup|ola)(\b|!|\.|,|\s|$)/i.test(
-    t
-  );
+/**
+ * Greetings + light small talk with the shop assistant — never product search.
+ * @param {{ allowGuideOverlap?: boolean }} opts — internal: skip guide/seller guards when nested
+ */
+export function isGreetingIntent(text, opts = {}) {
+  const t = String(text || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!t || t.length > 80) return false;
+  if (!opts.allowGuideOverlap) {
+    if (isSupportIntent(t) || isSellerTopic(t)) return false;
+  }
+
+  // Whole-message greetings (optional trailing punctuation only)
+  if (
+    /^(hi|hello|hey|yo|hola|habari|mambo|sasa|niaje|hujambo|howdy|sup|ola|hiya|helo|hallo)[!?.,]*$/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  if (/^(good\s*(morning|afternoon|evening)|morning|evening)[!?.,]*$/i.test(t)) {
+    return true;
+  }
+  if (
+    /^(hi|hello|hey|yo)[,!]?\s+(there|sokoni|plug)?[!?.,]*$/i.test(t)
+  ) {
+    return true;
+  }
+  // Small talk / check-ins — must be the whole message (not "thanks for the denim…")
+  if (
+    /^(how are you( doing)?( today)?|how're you( doing)?|how r you|how are u|how r u|how have you been|how's it going|how is it going|how you doing|how's everything|what's up|whats up|wassup|you good|you okay|uko aje|habari yako|habari yenu|mzuri|poa sana|i'm (fine|good|great|okay|ok|poa|well)|im (fine|good|great|okay|ok|poa|well)|doing (fine|good|great|well)|thanks|thank you|thanks you|asante|asante sana|cool|nice|great|awesome|sawa|okay|ok|yeah|yep|nah|no worries|just checking)[!?.,]*$/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
+
+/** Social / filler words — short phrases made only of these are not product hunts. */
+const SHOP_STOPWORDS = new Set(
+  [
+    "how",
+    "are",
+    "you",
+    "u",
+    "i",
+    "am",
+    "im",
+    "i'm",
+    "what",
+    "whats",
+    "what's",
+    "up",
+    "is",
+    "it",
+    "the",
+    "a",
+    "an",
+    "to",
+    "for",
+    "me",
+    "my",
+    "your",
+    "please",
+    "thanks",
+    "thank",
+    "ok",
+    "okay",
+    "sawa",
+    "yes",
+    "no",
+    "yeah",
+    "yep",
+    "nah",
+    "fine",
+    "good",
+    "great",
+    "cool",
+    "nice",
+    "poa",
+    "sasa",
+    "uko",
+    "aje",
+    "doing",
+    "today",
+    "bro",
+    "sis",
+    "mate",
+    "there",
+    "here",
+    "just",
+    "checking",
+    "in",
+    "about",
+    "and",
+    "or",
+    "with",
+    "from",
+    "can",
+    "could",
+    "would",
+    "will",
+    "be",
+    "been",
+    "was",
+    "were",
+    "this",
+    "that",
+    "of",
+    "on",
+    "at",
+    "if",
+    "so",
+    "very",
+    "really",
+    "well",
+    "hey",
+    "hi",
+    "hello",
+  ].map((w) => w.toLowerCase())
+);
 
 /**
  * True when the shopper is clearly looking for products / aisles / budgets.
@@ -149,10 +265,17 @@ export function isShoppingIntent(text, { browseMatch = null, budget = null } = {
   ) {
     return true;
   }
-  // Short keyword-ish queries (e.g. "denim", "kiondo") still shop
-  const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
-  if (tokens.length <= 4 && !isGuideIntent(raw) && !/^(please|thanks|thank you|ok|okay|sawa)$/i.test(raw)) {
-    return !isGreetingIntent(raw) && !isSellerTopic(raw);
+  // Short keyword-ish queries (e.g. "denim", "kiondo") still shop — but not "how are you"
+  const tokens = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length <= 4 && !isGuideIntent(raw) && !isSellerTopic(raw)) {
+    const content = tokens.filter((tok) => !SHOP_STOPWORDS.has(tok.replace(/'/g, "")));
+    if (!content.length) return false;
+    // Require at least one token that looks like a merchandise word (3+ letters)
+    return content.some((tok) => /^[a-z][a-z0-9-]{2,}$/i.test(tok));
   }
   return false;
 }
@@ -164,9 +287,9 @@ export function isSokoniConversation(text, { browseMatch = null, budget = null }
   const raw = String(text || "").trim();
   if (!raw) return false;
   if (isOffTopicIntent(raw)) return false;
+  if (isGreetingIntent(raw)) return true;
   if (isShoppingIntent(raw, { browseMatch, budget })) return true;
   if (
-    isGreetingIntent(raw) ||
     isSupportIntent(raw) ||
     isGuideIntent(raw) ||
     isSellerTopic(raw) ||
@@ -255,8 +378,10 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
   const sokoniChat = isSokoniConversation(text, { browseMatch, budget });
 
   // Buyer/seller conversation should always have live site facts available.
+  // Skip for pure greetings/small talk so the model chats instead of dumping catalog tips.
   if (
-    (sokoniChat || isGuideIntent(text) || isSupportIntent(text) || isGreetingIntent(text) || isSellerTopic(text)) &&
+    (sokoniChat || isGuideIntent(text) || isSupportIntent(text) || isSellerTopic(text)) &&
+    !isGreetingIntent(text) &&
     !results.some((r) => r.tool === "store_info")
   ) {
     results.push(await executeTool("store_info", {}, { phone }));
