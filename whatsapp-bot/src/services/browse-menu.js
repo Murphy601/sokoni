@@ -141,8 +141,13 @@ export async function matchBrowseFromText(text) {
   const hay = ` ${normalizeMatchKey(text)} `;
   if (hay.length < 4) return null;
 
-  /** @type {Array<{ score: number, browseCategory: string, browseSubCategory: string | null, label: string, source: string }>} */
+  /** @type {Array<{ score: number, browseCategory: string, browseSubCategory: string | null, label: string, source: string, aesthetic?: string }>} */
   const hits = [];
+  const hasBudgetCue = /\b(under|chini|below|less than)\b/i.test(String(text || ""));
+  const hasProductAisleCue =
+    /\b(electronics|phones?|laptops?|fashion|women|men|kids?|sneakers?|shoes?|beauty|appliances?|supermarket|garden|tools?)\b/i.test(
+      String(text || "")
+    );
 
   for (const cat of menu.categories || []) {
     const resolvedBrowse = cat.resolvesTo?.browse || cat.id;
@@ -170,10 +175,17 @@ export async function matchBrowseFromText(text) {
       const subKeys = [sub.id, sub.label, `${cat.label} ${sub.label}`]
         .map(normalizeMatchKey)
         .filter((k) => k.length >= 2);
+      const isPriceTierSub =
+        browse === "sale" ||
+        /^under[- ]?\d+/.test(String(subId || "")) ||
+        /under kes|under ksh/i.test(String(sub.label || ""));
       for (const key of subKeys) {
         if (hay.includes(` ${key} `) || hay.includes(` ${key}s `)) {
+          let score = key.length + 8;
+          // "Electronics under 10000" must prefer Electronics, not Sale → Under 10k.
+          if (isPriceTierSub && hasBudgetCue && hasProductAisleCue) score -= 30;
           hits.push({
-            score: key.length + 8,
+            score,
             browseCategory: browse,
             browseSubCategory: subId,
             label: `${cat.label} → ${sub.label}`,

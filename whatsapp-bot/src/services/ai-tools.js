@@ -183,6 +183,19 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
         );
       }
     } else {
+      let browseCategory = browseMatch?.browseCategory || null;
+      let browseSubCategory = browseMatch?.browseSubCategory || null;
+      let browseLabel = browseMatch?.label || null;
+      // Budget-only / price-tier hits: search the whole live catalog under maxPriceKes
+      if (
+        budget &&
+        browseCategory === "sale" &&
+        /^under[- ]?\d+/i.test(String(browseSubCategory || ""))
+      ) {
+        browseCategory = null;
+        browseSubCategory = null;
+        browseLabel = null;
+      }
       results.push(
         await executeTool(
           "search_products",
@@ -190,10 +203,10 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
             query: text,
             maxPriceKes: budget,
             secondhandOnly,
-            browseCategory: browseMatch?.browseCategory || null,
-            browseSubCategory: browseMatch?.browseSubCategory || null,
+            browseCategory,
+            browseSubCategory,
             aesthetic: browseMatch?.aesthetic || null,
-            browseLabel: browseMatch?.label || null,
+            browseLabel,
           },
           { phone }
         )

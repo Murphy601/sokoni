@@ -34,6 +34,10 @@ assert("isSokoniOrderId child", isSokoniOrderId("SKN-1002-1"));
 assert("isSokoniOrderId parent", isSokoniOrderId("SKN-1002"));
 assert("isSokoniOrderId legacy", isSokoniOrderId("SK-1042"));
 assert("reject garbage", !isSokoniOrderId("HELLO"));
+assert("reject budget sentence", !isSokoniOrderId("Electronics under 10000"));
+assert("reject under 10000 alone as free text", !isSokoniOrderId("under 10000"));
+assert("bare digits still ok", isSokoniOrderId("1002"));
+assert("normalize ignores shopping sentence digits", normalizeOrderId("Electronics under 10000") === null);
 assert("null safe", normalizeOrderId(null) === null);
 
 if (failed) {

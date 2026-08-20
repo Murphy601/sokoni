@@ -42,6 +42,9 @@ function looksLikeInstructionLeak(text) {
   const t = String(text || "").trim();
   if (!t) return true;
   if (INSTRUCTION_LEAK.test(t)) return true;
+  // Model "tool call" dumps / truncated numbered lists are not shopper answers
+  if (/^\s*\{[\s\S]*"tool"\s*:/.test(t)) return true;
+  if (/^\s*```?(?:json)?\s*\{[\s\S]*"tool"\s*:/.test(t)) return true;
   // Meta-planning about how to answer, not the answer itself
   if (/^(?:okay[,.]?\s*)?(?:so[,.]?\s*)?(?:i (?:should|must|need to)|let me|the (?:user|customer) asked)/i.test(t) &&
       /\b(?:concise|brief|sentences?|words?|fluff|follow-?ups?)\b/i.test(t)) {
@@ -145,8 +148,13 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
   return cleaned || null;
 }
 
-function formatProductLine(p) {
-  return `• *${p.name}* — KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""} ⭐ ${p.rating || "—"}`;
+function formatProductLine(p, channel = "whatsapp", index = 0) {
+  const price = `KES ${Number(p.priceKes).toLocaleString()}`;
+  const vibe = p.isSecondhand ? " · pre-loved" : "";
+  if (channel === "web") {
+    return `${index + 1}. ${p.name} — ${price}${vibe}`;
+  }
+  return `• *${p.name}* — ${price}${vibe}`;
 }
 
 function extractBudgetFromText(text) {
@@ -228,10 +236,10 @@ function offlineReply(toolResults, channel, userMessage = "") {
           return `Found *${n}* live match${n === 1 ? "" : "es"}. Reply with the *number* to view & order, or *menu*.`;
         }
         const aisle = r.label || r.browseLabel || "";
-        const lines = live.slice(0, 3).map(formatProductLine);
+        const lines = live.slice(0, 3).map((p, i) => formatProductLine(p, channel, i));
         return (
-          `${aisle ? `In *${aisle}* — ` : ""}Found ${n} live:\n${lines.join("\n")}\n` +
-          `Tap *Order on WhatsApp* on an item. (Current stock only.)`
+          `${aisle ? `In ${aisle} — ` : ""}Found ${n} live:\n${lines.join("\n")}\n` +
+          `Order on WhatsApp from the listing. Current stock only.`
         );
       }
       return emptyCatalogReply(channel, userMessage, r);

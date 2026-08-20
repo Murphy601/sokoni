@@ -161,6 +161,27 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  function askLooksBad(text) {
+    const t = String(text || "").trim();
+    if (!t) return true;
+    if (/^\s*\{[\s\S]*"tool"\s*:/.test(t)) return true;
+    if (/we need to answer|under \d+ words|strict conversational/i.test(t)) return true;
+    if (/\n\s*\d+\.\s*$/.test(t)) return true;
+    return false;
+  }
+
+  function renderAskProducts(products) {
+    const log = document.getElementById("auth-ask-log");
+    if (!log || !products?.length) return;
+    products.slice(0, 3).forEach((p) => {
+      const b = document.createElement("div");
+      b.className = "auth-ask-bubble auth-ask-bubble--bot";
+      b.textContent = `${p.name} — KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}`;
+      log.appendChild(b);
+    });
+    log.scrollTop = log.scrollHeight;
+  }
+
   async function sendAsk(message) {
     const msg = String(message || "").trim();
     if (!msg) return;
@@ -178,7 +199,15 @@
         askSessionId = data.sessionId;
         sessionStorage.setItem("sokoni-ai-session", askSessionId);
       }
-      askBubble(data.reply || data.message || "Try again in a moment.", "bot");
+      const products = Array.isArray(data.products) ? data.products : [];
+      let reply = String(data.reply || data.message || "").trim();
+      if (askLooksBad(reply)) {
+        reply = products.length
+          ? `Found ${Math.min(3, products.length)} live listing${products.length === 1 ? "" : "s"} — current stock only.`
+          : "No live Sokoni listings match that right now. Try another keyword or browse the shop.";
+      }
+      askBubble(reply || "Try again in a moment.", "bot");
+      renderAskProducts(products);
     } catch {
       askBubble("Sokoni Plug is offline right now — try Ask Plug page or WhatsApp.", "bot");
     }

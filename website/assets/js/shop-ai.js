@@ -25,6 +25,16 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  function looksLikeBadReply(text) {
+    const t = String(text || "").trim();
+    if (!t) return true;
+    if (/^\s*\{[\s\S]*"tool"\s*:/.test(t)) return true;
+    if (/we need to answer|under \d+ words|strict conversational/i.test(t)) return true;
+    // Truncated numbered list ending on "3." with nothing after
+    if (/\n\s*\d+\.\s*$/.test(t)) return true;
+    return false;
+  }
+
   function renderProducts(products) {
     if (!products?.length) return;
     const wrap = document.createElement("div");
@@ -36,10 +46,10 @@
       card.className = "ask-product-card";
       const aisle =
         p.browseCategory
-          ? `<span class="text-zinc-500 text-xs">${p.browseCategory}${p.browseSubCategory ? ` · ${p.browseSubCategory}` : ""}</span><br>`
+          ? `<span class="text-zinc-500 text-xs">${escapeHtml(p.browseCategory)}${p.browseSubCategory ? ` · ${escapeHtml(p.browseSubCategory)}` : ""}</span><br>`
           : "";
       const waText = encodeURIComponent(`Hi Sokoni, I want ${p.name} (${p.id})`);
-      card.innerHTML = `<div>${aisle}<strong class="text-white">${p.name}</strong><br><span class="text-zinc-400">KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}</span></div>`;
+      card.innerHTML = `<div>${aisle}<strong class="text-white">${escapeHtml(p.name)}</strong><br><span class="text-zinc-400">KES ${Number(p.priceKes).toLocaleString()}${p.isSecondhand ? " · pre-loved" : ""}</span></div>`;
       const a = document.createElement("a");
       a.href = `https://wa.me/${WHATSAPP}?text=${waText}`;
       a.target = "_blank";
@@ -52,6 +62,14 @@
     wrap.appendChild(box);
     log.appendChild(wrap);
     log.scrollTop = log.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   async function sendMessage(text) {
@@ -74,8 +92,15 @@
         sessionStorage.setItem("sokoni-ai-session", sessionId);
       }
 
-      if (data.reply) bubble(data.reply, "assistant");
-      renderProducts(data.products);
+      const products = Array.isArray(data.products) ? data.products : [];
+      let reply = String(data.reply || "").trim();
+      if (looksLikeBadReply(reply)) {
+        reply = products.length
+          ? `Found ${Math.min(3, products.length)} live listing${products.length === 1 ? "" : "s"} — current stock only.`
+          : "No live Sokoni listings match that right now. Try another keyword or browse the shop.";
+      }
+      if (reply) bubble(reply, "assistant");
+      renderProducts(products);
     } catch (err) {
       bubble(err.message || "Could not reach Sokoni AI. Try WhatsApp instead.", "assistant");
     } finally {
