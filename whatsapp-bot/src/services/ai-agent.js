@@ -83,12 +83,6 @@ function sanitizeReply(text) {
 const FLUFF_SENTENCE =
   /^(?:hello[!.,]?\s*)?(?:hi[!.,]?\s*)?(?:i hope (?:this|you|that)[^.!?]*[.!?]|thank you for (?:choosing|contacting|reaching out to) sokoni[^.!?]*[.!?]|i(?:'d| would) be delighted[^.!?]*[.!?]|hope (?:this|that) helps[^.!?]*[.!?]|(?:let me know if you need|is there anything else|would you (?:also )?like)[^.!?]*[.!?])\s*/i;
 
-function isPolicyOrTrustQuery(text) {
-  return /\b(prepaid|escrow|mpesa|pay(?:ment)?|stk|till|how (?:it|sokoni|does)|delivery|shipping|dispatch|courier|pickup|return|refund|scam|safe|trust|about sokoni|what is sokoni)\b/i.test(
-    String(text || "")
-  );
-}
-
 /**
  * Hard brevity guard after the model (WhatsApp notifications must fit one glance).
  * Policy / trust answers get a slightly larger budget so lists are not sliced mid-point.
@@ -186,20 +180,40 @@ function emptyCatalogReply(channel, userMessage = "", toolResult = null) {
 
 function storeInfoOffline(r, channel, userMessage = "") {
   const lower = String(userMessage || "").toLowerCase();
-  if (/\b(deliver|shipping|dispatch|courier|pickup|hub)\b/i.test(lower)) {
+  if (/\b(sell|seller hub|listing|payout|withdraw|drop-?off|commission|inventory|stock units?)\b/i.test(lower)) {
+    return channel === "web"
+      ? `Seller Hub (sokonimall.com/suppliers/list.html) covers Hub Drop-Offs, stock units, WhatsApp promo, orders, and M-Pesa Ledger. ${r?.sellerHub || ""} What do you need — listing, drop-off, or payouts?`.replace(/\s+/g, " ").trim()
+      : `*Seller Hub* — drop-offs, stock units, promo, orders, M-Pesa Ledger. Listing, pickup, or payouts?`;
+  }
+  if (/\b(account|sign ?up|sign ?in|log ?in|register|password)\b/i.test(lower)) {
+    return channel === "web"
+      ? `Create a free account at sokonimall.com/login — same login works for buyers and sellers. Sellers also use Seller Hub for listings and payouts.`
+      : `Sign up free on sokonimall.com/login — buyers and sellers use the same account.`;
+  }
+  if (/\b(dispute|refund|return|scam|safe|trust)\b/i.test(lower)) {
+    return `Your M-Pesa payment stays in Sokoni prepaid escrow until delivery is confirmed. If something goes wrong, open a dispute — never pay personal numbers or private tills.`;
+  }
+  if (/\b(deliver|shipping|dispatch|courier|pickup|hub|boda|ship)\b/i.test(lower)) {
     const note = String(r?.deliveryNote || "").trim();
     return note
       ? `${note} Checkout stays 100% prepaid M-Pesa escrow — never pay riders for the item itself.`
       : `Sellers dispatch via Sokoni Mashinani hubs countrywide after prepaid M-Pesa escrow. Track with your SKN order ID.`;
   }
-  if (/\b(refund|return|scam|safe|trust)\b/i.test(lower)) {
-    return `Your M-Pesa payment stays in Sokoni prepaid escrow until delivery is confirmed. If something goes wrong, open a dispute — never pay personal numbers or private tills.`;
+  if (/\b(track|tracking|order status|skn-)\b/i.test(lower)) {
+    return channel === "web"
+      ? `Paste your SKN-#### (or SKN-####-n) and I can check status — or open sokonimall.com/track.html.`
+      : `Send your *SKN-####* / *SKN-####-n* to track, or type *track*.`;
   }
-  // Escrow / prepaid / how it works (default)
+  if (/\b(categor|aisle|what (can|do) (i|you) (buy|sell|find)|what do you (sell|have))\b/i.test(lower)) {
+    return channel === "web"
+      ? `Browse live aisles on sokonimall.com or ask me for a category (e.g. women dresses, thrift, electronics). I only show current Sokoni stock.`
+      : `Ask for a category or type *menu* — live Sokoni stock only.`;
+  }
+  // Escrow / prepaid / how it works / general Sokoni
   if (channel === "web") {
-    return `You pay by M-Pesa STK when you order; Sokoni holds that money in prepaid escrow until delivery is confirmed, then releases the seller payout. No COD — never send money to personal tills or numbers.`;
+    return `You pay by M-Pesa STK when you order; Sokoni holds that money in prepaid escrow until delivery is confirmed, then releases the seller payout. No COD — never send money to personal tills or numbers. Ask me anything else about Sokoni.`;
   }
-  return `Sokoni is *100% prepaid* via M-Pesa STK — escrow until you confirm delivery. No COD. Never pay personal numbers.`;
+  return `Sokoni is *100% prepaid* via M-Pesa STK — escrow until you confirm delivery. No COD. Never pay personal numbers. Ask me anything about Sokoni.`;
 }
 
 function conversationalReply(channel, userMessage = "", toolResults = []) {
@@ -404,6 +418,8 @@ function sanitizeHistory(history = []) {
 
 /**
  * One agent turn — shared by WhatsApp and web.
+ * Default: real LLM conversation for any Sokoni Mall question, with live tools.
+ * Catalog search only when shopping; never invent stock. Off-topic → redirect.
  */
 export async function runAgentTurn({
   channel = "whatsapp",
@@ -423,23 +439,12 @@ export async function runAgentTurn({
   const toolResults = await runToolRouter(text, { phone, customerKey: sessionKey });
   const toolBlock = formatToolResultsForPrompt(toolResults);
   const shopping = isShoppingIntent(text);
-  const policyTurn =
-    isPolicyOrTrustQuery(text) && toolResults.some((r) => r.tool === "store_info");
   const hasLiveCatalogHits = toolResults.some(
     (r) =>
       (r.tool === "search_products" || r.tool === "browse_products") &&
       (r.products || []).some((p) => p && p.inStock !== false)
   );
-  const ranCatalogTools = toolResults.some(
-    (r) =>
-      r.tool === "search_products" ||
-      r.tool === "browse_products" ||
-      r.tool === "get_product"
-  );
-  // Live hits or empty product hunts stay deterministic — never invent stock.
-  const catalogTurn = hasLiveCatalogHits || (shopping && ranCatalogTools);
-  // Any non-catalog turn can be a real conversation (LLM), not only keyword-matched Sokoni phrases
-  const converseTurn = !catalogTurn && !shopping;
+  const trackingPayload = toolResults.find((r) => r.tool === "track_order")?.tracking || null;
 
   const session = channel === "whatsapp" ? getSession(sessionKey) : null;
   const hist = history || session?.history || [];
@@ -448,7 +453,7 @@ export async function runAgentTurn({
     pushMessage(sessionKey, "user", text);
   }
 
-  // Off-topic world chat only — hard redirect. Other messages may converse (LLM stays Sokoni-scoped).
+  // Clear non-Sokoni world chat only
   if (isOffTopicIntent(text)) {
     const reply = offTopicRedirect(channel);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
@@ -462,25 +467,26 @@ export async function runAgentTurn({
     };
   }
 
-  // Catalog answers stay offline. Buyer/seller Sokoni conversation uses the LLM when configured.
-  const forceOffline = catalogTurn || !getClient();
-  if (forceOffline) {
+  const products =
+    toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
+    toolResults.find((r) => r.tool === "search_products" && r.products?.length)?.products ||
+    [];
+
+  // No model configured → deterministic fallback (still answers Sokoni topics via tools)
+  if (!getClient()) {
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return {
       reply,
       tools: toolResults,
       offline: true,
-      policy: policyTurn,
-      catalog: catalogTurn,
-      products:
-        toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
-        toolResults.find((r) => r.tool === "search_products" && r.products?.length)?.products ||
-        [],
-      tracking: toolResults.find((r) => r.tool === "track_order")?.tracking || null,
+      catalog: shopping,
+      products,
+      tracking: trackingPayload,
     };
   }
 
+  // Default path: LLM answers every Sokoni question using tool results (site facts, taxonomy, stock, tracking).
   try {
     const messages = [
       { role: "system", content: channelPrompt(channel) },
@@ -489,23 +495,15 @@ export async function runAgentTurn({
       { role: "user", content: text },
     ];
 
-    // Conversational Sokoni turns get a slightly larger budget; product lists stay short.
-    const allowLonger = converseTurn || policyTurn;
+    const allowLonger = true;
+    const conversational = !shopping || !hasLiveCatalogHits;
     let reply = await callLLM(messages, {
       channel,
       allowLonger,
-      conversational: converseTurn,
+      conversational,
     });
 
-    if (
-      !reply &&
-      toolResults.some(
-        (r) =>
-          ((r.tool === "search_products" || r.tool === "browse_products") && r.products?.length) ||
-          r.tool === "browse_taxonomy" ||
-          r.tool === "store_info"
-      )
-    ) {
+    if (!reply) {
       reply = offlineReply(toolResults, channel, text);
     }
 
@@ -518,24 +516,19 @@ export async function runAgentTurn({
       pushMessage(sessionKey, "assistant", reply);
     }
 
-    const products =
-      toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
-      toolResults.find((r) => r.tool === "search_products" && r.products)?.products ||
-      [];
-
     return {
       reply,
       tools: toolResults,
       products,
-      converse: converseTurn,
-      policy: policyTurn,
-      tracking: toolResults.find((r) => r.tool === "track_order")?.tracking || null,
+      converse: conversational,
+      shopping,
+      tracking: trackingPayload,
     };
   } catch (err) {
     console.error("[ai-agent] error:", err.message);
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
-    return { reply, tools: toolResults, error: err.message };
+    return { reply, tools: toolResults, products, tracking: trackingPayload, error: err.message };
   }
 }
 
