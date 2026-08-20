@@ -15,7 +15,6 @@ import {
   isShoppingIntent,
   isSellerTopic,
   isOffTopicIntent,
-  isSokoniConversation,
 } from "./ai-tools.js";
 import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
 
@@ -234,8 +233,19 @@ function conversationalReply(channel, userMessage = "", toolResults = []) {
   }
 
   if (isGreetingIntent(userMessage)) {
+    const lower = String(userMessage || "").toLowerCase();
+    if (/\b(how are you|how're you|how are u|uko aje|what'?s up)\b/i.test(lower)) {
+      return channel === "web"
+        ? `Niko poa — thanks for asking! I'm Sokoni Plug — I can chat about shopping, prepaid escrow, tracking, or selling on Seller Hub. What do you need?`
+        : `Niko poa! Ask me to browse, *track* an SKN-####, or help you sell — what's up?`;
+    }
+    if (/^(thanks|thank you|asante)/i.test(lower)) {
+      return channel === "web"
+        ? `Karibu! Ask anytime about live stock, escrow, tracking, or selling on Sokoni.`
+        : `Karibu! Type *menu* when you're ready, or ask about escrow / track.`;
+    }
     return channel === "web"
-      ? `Poa! I can help you find live Sokoni stock, explain prepaid M-Pesa escrow, track SKN-#### orders, or guide a WhatsApp checkout. What are you shopping for?`
+      ? `Poa! I'm here to chat about Sokoni — live stock, escrow, tracking, or Seller Hub. What are you looking for?`
       : `Poa! Ask for an item or category, *track* an SKN-####, or type *menu* to browse.`;
   }
 
@@ -341,7 +351,7 @@ function offlineReply(toolResults, channel, userMessage = "") {
     : "Type *menu* to browse, send your *SKN-####*, or ask about escrow / delivery.";
 }
 
-async function callLLM(messages, { channel = "whatsapp", allowLonger = false } = {}) {
+async function callLLM(messages, { channel = "whatsapp", allowLonger = false, conversational = false } = {}) {
   const openai = getClient();
   if (!openai) throw new Error("No API key");
 
@@ -361,9 +371,10 @@ async function callLLM(messages, { channel = "whatsapp", allowLonger = false } =
         model,
         messages,
         max_tokens: maxTokens,
-        temperature: 0.2,
-        presence_penalty: 0,
-        frequency_penalty: 0.5,
+        // Slightly warmer for real chat; keep shopping/catalog turns crisp
+        temperature: conversational ? 0.55 : 0.2,
+        presence_penalty: conversational ? 0.2 : 0,
+        frequency_penalty: conversational ? 0.3 : 0.5,
       });
       const choice = response.choices[0];
       const raw = choice?.message?.content;
@@ -427,14 +438,8 @@ export async function runAgentTurn({
   );
   // Live hits or empty product hunts stay deterministic — never invent stock.
   const catalogTurn = hasLiveCatalogHits || (shopping && ranCatalogTools);
-  const sokoniChat =
-    isSokoniConversation(text) ||
-    isGreetingIntent(text) ||
-    isSupportIntent(text) ||
-    isGuideIntent(text) ||
-    isSellerTopic(text) ||
-    policyTurn;
-  const converseTurn = sokoniChat && !catalogTurn;
+  // Any non-catalog turn can be a real conversation (LLM), not only keyword-matched Sokoni phrases
+  const converseTurn = !catalogTurn && !shopping;
 
   const session = channel === "whatsapp" ? getSession(sessionKey) : null;
   const hist = history || session?.history || [];
@@ -443,12 +448,8 @@ export async function runAgentTurn({
     pushMessage(sessionKey, "user", text);
   }
 
-  // Off-topic / non-marketplace chat — hard redirect (Sokoni site only).
-  const hasOrderTools = toolResults.some(
-    (r) => r.tool === "track_order" || r.tool === "list_orders" || r.tool === "get_product"
-  );
-  const onSokoniSite = sokoniChat || shopping || catalogTurn || hasOrderTools;
-  if (isOffTopicIntent(text) || !onSokoniSite) {
+  // Off-topic world chat only — hard redirect. Other messages may converse (LLM stays Sokoni-scoped).
+  if (isOffTopicIntent(text)) {
     const reply = offTopicRedirect(channel);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return {
@@ -490,7 +491,11 @@ export async function runAgentTurn({
 
     // Conversational Sokoni turns get a slightly larger budget; product lists stay short.
     const allowLonger = converseTurn || policyTurn;
-    let reply = await callLLM(messages, { channel, allowLonger });
+    let reply = await callLLM(messages, {
+      channel,
+      allowLonger,
+      conversational: converseTurn,
+    });
 
     if (
       !reply &&

@@ -12,7 +12,7 @@ import {
   isSokoniConversation,
 } from "../src/services/ai-tools.js";
 import { offTopicRedirect } from "../src/services/ai-prompts.js";
-import { enforceReplyBrevity } from "../src/services/ai-agent.js";
+import { enforceReplyBrevity, runAgentTurn } from "../src/services/ai-agent.js";
 
 function ok(label) {
   console.log(`✓ ${label}`);
@@ -21,6 +21,13 @@ function ok(label) {
 assert.equal(isGreetingIntent("hello"), true);
 assert.equal(isShoppingIntent("hello"), false);
 ok("greeting is conversational, not shopping");
+
+assert.equal(isGreetingIntent("how are you"), true);
+assert.equal(isGreetingIntent("How are you?"), true);
+assert.equal(isShoppingIntent("how are you"), false);
+assert.equal(isGuideIntent("how are you"), false);
+assert.equal(isSokoniConversation("how are you"), true);
+ok('"how are you" is small talk, not a product hunt');
 
 assert.equal(isSupportIntent("I need to speak to support"), true);
 assert.equal(isShoppingIntent("I need to speak to support"), false);
@@ -43,7 +50,9 @@ ok("off-topic vs escrow scope");
 
 assert.equal(isShoppingIntent("Electronics under 10000"), true);
 assert.equal(isShoppingIntent("denim"), true);
-ok("product hunts stay shopping");
+assert.equal(isShoppingIntent("thanks"), false);
+assert.equal(isShoppingIntent("i'm fine"), false);
+ok("product hunts stay shopping; fillers do not");
 
 const redirect = offTopicRedirect("web");
 assert.match(redirect, /Sokoni/i);
@@ -57,5 +66,16 @@ const longChat = enforceReplyBrevity(
 );
 assert.ok(longChat && longChat.split(/\s+/).length <= 110);
 ok("conversational brevity allows longer web replies");
+
+const howAreYou = await runAgentTurn({
+  channel: "web",
+  sessionKey: "smoke-chat",
+  userMessage: "how are you",
+  persist: false,
+});
+assert.ok(!(howAreYou.products || []).length);
+assert.doesNotMatch(String(howAreYou.reply || ""), /Found \d+|live match|KES \d/i);
+assert.match(String(howAreYou.reply || ""), /poa|Sokoni|Plug|ready|chat/i);
+ok('"how are you" reply chats — no product suggestions');
 
 console.log("\nAll Ask AI conversation smoke checks passed.");
