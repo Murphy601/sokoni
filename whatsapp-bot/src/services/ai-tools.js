@@ -8,6 +8,7 @@ import { buildPublicTrackingPayload } from "./shipments.js";
 import { checkoutMeta } from "./prepaid-checkout.js";
 import { normalizeShopperQuery, isShopperFillerOnly } from "./shopper-language.js";
 import { browseTaxonomyForAi, matchBrowseFromText, priceTierMaxKes } from "./browse-menu.js";
+import { isProductAvailable } from "./product-availability.js";
 import { config } from "../config.js";
 import {
   howItWorksMessage,
@@ -280,6 +281,8 @@ async function toolSearchProducts({
     }
   }
 
+  products = products.filter((p) => isProductAvailable(p));
+
   return {
     tool: "search_products",
     ok: true,
@@ -324,7 +327,9 @@ async function toolBrowseProducts({
   }
 
   // Prefer rated items when browsing a whole aisle
-  products = [...products].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  products = [...products]
+    .filter((p) => isProductAvailable(p))
+    .sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
   return {
     tool: "browse_products",
@@ -380,7 +385,9 @@ async function toolBrowseTaxonomy({ focusCategory = null } = {}) {
 
 async function toolGetProduct({ productId }) {
   const p = await getProductById(productId);
-  if (!p) return { tool: "get_product", ok: false, error: "not_found" };
+  if (!p || !isProductAvailable(p)) {
+    return { tool: "get_product", ok: false, error: "not_found" };
+  }
   return { tool: "get_product", ok: true, product: publicProductSummary(p) };
 }
 
