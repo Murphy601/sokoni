@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Log in — Sokoni Mall</title>
-<meta name="description" content="Log in to your Sokoni Mall account to see purchases, saved items, and messages." />
+<title>Sokoni Mall — Buy, sell &amp; discover across Kenya</title>
+<meta name="description" content="Kenya's WhatsApp marketplace. Browse rare finds, ask Sokoni AI, then log in or create a free account." />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -33,29 +33,89 @@
 <link rel="stylesheet" href="assets/css/styles.css" />
 <link rel="stylesheet" href="assets/css/depop-shell.css" />
 <link rel="stylesheet" href="assets/css/depop-surfaces.css" />
+<link rel="stylesheet" href="assets/css/auth-landing.css" />
 </head>
-<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="profile">
-  <div id="sokoni-shell-header"></div>
+<body class="font-sans antialiased auth-landing has-depop-shell text-white" data-shell-page="profile">
+  <header class="auth-landing-header" aria-label="Sokoni Mall">
+    <a href="index.html" class="depop-logo">SOKONI<span class="depop-logo-dot">.</span></a>
+    <nav class="auth-landing-nav" aria-label="Account">
+      <button type="button" class="auth-nav-link" data-auth-open="ask">✦ ASK AI</button>
+      <button type="button" class="auth-nav-link auth-nav-outline" data-auth-open="login">Log in</button>
+      <button type="button" class="auth-nav-link auth-nav-cta" data-auth-open="signup">Create Account</button>
+    </nav>
+  </header>
 
-  <main class="depop-main-content max-w-md mx-auto w-full px-5 py-8 flex-1">
-    <section class="depop-card p-6 space-y-4">
-      <p class="depop-label">Welcome back</p>
-      <h1 class="font-display text-3xl font-bold tracking-tight text-white">Log in</h1>
-      <p class="text-sm text-zinc-400">
-        Use the email you signed up with. New here?
-        <a href="signup.html" class="text-[#25D366] font-semibold hover:underline">Create a free account</a>.
+  <main>
+    <section class="auth-hero" aria-label="Welcome">
+      <div class="auth-hero-copy">
+        <p class="auth-hero-kicker">WhatsApp marketplace · Kenya</p>
+        <h1 class="auth-hero-title">Buy, sell &amp; discover rare finds across Kenya.</h1>
+        <p class="auth-hero-lead">
+          Streetwear, thrift, tech, and local makers — prepaid with M-Pesa escrow, chat on WhatsApp.
+        </p>
+        <div class="auth-hero-actions">
+          <button type="button" class="depop-btn-accent min-h-[48px] px-6" data-auth-open="signup">Create free account</button>
+          <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="ask">Ask Sokoni AI ✦</button>
+          <a href="index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center">Browse shop</a>
+        </div>
+      </div>
+      <div class="auth-hero-visual" aria-hidden="true">
+        <ul class="auth-carousel">
+          <li class="is-active"><img src="assets/images/products/fa-001.jpg" alt="" width="800" height="800" /></li>
+          <li><img src="assets/images/products/fa-002.jpg" alt="" width="800" height="800" /></li>
+          <li><img src="assets/images/products/ap-001.jpg" alt="" width="800" height="800" /></li>
+          <li><img src="assets/images/products/bp-001.jpg" alt="" width="800" height="800" /></li>
+          <li><img src="assets/images/products/co-001.jpg" alt="" width="800" height="800" /></li>
+        </ul>
+        <div class="auth-carousel-fade"></div>
+      </div>
+    </section>
+
+    <section class="auth-trending" aria-labelledby="auth-trending-title">
+      <div class="auth-trending-head">
+        <h2 id="auth-trending-title">Trending drops</h2>
+        <a href="index.html">See all →</a>
+      </div>
+      <div id="auth-trending-rail" class="auth-trending-rail" role="list">
+        <p class="text-sm text-zinc-500 px-1">Loading drops…</p>
+      </div>
+    </section>
+
+    <aside class="auth-ai-banner">
+      <div>
+        <h2>Looking for a specific fit?</h2>
+        <p>Ask Sokoni AI to hunt sneakers, jackets, or tech — countrywide, in seconds.</p>
+      </div>
+      <button type="button" class="depop-btn-accent min-h-[48px] px-5 shrink-0" data-auth-open="ask">Try ASK AI ✦</button>
+    </aside>
+  </main>
+
+  <!-- Centered modals -->
+  <div id="auth-modal-root" class="auth-modal-root" aria-hidden="true">
+    <button type="button" class="auth-modal-backdrop" data-auth-close aria-label="Close"></button>
+
+    <!-- LOG IN -->
+    <div id="auth-panel-login" class="auth-modal-panel" role="dialog" aria-modal="true" aria-labelledby="auth-login-title" hidden>
+      <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">×</button>
+      <p class="auth-modal-label">Welcome back</p>
+      <h2 id="auth-login-title" class="auth-modal-title">Log in to Sokoni</h2>
+      <p class="text-sm text-zinc-400 mb-4">
+        Use the email you signed up with.
       </p>
 
       <form id="account-login-form" class="space-y-3" novalidate>
         <label class="block text-xs font-medium text-zinc-300">
           Email
           <input name="email" type="email" required autocomplete="email" placeholder="you@email.com"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
         </label>
         <label class="block text-xs font-medium text-zinc-300">
           Password
-          <input name="password" type="password" required autocomplete="current-password" minlength="8" placeholder="Your password"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          <span class="auth-pw-wrap block">
+            <input id="login-password" name="password" type="password" required autocomplete="current-password" minlength="8" placeholder="Your password"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+            <button type="button" class="auth-pw-toggle" data-pw-toggle="login-password" aria-pressed="false">Show</button>
+          </span>
         </label>
         <label class="flex items-center gap-2 text-sm text-zinc-300 min-h-[44px]">
           <input name="rememberMe" type="checkbox" value="1" class="rounded border-zinc-600" />
@@ -67,22 +127,22 @@
         </button>
       </form>
 
-      <p class="text-sm text-zinc-500 text-center">
+      <p class="text-sm text-zinc-500 text-center mt-3">
         <a href="forgot-password.html" class="hover:text-white underline-offset-2 hover:underline">Forgot password?</a>
       </p>
 
-      <div class="border-t border-zinc-800 pt-4 space-y-3">
+      <div class="border-t border-zinc-800 pt-4 mt-4 space-y-3">
         <p class="text-sm font-semibold text-white">Or continue with WhatsApp</p>
         <p class="text-xs text-zinc-400">Same OTP as buyer verify — signs you into the account linked to that number.</p>
         <label class="block text-xs font-medium text-zinc-300">
           WhatsApp number
           <input id="account-wa-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
         </label>
         <label class="block text-xs font-medium text-zinc-300">
           Code
           <input id="account-wa-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits"
-                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
         </label>
         <div class="flex flex-wrap gap-2">
           <button type="button" id="account-wa-send-btn" class="depop-btn-ghost">Send code</button>
@@ -90,16 +150,106 @@
         </div>
         <p id="account-wa-status" class="text-xs text-zinc-400" role="status"></p>
       </div>
-    </section>
-  </main>
+
+      <p class="text-sm text-zinc-400 text-center mt-4">
+        New to Sokoni?
+        <button type="button" class="text-[#25D366] font-semibold hover:underline" data-auth-open="signup">Create an account</button>
+      </p>
+    </div>
+
+    <!-- CREATE ACCOUNT -->
+    <div id="auth-panel-signup" class="auth-modal-panel" role="dialog" aria-modal="true" aria-labelledby="auth-signup-title" hidden>
+      <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">×</button>
+      <p class="auth-modal-label">Free account</p>
+      <h2 id="auth-signup-title" class="auth-modal-title">Join Sokoni</h2>
+
+      <div id="auth-role-toggle" class="auth-role-toggle" role="tablist" aria-label="Account type">
+        <button type="button" class="is-active" data-role="buyer" role="tab" aria-selected="true">Buyer</button>
+        <button type="button" data-role="seller" role="tab" aria-selected="false">Seller / Store</button>
+      </div>
+
+      <div id="auth-signup-seller-note" class="text-sm text-zinc-300 mb-3 space-y-2" hidden>
+        <p>Sellers list on WhatsApp with prepaid escrow. Open the sell page to start — same account email works after you list.</p>
+        <a href="suppliers/list.html" class="depop-btn-accent inline-flex min-h-[44px] px-4">Start selling →</a>
+      </div>
+
+      <div id="auth-signup-buyer-fields">
+        <form id="account-signup-form" class="space-y-3" novalidate>
+          <label class="block text-xs font-medium text-zinc-300">
+            Name
+            <input name="displayName" type="text" autocomplete="name" maxlength="120" placeholder="Your name"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <label class="block text-xs font-medium text-zinc-300">
+            Email
+            <input name="email" type="email" required autocomplete="email" placeholder="you@email.com"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <label class="block text-xs font-medium text-zinc-300">
+            Password
+            <span class="auth-pw-wrap block">
+              <input id="signup-password" name="password" type="password" required autocomplete="new-password" minlength="8" placeholder="At least 8 characters"
+                     class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+              <button type="button" class="auth-pw-toggle" data-pw-toggle="signup-password" aria-pressed="false">Show</button>
+            </span>
+          </label>
+          <label class="block text-xs font-medium text-zinc-300">
+            WhatsApp (optional)
+            <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <p class="text-xs text-zinc-500">Phone helps match prepaid orders and M-Pesa later.</p>
+          <p id="account-signup-form-status" class="text-sm text-zinc-400" role="status" aria-live="polite"></p>
+          <button type="submit" class="w-full min-h-[48px] rounded-full bg-[#25D366] text-[#1B1035] font-bold text-sm hover:opacity-90 transition">
+            Create free account
+          </button>
+        </form>
+        <p class="text-xs text-zinc-500 mt-3">By joining, you agree to Sokoni’s <a href="terms.html" class="underline hover:text-white">Terms</a>.</p>
+      </div>
+
+      <p class="text-sm text-zinc-400 text-center mt-4">
+        Already have an account?
+        <button type="button" class="text-[#25D366] font-semibold hover:underline" data-auth-open="login">Log in</button>
+      </p>
+    </div>
+
+    <!-- ASK AI -->
+    <div id="auth-panel-ask" class="auth-modal-panel auth-modal-wide" role="dialog" aria-modal="true" aria-labelledby="auth-ask-title" hidden>
+      <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">×</button>
+      <p class="auth-modal-label">Sokoni Plug</p>
+      <h2 id="auth-ask-title" class="auth-modal-title">
+        Sokoni AI ✦
+        <span class="auth-ask-status">Online</span>
+      </h2>
+      <p class="text-sm text-zinc-400 mb-1">Products, sellers, prepaid escrow, or order tracking — ask in plain language.</p>
+
+      <div class="auth-ask-chips" aria-label="Suggested prompts">
+        <button type="button" data-ask-chip="Find sneakers under KES 4,000">Find sneakers under KES 4,000</button>
+        <button type="button" data-ask-chip="Show top streetwear sellers on Sokoni">Top streetwear sellers</button>
+        <button type="button" data-ask-chip="How do I list my items and collect M-Pesa?">List &amp; collect M-Pesa</button>
+      </div>
+
+      <div id="auth-ask-log" class="auth-ask-log" aria-live="polite"></div>
+
+      <form id="auth-ask-form" class="flex gap-2">
+        <label for="auth-ask-input" class="sr-only">Ask anything</label>
+        <input id="auth-ask-input" type="text" autocomplete="off"
+               placeholder="Ask about products, sellers, or orders…"
+               class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-[#161616] px-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        <button type="submit" class="depop-btn-accent shrink-0 min-h-[48px] px-5">Ask</button>
+      </form>
+      <p class="text-xs text-zinc-500 mt-3 text-center">
+        Prefer full screen? <a href="ask.html" class="text-[#25D366] font-semibold hover:underline">Open Ask Plug</a>
+      </p>
+    </div>
+  </div>
 
   <div id="sokoni-shell-nav"></div>
   <script src="assets/js/shell-chrome.js"></script>
   <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/account-auth.js"></script>
   <script src="assets/js/account-gate.js"></script>
-
-  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="assets/js/auth-landing.js"></script>
   <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
 </body>
 </html>
