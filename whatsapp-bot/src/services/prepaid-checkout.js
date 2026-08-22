@@ -22,7 +22,7 @@ export function isDarajaConfigured() {
   return isDarajaReady();
 }
 
-/** STK can fire via Paystack charge or Daraja. */
+/** STK fires via Paystack Charge. Daraja only if PAYSTACK_ONLY=false. */
 export function isStkConfigured() {
   return resolveCollectRail(isDarajaReady()) !== "manual";
 }
@@ -75,8 +75,8 @@ export function formatPrepaidCheckoutPrompt(order) {
 }
 
 /**
- * Initiate M-Pesa STK — Paystack Charge when keyed, else Daraja.
- * Stores CheckoutRequestID (or Paystack reference) on the order for webhook match.
+ * Initiate M-Pesa STK — Paystack Charge. Does not fall back to Daraja.
+ * Stores Paystack reference on the order for webhook match.
  */
 export async function initiateMpesaCheckout(order, { phone } = {}) {
   if (!order?.id) {
@@ -129,15 +129,11 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
   if (rail === "paystack") {
     const charged = await initiatePaystackChargeForOrder(payOrder, { phone: payPhone, amountKes });
     if (charged.ok) return { ...charged, shippingKes };
-    if (isDarajaReady()) {
-      console.warn("[checkout] Paystack charge failed — falling back to Daraja:", charged.message);
-    } else {
-      updateOrderMeta(payOrder.id, {
-        paymentStatus: "failed",
-        lastPaymentError: charged.message,
-      });
-      return { ok: false, method: "stk_error", paymentRail: "paystack", message: charged.message };
-    }
+    updateOrderMeta(payOrder.id, {
+      paymentStatus: "failed",
+      lastPaymentError: charged.message,
+    });
+    return { ok: false, method: "stk_error", paymentRail: "paystack", message: charged.message };
   }
 
   try {
@@ -218,6 +214,7 @@ export function checkoutMeta() {
     stkAvailable: stkLive,
     paymentRail: rail,
     paystackConfigured: isPaystackCollectReady(),
+    paystackOnly: config.paystack?.only !== false,
     darajaIntegration: stkLive ? "stk_active" : "manual_fallback",
     escrow: true,
     autoConfirm: stkLive,

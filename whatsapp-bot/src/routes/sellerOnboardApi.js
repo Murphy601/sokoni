@@ -165,7 +165,9 @@ router.get("/withdraw", async (req, res) => {
 router.post("/withdraw", async (req, res) => {
   const { phone } = req.body || {};
   const result = await requestSellerWithdrawal(phone, sellerSessionFromReq(req));
-  if (result.error === "no_balance") return res.status(400).json(result);
+  if (result.error === "no_balance" || result.error === "paystack_failed" || result.error === "paystack_not_configured") {
+    return res.status(400).json(result);
+  }
   if (result.error === "withdrawal_pending") return res.status(409).json(result);
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);

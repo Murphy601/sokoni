@@ -245,6 +245,9 @@ app.get("/health", async (_req, res) => {
     dbError: db.ok ? null : db.reason,
     prepaidOnly: checkout.prepaidOnly,
     darajaConfigured: checkout.darajaConfigured,
+    paymentRail: checkout.paymentRail || null,
+    paystackConfigured: Boolean(checkout.paystackConfigured),
+    paystackOnly: checkout.paystackOnly !== false,
     b2c: b2cMeta(),
   });
 });

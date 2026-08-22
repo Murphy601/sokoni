@@ -11,6 +11,7 @@ import {
   MPESA_DAILY_LIMIT_KES,
   MPESA_PER_TX_LIMIT_KES,
   buyerChargeEmail,
+  isUsablePaystackSecret,
   parsePaystackChargeEvent,
   parsePaystackTransferEvent,
   paystackReference,
@@ -38,6 +39,14 @@ assert.equal(toPaystackChargePhone("0712345678"), "+254712345678");
 assert.equal(toPaystackChargePhone("712345678"), "+254712345678");
 assert.equal(buyerChargeEmail({ id: "SKN-1001" }), "skn1001@pay.sokonimall.com");
 assert.equal(buyerChargeEmail({ id: "SKN-1001", email: "buyer@example.com" }), "buyer@example.com");
+
+assert.equal(isUsablePaystackSecret("sk_live_abcdefghijklmnopqrstuvwxyz"), true);
+assert.equal(isUsablePaystackSecret("sk_test_abcdefghijklmnopqrstuvwxyz"), true);
+assert.equal(isUsablePaystackSecret("  sk_live_abcdefghijklmnopqrstuvwxyz  "), true);
+assert.equal(isUsablePaystackSecret("pk_live_abcdefghijklmnopqrstuvwxyz"), false);
+assert.equal(isUsablePaystackSecret("sk_live_..."), false);
+assert.equal(isUsablePaystackSecret("sk_live_short"), false);
+assert.equal(isUsablePaystackSecret(""), false);
 
 assert.deepEqual(splitMpesaTransferChunks(150_000), [150_000]);
 assert.deepEqual(splitMpesaTransferChunks(250_000), [250_000]);
@@ -110,6 +119,8 @@ assert.equal(parsePaystackChargeEvent({ event: "transfer.success", data: {} }).v
 const prepaid = read("src/services/prepaid-checkout.js");
 assert.match(prepaid, /initiatePaystackChargeForOrder/);
 assert.match(prepaid, /resolveCollectRail/);
+assert.doesNotMatch(prepaid, /falling back to Daraja/);
+assert.match(prepaid, /paymentRail: "paystack"/);
 
 const settlements = read("src/services/settlements.js");
 assert.match(settlements, /Lock ledger BEFORE the external API call/);
@@ -121,6 +132,11 @@ assert.match(settlements, /paystack_failed/);
 const withdraw = read("src/services/seller-withdrawals.js");
 assert.match(withdraw, /rail === "paystack"/);
 assert.match(withdraw, /initiateSettlementPaystack/);
+assert.match(withdraw, /error: "paystack_failed"/);
+assert.match(withdraw, /request.status = accepted > 0 \? "processing" : "failed"/);
+
+const onboardApi = read("src/routes/sellerOnboardApi.js");
+assert.match(onboardApi, /paystack_failed/);
 
 const payments = read("src/routes/paymentsApi.js");
 assert.match(payments, /handlePaystackWebhook/);
@@ -136,13 +152,19 @@ assert.match(security, /\/api\/webhooks\/paystack/);
 
 const envExample = read(".env.example");
 assert.match(envExample, /PAYSTACK_SECRET_KEY/);
-assert.match(envExample, /SELLER_PAYOUT_RAIL/);
-assert.match(envExample, /BUYER_PAY_RAIL/);
-assert.match(envExample, /PAYSTACK_COLLECT/);
+assert.match(envExample, /PAYSTACK_ONLY=true/);
+assert.match(envExample, /SELLER_PAYOUT_RAIL=paystack/);
+assert.match(envExample, /BUYER_PAY_RAIL=paystack/);
+assert.match(envExample, /PAYSTACK_COLLECT=true/);
 assert.match(envExample, /https:\/\/sokonimall.com\/checkout.html/);
 assert.match(envExample, /https:\/\/bot.sokonimall.com\/api\/webhooks\/paystack/);
 
 const checkoutApi = read("src/routes/checkoutApi.js");
 assert.match(checkoutApi, /by-reference/);
+
+const retain = readFileSync(path.join(root, "..", "scripts", "retain-order-for-withdraw-test.mjs"), "utf8");
+assert.match(retain, /SKN-1013/);
+assert.match(retain, /cancelledAt/);
+assert.match(retain, /withdrawals-only/);
 
 console.log("ok — Paystack payout helpers + wiring present");

@@ -13,8 +13,19 @@ const PAYSTACK_API = "https://api.paystack.co";
 export const MPESA_PER_TX_LIMIT_KES = 250_000;
 export const MPESA_DAILY_LIMIT_KES = 500_000;
 
+/** Reject placeholders, public keys, and truncated secrets. */
+export function isUsablePaystackSecret(raw) {
+  const key = String(raw || "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+  if (!key) return false;
+  if (key.includes("...") || key.includes("…")) return false;
+  if (/^pk_/i.test(key)) return false;
+  return /^sk_(live|test)_[A-Za-z0-9]{16,}$/.test(key);
+}
+
 export function isPaystackReady() {
-  return Boolean(String(config.paystack?.secretKey || "").trim());
+  return isUsablePaystackSecret(config.paystack?.secretKey);
 }
 
 export function isPaystackCollectReady() {
@@ -25,33 +36,37 @@ export function paystackMeta() {
   return {
     ready: isPaystackReady(),
     collectReady: isPaystackCollectReady(),
-    collectRail: config.paystack?.collectRail || "auto",
+    collectRail: config.paystack?.collectRail || "paystack",
     withdrawInstant: Boolean(config.paystack?.withdrawInstant && isPaystackReady()),
-    payoutRail: config.paystack?.payoutRail || "auto",
+    payoutRail: config.paystack?.payoutRail || "paystack",
+    only: config.paystack?.only !== false,
     webhookUrl: config.paystack?.webhookUrl || null,
     hasPublicKey: Boolean(config.paystack?.publicKey),
   };
 }
 
-/** auto → Paystack charge when keyed, else Daraja STK, else WhatsApp *paid*. */
+function darajaAllowed() {
+  return config.paystack?.only === false;
+}
+
+/** paystack (default) — Daraja only if PAYSTACK_ONLY=false. */
 export function resolveCollectRail(darajaReady = false) {
-  const preferred = config.paystack?.collectRail || "auto";
+  const preferred = config.paystack?.collectRail || "paystack";
   const paystackOn = isPaystackCollectReady();
+  const darajaOn = Boolean(darajaReady && darajaAllowed());
   if (preferred === "manual") return "manual";
-  if (preferred === "paystack") return paystackOn ? "paystack" : darajaReady ? "daraja" : "manual";
-  if (preferred === "daraja") return darajaReady ? "daraja" : paystackOn ? "paystack" : "manual";
+  if (preferred === "paystack") return paystackOn ? "paystack" : darajaOn ? "daraja" : "manual";
+  if (preferred === "daraja") return darajaOn ? "daraja" : paystackOn ? "paystack" : "manual";
   if (paystackOn) return "paystack";
-  if (darajaReady) return "daraja";
+  if (darajaOn) return "daraja";
   return "manual";
 }
 
-/**
- * auto → Paystack when keyed (no own B2C shortcode needed), else Daraja B2C, else manual.
- */
+/** paystack (default) — B2C only if PAYSTACK_ONLY=false. */
 export function resolvePayoutRail(b2cReady = false) {
-  const preferred = config.paystack?.payoutRail || "auto";
+  const preferred = config.paystack?.payoutRail || "paystack";
   const paystackOn = isPaystackReady() && config.paystack?.withdrawInstant !== false;
-  const b2cOn = Boolean(b2cReady && config.mpesa?.withdrawInstantB2c !== false);
+  const b2cOn = Boolean(b2cReady && config.mpesa?.withdrawInstantB2c !== false && darajaAllowed());
 
   if (preferred === "manual") return "manual";
   if (preferred === "paystack") return paystackOn ? "paystack" : b2cOn ? "b2c" : "manual";
@@ -154,8 +169,12 @@ async function paystackRequest(method, pathname, body) {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.status === false) {
-    const err = new Error(json.message || `Paystack HTTP ${res.status}`);
-    err.code = "paystack_http";
+    const raw = String(json.message || `Paystack HTTP ${res.status}`);
+    const message = /invalid key/i.test(raw)
+      ? "Paystack rejected PAYSTACK_SECRET_KEY (Invalid key). Paste the Live Secret Key that starts with sk_live_ — not pk_live_ — then pm2 restart sokoni-bot."
+      : raw;
+    const err = new Error(message);
+    err.code = /invalid key/i.test(raw) ? "paystack_invalid_key" : "paystack_http";
     err.status = res.status;
     err.paystack = json;
     throw err;
