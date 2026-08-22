@@ -1,9 +1,8 @@
 /**
- * Paystack Transfers — seller payouts to Kenyan M-Pesa.
- * Buyer checkout stays on Daraja STK; this rail only sends Ready balances out.
+ * Paystack — buyer M-Pesa STK (Charge API) + seller M-Pesa payouts (Transfers).
  *
+ * @see https://paystack.com/docs/payments/payment-channels/
  * @see https://paystack.com/docs/transfers/single-transfers/
- * @see https://docs-v2.paystack.com/docs/transfers/creating-transfer-recipients/
  */
 import crypto from "node:crypto";
 import { config } from "../config.js";
@@ -18,14 +17,32 @@ export function isPaystackReady() {
   return Boolean(String(config.paystack?.secretKey || "").trim());
 }
 
+export function isPaystackCollectReady() {
+  return isPaystackReady() && config.paystack?.collect !== false;
+}
+
 export function paystackMeta() {
   return {
     ready: isPaystackReady(),
+    collectReady: isPaystackCollectReady(),
+    collectRail: config.paystack?.collectRail || "auto",
     withdrawInstant: Boolean(config.paystack?.withdrawInstant && isPaystackReady()),
     payoutRail: config.paystack?.payoutRail || "auto",
     webhookUrl: config.paystack?.webhookUrl || null,
     hasPublicKey: Boolean(config.paystack?.publicKey),
   };
+}
+
+/** auto → Paystack charge when keyed, else Daraja STK, else WhatsApp *paid*. */
+export function resolveCollectRail(darajaReady = false) {
+  const preferred = config.paystack?.collectRail || "auto";
+  const paystackOn = isPaystackCollectReady();
+  if (preferred === "manual") return "manual";
+  if (preferred === "paystack") return paystackOn ? "paystack" : darajaReady ? "daraja" : "manual";
+  if (preferred === "daraja") return darajaReady ? "daraja" : paystackOn ? "paystack" : "manual";
+  if (paystackOn) return "paystack";
+  if (darajaReady) return "daraja";
+  return "manual";
 }
 
 /**
@@ -44,7 +61,28 @@ export function resolvePayoutRail(b2cReady = false) {
   return "manual";
 }
 
-/** Paystack Kenya mobile_money docs use 07xxxxxxxx (local), not 254. */
+/** Charge API wants +2547XXXXXXXX. Transfers recipients use 07xxxxxxxx. */
+export function toPaystackChargePhone(phone) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+  if (d.length === 9) d = `254${d}`;
+  if (!/^254[17]\d{8}$/.test(d)) return "";
+  return `+${d}`;
+}
+
+export function buyerChargeEmail(order) {
+  const fromOrder = String(order?.email || order?.buyerEmail || "").trim();
+  if (fromOrder.includes("@")) return fromOrder.slice(0, 80);
+  const configured = String(config.paystack?.chargeEmail || "").trim();
+  if (configured.includes("@")) return configured;
+  const slug = String(order?.id || "buyer")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 24) || "buyer";
+  return `${slug}@pay.sokonimall.com`;
+}
+
+/** Paystack Kenya mobile_money recipients use 07xxxxxxxx (local), not 254. */
 export function toPaystackMpesaAccount(phone) {
   let d = String(phone || "").replace(/\D/g, "");
   if (d.startsWith("254") && d.length >= 12) d = `0${d.slice(3)}`;
@@ -212,6 +250,93 @@ export async function initiateKesTransfer({
       paystack: err.paystack || null,
     };
   }
+}
+
+export async function initiatePaystackMpesaCharge({
+  email,
+  amountKes,
+  phone,
+  reference,
+  metadata = {},
+} = {}) {
+  const amount = Math.round(Number(amountKes) || 0);
+  const chargePhone = toPaystackChargePhone(phone);
+  if (amount <= 0) {
+    return { ok: false, error: "invalid_amount", message: "Charge amount must be greater than zero." };
+  }
+  if (!chargePhone) {
+    return { ok: false, error: "invalid_mpesa", message: "Enter a valid M-Pesa number (07xx or 2547xx)." };
+  }
+  const ref = String(reference || paystackReference({ orderId: metadata.orderId || "charge" }))
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "")
+    .slice(0, 80);
+  try {
+    const response = await paystackRequest("POST", "/charge", {
+      email: String(email || buyerChargeEmail({ id: metadata.orderId })).slice(0, 80),
+      amount: amount * 100,
+      currency: "KES",
+      reference: ref,
+      mobile_money: {
+        phone: chargePhone,
+        provider: "mpesa",
+      },
+      metadata: {
+        platform: "sokoni",
+        ...metadata,
+      },
+    });
+    const data = response?.data || {};
+    const status = String(data.status || "").toLowerCase();
+    const accepted = ["pay_offline", "pending", "success", "ongoing"].includes(status) || response.status === true;
+    return {
+      ok: accepted,
+      status: status || (accepted ? "pay_offline" : "failed"),
+      reference: data.reference || ref,
+      displayText: data.display_text || response.message || null,
+      amountKes: amount,
+      phone: chargePhone,
+      data,
+      message: response.message || null,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err.code || "paystack_http",
+      message: err.message || "Paystack charge failed.",
+      paystack: err.paystack || null,
+    };
+  }
+}
+
+export function parsePaystackChargeEvent(body) {
+  const event = String(body?.event || "").trim().toLowerCase();
+  const data = body?.data || {};
+  if (!event.startsWith("charge.")) {
+    return { valid: false, ignored: true, event };
+  }
+  const meta = data.metadata && typeof data.metadata === "object" ? data.metadata : {};
+  const amountKes = Number.isFinite(Number(data.amount))
+    ? Math.round(Number(data.amount) / 100)
+    : 0;
+  return {
+    valid: true,
+    event,
+    success: event === "charge.success" || String(data.status || "").toLowerCase() === "success",
+    failed: event === "charge.failed" || String(data.status || "").toLowerCase() === "failed",
+    reference: data.reference || null,
+    amountKes,
+    currency: data.currency || "KES",
+    phone:
+      data.authorization?.mobile_money_number ||
+      data.authorization?.account_name ||
+      data.customer?.phone ||
+      null,
+    receipt: data.gateway_response || data.reference || null,
+    orderId: meta.orderId || meta.order_id || null,
+    status: data.status || null,
+    data,
+  };
 }
 
 export function parsePaystackTransferEvent(body) {

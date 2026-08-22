@@ -329,13 +329,14 @@ export function listAllOrders() {
 export function findOrderByCheckoutRequestId(checkoutRequestId) {
   if (!checkoutRequestId) return null;
   load();
-  const fromOrders =
-    Object.values(store.orders).find((o) => o.checkoutRequestId === checkoutRequestId) || null;
+  const ref = String(checkoutRequestId);
+  const match = (o) =>
+    o.checkoutRequestId === ref ||
+    o.paystackReference === ref ||
+    o.merchantRequestId === ref;
+  const fromOrders = Object.values(store.orders).find(match) || null;
   if (fromOrders) return fromOrders;
-  return (
-    Object.values(store.cartOrders || {}).find((o) => o.checkoutRequestId === checkoutRequestId) ||
-    null
-  );
+  return Object.values(store.cartOrders || {}).find(match) || null;
 }
 
 export function findAwaitingPaymentOrderForCustomer(customerKey, phone = "") {

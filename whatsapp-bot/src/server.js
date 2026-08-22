@@ -410,7 +410,7 @@ function startPayoutScheduler() {
   const rail = resolvePayoutRail(b2c.ready);
   console.log(
     `✓ Seller payout scheduler enabled (hourly) · rail ${rail}` +
-      `${paystack.ready ? " · Paystack transfers" : ""}` +
+      `${paystack.ready ? ` · Paystack ${paystack.collectReady ? "C2B+transfers" : "transfers"}` : ""}` +
       `${b2c.ready ? ` · B2C ${b2c.auto ? "auto" : "manual (#payb2c)"}` : " · B2C not configured"}`
   );
 }

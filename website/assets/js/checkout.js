@@ -284,9 +284,13 @@
     pollCount = 0;
   }
 
+  function stkLive(meta) {
+    return Boolean(meta?.stkAvailable ?? meta?.darajaConfigured ?? meta?.paystackConfigured);
+  }
+
   function renderReadiness(meta) {
     if (!readinessEl || !meta) return;
-    if (meta.darajaConfigured) {
+    if (stkLive(meta)) {
       readinessEl.textContent =
         "M-Pesa STK is live — tap Pay, enter PIN on your phone. Payment confirms automatically.";
     } else {
@@ -358,11 +362,11 @@
       statusEl.textContent = "✅ Already paid — escrow held. Your order is being processed.";
       payBlock.classList.add("hidden");
       tillBlock?.classList.add("hidden");
-    } else if (processing && meta.darajaConfigured) {
+    } else if (processing && stkLive(meta)) {
       statusEl.textContent = "📱 STK sent — enter your M-Pesa PIN. Waiting for confirmation…";
       payBlock.classList.remove("hidden");
       if (payBtn && !payBusy) payBtn.textContent = "Resend STK";
-    } else if (meta.darajaConfigured) {
+    } else if (stkLive(meta)) {
       statusEl.textContent =
         "💳 Set delivery above, then tap Pay — M-Pesa STK uses item + delivery fee.";
       payBlock.classList.remove("hidden");

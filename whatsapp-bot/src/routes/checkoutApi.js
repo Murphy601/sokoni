@@ -21,7 +21,7 @@ router.get("/meta", (_req, res) => {
   res.json({
     ...checkoutMeta(),
     hybridLogistics: true,
-    paymentRail: "daraja_mpesa",
+    paymentRail: checkoutMeta().paymentRail || "mpesa_stk",
   });
 });
 
@@ -43,7 +43,7 @@ router.get("/locations/towns", (req, res) => {
   res.json({ success: true, county, towns: listTownsForCounty(county) });
 });
 
-/** POST /api/checkout/calculate-shipping — hybrid fee engine (no Paystack). */
+/** POST /api/checkout/calculate-shipping — hybrid fee engine (totals only). */
 router.post("/calculate-shipping", async (req, res) => {
   try {
     const result = await calculateShipping(req.body || {});
@@ -54,7 +54,7 @@ router.post("/calculate-shipping", async (req, res) => {
   }
 });
 
-/** POST /api/checkout/:orderId/apply-shipping — mutate order shipping before Daraja STK. */
+/** POST /api/checkout/:orderId/apply-shipping — mutate order shipping before M-Pesa STK. */
 router.post("/:orderId/apply-shipping", async (req, res) => {
   try {
     const result = await applyShippingToOrder(req.params.orderId, {
@@ -153,7 +153,7 @@ router.get("/:orderId", (req, res) => {
   });
 });
 
-/** POST /api/checkout/:orderId/stk — Daraja STK push (amount = item + shipping). */
+/** POST /api/checkout/:orderId/stk — M-Pesa STK (Paystack Charge, Daraja fallback). */
 router.post("/:orderId/stk", async (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {

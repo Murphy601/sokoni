@@ -10,10 +10,13 @@ import { fileURLToPath } from "node:url";
 import {
   MPESA_DAILY_LIMIT_KES,
   MPESA_PER_TX_LIMIT_KES,
+  buyerChargeEmail,
+  parsePaystackChargeEvent,
   parsePaystackTransferEvent,
   paystackReference,
   remainingMpesaDailyKes,
   splitMpesaTransferChunks,
+  toPaystackChargePhone,
   toPaystackMpesaAccount,
   verifyPaystackSignature,
 } from "../src/services/paystack-transfers.js";
@@ -30,6 +33,11 @@ assert.equal(toPaystackMpesaAccount("0712345678"), "0712345678");
 assert.equal(toPaystackMpesaAccount("712345678"), "0712345678");
 assert.equal(toPaystackMpesaAccount("254112345678"), "0112345678");
 assert.equal(toPaystackMpesaAccount("not-a-phone"), "");
+assert.equal(toPaystackChargePhone("254712345678"), "+254712345678");
+assert.equal(toPaystackChargePhone("0712345678"), "+254712345678");
+assert.equal(toPaystackChargePhone("712345678"), "+254712345678");
+assert.equal(buyerChargeEmail({ id: "SKN-1001" }), "skn1001@pay.sokonimall.com");
+assert.equal(buyerChargeEmail({ id: "SKN-1001", email: "buyer@example.com" }), "buyer@example.com");
 
 assert.deepEqual(splitMpesaTransferChunks(150_000), [150_000]);
 assert.deepEqual(splitMpesaTransferChunks(250_000), [250_000]);
@@ -82,6 +90,27 @@ assert.equal(reversed.reversed, true);
 const ignored = parsePaystackTransferEvent({ event: "charge.success", data: {} });
 assert.equal(ignored.valid, false);
 
+const chargeOk = parsePaystackChargeEvent({
+  event: "charge.success",
+  data: {
+    amount: 45000,
+    reference: "pay-skn1001-ab",
+    status: "success",
+    gateway_response: "Approved",
+    metadata: { orderId: "SKN-1001" },
+    customer: { phone: "+254712345678" },
+  },
+});
+assert.equal(chargeOk.valid, true);
+assert.equal(chargeOk.success, true);
+assert.equal(chargeOk.amountKes, 450);
+assert.equal(chargeOk.orderId, "SKN-1001");
+assert.equal(parsePaystackChargeEvent({ event: "transfer.success", data: {} }).valid, false);
+
+const prepaid = read("src/services/prepaid-checkout.js");
+assert.match(prepaid, /initiatePaystackChargeForOrder/);
+assert.match(prepaid, /resolveCollectRail/);
+
 const settlements = read("src/services/settlements.js");
 assert.match(settlements, /Lock ledger BEFORE the external API call/);
 assert.match(settlements, /export async function initiateSettlementPaystack/);
@@ -96,6 +125,8 @@ assert.match(withdraw, /initiateSettlementPaystack/);
 const payments = read("src/routes/paymentsApi.js");
 assert.match(payments, /handlePaystackWebhook/);
 assert.match(payments, /x-paystack-signature/);
+assert.match(payments, /parsePaystackChargeEvent/);
+assert.match(payments, /resolveOrderFromPaystackCharge/);
 
 const server = read("src/server.js");
 assert.match(server, /\/api\/webhooks\/paystack/);
@@ -106,5 +137,7 @@ assert.match(security, /\/api\/webhooks\/paystack/);
 const envExample = read(".env.example");
 assert.match(envExample, /PAYSTACK_SECRET_KEY/);
 assert.match(envExample, /SELLER_PAYOUT_RAIL/);
+assert.match(envExample, /BUYER_PAY_RAIL/);
+assert.match(envExample, /PAYSTACK_COLLECT/);
 
 console.log("ok — Paystack payout helpers + wiring present");

@@ -82,9 +82,13 @@ function main() {
   assert("meta escrow", meta.escrow === true);
   assert("meta methods", Array.isArray(meta.paymentMethods) && meta.paymentMethods.length >= 1);
   assert("daraja helpers agree", isDarajaConfigured() === isDarajaReady());
-  if (!isDarajaReady()) {
+  if (!isDarajaReady() && !meta.paystackConfigured) {
     assert("manual fallback when unset", meta.darajaIntegration === "manual_fallback");
-    assert("till method when unset", meta.paymentMethods.includes("manual_till"));
+    assert("whatsapp paid when unset", meta.paymentMethods.includes("whatsapp_paid"));
+  }
+  if (meta.paystackConfigured || isDarajaReady()) {
+    assert("stk live when a rail is keyed", meta.stkAvailable === true);
+    assert("stk method when live", meta.paymentMethods.includes("mpesa_stk"));
   }
 
   const labelUrl = labelPageUrlForOrder("SK-1042");
