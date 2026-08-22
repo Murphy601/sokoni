@@ -25,7 +25,8 @@ ENV_FILE="${ENV_FILE:-$REPO/whatsapp-bot/.env}"
 CERT_DEFAULT="$REPO/whatsapp-bot/certs/ProductionCertificate.cer"
 CERT_PATH="${MPESA_CERT_PATH:-$CERT_DEFAULT}"
 INITIATOR_NAME="${MPESA_INITIATOR_NAME:-DavidMuiruri}"
-B2C_SHORT="${MPESA_B2C_SHORTCODE:-3439153}"
+# Do not default to Buy Goods 3439153 — that shortcode cannot B2C.
+B2C_SHORT="${MPESA_B2C_SHORTCODE:-}"
 PASSWORD="${MPESA_INITIATOR_PASSWORD:-}"
 PREMADE_CRED="${MPESA_SECURITY_CREDENTIAL:-}"
 
@@ -128,10 +129,21 @@ if [ "${#CRED}" -lt 80 ]; then
   exit 1
 fi
 
+if [ "$B2C_SHORT" = "3439153" ]; then
+  echo "ERROR: MPESA_B2C_SHORTCODE=3439153 is Buy Goods / C2B-only and cannot B2C." >&2
+  echo "  Apply for a B2C/Bulk/One Account shortcode, then:" >&2
+  echo "  export MPESA_B2C_SHORTCODE='YOUR_B2C_SHORTCODE'" >&2
+  exit 1
+fi
+
 upsert MPESA_INITIATOR_NAME "$INITIATOR_NAME"
 upsert MPESA_SECURITY_CREDENTIAL "$CRED"
 upsert MPESA_CERT_PATH "$CERT_PATH"
-upsert MPESA_B2C_SHORTCODE "$B2C_SHORT"
+if [ -n "$B2C_SHORT" ]; then
+  upsert MPESA_B2C_SHORTCODE "$B2C_SHORT"
+else
+  echo "WARN: MPESA_B2C_SHORTCODE not set — initiator saved, but B2C stays disabled until you set a B2C/One Account shortcode."
+fi
 upsert MPESA_B2C_COMMAND_ID "${MPESA_B2C_COMMAND_ID:-BusinessPayment}"
 upsert MPESA_B2C_RESULT_URL "${MPESA_B2C_RESULT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/result}"
 upsert MPESA_B2C_TIMEOUT_URL "${MPESA_B2C_TIMEOUT_URL:-https://bot.sokonimall.com/api/payments/daraja/b2c/timeout}"
@@ -143,7 +155,7 @@ mv "${ENV_FILE}.tmp" "$ENV_FILE"
 echo "==> B2C initiator written to $ENV_FILE"
 echo "    Initiator: $INITIATOR_NAME"
 echo "    SecurityCredential len=${#CRED}"
-echo "    B2C shortcode: $B2C_SHORT · URL: /mpesa/b2c/v1/paymentrequest"
+echo "    B2C shortcode: ${B2C_SHORT:-NOT SET} · URL: /mpesa/b2c/v1/paymentrequest"
 
 if [ "${SKIP_RESTART:-}" != "1" ] && command -v pm2 >/dev/null 2>&1; then
   echo "==> Restarting sokoni-bot (env from whatsapp-bot/.env, not this shell)"

@@ -9,17 +9,33 @@ import { config } from "../config.js";
 const SANDBOX_BASE = "https://sandbox.safaricom.co.ke";
 const PRODUCTION_BASE = "https://api.safaricom.co.ke";
 
-let tokenCache = { token: null, expiresAt: 0 };
+let tokenCache = { token: null, expiresAt: 0, purpose: "" };
 let cachedSecurityCredential = null;
+
+/** Known Buy Goods / C2B-only shortcodes — cannot be B2C PartyA. */
+export const C2B_ONLY_SHORTCODES = new Set(["3439153"]);
 
 function baseUrl() {
   return config.mpesa.env === "production" ? PRODUCTION_BASE : SANDBOX_BASE;
 }
 
-/** OAuth only — shared by STK and B2C. */
+/** OAuth only — STK app keys (buyer pay). */
 export function isDarajaOAuthReady() {
   const m = config.mpesa;
   return Boolean(m.consumerKey && m.consumerSecret);
+}
+
+/** OAuth for B2C — optional dedicated B2C app keys, else STK app keys. */
+export function isB2COauthReady() {
+  const m = config.mpesa;
+  return Boolean(m.b2cConsumerKey && m.b2cConsumerSecret);
+}
+
+/** True when shortcode is a dedicated B2C / Bulk / One Account code (not C2B Buy Goods). */
+export function isUsableB2cShortcode(code) {
+  const c = String(code || "").trim();
+  if (!c || !/^\d{5,8}$/.test(c)) return false;
+  return !C2B_ONLY_SHORTCODES.has(c);
 }
 
 /** STK Push ready (buyer pay). */
@@ -81,29 +97,36 @@ function resolveSecurityCredential() {
   return "";
 }
 
-/** B2C seller payout ready. */
+/** B2C seller payout ready — needs a real B2C shortcode (not Buy Goods 3439153). */
 export function isB2CReady() {
   const m = config.mpesa;
   const credential = resolveSecurityCredential();
   return Boolean(
-    isDarajaOAuthReady() &&
+    isB2COauthReady() &&
       m.initiatorName &&
       credential &&
-      m.b2cShortcode &&
+      isUsableB2cShortcode(m.b2cShortcode) &&
       m.b2cResultUrl &&
       m.b2cTimeoutUrl
   );
 }
 
 export function b2cMeta() {
+  const m = config.mpesa;
+  const blockedC2b = C2B_ONLY_SHORTCODES.has(String(m.b2cShortcode || m.shortcode || "").trim());
   return {
     ready: isB2CReady(),
-    auto: Boolean(config.mpesa.b2cAuto),
-    shortcode: config.mpesa.b2cShortcode || null,
-    initiatorName: config.mpesa.initiatorName || null,
-    env: config.mpesa.env,
-    resultUrl: config.mpesa.b2cResultUrl || null,
-    timeoutUrl: config.mpesa.b2cTimeoutUrl || null,
+    auto: Boolean(m.b2cAuto),
+    shortcode: isUsableB2cShortcode(m.b2cShortcode) ? m.b2cShortcode : null,
+    initiatorName: m.initiatorName || null,
+    env: m.env,
+    resultUrl: m.b2cResultUrl || null,
+    timeoutUrl: m.b2cTimeoutUrl || null,
+    blockedReason: !isUsableB2cShortcode(m.b2cShortcode)
+      ? blockedC2b || m.shortcode === "3439153"
+        ? "Buy Goods shortcode 3439153 is C2B-only. Apply for a B2C/Bulk/One Account shortcode, then set MPESA_B2C_SHORTCODE."
+        : "Set MPESA_B2C_SHORTCODE to your B2C / One Account shortcode (not 3439153)."
+      : null,
   };
 }
 
@@ -137,15 +160,28 @@ export function formatMpesaPhone(raw) {
   return d;
 }
 
-async function getAccessToken() {
-  if (!isDarajaOAuthReady()) {
-    throw new Error("Daraja not configured — set MPESA_CONSUMER_KEY/SECRET");
+async function getAccessToken(purpose = "stk") {
+  const useB2c = purpose === "b2c";
+  if (useB2c ? !isB2COauthReady() : !isDarajaOAuthReady()) {
+    throw new Error(
+      useB2c
+        ? "Daraja B2C OAuth not configured — set MPESA_B2C_CONSUMER_KEY/SECRET (or STK MPESA_CONSUMER_KEY/SECRET)"
+        : "Daraja not configured — set MPESA_CONSUMER_KEY/SECRET"
+    );
   }
-  if (tokenCache.token && Date.now() < tokenCache.expiresAt - 60_000) {
+  if (
+    tokenCache.token &&
+    tokenCache.purpose === purpose &&
+    Date.now() < tokenCache.expiresAt - 60_000
+  ) {
     return tokenCache.token;
   }
-  const key = String(config.mpesa.consumerKey || "").replace(/\s+/g, "");
-  const secret = String(config.mpesa.consumerSecret || "").replace(/\s+/g, "");
+  const key = String(
+    useB2c ? config.mpesa.b2cConsumerKey : config.mpesa.consumerKey || ""
+  ).replace(/\s+/g, "");
+  const secret = String(
+    useB2c ? config.mpesa.b2cConsumerSecret : config.mpesa.consumerSecret || ""
+  ).replace(/\s+/g, "");
   const auth = Buffer.from(`${key}:${secret}`, "utf8").toString("base64");
   const url = `${baseUrl()}/oauth/v1/generate?grant_type=client_credentials`;
   const res = await fetch(url, {
@@ -159,6 +195,7 @@ async function getAccessToken() {
     const errText = await res.text().catch(() => "");
     console.warn("[daraja] OAuth failed", {
       status: res.status,
+      purpose,
       env: config.mpesa.env,
       host: baseUrl(),
       keyLen: key.length,
@@ -174,6 +211,7 @@ async function getAccessToken() {
   tokenCache = {
     token: data.access_token,
     expiresAt: Date.now() + Number(data.expires_in || 3599) * 1000,
+    purpose,
   };
   return data.access_token;
 }
@@ -186,7 +224,7 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   if (!isDarajaReady()) {
     throw new Error("Daraja STK not configured — set MPESA_* (passkey, shortcode, callback)");
   }
-  const token = await getAccessToken();
+  const token = await getAccessToken("stk");
   const { password, timestamp: ts } = stkPassword();
   const partyPhone = formatMpesaPhone(phone);
   const amt = Math.round(Number(amount));
@@ -339,12 +377,14 @@ export async function initiateB2CPayout({
   originatorConversationId = "",
 } = {}) {
   if (!isB2CReady()) {
+    const meta = b2cMeta();
     return {
       ok: false,
       stub: false,
       configured: false,
       message:
-        "B2C not configured — set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (or INITIATOR_PASSWORD + CERT_PATH) + MPESA_B2C_SHORTCODE",
+        meta.blockedReason ||
+        "B2C not configured — set MPESA_B2C_SHORTCODE (B2C/One Account, not 3439153) + MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL",
     };
   }
 
@@ -387,7 +427,7 @@ export async function initiateB2CPayout({
     commandId: body.CommandID,
   });
 
-  const token = await getAccessToken();
+  const token = await getAccessToken("b2c");
   // Prod-SOKONIMALL is entitled to B2C v1 (Safaricom go-live URL list).
   // Try v1 first, then v3 for apps that only have the newer path.
   const paths = ["/mpesa/b2c/v1/paymentrequest", "/mpesa/b2c/v3/paymentrequest"];
@@ -434,16 +474,23 @@ export async function initiateB2CPayout({
     JSON.stringify(data).slice(0, 300) ||
     `HTTP ${lastStatus}`;
   let msg = errCode ? `${rawMsg} (${errCode})` : String(rawMsg);
-  // Safaricom often returns 404.001.03 "Invalid Access Token" when OAuth is fine
-  // but B2C is not whitelisted on the production shortcode / Daraja app.
-  const looksLikeWhitelist =
-    String(errCode).includes("404.001.03") ||
-    /invalid access token/i.test(String(rawMsg));
-  if (looksLikeWhitelist) {
+  // Buy Goods 3439153 cannot do B2C — need a separate B2C/Bulk/One Account shortcode.
+  if (
+    C2B_ONLY_SHORTCODES.has(String(config.mpesa.b2cShortcode || "").trim()) ||
+    C2B_ONLY_SHORTCODES.has(String(config.mpesa.shortcode || "").trim())
+  ) {
     msg +=
-      " — OAuth can still work; usually B2C is not enabled on this production shortcode. " +
-      "Confirm B2C on Prod-SOKONIMALL in Daraja, then email apisupport@safaricom.co.ke " +
-      "to whitelist B2C for shortcode 3439153.";
+      " — Shortcode 3439153 is Buy Goods / C2B only and does not support B2C. " +
+      "Apply for a B2C/Bulk/One Account shortcode at https://hub.m-pesaforbusiness.co.ke/merchant-onboarding/self-onboarding " +
+      "then set MPESA_B2C_SHORTCODE (and optional MPESA_B2C_CONSUMER_KEY/SECRET).";
+  } else if (
+    String(errCode).includes("404.001.03") ||
+    String(errCode).includes("401.002.01") ||
+    /invalid access token/i.test(String(rawMsg))
+  ) {
+    msg +=
+      " — Check MPESA_B2C_SHORTCODE is your B2C/One Account code (not Buy Goods 3439153), " +
+      "initiator SecurityCredential matches that account, and the Daraja app is entitled for B2C.";
   }
   console.warn("[daraja] B2C rejected:", { status: lastStatus, errCode, msg, data });
   return {

@@ -632,7 +632,7 @@ async function handlePayB2CCommand(adminChatId, orderId) {
   if (!isB2CReady()) {
     return sendText(
       adminChatId,
-      "⚠️ B2C not configured. Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (or INITIATOR_PASSWORD + CERT_PATH) + MPESA_B2C_SHORTCODE, then restart the bot."
+      "⚠️ B2C not configured. Need a B2C/One Account shortcode (not Buy Goods 3439153) in MPESA_B2C_SHORTCODE + initiator SecurityCredential, then restart."
     );
   }
   const out = await initiateSettlementB2C(orderId);

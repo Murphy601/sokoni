@@ -65,19 +65,23 @@ Deploy (`SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh`) re-applies shortcod
 
 **Seller wallet / withdraw:**
 - `ESCROW_HOLD_BUSINESS_DAYS=0` (default) — on delivery / buyer confirm, credit **Ready for M-Pesa** on the Seller Hub immediately.
-- Seller **Withdraw** triggers Daraja B2C instantly when initiator `DavidMuiruri` + matching SecurityCredential are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
+- **Buy Goods shortcode `3439153` cannot do B2C** (Safaricom: C2B-only). Apply for a **B2C / Bulk / One Account** shortcode at https://hub.m-pesaforbusiness.co.ke/merchant-onboarding/self-onboarding then set `MPESA_B2C_SHORTCODE`.
+- Seller **Withdraw** triggers Daraja B2C when `MPESA_B2C_SHORTCODE` + initiator `DavidMuiruri` + SecurityCredential are set (`SELLER_WITHDRAW_INSTANT_B2C=true`). Otherwise withdraw queues for admin `#paid`.
 - Configure B2C on the VM (password never committed):
-  1. Download `ProductionCertificate.cer` from Daraja → `whatsapp-bot/certs/`
-  2. `export MPESA_INITIATOR_PASSWORD='…'` then `bash scripts/configure-b2c-initiator.sh`
-  3. `bash scripts/test-daraja-b2c-ready.sh`
-- Bot calls production B2C at `https://api.safaricom.co.ke/mpesa/b2c/v1/paymentrequest` (Safaricom go-live list).
+  1. Finish B2C/One Account onboarding → note the **new** shortcode
+  2. `export MPESA_B2C_SHORTCODE='…'` (never 3439153)
+  3. Optional separate Daraja app: `MPESA_B2C_CONSUMER_KEY` / `MPESA_B2C_CONSUMER_SECRET`
+  4. Download `ProductionCertificate.cer` from Daraja → `whatsapp-bot/certs/` (or paste SecurityCredential)
+  5. `bash scripts/configure-b2c-initiator.sh` then `bash scripts/test-daraja-b2c-ready.sh`
+- Bot calls production B2C at `https://api.safaricom.co.ke/mpesa/b2c/v1/paymentrequest`.
 - Admin Command Center shows Ready / scheduled / B2C failed and can **Pay B2C** or **Release → Ready**.
 - Leave `MPESA_B2C_AUTO=false` until the first `#payb2c` / withdraw B2C succeeds.
 
-**Till vs shortcode (Buy Goods — Sokoni live):**
-- `MPESA_SHORTCODE=3439153` — Daraja / org H.O. → STK `BusinessShortCode` + password
+**Till vs shortcode (Buy Goods — Sokoni live STK):**
+- `MPESA_SHORTCODE=3439153` — Daraja / org H.O. → STK `BusinessShortCode` + password (**C2B / Buy Goods only**)
 - Merchant store shortcode `4421485` — portal hierarchy only (not sent on STK)
 - `MPESA_TILL_NUMBER=4775847` — Buy Goods till → STK `PartyB` (money lands here)
+- `MPESA_B2C_SHORTCODE=` — separate B2C/One Account code for seller payouts (PartyA on B2C)
 
 Proven working combo from live logs: `businessShortCode: 3439153`, `partyB: 4775847`, `CustomerBuyGoodsOnline`.
 

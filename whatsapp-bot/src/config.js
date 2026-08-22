@@ -141,10 +141,19 @@ export const config = {
       trim(process.env.MPESA_TILL_NUMBER) ||
       "4775847";
     const botBase = "https://bot.sokonimall.com";
-    const b2cShortcode = trim(process.env.MPESA_B2C_SHORTCODE) || shortcode;
+    // 3439153 is Buy Goods / C2B only — must NOT be used as B2C PartyA.
+    // Set MPESA_B2C_SHORTCODE to a dedicated B2C / Bulk / One Account shortcode.
+    const b2cShortcodeRaw = trim(process.env.MPESA_B2C_SHORTCODE);
+    const b2cShortcode =
+      b2cShortcodeRaw && b2cShortcodeRaw !== "3439153" ? b2cShortcodeRaw : "";
+    const consumerKey = trim(process.env.MPESA_CONSUMER_KEY);
+    const consumerSecret = trim(process.env.MPESA_CONSUMER_SECRET);
     return {
-      consumerKey: trim(process.env.MPESA_CONSUMER_KEY),
-      consumerSecret: trim(process.env.MPESA_CONSUMER_SECRET),
+      consumerKey,
+      consumerSecret,
+      /** Optional separate Daraja app for B2C (falls back to STK app keys). */
+      b2cConsumerKey: trim(process.env.MPESA_B2C_CONSUMER_KEY) || consumerKey,
+      b2cConsumerSecret: trim(process.env.MPESA_B2C_CONSUMER_SECRET) || consumerSecret,
       passkey: trim(process.env.MPESA_PASSKEY),
       shortcode,
       partyB,
@@ -153,7 +162,7 @@ export const config = {
         trim(process.env.MPESA_CALLBACK_URL) || `${botBase}/api/payments/daraja/callback`,
       env: envRaw === "production" || envRaw === "prod" ? "production" : "sandbox",
       transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerBuyGoodsOnline",
-      /** B2C (BusinessPayment) — seller escrow disbursement. */
+      /** B2C (BusinessPayment) — seller escrow disbursement. Empty until a B2C shortcode is set. */
       b2cShortcode,
       initiatorName: trim(process.env.MPESA_INITIATOR_NAME),
       /** Pre-encrypted initiator password (Daraja portal / openssl). Preferred. */

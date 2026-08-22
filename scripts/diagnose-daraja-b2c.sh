@@ -1,32 +1,53 @@
 #!/usr/bin/env bash
-# Diagnose why seller B2C payouts fail while OAuth/STK may work.
-# Does NOT send money.
+# Diagnose why seller B2C payouts fail.
+# Buy Goods shortcode 3439153 is C2B-only — B2C needs a separate shortcode.
 set -euo pipefail
 
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
 ENV_FILE="${ENV_FILE:-$REPO/whatsapp-bot/.env}"
 
-echo "==> 1) Env readiness"
-bash "$REPO/scripts/test-daraja-b2c-ready.sh" || true
+env_get() {
+  local key="$1"
+  local line=""
+  if [ -f "$ENV_FILE" ]; then
+    line="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 || true)"
+  fi
+  printf '%s' "$line" | sed -E "s/^${key}=//" | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+
+STK="$(env_get MPESA_SHORTCODE)"
+B2C="$(env_get MPESA_B2C_SHORTCODE)"
+INIT="$(env_get MPESA_INITIATOR_NAME)"
+CRED="$(env_get MPESA_SECURITY_CREDENTIAL)"
+KEY="$(env_get MPESA_CONSUMER_KEY)"
+B2C_KEY="$(env_get MPESA_B2C_CONSUMER_KEY)"
+
+echo "Env: $ENV_FILE"
+echo "STK (Buy Goods) shortcode: ${STK:-unset}"
+echo "B2C shortcode: ${B2C:-unset}"
+echo "Initiator: ${INIT:-unset}"
+echo "SecurityCredential len: ${#CRED}"
+echo "STK Consumer Key len: ${#KEY}"
+echo "B2C Consumer Key len: ${#B2C_KEY} (0 = reuse STK app keys)"
 echo ""
-echo "==> 2) OAuth (same keys STK + B2C use)"
-bash "$REPO/scripts/test-daraja-oauth.sh" || true
-echo ""
-echo "==> 3) Recent bot B2C / OAuth log lines"
-if command -v pm2 >/dev/null 2>&1; then
-  pm2 logs sokoni-bot --lines 80 --nostream 2>/dev/null \
-    | grep -E '\[daraja\] (B2C|OAuth)|Invalid Access|404\.001|payb2c|SecurityCredential' \
-    || echo "(no matching lines — retry B2C once, then re-run this script)"
-else
-  echo "pm2 not found"
+
+if [ "$STK" = "3439153" ]; then
+  echo "OK: 3439153 is your Buy Goods / C2B org shortcode for buyer STK."
 fi
 
-echo ""
-echo "==> How to read results"
-echo "  • OAuth HTTP 200 + STK works, but B2C says Invalid Access Token / 404.001.03"
-echo "    → almost always Safaricom has not whitelisted B2C on shortcode 3439153"
-echo "      (Daraja app may show B2C in go-live email; shortcode still needs enablement)."
-echo "  • Email: apisupport@safaricom.co.ke"
-echo "    App: Prod-SOKONIMALL · Shortcode: 3439153 · Ask: enable B2C Payment API"
-echo "  • Until then: pay seller manually on M-Pesa, then #paid SKN-1005"
-echo "  • If OAuth itself is 400: bash scripts/fix-oauth-and-hint-b2c.sh"
+if [ -z "$B2C" ] || [ "$B2C" = "3439153" ]; then
+  echo "BLOCKED: B2C cannot use 3439153 (C2B / Buy Goods only)."
+  echo "  Safaricom: apply for B2C/Bulk/One Account shortcode:"
+  echo "  https://hub.m-pesaforbusiness.co.ke/merchant-onboarding/self-onboarding"
+  echo "  Then on the VM:"
+  echo "    export MPESA_B2C_SHORTCODE='YOUR_NEW_B2C_CODE'"
+  echo "    # optional if B2C uses a different Daraja app:"
+  echo "    export MPESA_B2C_CONSUMER_KEY='…' MPESA_B2C_CONSUMER_SECRET='…'"
+  echo "    bash scripts/set-daraja-env.sh"
+  echo "    bash scripts/configure-b2c-initiator.sh"
+  echo "    bash scripts/test-daraja-b2c-ready.sh"
+  exit 1
+fi
+
+echo "B2C shortcode looks set ($B2C). Next: bash scripts/test-daraja-b2c-ready.sh"
+exit 0
