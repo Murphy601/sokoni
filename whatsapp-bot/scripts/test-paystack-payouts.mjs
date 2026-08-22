@@ -166,5 +166,7 @@ const retain = readFileSync(path.join(root, "..", "scripts", "retain-order-for-w
 assert.match(retain, /SKN-1013/);
 assert.match(retain, /cancelledAt/);
 assert.match(retain, /withdrawals-only/);
+assert.match(retain, /--wipe/);
+assert.match(retain, /wiped \$\{keepId\} for a fresh withdraw test/);
 
 console.log("ok — Paystack payout helpers + wiring present");
