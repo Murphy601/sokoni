@@ -7,6 +7,7 @@
  *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013
  *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 --apply
  *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 --withdrawals-only --apply
+ *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 --wipe --apply
  */
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import path from "node:path";
@@ -21,13 +22,16 @@ const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const skipPm2 = args.includes("--skip-pm2");
 const withdrawalsOnly = args.includes("--withdrawals-only");
+const wipe = args.includes("--wipe");
 const orderIdx = args.indexOf("--order");
 const keepId = String(orderIdx >= 0 ? args[orderIdx + 1] : "SKN-1013")
   .trim()
   .toUpperCase();
 
 if (!/^SKN-\d+/.test(keepId)) {
-  console.error("Usage: node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 [--apply]");
+  console.error(
+    "Usage: node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 [--wipe] [--apply]"
+  );
   process.exit(1);
 }
 
@@ -94,13 +98,28 @@ const keepEntry = sellerEntries.find((e) => String(e.orderId || "").toUpperCase(
 const sellerWithdrawals = (withdrawals.requests || []).filter((r) => r.supplierId === supplierId);
 const blocking = sellerWithdrawals.filter((r) => r.status === "pending" || r.status === "processing");
 
-console.log("Keep for withdraw test:");
+console.log(wipe ? "Wipe remaining test order:" : "Keep for withdraw test:");
 console.log(`  order:        ${keep.id}  ${keep.productName || ""}`);
 console.log(`  seller:       ${keep.supplierName || supplierId}`);
 console.log(`  supplierId:   ${supplierId}`);
 console.log(`  mpesa:        ${keepEntry?.mpesaPhone || keep.mpesaPhone || "—"}`);
-console.log(`  settlement:   ${keepEntry ? `${keepEntry.status} KES ${keepEntry.payoutAmountKes}` : "MISSING — will create owed"}`);
-console.log(`  mode:         ${apply ? "APPLY" : "DRY-RUN"}${withdrawalsOnly ? " (withdrawals only)" : ""}`);
+console.log(
+  `  settlement:   ${
+    keepEntry
+      ? `${keepEntry.status} KES ${keepEntry.payoutAmountKes}${wipe ? " — will drop" : ""}`
+      : wipe
+        ? "none"
+        : "MISSING — will create owed"
+  }`
+);
+const modeBits = [
+  apply ? "APPLY" : "DRY-RUN",
+  wipe ? "WIPE order + settlement + stuck WD" : "",
+  !wipe && withdrawalsOnly ? "withdrawals only" : "",
+]
+  .filter(Boolean)
+  .join(" · ");
+console.log(`  mode:         ${modeBits}`);
 console.log(`\nThis seller's other Ready lines: ${sellerEntries.length - (keepEntry ? 1 : 0)}`);
 for (const e of sellerEntries) {
   if (String(e.orderId || "").toUpperCase() === keepId) continue;
@@ -114,8 +133,14 @@ for (const r of sellerWithdrawals) {
 
 if (!apply) {
   console.log("\nDRY-RUN. Re-run with --apply to write (stops/starts sokoni-bot).");
-  console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --apply`);
-  console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --withdrawals-only --apply`);
+  if (wipe) {
+    console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --wipe --apply`);
+    console.log("  Cancels the order, drops its Ready line, clears stuck WD-* — Seller Hub starts empty.");
+  } else {
+    console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --apply`);
+    console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --withdrawals-only --apply`);
+    console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --wipe --apply`);
+  }
   process.exit(0);
 }
 
@@ -123,15 +148,72 @@ console.log("\n==> Stopping sokoni-bot");
 pm2("stop");
 
 console.log("Backups:");
-const backupTargets = withdrawalsOnly
-  ? { withdrawals: backup(withdrawalsFile) }
-  : {
-      settlements: backup(settlementsFile),
-      withdrawals: backup(withdrawalsFile),
-      orders: backup(ordersFile),
-    };
+const backupTargets =
+  wipe || !withdrawalsOnly
+    ? {
+        settlements: backup(settlementsFile),
+        withdrawals: backup(withdrawalsFile),
+        orders: backup(ordersFile),
+      }
+    : { withdrawals: backup(withdrawalsFile) };
 for (const [k, v] of Object.entries(backupTargets)) {
   console.log(`  ${k}: ${v || "(none)"}`);
+}
+
+if (wipe) {
+  const nowWipe = Date.now();
+  settlements.entries = (settlements.entries || []).filter((e) => {
+    if (e.supplierId !== supplierId) return true;
+    return String(e.orderId || "").toUpperCase() !== keepId;
+  });
+  writeFileSync(settlementsFile, JSON.stringify(settlements, null, 2) + "\n");
+
+  withdrawals.requests = (withdrawals.requests || []).map((r) => {
+    if (r.supplierId !== supplierId) return r;
+    const mentionsKeep = (r.orderIds || []).some((id) => String(id || "").toUpperCase() === keepId);
+    if (!mentionsKeep && r.status !== "pending" && r.status !== "processing") return r;
+    return {
+      ...r,
+      status: "cancelled",
+      cancelledAt: nowWipe,
+      cancelReason: `wiped ${keepId} for a fresh withdraw test`,
+    };
+  });
+  writeFileSync(withdrawalsFile, JSON.stringify(withdrawals, null, 2) + "\n");
+
+  const cancelKeep = (o) => {
+    if (!o || String(o.id || "").toUpperCase() !== keepId) return;
+    o.status = "cancelled";
+    o.cancelledAt = nowWipe;
+    o.cancelReason = "admin wipe — start fresh withdraw test";
+    o.isPaidOut = true;
+    o.paidOutAt = nowWipe;
+    o.payoutStatus = "cancelled";
+    o.customerPaymentStatus = o.customerPaymentStatus || "confirmed";
+    if (String(o.escrowStatus || "").toLowerCase() === "held") {
+      o.escrowStatus = "released";
+      o.escrowReleasedAt = o.escrowReleasedAt || nowWipe;
+    }
+  };
+
+  if (ordersMap) {
+    for (const o of Object.values(ordersMap)) cancelKeep(o);
+    for (const o of Object.values(cartMap)) cancelKeep(o);
+    cancelKeep(keep);
+    writeFileSync(ordersFile, JSON.stringify(ordersStore, null, 2) + "\n");
+  }
+
+  const left = (loadJson(settlementsFile, { entries: [] }).entries || []).filter(
+    (e) => e.supplierId === supplierId
+  );
+  console.log("\nApplied wipe:");
+  console.log(`  cancelled order:     ${keepId}`);
+  console.log(`  Ready lines left:    ${left.length}`);
+  console.log(`  Blocking WD cleared: ${blocking.map((r) => r.id).join(", ") || "none"}`);
+  console.log("\n==> Starting sokoni-bot");
+  pm2("start");
+  console.log("Hard refresh Seller Hub. Ready for M-Pesa should be KES 0 — place a new test order.");
+  process.exit(0);
 }
 
 if (withdrawalsOnly) {
