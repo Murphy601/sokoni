@@ -578,6 +578,7 @@
     const params = new URLSearchParams(window.location.search);
     const offerId = params.get("offerId");
     const preset = params.get("order");
+    const paystackRef = params.get("reference") || params.get("trxref");
     if (offerId) {
       window.SokoniBuyerAuth?.bindPanel?.({
         onVerified: () => {
@@ -591,6 +592,25 @@
     if (preset) {
       input.value = normalizeOrderId(preset);
       loadOrder(input.value);
+      return;
+    }
+    if (paystackRef) {
+      fetch(`${CHECKOUT_API}/by-reference/${encodeURIComponent(paystackRef)}`)
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.orderId) {
+            showError("Payment found, but we could not match the order. Enter your SKN-####.");
+            return;
+          }
+          input.value = data.orderId;
+          const url = new URL(window.location.href);
+          url.searchParams.set("order", data.orderId);
+          window.history.replaceState({}, "", url);
+          loadOrder(data.orderId);
+        })
+        .catch(() => {
+          showError("Could not load this payment. Enter your SKN-#### from WhatsApp.");
+        });
     }
   });
 })();

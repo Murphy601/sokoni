@@ -7,7 +7,7 @@ import {
   labelPageUrlForOrder,
 } from "../services/prepaid-checkout.js";
 import { generateDropoffLabel } from "../services/escrow-automation.js";
-import { getOrder } from "../services/orders.js";
+import { getOrder, findOrderByCheckoutRequestId } from "../services/orders.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
 import { config } from "../config.js";
 import { listLandmarkHubs, formatLandmarkLine } from "../lib/landmark-hubs.js";
@@ -110,6 +110,17 @@ router.get("/:orderId/label", (req, res) => {
     message: paid
       ? "Print this label and drop the parcel at a Sokoni hub."
       : "Payment not confirmed yet — label unlocks after M-Pesa payment.",
+  });
+});
+
+/** GET /api/checkout/by-reference/:reference — Paystack callback ?reference= / ?trxref= */
+router.get("/by-reference/:reference", (req, res) => {
+  const order = findOrderByCheckoutRequestId(req.params.reference);
+  if (!order) return res.status(404).json({ error: "order_not_found" });
+  res.json({
+    orderId: order.id,
+    paymentStatus: order.customerPaymentStatus,
+    checkoutUrl: checkoutUrlForOrder(order.id),
   });
 });
 

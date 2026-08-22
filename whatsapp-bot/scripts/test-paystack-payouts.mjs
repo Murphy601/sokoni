@@ -139,5 +139,10 @@ assert.match(envExample, /PAYSTACK_SECRET_KEY/);
 assert.match(envExample, /SELLER_PAYOUT_RAIL/);
 assert.match(envExample, /BUYER_PAY_RAIL/);
 assert.match(envExample, /PAYSTACK_COLLECT/);
+assert.match(envExample, /https:\/\/sokonimall.com\/checkout.html/);
+assert.match(envExample, /https:\/\/bot.sokonimall.com\/api\/webhooks\/paystack/);
+
+const checkoutApi = read("src/routes/checkoutApi.js");
+assert.match(checkoutApi, /by-reference/);
 
 console.log("ok — Paystack payout helpers + wiring present");
