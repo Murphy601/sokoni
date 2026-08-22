@@ -6,6 +6,7 @@
  * Usage on the bot VM:
  *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013
  *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 --apply
+ *   node scripts/retain-order-for-withdraw-test.mjs --order SKN-1013 --withdrawals-only --apply
  */
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import path from "node:path";
@@ -19,6 +20,7 @@ const DATA = process.env.SOKONI_DATA_DIR || path.join(REPO, "whatsapp-bot", "dat
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const skipPm2 = args.includes("--skip-pm2");
+const withdrawalsOnly = args.includes("--withdrawals-only");
 const orderIdx = args.indexOf("--order");
 const keepId = String(orderIdx >= 0 ? args[orderIdx + 1] : "SKN-1013")
   .trim()
@@ -98,7 +100,7 @@ console.log(`  seller:       ${keep.supplierName || supplierId}`);
 console.log(`  supplierId:   ${supplierId}`);
 console.log(`  mpesa:        ${keepEntry?.mpesaPhone || keep.mpesaPhone || "—"}`);
 console.log(`  settlement:   ${keepEntry ? `${keepEntry.status} KES ${keepEntry.payoutAmountKes}` : "MISSING — will create owed"}`);
-console.log(`  mode:         ${apply ? "APPLY" : "DRY-RUN"}`);
+console.log(`  mode:         ${apply ? "APPLY" : "DRY-RUN"}${withdrawalsOnly ? " (withdrawals only)" : ""}`);
 console.log(`\nThis seller's other Ready lines: ${sellerEntries.length - (keepEntry ? 1 : 0)}`);
 for (const e of sellerEntries) {
   if (String(e.orderId || "").toUpperCase() === keepId) continue;
@@ -113,6 +115,7 @@ for (const r of sellerWithdrawals) {
 if (!apply) {
   console.log("\nDRY-RUN. Re-run with --apply to write (stops/starts sokoni-bot).");
   console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --apply`);
+  console.log(`  node scripts/retain-order-for-withdraw-test.mjs --order ${keepId} --withdrawals-only --apply`);
   process.exit(0);
 }
 
@@ -120,12 +123,36 @@ console.log("\n==> Stopping sokoni-bot");
 pm2("stop");
 
 console.log("Backups:");
-for (const [k, v] of Object.entries({
-  settlements: backup(settlementsFile),
-  withdrawals: backup(withdrawalsFile),
-  orders: backup(ordersFile),
-})) {
+const backupTargets = withdrawalsOnly
+  ? { withdrawals: backup(withdrawalsFile) }
+  : {
+      settlements: backup(settlementsFile),
+      withdrawals: backup(withdrawalsFile),
+      orders: backup(ordersFile),
+    };
+for (const [k, v] of Object.entries(backupTargets)) {
   console.log(`  ${k}: ${v || "(none)"}`);
+}
+
+if (withdrawalsOnly) {
+  const nowStuck = Date.now();
+  withdrawals.requests = (withdrawals.requests || []).map((r) => {
+    if (r.supplierId !== supplierId) return r;
+    if (r.status !== "pending" && r.status !== "processing") return r;
+    return {
+      ...r,
+      status: "cancelled",
+      cancelledAt: nowStuck,
+      cancelReason: `cleared so ${keepId} withdraw can retry`,
+    };
+  });
+  writeFileSync(withdrawalsFile, JSON.stringify(withdrawals, null, 2) + "\n");
+  console.log("\nApplied withdrawals-only:");
+  console.log(`  Blocking WD cleared: ${blocking.map((r) => r.id).join(", ") || "none"}`);
+  console.log("\n==> Starting sokoni-bot");
+  pm2("start");
+  console.log("Refresh Seller Hub → Escrow & withdraw. Then tap Withdraw to M-Pesa.");
+  process.exit(0);
 }
 
 const now = Date.now();

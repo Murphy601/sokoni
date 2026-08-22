@@ -32,6 +32,7 @@ assert.match(config, /withdrawInstantB2c/);
 assert.match(config, /PAYSTACK_SECRET_KEY/);
 assert.match(config, /payoutRail/);
 assert.match(config, /collectRail/);
+assert.match(config, /PAYSTACK_ONLY/);
 
 const prepaid = read("src/services/prepaid-checkout.js");
 assert.match(prepaid, /initiatePaystackMpesaCharge/);

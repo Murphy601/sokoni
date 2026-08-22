@@ -247,6 +247,7 @@ app.get("/health", async (_req, res) => {
     darajaConfigured: checkout.darajaConfigured,
     paymentRail: checkout.paymentRail || null,
     paystackConfigured: Boolean(checkout.paystackConfigured),
+    paystackOnly: checkout.paystackOnly !== false,
     b2c: b2cMeta(),
   });
 });

@@ -190,18 +190,18 @@ export const config = {
   })(),
   /**
    * Paystack — buyer C2B (M-Pesa STK charge) + seller transfers.
-   * Set PAYSTACK_SECRET_KEY to enable both. Daraja remains fallback.
+   * PAYSTACK_ONLY=true (default) never falls back to Daraja STK / B2C.
    */
   paystack: (() => {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const railRaw = trim(process.env.SELLER_PAYOUT_RAIL).toLowerCase();
     const payoutRail =
-      railRaw === "paystack" || railRaw === "b2c" || railRaw === "manual" ? railRaw : "auto";
+      railRaw === "paystack" || railRaw === "b2c" || railRaw === "manual" ? railRaw : "paystack";
     const collectRaw = trim(process.env.BUYER_PAY_RAIL).toLowerCase();
     const collectRail =
       collectRaw === "paystack" || collectRaw === "daraja" || collectRaw === "manual"
         ? collectRaw
-        : "auto";
+        : "paystack";
     const botBase = "https://bot.sokonimall.com";
     return {
       secretKey: trim(process.env.PAYSTACK_SECRET_KEY),
@@ -210,6 +210,7 @@ export const config = {
         trim(process.env.PAYSTACK_WEBHOOK_URL) || `${botBase}/api/webhooks/paystack`,
       payoutRail,
       collectRail,
+      only: !/^(0|false|no)$/i.test(trim(process.env.PAYSTACK_ONLY) || "true"),
       collect: !/^(0|false|no)$/i.test(trim(process.env.PAYSTACK_COLLECT) || "true"),
       chargeEmail: trim(process.env.PAYSTACK_CHARGE_EMAIL),
       withdrawInstant: !/^(0|false|no)$/i.test(

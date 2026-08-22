@@ -1,6 +1,6 @@
 /**
  * Seller M-Pesa withdrawal requests (Ready balance → payout number).
- * Rail: Paystack Transfers when keyed, else Daraja B2C, else admin #paid.
+ * Rail: Paystack Transfers (default). Daraja B2C only if PAYSTACK_ONLY=false.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -117,11 +117,14 @@ async function notifyAdminWithdrawal(request, supplier, { b2cAttempted = false }
     const adminPhone = config.admin?.primary;
     if (!adminPhone) return;
     const adminId = toChatId(adminPhone);
-    const mode = request.rail === "paystack"
-      ? "Paystack transfer submitted — waiting transfer webhook"
-      : b2cAttempted
-        ? "B2C submitted — waiting Safaricom ResultURL"
-        : `_Pay via M-Pesa, then mark paid: #paid ${request.orderIds[0]}_`;
+    const mode =
+      request.status === "failed"
+        ? `Paystack did not send — ${request.failReason || request.paystack?.results?.[0]?.message || "check PAYSTACK_SECRET_KEY"}`
+        : request.rail === "paystack"
+          ? "Paystack transfer submitted — waiting transfer webhook"
+          : b2cAttempted
+            ? "B2C submitted — waiting Safaricom ResultURL"
+            : `_Pay via M-Pesa, then mark paid: #paid ${request.orderIds[0]}_`;
     await sendText(
       adminId,
       `💸 *Withdraw request — ${request.id}*\n\n` +
@@ -222,7 +225,10 @@ async function createWithdrawalRequest(supplier) {
       else if (!out.skipped) failed += 1;
     }
     request.paystack = { attemptedAt: Date.now(), accepted, failed, results };
-    request.status = accepted > 0 ? "processing" : failed > 0 ? "pending" : "processing";
+    request.status = accepted > 0 ? "processing" : "failed";
+    if (request.status === "failed") {
+      request.failReason = results[0]?.message || "paystack_failed";
+    }
     saveWithdrawals(store);
     await notifyAdminWithdrawal(request, supplier, { b2cAttempted: false });
 
@@ -250,13 +256,14 @@ async function createWithdrawalRequest(supplier) {
       };
     }
     return {
-      ok: true,
+      ok: false,
+      error: "paystack_failed",
       request,
       instant: false,
       rail: "paystack",
       message:
-        `⚠️ Paystack could not send yet — withdrawal *${request.id}* queued.\n` +
-        `KES ${amountKes.toLocaleString()} to ${maskMpesa(mpesaNumber)}. ${results[0]?.message || ""}`.trim(),
+        `⚠️ Paystack could not send *${request.id}*.\n` +
+        `KES ${amountKes.toLocaleString()} to ${maskMpesa(mpesaNumber)}. ${results[0]?.message || "Check PAYSTACK_SECRET_KEY."}`.trim(),
     };
   }
 
@@ -312,6 +319,23 @@ async function createWithdrawalRequest(supplier) {
       message:
         `⚠️ B2C could not send yet — withdrawal *${request.id}* queued for admin.\n` +
         `KES ${amountKes.toLocaleString()} to ${maskMpesa(mpesaNumber)}.`,
+    };
+  }
+
+  if (config.paystack?.only !== false) {
+    request.status = "failed";
+    request.failReason = "paystack_not_configured";
+    saveWithdrawals(store);
+    await notifyAdminWithdrawal(request, supplier, { b2cAttempted: false });
+    return {
+      ok: false,
+      error: "paystack_not_configured",
+      request,
+      instant: false,
+      rail: "manual",
+      message:
+        `⚠️ Paystack is not ready — withdrawal *${request.id}* was not queued.\n` +
+        `Paste a Live Secret Key (sk_live_…) as PAYSTACK_SECRET_KEY, then pm2 restart sokoni-bot.`,
     };
   }
 

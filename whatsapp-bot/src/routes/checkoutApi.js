@@ -164,7 +164,7 @@ router.get("/:orderId", (req, res) => {
   });
 });
 
-/** POST /api/checkout/:orderId/stk — M-Pesa STK (Paystack Charge, Daraja fallback). */
+/** POST /api/checkout/:orderId/stk — M-Pesa STK (Paystack Charge). */
 router.post("/:orderId/stk", async (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {
