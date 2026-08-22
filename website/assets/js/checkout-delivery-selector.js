@@ -43,7 +43,7 @@
         <div>
           <p class="depop-label mb-1">Delivery location</p>
           <h2 class="text-lg font-bold text-white">Where should it go?</h2>
-          <p class="text-xs text-zinc-500 mt-1">County shipping for countrywide orders. Map pin for local express when the seller supports it. Paid with M-Pesa (Daraja) — not Paystack.</p>
+          <p class="text-xs text-zinc-500 mt-1">County shipping for countrywide orders. Map pin for local express when the seller supports it. Paid with M-Pesa STK — item + delivery in one prompt.</p>
         </div>
         <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Delivery mode">
           <label class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-full border border-zinc-700 text-sm text-zinc-200 cursor-pointer">

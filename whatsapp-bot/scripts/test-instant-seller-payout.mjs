@@ -22,12 +22,19 @@ assert.match(escrow, /creditSellerWalletAfterDelivery/);
 assert.match(escrow, /escrowHoldBusinessDays/);
 
 const withdraw = read("src/services/seller-withdrawals.js");
-assert.match(withdraw, /withdrawInstantB2c/);
+assert.match(withdraw, /resolvePayoutRail/);
+assert.match(withdraw, /initiateSettlementPaystack/);
 assert.match(withdraw, /initiateSettlementB2C/);
 
 const config = read("src/config.js");
 assert.match(config, /escrowHoldBusinessDays/);
 assert.match(config, /withdrawInstantB2c/);
+assert.match(config, /PAYSTACK_SECRET_KEY/);
+assert.match(config, /payoutRail/);
+assert.match(config, /collectRail/);
+
+const prepaid = read("src/services/prepaid-checkout.js");
+assert.match(prepaid, /initiatePaystackMpesaCharge/);
 
 const api = read("src/routes/adminCommandApi.js");
 assert.match(api, /payb2c/);

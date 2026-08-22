@@ -2,6 +2,13 @@ import { config } from "../config.js";
 import { getOrder, updateOrderMeta } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isDarajaReady, initiateStkPush } from "./daraja-mpesa.js";
+import {
+  isPaystackCollectReady,
+  resolveCollectRail,
+  initiatePaystackMpesaCharge,
+  buyerChargeEmail,
+  paystackReference,
+} from "./paystack-transfers.js";
 import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
 import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
 
@@ -13,6 +20,15 @@ export function isPrepaidOnly() {
 
 export function isDarajaConfigured() {
   return isDarajaReady();
+}
+
+/** STK can fire via Paystack charge or Daraja. */
+export function isStkConfigured() {
+  return resolveCollectRail(isDarajaReady()) !== "manual";
+}
+
+export function collectPaymentRail() {
+  return resolveCollectRail(isDarajaReady());
 }
 
 export function canFulfillOrder(order) {
@@ -47,7 +63,7 @@ export function formatPrepaidCheckoutPrompt(order) {
   const ref = order?.id || "SKN-####";
   const shipBit = ship > 0 ? ` · delivery KES ${ship.toLocaleString()}` : "";
 
-  if (isDarajaConfigured()) {
+  if (isStkConfigured()) {
     return `💳 *${ref}* — *${priceLine}*${shipBit}\nSTK sent — enter M-Pesa PIN.`;
   }
 
@@ -59,7 +75,8 @@ export function formatPrepaidCheckoutPrompt(order) {
 }
 
 /**
- * Initiate M-Pesa STK push via Daraja; stores CheckoutRequestID on order.
+ * Initiate M-Pesa STK — Paystack Charge when keyed, else Daraja.
+ * Stores CheckoutRequestID (or Paystack reference) on the order for webhook match.
  */
 export async function initiateMpesaCheckout(order, { phone } = {}) {
   if (!order?.id) {
@@ -78,11 +95,13 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     return { ok: true, method: "already_paid", alreadyPaid: true };
   }
 
-  if (!isDarajaConfigured()) {
+  const rail = collectPaymentRail();
+  if (rail === "manual") {
     return {
       ok: true,
       method: "manual_till",
       stkAvailable: false,
+      paymentRail: "manual",
       message:
         "M-Pesa STK is briefly unavailable — open your checkout link on sokonimall.com or reply *paid* with your M-Pesa code on WhatsApp.",
     };
@@ -93,7 +112,7 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     return { ok: false, method: "missing_phone", message: "No phone for STK push" };
   }
 
-  // Hybrid logistics: fold seller county/tier rates into total before Daraja STK.
+  // Hybrid logistics: fold seller county/tier rates into total before STK.
   let payOrder = order;
   try {
     const ensured = await ensureHybridShippingBeforePayment(order);
@@ -104,11 +123,28 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     payOrder = getOrder(order.id) || order;
   }
 
+  const amountKes = orderBuyerTotal(payOrder);
+  const shippingKes = Math.round(Number(payOrder.shippingKes) || 0);
+
+  if (rail === "paystack") {
+    const charged = await initiatePaystackChargeForOrder(payOrder, { phone: payPhone, amountKes });
+    if (charged.ok) return { ...charged, shippingKes };
+    if (isDarajaReady()) {
+      console.warn("[checkout] Paystack charge failed — falling back to Daraja:", charged.message);
+    } else {
+      updateOrderMeta(payOrder.id, {
+        paymentStatus: "failed",
+        lastPaymentError: charged.message,
+      });
+      return { ok: false, method: "stk_error", paymentRail: "paystack", message: charged.message };
+    }
+  }
+
   try {
-    updateOrderMeta(payOrder.id, { paymentStatus: "processing" });
+    updateOrderMeta(payOrder.id, { paymentStatus: "processing", paymentRail: "daraja" });
     const stk = await initiateStkPush({
       phone: payPhone,
-      amount: orderBuyerTotal(payOrder),
+      amount: amountKes,
       accountReference: payOrder.id,
       description: `Order ${payOrder.id}`,
     });
@@ -117,40 +153,80 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
       checkoutRequestId: stk.checkoutRequestId,
       merchantRequestId: stk.merchantRequestId,
       paymentStatus: "processing",
+      paymentRail: "daraja",
       stkSentAt: Date.now(),
     });
 
     return {
       ok: true,
       method: "mpesa_stk",
+      paymentRail: "daraja",
       stkAvailable: true,
       checkoutRequestId: stk.checkoutRequestId,
       customerMessage: stk.customerMessage,
-      amountKes: orderBuyerTotal(payOrder),
-      shippingKes: Math.round(Number(payOrder.shippingKes) || 0),
+      amountKes,
+      shippingKes,
     };
   } catch (err) {
     updateOrderMeta(payOrder.id, {
       paymentStatus: "failed",
       lastPaymentError: err.message,
     });
-    return { ok: false, method: "stk_error", message: err.message };
+    return { ok: false, method: "stk_error", paymentRail: "daraja", message: err.message };
   }
 }
 
+async function initiatePaystackChargeForOrder(payOrder, { phone, amountKes }) {
+  updateOrderMeta(payOrder.id, { paymentStatus: "processing", paymentRail: "paystack" });
+  const reference = paystackReference({ orderId: payOrder.id, withdrawId: "pay" });
+  const charge = await initiatePaystackMpesaCharge({
+    email: buyerChargeEmail(payOrder),
+    amountKes,
+    phone,
+    reference,
+    metadata: { orderId: payOrder.id },
+  });
+  if (!charge.ok) return charge;
+
+  updateOrderMeta(payOrder.id, {
+    checkoutRequestId: charge.reference,
+    paystackReference: charge.reference,
+    merchantRequestId: charge.data?.id || null,
+    paymentStatus: "processing",
+    paymentRail: "paystack",
+    stkSentAt: Date.now(),
+  });
+
+  return {
+    ok: true,
+    method: "mpesa_stk",
+    paymentRail: "paystack",
+    stkAvailable: true,
+    checkoutRequestId: charge.reference,
+    paystackReference: charge.reference,
+    customerMessage: charge.displayText || "STK sent — enter M-Pesa PIN on your phone.",
+    amountKes,
+  };
+}
+
 export function checkoutMeta() {
+  const rail = collectPaymentRail();
+  const stkLive = rail !== "manual";
   return {
     prepaidOnly: isPrepaidOnly(),
-    darajaConfigured: isDarajaConfigured(),
-    darajaIntegration: isDarajaConfigured() ? "stk_active" : "manual_fallback",
+    darajaConfigured: stkLive,
+    stkAvailable: stkLive,
+    paymentRail: rail,
+    paystackConfigured: isPaystackCollectReady(),
+    darajaIntegration: stkLive ? "stk_active" : "manual_fallback",
     escrow: true,
-    autoConfirm: isDarajaConfigured(),
+    autoConfirm: stkLive,
     multiSellerCart: isMultiSellerCartEnabled(),
     cartIdFormat: "SKN-#### (+ SKN-####-n children)",
-    paymentMethods: isDarajaConfigured() ? ["mpesa_stk"] : ["whatsapp_paid"],
+    paymentMethods: stkLive ? ["mpesa_stk"] : ["whatsapp_paid"],
     // Do not expose till / till account name on public checkout meta.
-    note: isDarajaConfigured()
-      ? "Daraja STK auto-confirms payment via webhook — no admin #payconfirm needed."
+    note: stkLive
+      ? "M-Pesa STK auto-confirms payment via webhook — no admin #payconfirm needed."
       : "STK env not configured — buyers retry STK or reply paid on WhatsApp.",
   };
 }

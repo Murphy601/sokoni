@@ -363,8 +363,8 @@ async function applyCartParentPostPayment(order, payment = {}) {
 }
 
 /** Handle failed / cancelled STK. */
-export async function applyPaymentFailure(checkoutRequestId, resultDesc = "") {
-  const order = findOrderByCheckoutRequestId(checkoutRequestId) || null;
+export async function applyPaymentFailure(checkoutRequestId, resultDesc = "", orderHint = null) {
+  const order = orderHint || findOrderByCheckoutRequestId(checkoutRequestId) || null;
   if (!order) {
     console.warn("[escrow] STK failed — order not found for", checkoutRequestId);
     return null;
@@ -396,6 +396,23 @@ export function resolveOrderFromStkCallback(parsed) {
   if (parsed.accountReference) {
     const byRef = getOrder(parsed.accountReference);
     if (byRef) return byRef;
+  }
+  return null;
+}
+
+/** Resolve order from Paystack charge.success / charge.failed. */
+export function resolveOrderFromPaystackCharge(parsed) {
+  if (parsed?.orderId) {
+    const byId = getOrder(parsed.orderId);
+    if (byId) return byId;
+  }
+  if (parsed?.reference) {
+    const byRef = findOrderByCheckoutRequestId(parsed.reference);
+    if (byRef) return byRef;
+  }
+  if (parsed?.phone && parsed.amountKes != null) {
+    const byPhone = findProcessingOrderByPhoneAmount(parsed.phone, parsed.amountKes);
+    if (byPhone) return byPhone;
   }
   return null;
 }

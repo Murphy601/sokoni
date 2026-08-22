@@ -1,6 +1,6 @@
 /**
- * Seller manual M-Pesa withdrawal requests (available balance → payout number).
- * When B2C is configured, Withdraw triggers Daraja B2C immediately for Ready lines.
+ * Seller M-Pesa withdrawal requests (Ready balance → payout number).
+ * Rail: Paystack Transfers when keyed, else Daraja B2C, else admin #paid.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -59,7 +59,8 @@ export function getWithdrawableEntries(supplierId) {
   const settlements = loadSettlements();
   return (settlements.entries || []).filter(
     (e) =>
-      e.supplierId === supplierId && (e.status === "owed" || e.status === "b2c_failed")
+      e.supplierId === supplierId &&
+      (e.status === "owed" || e.status === "b2c_failed" || e.status === "paystack_failed")
   );
 }
 
@@ -83,6 +84,8 @@ export async function getSellerWithdrawSummaryAsync(phone, sessionToken) {
 
   const availableKes = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   const { isB2CReady, b2cMeta } = await import("./daraja-mpesa.js");
+  const { isPaystackReady, paystackMeta, resolvePayoutRail } = await import("./paystack-transfers.js");
+  const rail = resolvePayoutRail(isB2CReady());
 
   return {
     availableKes,
@@ -95,8 +98,12 @@ export async function getSellerWithdrawSummaryAsync(phone, sessionToken) {
       productName: e.productName,
       amountKes: e.payoutAmountKes,
     })),
-    instantB2c: Boolean(config.mpesa.withdrawInstantB2c && isB2CReady()),
+    payoutRail: rail,
+    instantPaystack: rail === "paystack",
+    instantB2c: rail === "b2c",
+    paystack: paystackMeta(),
     b2c: b2cMeta(),
+    paystackReady: isPaystackReady(),
     seller: {
       id: supplier.id,
       businessName: supplier.businessName,
@@ -110,9 +117,11 @@ async function notifyAdminWithdrawal(request, supplier, { b2cAttempted = false }
     const adminPhone = config.admin?.primary;
     if (!adminPhone) return;
     const adminId = toChatId(adminPhone);
-    const mode = b2cAttempted
-      ? "B2C submitted — waiting Safaricom ResultURL"
-      : `_Pay via M-Pesa, then mark paid: #paid ${request.orderIds[0]}_`;
+    const mode = request.rail === "paystack"
+      ? "Paystack transfer submitted — waiting transfer webhook"
+      : b2cAttempted
+        ? "B2C submitted — waiting Safaricom ResultURL"
+        : `_Pay via M-Pesa, then mark paid: #paid ${request.orderIds[0]}_`;
     await sendText(
       adminId,
       `💸 *Withdraw request — ${request.id}*\n\n` +
@@ -180,16 +189,78 @@ async function createWithdrawalRequest(supplier) {
     status: "pending",
     requestedAt: Date.now(),
     paidAt: null,
+    rail: null,
     b2c: null,
+    paystack: null,
   };
+
+  const { isB2CReady } = await import("./daraja-mpesa.js");
+  const { resolvePayoutRail } = await import("./paystack-transfers.js");
+  const rail = resolvePayoutRail(isB2CReady());
+  request.rail = rail;
 
   store.requests = store.requests || [];
   store.requests.unshift(request);
   if (store.requests.length > 500) store.requests.length = 500;
   saveWithdrawals(store);
 
-  const { isB2CReady } = await import("./daraja-mpesa.js");
-  const wantInstant = Boolean(config.mpesa.withdrawInstantB2c && isB2CReady());
+  if (rail === "paystack") {
+    const { initiateSettlementPaystack } = await import("./settlements.js");
+    const results = [];
+    let accepted = 0;
+    let failed = 0;
+    for (const orderId of request.orderIds) {
+      const out = await initiateSettlementPaystack(orderId, { withdrawId: request.id });
+      results.push({
+        orderId,
+        ok: Boolean(out.success),
+        skipped: Boolean(out.skipped),
+        error: out.error || null,
+        message: out.message || null,
+      });
+      if (out.success) accepted += 1;
+      else if (!out.skipped) failed += 1;
+    }
+    request.paystack = { attemptedAt: Date.now(), accepted, failed, results };
+    request.status = accepted > 0 ? "processing" : failed > 0 ? "pending" : "processing";
+    saveWithdrawals(store);
+    await notifyAdminWithdrawal(request, supplier, { b2cAttempted: false });
+
+    if (accepted > 0 && failed === 0) {
+      return {
+        ok: true,
+        request,
+        instant: true,
+        rail: "paystack",
+        message:
+          `✅ Withdrawal *${request.id}* — KES ${amountKes.toLocaleString()} sent to M-Pesa ${maskMpesa(mpesaNumber)}.\n` +
+          `_Waiting Paystack confirmation (usually seconds)._`,
+      };
+    }
+    if (accepted > 0) {
+      return {
+        ok: true,
+        request,
+        instant: true,
+        partial: true,
+        rail: "paystack",
+        message:
+          `⏳ Withdrawal *${request.id}* — ${accepted} order(s) sent via Paystack, ${failed} need retry.\n` +
+          `Amount: KES ${amountKes.toLocaleString()} → ${maskMpesa(mpesaNumber)}.`,
+      };
+    }
+    return {
+      ok: true,
+      request,
+      instant: false,
+      rail: "paystack",
+      message:
+        `⚠️ Paystack could not send yet — withdrawal *${request.id}* queued.\n` +
+        `KES ${amountKes.toLocaleString()} to ${maskMpesa(mpesaNumber)}. ${results[0]?.message || ""}`.trim(),
+    };
+  }
+
+  const wantInstant = rail === "b2c";
 
   if (wantInstant) {
     const { initiateSettlementB2C } = await import("./settlements.js");
@@ -252,6 +323,6 @@ async function createWithdrawalRequest(supplier) {
     instant: false,
     message:
       `Withdrawal requested — KES ${amountKes.toLocaleString()} to M-Pesa ${maskMpesa(mpesaNumber)}.\n` +
-      `_B2C not configured yet — admin pays manually then #paid. Set MPESA_INITIATOR_NAME + SECURITY_CREDENTIAL for instant cashout._`,
+      `_Instant send needs PAYSTACK_SECRET_KEY or a B2C initiator — admin pays manually then #paid._`,
   };
 }

@@ -72,10 +72,11 @@ export async function handleSellerWalletMessage(customerKey, text, { phone = "" 
     }
     await sendText(
       customerKey,
-      `✅ *Withdrawal request ${result.request.id}*\n\n` +
-        `Amount: *KES ${result.request.amountKes.toLocaleString()}*\n` +
-        `M-Pesa: *${result.request.mpesaNumber}*\n\n` +
-        `_Processing usually within 1 business day._`
+      result.message ||
+        `✅ *Withdrawal request ${result.request.id}*\n\n` +
+          `Amount: *KES ${result.request.amountKes.toLocaleString()}*\n` +
+          `M-Pesa: *${result.request.mpesaNumber}*\n\n` +
+          `_Processing usually within 1 business day._`
     );
     return true;
   }

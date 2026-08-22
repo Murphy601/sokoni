@@ -284,9 +284,13 @@
     pollCount = 0;
   }
 
+  function stkLive(meta) {
+    return Boolean(meta?.stkAvailable ?? meta?.darajaConfigured ?? meta?.paystackConfigured);
+  }
+
   function renderReadiness(meta) {
     if (!readinessEl || !meta) return;
-    if (meta.darajaConfigured) {
+    if (stkLive(meta)) {
       readinessEl.textContent =
         "M-Pesa STK is live — tap Pay, enter PIN on your phone. Payment confirms automatically.";
     } else {
@@ -358,11 +362,11 @@
       statusEl.textContent = "✅ Already paid — escrow held. Your order is being processed.";
       payBlock.classList.add("hidden");
       tillBlock?.classList.add("hidden");
-    } else if (processing && meta.darajaConfigured) {
+    } else if (processing && stkLive(meta)) {
       statusEl.textContent = "📱 STK sent — enter your M-Pesa PIN. Waiting for confirmation…";
       payBlock.classList.remove("hidden");
       if (payBtn && !payBusy) payBtn.textContent = "Resend STK";
-    } else if (meta.darajaConfigured) {
+    } else if (stkLive(meta)) {
       statusEl.textContent =
         "💳 Set delivery above, then tap Pay — M-Pesa STK uses item + delivery fee.";
       payBlock.classList.remove("hidden");
@@ -574,6 +578,7 @@
     const params = new URLSearchParams(window.location.search);
     const offerId = params.get("offerId");
     const preset = params.get("order");
+    const paystackRef = params.get("reference") || params.get("trxref");
     if (offerId) {
       window.SokoniBuyerAuth?.bindPanel?.({
         onVerified: () => {
@@ -587,6 +592,25 @@
     if (preset) {
       input.value = normalizeOrderId(preset);
       loadOrder(input.value);
+      return;
+    }
+    if (paystackRef) {
+      fetch(`${CHECKOUT_API}/by-reference/${encodeURIComponent(paystackRef)}`)
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.orderId) {
+            showError("Payment found, but we could not match the order. Enter your SKN-####.");
+            return;
+          }
+          input.value = data.orderId;
+          const url = new URL(window.location.href);
+          url.searchParams.set("order", data.orderId);
+          window.history.replaceState({}, "", url);
+          loadOrder(data.orderId);
+        })
+        .catch(() => {
+          showError("Could not load this payment. Enter your SKN-#### from WhatsApp.");
+        });
     }
   });
 })();

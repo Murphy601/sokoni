@@ -7,7 +7,7 @@ import {
   labelPageUrlForOrder,
 } from "../services/prepaid-checkout.js";
 import { generateDropoffLabel } from "../services/escrow-automation.js";
-import { getOrder } from "../services/orders.js";
+import { getOrder, findOrderByCheckoutRequestId } from "../services/orders.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
 import { config } from "../config.js";
 import { listLandmarkHubs, formatLandmarkLine } from "../lib/landmark-hubs.js";
@@ -21,7 +21,7 @@ router.get("/meta", (_req, res) => {
   res.json({
     ...checkoutMeta(),
     hybridLogistics: true,
-    paymentRail: "daraja_mpesa",
+    paymentRail: checkoutMeta().paymentRail || "mpesa_stk",
   });
 });
 
@@ -43,7 +43,7 @@ router.get("/locations/towns", (req, res) => {
   res.json({ success: true, county, towns: listTownsForCounty(county) });
 });
 
-/** POST /api/checkout/calculate-shipping — hybrid fee engine (no Paystack). */
+/** POST /api/checkout/calculate-shipping — hybrid fee engine (totals only). */
 router.post("/calculate-shipping", async (req, res) => {
   try {
     const result = await calculateShipping(req.body || {});
@@ -54,7 +54,7 @@ router.post("/calculate-shipping", async (req, res) => {
   }
 });
 
-/** POST /api/checkout/:orderId/apply-shipping — mutate order shipping before Daraja STK. */
+/** POST /api/checkout/:orderId/apply-shipping — mutate order shipping before M-Pesa STK. */
 router.post("/:orderId/apply-shipping", async (req, res) => {
   try {
     const result = await applyShippingToOrder(req.params.orderId, {
@@ -113,6 +113,17 @@ router.get("/:orderId/label", (req, res) => {
   });
 });
 
+/** GET /api/checkout/by-reference/:reference — Paystack callback ?reference= / ?trxref= */
+router.get("/by-reference/:reference", (req, res) => {
+  const order = findOrderByCheckoutRequestId(req.params.reference);
+  if (!order) return res.status(404).json({ error: "order_not_found" });
+  res.json({
+    orderId: order.id,
+    paymentStatus: order.customerPaymentStatus,
+    checkoutUrl: checkoutUrlForOrder(order.id),
+  });
+});
+
 router.get("/:orderId", (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {
@@ -153,7 +164,7 @@ router.get("/:orderId", (req, res) => {
   });
 });
 
-/** POST /api/checkout/:orderId/stk — Daraja STK push (amount = item + shipping). */
+/** POST /api/checkout/:orderId/stk — M-Pesa STK (Paystack Charge, Daraja fallback). */
 router.post("/:orderId/stk", async (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {

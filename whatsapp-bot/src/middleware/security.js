@@ -31,11 +31,16 @@ export function corsAllowlist(req, res, next) {
   next();
 }
 
-/** Capture raw body for WAHA HMAC (sha512 of raw JSON) — use as express.json verify. */
+/** Capture raw body for WAHA HMAC and Paystack transfer webhooks. */
 export function attachRawBody(req, _res, buf) {
   if (!buf?.length) return;
   const path = req.originalUrl?.split("?")[0] || req.url?.split("?")[0] || "";
-  if (path === "/webhook") {
+  if (
+    path === "/webhook" ||
+    path === "/api/webhooks/paystack" ||
+    path === "/api/payments/paystack" ||
+    path === "/api/payments/paystack/webhook"
+  ) {
     req.rawBody = Buffer.from(buf);
   }
 }

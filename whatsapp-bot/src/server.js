@@ -26,7 +26,7 @@ import ordersApiRouter from "./routes/ordersApi.js";
 import disputesApiRouter from "./routes/disputesApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
 import cartApiRouter from "./routes/cartApi.js";
-import paymentsApiRouter from "./routes/paymentsApi.js";
+import paymentsApiRouter, { handlePaystackWebhook } from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
 import vendorShippingApiRouter from "./routes/vendorShippingApi.js";
 import { attachRiderSocket } from "./services/rider-tracking.js";
@@ -40,6 +40,7 @@ import feedApiRouter from "./routes/feedApi.js";
 import searchApiRouter from "./routes/searchApi.js";
 import { processDuePayouts, disburseOwedPayoutsViaB2C } from "./services/settlements.js";
 import { isB2CReady, b2cMeta } from "./services/daraja-mpesa.js";
+import { paystackMeta, resolvePayoutRail } from "./services/paystack-transfers.js";
 import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
@@ -313,6 +314,7 @@ app.use("/api/disputes", disputesApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
 app.use("/api/cart", cartApiRouter);
 app.use("/api/payments", paymentsApiRouter);
+app.post("/api/webhooks/paystack", webhookLimiter, handlePaystackWebhook);
 app.use("/api/tracking", trackingApiRouter);
 app.use("/api/vendor", vendorShippingApiRouter);
 app.use("/api/agent", agentApiRouter);
@@ -392,7 +394,8 @@ function startPayoutScheduler() {
     try {
       const n = processDuePayouts();
       if (n > 0) console.log(`[settlements] ${n} seller payout(s) now owed`);
-      if (isB2CReady()) {
+      const rail = resolvePayoutRail(isB2CReady());
+      if (rail === "b2c" && isB2CReady()) {
         const sent = await disburseOwedPayoutsViaB2C({ includeFailed: false, limit: 10 });
         if (sent > 0) console.log(`[settlements] B2C accepted ${sent} payout(s)`);
       }
@@ -403,8 +406,12 @@ function startPayoutScheduler() {
   tick();
   setInterval(tick, 60 * 60 * 1000);
   const b2c = b2cMeta();
+  const paystack = paystackMeta();
+  const rail = resolvePayoutRail(b2c.ready);
   console.log(
-    `✓ Seller payout scheduler enabled (hourly)${b2c.ready ? ` · B2C ${b2c.auto ? "auto" : "manual (#payb2c)"}` : " · B2C not configured"}`
+    `✓ Seller payout scheduler enabled (hourly) · rail ${rail}` +
+      `${paystack.ready ? ` · Paystack ${paystack.collectReady ? "C2B+transfers" : "transfers"}` : ""}` +
+      `${b2c.ready ? ` · B2C ${b2c.auto ? "auto" : "manual (#payb2c)"}` : " · B2C not configured"}`
   );
 }
 

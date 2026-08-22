@@ -177,7 +177,7 @@
       <div class="sell-dash-group space-y-4">
         <div class="sell-dash-group__head">
           <p class="sell-dash-group__label">Delivery fees across Kenya</p>
-          <p class="sell-dash-group__hint">Set once — Sokoni charges the right fee from the buyer’s county at checkout (M-Pesa / Daraja). Most sellers pick Standard rates and save.</p>
+          <p class="sell-dash-group__hint">Set once — Sokoni charges the right fee from the buyer’s county at checkout (M-Pesa STK). Most sellers pick Standard rates and save.</p>
         </div>
 
         <div class="flex flex-wrap gap-2" role="tablist" aria-label="Shipping sections">
