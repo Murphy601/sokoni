@@ -145,4 +145,8 @@ assert.match(envExample, /https:\/\/bot.sokonimall.com\/api\/webhooks\/paystack/
 const checkoutApi = read("src/routes/checkoutApi.js");
 assert.match(checkoutApi, /by-reference/);
 
+const retain = readFileSync(path.join(root, "..", "scripts", "retain-order-for-withdraw-test.mjs"), "utf8");
+assert.match(retain, /SKN-1013/);
+assert.match(retain, /cancelledAt/);
+
 console.log("ok — Paystack payout helpers + wiring present");
