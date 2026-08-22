@@ -32,13 +32,24 @@ export function isPaystackCollectReady() {
   return isPaystackReady() && config.paystack?.collect !== false;
 }
 
+/** Paystack Starter Business cannot call Transfers / third-party payouts. */
+export function isPaystackStarterPayoutBlock(raw) {
+  const text = String(raw || "");
+  return /third party payouts as a starter/i.test(text) || /starter business/i.test(text);
+}
+
+export function paystackTransfersEnabled() {
+  return isPaystackReady() && config.paystack?.transfers !== false && config.paystack?.withdrawInstant !== false;
+}
+
 export function paystackMeta() {
   return {
     ready: isPaystackReady(),
     collectReady: isPaystackCollectReady(),
     collectRail: config.paystack?.collectRail || "paystack",
-    withdrawInstant: Boolean(config.paystack?.withdrawInstant && isPaystackReady()),
+    withdrawInstant: Boolean(paystackTransfersEnabled()),
     payoutRail: config.paystack?.payoutRail || "paystack",
+    transfers: config.paystack?.transfers !== false,
     only: config.paystack?.only !== false,
     webhookUrl: config.paystack?.webhookUrl || null,
     hasPublicKey: Boolean(config.paystack?.publicKey),
@@ -65,15 +76,15 @@ export function resolveCollectRail(darajaReady = false) {
 /** paystack (default) — B2C only if PAYSTACK_ONLY=false. */
 export function resolvePayoutRail(b2cReady = false) {
   const preferred = config.paystack?.payoutRail || "paystack";
-  const paystackOn = isPaystackReady() && config.paystack?.withdrawInstant !== false;
+  const paystackOn = paystackTransfersEnabled();
   const b2cOn = Boolean(b2cReady && config.mpesa?.withdrawInstantB2c !== false && darajaAllowed());
 
-  if (preferred === "manual") return "manual";
-  if (preferred === "paystack") return paystackOn ? "paystack" : b2cOn ? "b2c" : "manual";
-  if (preferred === "b2c") return b2cOn ? "b2c" : paystackOn ? "paystack" : "manual";
+  if (preferred === "manual" || preferred === "admin") return "admin";
+  if (preferred === "paystack") return paystackOn ? "paystack" : b2cOn ? "b2c" : "admin";
+  if (preferred === "b2c") return b2cOn ? "b2c" : paystackOn ? "paystack" : "admin";
   if (paystackOn) return "paystack";
   if (b2cOn) return "b2c";
-  return "manual";
+  return "admin";
 }
 
 /** Charge API wants +2547XXXXXXXX. Transfers recipients use 07xxxxxxxx. */
@@ -172,9 +183,15 @@ async function paystackRequest(method, pathname, body) {
     const raw = String(json.message || `Paystack HTTP ${res.status}`);
     const message = /invalid key/i.test(raw)
       ? "Paystack rejected PAYSTACK_SECRET_KEY (Invalid key). Paste the Live Secret Key that starts with sk_live_ — not pk_live_ — then pm2 restart sokoni-bot."
-      : raw;
+      : isPaystackStarterPayoutBlock(raw)
+        ? "Paystack Starter Business cannot send Transfers. Upgrade to Registered Business, or we queue this for admin #paid."
+        : raw;
     const err = new Error(message);
-    err.code = /invalid key/i.test(raw) ? "paystack_invalid_key" : "paystack_http";
+    err.code = /invalid key/i.test(raw)
+      ? "paystack_invalid_key"
+      : isPaystackStarterPayoutBlock(raw)
+        ? "paystack_starter"
+        : "paystack_http";
     err.status = res.status;
     err.paystack = json;
     throw err;

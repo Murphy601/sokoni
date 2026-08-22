@@ -6,7 +6,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
-import { healReleasedSellerPayouts } from "./settlements.js";
+import { healReleasedSellerPayouts, markPayoutPaid } from "./settlements.js";
+import { updateOrderMeta } from "./orders.js";
 import { config } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +102,7 @@ export async function getSellerWithdrawSummaryAsync(phone, sessionToken) {
     payoutRail: rail,
     instantPaystack: rail === "paystack",
     instantB2c: rail === "b2c",
+    adminQueue: rail === "admin",
     paystack: paystackMeta(),
     b2c: b2cMeta(),
     paystackReady: isPaystackReady(),
@@ -120,11 +122,13 @@ async function notifyAdminWithdrawal(request, supplier, { b2cAttempted = false }
     const mode =
       request.status === "failed"
         ? `Paystack did not send — ${request.failReason || request.paystack?.results?.[0]?.message || "check PAYSTACK_SECRET_KEY"}`
-        : request.rail === "paystack"
-          ? "Paystack transfer submitted — waiting transfer webhook"
-          : b2cAttempted
-            ? "B2C submitted — waiting Safaricom ResultURL"
-            : `_Pay via M-Pesa, then mark paid: #paid ${request.orderIds[0]}_`;
+        : request.rail === "admin" || request.queued
+          ? `Paystack Starter cannot Transfer — send M-Pesa by hand, then *#paid ${request.id}*`
+          : request.rail === "paystack"
+            ? "Paystack transfer submitted — waiting transfer webhook"
+            : b2cAttempted
+              ? "B2C submitted — waiting Safaricom ResultURL"
+              : `_Pay via M-Pesa, then mark paid: #paid ${request.id}_`;
     await sendText(
       adminId,
       `💸 *Withdraw request — ${request.id}*\n\n` +
@@ -151,6 +155,98 @@ export async function requestSellerWithdrawalByPhone(phone) {
   const check = requireSeller(phone);
   if (check.error) return check;
   return createWithdrawalRequest(check.supplier);
+}
+
+export function listPendingAdminWithdrawals(limit = 20) {
+  const store = loadWithdrawals();
+  return (store.requests || [])
+    .filter((r) => (r.status === "pending" || r.status === "processing") && (r.rail === "admin" || r.queued))
+    .slice(0, limit);
+}
+
+/** Mark a queued withdrawal paid after admin sends M-Pesa (#paid WD-2026-0004). */
+export function markWithdrawalPaid(withdrawId, extra = {}) {
+  const id = String(withdrawId || "").trim().toUpperCase();
+  if (!id) return { error: "missing_id" };
+  const store = loadWithdrawals();
+  const request = (store.requests || []).find((r) => String(r.id || "").toUpperCase() === id);
+  if (!request) return { error: "not_found", message: `No withdrawal ${id}.` };
+  if (request.status === "paid") return { skipped: true, request, message: "Already marked paid." };
+
+  const paid = [];
+  for (const orderId of request.orderIds || []) {
+    try {
+      const entry = markPayoutPaid(orderId, { receipt: extra.receipt || null });
+      if (entry) {
+        paid.push(entry);
+        try {
+          updateOrderMeta(orderId, {
+            payoutStatus: "paid",
+            isPaidOut: true,
+            paidOutAt: Date.now(),
+            payoutRail: "admin",
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      console.warn("[withdrawals] mark paid skipped", orderId, err?.message || err);
+    }
+  }
+  request.status = "paid";
+  request.paidAt = Date.now();
+  request.paidBy = "admin";
+  if (extra.receipt) request.mpesaReceipt = extra.receipt;
+  saveWithdrawals(store);
+  return { ok: true, request, paid };
+}
+
+export function markWithdrawalPaidByOrderId(orderId) {
+  const oid = String(orderId || "").trim().toUpperCase();
+  if (!oid) return null;
+  const store = loadWithdrawals();
+  const request = (store.requests || []).find(
+    (r) =>
+      (r.status === "pending" || r.status === "processing") &&
+      (r.orderIds || []).some((id) => String(id || "").toUpperCase() === oid)
+  );
+  if (!request) return null;
+  const settlements = loadSettlements();
+  const stillOpen = (request.orderIds || []).some((id) => {
+    const entry = (settlements.entries || []).find(
+      (e) => String(e.orderId || "").toUpperCase() === String(id || "").toUpperCase()
+    );
+    return entry && entry.status !== "paid" && entry.status !== "cancelled";
+  });
+  if (stillOpen) return { pending: true, request };
+  request.status = "paid";
+  request.paidAt = Date.now();
+  request.paidBy = "admin";
+  saveWithdrawals(store);
+  return { ok: true, request };
+}
+
+async function queueForAdmin(store, request, supplier, { reason = "paystack_starter" } = {}) {
+  const { lockSettlementsForAdminQueue } = await import("./settlements.js");
+  lockSettlementsForAdminQueue(request.orderIds, { withdrawId: request.id });
+  request.rail = "admin";
+  request.queued = true;
+  request.queueReason = reason;
+  request.status = "pending";
+  request.failReason = null;
+  saveWithdrawals(store);
+  await notifyAdminWithdrawal(request, supplier, { b2cAttempted: false });
+  return {
+    ok: true,
+    request,
+    instant: false,
+    queued: true,
+    rail: "admin",
+    message:
+      `✅ Withdrawal *${request.id}* queued — KES ${request.amountKes.toLocaleString()} to ${maskMpesa(request.mpesaNumber)}.\n` +
+      `_We'll send M-Pesa shortly. You don't need to tap again._`,
+  };
 }
 
 async function createWithdrawalRequest(supplier) {
@@ -225,6 +321,13 @@ async function createWithdrawalRequest(supplier) {
       else if (!out.skipped) failed += 1;
     }
     request.paystack = { attemptedAt: Date.now(), accepted, failed, results };
+    const { isPaystackStarterPayoutBlock } = await import("./paystack-transfers.js");
+    const starterBlocked =
+      accepted === 0 &&
+      results.some((r) => r.error === "paystack_starter" || isPaystackStarterPayoutBlock(r.message));
+    if (starterBlocked) {
+      return queueForAdmin(store, request, supplier, { reason: "paystack_starter" });
+    }
     request.status = accepted > 0 ? "processing" : "failed";
     if (request.status === "failed") {
       request.failReason = results[0]?.message || "paystack_failed";
@@ -322,31 +425,7 @@ async function createWithdrawalRequest(supplier) {
     };
   }
 
-  if (config.paystack?.only !== false) {
-    request.status = "failed";
-    request.failReason = "paystack_not_configured";
-    saveWithdrawals(store);
-    await notifyAdminWithdrawal(request, supplier, { b2cAttempted: false });
-    return {
-      ok: false,
-      error: "paystack_not_configured",
-      request,
-      instant: false,
-      rail: "manual",
-      message:
-        `⚠️ Paystack is not ready — withdrawal *${request.id}* was not queued.\n` +
-        `Paste a Live Secret Key (sk_live_…) as PAYSTACK_SECRET_KEY, then pm2 restart sokoni-bot.`,
-    };
-  }
-
-  await notifyAdminWithdrawal(request, supplier, { b2cAttempted: false });
-
-  return {
-    ok: true,
-    request,
-    instant: false,
-    message:
-      `Withdrawal requested — KES ${amountKes.toLocaleString()} to M-Pesa ${maskMpesa(mpesaNumber)}.\n` +
-      `_Instant send needs PAYSTACK_SECRET_KEY or a B2C initiator — admin pays manually then #paid._`,
-  };
+  return queueForAdmin(store, request, supplier, {
+    reason: rail === "admin" ? "admin_queue" : "paystack_not_configured",
+  });
 }

@@ -62,7 +62,7 @@ export async function handleSellerWalletMessage(customerKey, text, { phone = "" 
     if (result.error === "withdrawal_pending") {
       await sendText(
         customerKey,
-        `⏳ Withdrawal *${result.request?.id}* is already processing.\n\nWe'll M-Pesa *KES ${result.request?.amountKes?.toLocaleString()}* to your registered number soon.`
+        `${result.request?.queued || result.request?.rail === "admin" ? "🕐" : "⏳"} Withdrawal *${result.request?.id}* is already queued.\n\nWe'll M-Pesa *KES ${result.request?.amountKes?.toLocaleString()}* to your registered number shortly.`
       );
       return true;
     }
