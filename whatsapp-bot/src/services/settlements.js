@@ -49,6 +49,36 @@ function persist() {
   }
 }
 
+function isFailedPayoutStatus(status) {
+  return status === "b2c_failed" || status === "paystack_failed";
+}
+
+function isWithdrawableStatus(status) {
+  return status === "owed" || isFailedPayoutStatus(status);
+}
+
+function isOpenSettlementStatus(status) {
+  return (
+    status === "owed" ||
+    status === "disbursing" ||
+    status === "scheduled" ||
+    isFailedPayoutStatus(status)
+  );
+}
+
+function nairobiDayStartMs(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(now));
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  return new Date(`${year}-${month}-${day}T00:00:00+03:00`).getTime();
+}
+
 /** Add N business days (Mon–Fri) in Africa/Nairobi calendar. */
 export function addBusinessDays(fromMs, days) {
   const n = Math.max(0, Math.floor(Number(days) || 0));
@@ -288,14 +318,7 @@ export function listDisbursingPayouts(limit = 20) {
 export function findSettlementByOrderId(orderId) {
   load();
   return (
-    store.entries.find(
-      (e) =>
-        e.orderId === orderId &&
-        (e.status === "owed" ||
-          e.status === "disbursing" ||
-          e.status === "scheduled" ||
-          e.status === "b2c_failed")
-    ) || null
+    store.entries.find((e) => e.orderId === orderId && isOpenSettlementStatus(e.status)) || null
   );
 }
 
@@ -313,9 +336,7 @@ export function findSettlementByOriginatorId(originatorConversationId) {
 export function markPayoutPaid(orderId, extra = {}) {
   load();
   const entry = store.entries.find(
-    (e) =>
-      e.orderId === orderId &&
-      (e.status === "owed" || e.status === "disbursing" || e.status === "b2c_failed")
+    (e) => e.orderId === orderId && (isWithdrawableStatus(e.status) || e.status === "disbursing")
   );
   if (!entry) return null;
   entry.status = "paid";
@@ -474,6 +495,296 @@ export function applyB2CResult(parsed) {
   return { success: false, entry, resultDesc: parsed.resultDesc };
 }
 
+export function isWithdrawableSettlementStatus(status) {
+  return isWithdrawableStatus(status);
+}
+
+export function sellerPaystackVolumeTodayKes(supplierId, now = Date.now()) {
+  if (!supplierId) return 0;
+  load();
+  const start = nairobiDayStartMs(now);
+  let sum = 0;
+  for (const entry of store.entries) {
+    if (entry.supplierId !== supplierId) continue;
+    const chunks = entry.paystack?.chunks || [];
+    for (const chunk of chunks) {
+      const at = Number(chunk.createdAt || entry.paystack?.lastRequestAt || 0);
+      if (at < start) continue;
+      const st = String(chunk.status || "").toLowerCase();
+      if (st === "success" || st === "pending" || st === "otp" || st === "received") {
+        sum += Number(chunk.amountKes) || 0;
+      }
+    }
+  }
+  return sum;
+}
+
+export function findSettlementByPaystackReference(reference) {
+  load();
+  const ref = String(reference || "").trim().toLowerCase();
+  if (!ref) return null;
+  return (
+    store.entries.find((e) => {
+      const chunks = e.paystack?.chunks || [];
+      return chunks.some((c) => String(c.reference || "").toLowerCase() === ref);
+    }) ||
+    store.entries.find((e) => String(e.paystack?.reference || "").toLowerCase() === ref) ||
+    null
+  );
+}
+
+async function ensurePaystackRecipient(supplier) {
+  const phone = supplier?.mpesaNumber || supplier?.phone;
+  const storedPhone = supplier?.paystackRecipientPhone;
+  const storedCode = supplier?.paystackRecipientCode;
+  if (storedCode && storedPhone && storedPhone === phone) {
+    return { ok: true, recipientCode: storedCode, reused: true };
+  }
+  const { createMpesaRecipient } = await import("./paystack-transfers.js");
+  const created = await createMpesaRecipient({
+    name: supplier?.businessName || supplier?.contactName || supplier?.id,
+    phone,
+    metadata: { supplierId: supplier?.id || "" },
+  });
+  if (!created.ok) return created;
+  const { saveSupplierPaystackRecipient } = await import("./suppliers.js");
+  saveSupplierPaystackRecipient(supplier.id, {
+    recipientCode: created.recipientCode,
+    phone,
+  });
+  return created;
+}
+
+/**
+ * Lock Ready line, then send Paystack transfer(s) to the seller M-Pesa.
+ * Splits amounts over KES 250,000. Webhook marks paid or refunds the line.
+ */
+export async function initiateSettlementPaystack(orderId, { force = false, withdrawId = "" } = {}) {
+  load();
+  const entry = store.entries.find((e) => e.orderId === orderId);
+  if (!entry) return { error: "not_found", message: `No settlement for ${orderId}` };
+  if (entry.status === "paid") return { skipped: true, message: "Already paid." };
+  if (entry.status === "cancelled") return { error: "cancelled", message: "Settlement cancelled." };
+  if (entry.status === "scheduled" && !force) {
+    return { error: "still_held", message: "Still in escrow hold — wait until owed, or use force." };
+  }
+  if (entry.status === "disbursing" && !force) {
+    return { skipped: true, message: "Payout already in flight — wait for Paystack webhook." };
+  }
+
+  const { getSupplier } = await import("./suppliers.js");
+  const supplier = getSupplier(entry.supplierId);
+  const mpesaPhone =
+    entry.mpesaPhone || supplier?.mpesaNumber || supplier?.phone || entry.supplierPhone;
+  if (!mpesaPhone) {
+    return { error: "no_mpesa", message: "Seller M-Pesa number not on file." };
+  }
+
+  const {
+    isPaystackReady,
+    splitMpesaTransferChunks,
+    paystackReference,
+    initiateKesTransfer,
+    remainingMpesaDailyKes,
+  } = await import("./paystack-transfers.js");
+  if (!isPaystackReady()) {
+    return { error: "paystack_not_configured", message: "Paystack secret key is not configured." };
+  }
+
+  const sentToday = sellerPaystackVolumeTodayKes(entry.supplierId);
+  const dailyLeft = remainingMpesaDailyKes(sentToday);
+  if (dailyLeft <= 0) {
+    return {
+      error: "mpesa_daily_cap",
+      message: "M-Pesa daily cap of KES 500,000 already used today — try again tomorrow.",
+    };
+  }
+
+  const amountKes = Math.round(Number(entry.payoutAmountKes) || 0);
+  if (amountKes > dailyLeft) {
+    return {
+      error: "mpesa_daily_cap",
+      message: `This payout (KES ${amountKes.toLocaleString()}) would pass the M-Pesa daily cap. KES ${dailyLeft.toLocaleString()} still available today.`,
+    };
+  }
+
+  const recipient = await ensurePaystackRecipient(supplier || { mpesaNumber: mpesaPhone });
+  if (!recipient.ok) {
+    return { error: recipient.error || "recipient_failed", message: recipient.message };
+  }
+
+  const chunks = splitMpesaTransferChunks(amountKes);
+  if (!chunks.length) {
+    return { error: "invalid_amount", message: "Nothing to send." };
+  }
+
+  // Lock ledger BEFORE the external API call to prevent double-spend.
+  entry.status = "disbursing";
+  entry.mpesaPhone = mpesaPhone;
+  entry.disburseLockedAt = Date.now();
+  entry.paystack = {
+    ...(entry.paystack || {}),
+    recipientCode: recipient.recipientCode,
+    withdrawId: withdrawId || entry.paystack?.withdrawId || null,
+    lastRequestAt: Date.now(),
+    chunks: chunks.map((amount, index) => ({
+      amountKes: amount,
+      reference: paystackReference({ withdrawId, orderId: entry.orderId, chunkIndex: index }),
+      status: "pending",
+      createdAt: Date.now(),
+    })),
+  };
+  persist();
+  try {
+    updateOrderMeta(entry.orderId, { payoutStatus: "disbursing", payoutRail: "paystack" });
+  } catch {
+    /* ignore */
+  }
+
+  let accepted = 0;
+  let failed = 0;
+  for (const chunk of entry.paystack.chunks) {
+    const result = await initiateKesTransfer({
+      amountKes: chunk.amountKes,
+      recipientCode: recipient.recipientCode,
+      reason: `Sokoni payout ${entry.orderId}`,
+      reference: chunk.reference,
+    });
+    chunk.lastMessage = result.message || result.error || null;
+    chunk.transferCode = result.transferCode || null;
+    chunk.status = result.ok ? result.status || "pending" : "failed";
+    if (result.ok) {
+      accepted += 1;
+      if (result.reference) chunk.reference = result.reference;
+    } else {
+      failed += 1;
+    }
+  }
+
+  if (accepted > 0) {
+    persist();
+    return { success: true, entry, accepted, failed };
+  }
+
+  entry.status = "paystack_failed";
+  entry.paystack.failedAt = Date.now();
+  persist();
+  try {
+    updateOrderMeta(entry.orderId, { payoutStatus: "paystack_failed" });
+  } catch {
+    /* ignore */
+  }
+  import("./communication-hub.js")
+    .then(({ notifyAdminEvent }) =>
+      notifyAdminEvent("PAYOUT_FAILED", {
+        orderId: entry.orderId,
+        details: entry.paystack.chunks?.[0]?.lastMessage || "Paystack transfer rejected — retry withdraw",
+      })
+    )
+    .catch(() => {});
+  return {
+    error: "paystack_rejected",
+    message: entry.paystack.chunks?.[0]?.lastMessage || "Paystack transfer rejected",
+    entry,
+  };
+}
+
+/** Apply Paystack transfer.success / failed / reversed to a locked settlement. */
+export function applyPaystackTransferEvent(parsed) {
+  if (!parsed?.valid) return { error: "invalid" };
+  load();
+
+  const entry =
+    findSettlementByPaystackReference(parsed.reference) ||
+    store.entries.find(
+      (e) =>
+        parsed.transferCode &&
+        (e.paystack?.chunks || []).some((c) => c.transferCode === parsed.transferCode)
+    ) ||
+    null;
+
+  if (!entry) {
+    console.warn("[settlements] Paystack transfer unmatched", {
+      reference: parsed.reference,
+      transferCode: parsed.transferCode,
+      event: parsed.event,
+    });
+    return { error: "not_found" };
+  }
+
+  const chunks = entry.paystack?.chunks || [];
+  const chunk =
+    chunks.find((c) => String(c.reference || "").toLowerCase() === String(parsed.reference || "").toLowerCase()) ||
+    chunks.find((c) => parsed.transferCode && c.transferCode === parsed.transferCode) ||
+    chunks[0];
+  if (chunk) {
+    chunk.status = parsed.success ? "success" : "failed";
+    chunk.callbackAt = Date.now();
+    chunk.transferCode = parsed.transferCode || chunk.transferCode;
+    if (parsed.reversed) chunk.reversed = true;
+  }
+  entry.paystack = {
+    ...(entry.paystack || {}),
+    lastEvent: parsed.event,
+    lastCallbackAt: Date.now(),
+  };
+
+  const allSuccess = chunks.length > 0 && chunks.every((c) => c.status === "success");
+  const anyPending = chunks.some((c) =>
+    ["pending", "otp", "received"].includes(String(c.status || "").toLowerCase())
+  );
+  const paidKes = chunks
+    .filter((c) => c.status === "success")
+    .reduce((s, c) => s + (Number(c.amountKes) || 0), 0);
+  const unpaidKes = chunks
+    .filter((c) => c.status !== "success")
+    .reduce((s, c) => s + (Number(c.amountKes) || 0), 0);
+
+  if (allSuccess) {
+    entry.status = "paid";
+    entry.paidAt = Date.now();
+    persist();
+    try {
+      updateOrderMeta(entry.orderId, {
+        payoutStatus: "paid",
+        isPaidOut: true,
+        paidOutAt: Date.now(),
+        payoutRail: "paystack",
+        paystackReference: parsed.reference || null,
+      });
+    } catch {
+      /* ignore */
+    }
+    console.log("[settlements] Paystack paid", entry.orderId, parsed.reference);
+    return { success: true, entry };
+  }
+
+  if (!anyPending && unpaidKes > 0) {
+    // Refund only the failed remainder — never re-open money already confirmed paid.
+    entry.payoutAmountKes = unpaidKes;
+    entry.paystack.paidKes = (Number(entry.paystack.paidKes) || 0) + paidKes;
+    entry.status = paidKes > 0 ? "owed" : "paystack_failed";
+    persist();
+    try {
+      updateOrderMeta(entry.orderId, {
+        payoutStatus: entry.status === "owed" ? "owed" : "paystack_failed",
+        isPaidOut: false,
+      });
+    } catch {
+      /* ignore */
+    }
+    console.warn("[settlements] Paystack partial/fail", entry.orderId, {
+      paidKes,
+      unpaidKes,
+      event: parsed.event,
+    });
+    return { success: false, entry, refunded: true, partial: paidKes > 0 };
+  }
+
+  persist();
+  return { success: Boolean(parsed.success), pending: true, entry };
+}
+
 /**
  * Auto-disburse owed settlements when MPESA_B2C_AUTO=true.
  * @returns {Promise<number>} number of B2C requests accepted
@@ -485,7 +796,7 @@ export async function disburseOwedPayoutsViaB2C({ includeFailed = false, limit =
 
   load();
   const candidates = store.entries
-    .filter((e) => e.status === "owed" || (includeFailed && e.status === "b2c_failed"))
+    .filter((e) => e.status === "owed" || (includeFailed && isFailedPayoutStatus(e.status)))
     .slice(0, limit);
 
   let accepted = 0;
@@ -498,14 +809,7 @@ export async function disburseOwedPayoutsViaB2C({ includeFailed = false, limit =
 
 export function cancelSettlementPayout(orderId, reason = "dispute") {
   load();
-  const entry = store.entries.find(
-    (e) =>
-      e.orderId === orderId &&
-      (e.status === "scheduled" ||
-        e.status === "owed" ||
-        e.status === "disbursing" ||
-        e.status === "b2c_failed")
-  );
+  const entry = store.entries.find((e) => e.orderId === orderId && isOpenSettlementStatus(e.status));
   if (!entry) return null;
   entry.status = "cancelled";
   entry.cancelledAt = Date.now();
@@ -535,7 +839,7 @@ export function getSettlementSummary() {
   const owed = store.entries.filter((e) => e.status === "owed");
   const scheduled = store.entries.filter((e) => e.status === "scheduled");
   const disbursing = store.entries.filter((e) => e.status === "disbursing");
-  const failed = store.entries.filter((e) => e.status === "b2c_failed");
+  const failed = store.entries.filter((e) => isFailedPayoutStatus(e.status));
   const totalOwed = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   const totalScheduled = scheduled.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   return {

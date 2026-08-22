@@ -188,6 +188,27 @@ export const config = {
       ),
     };
   })(),
+  /**
+   * Paystack Transfers — seller M-Pesa payouts (no own Safaricom B2C shortcode).
+   * Buyer checkout stays on Daraja STK. Set PAYSTACK_SECRET_KEY to enable.
+   */
+  paystack: (() => {
+    const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
+    const railRaw = trim(process.env.SELLER_PAYOUT_RAIL).toLowerCase();
+    const payoutRail =
+      railRaw === "paystack" || railRaw === "b2c" || railRaw === "manual" ? railRaw : "auto";
+    const botBase = "https://bot.sokonimall.com";
+    return {
+      secretKey: trim(process.env.PAYSTACK_SECRET_KEY),
+      publicKey: trim(process.env.PAYSTACK_PUBLIC_KEY),
+      webhookUrl:
+        trim(process.env.PAYSTACK_WEBHOOK_URL) || `${botBase}/api/webhooks/paystack`,
+      payoutRail,
+      withdrawInstant: !/^(0|false|no)$/i.test(
+        trim(process.env.SELLER_WITHDRAW_INSTANT_PAYSTACK) || "true"
+      ),
+    };
+  })(),
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**
    * Admin console phone(s). Set ADMIN_PHONES to a number DIFFERENT from the bot

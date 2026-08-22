@@ -183,6 +183,21 @@ export function getSupplier(id) {
   return supplierStore.suppliers[id] || null;
 }
 
+/** Persist Paystack transfer recipient on the seller profile (one-time per M-Pesa number). */
+export function saveSupplierPaystackRecipient(
+  supplierId,
+  { recipientCode, phone, createdAt = Date.now() } = {}
+) {
+  loadSuppliers();
+  const supplier = supplierStore.suppliers[supplierId];
+  if (!supplier || !recipientCode) return null;
+  supplier.paystackRecipientCode = String(recipientCode).trim();
+  supplier.paystackRecipientPhone = phone ? normalizePhoneDigits(phone) : supplier.mpesaNumber || null;
+  supplier.paystackRecipientAt = createdAt;
+  persistSuppliers();
+  return supplier;
+}
+
 export function listSuppliers() {
   loadSuppliers();
   return Object.values(supplierStore.suppliers);
@@ -339,7 +354,15 @@ export function createPeerSeller({
   const normalizedPhone = normalizePhoneDigits(phone);
   const existing = findSupplierByPhone(phone);
   if (existing) {
-    if (mpesaNumber) existing.mpesaNumber = mpesaNumber;
+    if (mpesaNumber) {
+      const nextMpesa = normalizePhoneDigits(mpesaNumber);
+      if (nextMpesa && existing.mpesaNumber && existing.mpesaNumber !== nextMpesa) {
+        existing.paystackRecipientCode = null;
+        existing.paystackRecipientPhone = null;
+        existing.paystackRecipientAt = null;
+      }
+      existing.mpesaNumber = nextMpesa || mpesaNumber;
+    }
     if (shopHandle) existing.shopHandle = shopHandle;
     if (nationalId) existing.nationalId = nationalId;
     existing.isSellerVerified = true;

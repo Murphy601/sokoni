@@ -167,9 +167,11 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
       escrowHoldBusinessDays: Number.isFinite(holdDays) ? holdDays : 0,
       readyOnDelivery: !holdDays,
       withdrawInstantB2c: Boolean(config.mpesa?.withdrawInstantB2c),
+      withdrawInstantPaystack: Boolean(config.paystack?.withdrawInstant && config.paystack?.secretKey),
+      payoutRail: config.paystack?.payoutRail || "auto",
       note:
         (holdDays || 0) === 0
-          ? "Delivery / buyer confirm credits Seller Hub Ready for M-Pesa immediately. Withdraw sends B2C when initiator credentials are set."
+          ? "Delivery / buyer confirm credits Seller Hub Ready for M-Pesa immediately. Withdraw sends via Paystack when PAYSTACK_SECRET_KEY is set, else Daraja B2C."
           : `Seller Ready after ${holdDays} business day hold (or admin Release).`,
     },
     totals: {

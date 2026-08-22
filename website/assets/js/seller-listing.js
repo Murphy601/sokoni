@@ -5965,6 +5965,20 @@ function renderWithdrawPanel(data) {
   if (el("payout-pipeline-pending")) el("payout-pipeline-pending").textContent = formatKes(pending);
   if (el("payout-pipeline-transit")) el("payout-pipeline-transit").textContent = formatKes(transit);
 
+  const railHint = el("withdraw-rail-hint");
+  if (railHint) {
+    if (data.instantPaystack) {
+      railHint.textContent =
+        "Tap withdraw and Ready money goes to your M-Pesa now. One send max KES 250,000 — we split larger balances. Daily cap on your number is KES 500,000.";
+    } else if (data.instantB2c) {
+      railHint.textContent =
+        "Tap withdraw and Ready money goes to your M-Pesa now. One send max KES 250,000.";
+    } else {
+      railHint.textContent =
+        "Tap withdraw to queue a cash-out. Instant M-Pesa is on once payouts are switched on — until then we send it by hand.";
+    }
+  }
+
   const pendingEl = el("withdraw-pending");
   const reqBtn = el("withdraw-request-btn");
   if (data.pendingRequest) {
@@ -5975,7 +5989,7 @@ function renderWithdrawPanel(data) {
   } else {
     pendingEl.classList.add("hidden");
     reqBtn.disabled = !(data.availableKes > 0);
-    reqBtn.textContent = "Request withdrawal";
+    reqBtn.textContent = data.instantPaystack || data.instantB2c ? "Withdraw to M-Pesa" : "Request withdrawal";
   }
 
   const breakdown = el("withdraw-breakdown");

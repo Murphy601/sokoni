@@ -17,6 +17,7 @@
     "test:listing-studio": "node scripts/test-listing-studio.mjs",
     "test:clip-fallbacks": "node scripts/test-clip-fallbacks.mjs",
     "test:daraja-checkout": "node scripts/test-daraja-checkout.mjs",
+    "test:paystack-payouts": "node scripts/test-paystack-payouts.mjs",
     "test:hybrid-shipping": "node scripts/test-hybrid-shipping.mjs",
     "test:gemini": "node scripts/test-gemini-vision.mjs",
     "test:nvidia": "node scripts/test-nvidia-vision.mjs",

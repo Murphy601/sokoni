@@ -5,7 +5,9 @@ import {
   applyPaymentFailure,
   resolveOrderFromStkCallback,
 } from "../services/escrow-automation.js";
-import { applyB2CResult } from "../services/settlements.js";
+import { applyB2CResult, applyPaystackTransferEvent } from "../services/settlements.js";
+import { parsePaystackTransferEvent, verifyPaystackSignature } from "../services/paystack-transfers.js";
+import { config } from "../config.js";
 
 const router = Router();
 
@@ -83,5 +85,26 @@ router.post("/mpesa-callback", handleMpesaStkCallback);
 router.post("/daraja/callback", handleMpesaStkCallback);
 router.post("/daraja/b2c/result", handleB2CResult);
 router.post("/daraja/b2c/timeout", handleB2CTimeout);
+router.post("/paystack", handlePaystackWebhook);
+router.post("/paystack/webhook", handlePaystackWebhook);
+
+/** Paystack transfer.success / failed / reversed — refunds Ready balance on failure. */
+export async function handlePaystackWebhook(req, res) {
+  try {
+    const signature = req.headers["x-paystack-signature"];
+    const raw = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+    if (!verifyPaystackSignature(raw, signature, config.paystack?.secretKey)) {
+      return res.status(401).json({ error: "invalid_signature" });
+    }
+    const parsed = parsePaystackTransferEvent(req.body);
+    if (parsed.valid) {
+      applyPaystackTransferEvent(parsed);
+    }
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error("[paystack-webhook] error:", err.message);
+    res.status(200).json({ received: true, error: "processing_error" });
+  }
+}
 
 export default router;

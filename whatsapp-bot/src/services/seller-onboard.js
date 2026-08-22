@@ -1067,7 +1067,7 @@ export async function confirmOrderDelivery(orderId) {
 
 /**
  * After delivery — schedule escrow hold only.
- * B2C runs later via hourly cron (MPESA_B2C_AUTO) or admin `#payb2c SK-…`.
+ * Instant withdraw uses Paystack (if keyed) or Daraja B2C / admin `#payb2c`.
  */
 export async function releaseEscrowPayout(orderId) {
   const order = getOrder(orderId);
@@ -1087,6 +1087,7 @@ export async function releaseEscrowPayout(orderId) {
     "./settlements.js"
   );
   const { isB2CReady, b2cMeta } = await import("./daraja-mpesa.js");
+  const { isPaystackReady, paystackMeta, resolvePayoutRail } = await import("./paystack-transfers.js");
 
   const holdDays = escrowHoldBusinessDays();
   const ready = creditSellerWalletAfterDelivery(
@@ -1112,12 +1113,16 @@ export async function releaseEscrowPayout(orderId) {
     netAmount,
     mpesaPhone: mpesaPhone || null,
     b2c: b2cMeta(),
+    paystack: paystackMeta(),
+    payoutRail: resolvePayoutRail(isB2CReady()),
     message: immediate
-      ? isB2CReady()
-        ? "Seller wallet credited (Ready for M-Pesa). Withdraw sends B2C instantly."
-        : "Seller wallet credited (Ready for M-Pesa). Configure B2C for instant withdraw, or #paid after manual send."
-      : isB2CReady()
-        ? `Payout scheduled (${holdDays} business day hold) — then Ready / #payb2c.`
+      ? isPaystackReady()
+        ? "Seller wallet credited (Ready for M-Pesa). Withdraw sends Paystack → M-Pesa instantly."
+        : isB2CReady()
+          ? "Seller wallet credited (Ready for M-Pesa). Withdraw sends B2C instantly."
+          : "Seller wallet credited (Ready for M-Pesa). Set PAYSTACK_SECRET_KEY or B2C for instant withdraw, or #paid after manual send."
+      : isPaystackReady() || isB2CReady()
+        ? `Payout scheduled (${holdDays} business day hold) — then Ready / withdraw.`
         : `Payout scheduled (${holdDays} business day hold).`,
   };
 }
