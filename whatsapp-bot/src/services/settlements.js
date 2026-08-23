@@ -57,10 +57,15 @@ function isWithdrawableStatus(status) {
   return status === "owed" || isFailedPayoutStatus(status);
 }
 
+function isLockedPayoutStatus(status) {
+  return status === "disbursing" || status === "withdraw_queued";
+}
+
 function isOpenSettlementStatus(status) {
   return (
     status === "owed" ||
     status === "disbursing" ||
+    status === "withdraw_queued" ||
     status === "scheduled" ||
     isFailedPayoutStatus(status)
   );
@@ -237,7 +242,7 @@ export function markSettlementReadyForMpesa(order, { payoutAmountKes = null } = 
   );
   if (existing) {
     // Already sending / already ready — just refresh amount if needed.
-    if (existing.status === "disbursing") {
+    if (isLockedPayoutStatus(existing.status)) {
       if (amount > 0) existing.payoutAmountKes = amount;
       persist();
       return existing;
@@ -280,7 +285,7 @@ export function healReleasedSellerPayouts(supplierId) {
       String(order.payoutStatus || "").toLowerCase() === "owed";
     if (!released) continue;
     const entry = markSettlementReadyForMpesa(order);
-    if (entry && (entry.status === "owed" || entry.status === "disbursing")) healed += 1;
+    if (entry && (entry.status === "owed" || isLockedPayoutStatus(entry.status))) healed += 1;
   }
   return healed;
 }
@@ -333,10 +338,35 @@ export function findSettlementByOriginatorId(originatorConversationId) {
   );
 }
 
+/** Lock Ready lines so a queued admin payout cannot be withdrawn twice. */
+export function lockSettlementsForAdminQueue(orderIds, { withdrawId = "" } = {}) {
+  load();
+  const want = new Set((orderIds || []).map((id) => String(id || "").toUpperCase()).filter(Boolean));
+  if (!want.size) return 0;
+  let locked = 0;
+  for (const entry of store.entries) {
+    if (!want.has(String(entry.orderId || "").toUpperCase())) continue;
+    if (entry.status === "paid" || entry.status === "cancelled") continue;
+    entry.status = "withdraw_queued";
+    entry.withdrawQueuedAt = Date.now();
+    entry.withdrawId = withdrawId || entry.withdrawId || null;
+    locked += 1;
+    try {
+      updateOrderMeta(entry.orderId, { payoutStatus: "withdraw_queued", payoutRail: "admin" });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (locked) persist();
+  return locked;
+}
+
 export function markPayoutPaid(orderId, extra = {}) {
   load();
   const entry = store.entries.find(
-    (e) => e.orderId === orderId && (isWithdrawableStatus(e.status) || e.status === "disbursing")
+    (e) =>
+      e.orderId === orderId &&
+      (isWithdrawableStatus(e.status) || isLockedPayoutStatus(e.status))
   );
   if (!entry) return null;
   entry.status = "paid";
@@ -666,6 +696,27 @@ export async function initiateSettlementPaystack(orderId, { force = false, withd
     return { success: true, entry, accepted, failed };
   }
 
+  const failMessage = entry.paystack.chunks?.[0]?.lastMessage || "Paystack transfer rejected";
+  const { isPaystackStarterPayoutBlock } = await import("./paystack-transfers.js");
+  if (isPaystackStarterPayoutBlock(failMessage)) {
+    entry.status = "withdraw_queued";
+    entry.withdrawQueuedAt = Date.now();
+    entry.withdrawId = withdrawId || entry.withdrawId || null;
+    entry.paystack.failedAt = Date.now();
+    persist();
+    try {
+      updateOrderMeta(entry.orderId, { payoutStatus: "withdraw_queued", payoutRail: "admin" });
+    } catch {
+      /* ignore */
+    }
+    return {
+      queued: true,
+      error: "paystack_starter",
+      message: failMessage,
+      entry,
+    };
+  }
+
   entry.status = "paystack_failed";
   entry.paystack.failedAt = Date.now();
   persist();
@@ -678,13 +729,13 @@ export async function initiateSettlementPaystack(orderId, { force = false, withd
     .then(({ notifyAdminEvent }) =>
       notifyAdminEvent("PAYOUT_FAILED", {
         orderId: entry.orderId,
-        details: entry.paystack.chunks?.[0]?.lastMessage || "Paystack transfer rejected — retry withdraw",
+        details: failMessage,
       })
     )
     .catch(() => {});
   return {
     error: "paystack_rejected",
-    message: entry.paystack.chunks?.[0]?.lastMessage || "Paystack transfer rejected",
+    message: failMessage,
     entry,
   };
 }
@@ -839,18 +890,23 @@ export function getSettlementSummary() {
   const owed = store.entries.filter((e) => e.status === "owed");
   const scheduled = store.entries.filter((e) => e.status === "scheduled");
   const disbursing = store.entries.filter((e) => e.status === "disbursing");
+  const queued = store.entries.filter((e) => e.status === "withdraw_queued");
   const failed = store.entries.filter((e) => isFailedPayoutStatus(e.status));
   const totalOwed = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   const totalScheduled = scheduled.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
+  const totalQueued = queued.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   return {
     count: owed.length,
     scheduledCount: scheduled.length,
     disbursingCount: disbursing.length,
+    queuedCount: queued.length,
     failedCount: failed.length,
     totalOwedKes: totalOwed,
     totalScheduledKes: totalScheduled,
+    totalQueuedKes: totalQueued,
     entries: owed,
     disbursing,
+    queued,
     failed,
   };
 }

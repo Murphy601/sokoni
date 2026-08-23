@@ -340,13 +340,13 @@ export function getSellerEscrowLedger(supplierId) {
 
   // Sending to M-Pesa — show under Ready list as in-flight, but not withdrawable again.
   const sending = sellerEntries
-    .filter((e) => e.status === "disbursing")
+    .filter((e) => e.status === "disbursing" || e.status === "withdraw_queued")
     .map((e) => ({
       orderId: e.orderId,
       amountKes: e.payoutAmountKes,
-      status: "disbursing",
+      status: e.status === "withdraw_queued" ? "withdraw_queued" : "disbursing",
       productName: e.productName,
-      readyLabel: "Sending to M-Pesa",
+      readyLabel: e.status === "withdraw_queued" ? "Queued — sending to M-Pesa" : "Sending to M-Pesa",
     }));
 
   // Pending escrow = buyer paid, still held. Released money must NEVER land here.

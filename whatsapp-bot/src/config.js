@@ -196,7 +196,11 @@ export const config = {
     const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
     const railRaw = trim(process.env.SELLER_PAYOUT_RAIL).toLowerCase();
     const payoutRail =
-      railRaw === "paystack" || railRaw === "b2c" || railRaw === "manual" ? railRaw : "paystack";
+      railRaw === "paystack" || railRaw === "b2c" || railRaw === "manual" || railRaw === "admin"
+        ? railRaw === "manual"
+          ? "admin"
+          : railRaw
+        : "paystack";
     const collectRaw = trim(process.env.BUYER_PAY_RAIL).toLowerCase();
     const collectRail =
       collectRaw === "paystack" || collectRaw === "daraja" || collectRaw === "manual"
@@ -216,6 +220,8 @@ export const config = {
       withdrawInstant: !/^(0|false|no)$/i.test(
         trim(process.env.SELLER_WITHDRAW_INSTANT_PAYSTACK) || "true"
       ),
+      /** false = skip Transfer API (Starter Business) and queue admin #paid. */
+      transfers: !/^(0|false|no)$/i.test(trim(process.env.PAYSTACK_TRANSFERS) || "true"),
     };
   })(),
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",

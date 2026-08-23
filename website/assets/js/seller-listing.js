@@ -5973,6 +5973,9 @@ function renderWithdrawPanel(data) {
     } else if (data.instantB2c) {
       railHint.textContent =
         "Tap withdraw and Ready money goes to your M-Pesa now. One send max KES 250,000.";
+    } else if (data.adminQueue) {
+      railHint.textContent =
+        "Tap withdraw and we lock the Ready amount. We send M-Pesa by hand — usually the same day. You don't tap twice.";
     } else {
       railHint.textContent =
         "Tap withdraw to queue a cash-out. Instant M-Pesa is on once payouts are switched on — until then we send it by hand.";
@@ -5983,9 +5986,12 @@ function renderWithdrawPanel(data) {
   const reqBtn = el("withdraw-request-btn");
   if (data.pendingRequest) {
     pendingEl.classList.remove("hidden");
-    pendingEl.textContent = `Processing ${data.pendingRequest.id} — ${formatKes(data.pendingRequest.amountKes)} requested ${new Date(data.pendingRequest.requestedAt).toLocaleString()}.`;
+    const queued = data.pendingRequest.queued || data.pendingRequest.rail === "admin";
+    pendingEl.textContent = queued
+      ? `Queued ${data.pendingRequest.id} — ${formatKes(data.pendingRequest.amountKes)}. We'll M-Pesa ${data.maskedMpesa || "your number"} shortly.`
+      : `Processing ${data.pendingRequest.id} — ${formatKes(data.pendingRequest.amountKes)} requested ${new Date(data.pendingRequest.requestedAt).toLocaleString()}.`;
     reqBtn.disabled = true;
-    reqBtn.textContent = "Withdrawal pending";
+    reqBtn.textContent = queued ? "Withdrawal queued" : "Withdrawal pending";
   } else {
     pendingEl.classList.add("hidden");
     reqBtn.disabled = !(data.availableKes > 0);

@@ -61,6 +61,7 @@ import {
   handleDbOpsCommand,
 } from "./platform-admin.js";
 import { getSettlementSummary, markPayoutPaid, initiateSettlementB2C } from "./settlements.js";
+import { markWithdrawalPaid, markWithdrawalPaidByOrderId } from "./seller-withdrawals.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isB2CReady, b2cMeta } from "./daraja-mpesa.js";
 
@@ -402,6 +403,7 @@ function adminHelpText() {
     `💰 *#payouts* — supplier amounts owed / B2C status\n` +
     `💸 *#payb2c SKN-1002-1* — send seller payout via M-Pesa B2C\n` +
     `✅ *#paid SKN-1002-1* — mark supplier paid (manual transfer)\n` +
+    `✅ *#paid WD-2026-0004* — mark a queued withdrawal paid (all its orders)\n` +
     `🖥️ *Command Center* — sokonimall.com/admin-command.html (escrow tank, disputes, hub stats)\n\n` +
     `📣 *Customer comms & offers*\n` +
     `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
@@ -607,7 +609,18 @@ async function handlePayoutsCommand(adminChatId) {
     parts.push(`⚠️ B2C failed (${summary.failedCount})\n${lines.join("\n\n")}`);
   }
 
-  if (summary.count === 0 && summary.disbursingCount === 0 && summary.failedCount === 0) {
+  if (summary.queuedCount > 0) {
+    const lines = (summary.queued || []).slice(0, 8).map(
+      (e) =>
+        `*${e.orderId}* · ${e.supplierName}\n` +
+        `KES ${e.payoutAmountKes.toLocaleString()} · ${e.withdrawId || "queued"}\n` +
+        `#paid ${e.withdrawId || e.orderId}`
+    );
+    parts.push(
+      `🕐 Admin queue (send M-Pesa by hand): ${summary.queuedCount} · KES ${(summary.totalQueuedKes || 0).toLocaleString()}\n\n${lines.join("\n\n")}`
+    );
+  }
+  if (summary.count === 0 && summary.disbursingCount === 0 && summary.failedCount === 0 && !summary.queuedCount) {
     parts.push("No supplier payouts owed right now.");
     return sendText(adminChatId, parts.join("\n\n"));
   }
@@ -846,14 +859,45 @@ async function handleAssignPickupCommand(adminChatId, args) {
 }
 
 async function handlePaidCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #paid SKN-1002-1");
-  const entry = markPayoutPaid(orderId);
-  if (!entry) return sendText(adminChatId, `⚠️ No owed payout for *${orderId}*.`);
-  updateOrderMeta(orderId, { payoutStatus: "paid" });
+  if (!orderId) return sendText(adminChatId, "Usage: #paid SKN-1002-1  or  #paid WD-2026-0004");
+  const id = String(orderId || "").trim();
+  if (/^WD-\d{4}-\d+/i.test(id)) {
+    const out = markWithdrawalPaid(id);
+    if (out.error === "not_found") return sendText(adminChatId, `⚠️ ${out.message}`);
+    if (out.skipped) return sendText(adminChatId, `ℹ️ *${out.request.id}* — ${out.message}`);
+    const req = out.request;
+    await notifySellerWithdrawalPaid(req);
+    return sendText(
+      adminChatId,
+      `✅ Marked *${req.id}* paid — KES ${req.amountKes.toLocaleString()} to ${req.mpesaNumber}.\n` +
+        `Orders: ${(req.orderIds || []).join(", ")}`
+    );
+  }
+  const entry = markPayoutPaid(id);
+  if (!entry) return sendText(adminChatId, `⚠️ No owed / queued payout for *${id}*.`);
+  updateOrderMeta(id, { payoutStatus: "paid", isPaidOut: true, paidOutAt: Date.now(), payoutRail: "admin" });
+  const done = markWithdrawalPaidByOrderId(id);
+  if (done?.ok && done.request) await notifySellerWithdrawalPaid(done.request);
   return sendText(
     adminChatId,
-    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.`
+    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.` +
+      (done?.ok ? `\nWithdrawal *${done.request.id}* closed.` : "")
   );
+}
+
+async function notifySellerWithdrawalPaid(request) {
+  try {
+    const supplier = getSupplier(request.supplierId);
+    const phone = supplier?.phone || request.phone;
+    if (!phone) return;
+    const { toChatId } = await import("./whatsapp.js");
+    await sendText(
+      toChatId(phone),
+      `✅ Withdrawal *${request.id}* paid — KES ${Number(request.amountKes || 0).toLocaleString()} sent to your M-Pesa.`
+    );
+  } catch (err) {
+    console.warn("[admin] seller withdraw notify failed:", err?.message || err);
+  }
 }
 
 async function handleBroadcastCommand(adminChatId, message) {

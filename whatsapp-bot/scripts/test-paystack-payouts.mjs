@@ -11,6 +11,7 @@ import {
   MPESA_DAILY_LIMIT_KES,
   MPESA_PER_TX_LIMIT_KES,
   buyerChargeEmail,
+  isPaystackStarterPayoutBlock,
   isUsablePaystackSecret,
   parsePaystackChargeEvent,
   parsePaystackTransferEvent,
@@ -47,6 +48,12 @@ assert.equal(isUsablePaystackSecret("pk_live_abcdefghijklmnopqrstuvwxyz"), false
 assert.equal(isUsablePaystackSecret("sk_live_..."), false);
 assert.equal(isUsablePaystackSecret("sk_live_short"), false);
 assert.equal(isUsablePaystackSecret(""), false);
+
+assert.equal(
+  isPaystackStarterPayoutBlock("You cannot initiate third party payouts as a starter business"),
+  true
+);
+assert.equal(isPaystackStarterPayoutBlock("Invalid key"), false);
 
 assert.deepEqual(splitMpesaTransferChunks(150_000), [150_000]);
 assert.deepEqual(splitMpesaTransferChunks(250_000), [250_000]);
@@ -128,12 +135,18 @@ assert.match(settlements, /export async function initiateSettlementPaystack/);
 assert.match(settlements, /export function applyPaystackTransferEvent/);
 assert.match(settlements, /status = "disbursing"/);
 assert.match(settlements, /paystack_failed/);
+assert.match(settlements, /export function lockSettlementsForAdminQueue/);
+assert.match(settlements, /withdraw_queued/);
+assert.match(settlements, /paystack_starter/);
 
 const withdraw = read("src/services/seller-withdrawals.js");
 assert.match(withdraw, /rail === "paystack"/);
 assert.match(withdraw, /initiateSettlementPaystack/);
 assert.match(withdraw, /error: "paystack_failed"/);
 assert.match(withdraw, /request.status = accepted > 0 \? "processing" : "failed"/);
+assert.match(withdraw, /queueForAdmin/);
+assert.match(withdraw, /markWithdrawalPaid/);
+assert.match(withdraw, /paystack_starter/);
 
 const onboardApi = read("src/routes/sellerOnboardApi.js");
 assert.match(onboardApi, /paystack_failed/);
@@ -156,11 +169,20 @@ assert.match(envExample, /PAYSTACK_ONLY=true/);
 assert.match(envExample, /SELLER_PAYOUT_RAIL=paystack/);
 assert.match(envExample, /BUYER_PAY_RAIL=paystack/);
 assert.match(envExample, /PAYSTACK_COLLECT=true/);
+assert.match(envExample, /PAYSTACK_TRANSFERS=false/);
 assert.match(envExample, /https:\/\/sokonimall.com\/checkout.html/);
 assert.match(envExample, /https:\/\/bot.sokonimall.com\/api\/webhooks\/paystack/);
 
 const checkoutApi = read("src/routes/checkoutApi.js");
 assert.match(checkoutApi, /by-reference/);
+
+const admin = read("src/services/admin.js");
+assert.match(admin, /#paid WD-/);
+assert.match(admin, /markWithdrawalPaid/);
+
+const sellerUi = readFileSync(path.join(root, "..", "website/assets/js/seller-listing.js"), "utf8");
+assert.match(sellerUi, /adminQueue/);
+assert.match(sellerUi, /Withdrawal queued/);
 
 const retain = readFileSync(path.join(root, "..", "scripts", "retain-order-for-withdraw-test.mjs"), "utf8");
 assert.match(retain, /SKN-1013/);
