@@ -14,6 +14,7 @@ import {
 } from "./settlements.js";
 import { listLandmarkHubs } from "../lib/landmark-hubs.js";
 import { config } from "../config.js";
+import { paystackTransfersEnabled, resolvePayoutRail } from "./paystack-transfers.js";
 
 function isHeldEscrow(order) {
   if (!order || order.kind === "cart_parent") return false;
@@ -166,13 +167,18 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
     payoutPolicy: {
       escrowHoldBusinessDays: Number.isFinite(holdDays) ? holdDays : 0,
       readyOnDelivery: !holdDays,
-      withdrawInstantB2c: Boolean(config.mpesa?.withdrawInstantB2c),
-      withdrawInstantPaystack: Boolean(config.paystack?.withdrawInstant && config.paystack?.secretKey),
-      payoutRail: config.paystack?.payoutRail || "auto",
+      withdrawInstantB2c: Boolean(config.mpesa?.withdrawInstantB2c && config.paystack?.only === false),
+      withdrawInstantPaystack: paystackTransfersEnabled(),
+      payoutRail: resolvePayoutRail(false),
+      paystackOnly: config.paystack?.only !== false,
+      darajaPayouts: config.paystack?.only === false,
+      adminQueue: resolvePayoutRail(false) === "admin" || config.paystack?.transfers === false,
       note:
-        (holdDays || 0) === 0
-          ? "Delivery / buyer confirm credits Seller Hub Ready for M-Pesa immediately. Withdraw sends via Paystack when PAYSTACK_SECRET_KEY is set, else Daraja B2C."
-          : `Seller Ready after ${holdDays} business day hold (or admin Release).`,
+        config.paystack?.only !== false
+          ? "Daraja B2C is off. Send M-Pesa by hand (Paystack Starter cannot Transfer), then Mark paid or WhatsApp #paid WD-…."
+          : (holdDays || 0) === 0
+            ? "Delivery / buyer confirm credits Seller Hub Ready for M-Pesa immediately."
+            : `Seller Ready after ${holdDays} business day hold (or admin Release).`,
     },
     totals: {
       heldOrders: rows.length,
@@ -188,13 +194,28 @@ export function getEscrowHoldingTank({ limit = 80 } = {}) {
       settlementDisbursingCount: settlements.disbursingCount || 0,
       settlementFailedCount: settlements.failedCount || 0,
       settlementOwedCount: settlements.count || 0,
+      settlementQueuedCount: settlements.queuedCount || 0,
+      settlementQueuedKes: settlements.totalQueuedKes || 0,
     },
     readyPayouts: readyRows,
+    queuedPayouts: (settlements.queued || []).slice(0, 20).map((e) => ({
+      orderId: e.orderId,
+      supplierName: e.supplierName || e.supplierId,
+      productName: e.productName,
+      payoutAmountKes: e.payoutAmountKes,
+      status: e.status,
+      mpesaPhone: e.mpesaPhone || e.supplierPhone || null,
+      withdrawId: e.withdrawId || null,
+    })),
     failedPayouts: (settlements.failed || []).slice(0, 20).map((e) => ({
       orderId: e.orderId,
       supplierName: e.supplierName || e.supplierId,
       payoutAmountKes: e.payoutAmountKes,
-      resultDesc: e.b2c?.resultDesc || e.b2c?.lastMessage || null,
+      resultDesc:
+        e.paystack?.chunks?.[0]?.lastMessage ||
+        e.b2c?.resultDesc ||
+        e.b2c?.lastMessage ||
+        null,
     })),
     orders: rows.slice(0, safeLimit),
     generatedAt: Date.now(),

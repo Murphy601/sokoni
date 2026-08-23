@@ -40,9 +40,14 @@ assert.match(prepaid, /initiatePaystackMpesaCharge/);
 
 const api = read("src/routes/adminCommandApi.js");
 assert.match(api, /payb2c/);
+assert.match(api, /escrow\/:orderId\/paid/);
+assert.match(api, /daraja_off/);
 
 const ui = readFileSync(path.join(root, "..", "website/assets/js/admin-command.js"), "utf8");
 assert.match(ui, /runPayB2C/);
+assert.match(ui, /runMarkPaid/);
 assert.match(ui, /readyPayouts/);
+assert.match(ui, /queuedPayouts/);
+assert.match(ui, /data-markpaid/);
 
 console.log("ok — instant seller payout wiring present");
