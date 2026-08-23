@@ -180,6 +180,11 @@ const admin = read("src/services/admin.js");
 assert.match(admin, /#paid WD-/);
 assert.match(admin, /markWithdrawalPaid/);
 
+const command = read("src/services/platform-command.js");
+assert.match(command, /darajaPayouts/);
+assert.match(command, /queuedPayouts/);
+assert.match(command, /Mark paid/);
+
 const sellerUi = readFileSync(path.join(root, "..", "website/assets/js/seller-listing.js"), "utf8");
 assert.match(sellerUi, /adminQueue/);
 assert.match(sellerUi, /Withdrawal queued/);

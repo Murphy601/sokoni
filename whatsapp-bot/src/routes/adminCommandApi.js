@@ -13,8 +13,11 @@ import {
   refundEscrowOrder,
   releaseEscrowOrder,
 } from "../services/platform-command.js";
-import { initiateSettlementB2C } from "../services/settlements.js";
+import { initiateSettlementB2C, markPayoutPaid } from "../services/settlements.js";
 import { isB2CReady, b2cMeta } from "../services/daraja-mpesa.js";
+import { markWithdrawalPaid, markWithdrawalPaidByOrderId } from "../services/seller-withdrawals.js";
+import { config } from "../config.js";
+import { updateOrderMeta } from "../services/orders.js";
 import { listAdminDisputes, resolveDispute } from "../services/disputes.js";
 import { smartSearch, smartSuggest } from "../services/smart-search.js";
 
@@ -66,8 +69,46 @@ router.post("/escrow/:orderId/release", (req, res) => {
   res.json(result);
 });
 
-/** POST /admin/command/escrow/:orderId/payb2c — send Ready/owed settlement via Daraja B2C */
+/** POST /admin/command/escrow/:orderId/paid — mark queued / Ready payout sent by hand */
+router.post("/escrow/:orderId/paid", (req, res) => {
+  const id = String(req.params.orderId || "").trim();
+  if (/^WD-\d{4}-\d+/i.test(id)) {
+    const out = markWithdrawalPaid(id);
+    if (out.error === "not_found") return res.status(404).json(out);
+    return res.json({ ok: true, ...out, message: `Marked ${id} paid.` });
+  }
+  const entry = markPayoutPaid(id);
+  if (!entry) return res.status(404).json({ error: "not_found", message: `No owed / queued payout for ${id}.` });
+  try {
+    updateOrderMeta(id, {
+      payoutStatus: "paid",
+      isPaidOut: true,
+      paidOutAt: Date.now(),
+      payoutRail: "admin",
+    });
+  } catch {
+    /* ignore */
+  }
+  const done = markWithdrawalPaidByOrderId(id);
+  res.json({
+    ok: true,
+    entry,
+    withdrawal: done?.request || null,
+    message: done?.ok
+      ? `Marked ${id} paid — withdrawal ${done.request.id} closed.`
+      : `Marked ${id} paid.`,
+  });
+});
+
+/** POST /admin/command/escrow/:orderId/payb2c — Daraja B2C only when PAYSTACK_ONLY=false */
 router.post("/escrow/:orderId/payb2c", async (req, res) => {
+  if (config.paystack?.only !== false) {
+    return res.status(409).json({
+      error: "daraja_off",
+      message:
+        "Daraja B2C is off. Send M-Pesa by hand, then Mark paid (or WhatsApp #paid WD-…).",
+    });
+  }
   if (!isB2CReady()) {
     return res.status(503).json({
       error: "b2c_not_configured",
