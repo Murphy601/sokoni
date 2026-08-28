@@ -76,12 +76,25 @@ set_env_kv "GROQ_MODEL" "$PICKED_MODEL"
 set_env_kv "AI_CHAT_PROVIDER" "${AI_CHAT_PROVIDER:-auto}"
 set_env_kv "AI_CHAT_TEMPERATURE" "${AI_CHAT_TEMPERATURE:-0.15}"
 # Vision GEMINI_API_KEY must not drive chat failover (400 noise) unless opted in
-if ! grep -qE "^[[:space:]]*(export[[:space:]]+)?AI_CHAT_USE_GEMINI=" "$ENV_FILE" 2>/dev/null; then
+if [ -n "${AI_CHAT_USE_GEMINI:-}" ]; then
+  set_env_kv "AI_CHAT_USE_GEMINI" "$(clean_cred "$AI_CHAT_USE_GEMINI")"
+else
   set_env_kv "AI_CHAT_USE_GEMINI" "false"
+fi
+
+# OpenRouter free fallback — migrate flaky gemma-4-26b a4b pin (429 under load)
+CURRENT_OR_FB="$(clean_cred "$(env_get OPENAI_MODEL_FALLBACKS)")"
+if [ -z "$CURRENT_OR_FB" ] || echo "$CURRENT_OR_FB" | grep -qE 'gemma-4-26b-a4b-it:free|llama-3\.3-70b-instruct:free'; then
+  set_env_kv "OPENAI_MODEL_FALLBACKS" "${OPENAI_MODEL_FALLBACKS:-google/gemma-4-31b-it:free}"
+fi
+CURRENT_OR_MODEL="$(clean_cred "$(env_get OPENAI_MODEL)")"
+if [ -z "$CURRENT_OR_MODEL" ] || [ "$CURRENT_OR_MODEL" = "llama-3.1-8b-instant" ]; then
+  set_env_kv "OPENAI_MODEL" "${OPENAI_MODEL:-openrouter/free}"
 fi
 
 echo "==> Wrote GROQ_API_KEY (${#PICKED} chars) + GROQ_MODEL=$PICKED_MODEL + AI_CHAT_* to $ENV_FILE"
 echo "==> Chat route: Groq → OpenRouter (Gemini chat only if AI_CHAT_USE_GEMINI=true)"
+echo "==> tool_choice=none on Groq (lookups are server-side — do not use tool_choice=auto)"
 
 if [ "${SKIP_RESTART:-}" = "1" ]; then
   echo "==> SKIP_RESTART=1 — not restarting pm2"

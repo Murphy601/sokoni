@@ -193,7 +193,9 @@ env_get() {
 if [ -f "$ENV_FILE" ]; then
   CURRENT_MODEL="$(env_get "$ENV_FILE" OPENAI_MODEL)"
   FREE_MODEL="openrouter/free"
-  FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free"
+  # Prefer free router + a live free Gemma 4 slug (26b a4b often 429s under load).
+  # Do NOT pin meta-llama/llama-3.3-70b-instruct:free — removed from OpenRouter free tier.
+  FREE_FALLBACKS="google/gemma-4-31b-it:free"
   # Seller photos — free OpenRouter VLMs (NVIDIA NIM is a code fallback after these).
   # Do NOT force paid google/gemini-* on OpenRouter; those burn credits / expire.
   PHOTO_VISION_MODEL="openrouter/free"
@@ -204,7 +206,7 @@ if [ -f "$ENV_FILE" ]; then
     set_env_kv "$ENV_FILE" "OPENAI_MODEL" "$FREE_MODEL"
   fi
   CURRENT_FALLBACKS="$(env_get "$ENV_FILE" OPENAI_MODEL_FALLBACKS)"
-  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b|llama-3\.2-3b|qwen/qwen3-coder'; then
+  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b|llama-3\.2-3b|qwen/qwen3-coder|gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "$FREE_FALLBACKS"
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
@@ -215,9 +217,14 @@ if [ -f "$ENV_FILE" ]; then
     echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (was: ${CURRENT_VISION:-unset}; free seller photos; chat stays ${FREE_MODEL})"
   fi
   CURRENT_VISION_FB="$(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
-  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'google/gemini-|krea/krea|gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free'; then
+  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'google/gemini-|krea/krea|gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_FALLBACKS" "$PHOTO_VISION_FALLBACKS"
     echo "==> Set CATALOG_VISION_FALLBACKS → ${PHOTO_VISION_FALLBACKS}"
+  fi
+  # Chat must not use vision GEMINI_API_KEY unless explicitly opted in.
+  CURRENT_USE_GEMINI="$(env_get "$ENV_FILE" AI_CHAT_USE_GEMINI)"
+  if [ -z "$CURRENT_USE_GEMINI" ]; then
+    set_env_kv "$ENV_FILE" "AI_CHAT_USE_GEMINI" "false"
   fi
   echo "==> AI model: $(env_get "$ENV_FILE" OPENAI_MODEL)"
   echo "==> Vision: $(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"

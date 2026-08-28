@@ -68,7 +68,7 @@ export function routeSpecialist(text, { isSellerSession = false } = {}) {
 
 const SPECIALIST_HINTS = {
   buyer:
-    "SPECIALIST: Buyer Agent — shop, recommend from TOOL RESULTS only, track orders. Never invent stock or prices. Include product links when tools return ids.",
+    "SPECIALIST: Buyer Agent — shop, recommend from LOOKUP RESULTS only, track orders. Never invent stock or prices. Include product links when lookups return ids.",
   seller:
     "SPECIALIST: Seller Agent — onboarding SOP, payouts, shipping zones. Use get_seller_* tools. Point to Seller Hub for edits. Never invent balances.",
   dispute:
@@ -206,7 +206,7 @@ export function retrieveKnowledge(query, { limit = 2, specialist = "general" } =
 export function formatKnowledgeForPrompt(chunks) {
   if (!chunks?.length) return "";
   return (
-    "KNOWLEDGE (platform policy — rely EXCLUSIVELY on this + TOOL RESULTS; never invent):\n" +
+    "KNOWLEDGE (platform policy — rely EXCLUSIVELY on this + LOOKUP RESULTS; never invent):\n" +
     chunks.map((c) => `[${c.id}${c.category ? ` · ${c.category}` : ""}]\n${c.excerpt}`).join("\n\n")
   );
 }

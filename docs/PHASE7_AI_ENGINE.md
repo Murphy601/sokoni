@@ -4,7 +4,7 @@ Fixes the three usual bottlenecks: **latency**, **bad knowledge**, **inconsisten
 
 | Spec | What Sokoni ships |
 |------|-------------------|
-| Fast inference | `llm-router.js` — **Groq → OpenRouter** (Gemini chat opt-in; never Ollama for WA traffic) |
+| Fast inference | `llm-router.js` — **Groq → OpenRouter** (`tool_choice=none`; Gemini chat opt-in; never Ollama for WA traffic) |
 | Low temperature | `AI_CHAT_TEMPERATURE=0.15` (deterministic buyer/seller answers) |
 | Strict grounding | `buildGroundedSystemPrompt` — CONTEXT + TOOL RESULTS only; escalate if missing |
 | LangGraph multi-agent | `agent-graph.js` — escalate → specialist → tools → RAG → reply |
@@ -36,13 +36,16 @@ GROQ_MODEL=openai/gpt-oss-20b   # replaces retired llama-3.1-8b-instant
 
 AI_CHAT_PROVIDER=auto          # groq | gemini | openrouter
 AI_CHAT_TEMPERATURE=0.15
+AI_CHAT_USE_GEMINI=false       # vision GEMINI_API_KEY alone must stay out of chat
 # AI_CHAT_USE_GEMINI=true      # only if you want Gemini in the chat chain
-# GEMINI_API_KEY=...           # alone = listing vision only (not chat)
 
-# Free fallback
+# Free fallback (openrouter/free auto-picks live free models)
 OPENAI_API_KEY=...             # OpenRouter
 OPENAI_MODEL=openrouter/free
+OPENAI_MODEL_FALLBACKS=google/gemma-4-31b-it:free
 ```
+
+Groq chat uses `tool_choice=none` — Sokoni runs catalog/order lookups **server-side** before the LLM. Do **not** set `tool_choice=auto` (that enables Groq `browser_search` and breaks grounding).
 
 **Do not** point Plug chat at local Ollama on a shared CPU box — requests queue and WhatsApp feels “stuck” at 30–60s.
 

@@ -8,6 +8,8 @@ import {
   buildChatProviderChain,
   chatTemperature,
   llmRouterMeta,
+  isToolUseFailedError,
+  extractFailedGenerationText,
 } from "../src/services/llm-router.js";
 import {
   buildGroundedSystemPrompt,
@@ -37,7 +39,9 @@ const grounded = buildGroundedSystemPrompt({
 assert(grounded.includes("CONTEXT DATA"), "has context block");
 assert(grounded.includes("254700000000"), "has thread id");
 assert(grounded.includes("ONLY use factual data") || SOKONI_MASTER_RULES.includes("ONLY use factual data"), "strict grounding");
-assert(grounded.includes("escalate") || grounded.includes("escalate this to support") || SOKONI_MASTER_RULES.includes("escalate"), "escalation wording");
+assert(grounded.includes("NO API TOOL CALLS") || SOKONI_MASTER_RULES.includes("NO API TOOL CALLS"), "blocks gpt-oss built-in tools");
+assert(!grounded.includes("## Tools"), "avoid ## Tools heading that triggers tool calling");
+assert(grounded.includes("LOOKUP RESULTS") || SOKONI_MASTER_RULES.includes("LOOKUP RESULTS"), "uses LOOKUP RESULTS wording");
 
 // Thread id = phone digits
 assert(threadIdFromPhone("+254 700 000 000") === "254700000000", "threadIdFromPhone digits");
@@ -52,6 +56,7 @@ assert(block.includes("EXCLUSIVELY") || block.includes("KNOWLEDGE"), "knowledge 
 // Router meta
 const meta = llmRouterMeta();
 assert(meta.avoid?.includes("ollama_local_cpu_queue"), "documents avoid ollama");
+assert(meta.avoid?.includes("groq_builtin_tools_for_chat"), "documents avoid groq built-in tools");
 assert(Array.isArray(meta.providers), "providers listed");
 assert(typeof meta.temperature === "number", "temperature in meta");
 assert(
@@ -71,6 +76,24 @@ assert(
 const routerSrc = readFileSync(path.join(root, "whatsapp-bot/src/services/llm-router.js"), "utf8");
 assert(routerSrc.includes("openai/gpt-oss-20b"), "router defaults to gpt-oss-20b");
 assert(!routerSrc.includes('llama-3.1-8b-instant"'), "router must not default to retired llama");
+assert(routerSrc.includes('tool_choice = "none"') || routerSrc.includes('tool_choice: "none"'), "groq uses tool_choice none");
+assert(routerSrc.includes("google/gemma-4-31b-it:free"), "openrouter free fallback uses live gemma-4-31b");
+assert(!routerSrc.includes("gemma-4-26b-a4b-it:free"), "drops flaky gemma-4-26b a4b free slug");
+assert(routerSrc.includes("Do NOT use tool_choice=auto"), "documents why tool_choice stays none");
+
+assert(
+  isToolUseFailedError({ error: { code: "tool_use_failed", message: "Tool choice is none, but model called a tool" } }),
+  "detects tool_use_failed"
+);
+assert(
+  extractFailedGenerationText({ error: { failed_generation: '{"name":"browser_search"}' } }) == null,
+  "rejects tool-call failed_generation"
+);
+assert(
+  extractFailedGenerationText({ error: { failed_generation: "Prepaid escrow until delivery." } }) ===
+    "Prepaid escrow until delivery.",
+  "recovers plain failed_generation"
+);
 
 const configSrc = readFileSync(path.join(root, "whatsapp-bot/src/config.js"), "utf8");
 assert(configSrc.includes('GROQ_MODEL || "openai/gpt-oss-20b"'), "config default gpt-oss-20b");

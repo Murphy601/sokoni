@@ -128,7 +128,7 @@ WAHA_SESSION=default
 OPENAI_API_KEY=sk-or-v1-...your key...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 OPENAI_MODEL=openrouter/free
-OPENAI_MODEL_FALLBACKS=google/gemma-4-26b-a4b-it:free
+OPENAI_MODEL_FALLBACKS=google/gemma-4-31b-it:free
 
 # Seller photos → listing draft (primary Gemini; keep krea as OpenRouter fallback)
 CATALOG_VISION_MODEL=google/gemini-2.5-flash
