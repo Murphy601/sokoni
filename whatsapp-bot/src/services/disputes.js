@@ -92,6 +92,7 @@ async function freezeOrderEscrow(orderRef) {
     disputeHold: true,
     escrowStatus: order.escrowStatus === "refunded" ? "refunded" : "held",
     disputeFrozenAt: Date.now(),
+    payoutStatus: "held_for_dispute",
   });
   return { frozen: true, orderId: order.id };
 }
@@ -203,8 +204,8 @@ export async function createDispute({
     };
   }
 
-  const freeze = freezeOrderEscrow(ref);
-  updateOrderMeta(order.id, { sellerUserId: resolvedSellerId, disputeHold: true });
+  const freeze = await freezeOrderEscrow(ref);
+  updateOrderMeta(order.id, { sellerUserId: resolvedSellerId, disputeHold: true, payoutStatus: "held_for_dispute" });
 
   const inserted = await query(
     `INSERT INTO order_disputes (
@@ -250,12 +251,12 @@ export async function createDispute({
       `${short}\n` +
       `Escrow: ${freeze.frozen ? "frozen" : "not frozen"}`,
     sellerMessage:
-      `⚠️ Buyer opened a dispute on *${fresh.id}*.\n` +
+      `⚠️ *URGENT DISPUTE* on *${fresh.id}*.\n` +
       `Reason: ${cleanReason}\n` +
       `${short}\n\n` +
-      `Reply in Seller Hub → Disputes, or WhatsApp. Escrow is on hold.`,
+      `Payout is on hold. Reply in Seller Hub → Disputes with dispatch photos within 24 hours.`,
     buyerMessage:
-      `✅ Dispute opened for *${fresh.id}*. We’ll review and message you here. Escrow is on hold.`,
+      `✅ Dispute opened for *${fresh.id}*. Escrow is on hold — reply with clear evidence photos so we can finalize.`,
   });
 
   return { success: true, dispute, escrowFrozen: Boolean(freeze.frozen) };

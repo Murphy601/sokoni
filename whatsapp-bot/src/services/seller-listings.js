@@ -1139,7 +1139,79 @@ export async function listSellerListings(phone, sessionToken) {
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch {}
 
+  // Prefer Postgres prices (storefront truth) when JSON master lags behind DB writes
+  live = await overlaySellerListingPricesFromDb(live);
+
   return { drafts, listings: live };
+}
+
+/** Overlay live price/stock from products table onto hub listing cards. */
+async function overlaySellerListingPricesFromDb(listings) {
+  if (!Array.isArray(listings) || !listings.length) return listings || [];
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    if (!isDbEnabled()) return listings;
+    const ids = listings.map((l) => l.productId || l.id).filter(Boolean);
+    if (!ids.length) return listings;
+    const { rows } = await query(
+      `SELECT id, price_kes, source_price_kes, original_price_kes, compare_at_price,
+              in_stock, is_sold, stock_quantity, legacy_json
+         FROM products
+        WHERE id = ANY($1::text[])`,
+      [ids]
+    );
+    if (!rows.length) return listings;
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return listings.map((item) => {
+      const row = byId.get(item.productId || item.id);
+      if (!row) return item;
+      let legacy = {};
+      try {
+        legacy =
+          typeof row.legacy_json === "string"
+            ? JSON.parse(row.legacy_json)
+            : row.legacy_json && typeof row.legacy_json === "object"
+              ? row.legacy_json
+              : {};
+      } catch {
+        legacy = {};
+      }
+      const priceKes = Math.round(Number(row.price_kes) || 0);
+      const sellerNet = Math.round(
+        Number(legacy.sellerNetKes ?? row.source_price_kes ?? item.draft?.sellerNetKes) || 0
+      );
+      const compareRaw = row.compare_at_price ?? row.original_price_kes ?? legacy.compareAtPrice;
+      const compareAt =
+        compareRaw != null && Number.isFinite(Number(compareRaw)) && Number(compareRaw) > 0
+          ? Math.round(Number(compareRaw))
+          : null;
+      return {
+        ...item,
+        stockQuantity:
+          row.stock_quantity != null && Number.isFinite(Number(row.stock_quantity))
+            ? Math.max(0, Math.round(Number(row.stock_quantity)))
+            : item.stockQuantity,
+        inStock: row.in_stock !== false && !row.is_sold,
+        isSold: Boolean(row.is_sold),
+        draft: {
+          ...(item.draft || {}),
+          sellerNetKes: sellerNet || item.draft?.sellerNetKes,
+          sourcePriceKes: sellerNet || item.draft?.sourcePriceKes,
+          priceKes: priceKes || item.draft?.priceKes,
+          buyerTotalKes: priceKes || item.draft?.buyerTotalKes,
+          originalPriceKes: compareAt,
+          compareAtPrice: compareAt,
+          promo: legacy.promo && typeof legacy.promo === "object" ? legacy.promo : item.draft?.promo || null,
+        },
+        promoActive: Boolean(legacy.promo?.active ?? item.promoActive),
+        originalPriceKes: compareAt,
+        compareAtPrice: compareAt,
+      };
+    });
+  } catch (err) {
+    console.warn("[seller-listings] db price overlay skipped:", err.message);
+    return listings;
+  }
 }
 
 async function persistStagedSellerVideo(check, buffer) {

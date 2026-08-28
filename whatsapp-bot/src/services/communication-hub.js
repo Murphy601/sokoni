@@ -677,7 +677,7 @@ function findTakeOverOrder(customerKey, phone) {
   );
 }
 
-async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) {
+async function startAdminTakeOver(order, { customerKey, phone, rawText, role, skipCounterpartNotify = false } = {}) {
   const { cancelSettlementPayout } = await import("./settlements.js");
   try {
     cancelSettlementPayout(order.id, "admin_take_over");
@@ -741,14 +741,16 @@ async function startAdminTakeOver(order, { customerKey, phone, rawText, role }) 
       `End: #done ${order.id}`,
   });
 
-  // Alert the other party (buyer↔seller) — was missing before.
-  const otherMsg =
-    role === "BUYER"
-      ? `⚠️ Buyer opened support on *${order.id}*. Escrow frozen. Admin is on the thread — reply here or wait for Sokoni.`
-      : role === "SELLER"
-        ? `⚠️ Seller opened support on *${order.id}*. Escrow frozen. Admin is on the thread — reply here or wait for Sokoni.`
-        : `⚠️ Support opened on *${order.id}*. Escrow frozen. Admin will reply here.`;
-  void notifyCounterpart(order, role, otherMsg);
+  // Alert the other party (buyer↔seller) — skip when createDispute already notified.
+  if (!skipCounterpartNotify) {
+    const otherMsg =
+      role === "BUYER"
+        ? `⚠️ Buyer opened support on *${order.id}*. Escrow frozen. Admin is on the thread — reply here or wait for Sokoni.`
+        : role === "SELLER"
+          ? `⚠️ Seller opened support on *${order.id}*. Escrow frozen. Admin is on the thread — reply here or wait for Sokoni.`
+          : `⚠️ Support opened on *${order.id}*. Escrow frozen. Admin will reply here.`;
+    void notifyCounterpart(order, role, otherMsg);
+  }
 }
 
 /**
@@ -1286,8 +1288,25 @@ async function flowHelp(customerKey, phone, orderId, rawText) {
 }
 
 /**
+ * Map free-text buyer complaint → order_disputes.reason enum.
+ */
+export function mapBuyerIssueToDisputeReason(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\b(wrong item|wrong product|not what i (ordered|bought)|different item)\b/.test(t)) {
+    return "wrong_item";
+  }
+  if (/\b(damaged|damage|broken|cracked|torn|smashed)\b/.test(t)) return "damaged";
+  if (/\b(not received|never arrived|missing package|didn'?t (arrive|receive))\b/.test(t)) {
+    return "not_received";
+  }
+  if (/\b(not as described|fake|counterfeit|misleading)\b/.test(t)) return "not_as_described";
+  return "other";
+}
+
+/**
  * AI / agent tool: open a buyer return/refund case (escrow hold + admin alert).
- * Does not send WhatsApp itself — the agent replies with evidence instructions.
+ * Creates a DB dispute ticket when Postgres is up, freezes payout, alerts seller,
+ * opens admin HITL takeover, and asks the buyer for evidence photos.
  */
 export async function openBuyerReturnCase({
   orderId,
@@ -1321,24 +1340,73 @@ export async function openBuyerReturnCase({
         `Support is already open on *${order.id}* (escrow held). Reply here with clear photos of the issue so admin can finalize.`,
     };
   }
+
   const rawText =
     String(reason || "").trim().slice(0, 400) ||
     `AI buyer return / refund request for ${order.id}`;
+  const disputeReason = mapBuyerIssueToDisputeReason(rawText);
+  const buyerPhone =
+    String(phone || "").replace(/\D/g, "") ||
+    String(order.phone || order.mpesaPhone || "").replace(/\D/g, "");
+
+  let dispute = null;
+  let disputeNotified = false;
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    if (isDbEnabled()) {
+      const { findOrCreateBuyerUserByPhone } = await import("../db/repositories/users.js");
+      const { createDispute, orderHasOpenDispute } = await import("./disputes.js");
+      const userResult = await findOrCreateBuyerUserByPhone(buyerPhone);
+      const buyerUserId = userResult?.user?.id || null;
+      if (buyerUserId) {
+        if (await orderHasOpenDispute(order.id)) {
+          disputeNotified = true;
+        } else {
+          const created = await createDispute({
+            orderRef: order.id,
+            buyerUserId,
+            reason: disputeReason,
+            statement: rawText,
+            buyerPhone,
+          });
+          if (created?.success && created.dispute) {
+            dispute = created.dispute;
+            disputeNotified = true;
+          } else if (created?.error === "dispute_exists") {
+            disputeNotified = true;
+          } else if (created?.error) {
+            console.warn("[communication-hub] createDispute:", created.error, created.message);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[communication-hub] dispute DB path skipped:", err.message);
+  }
+
   await startAdminTakeOver(order, {
     customerKey: customerKey || order.customerKey,
-    phone,
+    phone: phone || buyerPhone,
     rawText,
     role: "BUYER",
+    skipCounterpartNotify: disputeNotified,
   });
+
+  const ticketLabel = dispute?.id ? `Dispute #${dispute.id}` : `HELP ${order.id}`;
+  const site = String(config.publicSiteUrl || "https://sokonimall.com").replace(/\/$/, "");
   return {
     ok: true,
     orderId: order.id,
     payoutHeld: true,
     askForEvidence: true,
-    ticketHint: `HELP ${order.id}`,
+    disputeId: dispute?.id || null,
+    disputeReason,
+    ticketHint: ticketLabel,
     message:
-      `I'm sorry — payout for *${order.id}* is temporarily held.\n` +
-      `Please reply with clear photos of the damage / issue so support can finalize within 24 hours.\n` +
+      `I'm sorry — payout for *${order.id}* is on hold (${ticketLabel}).\n` +
+      `• Seller and support have been notified.\n` +
+      `• Reply here with clear photos of the damage / wrong item within 24 hours.\n` +
+      `• You can also upload evidence at ${site}/disputes.html\n` +
       msgHelpAck(getOrder(order.id) || order),
   };
 }
