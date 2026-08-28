@@ -3466,34 +3466,11 @@ async function setListingPromo(productId, currentSellerNet, currentBuyerTotal) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      handleSessionExpired(data);
-      return;
-    }
-    if (!res.ok) {
-      setStatus(data.message || data.error || "Could not start promo.", true);
-      return;
-    }
-    setStatus(data.message || "Promo live — site + STK use the promo price.");
-    await loadMyListings();
-  } catch {
-    setStatus("Network error.", true);
-  }
-}
-
-async function endListingPromo(productId) {
-  const phone = apiPhone();
-  if (!phone || !productId) return;
-  if (!window.confirm("End promo and restore list price on the site?")) return;
-  setStatus("Ending promo…");
-  try {
-    const res = await fetch(`${ONBOARD_API}/promo/end`, {
-      method: "POST",
-      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(jsonAuthBody({ phone, productId })),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) {
-      handleSessionExpired(data);
+      setStatus(
+        data.message ||
+          "Session expired — verify WhatsApp at the top of Seller Hub, then try % Set promo again.",
+        true
+      );
       return;
     }
     if (!res.ok) {
@@ -6796,8 +6773,8 @@ async function saveVariants() {
   try {
     const res = await fetch(`${ONBOARD_API}/variants`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
-      body: JSON.stringify({ phone: apiPhone(), productId, variants }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone: apiPhone(), productId, variants })),
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
@@ -6829,12 +6806,18 @@ async function saveShopOfferBanner() {
   try {
     const res = await fetch(`${ONBOARD_API}/shop-offer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
-      body: JSON.stringify({ phone: apiPhone(), promoBanner, offerNote }),
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({ phone: apiPhone(), promoBanner, offerNote })
+      ),
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      handleSessionExpired(data);
+      // Keep seller on Marketing panel — show inline error instead of wiping the hub to "Start selling".
+      if (status) {
+        status.textContent =
+          data.message || "Session expired — open Sign in at the top and verify WhatsApp again, then retry Save.";
+      }
       return;
     }
     if (!res.ok) {
