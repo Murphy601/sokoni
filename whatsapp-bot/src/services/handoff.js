@@ -11,20 +11,27 @@ import {
   getCustomerMeta,
   setCustomerMeta,
 } from "./session.js";
+import {
+  openGeneralSupportTicket,
+  appendGeneralSupportCustomerMessage,
+  supportInboxSiteHint,
+} from "./support-inbox.js";
 
-/** Simple admin ping when a customer wants a human — no relay / #reply flow. */
-async function pingAdminSimple(title, customerKey, { chatId, displayName, phone, detail = "" }) {
+/** Admin ping when a customer wants a human — also opens dashboard inbox ticket. */
+async function pingAdminSimple(title, customerKey, { chatId, displayName, phone, detail = "", ticketId = "" }) {
   const label = formatCustomerLabel({ chatId, displayName, phone }, customerKey);
+  const inbox = supportInboxSiteHint();
   const text =
     `${title}\n\n` +
     `Customer: *${displayName || "Unknown"}*\n` +
     `${phone ? `Phone: +${phone}\n` : ""}` +
     `Chat: \`${chatId || customerKey}\`\n` +
+    (ticketId ? `Inbox: *${ticketId}*\n` : "") +
     (detail ? `${detail}\n\n` : "\n") +
-    `Open their chat in WhatsApp to reply, or use:\n` +
-    `*#SKN-xxxx <message>* after an order alert · *#help* for commands`;
+    `Reply from the support inbox:\n${inbox}\n` +
+    `_Or open their WhatsApp chat directly._`;
 
-  console.log(`[handoff] ${label}`);
+  console.log(`[handoff] ${label}${ticketId ? ` ${ticketId}` : ""}`);
 
   if (!config.admin.primary) return;
   try {
@@ -45,6 +52,8 @@ async function pingAdminSimple(title, customerKey, { chatId, displayName, phone,
           displayName,
           phone,
           detail,
+          ticketId,
+          inboxUrl: inbox,
         }),
       });
     } catch (err) {
@@ -55,7 +64,15 @@ async function pingAdminSimple(title, customerKey, { chatId, displayName, phone,
 
 export async function startHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage }) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
-  setHumanHandoff(customerKey, { startedAt: Date.now() });
+
+  const opened = openGeneralSupportTicket({
+    customerKey,
+    chatId,
+    displayName,
+    phone,
+    lastMessage,
+  });
+
   await pingAdminSimple(
     "🙋 *Customer wants a human*",
     customerKey,
@@ -63,14 +80,22 @@ export async function startHumanHandoff(customerKey, { chatId, displayName, phon
       chatId,
       displayName,
       phone,
-      detail: lastMessage ? `They said: _"${lastMessage.slice(0, 120)}"_` : "",
+      detail: lastMessage ? `They said: _"${String(lastMessage).slice(0, 120)}"_` : "",
+      ticketId: opened?.ticket?.id || "",
     }
   );
+
+  return opened;
 }
 
-export async function handleCustomerWhileHandoff(customerKey) {
+export async function handleCustomerWhileHandoff(customerKey, text = "") {
   const handoff = getHumanHandoff(customerKey);
   if (!handoff) return false;
+
+  const body = String(text || "").trim();
+  if (body) {
+    appendGeneralSupportCustomerMessage(customerKey, body);
+  }
 
   if (!handoff.ackSent) {
     setHumanHandoff(customerKey, { ...handoff, ackSent: true });

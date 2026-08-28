@@ -44,10 +44,10 @@
     <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
       <h1 class="font-display text-2xl font-bold">WhatsApp support inbox</h1>
       <p class="text-sm text-brand-purple/65">
-        When a buyer/seller replies <strong>HELP SKN-####</strong>, the bot freezes escrow, goes silent, and relays
-        messages here + to admin WhatsApp. Reply from this page or with <code>#SKN-#### message</code> on WhatsApp.
-        End with <strong>Resolve / resume bot</strong>, or WhatsApp <code>#done SKN-####</code>
-        (alias <code>#resolve</code>). Buyer/seller can also reply <code>DONE</code>.
+        Shows <strong>order HELP</strong> (<code>HELP SKN-####</code> — escrow freeze) and
+        <strong>general</strong> “Talk to a Human” / free-text requests (no order needed).
+        Reply from this page — messages go to their WhatsApp. Resolve resumes the bot
+        (<code>#done SKN-####</code> still works for orders).
       </p>
       <label class="block text-sm font-medium">
         Admin token
@@ -76,7 +76,7 @@
       <section class="rounded-3xl border border-black/5 bg-white p-4 flex flex-col min-h-[420px]">
         <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
-            <h2 id="active-order" class="font-display text-xl font-bold">Select an order</h2>
+            <h2 id="active-order" class="font-display text-xl font-bold">Select a thread</h2>
             <p id="active-meta" class="text-xs text-brand-purple/55 mt-1"></p>
           </div>
           <button type="button" id="resolve-btn" class="hidden min-h-[44px] px-4 rounded-full border border-black/15 text-sm font-semibold">
@@ -90,7 +90,7 @@
             id="admin-input"
             type="text"
             class="flex-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm"
-            placeholder="Type reply to buyer WhatsApp…"
+            placeholder="Type reply to WhatsApp…"
             disabled
           />
           <button type="submit" id="send-btn" disabled class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple font-bold text-sm disabled:opacity-40">
