@@ -857,20 +857,22 @@ function productCard(product, shop) {
       }
       <p class="text-base font-bold mt-2">${escapeHtml(formatKes(product.priceKsh ?? product.priceKes))}${
         (() => {
-          const onPromo =
-            product.onPromo ||
-            product.promo?.active ||
-            (product.originalPriceKes &&
-              Number(product.originalPriceKes) > Number(product.priceKes || product.priceKsh || 0));
-          if (!onPromo) return "";
-          const original = Math.round(Number(product.originalPriceKes) || 0);
-          const pct = product.discountPct != null ? Math.round(Number(product.discountPct)) : 0;
+          const compareAt = Math.round(
+            Number(product.compareAtPrice ?? product.originalPriceKes) || 0
+          );
+          const current = Math.round(Number(product.priceKes || product.priceKsh || 0));
+          const onSale = compareAt > 0 && current > 0 && current < compareAt;
+          if (!onSale) return "";
+          const pct =
+            product.discountPct != null && Number(product.discountPct) > 0
+              ? Math.round(Number(product.discountPct))
+              : Math.max(1, Math.round(((compareAt - current) / compareAt) * 100));
           return `${
-            original
-              ? ` <span class="text-xs font-medium text-brand-purple/40 line-through">KES ${original.toLocaleString()}</span>`
+            compareAt
+              ? ` <span class="text-xs font-medium text-brand-purple/40 line-through">KES ${compareAt.toLocaleString()}</span>`
               : ""
           } <span class="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
-            pct ? `-${pct}% promo` : "Promo"
+            pct ? `${pct}% OFF` : "SALE"
           }</span>`;
         })()
       }</p>

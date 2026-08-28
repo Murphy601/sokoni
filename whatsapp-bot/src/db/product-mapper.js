@@ -100,7 +100,32 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     sellerPhone: legacy.sellerPhone ? String(legacy.sellerPhone) : undefined,
     priceUsd: row.price_usd != null ? Number(row.price_usd) : undefined,
     sourcePriceKes: row.source_price_kes != null ? Number(row.source_price_kes) : undefined,
-    originalPriceKes: row.original_price_kes != null ? Number(row.original_price_kes) : legacy.originalPriceKes != null ? Number(legacy.originalPriceKes) : undefined,
+    originalPriceKes: (() => {
+      const compare =
+        row.compare_at_price != null
+          ? Number(row.compare_at_price)
+          : row.original_price_kes != null
+            ? Number(row.original_price_kes)
+            : legacy.compareAtPrice != null
+              ? Number(legacy.compareAtPrice)
+              : legacy.originalPriceKes != null
+                ? Number(legacy.originalPriceKes)
+                : undefined;
+      return compare != null && Number.isFinite(compare) ? compare : undefined;
+    })(),
+    compareAtPrice: (() => {
+      const compare =
+        row.compare_at_price != null
+          ? Number(row.compare_at_price)
+          : row.original_price_kes != null
+            ? Number(row.original_price_kes)
+            : legacy.compareAtPrice != null
+              ? Number(legacy.compareAtPrice)
+              : legacy.originalPriceKes != null
+                ? Number(legacy.originalPriceKes)
+                : undefined;
+      return compare != null && Number.isFinite(compare) ? compare : undefined;
+    })(),
     promo:
       legacy.promo && typeof legacy.promo === "object"
         ? {
@@ -232,7 +257,8 @@ export function jsonToDbProduct(json, sellerId = null) {
     shipping_kes: json.shippingKes ?? null,
     price_usd: json.priceUsd ?? null,
     source_price_kes: json.sourcePriceKes ?? null,
-    original_price_kes: json.originalPriceKes ?? null,
+    original_price_kes: json.compareAtPrice ?? json.originalPriceKes ?? null,
+    // compare_at_price column may be absent until phase17 migration; upsert keeps original_price_kes.
     retail_per_ml_kes: json.retailPerMlKes ?? null,
     volume_ml: json.volumeMl ?? null,
     rating: json.rating ?? 4.5,

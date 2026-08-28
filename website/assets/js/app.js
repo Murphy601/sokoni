@@ -1105,30 +1105,37 @@ function renderStoreGrid() {
   revealCatalogSections();
 }
 
+function compareAtPriceKes(product) {
+  const n = Math.round(
+    Number(product?.compareAtPrice ?? product?.originalPriceKes) || 0
+  );
+  return n > 0 ? n : 0;
+}
+
 function productOnPromo(product) {
   if (!product) return false;
-  if (product.onPromo) return true;
-  if (product.promo && product.promo.active) return true;
-  const original = Math.round(Number(product.originalPriceKes) || 0);
+  const original = compareAtPriceKes(product);
   const current = buyerPriceKes(product);
-  return Boolean(original && current && original > current);
+  // Strict: only when current price is below compare-at (never on raises).
+  return Boolean(original && current && current < original);
 }
 
 function promoDiscountPct(product) {
+  if (!productOnPromo(product)) return 0;
   if (product?.discountPct != null && Number(product.discountPct) > 0) {
     return Math.round(Number(product.discountPct));
   }
-  const original = Math.round(Number(product?.originalPriceKes) || 0);
+  const original = compareAtPriceKes(product);
   const current = buyerPriceKes(product);
-  if (!original || !current || original <= current) return 0;
-  return Math.max(1, Math.round((1 - current / original) * 100));
+  if (!original || !current || current >= original) return 0;
+  return Math.max(1, Math.round(((original - current) / original) * 100));
 }
 
 function discountBadge(product) {
   if (!productOnPromo(product)) return "";
   const pct = promoDiscountPct(product);
-  const label = pct >= 1 ? `-${pct}% PROMO` : "PROMO";
-  return `<span class="depop-card-promo" aria-label="On promotion">${escapeHtml(label)}</span>`;
+  const label = pct >= 1 ? `${pct}% OFF` : "SALE";
+  return `<span class="depop-card-promo" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
 }
 
 function promoPriceHtml(product) {
@@ -1136,12 +1143,12 @@ function promoPriceHtml(product) {
   if (!productOnPromo(product)) {
     return `<p class="depop-card-price">${escapeHtml(current)}</p>`;
   }
-  const original = Math.round(Number(product.originalPriceKes) || 0);
+  const original = compareAtPriceKes(product);
   const pct = promoDiscountPct(product);
   return `<p class="depop-card-price depop-card-price--promo">
       <span class="depop-card-price-now">${escapeHtml(current)}</span>
       ${original > 0 ? `<span class="depop-card-price-was">KES ${original.toLocaleString()}</span>` : ""}
-      ${pct >= 1 ? `<span class="depop-card-price-save">Save ${pct}%</span>` : `<span class="depop-card-price-save">Promo</span>`}
+      ${pct >= 1 ? `<span class="depop-card-price-save">${pct}% OFF</span>` : ""}
     </p>`;
 }
 
@@ -1624,6 +1631,7 @@ window.SokoniApp = {
   getStoreProducts: () => storeProducts,
   formatPrice,
   buyerPriceKes,
+  compareAtPriceKes,
   formatShippingLine,
   formatBuyerTotal,
   resolveProductImage,

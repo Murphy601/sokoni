@@ -680,7 +680,8 @@
             <div id="my-listings" class="seller-hub-stack" role="list"></div>
           </section>
 
-          <section id="item-promo-panel" class="sell-depop-section p-5 space-y-3 hidden" aria-live="polite">
+          <!-- Fallback promo panel (primary UX is inline on the listing card) -->
+          <section id="item-promo-panel" class="sell-depop-section p-5 space-y-3 hidden" aria-live="polite" hidden>
             <h2 class="font-bold text-lg text-white">Item promo</h2>
             <p id="item-promo-target" class="text-sm text-zinc-400"></p>
             <label class="block text-sm font-medium text-zinc-300" for="item-promo-type">
@@ -1361,7 +1362,7 @@
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
   <script src="../assets/js/seller-analytics.js?v=analytics-5"></script>
-  <script src="../assets/js/seller-listing.js?v=hub-promo-session-3"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-promo-compare-1"></script>
   <script src="../assets/js/vendor-shipping-manager.js?v=shipping-save-5"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
