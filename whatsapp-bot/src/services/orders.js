@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
 import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
+import { assertPurchaseQty, findVariant } from "./product-availability.js";
 export {
   normalizeOrderId,
   extractOrderIdFromText,
@@ -173,6 +174,15 @@ export function allocateSknParentId(orderStore = store) {
 
 export function createOrder({ customerKey, chatId, product, details, offerId = null, totalsOverride = null }) {
   load();
+  const qty = Math.max(1, Math.round(Number(details?.quantity || details?.qty || 1) || 1));
+  const variantId = details?.variantId || product?.selectedVariantId || null;
+  const stockGate = assertPurchaseQty(product, qty, { variantId });
+  if (!stockGate.ok) {
+    const err = new Error(stockGate.message || "Out of stock");
+    err.code = stockGate.error || "insufficient_stock";
+    err.onHand = stockGate.onHand;
+    throw err;
+  }
   // Keep store.seq advancing for other ID families (DR-/WD-); order ids are SKN-.
   store.seq += 1;
   const id = allocateSknParentId(store);
@@ -202,6 +212,14 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     chatId: chatId || customerKey,
     productId: product.productId || product.id,
     productName: product.name,
+    quantity: qty,
+    variantId: variantId || null,
+    variantLabel: (() => {
+      if (!variantId) return null;
+      const v = findVariant(product, variantId);
+      if (!v) return null;
+      return [v.size, v.color].filter(Boolean).join(" / ") || v.id;
+    })(),
     priceKes,
     shippingKes,
     totalKes,

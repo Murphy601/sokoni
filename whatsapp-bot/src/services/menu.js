@@ -1304,6 +1304,10 @@ export async function confirmPrepaidOrder(to, parsed) {
     });
   } catch (err) {
     console.error("[order] createOrder failed (continuing):", err.message);
+    if (err.code === "insufficient_stock" || err.code === "out_of_stock" || err.code === "variant_not_found") {
+      await sendText(to, `⚠️ ${err.message || "That item is sold out."}`);
+      return;
+    }
   }
 
   if (order && (pending.buyerCounty || details.deliveryCounty)) {

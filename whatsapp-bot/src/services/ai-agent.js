@@ -17,6 +17,14 @@ import {
   isOffTopicIntent,
 } from "./ai-tools.js";
 import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
+import {
+  detectEscalation,
+  routeSpecialist,
+  specialistSystemHint,
+  retrieveKnowledge,
+  formatKnowledgeForPrompt,
+  summarizeForHandoff,
+} from "./agent-specialists.js";
 
 const FALLBACK_MODELS = ["google/gemma-4-26b-a4b-it:free"];
 
@@ -436,8 +444,44 @@ export async function runAgentTurn({
     return { reply: null, tools: [], handoff: true };
   }
 
+  const escalation = detectEscalation(text);
+  const specialist = routeSpecialist(text, { isSellerSession: isSellerTopic(text) });
+  if (escalation.escalate && escalation.severity === "high" && channel === "whatsapp") {
+    const summary = summarizeForHandoff({
+      text,
+      specialist,
+      toolNames: [],
+    });
+    try {
+      const { startHumanHandoff } = await import("./handoff.js");
+      await startHumanHandoff(sessionKey, {
+        chatId: sessionKey,
+        phone,
+        lastMessage: `[AI escalation:${escalation.reason}] ${text.slice(0, 200)}\n${summary}`,
+      });
+    } catch (err) {
+      console.warn("[ai-agent] escalation handoff failed:", err.message);
+    }
+    const wa = formatWhatsAppLink();
+    const reply =
+      `I've connected you to a human — this looks like it needs the support team.\n` +
+      `(${escalation.reason})\n` +
+      (channel === "web" ? `WhatsApp: ${wa}` : `Hang tight — an admin will reply here.`);
+    if (persist) pushMessage(sessionKey, "user", text);
+    if (persist) pushMessage(sessionKey, "assistant", reply);
+    return {
+      reply,
+      tools: [],
+      handoff: true,
+      escalation,
+      specialist,
+    };
+  }
+
   const toolResults = await runToolRouter(text, { phone, customerKey: sessionKey });
   const toolBlock = formatToolResultsForPrompt(toolResults);
+  const knowledge = retrieveKnowledge(text, { limit: 2 });
+  const knowledgeBlock = formatKnowledgeForPrompt(knowledge);
   const shopping = isShoppingIntent(text);
   const hasLiveCatalogHits = toolResults.some(
     (r) =>
@@ -490,6 +534,8 @@ export async function runAgentTurn({
   try {
     const messages = [
       { role: "system", content: channelPrompt(channel) },
+      { role: "system", content: specialistSystemHint(specialist) },
+      ...(knowledgeBlock ? [{ role: "system", content: knowledgeBlock }] : []),
       ...(toolBlock ? [{ role: "system", content: toolBlock }] : []),
       ...sanitizeHistory(hist),
       { role: "user", content: text },
@@ -523,6 +569,9 @@ export async function runAgentTurn({
       converse: conversational,
       shopping,
       tracking: trackingPayload,
+      specialist,
+      knowledge: knowledge.map((k) => k.id),
+      escalation: escalation.escalate ? escalation : undefined,
     };
   } catch (err) {
     console.error("[ai-agent] error:", err.message);
@@ -536,6 +585,17 @@ export function agentMeta() {
   return {
     phase: 7,
     name: "Sokoni Plug",
+    engine: "multi-specialist",
+    specialists: ["buyer", "seller", "dispute", "logistics", "general"],
+    knowledge: "rag-lite (knowledge/*.md) — pgvector optional later",
+    models: {
+      chat: "OpenRouter (OPENAI_*)",
+      vision: "OpenRouter → NVIDIA NIM → Gemini",
+    },
+    guardrails: {
+      goodwillCapKes: 300,
+      sentimentEscalation: true,
+    },
     channels: ["whatsapp", "web"],
     tools: [
       "search_products",

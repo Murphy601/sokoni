@@ -72,12 +72,23 @@ async function lockProductForOrder(order) {
       if (idx !== -1) {
         const result = consumeStockForSale(
           { ...products[idx] },
-          { qty: qtyBought, orderId: order.id, soldAt: Date.now() }
+          {
+            qty: qtyBought,
+            orderId: order.id,
+            soldAt: Date.now(),
+            variantId: order.variantId || null,
+          }
         );
         products[idx] = result.product;
         finalProduct = result.product;
         shouldTombstone = result.tombstone;
         await writeFile(PRODUCTS_PATH, JSON.stringify(products, null, 2) + "\n", "utf-8");
+        try {
+          const { notifySellerLowStock } = await import("./inventory-alerts.js");
+          await notifySellerLowStock(result.product, { reason: "paid_order" });
+        } catch {
+          /* fail-soft */
+        }
       }
     }
 

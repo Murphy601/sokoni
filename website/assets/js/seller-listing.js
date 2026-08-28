@@ -2369,6 +2369,7 @@ async function loadMyListings() {
     renderSellerHubOverview();
     renderHubStockAlerts();
     renderHubMarketing();
+    renderVariantsEditor();
     if (!items.length) {
       wrap.innerHTML = `<p class="text-sm text-zinc-500">No listings yet — add your first item above, or import a CSV.</p>`;
       return;
@@ -6726,6 +6727,130 @@ function buildMarketingShareMessage() {
   );
 }
 
+function liveListingsForVariants() {
+  return (hubCache.listings || []).filter((l) => (l.status || "live") === "live");
+}
+
+function renderVariantsEditor() {
+  const select = el("variants-product-select");
+  const editor = el("variants-editor");
+  if (!select || !editor) return;
+
+  const listings = liveListingsForVariants();
+  const prev = select.value;
+  select.innerHTML = listings.length
+    ? listings
+        .map((item) => {
+          const pid = item.productId || item.id;
+          const name = escapeHtml(item.draft?.name || pid);
+          return `<option value="${escapeHtml(pid)}">${name}</option>`;
+        })
+        .join("")
+    : `<option value="">No live listings yet</option>`;
+  if (prev && [...select.options].some((o) => o.value === prev)) select.value = prev;
+
+  const selected = listings.find((l) => (l.productId || l.id) === select.value);
+  const variants = Array.isArray(selected?.variants)
+    ? selected.variants
+    : Array.isArray(selected?.draft?.variants)
+      ? selected.draft.variants
+      : [];
+
+  function rowHtml(v = {}, idx = 0) {
+    return `<div class="rounded-xl border border-zinc-800 p-3 grid sm:grid-cols-4 gap-2 items-end" data-var-row>
+      <label class="text-xs text-zinc-400">Size<input class="sell-form-input mt-1" data-var-size value="${escapeHtml(v.size || "")}" placeholder="M" /></label>
+      <label class="text-xs text-zinc-400">Colour<input class="sell-form-input mt-1" data-var-color value="${escapeHtml(v.color || "")}" placeholder="Black" /></label>
+      <label class="text-xs text-zinc-400">Units<input type="number" min="0" max="9999" class="sell-form-input mt-1" data-var-qty value="${escapeHtml(String(v.stockQuantity ?? 1))}" /></label>
+      <button type="button" class="depop-btn-ghost text-xs" data-var-remove>Remove</button>
+      <input type="hidden" data-var-id value="${escapeHtml(v.id || `var_${idx + 1}`)}" />
+    </div>`;
+  }
+
+  editor.innerHTML = variants.length ? variants.map(rowHtml).join("") : rowHtml({}, 0);
+
+  editor.querySelectorAll("[data-var-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest("[data-var-row]");
+      row?.remove();
+      if (!editor.querySelector("[data-var-row]")) editor.innerHTML = rowHtml({}, 0);
+    });
+  });
+}
+
+async function saveVariants() {
+  const select = el("variants-product-select");
+  const editor = el("variants-editor");
+  const status = el("variants-status");
+  const productId = select?.value;
+  if (!productId) {
+    if (status) status.textContent = "Pick a live listing first.";
+    return;
+  }
+  const variants = [...(editor?.querySelectorAll("[data-var-row]") || [])].map((row, i) => ({
+    id: row.querySelector("[data-var-id]")?.value || `var_${i + 1}`,
+    size: row.querySelector("[data-var-size]")?.value || "",
+    color: row.querySelector("[data-var-color]")?.value || "",
+    stockQuantity: Number(row.querySelector("[data-var-qty]")?.value || 0),
+  }));
+  if (status) status.textContent = "Saving variants…";
+  try {
+    const res = await fetch(`${ONBOARD_API}/variants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
+      body: JSON.stringify({ phone: apiPhone(), productId, variants }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      if (status) status.textContent = data.message || data.error || "Could not save variants.";
+      return;
+    }
+    if (status) status.textContent = data.message || "Variants saved.";
+    const listing = (hubCache.listings || []).find((l) => (l.productId || l.id) === productId);
+    if (listing) {
+      listing.variants = data.variants || variants;
+      listing.stockQuantity = data.stockQuantity;
+    }
+    renderHubStockAlerts();
+    renderVariantsEditor();
+  } catch {
+    if (status) status.textContent = "Network error saving variants.";
+  }
+}
+
+async function saveShopOfferBanner() {
+  const status = el("marketing-status");
+  const promoBanner = el("shop-promo-banner")?.value || "";
+  const offerNote = el("shop-offer-note")?.value || "";
+  if (status) status.textContent = "Saving shop banner…";
+  try {
+    const res = await fetch(`${ONBOARD_API}/shop-offer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...sellerAuthHeaders() },
+      body: JSON.stringify({ phone: apiPhone(), promoBanner, offerNote }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      if (status) status.textContent = data.message || data.error || "Could not save banner.";
+      return;
+    }
+    if (sellerProfile) {
+      sellerProfile.promoBanner = data.promoBanner || promoBanner;
+      sellerProfile.offerNote = data.offerNote || offerNote;
+    }
+    if (status) status.textContent = data.message || "Shop banner saved.";
+  } catch {
+    if (status) status.textContent = "Network error saving banner.";
+  }
+}
+
 function renderHubMarketing() {
   const preview = el("marketing-share-preview");
   const codeInput = el("marketing-promo-code");
@@ -6739,6 +6864,17 @@ function renderHubMarketing() {
     codeInput.dataset.bound = "1";
   } else if (codeInput) {
     codeInput.value = getSellerPromoCode();
+  }
+
+  if (el("shop-promo-banner") && sellerProfile?.promoBanner != null) {
+    el("shop-promo-banner").value = sellerProfile.promoBanner || el("shop-promo-banner").value || "";
+  }
+  if (el("shop-offer-note") && sellerProfile?.offerNote != null) {
+    el("shop-offer-note").value = sellerProfile.offerNote || el("shop-offer-note").value || "";
+  }
+  if (el("shop-offer-save-btn") && !el("shop-offer-save-btn").dataset.bound) {
+    el("shop-offer-save-btn").addEventListener("click", () => void saveShopOfferBanner());
+    el("shop-offer-save-btn").dataset.bound = "1";
   }
 
   const msg = buildMarketingShareMessage();
@@ -6974,6 +7110,23 @@ function bindSellerCommandCenterUi() {
       if (el("marketing-status")) el("marketing-status").textContent = "Could not copy — select the preview text manually.";
     }
   });
+  el("variants-product-select")?.addEventListener("change", () => renderVariantsEditor());
+  el("variants-add-row")?.addEventListener("click", () => {
+    const editor = el("variants-editor");
+    if (!editor) return;
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="rounded-xl border border-zinc-800 p-3 grid sm:grid-cols-4 gap-2 items-end" data-var-row>
+      <label class="text-xs text-zinc-400">Size<input class="sell-form-input mt-1" data-var-size placeholder="M" /></label>
+      <label class="text-xs text-zinc-400">Colour<input class="sell-form-input mt-1" data-var-color placeholder="Black" /></label>
+      <label class="text-xs text-zinc-400">Units<input type="number" min="0" max="9999" class="sell-form-input mt-1" data-var-qty value="1" /></label>
+      <button type="button" class="depop-btn-ghost text-xs" data-var-remove>Remove</button>
+      <input type="hidden" data-var-id value="var_${Date.now().toString(36)}" />
+    </div>`;
+    const row = wrap.firstElementChild;
+    row?.querySelector("[data-var-remove]")?.addEventListener("click", () => row.remove());
+    editor.appendChild(row);
+  });
+  el("variants-save-btn")?.addEventListener("click", () => void saveVariants());
   el("payout-export-pdf-btn")?.addEventListener("click", exportPayoutPdf);
   // Back-compat if an older cached HTML still has the CSV button id.
   el("payout-export-csv-btn")?.addEventListener("click", exportPayoutPdf);

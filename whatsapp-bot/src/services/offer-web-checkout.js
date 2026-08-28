@@ -83,29 +83,39 @@ export async function placeOrderFromAcceptedOffer({
     phone: mpesaPhone,
   });
 
-  const order = createOrder({
-    customerKey,
-    chatId: customerKey,
-    product: { ...product, productId: product.id },
-    details: {
-      name: fullName,
-      location: landmark.location,
-      phone: mpesaPhone,
-      deliveryType: landmark.deliveryType,
-      landmarkTown: landmark.landmarkTown,
-      landmarkSpot: landmark.landmarkSpot,
-      landmarkInstructions: landmark.landmarkInstructions,
-      landmarkId: landmark.landmarkId,
-    },
-    offerId: checkout.offer.id,
-    totalsOverride: {
-      itemKes: checkout.breakdown.itemKes,
-      shippingKes: checkout.breakdown.shippingKes,
-      totalKes: checkout.breakdown.totalKes,
-      platformFeeKes: checkout.breakdown.platformFeeKes,
-      sellerNetKes: checkout.breakdown.sellerNetKes,
-    },
-  });
+  let order;
+  try {
+    order = createOrder({
+      customerKey,
+      chatId: customerKey,
+      product: { ...product, productId: product.id },
+      details: {
+        name: fullName,
+        location: landmark.location,
+        phone: mpesaPhone,
+        deliveryType: landmark.deliveryType,
+        landmarkTown: landmark.landmarkTown,
+        landmarkSpot: landmark.landmarkSpot,
+        landmarkInstructions: landmark.landmarkInstructions,
+        landmarkId: landmark.landmarkId,
+      },
+      offerId: checkout.offer.id,
+      totalsOverride: {
+        itemKes: checkout.breakdown.itemKes,
+        shippingKes: checkout.breakdown.shippingKes,
+        totalKes: checkout.breakdown.totalKes,
+        platformFeeKes: checkout.breakdown.platformFeeKes,
+        sellerNetKes: checkout.breakdown.sellerNetKes,
+      },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: err.code || "create_order_failed",
+      message: err.message || "Could not create order.",
+      onHand: err.onHand,
+    };
+  }
 
   return {
     ok: true,

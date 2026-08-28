@@ -578,6 +578,19 @@
             </section>
 
             <section class="sell-depop-section p-5 space-y-3">
+              <h2 class="font-bold text-lg text-white">Size &amp; colour variants</h2>
+              <p class="text-sm text-zinc-400">Add options (e.g. M / Black) with their own units so you don’t oversell one size.</p>
+              <label class="block text-sm font-medium text-zinc-300">
+                Listing
+                <select id="variants-product-select" class="sell-form-input mt-1"></select>
+              </label>
+              <div id="variants-editor" class="space-y-2"></div>
+              <button type="button" id="variants-add-row" class="depop-btn-ghost text-sm">+ Add variant</button>
+              <button type="button" id="variants-save-btn" class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold">Save variants</button>
+              <p id="variants-status" class="text-sm text-zinc-500" role="status"></p>
+            </section>
+
+            <section class="sell-depop-section p-5 space-y-3">
               <h2 class="font-bold text-base text-white">Seasonal demand tips</h2>
               <ul id="stock-seasonal-tips" class="space-y-2 text-sm text-zinc-400">
                 <li class="rounded-xl border border-zinc-800 px-3 py-2">December holidays — gift baskets, kiondos, and party fits move faster. Restock early.</li>
@@ -604,6 +617,16 @@
                 <input id="marketing-promo-code" type="text" maxlength="24" class="sell-form-input mt-1 font-mono uppercase" placeholder="SOKONI10" autocomplete="off" />
               </label>
               <p class="text-xs text-zinc-500">Share-code text only. For a real price cut that shows on the mall and STK pay, open <strong class="text-zinc-300">My listings → % Set promo</strong> on that item. End anytime with <strong class="text-zinc-300">End promo</strong>.</p>
+              <label class="block text-sm font-medium text-zinc-300" for="shop-promo-banner">
+                Shop promo banner
+                <input id="shop-promo-banner" type="text" maxlength="160" class="sell-form-input mt-1" placeholder="Weekend 10% off dresses — while stocks last" autocomplete="off" />
+              </label>
+              <label class="block text-sm font-medium text-zinc-300" for="shop-offer-note">
+                Offer note
+                <input id="shop-offer-note" type="text" maxlength="240" class="sell-form-input mt-1" placeholder="Free gift wrap on orders above KES 2,000" autocomplete="off" />
+              </label>
+              <button type="button" id="shop-offer-save-btn" class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold">Save shop banner</button>
+              <p class="text-xs text-zinc-500">Shows on your public shop page under the bio. Pair with <strong class="text-zinc-300">% Set promo</strong> on listings for a real STK price cut.</p>
             </section>
 
             <section class="sell-depop-section p-5 space-y-3">
