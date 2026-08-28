@@ -3474,6 +3474,37 @@ async function setListingPromo(productId, currentSellerNet, currentBuyerTotal) {
       return;
     }
     if (!res.ok) {
+      setStatus(data.message || data.error || "Could not start promo.", true);
+      return;
+    }
+    setStatus(data.message || "Promo live — site + STK use the promo price.");
+    await loadMyListings();
+  } catch {
+    setStatus("Network error.", true);
+  }
+}
+
+async function endListingPromo(productId) {
+  const phone = apiPhone();
+  if (!phone || !productId) return;
+  if (!window.confirm("End promo and restore list price on the site?")) return;
+  setStatus("Ending promo…");
+  try {
+    const res = await fetch(`${ONBOARD_API}/promo/end`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(jsonAuthBody({ phone, productId })),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      setStatus(
+        data.message ||
+          "Session expired — verify WhatsApp at the top of Seller Hub, then try End promo again.",
+        true
+      );
+      return;
+    }
+    if (!res.ok) {
       setStatus(data.message || data.error || "Could not end promo.", true);
       return;
     }
