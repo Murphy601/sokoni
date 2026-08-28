@@ -100,8 +100,18 @@
           </button>
         </div>
 
-        <div id="order-actions" class="hidden space-y-2 rounded-2xl border border-black/5 bg-brand-cream/60 p-3">
+        <div id="order-actions" class="space-y-2 rounded-2xl border border-black/5 bg-brand-cream/60 p-3">
           <p class="text-xs font-bold uppercase tracking-wide text-brand-purple/50">Order actions (WhatsApp #commands)</p>
+          <label class="block text-xs font-medium">
+            Order id
+            <input
+              id="action-order-id"
+              type="text"
+              autocomplete="off"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm bg-white"
+              placeholder="SKN-1002-1 — select a thread or type it"
+            />
+          </label>
           <div class="flex flex-wrap gap-2 items-end">
             <label class="text-xs font-medium">
               Status
@@ -153,6 +163,7 @@
             </label>
             <button type="button" data-cmd="scan-extra" class="order-act min-h-[44px] px-3 rounded-full border border-black/10 text-xs font-semibold">Scan + args</button>
           </div>
+          <pre id="action-result" class="hidden cmd-out text-xs rounded-2xl bg-brand-purple text-white p-3 max-h-48 overflow-y-auto" aria-live="polite"></pre>
         </div>
 
         <div id="chat-messages" class="flex-1 overflow-y-auto rounded-2xl bg-brand-purple text-white p-4 space-y-2 text-sm min-h-[240px]"></div>
@@ -169,7 +180,6 @@
             Send
           </button>
         </form>
-        <pre id="action-result" class="hidden cmd-out text-xs rounded-2xl bg-brand-purple/5 p-3 max-h-40 overflow-y-auto" aria-live="polite"></pre>
       </section>
     </div>
 
@@ -245,7 +255,7 @@
     </section>
   </main>
 
-  <script src="assets/js/admin-support.js"></script>
+  <script src="assets/js/admin-support.js?v=20260828c"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
