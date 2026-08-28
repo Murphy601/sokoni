@@ -10,6 +10,15 @@ import { fileURLToPath } from "node:url";
 const sessions = new Map();
 const MAX_HISTORY = 20;
 
+/** Normalize WhatsApp sender → LangGraph-style thread_id (avoid importing commerce-ops). */
+function threadIdFromPhoneLocal(phoneOrKey) {
+  const raw = String(phoneOrKey || "").trim();
+  if (!raw) return "";
+  if (raw.includes("@")) return raw;
+  const digits = raw.replace(/\D/g, "");
+  return digits || raw;
+}
+
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
 const PENDING_FILE = path.join(DATA_DIR, "pending-checkouts.json");
 const PENDING_TTL_MS = 6 * 60 * 60 * 1000;
@@ -90,11 +99,20 @@ export function getSession(phoneNumber) {
       humanHandoff: null,
       customerMeta: null,
       pendingReview: null,
+      /** Persistent LangGraph-style thread id = WhatsApp sender phone */
+      threadId: threadIdFromPhoneLocal(phoneNumber),
     };
     sessions.set(phoneNumber, session);
     hydratePending(phoneNumber, session);
   }
-  return sessions.get(phoneNumber);
+  const session = sessions.get(phoneNumber);
+  if (!session.threadId) session.threadId = threadIdFromPhoneLocal(phoneNumber);
+  return session;
+}
+
+/** WhatsApp sender phone (or @lid) used as LangGraph-style thread_id. */
+export function resolveThreadId(phoneOrKey) {
+  return threadIdFromPhoneLocal(phoneOrKey) || String(phoneOrKey || "").trim();
 }
 
 export function pushMessage(phoneNumber, role, content) {

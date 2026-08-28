@@ -68,7 +68,13 @@ const filtered = filterToolsForSpecialist(
 assert("filter drops buyer catalog on seller lane", filtered.length === 1 && filtered[0].tool === "get_seller_payout");
 
 const meta = llmRouterMeta();
-assert("litellm-style router meta", meta.style === "litellm-compatible" && meta.models.length >= 1);
+assert(
+  "litellm-style router meta",
+  String(meta.style || "").includes("litellm") &&
+    Array.isArray(meta.providers) &&
+    meta.temperature <= 0.35 &&
+    meta.avoid?.includes("ollama_local_cpu_queue")
+);
 
 if (failed) {
   console.error(`\n${failed} failure(s)`);

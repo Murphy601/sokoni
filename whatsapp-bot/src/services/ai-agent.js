@@ -1,11 +1,10 @@
 /**
  * Phase 7 — Unified AI agent (WhatsApp + web) with shared tool layer.
- * Uses OPENAI_MODEL only (free chat). Never uses CATALOG_VISION_MODEL (seller photos).
+ * Chat goes through llm-router (Groq → Gemini → OpenRouter). Never Ollama for WA traffic.
  */
-import OpenAI from "openai";
 import { config } from "../config.js";
-import { getSession, pushMessage, isHumanHandoff } from "./session.js";
-import { channelPrompt, offTopicRedirect } from "./ai-prompts.js";
+import { getSession, pushMessage, isHumanHandoff, resolveThreadId } from "./session.js";
+import { channelPrompt, offTopicRedirect, buildGroundedSystemPrompt } from "./ai-prompts.js";
 import {
   formatToolResultsForPrompt,
   isGreetingIntent,
@@ -17,34 +16,13 @@ import {
 } from "./ai-tools.js";
 import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
 import { runAgentGraph } from "./agent-graph.js";
-import { llmRouterMeta } from "./llm-router.js";
+import {
+  llmRouterMeta,
+  routedChatCompletion,
+  chatTemperature,
+  buildChatProviderChain,
+} from "./llm-router.js";
 import { GOODWILL_VOUCHER_CAP_KES } from "./agent-specialists.js";
-
-const FALLBACK_MODELS = ["google/gemma-4-26b-a4b-it:free"];
-
-let client = null;
-
-function modelChain() {
-  const primary = config.openai.model?.trim();
-  const configured = config.openai.modelFallbacks || [];
-  return [...new Set([primary, ...configured, ...FALLBACK_MODELS].filter(Boolean))];
-}
-
-function getClient() {
-  if (!config.openai.apiKey) return null;
-  if (!client) {
-    client = new OpenAI({
-      apiKey: config.openai.apiKey,
-      baseURL: config.openai.baseUrl,
-      timeout: 35_000,
-      defaultHeaders: {
-        "HTTP-Referer": config.publicSiteUrl || "http://localhost:3001",
-        "X-Title": config.brand.name,
-      },
-    });
-  }
-  return client;
-}
 
 /** Free models sometimes echo planning / system rules instead of answering. */
 const INSTRUCTION_LEAK =
@@ -394,10 +372,7 @@ function offlineReply(toolResults, channel, userMessage = "") {
     : "Type *menu* to browse, send your *SKN-####*, or ask about escrow / delivery.";
 }
 
-async function callLLM(messages, { channel = "whatsapp", allowLonger = false, conversational = false } = {}) {
-  const openai = getClient();
-  if (!openai) throw new Error("No API key");
-
+async function callLLM(messages, { channel = "whatsapp", allowLonger = false } = {}) {
   // Enough headroom to finish a short trust answer without mid-sentence cutoffs.
   const maxTokens = allowLonger
     ? channel === "web"
@@ -407,35 +382,15 @@ async function callLLM(messages, { channel = "whatsapp", allowLonger = false, co
       ? 200
       : 120;
 
-  let lastError = null;
-  for (const model of modelChain()) {
-    try {
-      const response = await openai.chat.completions.create({
-        model,
-        messages,
-        max_tokens: maxTokens,
-        // Slightly warmer for real chat; keep shopping/catalog turns crisp
-        temperature: conversational ? 0.55 : 0.2,
-        presence_penalty: conversational ? 0.2 : 0,
-        frequency_penalty: conversational ? 0.3 : 0.5,
-      });
-      const choice = response.choices[0];
-      const raw = choice?.message?.content;
-      if (choice?.finish_reason === "length") {
-        console.warn(`[ai-agent] ${model} hit max_tokens — preferring complete fallback if needed`);
-      }
-      const reply = enforceReplyBrevity(raw, channel, { allowLonger });
-      if (reply) {
-        console.log(`[ai-agent] replied via ${model} (max_tokens=${maxTokens})`);
-        return reply;
-      }
-      console.warn(`[ai-agent] ${model} produced empty/leaked reply — trying next model`);
-    } catch (err) {
-      lastError = err;
-      console.warn(`[ai-agent] ${model} failed:`, err.error?.message || err.message);
-    }
-  }
-  throw lastError || new Error("All models failed");
+  // Low temperature everywhere — consistent buyer/seller replies (no creative drift).
+  const temperature = chatTemperature();
+  const result = await routedChatCompletion(messages, { maxTokens, temperature });
+  const reply = enforceReplyBrevity(result.content, channel, { allowLonger });
+  if (!reply) throw new Error("Empty/leaked reply after brevity enforce");
+  console.log(
+    `[ai-agent] replied via ${result.provider}/${result.model} (temp=${temperature}, max_tokens=${maxTokens})`
+  );
+  return reply;
 }
 
 function sanitizeHistory(history = []) {
@@ -543,8 +498,8 @@ export async function runAgentTurn({
     toolResults.find((r) => r.tool === "search_products" && r.products?.length)?.products ||
     [];
 
-  // No model configured → deterministic fallback (still answers Sokoni topics via tools)
-  if (!getClient()) {
+  // No chat provider configured → deterministic fallback (still answers Sokoni topics via tools)
+  if (!buildChatProviderChain().length) {
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return {
@@ -557,13 +512,19 @@ export async function runAgentTurn({
     };
   }
 
+  const threadId = resolveThreadId(phone || sessionKey);
+
   // Default path: LLM answers every Sokoni question using tool results (site facts, taxonomy, stock, tracking).
   try {
     const messages = [
-      { role: "system", content: channelPrompt(channel) },
-      { role: "system", content: specialistHint },
-      ...(knowledgeBlock ? [{ role: "system", content: knowledgeBlock }] : []),
-      ...(toolBlock ? [{ role: "system", content: toolBlock }] : []),
+      {
+        role: "system",
+        content: buildGroundedSystemPrompt({
+          channel,
+          contextBlocks: [specialistHint, knowledgeBlock, toolBlock].filter(Boolean),
+          threadId,
+        }),
+      },
       ...sanitizeHistory(hist),
       { role: "user", content: text },
     ];
@@ -573,7 +534,6 @@ export async function runAgentTurn({
     let reply = await callLLM(messages, {
       channel,
       allowLonger,
-      conversational,
     });
 
     if (!reply) {
@@ -600,6 +560,8 @@ export async function runAgentTurn({
       knowledge: knowledge.map((k) => k.id),
       escalation: escalation.escalate ? escalation : undefined,
       graph: graph.graph,
+      threadId,
+      llm: llmRouterMeta(),
     };
   } catch (err) {
     console.error("[ai-agent] error:", err.message);
@@ -611,16 +573,18 @@ export async function runAgentTurn({
 
 export function agentMeta() {
   return {
-    phase: 7.2,
+    phase: 7.3,
     name: "Sokoni Plug",
     engine: "langgraph-style-multi-agent",
     specialists: ["buyer", "seller", "dispute", "logistics", "general"],
-    knowledge: "rag-lite chunked knowledge/*.md (pgvector-ready)",
+    knowledge: "chunked knowledge/*.md (~200–300 words) + optional pgvector platform_knowledge",
     routing: llmRouterMeta(),
+    temperature: chatTemperature(),
     guardrails: {
       goodwillCapKes: GOODWILL_VOUCHER_CAP_KES,
       sentimentEscalation: true,
       hitlPriorities: ["normal", "high"],
+      grounding: "context_and_tools_only",
     },
     channels: ["whatsapp", "web"],
     tools: [
@@ -642,13 +606,15 @@ export function agentMeta() {
       "verify_payment_code",
       "check_aup",
     ],
-    threadId: "whatsapp_phone",
+    threadId: "whatsapp_sender_phone",
     commerceOps: true,
     endpoints: {
       chat: "/api/agent/chat",
       meta: "/api/agent/meta",
     },
-    configured: Boolean(config.openai.apiKey),
+    configured: Boolean(
+      config.groq?.apiKey || config.gemini?.apiKey || config.openai?.apiKey
+    ),
   };
 }
 

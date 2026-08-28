@@ -6,12 +6,13 @@ import {
   detectEscalation,
   routeSpecialist,
   specialistSystemHint,
-  retrieveKnowledge,
+  retrieveKnowledgeAsync,
   formatKnowledgeForPrompt,
   summarizeForHandoff,
   evaluateGoodwillVoucher,
 } from "./agent-specialists.js";
 import { runToolRouter, TOOL_NAMES, filterToolsForSpecialist } from "./ai-tools.js";
+import { threadIdFromPhone } from "./commerce-ops.js";
 
 /** Tool allowlists per specialist lane (LangGraph agent boundaries). */
 export const SPECIALIST_TOOLS = {
@@ -73,13 +74,14 @@ export async function runAgentGraph({
     ? filterToolsForSpecialist(rawTools, allow)
     : rawTools.filter((t) => allow.includes(t.tool));
 
-  const knowledge = retrieveKnowledge(text, { limit: 3, specialist });
+  const knowledge = await retrieveKnowledgeAsync(text, { limit: 3, specialist });
   const knowledgeBlock = formatKnowledgeForPrompt(knowledge);
   const handoffSummary = summarizeForHandoff({
     text,
     specialist,
     toolNames: tools.map((t) => t.tool),
   });
+  const threadId = threadIdFromPhone(phone || customerKey);
 
   return {
     escalation,
@@ -89,11 +91,13 @@ export async function runAgentGraph({
     knowledge,
     knowledgeBlock,
     handoffSummary,
+    threadId,
     graph: {
       framework: "langgraph-style",
       nodes: ["escalate", "route", "tools", "knowledge", "reply"],
       specialist,
       toolAllowlist: allow,
+      threadId,
     },
   };
 }

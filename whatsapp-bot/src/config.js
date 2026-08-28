@@ -29,7 +29,7 @@ export const config = {
     apiKey: process.env.WAHA_API_KEY || "",
     session: process.env.WAHA_SESSION || "default",
   },
-  /** WhatsApp + web chat AI (text only — keep on free OpenRouter models). */
+  /** WhatsApp + web chat AI (text only). Prefer Groq/Gemini for speed; OpenRouter free as fallback. */
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
@@ -40,7 +40,21 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
-  /** Optional Google Gemini direct API — listing-photo fallback (not WhatsApp chat). */
+  /** Fast chat: Groq Cloud (Llama 3.1 8B) — set GROQ_API_KEY for production WhatsApp latency. */
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || "",
+    baseUrl: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+    model: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
+  },
+  /**
+   * Chat routing: auto (Groq→Gemini→OpenRouter) | groq | gemini | openrouter
+   * Temperature kept low (0.1–0.2) for consistent buyer/seller replies.
+   */
+  aiChat: {
+    provider: process.env.AI_CHAT_PROVIDER || "auto",
+    temperature: Number(process.env.AI_CHAT_TEMPERATURE ?? 0.15),
+  },
+  /** Optional Google Gemini — listing vision + optional chat (GEMINI_CHAT_MODEL). */
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
     visionModel: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
@@ -48,6 +62,10 @@ export const config = {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    chatModel: process.env.GEMINI_CHAT_MODEL || "gemini-2.0-flash",
+    chatBaseUrl:
+      process.env.GEMINI_CHAT_BASE_URL ||
+      "https://generativelanguage.googleapis.com/v1beta/openai/",
   },
   /**
    * NVIDIA NIM (build.nvidia.com) — OpenAI-compatible VLMs for listing drafts
