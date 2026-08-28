@@ -44,7 +44,7 @@
     <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
       <h1 class="font-display text-2xl font-bold">Seller listing review</h1>
       <p class="text-sm text-brand-purple/65">
-        Token-gated queue for hidden / flagged listings. Restore after review or keep removed.
+        Flagged listings (auto + admin), seller KYC, and shop pause / payout holds. Restore after review.
       </p>
       <label class="block text-sm font-medium">
         Admin token
@@ -63,15 +63,22 @@
         <button id="admin-kyc-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">
           Load KYC queue
         </button>
+        <button id="admin-shops-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">
+          Load held shops
+        </button>
         <button id="admin-refresh-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">
           Refresh
         </button>
       </div>
       <p id="admin-status" class="text-sm text-brand-purple/60" role="status" aria-live="polite"></p>
+      <p class="text-xs text-brand-purple/50">
+        Flagged = auto scanner after a seller publishes (off-platform contact, prohibited goods, missing fields) or admin takedown.
+        KYC = National ID / KRA from onboard. Held shops = pause / review / deactivate (listings hidden + M-Pesa withdraw blocked until restore).
+      </p>
     </section>
 
     <section id="admin-kyc-list" class="space-y-3" aria-label="Seller KYC queue"></section>
-
+    <section id="admin-shops-list" class="space-y-3" aria-label="Held shops"></section>
     <section id="admin-list" class="space-y-3"></section>
   </main>
 

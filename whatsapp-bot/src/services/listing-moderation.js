@@ -37,6 +37,7 @@ const FLAG_LABELS = {
   off_platform_contact: "Off-platform contact",
   prohibited_item: "Prohibited item",
   admin_takedown: "Removed by Sokoni",
+  shop_review_hold: "Shop under Sokoni review",
 };
 
 export function labelForFlag(flag) {
@@ -193,6 +194,84 @@ export async function restoreListing(productId) {
 
 export async function takedownListing(productId, reason = "") {
   return hideListing(productId, { flags: ["admin_takedown"], reason });
+}
+
+/** Hide all live listings for a supplier while the shop is under review. */
+export async function hideListingsForSupplier(supplierId, { reason = "Shop under Sokoni review" } = {}) {
+  const sid = String(supplierId || "").trim();
+  if (!sid) return { error: "missing_supplier", hidden: 0 };
+  const master = await loadMaster();
+  let hidden = 0;
+  for (let i = 0; i < master.length; i++) {
+    const p = master[i];
+    if (String(p.supplierId || "") !== sid) continue;
+    if (p.moderation?.status === "hidden" && p.inStock === false) continue;
+    const flags = Array.isArray(p.moderation?.flags) ? [...p.moderation.flags] : [];
+    if (!flags.includes("shop_review_hold")) flags.push("shop_review_hold");
+    master[i] = {
+      ...p,
+      inStock: false,
+      moderation: {
+        ...(p.moderation || {}),
+        status: "hidden",
+        flags,
+        reason,
+        hiddenAt: Date.now(),
+        shopReviewHold: true,
+      },
+    };
+    hidden += 1;
+    if (dbProductsAvailable()) {
+      try {
+        await upsertCatalogProduct(master[i]);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  if (hidden) await saveMaster(master);
+  return { ok: true, hidden };
+}
+
+/** Restore listings that were only hidden for shop review (keeps policy takedowns). */
+export async function restoreListingsForSupplier(supplierId) {
+  const sid = String(supplierId || "").trim();
+  if (!sid) return { error: "missing_supplier", restored: 0 };
+  const master = await loadMaster();
+  const { assertCanRestock } = await import("./product-availability.js");
+  let restored = 0;
+  for (let i = 0; i < master.length; i++) {
+    const p = master[i];
+    if (String(p.supplierId || "") !== sid) continue;
+    const flags = Array.isArray(p.moderation?.flags) ? p.moderation.flags : [];
+    if (!flags.includes("shop_review_hold") && !p.moderation?.shopReviewHold) continue;
+    // Keep hard policy hides (prohibited / admin_takedown) off the grid.
+    if (flags.includes("admin_takedown") || flags.includes("prohibited_item")) continue;
+    const gate = await assertCanRestock(p.id, p);
+    if (!gate.ok) continue;
+    const nextFlags = flags.filter((f) => f !== "shop_review_hold");
+    master[i] = {
+      ...p,
+      inStock: true,
+      moderation: {
+        ...(p.moderation || {}),
+        status: "live",
+        flags: nextFlags,
+        shopReviewHold: false,
+        restoredAt: Date.now(),
+      },
+    };
+    restored += 1;
+    if (dbProductsAvailable()) {
+      try {
+        await upsertCatalogProduct(master[i]);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  if (restored) await saveMaster(master);
+  return { ok: true, restored };
 }
 
 /** Run moderation after instant publish; hide + notify if flagged. */

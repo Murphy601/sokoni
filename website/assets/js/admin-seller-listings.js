@@ -109,6 +109,11 @@
           <div class="flex flex-wrap gap-2">
             <button type="button" class="admin-restore min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold" data-id="${item.id}">Restore</button>
             <button type="button" class="admin-takedown min-h-[44px] px-4 rounded-full border border-red-300 text-red-700 text-sm font-semibold" data-id="${item.id}">Keep removed</button>
+            ${
+              item.supplierId
+                ? `<button type="button" class="admin-shop-action min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold" data-id="${item.supplierId}" data-action="review">Hold whole shop</button>`
+                : ""
+            }
           </div>
         </div>
       </article>`;
@@ -141,6 +146,7 @@
       setStatus(`${listings.length} flagged listing${listings.length === 1 ? "" : "s"}`);
       list.innerHTML = listings.map(cardHtml).join("");
       wireActions();
+      wireShopActions();
     } catch {
       setStatus("Network error while loading flagged listings.", true);
     }
@@ -189,6 +195,16 @@
       .replace(/"/g, "&quot;");
   }
 
+  function apiErrorHint(res, data, label) {
+    if (res.status === 404) {
+      return `${label} API not on the live bot yet — deploy bot (git pull + scripts/deploy-bot.sh). Flagged listings can still work on the older build.`;
+    }
+    if (res.status === 403) {
+      return "Admin token rejected — check ADMIN_SETUP_TOKEN / SUPPLIER_ADMIN_TOKEN.";
+    }
+    return data.message || data.error || `Could not load ${label}.`;
+  }
+
   function kycCardHtml(s) {
     return `
       <article class="rounded-3xl border border-black/5 bg-white p-4 space-y-2" data-kyc-id="${escapeHtml(s.id)}">
@@ -211,8 +227,35 @@
           <input type="text" class="admin-kyc-note mt-1 w-full min-h-[40px] rounded-xl border border-black/10 px-3 text-sm" placeholder="Verified docs / reason" />
         </label>
         <div class="flex flex-wrap gap-2">
-          <button type="button" class="admin-kyc-approve min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold" data-id="${escapeHtml(s.id)}">Approve</button>
-          <button type="button" class="admin-kyc-reject min-h-[44px] px-4 rounded-full border border-red-300 text-red-700 text-sm font-semibold" data-id="${escapeHtml(s.id)}">Reject</button>
+          <button type="button" class="admin-kyc-approve min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold" data-id="${escapeHtml(s.id)}">Approve KYC</button>
+          <button type="button" class="admin-kyc-reject min-h-[44px] px-4 rounded-full border border-red-300 text-red-700 text-sm font-semibold" data-id="${escapeHtml(s.id)}">Reject KYC</button>
+          <button type="button" class="admin-shop-action min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold" data-id="${escapeHtml(s.id)}" data-action="review">Hold shop + payouts</button>
+        </div>
+      </article>`;
+  }
+
+  function shopCardHtml(s) {
+    return `
+      <article class="rounded-3xl border border-black/5 bg-white p-4 space-y-2" data-shop-id="${escapeHtml(s.id)}">
+        <div>
+          <h2 class="font-semibold">${escapeHtml(s.businessName || s.shopHandle || s.id)}</h2>
+          <p class="text-xs text-brand-purple/60 mt-0.5">
+            <code>${escapeHtml(s.id)}</code>
+            ${s.shopHandle ? ` · ${escapeHtml(s.shopHandle)}` : ""}
+            · status <strong>${escapeHtml(s.shopStatus || "live")}</strong>
+            ${s.payoutHold ? " · payouts held" : ""}
+          </p>
+          ${s.shopStatusNote ? `<p class="text-sm text-brand-purple/70">${escapeHtml(s.shopStatusNote)}</p>` : ""}
+        </div>
+        <label class="block text-xs font-medium">
+          Note
+          <input type="text" class="admin-shop-note mt-1 w-full min-h-[40px] rounded-xl border border-black/10 px-3 text-sm" placeholder="Reason for pause / restore" />
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="admin-shop-action min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold" data-id="${escapeHtml(s.id)}" data-action="pause">Pause</button>
+          <button type="button" class="admin-shop-action min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold" data-id="${escapeHtml(s.id)}" data-action="review">Under review</button>
+          <button type="button" class="admin-shop-action min-h-[44px] px-4 rounded-full border border-red-300 text-red-700 text-sm font-semibold" data-id="${escapeHtml(s.id)}" data-action="deactivate">Deactivate</button>
+          <button type="button" class="admin-shop-action min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold" data-id="${escapeHtml(s.id)}" data-action="restore">Restore shop</button>
         </div>
       </article>`;
   }
@@ -231,7 +274,8 @@
       const res = await fetch(`${ADMIN_API}/kyc?status=pending`, { headers: adminHeaders() });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setStatus(data.message || data.error || "Could not load KYC queue.", true);
+        setStatus(apiErrorHint(res, data, "KYC"), true);
+        list.innerHTML = `<p class="text-sm text-red-700">${escapeHtml(apiErrorHint(res, data, "KYC"))}</p>`;
         return;
       }
       const sellers = Array.isArray(data.sellers) ? data.sellers : [];
@@ -244,8 +288,44 @@
       list.innerHTML =
         `<h2 class="font-display text-xl font-bold">Seller KYC</h2>` + sellers.map(kycCardHtml).join("");
       wireKycActions();
+      wireShopActions();
     } catch {
       setStatus("Network error while loading KYC.", true);
+    }
+  }
+
+  async function loadShops() {
+    const token = readToken();
+    const list = el("admin-shops-list");
+    if (!list) return;
+    if (!token) {
+      setStatus("Enter the admin token first.", true);
+      return;
+    }
+    setStatus("Loading held shops…");
+    list.innerHTML = "";
+    try {
+      const res = await fetch(`${ADMIN_API}/shops?status=held`, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(apiErrorHint(res, data, "held shops"), true);
+        list.innerHTML = `<p class="text-sm text-red-700">${escapeHtml(apiErrorHint(res, data, "held shops"))}</p>`;
+        return;
+      }
+      const shops = Array.isArray(data.shops) ? data.shops : [];
+      if (!shops.length) {
+        setStatus("No shops on hold.");
+        list.innerHTML = `<p class="text-sm text-brand-purple/60">No paused / under-review / deactivated shops.</p>`;
+        return;
+      }
+      setStatus(`${shops.length} shop${shops.length === 1 ? "" : "s"} held`);
+      list.innerHTML =
+        `<h2 class="font-display text-xl font-bold">Held shops</h2>
+         <p class="text-sm text-brand-purple/60">Listings hidden from the mall + M-Pesa withdraw blocked until Restore.</p>` +
+        shops.map(shopCardHtml).join("");
+      wireShopActions();
+    } catch {
+      setStatus("Network error while loading shops.", true);
     }
   }
 
@@ -260,13 +340,41 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setStatus(data.message || data.error || `Could not ${action}.`, true);
+        setStatus(apiErrorHint(res, data, "KYC action"), true);
         return;
       }
       setStatus(action === "approve" ? `Approved ${id}.` : `Rejected ${id}.`);
       await loadKyc();
     } catch {
       setStatus(`Network error during KYC ${action}.`, true);
+    }
+  }
+
+  async function postShop(id, action, note) {
+    if (!id || !action) return;
+    setStatus(`${action} ${id}…`);
+    try {
+      const res = await fetch(`${ADMIN_API}/shops/${encodeURIComponent(id)}/${action}`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ note: note || "" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(apiErrorHint(res, data, "shop action"), true);
+        return;
+      }
+      const hidden = data.listings?.hidden;
+      const restored = data.listings?.restored;
+      setStatus(
+        action === "restore"
+          ? `Restored ${id}${restored != null ? ` · ${restored} listings back` : ""}.`
+          : `${action} set on ${id}${hidden != null ? ` · ${hidden} listings hidden` : ""} · payouts held.`
+      );
+      await loadShops();
+      await loadFlagged();
+    } catch {
+      setStatus(`Network error during shop ${action}.`, true);
     }
   }
 
@@ -287,17 +395,33 @@
     });
   }
 
+  function wireShopActions() {
+    document.querySelectorAll(".admin-shop-action").forEach((btn) => {
+      btn.onclick = () => {
+        const card = btn.closest("[data-shop-id], [data-kyc-id]");
+        const note =
+          card?.querySelector(".admin-shop-note")?.value ||
+          card?.querySelector(".admin-kyc-note")?.value ||
+          "";
+        postShop(btn.dataset.id, btn.dataset.action, note);
+      };
+    });
+  }
+
   function init() {
     hydrateTokenFromUrl();
     el("admin-load-btn")?.addEventListener("click", () => loadFlagged());
     el("admin-refresh-btn")?.addEventListener("click", () => {
       void loadFlagged();
       void loadKyc();
+      void loadShops();
     });
     el("admin-kyc-btn")?.addEventListener("click", () => loadKyc());
+    el("admin-shops-btn")?.addEventListener("click", () => loadShops());
     if (readToken()) {
       void loadFlagged();
       void loadKyc();
+      void loadShops();
     }
   }
 

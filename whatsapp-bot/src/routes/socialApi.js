@@ -494,6 +494,21 @@ async function resolveOptionalShopViewerUserId(req) {
 /** GET /api/social/shop/:handle — storefront profile + active listings */
 router.get("/shop/:handle", async (req, res) => {
   try {
+    try {
+      const { getSupplierByHandle, isShopPubliclyVisible } = await import("../services/suppliers.js");
+      const supplier = getSupplierByHandle(req.params.handle);
+      if (supplier && !isShopPubliclyVisible(supplier)) {
+        return res.status(403).json({
+          error: "shop_under_review",
+          message:
+            supplier.shopStatusNote ||
+            "This shop is temporarily unavailable while Sokoni completes a review.",
+          shopStatus: supplier.shopStatus || "under_review",
+        });
+      }
+    } catch {
+      /* fail-soft — shop still loads if supplier store unavailable */
+    }
     const viewerUserId = await resolveOptionalShopViewerUserId(req);
     const result = await getShopProfileByHandle({
       handle: req.params.handle,

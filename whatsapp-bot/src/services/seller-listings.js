@@ -34,7 +34,7 @@ import {
 } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
-import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, summarizeModeration } from "./listing-moderation.js";
+import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, hideListingsForSupplier, restoreListingsForSupplier, summarizeModeration } from "./listing-moderation.js";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
 import {
   BULK_CSV_MAX_ROWS,
@@ -1408,4 +1408,4 @@ export async function getSellerListingMeta() {
   };
 }
 
-export { listFlaggedListings, takedownListing, restoreListing, VALID_CONDITIONS, computeFeeBreakdown };
+export { listFlaggedListings, takedownListing, restoreListing, hideListingsForSupplier, restoreListingsForSupplier, VALID_CONDITIONS, computeFeeBreakdown };
