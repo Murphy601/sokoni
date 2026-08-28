@@ -1,99 +1,83 @@
-# Phase 7.2 — Operational multi-agent engine (Sokoni Plug)
+# Phase 7.3 — Fast, grounded multi-agent engine (Sokoni Plug)
 
-Delivers the buyer / seller / HITL capabilities below on the **existing WhatsApp + `/api/agent/chat` stack**.
+Fixes the three usual bottlenecks: **latency**, **bad knowledge**, **inconsistent replies**.
 
-| Spec buzzword | What Sokoni ships |
-|---------------|-------------------|
-| LangGraph multi-agent | `agent-graph.js` — escalate → specialist → allowlisted tools → RAG → reply |
-| LiteLLM routing | `llm-router.js` — OpenRouter free-tier-first model chain (no extra process) |
-| Pgvector | Chunked keyword RAG today (`knowledge/*.md`); embedding table optional later |
-
-Chat models: OpenRouter (`OPENAI_*`). Listing vision unchanged (OpenRouter → NVIDIA → Gemini).
+| Spec | What Sokoni ships |
+|------|-------------------|
+| Fast inference | `llm-router.js` — **Groq → Gemini Flash → OpenRouter** (never Ollama for WA traffic) |
+| Low temperature | `AI_CHAT_TEMPERATURE=0.15` (deterministic buyer/seller answers) |
+| Strict grounding | `buildGroundedSystemPrompt` — CONTEXT + TOOL RESULTS only; escalate if missing |
+| LangGraph multi-agent | `agent-graph.js` — escalate → specialist → tools → RAG → reply |
+| RAG | `knowledge/*.md` chunks ~200–300 words; optional `platform_knowledge` (pgvector) |
+| Thread ID | WhatsApp sender phone via `threadIdFromPhone` / `resolveThreadId` |
 
 ```
-User message
+User message (thread_id = WhatsApp phone)
     ↓
-Escalation (fraud/legal/anger → HIGH PRIORITY inbox + admin ping)
+Escalation (fraud/legal/anger → HIGH PRIORITY inbox)
     ↓
 Specialist route (buyer | seller | dispute | logistics | general)
     ↓
 Tool allowlist for that specialist
     ↓
-Knowledge RAG-lite (chunked markdown)
+Knowledge RAG (markdown + optional platform_knowledge)
     ↓
-LLM (LiteLLM-style failover) + TOOL RESULTS
+LLM @ temp 0.15 (Groq / Gemini / OpenRouter failover)
     ↓
 Reply
 ```
 
-## Tools
+## Env (production)
 
-| Tool | Role |
-|------|------|
-| `track_order` / `list_orders` | Order status, rider, ETA |
-| `search_products` / `browse_*` | Catalog recommendations |
-| `open_return_case` | Damaged/refund → escrow hold + ask for photos |
-| `get_seller_onboarding` | Register + Till / Paybill SOP |
-| `get_seller_payout` | Ready / pending / in-transit balances |
-| `get_shipping_rates` | Guide + saved local/upcountry rates |
-| `propose_goodwill` | Cap KES 300; higher → human |
-| `store_info` | Escrow / trust facts |
+```bash
+# Prefer one of these for sub-second replies under load:
+GROQ_API_KEY=...
+# or
+GEMINI_API_KEY=...
+GEMINI_CHAT_MODEL=gemini-2.0-flash
 
-## Real-world test cases
+AI_CHAT_PROVIDER=auto          # groq | gemini | openrouter
+AI_CHAT_TEMPERATURE=0.15
 
-### 1. Buyer support
+# Free fallback
+OPENAI_API_KEY=...             # OpenRouter
+OPENAI_MODEL=openrouter/free
+```
 
-**A — Order tracking**  
-Send: `Where is my package for Order #SKN-4920?`  
-Expect: logistics/buyer tools → status, rider if dispatched, ETA from tools only.
+**Do not** point Plug chat at local Ollama on a shared CPU box — requests queue and WhatsApp feels “stuck” at 30–60s.
 
-**B — Catalog**  
-Send: `wireless noise-canceling headphones under KES 5000`  
-Expect: `search_products` hits with live prices + links (no invented stock).
+## Grounding prompt
 
-**C — Low-level return**  
-Send: `Order #SKN-1102 arrived damaged. I want my money back.`  
-Expect: `open_return_case` → payout held, ask for photos, admin alerted.
+Injected every turn (`ai-prompts.js` → `buildGroundedSystemPrompt`):
 
-### 2. Seller support
+- Rely **exclusively** on CONTEXT + TOOL RESULTS
+- If missing: offer escalation (no invented policies/stock)
+- Includes `USER PHONE / THREAD ID` for session continuity
 
-**A — Onboarding**  
-Send: `How do I register as a seller and link my M-Pesa Till?`  
-Expect: `get_seller_onboarding` steps → Seller Hub Settings → Payouts.
+## Knowledge / pgvector
 
-**B — Payout balance**  
-Send (as seller WhatsApp): `What is my pending payout balance?`  
-Expect: `get_seller_payout` with Ready / Pending escrow / In transit.
+1. Keyword RAG over `whatsapp-bot/knowledge/*.md` (always on)
+2. Optional: `db/schema-phase16-pgvector-knowledge.sql` → `platform_knowledge`
+3. Migrate: phase16 is **fail-soft** if `CREATE EXTENSION vector` is unavailable
 
-**C — Shipping rates**  
-Send: `How do I set delivery to KES 300 Nairobi and KES 500 upcountry?`  
-Expect: `get_shipping_rates` guide to Seller Hub → Shipping Rates.
+Seed / query helpers: `knowledge-rag.js` (`retrievePlatformKnowledge`, `upsertKnowledgeChunk`).
 
-### 3. HITL
+## Diagnostics
 
-**A — Fraud / legal**  
-Send: `This seller scammed me on SKN-8811 — I'm calling the police and suing.`  
-Expect: high-priority ticket, bot pauses, admin WhatsApp/webhook ping, serious escalation reply.
+| Symptom | Cause | Action |
+|---------|--------|--------|
+| Replies 15+s | Slow free OpenRouter / no Groq-Gemini | Set `GROQ_API_KEY` or `GEMINI_API_KEY` |
+| Mixes rules/prices | High temp / weak grounding | Keep `AI_CHAT_TEMPERATURE=0.15`; redeploy prompts |
+| Invents features | Empty context | Check knowledge files + tools; escalate path |
+| Lost conversation | Wrong session key | Ensure webhook passes WhatsApp sender as `customerKey` |
 
 ## Deploy
 
 ```bash
+# On bot VM
 SKIP_WAHA_DEPLOY=1 SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh
+# Optional knowledge table (when vector extension exists):
+# psql $DATABASE_URL -f whatsapp-bot/db/schema-phase16-pgvector-knowledge.sql
 ```
 
-Smoke:
-
-```bash
-node scripts/test-agent-tool-router.mjs
-node scripts/test-agent-ops-graph.mjs
-```
-
-## Honest limits
-
-- Not a separate Python LangGraph / LiteLLM / Pinecone bill — same Node bot, free-tier OpenRouter.
-- Refunds are **held + human finalize**, not auto-STK reverse.
-- Shipping rate **writes** stay in Seller Hub (authenticated); AI reads + guides.
-- Pgvector embeddings are optional next; keyword RAG is live.
-
-
-See also [PHASE7_AI_COMMERCE.md](./PHASE7_AI_COMMERCE.md) for cart/voice/inventory/risk/retention.
+Smoke: `node whatsapp-bot/scripts/test-ai-latency-grounding.mjs`

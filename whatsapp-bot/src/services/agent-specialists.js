@@ -120,21 +120,53 @@ export function loadKnowledgeDocs({ specialist = "general" } = {}) {
 }
 
 /**
- * Chunk docs into ~500-char windows for better keyword / future pgvector recall.
+ * Chunk docs into ~200–300 word windows (~1000–1400 chars) for keyword / pgvector recall.
+ * Smaller atomic chunks reduce mixed-policy hallucinations.
  */
 function chunkDoc(doc) {
-  const size = 500;
+  const size = 1200;
+  const overlap = 150;
   const chunks = [];
   const text = doc.text;
-  if (text.length <= size) return [{ id: doc.id, text }];
-  for (let i = 0; i < text.length; i += size - 80) {
-    chunks.push({ id: `${doc.id}#${chunks.length}`, text: text.slice(i, i + size) });
+  if (text.length <= size) return [{ id: doc.id, text, category: guessCategory(doc.id) }];
+  for (let i = 0; i < text.length; i += size - overlap) {
+    const slice = text.slice(i, i + size).trim();
+    if (!slice) continue;
+    chunks.push({
+      id: `${doc.id}#${chunks.length}`,
+      text: slice,
+      category: guessCategory(doc.id),
+    });
   }
   return chunks;
 }
 
+function guessCategory(docId) {
+  const id = String(docId || "").toLowerCase();
+  if (id.includes("seller") || id.includes("payout") || id.includes("vendor") || id.includes("onboard")) {
+    return "seller_policy";
+  }
+  if (id.includes("ship")) return "shipping";
+  if (id.includes("return") || id.includes("buyer") || id.includes("trust")) return "buyer_policy";
+  return "general";
+}
+
 /**
- * Keyword RAG-lite (pgvector-ready shape). Optional: swap scoring for embedding cosine later.
+ * Keyword RAG-lite (pgvector-ready shape). Tries DB platform_knowledge when available.
+ */
+export async function retrieveKnowledgeAsync(query, { limit = 2, specialist = "general" } = {}) {
+  try {
+    const { retrievePlatformKnowledge } = await import("./knowledge-rag.js");
+    const fromDb = await retrievePlatformKnowledge(query, { limit, specialist });
+    if (fromDb?.length) return fromDb;
+  } catch {
+    /* fall through to markdown */
+  }
+  return retrieveKnowledge(query, { limit, specialist });
+}
+
+/**
+ * Keyword RAG-lite over knowledge/*.md (sync; used by graph + tests).
  */
 export function retrieveKnowledge(query, { limit = 2, specialist = "general" } = {}) {
   const docs = loadKnowledgeDocs({ specialist });
@@ -145,7 +177,11 @@ export function retrieveKnowledge(query, { limit = 2, specialist = "general" } =
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length > 2);
   if (!tokens.length) {
-    return chunks.slice(0, 1).map((d) => ({ id: d.id, excerpt: d.text.slice(0, 700) }));
+    return chunks.slice(0, 1).map((d) => ({
+      id: d.id,
+      excerpt: d.text.slice(0, 900),
+      category: d.category,
+    }));
   }
 
   const scored = chunks.map((d) => {
@@ -162,15 +198,16 @@ export function retrieveKnowledge(query, { limit = 2, specialist = "general" } =
     .slice(0, limit)
     .map((d) => ({
       id: d.id,
-      excerpt: d.text.slice(0, 800),
+      excerpt: d.text.slice(0, 900),
+      category: d.category,
     }));
 }
 
 export function formatKnowledgeForPrompt(chunks) {
   if (!chunks?.length) return "";
   return (
-    "KNOWLEDGE (platform policy — prefer this over guessing):\n" +
-    chunks.map((c) => `[${c.id}]\n${c.excerpt}`).join("\n\n")
+    "KNOWLEDGE (platform policy — rely EXCLUSIVELY on this + TOOL RESULTS; never invent):\n" +
+    chunks.map((c) => `[${c.id}${c.category ? ` · ${c.category}` : ""}]\n${c.excerpt}`).join("\n\n")
   );
 }
 

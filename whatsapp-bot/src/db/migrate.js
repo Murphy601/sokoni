@@ -13,6 +13,8 @@ const SCHEMA_PHASE12_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE13_PATH = path.join(__dirname, "..", "..", "db", "schema-phase13-reviews-disputes.sql");
 const SCHEMA_PHASE14_PATH = path.join(__dirname, "..", "..", "db", "schema-phase14-account-auth.sql");
 const SCHEMA_PHASE15_PATH = path.join(__dirname, "..", "..", "db", "schema-phase15-hybrid-logistics.sql");
+const SCHEMA_PHASE16_PATH = path.join(__dirname, "..", "..", "db", "schema-phase16-pgvector-knowledge.sql");
+const SCHEMA_PHASE17_PATH = path.join(__dirname, "..", "..", "db", "schema-phase17-compare-at-price.sql");
 
 async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
@@ -50,10 +52,23 @@ export async function runMigrations() {
     ["phase13 reviews disputes", SCHEMA_PHASE13_PATH],
     ["phase14 account auth", SCHEMA_PHASE14_PATH],
     ["phase15 hybrid logistics", SCHEMA_PHASE15_PATH],
+    ["phase17 compare_at_price", SCHEMA_PHASE17_PATH],
   ];
 
   for (const [label, filePath] of phases) {
     results.push(await applySchemaFile(label, filePath));
+  }
+
+  // Phase16 (pgvector) is optional — many hosts lack CREATE EXTENSION vector.
+  const phase16 = await applySchemaFile("phase16 pgvector knowledge", SCHEMA_PHASE16_PATH);
+  if (!phase16.ok) {
+    console.warn(
+      "[db] phase16 pgvector skipped — keyword RAG over knowledge/*.md still works:",
+      phase16.error
+    );
+    results.push({ ok: true, label: "phase16 pgvector knowledge", skipped: true, error: phase16.error });
+  } else {
+    results.push(phase16);
   }
 
   try {
