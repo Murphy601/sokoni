@@ -780,13 +780,19 @@ function renderStoreCard(product) {
       ]
         .filter(Boolean)
         .join(" · ")}</p>
-      <div class="flex items-baseline gap-2 mb-1 flex-wrap">
-        <span class="font-extrabold text-lg">${formatPrice(product)}</span>
+      <div class="flex items-baseline gap-2 mb-1 flex-wrap price-container">
+        <span class="font-extrabold text-lg current-price">${formatPrice(product)}</span>
         ${
-          productOnPromo(product) && product.originalPriceKes
-            ? `<span class="text-xs text-brand-purple/40 line-through">KES ${Number(product.originalPriceKes).toLocaleString()}</span>
-               <span class="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
-                 promoDiscountPct(product) ? `-${promoDiscountPct(product)}% promo` : "Promo"
+          productOnPromo(product)
+            ? `${
+                compareAtPriceKes(product)
+                  ? `<span class="compare-price text-xs font-medium text-brand-purple/40 line-through">was KES ${compareAtPriceKes(
+                      product
+                    ).toLocaleString()}</span>`
+                  : ""
+              }
+               <span class="badge-promo text-[10px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
+                 promoDiscountPct(product) ? `${promoDiscountPct(product)}% OFF` : "SALE"
                }</span>`
             : ""
         }
@@ -1135,20 +1141,33 @@ function discountBadge(product) {
   if (!productOnPromo(product)) return "";
   const pct = promoDiscountPct(product);
   const label = pct >= 1 ? `${pct}% OFF` : "SALE";
-  return `<span class="depop-card-promo" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+  return `<span class="depop-card-promo badge-promo" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
 }
 
+/**
+ * Buyer price row: current KES only, or was/now + % OFF when compare-at > current.
+ * Matches: ~~KES 1,700~~ KES 1,500 + [12% OFF]
+ */
 function promoPriceHtml(product) {
-  const current = formatPrice(product);
+  const currentKes = buyerPriceKes(product);
+  const currentLabel = currentKes > 0 ? `KES ${currentKes.toLocaleString()}` : formatPrice(product);
   if (!productOnPromo(product)) {
-    return `<p class="depop-card-price">${escapeHtml(current)}</p>`;
+    return `<p class="depop-card-price price-container"><span class="current-price depop-card-price-now">${escapeHtml(
+      currentLabel
+    )}</span></p>`;
   }
   const original = compareAtPriceKes(product);
   const pct = promoDiscountPct(product);
-  return `<p class="depop-card-price depop-card-price--promo">
-      <span class="depop-card-price-now">${escapeHtml(current)}</span>
-      ${original > 0 ? `<span class="depop-card-price-was">KES ${original.toLocaleString()}</span>` : ""}
-      ${pct >= 1 ? `<span class="depop-card-price-save">${pct}% OFF</span>` : ""}
+  return `<p class="depop-card-price depop-card-price--promo price-container">
+      ${pct >= 1 ? `<span class="badge-promo depop-card-price-save">${pct}% OFF</span>` : `<span class="badge-promo depop-card-price-save">SALE</span>`}
+      <span class="price-wrapper">
+        <span class="current-price depop-card-price-now">${escapeHtml(currentLabel)}</span>
+        ${
+          original > 0
+            ? `<span class="compare-price depop-card-price-was">was KES ${original.toLocaleString()}</span>`
+            : ""
+        }
+      </span>
     </p>`;
 }
 
@@ -1381,6 +1400,25 @@ function mergeCatalogProducts(apiProducts, staticProducts) {
       (!Number.isFinite(apiQty) || apiQty < staticQty)
     ) {
       merged = { ...merged, stockQuantity: staticQty, inStock: true };
+    }
+    // Prefer compare-at / promo display fields from whichever side has a real drop.
+    const existingCompare = Number(merged.compareAtPrice ?? merged.originalPriceKes) || 0;
+    const staticCompare = Number(p.compareAtPrice ?? p.originalPriceKes) || 0;
+    const existingPrice = Number(merged.priceKes ?? merged.totalKes) || 0;
+    const staticOnSale = staticCompare > 0 && existingPrice > 0 && existingPrice < staticCompare;
+    const existingOnSale = existingCompare > 0 && existingPrice > 0 && existingPrice < existingCompare;
+    if (staticOnSale && !existingOnSale) {
+      merged = {
+        ...merged,
+        compareAtPrice: staticCompare,
+        originalPriceKes: staticCompare,
+        onPromo: true,
+        discountPct:
+          p.discountPct != null
+            ? Number(p.discountPct)
+            : Math.max(1, Math.round(((staticCompare - existingPrice) / staticCompare) * 100)),
+        promo: p.promo || merged.promo || { active: true, type: "sale" },
+      };
     }
     byId.set(id, merged);
   }

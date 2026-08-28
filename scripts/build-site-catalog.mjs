@@ -70,6 +70,7 @@ function toPublic(product) {
       category: product.category,
       priceKes: totals.totalKes,
       ...(promoFields.originalPriceKes ? { originalPriceKes: promoFields.originalPriceKes } : {}),
+      ...(promoFields.compareAtPrice ? { compareAtPrice: promoFields.compareAtPrice } : {}),
       ...(promoFields.onPromo ? { onPromo: true } : {}),
       ...(promoFields.discountPct ? { discountPct: promoFields.discountPct } : {}),
       ...(promoFields.promo ? { promo: promoFields.promo } : {}),
