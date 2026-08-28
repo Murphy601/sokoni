@@ -7,7 +7,6 @@ import { config } from "../config.js";
 import { getSession, pushMessage, isHumanHandoff } from "./session.js";
 import { channelPrompt, offTopicRedirect } from "./ai-prompts.js";
 import {
-  runToolRouter,
   formatToolResultsForPrompt,
   isGreetingIntent,
   isSupportIntent,
@@ -17,14 +16,9 @@ import {
   isOffTopicIntent,
 } from "./ai-tools.js";
 import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
-import {
-  detectEscalation,
-  routeSpecialist,
-  specialistSystemHint,
-  retrieveKnowledge,
-  formatKnowledgeForPrompt,
-  summarizeForHandoff,
-} from "./agent-specialists.js";
+import { runAgentGraph } from "./agent-graph.js";
+import { llmRouterMeta } from "./llm-router.js";
+import { GOODWILL_VOUCHER_CAP_KES } from "./agent-specialists.js";
 
 const FALLBACK_MODELS = ["google/gemma-4-26b-a4b-it:free"];
 
@@ -296,13 +290,40 @@ function offlineReply(toolResults, channel, userMessage = "") {
   }
 
   for (const r of toolResults) {
+    if (r.tool === "open_return_case" && r.message) {
+      return r.message;
+    }
+    if (r.tool === "get_seller_payout" && (r.message || r.ok)) {
+      return r.message || `Payout summary ready in Seller Hub.`;
+    }
+    if (r.tool === "get_seller_onboarding" && r.steps?.length) {
+      return (
+        `To start selling:\n` +
+        r.steps.map((s, i) => `${i + 1}. ${s}`).join("\n") +
+        (r.note ? `\n${r.note}` : "")
+      );
+    }
+    if (r.tool === "get_shipping_rates" && r.howToSet?.length) {
+      return (
+        `Set delivery prices in Seller Hub:\n` +
+        r.howToSet.map((s, i) => `${i + 1}. ${s}`).join("\n")
+      );
+    }
     if (r.tool === "track_order" && r.tracking) {
       const t = r.tracking;
       const steps = (t.shipmentTimeline || [])
         .map((s) => `${s.done ? "✅" : s.active ? "🔵" : "⚪"} ${s.label}`)
         .join("\n");
+      const rider =
+        t.riderName || t.riderPhone
+          ? `\nRider: ${t.riderName || "—"} ${t.riderPhone || ""}`
+          : "";
+      const eta = t.etaNote ? `\nETA: ${t.etaNote}` : "";
       return (
-        `📦 *${t.orderId}*\n${t.productName}\n${t.paymentLine}\n\n${steps || t.shipmentStatusLabel}\n\n` +
+        `📦 *${t.orderId}*\n${t.productName}\n${t.paymentLine}\n\n${steps || t.shipmentStatusLabel}` +
+        rider +
+        eta +
+        `\n\n` +
         (channel === "web" ? `Order on WhatsApp for support.` : `_Type *menu* for help._`)
       );
     }
@@ -444,29 +465,37 @@ export async function runAgentTurn({
     return { reply: null, tools: [], handoff: true };
   }
 
-  const escalation = detectEscalation(text);
-  const specialist = routeSpecialist(text, { isSellerSession: isSellerTopic(text) });
-  if (escalation.escalate && escalation.severity === "high" && channel === "whatsapp") {
-    const summary = summarizeForHandoff({
-      text,
-      specialist,
-      toolNames: [],
-    });
+  const graph = await runAgentGraph({
+    text,
+    phone,
+    customerKey: sessionKey,
+    isSellerSession: isSellerTopic(text),
+  });
+  const { escalation, specialist, specialistHint, tools: toolResults, knowledge, knowledgeBlock, handoffSummary } =
+    graph;
+
+  // High + medium (angry) → human-in-the-loop with priority inbox ticket
+  if (escalation.escalate && channel === "whatsapp") {
     try {
       const { startHumanHandoff } = await import("./handoff.js");
       await startHumanHandoff(sessionKey, {
         chatId: sessionKey,
         phone,
-        lastMessage: `[AI escalation:${escalation.reason}] ${text.slice(0, 200)}\n${summary}`,
+        priority: escalation.priority || "high",
+        escalationReason: escalation.reason,
+        lastMessage: `[AI escalation:${escalation.reason}] ${text.slice(0, 200)}\n${handoffSummary}`,
       });
     } catch (err) {
       console.warn("[ai-agent] escalation handoff failed:", err.message);
     }
     const wa = formatWhatsAppLink();
     const reply =
-      `I've connected you to a human — this looks like it needs the support team.\n` +
-      `(${escalation.reason})\n` +
-      (channel === "web" ? `WhatsApp: ${wa}` : `Hang tight — an admin will reply here.`);
+      escalation.severity === "high"
+        ? `I take this seriously — I've escalated to Sokoni Mall Management.\n` +
+          `A senior teammate will review the logs and follow up shortly.\n` +
+          (channel === "web" ? `WhatsApp: ${wa}` : `Hang tight — an admin will reply here.`)
+        : `I've connected you to a human — this needs the support team.\n` +
+          (channel === "web" ? `WhatsApp: ${wa}` : `Hang tight — an admin will reply here.`);
     if (persist) pushMessage(sessionKey, "user", text);
     if (persist) pushMessage(sessionKey, "assistant", reply);
     return {
@@ -475,13 +504,11 @@ export async function runAgentTurn({
       handoff: true,
       escalation,
       specialist,
+      graph: graph.graph,
     };
   }
 
-  const toolResults = await runToolRouter(text, { phone, customerKey: sessionKey });
   const toolBlock = formatToolResultsForPrompt(toolResults);
-  const knowledge = retrieveKnowledge(text, { limit: 2 });
-  const knowledgeBlock = formatKnowledgeForPrompt(knowledge);
   const shopping = isShoppingIntent(text);
   const hasLiveCatalogHits = toolResults.some(
     (r) =>
@@ -534,7 +561,7 @@ export async function runAgentTurn({
   try {
     const messages = [
       { role: "system", content: channelPrompt(channel) },
-      { role: "system", content: specialistSystemHint(specialist) },
+      { role: "system", content: specialistHint },
       ...(knowledgeBlock ? [{ role: "system", content: knowledgeBlock }] : []),
       ...(toolBlock ? [{ role: "system", content: toolBlock }] : []),
       ...sanitizeHistory(hist),
@@ -572,6 +599,7 @@ export async function runAgentTurn({
       specialist,
       knowledge: knowledge.map((k) => k.id),
       escalation: escalation.escalate ? escalation : undefined,
+      graph: graph.graph,
     };
   } catch (err) {
     console.error("[ai-agent] error:", err.message);
@@ -583,18 +611,16 @@ export async function runAgentTurn({
 
 export function agentMeta() {
   return {
-    phase: 7,
+    phase: 7.2,
     name: "Sokoni Plug",
-    engine: "multi-specialist",
+    engine: "langgraph-style-multi-agent",
     specialists: ["buyer", "seller", "dispute", "logistics", "general"],
-    knowledge: "rag-lite (knowledge/*.md) — pgvector optional later",
-    models: {
-      chat: "OpenRouter (OPENAI_*)",
-      vision: "OpenRouter → NVIDIA NIM → Gemini",
-    },
+    knowledge: "rag-lite chunked knowledge/*.md (pgvector-ready)",
+    routing: llmRouterMeta(),
     guardrails: {
-      goodwillCapKes: 300,
+      goodwillCapKes: GOODWILL_VOUCHER_CAP_KES,
       sentimentEscalation: true,
+      hitlPriorities: ["normal", "high"],
     },
     channels: ["whatsapp", "web"],
     tools: [
@@ -605,6 +631,11 @@ export function agentMeta() {
       "track_order",
       "list_orders",
       "store_info",
+      "open_return_case",
+      "get_seller_onboarding",
+      "get_seller_payout",
+      "get_shipping_rates",
+      "propose_goodwill",
     ],
     endpoints: {
       chat: "/api/agent/chat",
