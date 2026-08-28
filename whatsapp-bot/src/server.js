@@ -360,6 +360,22 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   if (!config.openai.apiKey) {
     console.log("⚠️ OPENAI_API_KEY not set — free-text replies will use a basic keyword-search fallback.");
   }
+  try {
+    const routing = agentMeta()?.routing || {};
+    const providers = (routing.providers || [])
+      .map((p) => `${p.name}=[${(p.models || []).join(",")}]`)
+      .join(" → ");
+    console.log(
+      `✓ Chat LLM: ${providers || "(no keys)"} | temp=${routing.temperature ?? "?"} | geminiChat=${
+        String(process.env.AI_CHAT_USE_GEMINI || "").toLowerCase() === "true" ||
+        String(process.env.AI_CHAT_PROVIDER || "").toLowerCase() === "gemini"
+          ? "on"
+          : "off"
+      }`
+    );
+  } catch (err) {
+    console.warn("[llm-router] meta at startup:", err.message);
+  }
   const tiktok = getConnectionStatus();
   if (tiktok.connected) {
     console.log(`✓ TikTok connected (access until ${tiktok.accessExpiresAt})`);

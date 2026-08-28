@@ -107,6 +107,18 @@ if command -v pm2 >/dev/null 2>&1 && pm2 describe sokoni-bot >/dev/null 2>&1; th
   echo "==> Restarting sokoni-bot --update-env"
   pm2 restart sokoni-bot --update-env
   pm2 save 2>/dev/null || true
+  # Old llama/Gemini lines in the buffer look like a live fail — flush them.
+  pm2 flush sokoni-bot >/dev/null 2>&1 || pm2 flush >/dev/null 2>&1 || true
+  echo "==> Flushed pm2 logs (ignore any llama-3.1 / Gemini lines from before restart)"
+  sleep 2
+  if [ -x "$REPO/scripts/verify-ai-chat.sh" ] || [ -f "$REPO/scripts/verify-ai-chat.sh" ]; then
+    echo "==> Live verify (meta + escrow chat)"
+    bash "$REPO/scripts/verify-ai-chat.sh" || echo "WARN: verify-ai-chat.sh reported issues — check pm2 logs"
+  else
+    echo "==> Quick meta check:"
+    curl -fsS --max-time 8 "http://127.0.0.1:3001/api/agent/meta" 2>/dev/null | head -c 600 || true
+    echo
+  fi
 else
   echo "==> pm2 / sokoni-bot not found — restart manually after deploy"
 fi

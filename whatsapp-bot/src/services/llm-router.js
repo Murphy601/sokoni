@@ -258,14 +258,14 @@ export async function routedChatCompletion(
         if (provider.name === "groq" && isToolUseFailedError(err)) {
           const recovered = extractFailedGenerationText(err);
           if (recovered) {
-            console.warn(
-              `[llm-router] ${provider.name}/${model} recovered plain text from failed_generation`
+            console.log(
+              `[llm-router] ${provider.name}/${model} recovered plain text from failed_generation (non-fatal)`
             );
             return successPayload(recovered, model, provider, temperature);
           }
           try {
-            console.warn(
-              `[llm-router] ${provider.name}/${model} tool_use_failed — retrying with stronger plain-text nudge`
+            console.log(
+              `[llm-router] ${provider.name}/${model} tool_use_failed — plain-text retry (non-fatal)`
             );
             const retry = await provider.client.chat.completions.create(
               buildCompletionParams(provider, model, messages, maxTokens, temperature, {
