@@ -195,10 +195,23 @@ function clearSession() {
   } catch {}
 }
 
-function handleSessionExpired(data) {
+function handleSessionExpired(data, { force = false } = {}) {
+  const msg =
+    data?.message || "Session expired — verify WhatsApp again to continue.";
+  // Never wipe an active Seller Hub session for routine API 401s (promo/stock/listings).
+  // Only force-logout when explicitly requested (sign-out, phone number change, cold restore).
+  if (!force && (sellerProfile || verificationToken || phoneVerified)) {
+    setStatus(msg, true);
+    setOnboardStatus(msg, true);
+    if (el("marketing-status")) el("marketing-status").textContent = msg;
+    if (el("stock-status")) el("stock-status").textContent = msg;
+    if (el("variants-status")) el("variants-status").textContent = msg;
+    console.warn("[seller-hub] soft session error (hub kept open):", data?.error || msg);
+    return;
+  }
   clearSession();
   showVerifyPanel();
-  setOnboardStatus(data?.message || "Session expired — verify WhatsApp again.", true);
+  setOnboardStatus(msg, true);
 }
 
 function showVerifyPanel() {
@@ -2354,7 +2367,11 @@ async function loadMyListings() {
     const res = await fetch(listingsQuery(phone), { headers: sellerAuthHeaders() });
     const data = await res.json();
     if (res.status === 401) {
+      // Soft: do not wipe hub after promo/stock refresh — show inline error only.
       handleSessionExpired(data);
+      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">${escapeHtml(
+        data.message || "Session issue — verify WhatsApp at the top, then refresh."
+      )}</p>`;
       return;
     }
     if (!res.ok) {
@@ -2962,7 +2979,8 @@ async function tryRestoreSession() {
     const res = await fetch(onboardQuery(phone), { headers: sellerAuthHeaders() });
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
-      handleSessionExpired(parsed.data);
+      // Cold restore: wipe stale token so we don't keep a dead session in memory.
+      handleSessionExpired(parsed.data, { force: true });
       return false;
     }
     if (parsed.ok && parsed.data?.seller) {
@@ -3309,13 +3327,13 @@ async function onOnboard() {
     });
     const parsed = await parseApiResponse(res);
     if (parsed.status === 401) {
-      handleSessionExpired(parsed.data);
+      handleSessionExpired(parsed.data, { force: true });
       return;
     }
     if (!parsed.ok) {
       setOnboardStatus(parsed.data?.message || parsed.message || parsed.data?.error || "Setup failed.", true);
       if (parsed.data?.error === "session_expired" || parsed.data?.error === "session_invalid") {
-        handleSessionExpired(parsed.data);
+        handleSessionExpired(parsed.data, { force: true });
         return;
       }
       if (parsed.data?.error === "not_verified" || parsed.data?.error === "verification_expired") {
@@ -6809,6 +6827,10 @@ async function saveVariants() {
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
+      if (status) {
+        status.textContent =
+          data.message || "Session expired — verify WhatsApp at the top, then retry Save variants.";
+      }
       handleSessionExpired(data);
       return;
     }
@@ -7407,9 +7429,16 @@ function init() {
   bindSellerDispatchUi();
   bindShopAvatarUi();
   el("seller-phone")?.addEventListener("change", () => {
+    const prev = normalizePhoneInput(localStorage.getItem(PHONE_KEY) || "");
     savePhone();
-    clearSession();
-    showVerifyPanel();
+    const next = apiPhone();
+    // Autofill / blur / returning from window.prompt often fires change without a real number change.
+    // Wiping the hub here is what kicked sellers to "Start selling" after % Set promo.
+    if (!next || (prev && prev === next)) return;
+    handleSessionExpired(
+      { message: "WhatsApp number changed — send a new code to continue." },
+      { force: true }
+    );
   });
   el("draft-price")?.addEventListener("input", onListingPriceInput);
   el("media-price")?.addEventListener("input", onListingPriceInput);
