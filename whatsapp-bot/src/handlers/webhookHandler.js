@@ -417,11 +417,33 @@ export async function handleIncomingMessage(
   // Numbered menu replies (1, 2, 3…) — before handoff silence swallows them.
   if (await tryNumberedMenuReply(customerKey, text, { phone })) return;
 
-  // Human handoff — bot stays silent except menu / track (handled above)
+  // Human handoff — bot stays silent except menu / track (handled above).
+  // Exception: dispute evidence photos must still attach (not silent-drop / not catalog search).
   if (isHumanHandoff(customerKey)) {
     if (normalized === "menu") {
       clearHumanHandoff(customerKey);
       return sendWelcome(customerKey);
+    }
+    if (hasMedia) {
+      try {
+        const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+        if (
+          await tryHandleDisputeEvidencePhoto(customerKey, {
+            hasMedia,
+            mediaUrl,
+            mediaMimetype,
+            messageId,
+            chatId,
+            session: wahaSession,
+            text: combinedText || text,
+            phone,
+          })
+        ) {
+          return;
+        }
+      } catch (err) {
+        console.warn("[webhook] handoff dispute evidence skipped:", err.message);
+      }
     }
     return handleCustomerWhileHandoff(customerKey, combinedText || text);
   }
@@ -481,6 +503,60 @@ export async function handleIncomingMessage(
     /\[SKU:[^\]]+\]/i.test(combinedText)
   ) {
     if (await startCartFromHandoff(customerKey, combinedText)) return;
+  }
+
+  // Dispute evidence photos BEFORE visual catalog search (stateful routing).
+  if (hasMedia && !isAdminSender(customerKey, phone)) {
+    try {
+      const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+      if (
+        await tryHandleDisputeEvidencePhoto(customerKey, {
+          hasMedia,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+          text: combinedText || text,
+          phone,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute evidence skipped:", err.message);
+    }
+  }
+
+  // Fulfillment disputes (damaged / wrong item / refund) — BEFORE image search + AI.
+  // Caption+photo on the same message must open the dispute, not catalog-match.
+  if (!isAdminSender(customerKey, phone) && !isHumanHandoff(customerKey)) {
+    try {
+      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
+      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
+        // Same message included evidence media — attach it now.
+        if (hasMedia) {
+          try {
+            const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+            await tryHandleDisputeEvidencePhoto(customerKey, {
+              hasMedia,
+              mediaUrl,
+              mediaMimetype,
+              messageId,
+              chatId,
+              session: wahaSession,
+              text: combinedText || text,
+              phone,
+            });
+          } catch (err) {
+            console.warn("[webhook] dispute evidence after open skipped:", err.message);
+          }
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute protocol skipped:", err.message);
+    }
   }
 
   // Product photo → stock match must beat stuck checkout.
@@ -670,19 +746,6 @@ export async function handleIncomingMessage(
 
   if (/human|agent|person|call me|speak to someone|talk to a human|i need human/i.test(normalized)) {
     return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
-  }
-
-  // Fulfillment disputes (damaged / wrong item / refund) — deterministic protocol BEFORE AI.
-  // LLM apologies must never replace DB freeze + seller alert + ticket + structured follow-up.
-  if (!isAdminSender(customerKey, phone) && !isHumanHandoff(customerKey)) {
-    try {
-      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
-      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
-        return;
-      }
-    } catch (err) {
-      console.warn("[webhook] dispute protocol skipped:", err.message);
-    }
   }
 
   // Never let AI invent till / product-picker replies during cart checkout

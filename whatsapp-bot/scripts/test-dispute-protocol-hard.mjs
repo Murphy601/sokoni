@@ -45,6 +45,15 @@ assert("structured follow-up text", /SKN|Dispute|freeze|ticket|order/i.test(need
 
 const webhook = readFileSync(path.join(root, "whatsapp-bot/src/handlers/webhookHandler.js"), "utf8");
 assert("webhook hooks dispute before AI", webhook.includes("tryHandleFulfillmentDispute"));
+const disputeIdx = webhook.indexOf("tryHandleFulfillmentDispute");
+const imageIdx = webhook.indexOf("tryHandleBuyerImageSearch");
+assert(
+  "webhook runs dispute protocol before image search",
+  disputeIdx > 0 && imageIdx > 0 && disputeIdx < imageIdx
+);
+assert("webhook routes dispute evidence photos", webhook.includes("tryHandleDisputeEvidencePhoto"));
+const evidenceIdx = webhook.indexOf("tryHandleDisputeEvidencePhoto");
+assert("evidence photos before catalog image search", evidenceIdx > 0 && evidenceIdx < imageIdx);
 
 const agent = readFileSync(path.join(root, "whatsapp-bot/src/services/ai-agent.js"), "utf8");
 assert("ai-agent skips LLM on dispute protocol", agent.includes("dispute protocol (no LLM)"));

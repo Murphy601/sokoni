@@ -115,6 +115,26 @@ export async function orderHasOpenDispute(orderRef) {
   }
 }
 
+/** Open / under_review dispute row for an order, or null. */
+export async function getOpenDisputeForOrder(orderRef) {
+  if (!isDbEnabled()) return null;
+  const ref = normalizeOrderRef(orderRef);
+  if (!ref) return null;
+  try {
+    const { rows } = await query(
+      `SELECT * FROM order_disputes
+        WHERE UPPER(order_ref) = $1
+          AND status IN ('open', 'under_review')
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [ref]
+    );
+    return rows[0] ? mapDisputeRow(rows[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createDispute({
   orderRef,
   buyerUserId,

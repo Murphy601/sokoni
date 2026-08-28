@@ -23,7 +23,6 @@ import {
   aiSurveyMessage,
   damagedReturnMessage,
   wrongOrderApologyMessage,
-  postDeliveryDamageMessage,
   mpesaTroubleshootMessage,
   delayedDeliveryMessage,
   PROMO_CODE,
@@ -189,50 +188,8 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
     return true;
   }
 
-  if (
-    /damaged|broken|faulty|imevunjika|haifanyi\s+kazi|not\s+working|cracked|dented/i.test(t)
-  ) {
-    const order = latestRelevantOrder(customerKey, phone);
-    const oid = orderIdFromText(text) || order?.id;
-    const resolved = oid ? getOrder(oid) : order;
-    if (resolved) {
-      setCustomerMeta(customerKey, { awaitingDamagePhoto: true, issueOrderId: resolved.id });
-      await sendText(
-        customerKey,
-        postDeliveryDamageMessage({
-          orderId: resolved.id,
-          productName: resolved.productName,
-          customerName: displayName || resolved.customerName,
-        })
-      );
-    } else {
-      await sendText(customerKey, damagedReturnMessage({ orderId: "your order", productName: "your item" }));
-    }
-    return true;
-  }
-
-  if (getCustomerMeta(customerKey)?.awaitingDamagePhoto) {
-    const hasMediaHint = /photo|video|image|picha|sent/i.test(t) || t.length > 20;
-    if (hasMediaHint) {
-      const issueOrderId = getCustomerMeta(customerKey)?.issueOrderId;
-      setCustomerMeta(customerKey, { awaitingDamagePhoto: false, issueOrderId: null });
-      await sendText(
-        customerKey,
-        `✅ Thanks — we've logged your damage report. A replacement will be arranged.\n\nType *Human* for urgent help. 🙏`
-      );
-      if (config.admin.primary) {
-        try {
-          await sendText(
-            config.admin.primary,
-            `📸 *Damage report + media*\nOrder: *${issueOrderId || "—"}*\nCustomer: ${displayName || "—"} · ${phone || customerKey}\nNote: ${text.slice(0, 200)}`
-          );
-        } catch {
-          /* ignore */
-        }
-      }
-      return true;
-    }
-  }
+  // Damaged / broken / photo evidence → dispute-protocol.js (stateful; must beat catalog search).
+  // Do not soft-handle here — it left awaitingDamagePhoto without routing the next image.
 
   if (
     /mpesa\s+(error|fail)|payment\s+(fail|error)|transaction\s+(fail|error)|haikubali|lipa\s+haikubali|network\s+glitch/i.test(
