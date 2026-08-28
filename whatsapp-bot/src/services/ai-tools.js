@@ -1296,7 +1296,7 @@ export function formatToolResultsForPrompt(toolResults) {
     if (!r.ok) return `TOOL ${r.tool}: ${r.error || "failed"}`;
     return `TOOL ${r.tool}: (no data)`;
   });
-  return `TOOL RESULTS (authoritative — use only this data):\n${blocks.join("\n\n")}`;
+  return `LOOKUP RESULTS (authoritative — use only this data; do not call API tools):\n${blocks.join("\n\n")}`;
 }
 
 /** Exported for tests */
