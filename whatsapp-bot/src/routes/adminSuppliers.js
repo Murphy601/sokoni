@@ -5,6 +5,8 @@ import {
   approveApplication,
   rejectApplication,
   listSuppliers,
+  listSellerKycQueue,
+  reviewSellerKyc,
 } from "../services/suppliers.js";
 import { getSettlementSummary, markPayoutPaid } from "../services/settlements.js";
 import {
@@ -45,6 +47,24 @@ router.post("/applications/:id/reject", (req, res) => {
 
 router.get("/suppliers", (_req, res) => {
   res.json({ suppliers: listSuppliers() });
+});
+
+/** Peer-seller KYC queue (National ID / KRA PIN review). Soft — listing still works until hard gate is enabled. */
+router.get("/kyc", (req, res) => {
+  const status = String(req.query.status || "pending").toLowerCase();
+  res.json({ sellers: listSellerKycQueue({ status }) });
+});
+
+router.post("/kyc/:id/approve", (req, res) => {
+  const result = reviewSellerKyc(req.params.id, { approve: true, note: req.body?.note || "" });
+  if (result.error) return res.status(404).json(result);
+  res.json({ ok: true, seller: result.supplier });
+});
+
+router.post("/kyc/:id/reject", (req, res) => {
+  const result = reviewSellerKyc(req.params.id, { approve: false, note: req.body?.note || "" });
+  if (result.error) return res.status(404).json(result);
+  res.json({ ok: true, seller: result.supplier });
 });
 
 router.get("/payouts", (_req, res) => {

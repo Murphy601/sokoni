@@ -26,6 +26,17 @@ function sellerOrderNet(o) {
   return o.sellerNetKes ?? o.sourcePriceKes ?? Math.round(orderBuyerTotal(o) * 0.9);
 }
 
+function sellerOrderGross(o) {
+  return Math.round(Number(orderBuyerTotal(o)) || 0);
+}
+
+function sellerOrderFee(o) {
+  const gross = sellerOrderGross(o);
+  const net = sellerOrderNet(o);
+  const fee = Math.round(Number(o?.platformFeeKes) || Math.max(0, gross - net));
+  return fee;
+}
+
 export function normalizePhone(phone) {
   let d = String(phone || "").replace(/\D/g, "");
   if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
@@ -58,13 +69,21 @@ export async function requireAuthenticatedSeller(phone, sessionToken) {
 
 /** New and returning sellers must verify WhatsApp OTP before every sign-in. */
 export async function onboardSellerAsync(payload) {
-  const { phone, shopName, shopHandle, mpesaNumber, nationalId, sessionToken, verificationToken } =
-    payload || {};
+  const {
+    phone,
+    shopName,
+    shopHandle,
+    mpesaNumber,
+    nationalId,
+    kraPin,
+    sessionToken,
+    verificationToken,
+  } = payload || {};
   const token = sessionToken || verificationToken;
   const session = await validateSellerSession(phone, token);
   if (session.error) return session;
 
-  const result = onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId });
+  const result = onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin });
   if (result.error) return result;
 
   // Provision Postgres users + sellers so activity / public shop / PATCH profile work.
@@ -100,7 +119,7 @@ export async function onboardSellerAsync(payload) {
   return result;
 }
 
-export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId }) {
+export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin }) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone || normalizedPhone.length < 12) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
@@ -118,6 +137,7 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     shopHandle: String(shopHandle || shopName).trim(),
     mpesaNumber: normalizePhone(mpesaNumber),
     nationalId,
+    kraPin,
     whatsappChatId: `${normalizedPhone}@c.us`,
   });
 
@@ -138,6 +158,17 @@ function sanitizeSeller(s) {
     phone: s.phone,
     mpesaNumber: s.mpesaNumber || null,
     isSellerVerified: Boolean(s.isSellerVerified),
+    kycStatus: s.kycStatus || (s.isSellerVerified ? "approved" : "pending"),
+    nationalId: s.nationalId ? String(s.nationalId).replace(/.(?=.{3})/g, "•") : null,
+    kraPin: s.kraPin ? String(s.kraPin).replace(/.(?=.{3})/g, "•") : null,
+    bankName: s.bankName || null,
+    bankAccountName: s.bankAccountName || null,
+    bankAccountNumber: s.bankAccountNumber
+      ? `••••${String(s.bankAccountNumber).slice(-4)}`
+      : null,
+    mpesaTill: s.mpesaTill || null,
+    mpesaPaybill: s.mpesaPaybill || null,
+    paybillAccount: s.paybillAccount || null,
     role: s.role || "SELLER",
     city: s.city || "",
   };
@@ -293,6 +324,9 @@ export function getSellerOrders(supplierId) {
         buyerConfirmedAt: fulfill.buyerConfirmedAt,
         sellerDispatchedAt: fulfill.sellerDispatchedAt,
         deliveredAt: fulfill.deliveredAt,
+        riderName: o.riderName || null,
+        riderPhone: o.riderPhone || null,
+        trackingRef: o.courierTrackingRef || null,
         customerName: o.customerName || null,
         buyerPhone: orderBuyerPhone(o),
         labelUrl: paid ? sellerLabelUrl(o.id) : null,
@@ -322,32 +356,58 @@ export function getSellerEscrowLedger(supplierId) {
 
   const sellerEntries = settlements.entries.filter((e) => e.supplierId === supplierId);
 
+  function enrichLedgerRow(base, e, order) {
+    const net = Math.round(Number(base.amountKes) || 0);
+    const gross = Math.round(Number(e?.retailKes) || (order ? sellerOrderGross(order) : 0));
+    const fee = Math.round(Number(e?.marginKes) || (order ? sellerOrderFee(order) : Math.max(0, gross - net)));
+    return {
+      ...base,
+      sellerNetKes: net,
+      salesKes: gross || net + fee,
+      commissionKes: fee,
+    };
+  }
+
   // Ready for M-Pesa = owed (withdrawable) + failed B2C (retry). Never pending escrow.
   const available = sellerEntries
     .filter((e) => e.status === "owed" || e.status === "b2c_failed" || e.status === "paid")
-    .map((e) => ({
-      orderId: e.orderId,
-      amountKes: e.payoutAmountKes,
-      status: e.status === "paid" ? "paid" : e.status === "b2c_failed" ? "b2c_failed" : "available",
-      productName: e.productName,
-      readyLabel:
-        e.status === "paid"
-          ? "Paid out"
-          : e.status === "b2c_failed"
-            ? "Ready — retry withdraw"
-            : "Ready for M-Pesa",
-    }));
+    .map((e) => {
+      const order = orders.find((o) => o.id === e.orderId);
+      return enrichLedgerRow(
+        {
+          orderId: e.orderId,
+          amountKes: e.payoutAmountKes,
+          status: e.status === "paid" ? "paid" : e.status === "b2c_failed" ? "b2c_failed" : "available",
+          productName: e.productName,
+          readyLabel:
+            e.status === "paid"
+              ? "Paid out"
+              : e.status === "b2c_failed"
+                ? "Ready — retry withdraw"
+                : "Ready for M-Pesa",
+        },
+        e,
+        order
+      );
+    });
 
   // Sending to M-Pesa — show under Ready list as in-flight, but not withdrawable again.
   const sending = sellerEntries
     .filter((e) => e.status === "disbursing" || e.status === "withdraw_queued")
-    .map((e) => ({
-      orderId: e.orderId,
-      amountKes: e.payoutAmountKes,
-      status: e.status === "withdraw_queued" ? "withdraw_queued" : "disbursing",
-      productName: e.productName,
-      readyLabel: e.status === "withdraw_queued" ? "Queued — sending to M-Pesa" : "Sending to M-Pesa",
-    }));
+    .map((e) => {
+      const order = orders.find((o) => o.id === e.orderId);
+      return enrichLedgerRow(
+        {
+          orderId: e.orderId,
+          amountKes: e.payoutAmountKes,
+          status: e.status === "withdraw_queued" ? "withdraw_queued" : "disbursing",
+          productName: e.productName,
+          readyLabel: e.status === "withdraw_queued" ? "Queued — sending to M-Pesa" : "Sending to M-Pesa",
+        },
+        e,
+        order
+      );
+    });
 
   // Pending escrow = buyer paid, still held. Released money must NEVER land here.
   const pendingEscrow = orders
@@ -359,15 +419,21 @@ export function getSellerEscrowLedger(supplierId) {
         o.status !== "delivered" &&
         o.status !== "cancelled"
     )
-    .map((o) => ({
-      orderId: o.id,
-      amountKes: sellerOrderNet(o),
-      status: "pending",
-      productName: o.productName,
-      trackingCode: o.id,
-      shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus || "pending"),
-      trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
-    }));
+    .map((o) =>
+      enrichLedgerRow(
+        {
+          orderId: o.id,
+          amountKes: sellerOrderNet(o),
+          status: "pending",
+          productName: o.productName,
+          trackingCode: o.id,
+          shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus || "pending"),
+          trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
+        },
+        null,
+        o
+      )
+    );
 
   const inTransit = orders
     .filter(
@@ -376,16 +442,22 @@ export function getSellerEscrowLedger(supplierId) {
         o.status !== "delivered" &&
         o.status !== "cancelled"
     )
-    .map((o) => ({
-      orderId: o.id,
-      amountKes: sellerOrderNet(o),
-      status: "in_transit",
-      productName: o.productName,
-      trackingCode: o.id,
-      shipmentStatus: o.shipmentStatus,
-      shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus),
-      trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
-    }));
+    .map((o) =>
+      enrichLedgerRow(
+        {
+          orderId: o.id,
+          amountKes: sellerOrderNet(o),
+          status: "in_transit",
+          productName: o.productName,
+          trackingCode: o.id,
+          shipmentStatus: o.shipmentStatus,
+          shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus),
+          trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
+        },
+        null,
+        o
+      )
+    );
 
   const readyItems = available.filter((e) => e.status === "available" || e.status === "b2c_failed");
   const availableTotal = readyItems.reduce((s, e) => s + (e.amountKes || 0), 0);
@@ -1125,4 +1197,152 @@ export async function releaseEscrowPayout(orderId) {
         ? `Payout scheduled (${holdDays} business day hold) — then Ready / withdraw.`
         : `Payout scheduled (${holdDays} business day hold).`,
   };
+}
+
+/**
+ * Seller Hub dispatch — same mutation as WhatsApp DISPATCH, plus rider / waybill fields.
+ * Does not replace the WhatsApp command path.
+ */
+export async function sellerDispatchOrder({
+  phone,
+  sessionToken,
+  orderId,
+  riderName = "",
+  riderPhone = "",
+  trackingRef = "",
+} = {}) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const { normalizeOrderId, updateOrderMeta } = await import("./orders.js");
+  const { advanceShipmentStatus, getEffectiveShipmentStatus } = await import("./shipments.js");
+  const {
+    authorizeSellerForOrder,
+    isPaidHeld,
+    isDispatched,
+    isAdminTakeOver,
+    msgBuyerDispatched,
+    msgSellerDispatchAck,
+    dispatchMessages,
+    notifyAdminEvent,
+  } = await import("./communication-hub.js");
+
+  const id = normalizeOrderId(orderId);
+  if (!id) return { error: "invalid_order_id", message: "Enter a valid SKN order id." };
+
+  let order = getOrder(id);
+  if (!order) return { error: "not_found", message: `Order ${id} not found.` };
+  if (order.supplierId !== check.supplier.id) {
+    return { error: "forbidden", message: "This order is not linked to your shop." };
+  }
+  if (isAdminTakeOver(order) || order.disputeHold) {
+    return { error: "support_hold", message: "This order is with Sokoni support right now." };
+  }
+
+  const auth = await authorizeSellerForOrder(order, phone, "");
+  order = auth.order || order;
+  if (!auth.ok) {
+    return { error: "forbidden", message: "Could not authorize dispatch for this order." };
+  }
+  if (!isPaidHeld(order)) {
+    return { error: "unpaid", message: "Buyer has not paid into escrow yet." };
+  }
+
+  const ship = getEffectiveShipmentStatus(order);
+  if (ship === "delivered" || order.status === "delivered") {
+    return { error: "already_delivered", message: "Order is already delivered." };
+  }
+  if (isDispatched(order) && order.sellerDispatchedAt) {
+    return {
+      ok: true,
+      already: true,
+      orderId: order.id,
+      message: "Already dispatched — buyer should reply YES on WhatsApp.",
+      riderName: order.riderName || null,
+      trackingRef: order.courierTrackingRef || null,
+    };
+  }
+
+  const rider = String(riderName || "").trim().slice(0, 80);
+  const riderTel = String(riderPhone || "").replace(/\D/g, "").slice(0, 15);
+  const waybill = String(trackingRef || "").trim().slice(0, 80);
+
+  const result = advanceShipmentStatus(id, "in_transit", {
+    actor: "seller_hub_dispatch",
+    note: "Seller DISPATCH via Seller Hub",
+    skipBuyerNotify: true,
+    riderName: rider || undefined,
+    riderPhone: riderTel || undefined,
+    trackingRef: waybill || undefined,
+  });
+  if (result.error) {
+    return { error: result.error, message: `Could not dispatch (${result.error}).` };
+  }
+
+  updateOrderMeta(id, {
+    sellerDispatchedAt: Date.now(),
+    deliveryMode: order.deliveryMode === "pending" ? "seller_dispatch" : order.deliveryMode,
+    ...(rider ? { riderName: rider } : {}),
+    ...(riderTel ? { riderPhone: riderTel } : {}),
+    ...(waybill ? { courierTrackingRef: waybill } : {}),
+  });
+
+  const fresh = getOrder(id) || order;
+  void notifyAdminEvent("SELLER_DISPATCHED", {
+    orderId: fresh.id,
+    details: `IN_TRANSIT via Seller Hub — buyer asked for YES ${fresh.id}`,
+    silent: true,
+  });
+
+  const jobs = [];
+  if (fresh.customerKey) jobs.push({ to: fresh.customerKey, message: msgBuyerDispatched(fresh) });
+  // Optional ack to seller WhatsApp if we know a chat id — fail-soft.
+  try {
+    const { sellerNotifyTargets } = await import("./communication-hub.js");
+    const targets = sellerNotifyTargets(phone) || [];
+    for (const to of targets.slice(0, 1)) {
+      jobs.push({ to, message: msgSellerDispatchAck(fresh) });
+    }
+  } catch {
+    /* ignore */
+  }
+  void dispatchMessages(jobs);
+
+  return {
+    ok: true,
+    orderId: fresh.id,
+    message: "Marked dispatched. Buyer was asked to reply YES when it arrives.",
+    riderName: fresh.riderName || rider || null,
+    trackingRef: fresh.courierTrackingRef || waybill || null,
+    trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(fresh.id)}`,
+  };
+}
+
+/** Soft payout details for admin/manual rails — live withdraw still uses M-Pesa number. */
+export async function updateSellerPayoutDetails({
+  phone,
+  sessionToken,
+  mpesaNumber,
+  bankName,
+  bankAccountName,
+  bankAccountNumber,
+  mpesaTill,
+  mpesaPaybill,
+  paybillAccount,
+} = {}) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const { updatePeerSellerPayoutDetails } = await import("./suppliers.js");
+  const result = updatePeerSellerPayoutDetails(phone, {
+    mpesaNumber,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    mpesaTill,
+    mpesaPaybill,
+    paybillAccount,
+  });
+  if (result.error) return result;
+  return { ok: true, seller: sanitizeSeller(result.supplier), message: "Payout details saved." };
 }

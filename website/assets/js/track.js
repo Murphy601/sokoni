@@ -107,6 +107,8 @@
       <p class="text-sm text-zinc-400">
         Open a dispute if the item never arrived, arrived damaged, or doesn’t match the listing.
         Escrow stays held while Sokoni reviews tracking + your note.
+        Contact within <strong class="text-zinc-200">48 hours of delivery</strong> for wrong/damaged items
+        (<a href="terms.html" class="text-[#FF2300] font-semibold hover:underline">Terms §7</a>).
       </p>
       <div id="buyer-auth-panel" class="depop-card !bg-black p-4 space-y-3">
         <p class="text-sm font-semibold text-white">Verify WhatsApp to open a dispute</p>
@@ -203,6 +205,7 @@
     const t = data.tracking;
     if (!t) return;
 
+    const journey = renderStepper(t.buyerJourneyTimeline);
     const stepper = renderStepper(t.shipmentTimeline);
     const history = renderHistory(t.history);
     currentOrderId = t.orderId || currentOrderId;
@@ -229,9 +232,22 @@
         ${t.riderName ? `<p class="track-rider">Rider: ${escapeHtml(t.riderName)}${t.etaNote ? ` · ETA ${escapeHtml(t.etaNote)}` : ""}</p>` : ""}
 
         <div class="track-timeline-wrap">
-          <p class="track-kicker">Shipment</p>
-          ${stepper || `<p class="text-sm">Status: ${escapeHtml(t.shipmentStatusLabel || "Pending")}</p>`}
+          <p class="track-kicker">Order progress</p>
+          ${
+            journey ||
+            stepper ||
+            `<p class="text-sm">Status: ${escapeHtml(t.shipmentStatusLabel || "Pending")}</p>`
+          }
         </div>
+
+        ${
+          journey && stepper
+            ? `<details class="track-history">
+                <summary>Logistics detail</summary>
+                ${stepper}
+              </details>`
+            : ""
+        }
 
         <div id="track-live-map-wrap" class="hidden space-y-2">
           <p class="track-kicker">Live map</p>

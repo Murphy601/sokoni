@@ -181,11 +181,124 @@
     });
   }
 
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function kycCardHtml(s) {
+    return `
+      <article class="rounded-3xl border border-black/5 bg-white p-4 space-y-2" data-kyc-id="${escapeHtml(s.id)}">
+        <div>
+          <h2 class="font-semibold">${escapeHtml(s.businessName || s.shopHandle || s.id)}</h2>
+          <p class="text-xs text-brand-purple/60 mt-0.5">
+            <code>${escapeHtml(s.id)}</code>
+            ${s.shopHandle ? ` · ${escapeHtml(s.shopHandle)}` : ""}
+            · ${escapeHtml(s.phone || "—")}
+          </p>
+        </div>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+          <div><dt class="text-xs text-brand-purple/50">National ID</dt><dd class="font-medium">${escapeHtml(s.nationalId || "—")}</dd></div>
+          <div><dt class="text-xs text-brand-purple/50">KRA PIN</dt><dd class="font-medium">${escapeHtml(s.kraPin || "—")}</dd></div>
+          <div><dt class="text-xs text-brand-purple/50">M-Pesa</dt><dd class="font-medium">${escapeHtml(s.mpesaNumber || "—")}</dd></div>
+          <div><dt class="text-xs text-brand-purple/50">Status</dt><dd class="font-medium">${escapeHtml(s.kycStatus || "pending")}</dd></div>
+        </dl>
+        <label class="block text-xs font-medium">
+          Review note (optional)
+          <input type="text" class="admin-kyc-note mt-1 w-full min-h-[40px] rounded-xl border border-black/10 px-3 text-sm" placeholder="Verified docs / reason" />
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="admin-kyc-approve min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold" data-id="${escapeHtml(s.id)}">Approve</button>
+          <button type="button" class="admin-kyc-reject min-h-[44px] px-4 rounded-full border border-red-300 text-red-700 text-sm font-semibold" data-id="${escapeHtml(s.id)}">Reject</button>
+        </div>
+      </article>`;
+  }
+
+  async function loadKyc() {
+    const token = readToken();
+    const list = el("admin-kyc-list");
+    if (!list) return;
+    if (!token) {
+      setStatus("Enter the admin token first.", true);
+      return;
+    }
+    setStatus("Loading seller KYC queue…");
+    list.innerHTML = "";
+    try {
+      const res = await fetch(`${ADMIN_API}/kyc?status=pending`, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Could not load KYC queue.", true);
+        return;
+      }
+      const sellers = Array.isArray(data.sellers) ? data.sellers : [];
+      if (!sellers.length) {
+        setStatus("No sellers pending KYC review.");
+        list.innerHTML = `<p class="text-sm text-brand-purple/60">KYC queue empty.</p>`;
+        return;
+      }
+      setStatus(`${sellers.length} seller${sellers.length === 1 ? "" : "s"} awaiting KYC`);
+      list.innerHTML =
+        `<h2 class="font-display text-xl font-bold">Seller KYC</h2>` + sellers.map(kycCardHtml).join("");
+      wireKycActions();
+    } catch {
+      setStatus("Network error while loading KYC.", true);
+    }
+  }
+
+  async function postKyc(id, action, note) {
+    if (!id) return;
+    setStatus(`${action === "approve" ? "Approving" : "Rejecting"} ${id}…`);
+    try {
+      const res = await fetch(`${ADMIN_API}/kyc/${encodeURIComponent(id)}/${action}`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ note: note || "" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || `Could not ${action}.`, true);
+        return;
+      }
+      setStatus(action === "approve" ? `Approved ${id}.` : `Rejected ${id}.`);
+      await loadKyc();
+    } catch {
+      setStatus(`Network error during KYC ${action}.`, true);
+    }
+  }
+
+  function wireKycActions() {
+    document.querySelectorAll(".admin-kyc-approve").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const card = btn.closest("[data-kyc-id]");
+        const note = card?.querySelector(".admin-kyc-note")?.value || "";
+        postKyc(btn.dataset.id, "approve", note);
+      });
+    });
+    document.querySelectorAll(".admin-kyc-reject").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const card = btn.closest("[data-kyc-id]");
+        const note = card?.querySelector(".admin-kyc-note")?.value || "";
+        postKyc(btn.dataset.id, "reject", note);
+      });
+    });
+  }
+
   function init() {
     hydrateTokenFromUrl();
     el("admin-load-btn")?.addEventListener("click", () => loadFlagged());
-    el("admin-refresh-btn")?.addEventListener("click", () => loadFlagged());
-    if (readToken()) void loadFlagged();
+    el("admin-refresh-btn")?.addEventListener("click", () => {
+      void loadFlagged();
+      void loadKyc();
+    });
+    el("admin-kyc-btn")?.addEventListener("click", () => loadKyc());
+    if (readToken()) {
+      void loadFlagged();
+      void loadKyc();
+    }
   }
 
   if (document.readyState === "loading") {

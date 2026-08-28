@@ -2531,6 +2531,128 @@ function fillShopEditFormFromSeller(profile = {}) {
     publicLink.href = `../shop.html?handle=${encodeURIComponent(handle)}`;
     publicLink.classList.remove("hidden");
   }
+  fillPayoutFormFromSeller(profile);
+}
+
+function fillPayoutFormFromSeller(profile = {}) {
+  if (el("payout-mpesa")) el("payout-mpesa").value = profile.mpesaNumber || "";
+  if (el("payout-till")) el("payout-till").value = profile.mpesaTill || "";
+  if (el("payout-paybill")) el("payout-paybill").value = profile.mpesaPaybill || "";
+  if (el("payout-paybill-account")) el("payout-paybill-account").value = profile.paybillAccount || "";
+  if (el("payout-bank-name")) el("payout-bank-name").value = profile.bankName || "";
+  if (el("payout-bank-account-name")) el("payout-bank-account-name").value = profile.bankAccountName || "";
+  // Masked account numbers from API shouldn't be written back as the real value.
+  if (el("payout-bank-account-number") && profile.bankAccountNumber && !String(profile.bankAccountNumber).includes("•")) {
+    el("payout-bank-account-number").value = profile.bankAccountNumber;
+  }
+}
+
+async function savePayoutDetails(ev) {
+  ev?.preventDefault?.();
+  const status = el("payout-status");
+  const btn = el("payout-save-btn");
+  const phone = getPhone();
+  if (!phone || !getSessionToken()) {
+    if (status) status.textContent = "Sign in again to save payout details.";
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = "Saving…";
+  try {
+    const res = await fetch(`${ONBOARD_API}/payout-details`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: normalizePhoneInput(phone),
+          mpesaNumber: el("payout-mpesa")?.value.trim() || undefined,
+          mpesaTill: el("payout-till")?.value.trim() || "",
+          mpesaPaybill: el("payout-paybill")?.value.trim() || "",
+          paybillAccount: el("payout-paybill-account")?.value.trim() || "",
+          bankName: el("payout-bank-name")?.value.trim() || "",
+          bankAccountName: el("payout-bank-account-name")?.value.trim() || "",
+          bankAccountNumber: el("payout-bank-account-number")?.value.trim() || "",
+        })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      if (status) status.textContent = data.message || data.error || "Could not save.";
+      return;
+    }
+    if (data.seller) {
+      sellerProfile = { ...sellerProfile, ...data.seller };
+      fillPayoutFormFromSeller(sellerProfile);
+    }
+    if (status) status.textContent = data.message || "Payout details saved.";
+  } catch {
+    if (status) status.textContent = "Network error.";
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function submitSellerDispatch(orderId, form) {
+  const status = form?.querySelector("[data-dispatch-status]");
+  const phone = getPhone();
+  if (!phone || !getSessionToken()) {
+    if (status) status.textContent = "Sign in again to dispatch.";
+    return;
+  }
+  const fd = new FormData(form);
+  if (status) status.textContent = "Marking dispatched…";
+  try {
+    const res = await fetch(`${ONBOARD_API}/dispatch`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: normalizePhoneInput(phone),
+          orderId,
+          riderName: String(fd.get("riderName") || "").trim(),
+          riderPhone: String(fd.get("riderPhone") || "").trim(),
+          trackingRef: String(fd.get("trackingRef") || "").trim(),
+        })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok) {
+      if (status) status.textContent = data.message || data.error || "Dispatch failed.";
+      return;
+    }
+    if (status) status.textContent = data.message || "Dispatched.";
+    await loadSellerOrders();
+  } catch {
+    if (status) status.textContent = "Network error.";
+  }
+}
+
+function bindSellerDispatchUi() {
+  const root = el("seller-orders");
+  if (!root || root.dataset.dispatchBound === "1") return;
+  root.dataset.dispatchBound = "1";
+  root.addEventListener("click", (ev) => {
+    const toggle = ev.target?.closest?.("[data-dispatch-toggle]");
+    if (!toggle) return;
+    const id = toggle.getAttribute("data-dispatch-toggle");
+    const form = root.querySelector(`[data-dispatch-form="${CSS.escape(id)}"]`);
+    form?.classList.toggle("hidden");
+  });
+  root.addEventListener("submit", (ev) => {
+    const form = ev.target?.closest?.("[data-dispatch-form]");
+    if (!form) return;
+    ev.preventDefault();
+    const id = form.getAttribute("data-dispatch-form");
+    void submitSellerDispatch(id, form);
+  });
 }
 
 async function hydrateShopEditFormFromSocial() {
@@ -3146,6 +3268,7 @@ async function onOnboard() {
   let shopHandle = el("onboard-shop-handle")?.value.trim().replace(/^@/, "");
   const mpesaNumber = el("onboard-mpesa")?.value.trim();
   const nationalId = el("onboard-national-id")?.value.trim();
+  const kraPin = el("onboard-kra-pin")?.value.trim();
 
   if (!phone) {
     setOnboardStatus("Enter your WhatsApp number.", true);
@@ -3179,6 +3302,7 @@ async function onOnboard() {
           shopHandle: shopHandle || undefined,
           mpesaNumber: normalizePhoneInput(mpesaNumber),
           nationalId,
+          kraPin: kraPin || undefined,
         })
       ),
     });
@@ -3414,6 +3538,10 @@ function renderLedgerDetail() {
       const statusLine = item.shipmentStatusLabel
         ? `<span class="text-xs text-zinc-500">${escapeHtml(item.shipmentStatusLabel)}</span>`
         : "";
+      const feeLine =
+        item.salesKes != null || item.commissionKes != null
+          ? `<span class="text-xs text-zinc-500">Sales ${formatKes(item.salesKes || 0)} − Sokoni fee ${formatKes(item.commissionKes || 0)} = net ${formatKes(item.sellerNetKes ?? item.amountKes)}</span>`
+          : "";
       const trackLink = item.trackUrl
         ? `<a href="${escapeHtml(item.trackUrl)}" class="text-xs font-semibold text-[#FF2300] hover:underline shrink-0">Track</a>`
         : "";
@@ -3422,6 +3550,7 @@ function renderLedgerDetail() {
             <span class="block truncate">${escapeHtml(item.productName || item.orderId)}</span>
             ${item.orderId ? `<span class="text-xs text-zinc-500">${escapeHtml(item.orderId)}</span>` : ""}
             ${readyLine || statusLine}
+            ${feeLine}
           </div>
           <div class="text-right shrink-0">
             <span class="font-semibold block">${formatKes(item.amountKes)}</span>
@@ -3779,6 +3908,11 @@ function renderSellerOrderCard(o, { allowPrintLabel = true } = {}) {
       `<a href="${o.labelUrl}" target="_blank" rel="noopener" class="sell-order-action sell-order-action--primary">Print label</a>`
     );
   }
+  if (phase === "awaiting_ship") {
+    actions.push(
+      `<button type="button" class="sell-order-action sell-order-action--primary" data-dispatch-toggle="${escapeHtml(o.orderId || "")}">Mark dispatched</button>`
+    );
+  }
   if (phase === "shipped" && o.trackUrl) {
     actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
   }
@@ -3787,19 +3921,37 @@ function renderSellerOrderCard(o, { allowPrintLabel = true } = {}) {
   }
   const hint =
     phase === "shipped"
-      ? "Waiting for buyer to reply YES on WhatsApp"
+      ? `Waiting for buyer to reply YES on WhatsApp${o.riderName ? ` · Rider ${escapeHtml(o.riderName)}` : ""}${o.trackingRef ? ` · Waybill ${escapeHtml(o.trackingRef)}` : ""}`
       : phase === "received"
         ? "Buyer confirmed — marked received"
-        : "Print label, drop off, then DISPATCH on WhatsApp";
+        : "Print label if needed, then mark dispatched (or reply DISPATCH on WhatsApp)";
+  const dispatchForm =
+    phase === "awaiting_ship"
+      ? `<form class="mt-3 space-y-2 hidden" data-dispatch-form="${escapeHtml(o.orderId || "")}">
+          <p class="text-xs text-zinc-500">Optional rider / waybill so the buyer can track.</p>
+          <label class="block text-xs text-zinc-400">Rider name
+            <input name="riderName" type="text" maxlength="80" class="sell-form-input mt-1 text-sm" placeholder="e.g. Kamau" />
+          </label>
+          <label class="block text-xs text-zinc-400">Rider phone
+            <input name="riderPhone" type="tel" maxlength="15" class="sell-form-input mt-1 text-sm" placeholder="07xx…" inputmode="tel" />
+          </label>
+          <label class="block text-xs text-zinc-400">Waybill / tracking ref
+            <input name="trackingRef" type="text" maxlength="80" class="sell-form-input mt-1 text-sm" placeholder="Optional" />
+          </label>
+          <button type="submit" class="depop-btn-accent text-xs min-h-[44px] px-4">Confirm dispatched</button>
+          <p class="text-xs text-zinc-500" data-dispatch-status></p>
+        </form>`
+      : "";
   return `
-    <div class="sell-order-card sell-order-card--static" role="listitem" data-order-phase="${escapeHtml(phase)}">
+    <div class="sell-order-card sell-order-card--static" role="listitem" data-order-phase="${escapeHtml(phase)}" data-order-id="${escapeHtml(o.orderId || "")}">
       <div class="sell-order-card-head">
         <p class="font-semibold text-sm sell-order-card__title">${escapeHtml(o.productName || "Order")}</p>
         <span class="sell-order-badge ${shipmentBadgeClass(o)}">${escapeHtml(orderPhaseLabel(o))}</span>
       </div>
       <p class="text-xs text-zinc-500 mt-1 sell-order-card__meta"><span class="font-mono">${escapeHtml(o.orderId || "")}</span> · You receive ${formatKes(o.sellerNetKes)}</p>
-      <p class="text-xs text-zinc-500 mt-1">${escapeHtml(hint)}</p>
+      <p class="text-xs text-zinc-500 mt-1">${hint}</p>
       ${actions.length ? `<div class="sell-order-actions">${actions.join("")}</div>` : ""}
+      ${dispatchForm}
     </div>`;
 }
 
@@ -7084,6 +7236,8 @@ function init() {
   });
   el("sign-out-btn")?.addEventListener("click", onSignOut);
   el("seller-shop-edit-form")?.addEventListener("submit", saveShopProfile);
+  el("seller-payout-form")?.addEventListener("submit", savePayoutDetails);
+  bindSellerDispatchUi();
   bindShopAvatarUi();
   el("seller-phone")?.addEventListener("change", () => {
     savePhone();

@@ -348,6 +348,7 @@ export function createPeerSeller({
   shopHandle,
   mpesaNumber,
   nationalId = "",
+  kraPin = "",
   whatsappChatId = null,
 } = {}) {
   loadSuppliers();
@@ -365,6 +366,9 @@ export function createPeerSeller({
     }
     if (shopHandle) existing.shopHandle = shopHandle;
     if (nationalId) existing.nationalId = nationalId;
+    if (kraPin) existing.kraPin = String(kraPin).trim().toUpperCase();
+    // Existing live sellers stay approved — no re-friction.
+    if (!existing.kycStatus) existing.kycStatus = "approved";
     existing.isSellerVerified = true;
     existing.role = "SELLER";
     persistSuppliers();
@@ -377,6 +381,7 @@ export function createPeerSeller({
     .trim();
   const id = `seller-${slugify(handle)}-${Date.now().toString(36).slice(-4)}`;
   const cus = normalizedPhone ? `${normalizedPhone}@c.us` : null;
+  const hasKyc = Boolean(String(nationalId || "").trim() || String(kraPin || "").trim());
   const supplier = {
     id,
     businessName: String(shopName || handle).trim(),
@@ -385,7 +390,10 @@ export function createPeerSeller({
     phone: normalizedPhone,
     mpesaNumber: normalizePhoneDigits(mpesaNumber),
     nationalId: String(nationalId || "").trim() || null,
-    isSellerVerified: true,
+    kraPin: String(kraPin || "").trim().toUpperCase() || null,
+    // Soft KYC: can list immediately; admin queue reviews ID/KRA. Hard gate is opt-in via env.
+    kycStatus: hasKyc ? "pending" : "pending",
+    isSellerVerified: false,
     role: "SELLER",
     peerSeller: true,
     approvedAt: Date.now(),
@@ -401,6 +409,92 @@ export function createPeerSeller({
   persistSuppliers();
   attachSellerWhatsAppChat(normalizedPhone, whatsappChatId);
   return { supplier, existing: false };
+}
+
+/** Soft-update payout / bank details for admin manual rails. Live withdraw uses mpesaNumber. */
+export function updatePeerSellerPayoutDetails(
+  phone,
+  {
+    mpesaNumber,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    mpesaTill,
+    mpesaPaybill,
+    paybillAccount,
+  } = {}
+) {
+  loadSuppliers();
+  const existing = findSupplierByPhone(phone);
+  if (!existing) {
+    return { error: "not_found", message: "Seller profile not found." };
+  }
+  if (mpesaNumber !== undefined) {
+    const next = normalizePhoneDigits(mpesaNumber);
+    if (next && existing.mpesaNumber && existing.mpesaNumber !== next) {
+      existing.paystackRecipientCode = null;
+      existing.paystackRecipientPhone = null;
+      existing.paystackRecipientAt = null;
+    }
+    if (next) existing.mpesaNumber = next;
+  }
+  if (bankName !== undefined) existing.bankName = String(bankName || "").trim().slice(0, 80) || null;
+  if (bankAccountName !== undefined) {
+    existing.bankAccountName = String(bankAccountName || "").trim().slice(0, 120) || null;
+  }
+  if (bankAccountNumber !== undefined) {
+    existing.bankAccountNumber = String(bankAccountNumber || "").replace(/\s+/g, "").slice(0, 32) || null;
+  }
+  if (mpesaTill !== undefined) existing.mpesaTill = String(mpesaTill || "").replace(/\D/g, "").slice(0, 12) || null;
+  if (mpesaPaybill !== undefined) {
+    existing.mpesaPaybill = String(mpesaPaybill || "").replace(/\D/g, "").slice(0, 12) || null;
+  }
+  if (paybillAccount !== undefined) {
+    existing.paybillAccount = String(paybillAccount || "").trim().slice(0, 40) || null;
+  }
+  persistSuppliers();
+  return { supplier: existing };
+}
+
+/** Admin KYC queue — peer sellers awaiting ID / KRA review. */
+export function listSellerKycQueue({ status = "pending" } = {}) {
+  loadSuppliers();
+  const wanted = String(status || "pending").toLowerCase();
+  return Object.values(supplierStore.suppliers || {})
+    .filter((s) => s?.peerSeller)
+    .filter((s) => {
+      const st = String(s.kycStatus || (s.isSellerVerified ? "approved" : "pending")).toLowerCase();
+      if (wanted === "all") return true;
+      return st === wanted;
+    })
+    .map((s) => ({
+      id: s.id,
+      businessName: s.businessName,
+      shopHandle: s.shopHandle,
+      phone: s.phone,
+      mpesaNumber: s.mpesaNumber,
+      nationalId: s.nationalId || null,
+      kraPin: s.kraPin || null,
+      city: s.city || "",
+      kycStatus: s.kycStatus || (s.isSellerVerified ? "approved" : "pending"),
+      isSellerVerified: Boolean(s.isSellerVerified),
+      approvedAt: s.approvedAt || null,
+      kycReviewedAt: s.kycReviewedAt || null,
+      kycNote: s.kycNote || null,
+    }))
+    .sort((a, b) => (b.approvedAt || 0) - (a.approvedAt || 0));
+}
+
+export function reviewSellerKyc(supplierId, { approve = true, note = "" } = {}) {
+  loadSuppliers();
+  const s = supplierStore.suppliers[supplierId];
+  if (!s) return { error: "not_found", message: "Seller not found." };
+  s.kycStatus = approve ? "approved" : "rejected";
+  s.isSellerVerified = Boolean(approve);
+  s.kycReviewedAt = Date.now();
+  s.kycNote = String(note || "").trim().slice(0, 280) || null;
+  persistSuppliers();
+  return { supplier: s };
 }
 
 /** Soft-update JSON peer seller identity fields used by seller session auth. */
