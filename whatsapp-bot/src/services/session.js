@@ -189,3 +189,28 @@ export function getPendingReview(phoneNumber) {
 export function clearPendingReview(phoneNumber) {
   getSession(phoneNumber).pendingReview = null;
 }
+
+/** Snapshot of disk-persisted pending checkouts for abandon recovery. */
+export function listPendingDiskEntries() {
+  loadPendingDisk();
+  const now = Date.now();
+  return Object.entries(pendingDisk)
+    .filter(([, v]) => v?.at && now - v.at <= PENDING_TTL_MS)
+    .map(([phone, v]) => ({
+      phone,
+      customerKey: phone,
+      pendingOrder: v.pendingOrder || null,
+      pendingCart: v.pendingCart || null,
+      at: v.at,
+      abandonNudgeSent: Boolean(v.abandonNudgeSent),
+    }));
+}
+
+export function markPendingAbandonNudge(phoneNumber) {
+  loadPendingDisk();
+  const key = String(phoneNumber || "");
+  if (!key || !pendingDisk[key]) return false;
+  pendingDisk[key].abandonNudgeSent = true;
+  writePendingDisk();
+  return true;
+}

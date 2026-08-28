@@ -59,6 +59,11 @@ function looksLikeBuyerProductPhoto(mediaMimetype, text = "") {
   return true;
 }
 
+function looksLikeVoiceNote(mediaMimetype) {
+  const mime = String(mediaMimetype || "").toLowerCase();
+  return mime.startsWith("audio/") || mime.includes("ogg") || mime.includes("ptt");
+}
+
 function extractQuotedText(payload) {
   const candidates = [
     payload.replyTo?.body,
@@ -293,6 +298,44 @@ export async function handleIncomingMessage(
 
   if (await tryPickupContinueFromRef(customerKey, combinedText, { phone })) return;
   if (await trySupplierContinueFromRef(customerKey, combinedText, { phone })) return;
+
+  // Voice note → Whisper/OpenRouter STT → continue as text (phone = thread_id).
+  if (
+    hasMedia &&
+    looksLikeVoiceNote(mediaMimetype) &&
+    !String(text || "").trim()
+  ) {
+    try {
+      const { downloadWahaMedia } = await import("../services/whatsapp.js");
+      const { transcribeWhatsAppAudio } = await import("../services/commerce-ops.js");
+      const buffer = await downloadWahaMedia(mediaUrl, {
+        messageId,
+        chatId,
+        session: wahaSession,
+        mimetype: mediaMimetype,
+      });
+      const stt = await transcribeWhatsAppAudio({ buffer, mimetype: mediaMimetype });
+      if (stt.ok && stt.text) {
+        return handleIncomingMessage(customerKey, stt.text, {
+          quotedText,
+          combinedText: stt.text,
+          displayName,
+          phone,
+          chatId,
+          hasMedia: false,
+          messageId,
+          wahaSession,
+        });
+      }
+      await sendText(
+        customerKey,
+        "I couldn't hear that voice note clearly — type your request (e.g. *viatu size 42 under 3000*)."
+      );
+      return;
+    } catch (err) {
+      console.warn("[webhook] voice STT:", err.message);
+    }
+  }
 
   if (await tryRoleMenu(customerKey, text, { phone })) return;
 

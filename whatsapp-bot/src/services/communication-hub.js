@@ -943,9 +943,32 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
     return true;
   }
 
-  const dispatchMatch = trimmed.match(new RegExp(`^DISPATCH\\s+${ORDER_ID_CAPTURE}\\b`, "i"));
+  const dispatchMatch = trimmed.match(
+    new RegExp(
+      `^DISPATCH\\s+${ORDER_ID_CAPTURE}(?:\\s+via\\s+rider\\s+([A-Za-z][\\w\\s-]{0,40}))?(?:\\s+((?:\\+?254|0)?\\d{9,12}))?\\b`,
+      "i"
+    )
+  );
   if (dispatchMatch) {
-    await flowSellerDispatch(customerKey, phone, orderIdOrEmpty(dispatchMatch[1]));
+    const id = orderIdOrEmpty(dispatchMatch[1]);
+    const riderName = String(dispatchMatch[2] || "").trim();
+    const riderPhone = String(dispatchMatch[3] || "").trim();
+    if (riderPhone || riderName) {
+      const { dispatchOrderWithRider } = await import("./commerce-ops.js");
+      const result = await dispatchOrderWithRider({
+        orderId: id,
+        phone,
+        customerKey,
+        riderName,
+        riderPhone,
+      });
+      await sendSafeWhatsApp(
+        customerKey,
+        result.message || (result.ok ? `Dispatched *${id}*.` : result.message || "Dispatch failed.")
+      );
+      return true;
+    }
+    await flowSellerDispatch(customerKey, phone, id);
     return true;
   }
 
@@ -1220,6 +1243,14 @@ async function flowBuyerYes(customerKey, phone, orderId) {
       }))
     : [];
   void dispatchMessages([{ to: customerKey, message: msgBuyerConfirmAck(fresh) }, ...sellerJobs]);
+
+  // Automated review collector (24h path also calls this after auto-release).
+  try {
+    const { sendReviewPrompt } = await import("./reviews.js");
+    await sendReviewPrompt(customerKey, fresh);
+  } catch (err) {
+    console.warn("[communication-hub] review prompt:", err.message);
+  }
 }
 
 async function flowHelp(customerKey, phone, orderId, rawText) {
@@ -1349,6 +1380,14 @@ async function autoReleaseOrder(order) {
     fresh.customerKey ? { to: fresh.customerKey, message: msgAutoReleasedBuyer(fresh) } : null,
     ...sellerJobs,
   ]);
+  if (fresh.customerKey) {
+    try {
+      const { sendReviewPrompt } = await import("./reviews.js");
+      await sendReviewPrompt(fresh.customerKey, fresh);
+    } catch (err) {
+      console.warn("[communication-hub] auto-release review prompt:", err.message);
+    }
+  }
   void notifyAdminEvent("AUTO_RELEASED", {
     orderId: fresh.id,
     details: `Auto-completed 24h after dispatch (no YES, no dispute). Payout scheduled.`,

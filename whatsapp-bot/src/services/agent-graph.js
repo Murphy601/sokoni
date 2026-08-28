@@ -24,6 +24,8 @@ export const SPECIALIST_TOOLS = {
     "list_orders",
     "store_info",
     "open_return_case",
+    "create_checkout_link",
+    "verify_payment_code",
   ],
   seller: [
     "store_info",
@@ -31,6 +33,9 @@ export const SPECIALIST_TOOLS = {
     "get_seller_payout",
     "get_shipping_rates",
     "browse_taxonomy",
+    "update_inventory",
+    "dispatch_with_rider",
+    "check_aup",
   ],
   dispute: [
     "track_order",
@@ -38,8 +43,9 @@ export const SPECIALIST_TOOLS = {
     "open_return_case",
     "propose_goodwill",
     "store_info",
+    "verify_payment_code",
   ],
-  logistics: ["track_order", "list_orders", "store_info", "get_shipping_rates"],
+  logistics: ["track_order", "list_orders", "store_info", "get_shipping_rates", "dispatch_with_rider"],
   general: [...TOOL_NAMES],
 };
 

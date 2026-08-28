@@ -147,7 +147,7 @@ export function buildAdminPaidClaimMessage(order) {
   );
 }
 
-/** Customer replied "paid" — flag for admin review. */
+/** Customer replied "paid" — verify code against webhooks when present; else flag for admin. */
 export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
   const order = pickOrderForPaidClaim(customerKey, text, phone);
   if (!order) {
@@ -161,6 +161,22 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
   if (order.customerPaymentStatus === "confirmed") {
     await sendText(customerKey, paymentConfirmedMessage({ orderId: order.id, amountKes: orderBuyerTotal(order) }));
     return true;
+  }
+
+  // Anti fake PoP — if they pasted a code, verify against Paystack/M-Pesa webhook fields.
+  const codeMatch = String(text || "").match(/\b([A-Z0-9]{8,15})\b/i);
+  if (codeMatch) {
+    const { verifyPaymentProof } = await import("./commerce-ops.js");
+    const proof = verifyPaymentProof({
+      orderId: order.id,
+      code: codeMatch[1],
+      customerKey,
+      phone,
+    });
+    if (!proof.verified && proof.error === "code_not_found") {
+      await sendText(customerKey, proof.message);
+      return true;
+    }
   }
 
   if (order.customerPaymentStatus === "claimed") {

@@ -42,6 +42,11 @@ export const TOOL_NAMES = [
   "get_seller_payout",
   "get_shipping_rates",
   "propose_goodwill",
+  "create_checkout_link",
+  "update_inventory",
+  "dispatch_with_rider",
+  "verify_payment_code",
+  "check_aup",
 ];
 
 /** Keep only tools allowed for the active specialist. */
@@ -422,6 +427,84 @@ export async function runToolRouter(
   }
 
   if (
+    allow("create_checkout_link") &&
+    /\b(add\s+\d+|to\s+(?:my\s+)?cart|send\s+(?:me\s+)?(?:the\s+)?(?:payment|pay|checkout)\s+link|reserve\s+\d+)\b/i.test(
+      lower
+    )
+  ) {
+    const intent = (await import("./commerce-ops.js")).parseCommerceIntent(text);
+    const qty = intent.addToCart?.quantity || Number((text.match(/\badd\s+(\d+)/i) || [])[1]) || 1;
+    const query =
+      intent.addToCart?.query ||
+      text
+        .replace(/\b(add|reserve|buy)\s+\d+\s+(of\s+)?(those\s+|the\s+)?/i, "")
+        .replace(/\s+to\s+(my\s+)?cart.*$/i, "")
+        .replace(/\s+and\s+send.*$/i, "")
+        .trim();
+    results.push(
+      await executeTool(
+        "create_checkout_link",
+        { quantity: qty, query, productId: "" },
+        { phone, customerKey }
+      )
+    );
+  }
+
+  if (allow("update_inventory") && /\b(update\s+(?:my\s+)?inventory|restock|stock\s+\S+\s+\d+)\b/i.test(lower)) {
+    const intent = (await import("./commerce-ops.js")).parseCommerceIntent(text);
+    const stock = intent.stockUpdate || {};
+    results.push(
+      await executeTool(
+        "update_inventory",
+        {
+          productId: stock.productId || "",
+          productQuery: stock.query || "",
+          stockQuantity: stock.quantity,
+          priceKes: stock.priceKes,
+        },
+        { phone }
+      )
+    );
+  }
+
+  if (allow("dispatch_with_rider") && /\bdispatch\s+skn-/i.test(lower)) {
+    const intent = (await import("./commerce-ops.js")).parseCommerceIntent(text);
+    if (intent.dispatch) {
+      results.push(
+        await executeTool(
+          "dispatch_with_rider",
+          intent.dispatch,
+          { phone, customerKey }
+        )
+      );
+    }
+  }
+
+  if (allow("verify_payment_code") && /\b(paid|mpesa|m-pesa|transaction\s+code|qa\d)\b/i.test(lower)) {
+    const intent = (await import("./commerce-ops.js")).parseCommerceIntent(text);
+    const orderId = extractOrderId(text);
+    if (intent.paymentCode || orderId) {
+      results.push(
+        await executeTool(
+          "verify_payment_code",
+          { orderId, code: intent.paymentCode || "" },
+          { phone, customerKey }
+        )
+      );
+    }
+  }
+
+  if (
+    allow("check_aup") &&
+    /\b(list(?:ing)?|sell|upload)\b/i.test(lower) &&
+    /\b(pill|medical|pharma|weapon|drug|counterfeit)\b/i.test(lower)
+  ) {
+    results.push(
+      await executeTool("check_aup", { title: text, description: text }, { phone })
+    );
+  }
+
+  if (
     allow("get_seller_onboarding") &&
     /\b(register as|how (do|to) (i )?sell|become a seller|onboard|link (my )?m-?pesa|till|paybill|seller setup)\b/i.test(
       lower
@@ -590,6 +673,16 @@ export async function executeTool(name, args = {}, context = {}) {
         return toolShippingRates(context);
       case "propose_goodwill":
         return toolProposeGoodwill(args);
+      case "create_checkout_link":
+        return await toolCreateCheckout(args, context);
+      case "update_inventory":
+        return await toolUpdateInventory(args, context);
+      case "dispatch_with_rider":
+        return await toolDispatchRider(args, context);
+      case "verify_payment_code":
+        return toolVerifyPayment(args, context);
+      case "check_aup":
+        return toolCheckAup(args);
       default:
         return { tool: name, ok: false, error: "unknown_tool" };
     }
@@ -910,6 +1003,62 @@ function toolProposeGoodwill({ amountKes = 300 } = {}) {
   return { tool: "propose_goodwill", ...result };
 }
 
+async function toolCreateCheckout(args, context = {}) {
+  const { createWhatsAppCheckoutSession } = await import("./commerce-ops.js");
+  const result = await createWhatsAppCheckoutSession({
+    customerKey: context.customerKey,
+    phone: context.phone,
+    productId: args.productId,
+    query: args.query,
+    quantity: args.quantity,
+  });
+  return { tool: "create_checkout_link", ...result };
+}
+
+async function toolUpdateInventory(args, context = {}) {
+  const { updateInventoryFromWhatsApp } = await import("./commerce-ops.js");
+  const result = await updateInventoryFromWhatsApp({
+    phone: context.phone,
+    productId: args.productId,
+    productQuery: args.productQuery,
+    stockQuantity: args.stockQuantity,
+    priceKes: args.priceKes,
+  });
+  return { tool: "update_inventory", ...result };
+}
+
+async function toolDispatchRider(args, context = {}) {
+  const { dispatchOrderWithRider } = await import("./commerce-ops.js");
+  const result = await dispatchOrderWithRider({
+    orderId: args.orderId,
+    phone: context.phone,
+    customerKey: context.customerKey,
+    riderName: args.riderName,
+    riderPhone: args.riderPhone,
+  });
+  return { tool: "dispatch_with_rider", ...result };
+}
+
+function toolVerifyPayment(args, context = {}) {
+  // sync import via dynamic in callers — use require pattern
+  return import("./commerce-ops.js").then(({ verifyPaymentProof }) => ({
+    tool: "verify_payment_code",
+    ...verifyPaymentProof({
+      orderId: args.orderId,
+      code: args.code,
+      customerKey: context.customerKey,
+      phone: context.phone,
+    }),
+  }));
+}
+
+function toolCheckAup(args) {
+  return import("./commerce-ops.js").then(({ checkAcceptableUsePolicy }) => ({
+    tool: "check_aup",
+    ...checkAcceptableUsePolicy({ title: args.title, description: args.description }),
+  }));
+}
+
 function toolStoreInfo() {
   const meta = checkoutMeta();
   const site = (config.publicSiteUrl || "https://sokonimall.com").replace(/\/$/, "");
@@ -1100,6 +1249,25 @@ export function formatToolResultsForPrompt(toolResults) {
     }
     if (r.tool === "propose_goodwill") {
       return `TOOL propose_goodwill: ${r.message || JSON.stringify(r)}`;
+    }
+    if (r.tool === "create_checkout_link") {
+      return (
+        `TOOL create_checkout_link:\n` +
+        `ok=${r.ok} order=${r.orderId || "—"} qty=${r.quantity || 1} total=KES ${r.totalKes || "—"}\n` +
+        `payUrl=${r.payUrl || "—"}\n${r.message || r.error || ""}`
+      );
+    }
+    if (r.tool === "update_inventory") {
+      return `TOOL update_inventory: ${r.message || r.error || JSON.stringify(r)}`;
+    }
+    if (r.tool === "dispatch_with_rider") {
+      return `TOOL dispatch_with_rider: ${r.message || r.error || JSON.stringify(r)}`;
+    }
+    if (r.tool === "verify_payment_code") {
+      return `TOOL verify_payment_code verified=${r.verified}: ${r.message || r.error || ""}`;
+    }
+    if (r.tool === "check_aup") {
+      return `TOOL check_aup allowed=${r.allowed}: ${r.message || ""}`;
     }
     if (r.tool === "store_info") {
       return (
