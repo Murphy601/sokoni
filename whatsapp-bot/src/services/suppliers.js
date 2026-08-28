@@ -478,6 +478,8 @@ export function listSellerKycQueue({ status = "pending" } = {}) {
       city: s.city || "",
       kycStatus: s.kycStatus || (s.isSellerVerified ? "approved" : "pending"),
       isSellerVerified: Boolean(s.isSellerVerified),
+      shopStatus: s.shopStatus || "live",
+      payoutHold: Boolean(s.payoutHold),
       approvedAt: s.approvedAt || null,
       kycReviewedAt: s.kycReviewedAt || null,
       kycNote: s.kycNote || null,
@@ -538,3 +540,99 @@ export function rejectApplication(applicationId, reason = "") {
 }
 
 export const SUPPLIER_CATEGORIES = Object.keys(CATEGORY_EMOJI);
+
+const SHOP_STATUSES = new Set(["live", "paused", "under_review", "deactivated"]);
+
+export function getSupplierByHandle(handle) {
+  loadSuppliers();
+  const h = String(handle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  if (!h) return null;
+  return (
+    Object.values(supplierStore.suppliers || {}).find((s) => {
+      const sh = String(s.shopHandle || "")
+        .trim()
+        .replace(/^@+/, "")
+        .toLowerCase();
+      return sh && sh === h;
+    }) || null
+  );
+}
+
+export function isShopPubliclyVisible(supplier) {
+  if (!supplier) return true;
+  const st = String(supplier.shopStatus || "live").toLowerCase();
+  return st === "live";
+}
+
+export function sellerPayoutsHeld(supplier) {
+  if (!supplier) return false;
+  if (supplier.payoutHold) return true;
+  const st = String(supplier.shopStatus || "live").toLowerCase();
+  return st === "under_review" || st === "deactivated" || st === "paused";
+}
+
+/**
+ * Admin shop review — pause/deactivate removes public presence + holds M-Pesa withdraws.
+ * restore returns shop to live and clears payout hold.
+ */
+export function setSellerShopStatus(
+  supplierId,
+  { status = "under_review", note = "", holdPayouts = null } = {}
+) {
+  loadSuppliers();
+  const s = supplierStore.suppliers[supplierId];
+  if (!s) return { error: "not_found", message: "Seller not found." };
+
+  const next = String(status || "").trim().toLowerCase();
+  if (!SHOP_STATUSES.has(next)) {
+    return { error: "invalid_status", message: "Use live, paused, under_review, or deactivated." };
+  }
+
+  const prev = String(s.shopStatus || "live").toLowerCase();
+  s.shopStatus = next;
+  s.shopStatusNote = String(note || "").trim().slice(0, 280) || null;
+  s.shopStatusAt = Date.now();
+  if (holdPayouts == null) {
+    s.payoutHold = next !== "live";
+  } else {
+    s.payoutHold = Boolean(holdPayouts);
+  }
+  if (next === "live") {
+    s.isSellerVerified = s.kycStatus === "rejected" ? false : true;
+    if (!s.kycStatus || s.kycStatus === "pending") s.kycStatus = "approved";
+  }
+  persistSuppliers();
+  return { supplier: s, previousStatus: prev };
+}
+
+export function listShopsForAdminReview({ status = "all" } = {}) {
+  loadSuppliers();
+  const wanted = String(status || "all").toLowerCase();
+  return Object.values(supplierStore.suppliers || {})
+    .filter((s) => s?.peerSeller || s?.role === "SELLER")
+    .filter((s) => {
+      const st = String(s.shopStatus || "live").toLowerCase();
+      if (wanted === "all") return true;
+      if (wanted === "held") return st !== "live" || Boolean(s.payoutHold);
+      return st === wanted;
+    })
+    .map((s) => ({
+      id: s.id,
+      businessName: s.businessName,
+      shopHandle: s.shopHandle,
+      phone: s.phone,
+      mpesaNumber: s.mpesaNumber,
+      city: s.city || "",
+      shopStatus: s.shopStatus || "live",
+      payoutHold: Boolean(s.payoutHold) || sellerPayoutsHeld(s),
+      shopStatusNote: s.shopStatusNote || null,
+      shopStatusAt: s.shopStatusAt || null,
+      kycStatus: s.kycStatus || (s.isSellerVerified ? "approved" : "pending"),
+      nationalId: s.nationalId || null,
+      kraPin: s.kraPin || null,
+    }))
+    .sort((a, b) => (b.shopStatusAt || b.approvedAt || 0) - (a.shopStatusAt || a.approvedAt || 0));
+}

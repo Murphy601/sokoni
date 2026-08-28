@@ -255,6 +255,16 @@ async function createWithdrawalRequest(supplier) {
     return { error: "missing_mpesa", message: "Add your M-Pesa payout number in seller profile." };
   }
 
+  const { sellerPayoutsHeld } = await import("./suppliers.js");
+  if (sellerPayoutsHeld(supplier)) {
+    const st = String(supplier.shopStatus || "under_review").replace(/_/g, " ");
+    return {
+      error: "payout_held",
+      message: `Withdrawals are on hold while your shop is ${st}. Sokoni will release Ready funds after review.`,
+      shopStatus: supplier.shopStatus || null,
+    };
+  }
+
   const store = loadWithdrawals();
   const existingPending = (store.requests || []).find(
     (r) =>
