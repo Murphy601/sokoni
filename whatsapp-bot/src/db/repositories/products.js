@@ -736,6 +736,18 @@ export async function upsertCatalogProduct(catalogProduct) {
     row.legacy_json,
   ]);
 
+  // Keep compare_at_price in sync with original_price_kes (phase17). Fail-soft if column missing.
+  try {
+    await query(`UPDATE products SET compare_at_price = $2 WHERE id = $1`, [
+      row.id,
+      row.original_price_kes,
+    ]);
+  } catch (err) {
+    if (!String(err.message || "").includes("compare_at_price")) {
+      console.warn("[products] compare_at_price sync skipped:", err.message);
+    }
+  }
+
   const imageUrl = productForUpsert.imageUrl || catalogProduct.imageUrl || null;
   const allImages =
     Array.isArray(productForUpsert.images) && productForUpsert.images.length

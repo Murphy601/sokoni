@@ -258,22 +258,6 @@ html.dark .depop-card-placeholder {
   border-radius: 9999px;
 }
 
-.depop-card-promo {
-  position: absolute;
-  top: 0.35rem;
-  left: 0.35rem;
-  z-index: 4;
-  background: #25d366;
-  color: #1b1035;
-  font-size: 0.625rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  padding: 0.25rem 0.5rem;
-  border-radius: 9999px;
-  box-shadow: 0 1px 4px rgba(27, 16, 53, 0.2);
-  max-width: calc(100% - 3rem);
-}
-
 .depop-card-condition {
   position: absolute;
   top: 0.35rem;
@@ -296,34 +280,67 @@ html.dark .depop-card-placeholder {
   gap: 0.35rem 0.5rem;
 }
 
-.depop-card-price-now {
+.depop-card-price-now,
+.current-price {
+  font-size: 1.05rem;
+  font-weight: 800;
   color: #1b1035;
 }
 
-html.dark .depop-card-price-now {
+html.dark .depop-card-price-now,
+html.dark .current-price {
   color: #fff8f0;
 }
 
-.depop-card-price-was {
-  font-size: 0.75rem;
+.depop-card-price-was,
+.compare-price {
+  font-size: 0.8rem;
   font-weight: 500;
-  color: rgba(27, 16, 53, 0.4);
+  color: rgba(27, 16, 53, 0.45);
   text-decoration: line-through;
+  margin-left: 0.15rem;
 }
 
-html.dark .depop-card-price-was {
-  color: rgba(255, 248, 240, 0.4);
+html.dark .depop-card-price-was,
+html.dark .compare-price {
+  color: rgba(255, 248, 240, 0.45);
 }
 
-.depop-card-price-save {
+.depop-card-price-save,
+.badge-promo {
   font-size: 0.625rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: #146c3a;
-  background: rgba(37, 211, 102, 0.2);
-  padding: 0.1rem 0.4rem;
-  border-radius: 9999px;
+  background: rgba(37, 211, 102, 0.22);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.35rem;
+}
+
+/* Image-corner sale chip — high contrast on photos */
+.depop-card-promo.badge-promo,
+.depop-card-promo {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 4;
+  background: #1b1035;
+  color: #fff8f0;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0.28rem 0.55rem;
+  border-radius: 0.35rem;
+  box-shadow: 0 1px 4px rgba(27, 16, 53, 0.35);
+  max-width: calc(100% - 3rem);
+}
+
+.price-wrapper {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
 }
 
 .depop-card-condition--new {

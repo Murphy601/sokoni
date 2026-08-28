@@ -412,9 +412,9 @@
                 : Math.max(1, Math.round(((compareAt - current) / compareAt) * 100));
             return `${
               compareAt > 0
-                ? ` <span class="text-sm font-medium text-brand-purple/40 line-through">KES ${compareAt.toLocaleString()}</span>`
+                ? ` <span class="compare-price text-sm font-medium text-brand-purple/40 line-through">was KES ${compareAt.toLocaleString()}</span>`
                 : ""
-            } <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">${
+            } <span class="badge-promo inline-flex items-center text-[11px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">${
               pct ? `${pct}% OFF` : "SALE"
             }</span>`;
           })()

@@ -33,10 +33,15 @@ export function publicPromoFields(product, opts = {}) {
   if (!product) return {};
   const promo = product.promo && typeof product.promo === "object" ? product.promo : null;
   const active = Boolean(promo?.active);
-  const current =
+  const stored =
+    product.priceKes != null ? Math.round(Number(product.priceKes) || 0) : 0;
+  const computed =
     opts.totalKes != null
       ? Math.round(Number(opts.totalKes) || 0)
       : Math.round(Number(computeProductTotals(product).totalKes) || 0);
+  // Prefer the lower buyer-facing figure so fee recompute cannot hide a real drop.
+  const current =
+    stored > 0 && computed > 0 ? Math.min(stored, computed) : stored || computed;
 
   const original = resolveCompareAtKes(product, promo);
 

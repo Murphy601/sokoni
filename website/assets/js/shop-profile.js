@@ -869,9 +869,9 @@ function productCard(product, shop) {
               : Math.max(1, Math.round(((compareAt - current) / compareAt) * 100));
           return `${
             compareAt
-              ? ` <span class="text-xs font-medium text-brand-purple/40 line-through">KES ${compareAt.toLocaleString()}</span>`
+              ? ` <span class="compare-price text-xs font-medium text-brand-purple/40 line-through">was KES ${compareAt.toLocaleString()}</span>`
               : ""
-          } <span class="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
+          } <span class="badge-promo text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">${
             pct ? `${pct}% OFF` : "SALE"
           }</span>`;
         })()
