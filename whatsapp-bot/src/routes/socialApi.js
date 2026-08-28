@@ -523,6 +523,16 @@ router.get("/shop/:handle", async (req, res) => {
         message: result.message,
       });
     }
+    try {
+      const { getSupplierByHandle } = await import("../services/suppliers.js");
+      const supplier = getSupplierByHandle(req.params.handle);
+      if (result.shop && supplier) {
+        result.shop.promoBanner = supplier.promoBanner || "";
+        result.shop.offerNote = supplier.offerNote || "";
+      }
+    } catch {
+      /* fail-soft */
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

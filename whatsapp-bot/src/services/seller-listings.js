@@ -1111,6 +1111,7 @@ export async function listSellerListings(phone, sessionToken) {
             if (p.isSold || p.inStock === false) return 0;
             return 1;
           })(),
+          variants: Array.isArray(p.variants) ? p.variants : [],
           inStock: p.inStock !== false && !p.isSold,
           isSold: Boolean(p.isSold),
           draft: {

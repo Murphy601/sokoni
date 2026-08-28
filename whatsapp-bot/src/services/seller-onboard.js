@@ -171,6 +171,8 @@ function sanitizeSeller(s) {
     paybillAccount: s.paybillAccount || null,
     role: s.role || "SELLER",
     city: s.city || "",
+    promoBanner: s.promoBanner || "",
+    offerNote: s.offerNote || "",
   };
 }
 
@@ -1093,16 +1095,115 @@ export async function updateSellerListingStock({ phone, productId, stockQuantity
     console.warn("[seller-onboard] catalog sync after stock:", err.message);
   }
 
+  try {
+    const { notifySellerLowStock } = await import("./inventory-alerts.js");
+    await notifySellerLowStock(updated, { reason: "stock_saved" });
+  } catch {}
+
   return {
     success: true,
     productId,
     stockQuantity: Math.max(0, Math.round(Number(updated.stockQuantity) || 0)),
     inStock: updated.inStock !== false && !updated.isSold,
     isSold: Boolean(updated.isSold),
+    variants: Array.isArray(updated.variants) ? updated.variants : [],
     message:
       qty > 0
         ? `Units on hand set to ${qty} — listing stays on the main menu while stock remains.`
         : "Marked out of stock — buyers won't see it until you add units again.",
+  };
+}
+
+/**
+ * Replace size/colour variants on a live listing and sync parent stockQuantity.
+ */
+export async function updateSellerListingVariants({ phone, productId, variants, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+  if (!productId) {
+    return { error: "missing_product_id", message: "Missing product id." };
+  }
+  if (!Array.isArray(variants)) {
+    return { error: "invalid_variants", message: "Send a variants array (size, colour, units)." };
+  }
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  const sellerDigits = normalizePhone(phone);
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => {
+        if (p.id !== productId) return false;
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerDigits && normalizePhone(p.sellerPhone) === sellerDigits) return true;
+        return false;
+      });
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const { applyProductVariants, clearSoldSku, productStockOnHand } = await import(
+        "./product-availability.js"
+      );
+      const next = applyProductVariants({ ...current }, variants);
+      const sum = productStockOnHand(next);
+      if (sum > 0) await clearSoldSku(productId);
+      next.stockUpdatedAt = Date.now();
+      products[idx] = next;
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = next;
+    } catch (err) {
+      console.warn("[seller-onboard] variants update failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    const { updateProductInventory, upsertCatalogProduct } = await import(
+      "../db/repositories/products.js"
+    );
+    if (isDbEnabled()) {
+      await upsertCatalogProduct(updated);
+      await updateProductInventory(productId, {
+        stockQuantity: updated.stockQuantity,
+        inStock: updated.inStock !== false && !updated.isSold,
+        isSold: Boolean(updated.isSold),
+      });
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB variants sync skipped:", err.message);
+  }
+
+  try {
+    const { invalidateProductCache } = await import("./catalog.js");
+    invalidateProductCache();
+  } catch {}
+
+  try {
+    const { syncPublicCatalog } = await import("./catalog-ops.js");
+    await syncPublicCatalog();
+  } catch (err) {
+    console.warn("[seller-onboard] catalog sync after variants:", err.message);
+  }
+
+  try {
+    const { notifySellerLowStock } = await import("./inventory-alerts.js");
+    await notifySellerLowStock(updated, { reason: "variants_saved" });
+  } catch {}
+
+  const { listProductVariants, productStockOnHand } = await import("./product-availability.js");
+  return {
+    success: true,
+    productId,
+    variants: listProductVariants(updated),
+    stockQuantity: productStockOnHand(updated),
+    inStock: updated.inStock !== false && !updated.isSold,
+    message: `Saved ${listProductVariants(updated).length} variant(s) · ${productStockOnHand(updated)} units total.`,
   };
 }
 

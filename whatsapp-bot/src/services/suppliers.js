@@ -500,7 +500,7 @@ export function reviewSellerKyc(supplierId, { approve = true, note = "" } = {}) 
 }
 
 /** Soft-update JSON peer seller identity fields used by seller session auth. */
-export function updatePeerSellerProfile(phone, { shopName, shopHandle, city } = {}) {
+export function updatePeerSellerProfile(phone, { shopName, shopHandle, city, promoBanner, offerNote } = {}) {
   loadSuppliers();
   const existing = findSupplierByPhone(phone);
   if (!existing) {
@@ -522,6 +522,14 @@ export function updatePeerSellerProfile(phone, { shopName, shopHandle, city } = 
   }
   if (city !== undefined) {
     existing.city = String(city || "").trim();
+  }
+  if (promoBanner !== undefined) {
+    existing.promoBanner = String(promoBanner || "").trim().slice(0, 160);
+    existing.promoBannerUpdatedAt = Date.now();
+  }
+  if (offerNote !== undefined) {
+    existing.offerNote = String(offerNote || "").trim().slice(0, 240);
+    existing.offerNoteUpdatedAt = Date.now();
   }
 
   persistSuppliers();

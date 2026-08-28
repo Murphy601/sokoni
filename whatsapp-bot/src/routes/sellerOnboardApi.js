@@ -7,6 +7,7 @@ import {
   refreshSellerListing,
   updateSellerListingPrice,
   updateSellerListingStock,
+  updateSellerListingVariants,
   setSellerListingPromo,
   endSellerListingPromo,
   requireAuthenticatedSeller,
@@ -383,6 +384,48 @@ router.post("/stock", async (req, res) => {
   }
   if (result.error) return res.status(403).json(result);
   res.json(result);
+});
+
+/** POST /api/seller/onboard/variants — size/colour variants + per-variant stock */
+router.post("/variants", async (req, res) => {
+  const { phone, productId, variants } = req.body || {};
+  const result = await updateSellerListingVariants({
+    phone,
+    productId,
+    variants,
+    sessionToken: sellerSessionFromReq(req),
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (
+    result.error === "invalid_variants" ||
+    result.error === "missing_product_id"
+  ) {
+    return res.status(400).json(result);
+  }
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/shop-offer — shop promo banner + offer note (public storefront) */
+router.post("/shop-offer", async (req, res) => {
+  const check = await authedSeller(req, res);
+  if (!check) return;
+  const { promoBanner, offerNote } = req.body || {};
+  const { updatePeerSellerProfile } = await import("../services/suppliers.js");
+  const result = updatePeerSellerProfile(check.supplier.phone || phoneFromReq(req), {
+    promoBanner: promoBanner !== undefined ? promoBanner : undefined,
+    offerNote: offerNote !== undefined ? offerNote : undefined,
+  });
+  if (result.error) return res.status(404).json(result);
+  res.json({
+    success: true,
+    promoBanner: result.supplier.promoBanner || "",
+    offerNote: result.supplier.offerNote || "",
+    message: "Shop offer banner saved — shows on your public shop page.",
+  });
 });
 
 /**

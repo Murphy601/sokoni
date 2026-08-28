@@ -502,6 +502,25 @@ function renderShopHeader(payload) {
     }
   }
 
+  const promoBanner = el("shop-promo-banner");
+  if (promoBanner) {
+    if (shop.promoBanner) {
+      promoBanner.textContent = shop.promoBanner;
+      promoBanner.classList.remove("hidden");
+    } else {
+      promoBanner.classList.add("hidden");
+    }
+  }
+  const offerNote = el("shop-offer-note");
+  if (offerNote) {
+    if (shop.offerNote) {
+      offerNote.textContent = shop.offerNote;
+      offerNote.classList.remove("hidden");
+    } else {
+      offerNote.classList.add("hidden");
+    }
+  }
+
   const location = el("shop-location");
   if (location) {
     if (shop.location) {

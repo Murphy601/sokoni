@@ -36,14 +36,120 @@ export function isProductAvailable(product) {
   return true;
 }
 
-/** Units on hand — defaults to 1 for classic thrift/single SKUs. */
+/** Units on hand — defaults to 1 for classic thrift/single SKUs. Sums variants when present. */
 export function productStockOnHand(product) {
   if (!product || typeof product !== "object") return 0;
+  const variants = listProductVariants(product);
+  if (variants.length) {
+    return variants.reduce((sum, v) => sum + Math.max(0, Math.round(Number(v.stockQuantity) || 0)), 0);
+  }
   if (product.stockQuantity != null && Number.isFinite(Number(product.stockQuantity))) {
     return Math.max(0, Math.round(Number(product.stockQuantity)));
   }
   if (isProductSold(product) || product.inStock === false) return 0;
   return 1;
+}
+
+/** Low-stock threshold for seller alerts (Hub badge + WhatsApp). */
+export const LOW_STOCK_THRESHOLD = 2;
+
+export function isLowStock(product) {
+  const onHand = productStockOnHand(product);
+  return onHand > 0 && onHand <= LOW_STOCK_THRESHOLD;
+}
+
+/**
+ * Size/color variants on one listing.
+ * Shape: { id, size?, color?, stockQuantity, sku? }
+ */
+export function listProductVariants(product) {
+  if (!product || !Array.isArray(product.variants)) return [];
+  return product.variants
+    .filter((v) => v && typeof v === "object")
+    .map((v, i) => ({
+      id: String(v.id || `var_${i + 1}`).trim(),
+      size: v.size != null ? String(v.size).trim() : "",
+      color: v.color != null ? String(v.color).trim() : "",
+      stockQuantity: Math.max(0, Math.round(Number(v.stockQuantity) || 0)),
+      sku: v.sku != null ? String(v.sku).trim() : "",
+    }));
+}
+
+export function findVariant(product, variantId) {
+  const id = String(variantId || "").trim();
+  if (!id) return null;
+  return listProductVariants(product).find((v) => v.id === id) || null;
+}
+
+/** Normalize + write variants; syncs parent stockQuantity to the sum. */
+export function applyProductVariants(product, rawVariants) {
+  if (!product || typeof product !== "object") return product;
+  const list = Array.isArray(rawVariants) ? rawVariants : [];
+  const variants = list.slice(0, 40).map((v, i) => {
+    const size = String(v?.size || "").trim().slice(0, 40);
+    const color = String(v?.color || "").trim().slice(0, 40);
+    const qty = Math.max(0, Math.min(9999, Math.round(Number(v?.stockQuantity ?? v?.qty) || 0)));
+    const id =
+      String(v?.id || "")
+        .trim()
+        .slice(0, 48) ||
+      `var_${Date.now().toString(36)}_${i}`;
+    return {
+      id,
+      size,
+      color,
+      stockQuantity: qty,
+      sku: String(v?.sku || "").trim().slice(0, 64),
+      label: [size, color].filter(Boolean).join(" / ") || `Option ${i + 1}`,
+    };
+  });
+  product.variants = variants;
+  const sum = variants.reduce((s, v) => s + v.stockQuantity, 0);
+  applyStockQuantityFields(product, sum);
+  product.variantsUpdatedAt = Date.now();
+  return product;
+}
+
+/**
+ * Block checkout when requested qty exceeds on-hand (and optional variant).
+ * @returns {{ ok: true, onHand: number } | { ok: false, error, message, onHand }}
+ */
+export function assertPurchaseQty(product, qty = 1, { variantId = null } = {}) {
+  if (!product || typeof product !== "object") {
+    return { ok: false, error: "missing_product", message: "Product not found.", onHand: 0 };
+  }
+  if (isProductSold(product) || product.inStock === false) {
+    return { ok: false, error: "out_of_stock", message: "This item is sold out.", onHand: 0 };
+  }
+  const bought = Math.max(1, Math.round(Number(qty) || 1));
+  if (variantId) {
+    const v = findVariant(product, variantId);
+    if (!v) {
+      return { ok: false, error: "variant_not_found", message: "That size/colour is not available.", onHand: 0 };
+    }
+    if (v.stockQuantity < bought) {
+      return {
+        ok: false,
+        error: "insufficient_stock",
+        message:
+          v.stockQuantity <= 0
+            ? "That size/colour is sold out."
+            : `Only ${v.stockQuantity} left for that size/colour.`,
+        onHand: v.stockQuantity,
+      };
+    }
+    return { ok: true, onHand: v.stockQuantity };
+  }
+  const onHand = productStockOnHand(product);
+  if (onHand < bought) {
+    return {
+      ok: false,
+      error: "insufficient_stock",
+      message: onHand <= 0 ? "This item is sold out." : `Only ${onHand} unit${onHand === 1 ? "" : "s"} left.`,
+      onHand,
+    };
+  }
+  return { ok: true, onHand };
 }
 
 /** Stamp sold fields onto a product object (mutates and returns). */
@@ -88,12 +194,58 @@ export function applyStockQuantityFields(product, qty) {
  * Decrement stock after a paid order.
  * Multi-unit stays live until units hit 0 (soft OOS, restockable).
  * Unique 1-of-1 thrift gets a permanent sold tombstone.
+ * When variantId is set, decrements that variant then resyncs parent total.
  */
-export function consumeStockForSale(product, { qty = 1, orderId = null, soldAt = Date.now() } = {}) {
+export function consumeStockForSale(product, { qty = 1, orderId = null, soldAt = Date.now(), variantId = null } = {}) {
   if (!product || typeof product !== "object") {
     return { product, depleted: true, tombstone: false, remaining: 0, onHand: 0 };
   }
   const bought = Math.max(1, Math.round(Number(qty) || 1));
+  const variants = listProductVariants(product);
+
+  if (variants.length && variantId) {
+    const nextVariants = variants.map((v) => ({ ...v }));
+    const idx = nextVariants.findIndex((v) => v.id === String(variantId));
+    if (idx === -1) {
+      return { product, depleted: false, tombstone: false, remaining: productStockOnHand(product), onHand: productStockOnHand(product), error: "variant_not_found" };
+    }
+    const onHandVar = nextVariants[idx].stockQuantity;
+    nextVariants[idx].stockQuantity = Math.max(0, onHandVar - bought);
+    const next = applyProductVariants({ ...product }, nextVariants);
+    const remaining = productStockOnHand(next);
+    if (remaining > 0) {
+      return { product: next, depleted: false, tombstone: false, remaining, onHand: onHandVar };
+    }
+    if (onHandVar <= 1 && variants.length === 1) {
+      markProductSoldFields(next, { orderId, soldAt });
+      return { product: next, depleted: true, tombstone: true, remaining: 0, onHand: onHandVar };
+    }
+    markProductSoftOutOfStock(next);
+    next.variants = nextVariants;
+    return { product: next, depleted: true, tombstone: false, remaining: 0, onHand: onHandVar };
+  }
+
+  if (variants.length && !variantId) {
+    // No variant picked — consume from the first variant with stock, then fall through to parent total.
+    const nextVariants = variants.map((v) => ({ ...v }));
+    let left = bought;
+    for (const v of nextVariants) {
+      if (left <= 0) break;
+      const take = Math.min(v.stockQuantity, left);
+      v.stockQuantity -= take;
+      left -= take;
+    }
+    const next = applyProductVariants({ ...product }, nextVariants);
+    const remaining = productStockOnHand(next);
+    const onHand = variants.reduce((s, v) => s + v.stockQuantity, 0);
+    if (remaining > 0) {
+      return { product: next, depleted: false, tombstone: false, remaining, onHand };
+    }
+    markProductSoftOutOfStock(next);
+    next.variants = nextVariants;
+    return { product: next, depleted: true, tombstone: false, remaining: 0, onHand };
+  }
+
   const onHand = productStockOnHand(product);
   const remaining = Math.max(0, onHand - bought);
   const next = { ...product, stockQuantity: remaining };
