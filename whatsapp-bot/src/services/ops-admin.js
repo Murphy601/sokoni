@@ -207,6 +207,14 @@ export async function handleRecoverCommand(adminChatId, args) {
       issueType: "post_delivery_damage",
       awaitingDamagePhoto: true,
     });
+    try {
+      const { markAwaitingDisputeEvidence } = await import("./dispute-protocol.js");
+      if (order.customerKey) {
+        markAwaitingDisputeEvidence(order.customerKey, { orderId: order.id });
+      }
+    } catch {
+      /* ignore */
+    }
     return sendText(adminChatId, `✅ Recovery message sent for *${order.id}* (awaiting photo).`);
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed: ${err.message}`);
