@@ -440,6 +440,16 @@ export async function runToolRouter(
       customerKey,
     });
     if (dispute.handled) {
+      try {
+        const { markAwaitingDisputeEvidence } = await import("./dispute-protocol.js");
+        markAwaitingDisputeEvidence(customerKey, {
+          orderId: dispute.orderId || null,
+          disputeId: dispute.disputeId || null,
+          phone,
+        });
+      } catch {
+        /* ignore */
+      }
       results.push({
         tool: "open_return_case",
         ok: Boolean(dispute.ok),
@@ -955,6 +965,18 @@ async function toolOpenReturnCase({ orderId, reason = "" } = {}, { phone = "", c
     customerKey,
     reason,
   });
+  try {
+    const { markAwaitingDisputeEvidence } = await import("./dispute-protocol.js");
+    if (result.ok || result.askForEvidence) {
+      markAwaitingDisputeEvidence(customerKey, {
+        orderId: result.orderId || orderId || null,
+        disputeId: result.disputeId || null,
+        phone,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
   return {
     tool: "open_return_case",
     ok: Boolean(result.ok),

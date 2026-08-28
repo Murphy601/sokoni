@@ -210,7 +210,7 @@ export async function handleRecoverCommand(adminChatId, args) {
     try {
       const { markAwaitingDisputeEvidence } = await import("./dispute-protocol.js");
       if (order.customerKey) {
-        markAwaitingDisputeEvidence(order.customerKey, { orderId: order.id });
+        markAwaitingDisputeEvidence(order.customerKey, { orderId: order.id, phone: order.phone || "" });
       }
     } catch {
       /* ignore */

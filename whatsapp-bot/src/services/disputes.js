@@ -83,7 +83,7 @@ async function appendEvent(disputeId, actorRole, action, detail = null) {
   );
 }
 
-async function freezeOrderEscrow(orderRef) {
+export async function freezeOrderEscrow(orderRef) {
   const order = getOrder(orderRef);
   if (!order) return { frozen: false, reason: "order_not_found" };
 

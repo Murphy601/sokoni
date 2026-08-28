@@ -222,12 +222,42 @@ export async function tryHandleBuyerImageSearch(
     chatId = null,
     session = null,
     text = "",
+    phone = "",
   } = {}
 ) {
   if (!hasMedia) return false;
   // Ignore obvious document-only or caption-driven seller flows
   const caption = String(text || "").toLowerCase();
   if (/\b(id|passport|kra|license|national id)\b/.test(caption)) return false;
+
+  // HARD GATE: dispute evidence must never become catalog search
+  try {
+    const {
+      shouldBlockCatalogImageSearch,
+      tryHandleDisputeEvidencePhoto,
+    } = await import("./dispute-protocol.js");
+    if (shouldBlockCatalogImageSearch(customerKey, phone, text)) {
+      console.log("[image-search] blocked — dispute evidence context (not catalog search)");
+      const evidenceHit = await tryHandleDisputeEvidencePhoto(customerKey, {
+        hasMedia,
+        mediaUrl,
+        mediaMimetype,
+        messageId,
+        chatId,
+        session,
+        text,
+        phone,
+      });
+      if (evidenceHit) return true;
+      await sendText(
+        customerKey,
+        "📷 Got your photo for the dispute thread. Reply with your *SKN-####* if we don't have the order number yet."
+      );
+      return true;
+    }
+  } catch (err) {
+    console.warn("[image-search] dispute gate skipped:", err.message);
+  }
 
   if (!imageSearchVisionAvailable()) {
     await sendText(
