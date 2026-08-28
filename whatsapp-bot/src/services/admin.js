@@ -1075,28 +1075,24 @@ export function dashboardAdminChatId() {
  * Captures admin reply texts (does not ping admin WA); customer/seller sends still go out.
  */
 export async function executeAdminCommandFromDashboard(text, quotedText = "") {
-  const adminChatId = dashboardAdminChatId();
-  if (!adminChatId) {
-    return {
-      ok: false,
-      error: "admin_phones_unset",
-      message: "ADMIN_PHONES is not configured on the bot.",
-      replies: [],
-    };
-  }
+  const adminChatId = dashboardAdminChatId() || "dashboard-admin@c.us";
   const cmd = String(text || "").trim();
   if (!cmd) {
     return { ok: false, error: "missing_command", message: "Enter a #command.", replies: [] };
   }
+  // REST route is already gated by X-Admin-Token — do not re-require ADMIN_PHONES match.
   let handled = false;
   const replies = await withAdminReplyCapture(adminChatId, async () => {
-    handled = await runAdminCommand(adminChatId, cmd, quotedText, { allowBusinessOwner: false });
+    handled = await runAdminCommand(adminChatId, cmd, quotedText, {
+      allowBusinessOwner: false,
+      skipSenderAuth: true,
+    });
   });
   if (!handled) {
     return {
       ok: false,
-      error: "forbidden",
-      message: "Admin command rejected — check ADMIN_PHONES.",
+      error: "unhandled",
+      message: "Command was not handled.",
       replies,
     };
   }
@@ -1104,9 +1100,14 @@ export async function executeAdminCommandFromDashboard(text, quotedText = "") {
 }
 
 /** Parse and run an admin command. Returns true if handled. */
-export async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwner = false } = {}) {
+export async function runAdminCommand(
+  adminChatId,
+  text,
+  quotedText,
+  { allowBusinessOwner = false, skipSenderAuth = false } = {}
+) {
   const phone = phoneDigitsFromChatId(adminChatId) || "";
-  if (!canRunAdminCommands(adminChatId, phone, { allowBusinessOwner })) {
+  if (!skipSenderAuth && !canRunAdminCommands(adminChatId, phone, { allowBusinessOwner })) {
     return false;
   }
   const t = normalizeAdminCommand(text.trim());

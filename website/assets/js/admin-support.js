@@ -11,6 +11,7 @@
   let activeKind = null;
   let pollTimer = null;
   let activeTab = "inbox";
+  let statusHoldUntil = 0;
 
   function el(id) {
     return document.getElementById(id);
@@ -36,12 +37,18 @@
     };
   }
 
-  function setStatus(message, isError = false) {
+  function setStatus(message, isError = false, { holdMs = 0 } = {}) {
     const node = el("admin-status");
     if (!node) return;
     node.textContent = message || "";
     node.classList.toggle("text-red-600", isError);
     node.classList.toggle("text-emerald-700", !isError && Boolean(message));
+    if (holdMs > 0) statusHoldUntil = Date.now() + holdMs;
+  }
+
+  function setStatusQuiet(message) {
+    if (Date.now() < statusHoldUntil) return;
+    setStatus(message, false);
   }
 
   function stripTokenFromUrl() {
@@ -98,10 +105,10 @@
     if (name === "payouts") void loadPayoutsDesk();
   }
 
-  function showActionResult(replies) {
+  function showActionResult(replies, fallback) {
     const box = el("action-result");
     if (!box) return;
-    const text = (replies || []).join("\n\n---\n\n").trim();
+    const text = (replies || []).join("\n\n---\n\n").trim() || String(fallback || "").trim();
     if (!text) {
       box.classList.add("hidden");
       box.textContent = "";
@@ -109,6 +116,11 @@
     }
     box.classList.remove("hidden");
     box.textContent = text;
+    try {
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
   }
 
   function showCommandOutput(replies, fallback) {
@@ -118,11 +130,19 @@
     box.textContent = text;
   }
 
+  function actionOrderId() {
+    const typed = el("action-order-id")?.value?.trim() || "";
+    if (typed) return typed;
+    if (activeThreadId && activeKind !== "general") return activeThreadId;
+    return "";
+  }
+
   async function runCommand(command, { confirmBroadcast = true } = {}) {
     const cmd = String(command || "").trim();
     if (!cmd) return null;
     if (!token()) {
-      setStatus("Enter admin token.", true);
+      setStatus("Enter admin token.", true, { holdMs: 8000 });
+      showActionResult([], "Enter admin token first.");
       return null;
     }
     if (confirmBroadcast && /^#broadcast\b/i.test(cmd)) {
@@ -131,6 +151,8 @@
       );
       if (!ok) return null;
     }
+    showActionResult([], `Running ${cmd}…`);
+    setStatus(`Running ${cmd.split(/\s+/)[0]}…`, false, { holdMs: 2000 });
     try {
       const res = await fetch(`${SUPPORT_API}/command`, {
         method: "POST",
@@ -139,24 +161,39 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setStatus(data.message || data.error || "Command failed.", true);
-        showCommandOutput(data.replies, data.message || data.error);
-        showActionResult(data.replies || [data.message || data.error]);
+        let err =
+          data.message ||
+          data.error ||
+          (res.status === 404
+            ? "Bot missing /admin/support/command — redeploy the bot."
+            : `Command failed (${res.status}).`);
+        setStatus(err, true, { holdMs: 12000 });
+        showCommandOutput(data.replies, err);
+        showActionResult(data.replies, err);
         return data;
       }
-      setStatus(`Ran ${cmd.split(/\s+/)[0]}`);
+      setStatus(`Ran ${cmd.split(/\s+/)[0]}`, false, { holdMs: 8000 });
       showCommandOutput(data.replies);
-      showActionResult(data.replies);
+      showActionResult(data.replies, "(command returned no text)");
       return data;
-    } catch {
-      setStatus("Network error running command.", true);
+    } catch (err) {
+      const msg = err?.message || "Network error running command.";
+      setStatus(msg, true, { holdMs: 12000 });
+      showActionResult([], msg);
       return null;
     }
   }
 
   function buildOrderCommand(action) {
-    const id = activeThreadId;
-    if (!id || activeKind === "general") return null;
+    const id = actionOrderId();
+    if (!id) {
+      setStatus("Enter or select an order id (SKN-…).", true, { holdMs: 8000 });
+      showActionResult([], "Enter an order id above (or open an order thread), then click again.");
+      return null;
+    }
+    if (el("action-order-id") && !el("action-order-id").value.trim()) {
+      el("action-order-id").value = id;
+    }
     switch (action) {
       case "status": {
         const st = el("status-select")?.value || "confirmed";
@@ -199,12 +236,14 @@
       case "pickup": {
         const pp = el("pickup-id")?.value?.trim();
         if (!pp) {
-          setStatus("Enter pickup point id (pp-xxxx).", true);
+          setStatus("Enter pickup point id (pp-xxxx).", true, { holdMs: 8000 });
+          showActionResult([], "Enter pickup point id (pp-xxxx), then click Assign pickup.");
           return null;
         }
         return `#pickup ${id} ${pp}`;
       }
       default:
+        setStatus(`Unknown action: ${action}`, true, { holdMs: 8000 });
         return null;
     }
   }
@@ -212,7 +251,7 @@
   async function loadList() {
     const t = token();
     if (!t) {
-      setStatus("Enter admin token.", true);
+      setStatus("Enter admin token.", true, { holdMs: 8000 });
       return;
     }
     localStorage.setItem(TOKEN_KEY, t);
@@ -232,7 +271,7 @@
             label: o.productName || o.orderId,
           }));
       if (activeTab === "inbox") {
-        setStatus(`${threads.length} open thread${threads.length === 1 ? "" : "s"}`);
+        setStatusQuiet(`${threads.length} open thread${threads.length === 1 ? "" : "s"}`);
       }
       const list = el("support-list");
       if (!list) return;
@@ -320,7 +359,9 @@
         "hidden",
         !(data.adminTakeOver || data.disputeHold || kind === "general")
       );
-      el("order-actions")?.classList.toggle("hidden", kind !== "order");
+      if (kind === "order" && el("action-order-id")) {
+        el("action-order-id").value = data.orderId || threadId;
+      }
       el("admin-input").disabled = false;
       el("admin-input").placeholder =
         kind === "general" ? "Type reply to their WhatsApp…" : "Type reply to buyer WhatsApp…";
@@ -563,14 +604,22 @@
     void loadList();
   });
 
-  document.querySelectorAll(".order-act").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const cmd = buildOrderCommand(btn.getAttribute("data-cmd"));
-      if (!cmd) return;
-      void runCommand(cmd).then(() => {
-        if (activeThreadId) void loadThread(activeThreadId);
+  // Event delegation — never silently no-op; always show result in #action-result
+  el("order-actions")?.addEventListener("click", (ev) => {
+    const btn = ev.target?.closest?.(".order-act");
+    if (!btn || !el("order-actions").contains(btn)) return;
+    ev.preventDefault();
+    const action = btn.getAttribute("data-cmd");
+    const cmd = buildOrderCommand(action);
+    if (!cmd) return;
+    btn.disabled = true;
+    void runCommand(cmd)
+      .then(() => {
+        if (activeThreadId && activeKind === "order") void loadThread(activeThreadId);
+      })
+      .finally(() => {
+        btn.disabled = false;
       });
-    });
   });
 
   el("command-form")?.addEventListener("submit", (ev) => {
