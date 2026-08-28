@@ -2468,34 +2468,7 @@ async function loadMyListings() {
     wrap.querySelectorAll(".refresh-listing-btn").forEach((btn) => {
       btn.addEventListener("click", () => refreshListing(btn.dataset.id));
     });
-    wrap.querySelectorAll(".drop-price-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openListingPricePanel(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "drop");
-      });
-    });
-    wrap.querySelectorAll(".raise-price-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openListingPricePanel(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "raise");
-      });
-    });
-    wrap.querySelectorAll(".set-promo-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openItemPromoPanel(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal);
-      });
-    });
-    wrap.querySelectorAll(".end-promo-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        void endListingPromo(btn.dataset.id);
-      });
-    });
+    // Promo / price / end-promo: delegated in bindListingActionClicks() so reloads can't drop handlers.
     wrap.querySelectorAll(".continue-draft-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const item = draftById.get(String(btn.dataset.id || ""));
@@ -2510,6 +2483,48 @@ async function loadMyListings() {
   } catch {
     wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error.</p>`;
   }
+}
+
+/** One document-level listener — survives My listings innerHTML reloads. */
+function bindListingActionClicks() {
+  if (window.__sokoniListingActionsBound) return;
+  window.__sokoniListingActionsBound = true;
+  document.addEventListener(
+    "click",
+    (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== "function") return;
+      const promoBtn = t.closest(".set-promo-btn");
+      if (promoBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openItemPromoPanel(promoBtn.dataset.id, promoBtn.dataset.sellerNet, promoBtn.dataset.buyerTotal);
+        return;
+      }
+      const endBtn = t.closest(".end-promo-btn");
+      if (endBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        void endListingPromo(endBtn.dataset.id);
+        return;
+      }
+      const dropBtn = t.closest(".drop-price-btn");
+      if (dropBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openListingPricePanel(dropBtn.dataset.id, dropBtn.dataset.sellerNet, dropBtn.dataset.buyerTotal, "drop");
+        return;
+      }
+      const raiseBtn = t.closest(".raise-price-btn");
+      if (raiseBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openListingPricePanel(raiseBtn.dataset.id, raiseBtn.dataset.sellerNet, raiseBtn.dataset.buyerTotal, "raise");
+        return;
+      }
+    },
+    true
+  );
 }
 
 function showSellerProfile(profile, opts = {}) {
@@ -3413,146 +3428,223 @@ async function refreshListing(productId) {
   }
 }
 
-/** Inline listing editors — never use window.prompt (blur/autofill wiped seller sessions). */
+/** Promo / price editors — fixed modal on body (survives My listings reloads). */
 let pendingItemPromo = null;
 let pendingListingPrice = null;
+
+const LISTING_EDITOR_MODAL_ID = "sokoni-listing-editor-modal";
+
+function getListingEditorModal() {
+  return document.getElementById(LISTING_EDITOR_MODAL_ID);
+}
 
 function clearListingInlineEditors() {
   document.querySelectorAll(".listing-inline-editor").forEach((node) => node.remove());
   el("item-promo-panel")?.classList.add("hidden");
-}
-
-function listingCardById(productId) {
-  const id = String(productId || "").trim();
-  if (!id) return null;
-  try {
-    return document.querySelector(`#my-listings [data-product-id="${CSS.escape(id)}"]`);
-  } catch {
-    return document.querySelector(`#my-listings [data-product-id="${id.replace(/"/g, "")}"]`);
+  el("item-promo-panel")?.setAttribute("hidden", "");
+  const modal = getListingEditorModal();
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.setAttribute("hidden", "");
+    modal.setAttribute("aria-hidden", "true");
+    const body = modal.querySelector("[data-listing-editor-body]");
+    if (body) body.innerHTML = "";
   }
 }
 
 function ensureListingsHubVisible() {
-  if (currentSellerView === "listings") {
-    el("hub-panel-listings")?.classList.remove("hidden");
-    el("view-dashboard")?.classList.remove("hidden");
-    return;
+  try {
+    if (currentSellerView === "listings") {
+      el("hub-panel-listings")?.classList.remove("hidden");
+      el("view-dashboard")?.classList.remove("hidden");
+      return;
+    }
+    showSellerView("listings", { skipDataReload: true });
+  } catch (err) {
+    console.warn("[seller-hub] ensureListingsHubVisible:", err);
   }
-  // Switch panels only — do not reload listings (reload raced the open and hid the form).
-  showSellerView("listings", { skipDataReload: true });
+}
+
+function ensureListingEditorModal() {
+  let modal = getListingEditorModal();
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = LISTING_EDITOR_MODAL_ID;
+  modal.className = "sokoni-listing-editor-modal hidden";
+  modal.setAttribute("hidden", "");
+  modal.setAttribute("aria-hidden", "true");
+  modal.innerHTML = `
+    <div class="sokoni-listing-editor-modal__backdrop" data-listing-editor-dismiss="1"></div>
+    <div class="sokoni-listing-editor-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="sokoni-listing-editor-title">
+      <div data-listing-editor-body class="sokoni-listing-editor-modal__body"></div>
+    </div>
+  `;
+  modal.addEventListener("click", (e) => {
+    if (e.target?.closest?.("[data-listing-editor-dismiss]")) {
+      closeItemPromoPanel();
+    }
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function showListingEditorModal(html, { title, onMount }) {
+  const modal = ensureListingEditorModal();
+  const body = modal.querySelector("[data-listing-editor-body]");
+  if (!body) return null;
+  body.innerHTML = html;
+  const titleEl = body.querySelector("#sokoni-listing-editor-title");
+  if (titleEl && title) titleEl.textContent = title;
+  modal.classList.remove("hidden");
+  modal.removeAttribute("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("sokoni-listing-editor-open");
+  if (typeof onMount === "function") onMount(body, modal);
+  window.requestAnimationFrame(() => {
+    body.querySelector("input, select, button")?.focus?.();
+  });
+  return body;
 }
 
 function closeItemPromoPanel() {
   pendingItemPromo = null;
   pendingListingPrice = null;
   clearListingInlineEditors();
+  document.body.classList.remove("sokoni-listing-editor-open");
   if (el("item-promo-status")) el("item-promo-status").textContent = "";
 }
 
 function openItemPromoPanel(productId, currentSellerNet, currentBuyerTotal) {
-  const id = String(productId || "").trim();
-  if (!id) return;
-  const currentNet = Math.round(Number(currentSellerNet) || 0);
-  const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
-  pendingItemPromo = { productId: id, currentNet, currentBuyer };
-  pendingListingPrice = null;
-  ensureListingsHubVisible();
+  try {
+    const id = String(productId || "").trim();
+    if (!id) {
+      setStatus("Missing listing id for promo.", true);
+      return;
+    }
+    const currentNet = Math.round(Number(currentSellerNet) || 0);
+    const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+    pendingItemPromo = { productId: id, currentNet, currentBuyer };
+    pendingListingPrice = null;
+    ensureListingsHubVisible();
 
-  const card = listingCardById(id);
-  if (!card) {
-    setStatus("Could not find that listing — tap Refresh, then % Set promo again.", true);
-    return;
+    const html = `
+      <div class="listing-inline-editor listing-inline-editor--promo space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <h2 id="sokoni-listing-editor-title" class="font-bold text-lg text-white">Item promo</h2>
+          <button type="button" data-promo-cancel class="depop-btn-ghost min-h-[44px] px-3 text-sm font-semibold" aria-label="Close">✕</button>
+        </div>
+        <p class="text-sm text-zinc-300">Applies only to <strong class="text-white">${escapeHtml(id)}</strong>. Other listings keep their price.</p>
+        <p class="text-xs text-zinc-400">${
+          currentNet
+            ? `You receive KES ${currentNet.toLocaleString()}${
+                currentBuyer ? ` · buyer pays ${formatKes(currentBuyer)}` : ""
+              }. Promo must be lower.`
+            : "Promo lowers what you receive; buyer STK follows."
+        }</p>
+        <label class="block text-sm font-medium text-zinc-300">Promo type
+          <select data-promo-type class="sell-form-input mt-1 w-full">
+            <option value="percent" selected>Percent off what you receive</option>
+            <option value="kes_off">KES off what you receive</option>
+            <option value="sale_net">Set promo amount you receive (KES)</option>
+          </select>
+        </label>
+        <label class="block text-sm font-medium text-zinc-300">Value
+          <input data-promo-value type="number" min="1" step="1" class="sell-form-input mt-1 w-full" value="15" inputmode="decimal" />
+        </label>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="button" data-promo-save class="depop-btn-accent min-h-[48px] px-4 text-sm font-semibold flex-1">Start promo on this item</button>
+          <button type="button" data-promo-cancel class="depop-btn-ghost min-h-[48px] px-4 text-sm font-semibold">Cancel</button>
+        </div>
+        <p data-promo-status class="text-sm text-zinc-400" role="status"></p>
+      </div>
+    `;
+    showListingEditorModal(html, {
+      onMount(root) {
+        root.querySelectorAll("[data-promo-save]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void submitItemPromo(root);
+          });
+        });
+        root.querySelectorAll("[data-promo-cancel]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeItemPromoPanel();
+          });
+        });
+      },
+    });
+    setStatus(`Promo editor open for ${id}.`);
+  } catch (err) {
+    console.error("[seller-hub] openItemPromoPanel failed:", err);
+    setStatus("Could not open promo editor — refresh and try again.", true);
   }
-
-  clearListingInlineEditors();
-  const editor = document.createElement("div");
-  editor.className =
-    "listing-inline-editor listing-inline-editor--promo mt-3 p-3 rounded-xl border border-emerald-500/30 bg-black/40 space-y-2";
-  editor.setAttribute("role", "region");
-  editor.setAttribute("aria-label", "Set item promo");
-  editor.innerHTML = `
-    <p class="text-sm font-semibold text-white">Item promo — ${escapeHtml(id)} only</p>
-    <p class="text-xs text-zinc-400">${
-      currentNet
-        ? `You receive KES ${currentNet.toLocaleString()}${
-            currentBuyer ? ` · buyer pays ${formatKes(currentBuyer)}` : ""
-          }. Promo must be lower.`
-        : "Promo lowers what you receive; buyer STK follows."
-    }</p>
-    <label class="block text-xs font-medium text-zinc-300">Promo type
-      <select data-promo-type class="sell-form-input mt-1">
-        <option value="percent" selected>Percent off what you receive</option>
-        <option value="kes_off">KES off what you receive</option>
-        <option value="sale_net">Set promo amount you receive (KES)</option>
-      </select>
-    </label>
-    <label class="block text-xs font-medium text-zinc-300">Value
-      <input data-promo-value type="number" min="1" step="1" class="sell-form-input mt-1" value="15" inputmode="decimal" />
-    </label>
-    <div class="flex flex-wrap gap-2 pt-1">
-      <button type="button" data-promo-save class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold">Start promo</button>
-      <button type="button" data-promo-cancel class="depop-btn-ghost min-h-[44px] px-4 text-sm font-semibold">Cancel</button>
-    </div>
-    <p data-promo-status class="text-sm text-zinc-500" role="status"></p>
-  `;
-  (card.querySelector(".sell-hub-rail-card__body") || card).appendChild(editor);
-  editor.querySelector("[data-promo-save]")?.addEventListener("click", () => void submitItemPromo(editor));
-  editor.querySelector("[data-promo-cancel]")?.addEventListener("click", () => closeItemPromoPanel());
-  window.requestAnimationFrame(() => {
-    editor.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    editor.querySelector("[data-promo-value]")?.focus();
-  });
 }
 
 function openListingPricePanel(productId, currentSellerNet, currentBuyerTotal, mode = "drop") {
-  const id = String(productId || "").trim();
-  if (!id) return;
-  const currentNet = Math.round(Number(currentSellerNet) || 0);
-  const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
-  const raising = mode === "raise";
-  pendingListingPrice = { productId: id, currentNet, currentBuyer, mode: raising ? "raise" : "drop" };
-  pendingItemPromo = null;
-  ensureListingsHubVisible();
+  try {
+    const id = String(productId || "").trim();
+    if (!id) {
+      setStatus("Missing listing id.", true);
+      return;
+    }
+    const currentNet = Math.round(Number(currentSellerNet) || 0);
+    const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+    const raising = mode === "raise";
+    pendingListingPrice = { productId: id, currentNet, currentBuyer, mode: raising ? "raise" : "drop" };
+    pendingItemPromo = null;
+    ensureListingsHubVisible();
 
-  const card = listingCardById(id);
-  if (!card) {
-    setStatus("Could not find that listing — tap Refresh, then try again.", true);
-    return;
+    const defaultVal =
+      currentNet > 0 ? String(raising ? currentNet + 100 : Math.max(50, currentNet - 100)) : "";
+    const html = `
+      <div class="listing-inline-editor listing-inline-editor--price space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <h2 id="sokoni-listing-editor-title" class="font-bold text-lg text-white">${raising ? "Raise price" : "Drop price"}</h2>
+          <button type="button" data-price-cancel class="depop-btn-ghost min-h-[44px] px-3 text-sm font-semibold" aria-label="Close">✕</button>
+        </div>
+        <p class="text-sm text-zinc-300">${escapeHtml(id)}</p>
+        <p class="text-xs text-zinc-400">${
+          currentNet
+            ? `Now: you receive KES ${currentNet.toLocaleString()}${
+                currentBuyer ? ` · buyer pays ${formatKes(currentBuyer)}` : ""
+              }.${raising ? " Raising clears was-price / % OFF." : " Dropping shows was-price + % OFF on the mall."}`
+            : "Enter the new amount you want to receive (KES)."
+        }</p>
+        <label class="block text-sm font-medium text-zinc-300">New amount you receive (KES)
+          <input data-price-net type="number" min="50" step="1" class="sell-form-input mt-1 w-full" value="${escapeHtml(defaultVal)}" inputmode="numeric" />
+        </label>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="button" data-price-save class="depop-btn-accent min-h-[48px] px-4 text-sm font-semibold flex-1">${raising ? "Raise price" : "Drop price"}</button>
+          <button type="button" data-price-cancel class="depop-btn-ghost min-h-[48px] px-4 text-sm font-semibold">Cancel</button>
+        </div>
+        <p data-price-status class="text-sm text-zinc-400" role="status"></p>
+      </div>
+    `;
+    showListingEditorModal(html, {
+      onMount(root) {
+        root.querySelectorAll("[data-price-save]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void submitListingPrice(root);
+          });
+        });
+        root.querySelectorAll("[data-price-cancel]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeItemPromoPanel();
+          });
+        });
+      },
+    });
+  } catch (err) {
+    console.error("[seller-hub] openListingPricePanel failed:", err);
+    setStatus("Could not open price editor — refresh and try again.", true);
   }
-
-  clearListingInlineEditors();
-  const defaultVal =
-    currentNet > 0 ? String(raising ? currentNet + 100 : Math.max(50, currentNet - 100)) : "";
-  const editor = document.createElement("div");
-  editor.className =
-    "listing-inline-editor listing-inline-editor--price mt-3 p-3 rounded-xl border border-zinc-600 bg-black/40 space-y-2";
-  editor.setAttribute("role", "region");
-  editor.setAttribute("aria-label", raising ? "Raise price" : "Drop price");
-  editor.innerHTML = `
-    <p class="text-sm font-semibold text-white">${raising ? "Raise price" : "Drop price"} — ${escapeHtml(id)}</p>
-    <p class="text-xs text-zinc-400">${
-      currentNet
-        ? `Now: you receive KES ${currentNet.toLocaleString()}${
-            currentBuyer ? ` · buyer pays ${formatKes(currentBuyer)}` : ""
-          }.${raising ? " Raising clears any was-price / % OFF badge." : " Dropping shows was-price + % OFF on the mall."}`
-        : "Enter the new amount you want to receive (KES)."
-    }</p>
-    <label class="block text-xs font-medium text-zinc-300">New amount you receive (KES)
-      <input data-price-net type="number" min="50" step="1" class="sell-form-input mt-1" value="${escapeHtml(defaultVal)}" inputmode="numeric" />
-    </label>
-    <div class="flex flex-wrap gap-2 pt-1">
-      <button type="button" data-price-save class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold">${raising ? "Raise price" : "Drop price"}</button>
-      <button type="button" data-price-cancel class="depop-btn-ghost min-h-[44px] px-4 text-sm font-semibold">Cancel</button>
-    </div>
-    <p data-price-status class="text-sm text-zinc-500" role="status"></p>
-  `;
-  (card.querySelector(".sell-hub-rail-card__body") || card).appendChild(editor);
-  editor.querySelector("[data-price-save]")?.addEventListener("click", () => void submitListingPrice(editor));
-  editor.querySelector("[data-price-cancel]")?.addEventListener("click", () => closeItemPromoPanel());
-  window.requestAnimationFrame(() => {
-    editor.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    editor.querySelector("[data-price-net]")?.focus();
-  });
 }
 
 async function submitListingPrice(editor) {
@@ -3560,13 +3652,22 @@ async function submitListingPrice(editor) {
   const productId = pendingListingPrice?.productId;
   const currentNet = Math.round(Number(pendingListingPrice?.currentNet) || 0);
   const raising = pendingListingPrice?.mode === "raise";
-  const status = editor?.querySelector?.("[data-price-status]") || null;
+  const status =
+    editor?.querySelector?.("[data-price-status]") ||
+    getListingEditorModal()?.querySelector("[data-price-status]") ||
+    null;
   if (!phone || !productId) {
     if (status) status.textContent = "Pick a listing first.";
     return;
   }
   const nextNet = Math.round(
-    Number(String(editor?.querySelector?.("[data-price-net]")?.value || "").replace(/[^\d.]/g, ""))
+    Number(
+      String(
+        editor?.querySelector?.("[data-price-net]")?.value ||
+          getListingEditorModal()?.querySelector("[data-price-net]")?.value ||
+          ""
+      ).replace(/[^\d.]/g, "")
+    )
   );
   if (!Number.isFinite(nextNet) || nextNet < 50) {
     if (status) status.textContent = "Enter a valid price you receive (minimum KES 50).";
@@ -3636,7 +3737,10 @@ async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) 
 async function submitItemPromo(editor) {
   const phone = apiPhone();
   const productId = pendingItemPromo?.productId;
-  const root = editor || document.querySelector(".listing-inline-editor--promo");
+  const root =
+    editor ||
+    getListingEditorModal()?.querySelector(".listing-inline-editor--promo") ||
+    document.querySelector(".listing-inline-editor--promo");
   const status =
     root?.querySelector?.("[data-promo-status]") || el("item-promo-status");
   if (!phone || !productId) {
@@ -7620,6 +7724,15 @@ function init() {
   });
   el("item-promo-save-btn")?.addEventListener("click", () => void submitItemPromo(el("item-promo-panel")));
   el("item-promo-cancel-btn")?.addEventListener("click", () => closeItemPromoPanel());
+  bindListingActionClicks();
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && getListingEditorModal() && !getListingEditorModal().classList.contains("hidden")) {
+      closeItemPromoPanel();
+    }
+  });
+  // Debug / emergency: window.SokoniOpenPromo("SKN-…", sellerNet, buyerTotal)
+  window.SokoniOpenPromo = openItemPromoPanel;
+  window.SokoniClosePromo = closeItemPromoPanel;
   el("draft-price")?.addEventListener("input", onListingPriceInput);
   el("media-price")?.addEventListener("input", onListingPriceInput);
   el("photo-caption")?.addEventListener("change", () => {

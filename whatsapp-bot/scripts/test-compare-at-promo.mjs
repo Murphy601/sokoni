@@ -55,7 +55,8 @@ assert(onboard.includes("compareAtPrice: promo.listPriceKes"), "promo sets compa
 
 const hub = readFileSync(path.join(root, "website/assets/js/seller-listing.js"), "utf8");
 assert(hub.includes("openItemPromoPanel"), "promo panel opener exists");
-assert(hub.includes("listing-inline-editor--promo"), "inline promo editor");
+assert(hub.includes("sokoni-listing-editor-modal"), "fixed promo modal on body");
+assert(hub.includes("bindListingActionClicks"), "delegated listing action clicks");
 assert(hub.includes("skipDataReload"), "opening promo does not thrash-reload hub");
 assert(!/window\.prompt\(hint/.test(hub), "price drop no longer uses window.prompt");
 
