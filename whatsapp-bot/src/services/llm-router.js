@@ -13,10 +13,13 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
 
-const OPENROUTER_FREE = ["openrouter/free", "google/gemma-4-26b-a4b-it:free"];
+const OPENROUTER_FREE = ["openrouter/free", "google/gemma-4-31b-it:free"];
 const DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
 
-/** gpt-oss on Groq may emit built-in browser_search — steer + tool_choice none. */
+/** gpt-oss on Groq may emit built-in browser_search — steer + tool_choice none.
+ * Do NOT use tool_choice=auto: Sokoni runs lookups server-side and never sends tools
+ * to the LLM; auto would enable Groq browser_search and break grounding.
+ */
 const GROQ_PLAIN_TEXT_NUDGE =
   "OUTPUT RULE: Reply with plain customer-facing text only. Do not call browser_search, code_interpreter, functions, or any API tools — lookups already ran server-side.";
 

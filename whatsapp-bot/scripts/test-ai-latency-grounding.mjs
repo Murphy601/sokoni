@@ -77,8 +77,9 @@ const routerSrc = readFileSync(path.join(root, "whatsapp-bot/src/services/llm-ro
 assert(routerSrc.includes("openai/gpt-oss-20b"), "router defaults to gpt-oss-20b");
 assert(!routerSrc.includes('llama-3.1-8b-instant"'), "router must not default to retired llama");
 assert(routerSrc.includes('tool_choice = "none"') || routerSrc.includes('tool_choice: "none"'), "groq uses tool_choice none");
-assert(routerSrc.includes("isToolUseFailedError"), "retries tool_use_failed");
-assert(routerSrc.includes("browser_search"), "steers against browser_search");
+assert(routerSrc.includes("google/gemma-4-31b-it:free"), "openrouter free fallback uses live gemma-4-31b");
+assert(!routerSrc.includes("gemma-4-26b-a4b-it:free"), "drops flaky gemma-4-26b a4b free slug");
+assert(routerSrc.includes("Do NOT use tool_choice=auto"), "documents why tool_choice stays none");
 
 assert(
   isToolUseFailedError({ error: { code: "tool_use_failed", message: "Tool choice is none, but model called a tool" } }),
