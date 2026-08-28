@@ -305,6 +305,43 @@
     tillBlock.classList.add("hidden");
   }
 
+  function renderSellerShippingBreakdown(data) {
+    const host = document.getElementById("checkout-seller-shipping");
+    if (!host) return;
+    const rows = Array.isArray(data?.vendorBreakdown)
+      ? data.vendorBreakdown
+      : Array.isArray(data?.children) && data.children.length > 1
+        ? data.children.map((c) => ({
+            vendorId: c.vendorId || c.shopHandle,
+            shippingFee: c.shippingKes,
+          }))
+        : [];
+    if (rows.length < 2) {
+      host.classList.add("hidden");
+      host.innerHTML = "";
+      return;
+    }
+    host.classList.remove("hidden");
+    host.innerHTML =
+      `<p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Shipping by seller</p><ul class="space-y-1 text-sm text-zinc-300">` +
+      rows
+        .map((v) => {
+          const name = String(v.vendorId || v.shopHandle || "Seller").replace(/^@/, "");
+          const fee = Math.round(Number(v.shippingFee ?? v.shippingKes) || 0);
+          return `<li>${escapeHtml(name)} · ${formatKes(fee)}</li>`;
+        })
+        .join("") +
+      `</ul><p class="text-xs text-zinc-500">Multi-seller carts ship separately — each seller’s rate is included in one M-Pesa total.</p>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function renderOrderSummary(data) {
     const total = Math.round(Number(data.totalKes ?? data.amountKes) || 0);
     const ship = Math.round(Number(data.shippingKes) || 0);
@@ -318,9 +355,10 @@
     if (itemEl) itemEl.textContent = formatKes(item);
     if (shipEl) {
       const place = [data.deliveryCounty, data.deliveryTown].filter(Boolean).join(" · ");
+      const multi = Array.isArray(data.vendorBreakdown) && data.vendorBreakdown.length > 1;
       shipEl.textContent =
         ship > 0
-          ? `${formatKes(ship)}${place ? ` (${place})` : ""}`
+          ? `${formatKes(ship)}${place ? ` (${place})` : ""}${multi ? " · split by seller" : ""}`
           : "KES 0";
     }
     if (totalEl) totalEl.textContent = formatKes(total);
@@ -330,6 +368,7 @@
           ? "Delivery fee is included in the M-Pesa STK amount below."
           : "Choose county (or map pin) above and apply — delivery is added before M-Pesa.";
     }
+    renderSellerShippingBreakdown(data);
     if (payBtn && !payBusy) {
       const paid = data.paymentStatus === "confirmed";
       if (!paid) {
@@ -553,6 +592,19 @@
         .toLowerCase()
         .replace(/^@/, "") ||
       null,
+    getCartItems: () => {
+      if (Array.isArray(currentOrder?.cartItems) && currentOrder.cartItems.length) {
+        return currentOrder.cartItems;
+      }
+      const vendorId =
+        currentOrder?.vendorId ||
+        String(currentOrder?.shopHandle || currentOrder?.supplierId || "")
+          .trim()
+          .toLowerCase()
+          .replace(/^@/, "") ||
+        "unknown";
+      return [{ productId: currentOrder?.orderId || "checkout", vendorId, qty: 1 }];
+    },
     onApplied: (data) => {
       if (data?.order) {
         renderOrderSummary({
@@ -563,6 +615,8 @@
           deliveryCounty: data.order.deliveryCounty,
           deliveryTown: data.order.deliveryTown,
           paymentStatus: currentOrder?.paymentStatus,
+          vendorBreakdown: data?.calc?.vendorBreakdown || currentOrder?.vendorBreakdown,
+          children: currentOrder?.children,
         });
       }
       if (data?.orderId) void loadOrder(data.orderId, { quiet: true });

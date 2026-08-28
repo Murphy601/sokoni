@@ -10,6 +10,8 @@ import {
   setSellerListingPromo,
   endSellerListingPromo,
   requireAuthenticatedSeller,
+  sellerDispatchOrder,
+  updateSellerPayoutDetails,
 } from "../services/seller-onboard.js";
 import {
   getSellerWithdrawSummaryByPhone,
@@ -97,14 +99,23 @@ router.post("/sign-out", async (req, res) => {
 
 /** POST /api/seller/onboard — WhatsApp phone + shop + M-Pesa setup */
 router.post("/", async (req, res) => {
-  const { phone, shopName, shopHandle, mpesaNumber, nationalId, sessionToken, verificationToken } =
-    req.body || {};
+  const {
+    phone,
+    shopName,
+    shopHandle,
+    mpesaNumber,
+    nationalId,
+    kraPin,
+    sessionToken,
+    verificationToken,
+  } = req.body || {};
   const result = await onboardSellerAsync({
     phone,
     shopName,
     shopHandle,
     mpesaNumber,
     nationalId,
+    kraPin,
     sessionToken: sessionToken || verificationToken || sellerSessionFromReq(req),
   });
   if (result.error === "not_verified" || result.error === "verification_expired") {
@@ -148,6 +159,57 @@ router.get("/orders", async (req, res) => {
     return res.status(401).json(result);
   }
   if (result.error) return res.status(403).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/dispatch — mark shipped + optional rider / waybill */
+router.post("/dispatch", async (req, res) => {
+  const { phone, orderId, riderName, riderPhone, trackingRef, waybill } = req.body || {};
+  const result = await sellerDispatchOrder({
+    phone,
+    sessionToken: sellerSessionFromReq(req),
+    orderId,
+    riderName,
+    riderPhone,
+    trackingRef: trackingRef || waybill,
+  });
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "forbidden" || result.error === "support_hold") return res.status(403).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /api/seller/onboard/payout-details — M-Pesa / bank / Till / Paybill for payouts */
+router.post("/payout-details", async (req, res) => {
+  const {
+    phone,
+    mpesaNumber,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    mpesaTill,
+    mpesaPaybill,
+    paybillAccount,
+  } = req.body || {};
+  const result = await updateSellerPayoutDetails({
+    phone,
+    sessionToken: sellerSessionFromReq(req),
+    mpesaNumber,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    mpesaTill,
+    mpesaPaybill,
+    paybillAccount,
+  });
+  if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
+    return res.status(401).json(result);
+  }
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
   res.json(result);
 });
 

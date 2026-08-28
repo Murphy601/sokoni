@@ -136,8 +136,51 @@ router.get("/:orderId", (req, res) => {
   );
   const shopHandle = order.shopHandle || null;
   const supplierId = order.supplierId || order.sellerId || null;
+  const childIds = order.kind === "cart_parent" && Array.isArray(order.itemIds) ? order.itemIds : [];
+  const children = childIds
+    .map((id) => getOrder(id))
+    .filter(Boolean)
+    .map((c) => ({
+      orderId: c.id,
+      productId: c.productId || null,
+      productName: c.productName || null,
+      vendorId: String(c.shopHandle || c.supplierId || c.sellerId || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, "") || "unknown",
+      shopHandle: c.shopHandle || null,
+      qty: Math.max(1, Math.round(Number(c.quantity) || 1)),
+      shippingKes: Math.round(Number(c.shippingKes) || 0),
+    }));
+  const cartItems =
+    children.length > 0
+      ? children.map((c) => ({
+          productId: c.productId || c.orderId,
+          vendorId: c.vendorId,
+          qty: c.qty,
+        }))
+      : [
+          {
+            productId: order.productId || order.id,
+            vendorId: String(shopHandle || supplierId || "")
+              .trim()
+              .toLowerCase()
+              .replace(/^@/, "") || "unknown",
+            qty: Math.max(1, Math.round(Number(order.quantity) || 1)),
+          },
+        ];
+  const vendorBreakdown =
+    order.shippingCalcMeta?.vendorBreakdown ||
+    (children.length > 1
+      ? children.map((c) => ({
+          vendorId: c.vendorId,
+          shippingFee: c.shippingKes,
+          methodUsed: "ORDER_LINE",
+        }))
+      : null);
   res.json({
     orderId: order.id,
+    kind: order.kind || "order",
     productName: order.productName,
     itemKes,
     shippingKes,
@@ -151,6 +194,9 @@ router.get("/:orderId", (req, res) => {
       .trim()
       .toLowerCase()
       .replace(/^@/, "") || null,
+    cartItems,
+    children: children.length ? children : undefined,
+    vendorBreakdown,
     paymentStatus: order.customerPaymentStatus,
     paymentStatusDetail: order.paymentStatus,
     escrowStatus: order.escrowStatus || "pending",

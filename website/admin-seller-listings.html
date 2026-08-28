@@ -34,7 +34,8 @@
       <a href="index.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
       <nav class="flex flex-wrap gap-2 text-xs font-semibold">
         <a href="admin-command.html" class="min-h-[36px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Command</a>
-        <span class="min-h-[36px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Listings</span>
+        <a href="admin-disputes.html" class="min-h-[36px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Disputes</a>
+        <span class="min-h-[36px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Listings &amp; KYC</span>
       </nav>
     </div>
   </header>
@@ -59,12 +60,17 @@
         <button id="admin-load-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
           Load flagged
         </button>
+        <button id="admin-kyc-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">
+          Load KYC queue
+        </button>
         <button id="admin-refresh-btn" type="button" class="min-h-[44px] px-4 rounded-full border border-brand-purple/20 text-sm font-semibold">
           Refresh
         </button>
       </div>
       <p id="admin-status" class="text-sm text-brand-purple/60" role="status" aria-live="polite"></p>
     </section>
+
+    <section id="admin-kyc-list" class="space-y-3" aria-label="Seller KYC queue"></section>
 
     <section id="admin-list" class="space-y-3"></section>
   </main>

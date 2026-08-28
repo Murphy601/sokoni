@@ -141,7 +141,22 @@ function orderLinkFor(product) {
   );
 }
 
+function askInboxLinkFor(product) {
+  const handle = normalizeShopHandle(
+    product?.shopHandle || product?.sellerHandle || product?.shop?.handle || ""
+  );
+  const sellerUserId = Number(product?.sellerUserId || product?.userId || product?.shop?.userId);
+  if (!handle && !(Number.isInteger(sellerUserId) && sellerUserId > 0)) return "";
+  const params = new URLSearchParams();
+  if (Number.isInteger(sellerUserId) && sellerUserId > 0) params.set("with", String(sellerUserId));
+  if (product?.id) params.set("product", String(product.id));
+  if (handle) params.set("handle", handle);
+  return `inbox.html?${params.toString()}`;
+}
+
 function askLinkFor(product) {
+  const inbox = askInboxLinkFor(product);
+  if (inbox) return inbox;
   return waLink(`Hi Sokoni, tell me more about "${product.name}" (${formatPrice(product)}).`);
 }
 
@@ -782,9 +797,9 @@ function renderStoreCard(product) {
            class="text-center bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
           🛒 Buy — prepaid
         </a>
-        <a href="${askLinkFor(product)}" target="_blank" rel="noopener"
+        <a href="${askLinkFor(product)}" ${askInboxLinkFor(product) ? "" : 'target="_blank" rel="noopener"'}
            class="text-center text-xs text-brand-purple/60 underline hover:text-brand-purple">
-          💬 Ask about it on WhatsApp
+          ${askInboxLinkFor(product) ? "💬 Message seller" : "💬 Ask about it on WhatsApp"}
         </a>
         ${
           handle && shopLink

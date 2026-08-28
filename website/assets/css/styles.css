@@ -1036,3 +1036,57 @@ body.has-depop-shell {
   border-radius: 9999px;
   padding: 0.75rem 1.5rem;
 }
+
+/* Soft KDPA privacy consent bar (privacy-consent.js) */
+.sokoni-privacy-consent {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  padding: 12px;
+  pointer-events: none;
+}
+.sokoni-privacy-consent__inner {
+  pointer-events: auto;
+  max-width: 42rem;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 1rem;
+  background: #1b1035;
+  color: #fff8f0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.28);
+}
+.sokoni-privacy-consent__text {
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgba(255, 248, 240, 0.92);
+}
+.sokoni-privacy-consent__text a {
+  color: #25d366;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.sokoni-privacy-consent__btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  border: 0;
+  background: #25d366;
+  color: #1b1035;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sokoni-privacy-consent {
+    transition: none;
+  }
+}

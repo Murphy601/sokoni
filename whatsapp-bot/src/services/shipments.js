@@ -20,6 +20,14 @@ export const SHIPMENT_STATUSES = [
 /** Customer-facing shipment steps (after payment). */
 export const SHIPMENT_STEPS = ["label_ready", "dropped_off", "in_transit", "at_pickup_point", "delivered"];
 
+/** Simple buyer journey labels (alongside hub logistics steps). */
+export const BUYER_JOURNEY_STEPS = [
+  { id: "received", label: "Order Received" },
+  { id: "processing", label: "Processing" },
+  { id: "dispatched", label: "Dispatched" },
+  { id: "delivered", label: "Delivered" },
+];
+
 const STATUS_LABELS = {
   pending: "Awaiting label",
   label_ready: "Prepaid label ready",
@@ -218,6 +226,46 @@ export function buildShipmentTimeline(order) {
   }));
 }
 
+/**
+ * Buyer-facing 4-step journey mapped from payment + shipment state.
+ * Does not replace hub logistics timeline — complements it.
+ */
+export function buildBuyerJourneyTimeline(order) {
+  const paid =
+    order?.customerPaymentStatus === "confirmed" ||
+    String(order?.escrowStatus || "").toLowerCase() === "held" ||
+    String(order?.escrowStatus || "").toLowerCase() === "released";
+  const ship = getEffectiveShipmentStatus(order);
+  const delivered =
+    ship === "delivered" ||
+    order?.status === "delivered" ||
+    Boolean(order?.buyerConfirmedAt || order?.shipmentDeliveredAt || order?.deliveredAt);
+  const dispatched =
+    delivered ||
+    Boolean(order?.sellerDispatchedAt || order?.inTransitAt) ||
+    ["dropped_off", "in_transit", "at_pickup_point", "delivered"].includes(ship);
+  const processing =
+    paid &&
+    !dispatched &&
+    (["pending", "label_ready"].includes(ship) || Boolean(order?.labelUrl) || paid);
+
+  let activeId = "received";
+  if (delivered) activeId = "delivered";
+  else if (dispatched) activeId = "dispatched";
+  else if (processing) activeId = "processing";
+  else if (paid) activeId = "received";
+
+  const orderIdx = BUYER_JOURNEY_STEPS.findIndex((s) => s.id === activeId);
+  const safeIdx = Math.max(0, orderIdx);
+
+  return BUYER_JOURNEY_STEPS.map((step, i) => ({
+    status: step.id,
+    label: step.label,
+    done: i < safeIdx || (step.id === "delivered" && delivered),
+    active: i === safeIdx,
+  }));
+}
+
 export function renderShipmentTimelineText(order) {
   const steps = buildShipmentTimeline(order);
   return steps
@@ -274,6 +322,7 @@ export function buildPublicTrackingPayload(order) {
   }
 
   const shipmentSteps = buildShipmentTimeline(order);
+  const buyerJourney = buildBuyerJourneyTimeline(order);
   const orderStatus = order.status;
 
   return {
@@ -289,6 +338,7 @@ export function buildPublicTrackingPayload(order) {
     shipmentStatus: getEffectiveShipmentStatus(order),
     shipmentStatusLabel: shipmentStatusLabel(getEffectiveShipmentStatus(order)),
     shipmentTimeline: shipmentSteps,
+    buyerJourneyTimeline: buyerJourney,
     escrowStatus: order.escrowStatus || null,
     fulfillment: formatFulfillmentLine(order),
     courier: order.courierName || null,

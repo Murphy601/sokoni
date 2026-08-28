@@ -115,8 +115,13 @@
           <span class="sell-tag-hint">Where we send your money after a sale is delivered. Can be the same as WhatsApp.</span>
         </label>
         <label class="block text-sm font-medium">
-          National ID <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
+          National ID <span class="font-normal text-brand-purple/50 dark:text-white/50">(for seller vetting)</span>
           <input id="onboard-national-id" type="text" placeholder="ID number" class="sell-form-input" />
+        </label>
+        <label class="block text-sm font-medium">
+          KRA PIN <span class="font-normal text-brand-purple/50 dark:text-white/50">(for seller vetting)</span>
+          <input id="onboard-kra-pin" type="text" placeholder="e.g. A123456789X" class="sell-form-input" maxlength="20" />
+          <span class="sell-tag-hint">Admin reviews ID + KRA before marking your shop verified. You can still list while review is pending.</span>
         </label>
         <button id="onboard-btn" type="button" class="btn-whatsapp font-bold px-8 py-3 rounded-full w-full sm:w-auto hidden">Start selling</button>
         </div>
@@ -795,6 +800,48 @@
                   Save shop profile
                 </button>
                 <p id="edit-shop-status" class="text-sm text-brand-purple/60 dark:text-white/65"></p>
+              </div>
+            </form>
+          </section>
+
+          <section id="seller-payout-details" class="sell-depop-section p-5 sm:p-6 space-y-4" aria-label="Payout details">
+            <div>
+              <p class="depop-label">Money</p>
+              <h2 class="font-bold text-lg text-white mt-0.5">Payout details</h2>
+              <p class="text-sm text-zinc-400 mt-0.5">Live withdraws still go to your M-Pesa number. Bank / Till / Paybill help admin send manual payouts when needed.</p>
+            </div>
+            <form id="seller-payout-form" class="grid gap-3 md:grid-cols-2">
+              <label class="text-sm font-medium md:col-span-1">
+                M-Pesa number *
+                <input id="payout-mpesa" type="tel" class="sell-form-input mt-1" placeholder="07xx or 2547xx" inputmode="tel" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                M-Pesa Till
+                <input id="payout-till" type="text" class="sell-form-input mt-1" placeholder="Optional Till number" inputmode="numeric" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                Paybill
+                <input id="payout-paybill" type="text" class="sell-form-input mt-1" placeholder="Optional Paybill" inputmode="numeric" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                Paybill account
+                <input id="payout-paybill-account" type="text" class="sell-form-input mt-1" placeholder="Account / ref" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                Bank name
+                <input id="payout-bank-name" type="text" class="sell-form-input mt-1" placeholder="e.g. Equity" />
+              </label>
+              <label class="text-sm font-medium md:col-span-1">
+                Account name
+                <input id="payout-bank-account-name" type="text" class="sell-form-input mt-1" placeholder="As on statement" />
+              </label>
+              <label class="text-sm font-medium md:col-span-2">
+                Account number
+                <input id="payout-bank-account-number" type="text" class="sell-form-input mt-1" placeholder="Bank account number" inputmode="numeric" />
+              </label>
+              <div class="md:col-span-2 flex flex-wrap items-center gap-3">
+                <button type="submit" id="payout-save-btn" class="depop-btn-accent text-sm">Save payout details</button>
+                <p id="payout-status" class="text-sm text-zinc-500" role="status"></p>
               </div>
             </form>
           </section>

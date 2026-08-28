@@ -82,6 +82,7 @@
         <div id="cds-summary" class="rounded-2xl border border-zinc-800 bg-black/50 px-4 py-3 space-y-1 text-sm">
           <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Delivery estimate</p>
           <p id="cds-fee" class="text-zinc-300">Choose county or drop a pin to calculate delivery.</p>
+          <ul id="cds-vendor-breakdown" class="hidden space-y-1 text-xs text-zinc-400 pt-1" aria-label="Shipping by seller"></ul>
           <p id="cds-grand" class="text-white font-semibold hidden"></p>
         </div>
         <button type="button" id="cds-apply" class="depop-btn-ghost text-sm font-semibold min-h-[44px]">Apply location to order</button>
@@ -169,11 +170,46 @@
     };
   }
 
+  function renderVendorBreakdown(calc) {
+    const list = document.getElementById("cds-vendor-breakdown");
+    if (!list) return;
+    const rows = Array.isArray(calc?.vendorBreakdown) ? calc.vendorBreakdown : [];
+    if (rows.length < 2) {
+      list.classList.add("hidden");
+      list.innerHTML = "";
+      return;
+    }
+    list.classList.remove("hidden");
+    list.innerHTML = rows
+      .map((v) => {
+        const name = String(v.vendorId || v.shopHandle || "Seller").replace(/^@/, "");
+        const fee = Math.round(Number(v.shippingFee) || 0);
+        return `<li><span class="text-zinc-300">${escapeHtml(name)}</span> · shipping KES ${fee.toLocaleString()}</li>`;
+      })
+      .join("");
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   async function previewFee() {
     const feeEl = document.getElementById("cds-fee");
     const grandEl = document.getElementById("cds-grand");
     const orderId = window.SokoniCheckoutDelivery?.getOrderId?.();
-    const vendorId = window.SokoniCheckoutDelivery?.getVendorId?.() || "unknown";
+    const cartItems =
+      window.SokoniCheckoutDelivery?.getCartItems?.() ||
+      [
+        {
+          productId: "checkout",
+          vendorId: window.SokoniCheckoutDelivery?.getVendorId?.() || "unknown",
+          qty: 1,
+        },
+      ];
     const payload = locationPayload();
     if (
       (payload.deliveryMethod === "COUNTY_DROPDOWN" && !payload.buyerCounty) ||
@@ -184,10 +220,11 @@
         grandEl.classList.add("hidden");
         grandEl.textContent = "";
       }
+      renderVendorBreakdown(null);
       return { orderId, lastCalc: null };
     }
     const body = {
-      cartItems: [{ productId: "checkout", vendorId, qty: 1 }],
+      cartItems,
       ...payload,
     };
     try {
@@ -198,22 +235,27 @@
       });
       lastCalc = await res.json();
       const fee = Math.round(Number(lastCalc.totalShippingFee) || 0);
-      const tierHint = lastCalc.vendorBreakdown?.[0];
+      const vendors = lastCalc.vendorBreakdown || [];
       const place = [payload.buyerCounty, payload.buyerTown].filter(Boolean).join(" · ");
       if (feeEl) {
         feeEl.textContent =
           fee > 0
-            ? `Delivery fee${place ? ` (${place})` : ""}: KES ${fee.toLocaleString()}`
+            ? `Total delivery${place ? ` (${place})` : ""}${vendors.length > 1 ? ` · ${vendors.length} sellers` : ""}: KES ${fee.toLocaleString()}`
             : "Delivery fee: KES 0 — seller arranges (no saved rates yet).";
       }
-      if (grandEl && tierHint?.methodUsed) {
-        grandEl.textContent = `Method: ${tierHint.methodUsed.replace(/_/g, " ")}`;
+      renderVendorBreakdown(lastCalc);
+      if (grandEl && vendors[0]?.methodUsed) {
+        grandEl.textContent =
+          vendors.length > 1
+            ? "Shipping is calculated per seller and added into one M-Pesa total."
+            : `Method: ${String(vendors[0].methodUsed).replace(/_/g, " ")}`;
         grandEl.classList.remove("hidden");
       } else if (grandEl) {
         grandEl.classList.add("hidden");
       }
     } catch {
       if (feeEl) feeEl.textContent = "Shipping preview unavailable.";
+      renderVendorBreakdown(null);
     }
     return { orderId, lastCalc };
   }
@@ -251,6 +293,9 @@
           ? `Location saved. Total now ${formatKes(data.totalKes)} (shipping KES ${data.shippingKes}).`
           : "Location saved. Total unchanged — seller has not set shipping rates yet."
       );
+      if (Array.isArray(data?.calc?.vendorBreakdown) && data.calc.vendorBreakdown.length > 1) {
+        renderVendorBreakdown(data.calc);
+      }
       window.SokoniCheckoutDelivery?.onApplied?.(data);
     } catch (err) {
       setStatus(err.message || "Apply failed", true);
