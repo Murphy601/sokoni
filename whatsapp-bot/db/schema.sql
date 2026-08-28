@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS products (
   price_usd           NUMERIC(10, 2),
   source_price_kes    NUMERIC(12, 2),
   original_price_kes  NUMERIC(12, 2),
+  compare_at_price    NUMERIC(12, 2),
   retail_per_ml_kes   NUMERIC(10, 2),
   volume_ml           INT,
 

@@ -2451,7 +2451,11 @@ async function loadMyListings() {
                 ${
                   item.promoActive || item.draft?.promo?.active
                     ? `<button type="button" class="text-xs font-semibold text-amber-300 hover:underline end-promo-btn" data-id="${escapeHtml(pid)}">End promo</button>
-                       <span class="text-[10px] text-emerald-400 font-semibold self-center">Promo live${item.originalPriceKes || item.draft?.originalPriceKes ? ` · was ${formatKes(item.originalPriceKes || item.draft.originalPriceKes)}` : ""}</span>`
+                       <span class="text-[10px] text-emerald-400 font-semibold self-center">Promo live${item.originalPriceKes || item.draft?.originalPriceKes || item.compareAtPrice ? ` · was ${formatKes(item.originalPriceKes || item.draft?.originalPriceKes || item.compareAtPrice)}` : ""}</span>`
+                    : Number(item.compareAtPrice || item.originalPriceKes || item.draft?.compareAtPrice || item.draft?.originalPriceKes) >
+                        Number(price || 0)
+                      ? `<span class="text-[10px] text-emerald-400 font-semibold self-center">Sale price · was ${formatKes(item.compareAtPrice || item.originalPriceKes || item.draft?.compareAtPrice || item.draft?.originalPriceKes)}</span>
+                         <button type="button" class="text-xs font-semibold text-emerald-300 hover:underline set-promo-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">% Set promo</button>`
                     : `<button type="button" class="text-xs font-semibold text-emerald-300 hover:underline set-promo-btn" data-id="${escapeHtml(pid)}" data-seller-net="${escapeHtml(String(item.draft?.sellerNetKes ?? item.draft?.sourcePriceKes ?? ""))}" data-buyer-total="${escapeHtml(String(price ?? ""))}">% Set promo</button>`
                 }
                 <a href="https://wa.me/?text=${encodeURIComponent(`🛍️ ${item.draft?.name || pid} — ${formatKes(price)}\n${shareUrl}`)}" target="_blank" rel="noopener" class="text-xs font-semibold text-[#FF2300] hover:underline">Share to WhatsApp</a>
@@ -2464,26 +2468,7 @@ async function loadMyListings() {
     wrap.querySelectorAll(".refresh-listing-btn").forEach((btn) => {
       btn.addEventListener("click", () => refreshListing(btn.dataset.id));
     });
-    wrap.querySelectorAll(".drop-price-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        void updateListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "drop");
-      });
-    });
-    wrap.querySelectorAll(".raise-price-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        void updateListingPrice(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal, "raise");
-      });
-    });
-    wrap.querySelectorAll(".set-promo-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        void setListingPromo(btn.dataset.id, btn.dataset.sellerNet, btn.dataset.buyerTotal);
-      });
-    });
-    wrap.querySelectorAll(".end-promo-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        void endListingPromo(btn.dataset.id);
-      });
-    });
+    // Promo / price / end-promo: delegated in bindListingActionClicks() so reloads can't drop handlers.
     wrap.querySelectorAll(".continue-draft-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const item = draftById.get(String(btn.dataset.id || ""));
@@ -2498,6 +2483,48 @@ async function loadMyListings() {
   } catch {
     wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Network error.</p>`;
   }
+}
+
+/** One document-level listener — survives My listings innerHTML reloads. */
+function bindListingActionClicks() {
+  if (window.__sokoniListingActionsBound) return;
+  window.__sokoniListingActionsBound = true;
+  document.addEventListener(
+    "click",
+    (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== "function") return;
+      const promoBtn = t.closest(".set-promo-btn");
+      if (promoBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openItemPromoPanel(promoBtn.dataset.id, promoBtn.dataset.sellerNet, promoBtn.dataset.buyerTotal);
+        return;
+      }
+      const endBtn = t.closest(".end-promo-btn");
+      if (endBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        void endListingPromo(endBtn.dataset.id);
+        return;
+      }
+      const dropBtn = t.closest(".drop-price-btn");
+      if (dropBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openListingPricePanel(dropBtn.dataset.id, dropBtn.dataset.sellerNet, dropBtn.dataset.buyerTotal, "drop");
+        return;
+      }
+      const raiseBtn = t.closest(".raise-price-btn");
+      if (raiseBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openListingPricePanel(raiseBtn.dataset.id, raiseBtn.dataset.sellerNet, raiseBtn.dataset.buyerTotal, "raise");
+        return;
+      }
+    },
+    true
+  );
 }
 
 function showSellerProfile(profile, opts = {}) {
@@ -3401,40 +3428,270 @@ async function refreshListing(productId) {
   }
 }
 
-async function updateListingPrice(productId, currentSellerNet, currentBuyerTotal, mode = "drop") {
+/** Promo / price editors — fixed modal on body (survives My listings reloads). */
+let pendingItemPromo = null;
+let pendingListingPrice = null;
+
+const LISTING_EDITOR_MODAL_ID = "sokoni-listing-editor-modal";
+
+function getListingEditorModal() {
+  return document.getElementById(LISTING_EDITOR_MODAL_ID);
+}
+
+function clearListingInlineEditors() {
+  document.querySelectorAll(".listing-inline-editor").forEach((node) => node.remove());
+  el("item-promo-panel")?.classList.add("hidden");
+  el("item-promo-panel")?.setAttribute("hidden", "");
+  const modal = getListingEditorModal();
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.setAttribute("hidden", "");
+    modal.setAttribute("aria-hidden", "true");
+    const body = modal.querySelector("[data-listing-editor-body]");
+    if (body) body.innerHTML = "";
+  }
+}
+
+function ensureListingsHubVisible() {
+  try {
+    if (currentSellerView === "listings") {
+      el("hub-panel-listings")?.classList.remove("hidden");
+      el("view-dashboard")?.classList.remove("hidden");
+      return;
+    }
+    showSellerView("listings", { skipDataReload: true });
+  } catch (err) {
+    console.warn("[seller-hub] ensureListingsHubVisible:", err);
+  }
+}
+
+function ensureListingEditorModal() {
+  let modal = getListingEditorModal();
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = LISTING_EDITOR_MODAL_ID;
+  modal.className = "sokoni-listing-editor-modal hidden";
+  modal.setAttribute("hidden", "");
+  modal.setAttribute("aria-hidden", "true");
+  modal.innerHTML = `
+    <div class="sokoni-listing-editor-modal__backdrop" data-listing-editor-dismiss="1"></div>
+    <div class="sokoni-listing-editor-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="sokoni-listing-editor-title">
+      <div data-listing-editor-body class="sokoni-listing-editor-modal__body"></div>
+    </div>
+  `;
+  modal.addEventListener("click", (e) => {
+    if (e.target?.closest?.("[data-listing-editor-dismiss]")) {
+      closeItemPromoPanel();
+    }
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function showListingEditorModal(html, { title, onMount }) {
+  const modal = ensureListingEditorModal();
+  const body = modal.querySelector("[data-listing-editor-body]");
+  if (!body) return null;
+  body.innerHTML = html;
+  const titleEl = body.querySelector("#sokoni-listing-editor-title");
+  if (titleEl && title) titleEl.textContent = title;
+  modal.classList.remove("hidden");
+  modal.removeAttribute("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("sokoni-listing-editor-open");
+  if (typeof onMount === "function") onMount(body, modal);
+  window.requestAnimationFrame(() => {
+    body.querySelector("input, select, button")?.focus?.();
+  });
+  return body;
+}
+
+function closeItemPromoPanel() {
+  pendingItemPromo = null;
+  pendingListingPrice = null;
+  clearListingInlineEditors();
+  document.body.classList.remove("sokoni-listing-editor-open");
+  if (el("item-promo-status")) el("item-promo-status").textContent = "";
+}
+
+function openItemPromoPanel(productId, currentSellerNet, currentBuyerTotal) {
+  try {
+    const id = String(productId || "").trim();
+    if (!id) {
+      setStatus("Missing listing id for promo.", true);
+      return;
+    }
+    const currentNet = Math.round(Number(currentSellerNet) || 0);
+    const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+    pendingItemPromo = { productId: id, currentNet, currentBuyer };
+    pendingListingPrice = null;
+    ensureListingsHubVisible();
+
+    const html = `
+      <div class="listing-inline-editor listing-inline-editor--promo space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <h2 id="sokoni-listing-editor-title" class="font-bold text-lg text-white">Item promo</h2>
+          <button type="button" data-promo-cancel class="depop-btn-ghost min-h-[44px] px-3 text-sm font-semibold" aria-label="Close">✕</button>
+        </div>
+        <p class="text-sm text-zinc-300">Applies only to <strong class="text-white">${escapeHtml(id)}</strong>. Other listings keep their price.</p>
+        <p class="text-xs text-zinc-400">${
+          currentNet
+            ? `You receive KES ${currentNet.toLocaleString()}${
+                currentBuyer ? ` · buyer pays ${formatKes(currentBuyer)}` : ""
+              }. Promo must be lower.`
+            : "Promo lowers what you receive; buyer STK follows."
+        }</p>
+        <label class="block text-sm font-medium text-zinc-300">Promo type
+          <select data-promo-type class="sell-form-input mt-1 w-full">
+            <option value="percent" selected>Percent off what you receive</option>
+            <option value="kes_off">KES off what you receive</option>
+            <option value="sale_net">Set promo amount you receive (KES)</option>
+          </select>
+        </label>
+        <label class="block text-sm font-medium text-zinc-300">Value
+          <input data-promo-value type="number" min="1" step="1" class="sell-form-input mt-1 w-full" value="15" inputmode="decimal" />
+        </label>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="button" data-promo-save class="depop-btn-accent min-h-[48px] px-4 text-sm font-semibold flex-1">Start promo on this item</button>
+          <button type="button" data-promo-cancel class="depop-btn-ghost min-h-[48px] px-4 text-sm font-semibold">Cancel</button>
+        </div>
+        <p data-promo-status class="text-sm text-zinc-400" role="status"></p>
+      </div>
+    `;
+    showListingEditorModal(html, {
+      onMount(root) {
+        root.querySelectorAll("[data-promo-save]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void submitItemPromo(root);
+          });
+        });
+        root.querySelectorAll("[data-promo-cancel]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeItemPromoPanel();
+          });
+        });
+      },
+    });
+    setStatus(`Promo editor open for ${id}.`);
+  } catch (err) {
+    console.error("[seller-hub] openItemPromoPanel failed:", err);
+    setStatus("Could not open promo editor — refresh and try again.", true);
+  }
+}
+
+function openListingPricePanel(productId, currentSellerNet, currentBuyerTotal, mode = "drop") {
+  try {
+    const id = String(productId || "").trim();
+    if (!id) {
+      setStatus("Missing listing id.", true);
+      return;
+    }
+    const currentNet = Math.round(Number(currentSellerNet) || 0);
+    const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
+    const raising = mode === "raise";
+    pendingListingPrice = { productId: id, currentNet, currentBuyer, mode: raising ? "raise" : "drop" };
+    pendingItemPromo = null;
+    ensureListingsHubVisible();
+
+    const defaultVal =
+      currentNet > 0 ? String(raising ? currentNet + 100 : Math.max(50, currentNet - 100)) : "";
+    const html = `
+      <div class="listing-inline-editor listing-inline-editor--price space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <h2 id="sokoni-listing-editor-title" class="font-bold text-lg text-white">${raising ? "Raise price" : "Drop price"}</h2>
+          <button type="button" data-price-cancel class="depop-btn-ghost min-h-[44px] px-3 text-sm font-semibold" aria-label="Close">✕</button>
+        </div>
+        <p class="text-sm text-zinc-300">${escapeHtml(id)}</p>
+        <p class="text-xs text-zinc-400">${
+          currentNet
+            ? `Now: you receive KES ${currentNet.toLocaleString()}${
+                currentBuyer ? ` · buyer pays ${formatKes(currentBuyer)}` : ""
+              }.${raising ? " Raising clears was-price / % OFF." : " Dropping shows was-price + % OFF on the mall."}`
+            : "Enter the new amount you want to receive (KES)."
+        }</p>
+        <label class="block text-sm font-medium text-zinc-300">New amount you receive (KES)
+          <input data-price-net type="number" min="50" step="1" class="sell-form-input mt-1 w-full" value="${escapeHtml(defaultVal)}" inputmode="numeric" />
+        </label>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="button" data-price-save class="depop-btn-accent min-h-[48px] px-4 text-sm font-semibold flex-1">${raising ? "Raise price" : "Drop price"}</button>
+          <button type="button" data-price-cancel class="depop-btn-ghost min-h-[48px] px-4 text-sm font-semibold">Cancel</button>
+        </div>
+        <p data-price-status class="text-sm text-zinc-400" role="status"></p>
+      </div>
+    `;
+    showListingEditorModal(html, {
+      onMount(root) {
+        root.querySelectorAll("[data-price-save]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void submitListingPrice(root);
+          });
+        });
+        root.querySelectorAll("[data-price-cancel]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeItemPromoPanel();
+          });
+        });
+      },
+    });
+  } catch (err) {
+    console.error("[seller-hub] openListingPricePanel failed:", err);
+    setStatus("Could not open price editor — refresh and try again.", true);
+  }
+}
+
+async function submitListingPrice(editor) {
   const phone = apiPhone();
-  if (!phone || !productId) return;
-  const currentNet = Math.round(Number(currentSellerNet) || 0);
-  const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
-  const raising = mode === "raise";
-  const actionLabel = raising ? "raise" : "drop";
-  const hint =
-    currentNet > 0
-      ? `Current: you receive KES ${currentNet.toLocaleString()}${
-          currentBuyer > 0 ? ` (buyer pays KES ${currentBuyer.toLocaleString()})` : ""
-        }.\n\nNew amount you want to receive (KES) — ${actionLabel} price:`
-      : `New amount you want to receive (KES) — ${actionLabel} price:`;
-  const defaultVal =
-    currentNet > 0 ? String(raising ? currentNet + 100 : Math.max(50, currentNet - 100)) : "";
-  const raw = window.prompt(hint, defaultVal);
-  if (raw == null) return;
-  const nextNet = Math.round(Number(String(raw).replace(/[^\d.]/g, "")));
+  const productId = pendingListingPrice?.productId;
+  const currentNet = Math.round(Number(pendingListingPrice?.currentNet) || 0);
+  const raising = pendingListingPrice?.mode === "raise";
+  const status =
+    editor?.querySelector?.("[data-price-status]") ||
+    getListingEditorModal()?.querySelector("[data-price-status]") ||
+    null;
+  if (!phone || !productId) {
+    if (status) status.textContent = "Pick a listing first.";
+    return;
+  }
+  const nextNet = Math.round(
+    Number(
+      String(
+        editor?.querySelector?.("[data-price-net]")?.value ||
+          getListingEditorModal()?.querySelector("[data-price-net]")?.value ||
+          ""
+      ).replace(/[^\d.]/g, "")
+    )
+  );
   if (!Number.isFinite(nextNet) || nextNet < 50) {
+    if (status) status.textContent = "Enter a valid price you receive (minimum KES 50).";
     setStatus("Enter a valid price you receive (minimum KES 50).", true);
     return;
   }
   if (currentNet > 0 && nextNet === currentNet) {
+    if (status) status.textContent = "Price unchanged.";
     setStatus("Price unchanged.");
     return;
   }
   if (raising && currentNet > 0 && nextNet < currentNet) {
-    setStatus("Raise price needs a higher amount than the current price. Use Drop price to go lower.", true);
+    const msg = "Raise price needs a higher amount. Use Drop price to go lower.";
+    if (status) status.textContent = msg;
+    setStatus(msg, true);
     return;
   }
   if (!raising && currentNet > 0 && nextNet > currentNet) {
-    setStatus("Drop price needs a lower amount than the current price. Use Raise price to go higher.", true);
+    const msg = "Drop price needs a lower amount. Use Raise price to go higher.";
+    if (status) status.textContent = msg;
+    setStatus(msg, true);
     return;
   }
+  if (status) status.textContent = raising ? "Raising price…" : "Dropping price…";
   setStatus(raising ? "Raising price…" : "Dropping price…");
   try {
     const res = await fetch(`${ONBOARD_API}/price`, {
@@ -3444,18 +3701,32 @@ async function updateListingPrice(productId, currentSellerNet, currentBuyerTotal
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      handleSessionExpired(data);
+      const msg =
+        data.message ||
+        "Could not update price — verify WhatsApp if needed. Hub stays open.";
+      if (status) status.textContent = msg;
+      softSessionStatus(msg);
       return;
     }
     if (!res.ok) {
-      setStatus(data.message || data.error || "Price update failed.", true);
+      const msg = data.message || data.error || "Price update failed.";
+      if (status) status.textContent = msg;
+      setStatus(msg, true);
       return;
     }
-    setStatus(data.message || (raising ? "Price raised." : "Price dropped."));
+    const okMsg = data.message || (raising ? "Price raised." : "Price dropped.");
+    if (status) status.textContent = okMsg;
+    setStatus(okMsg);
+    closeItemPromoPanel();
     await loadMyListings();
   } catch {
+    if (status) status.textContent = "Network error.";
     setStatus("Network error.", true);
   }
+}
+
+async function updateListingPrice(productId, currentSellerNet, currentBuyerTotal, mode = "drop") {
+  openListingPricePanel(productId, currentSellerNet, currentBuyerTotal, mode);
 }
 
 /** @deprecated use updateListingPrice(..., "drop") */
@@ -3463,57 +3734,39 @@ async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) 
   return updateListingPrice(productId, currentSellerNet, currentBuyerTotal, "drop");
 }
 
-/** Pending per-item promo editor (no window.prompt — prompts caused phone blur → logout). */
-let pendingItemPromo = null;
-
-function closeItemPromoPanel() {
-  pendingItemPromo = null;
-  el("item-promo-panel")?.classList.add("hidden");
-  if (el("item-promo-status")) el("item-promo-status").textContent = "";
-}
-
-function openItemPromoPanel(productId, currentSellerNet, currentBuyerTotal) {
-  const currentNet = Math.round(Number(currentSellerNet) || 0);
-  const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
-  pendingItemPromo = { productId, currentNet, currentBuyer };
-  const panel = el("item-promo-panel");
-  const target = el("item-promo-target");
-  const typeSelect = el("item-promo-type");
-  const valueInput = el("item-promo-value");
-  if (target) {
-    target.textContent =
-      `This promo applies only to ${productId}. Other listings keep their list price.` +
-      (currentNet
-        ? ` You currently receive KES ${currentNet.toLocaleString()}${
-            currentBuyer ? ` (buyer pays ${formatKes(currentBuyer)})` : ""
-          }.`
-        : "");
-  }
-  if (typeSelect) typeSelect.value = "percent";
-  if (valueInput) valueInput.value = "15";
-  if (el("item-promo-status")) el("item-promo-status").textContent = "";
-  panel?.classList.remove("hidden");
-  showSellerView("listings");
-  panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
-
-async function submitItemPromo() {
+async function submitItemPromo(editor) {
   const phone = apiPhone();
   const productId = pendingItemPromo?.productId;
+  const root =
+    editor ||
+    getListingEditorModal()?.querySelector(".listing-inline-editor--promo") ||
+    document.querySelector(".listing-inline-editor--promo");
+  const status =
+    root?.querySelector?.("[data-promo-status]") || el("item-promo-status");
   if (!phone || !productId) {
-    if (el("item-promo-status")) {
-      el("item-promo-status").textContent = "Pick a listing with % Set promo first.";
-    }
+    if (status) status.textContent = "Pick a listing with % Set promo first.";
     return;
   }
-  const type = String(el("item-promo-type")?.value || "percent").trim().toLowerCase() || "percent";
-  const value = Number(String(el("item-promo-value")?.value || "").replace(/[^\d.]/g, ""));
+  const type =
+    String(
+      root?.querySelector?.("[data-promo-type]")?.value ||
+        el("item-promo-type")?.value ||
+        "percent"
+    )
+      .trim()
+      .toLowerCase() || "percent";
+  const value = Number(
+    String(
+      root?.querySelector?.("[data-promo-value]")?.value ||
+        el("item-promo-value")?.value ||
+        ""
+    ).replace(/[^\d.]/g, "")
+  );
   if (!Number.isFinite(value) || value <= 0) {
-    if (el("item-promo-status")) el("item-promo-status").textContent = "Enter a valid promo value.";
+    if (status) status.textContent = "Enter a valid promo value.";
     setStatus("Enter a valid promo value.", true);
     return;
   }
-  const status = el("item-promo-status");
   if (status) status.textContent = "Starting promo on this item only…";
   setStatus("Starting promo…");
   try {
@@ -7284,32 +7537,34 @@ function showSellerView(view, opts = {}) {
   syncSellerHubNavActive(view, anchor);
 
   if (showDash) {
-    loadSellerOrders();
-    loadSellerOffers();
-    loadEscrowLedger();
-    loadMyListings();
-    void loadSellerBuyerReviews();
-    void loadSellerDisputes();
-    if (view === "grow" || view === "overview") {
-      void loadSellerActivity();
-      renderHubTrendingCarousel();
-      renderHubGuidesCarousel();
-      renderSellerHubOverview();
-    }
-    if (view === "logistics") {
-      renderHubLogistics();
-      try {
-        window.SokoniVendorShippingManager?.init?.();
-      } catch {
-        /* fail-soft */
+    if (!opts.skipDataReload) {
+      loadSellerOrders();
+      loadSellerOffers();
+      loadEscrowLedger();
+      loadMyListings();
+      void loadSellerBuyerReviews();
+      void loadSellerDisputes();
+      if (view === "grow" || view === "overview") {
+        void loadSellerActivity();
+        renderHubTrendingCarousel();
+        renderHubGuidesCarousel();
+        renderSellerHubOverview();
       }
+      if (view === "logistics") {
+        renderHubLogistics();
+        try {
+          window.SokoniVendorShippingManager?.init?.();
+        } catch {
+          /* fail-soft */
+        }
+      }
+      if (view === "stock") renderHubStockAlerts();
+      if (view === "marketing") renderHubMarketing();
+      refreshSellerAnalytics();
     }
-    if (view === "stock") renderHubStockAlerts();
-    if (view === "marketing") renderHubMarketing();
     startSellerOffersPolling();
     startSellerBalancePolling();
     ensureReminderCooldownTicker();
-    refreshSellerAnalytics();
   } else if (showWithdraw) {
     stopSellerOffersPolling();
     stopReminderCooldownTicker();
@@ -7467,8 +7722,17 @@ function init() {
     }
     savePhone();
   });
-  el("item-promo-save-btn")?.addEventListener("click", () => void submitItemPromo());
+  el("item-promo-save-btn")?.addEventListener("click", () => void submitItemPromo(el("item-promo-panel")));
   el("item-promo-cancel-btn")?.addEventListener("click", () => closeItemPromoPanel());
+  bindListingActionClicks();
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && getListingEditorModal() && !getListingEditorModal().classList.contains("hidden")) {
+      closeItemPromoPanel();
+    }
+  });
+  // Debug / emergency: window.SokoniOpenPromo("SKN-…", sellerNet, buyerTotal)
+  window.SokoniOpenPromo = openItemPromoPanel;
+  window.SokoniClosePromo = closeItemPromoPanel;
   el("draft-price")?.addEventListener("input", onListingPriceInput);
   el("media-price")?.addEventListener("input", onListingPriceInput);
   el("photo-caption")?.addEventListener("change", () => {

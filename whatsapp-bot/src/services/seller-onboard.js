@@ -597,7 +597,12 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
           message: gate.message || "Sold listings cannot be repriced onto the live grid.",
         };
       }
-      products[idx] = preserveSoldState(current, {
+      const comparePatch = applyCompareAtOnBuyerPriceChange(
+        current,
+        oldBuyerTotal ?? Math.round(Number(current.priceKes) || 0),
+        fees.buyerTotalKes
+      );
+      const nextRow = {
         ...current,
         sellerNetKes: fees.sellerNetKes,
         sourcePriceKes: fees.sellerNetKes,
@@ -610,7 +615,19 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
         publishedAt: Date.now(),
         refreshedAt: Date.now(),
         priceUpdatedAt: Date.now(),
-      });
+        ...comparePatch,
+      };
+      if (Object.prototype.hasOwnProperty.call(comparePatch, "originalPriceKes") && comparePatch.originalPriceKes == null) {
+        delete nextRow.originalPriceKes;
+        delete nextRow.compareAtPrice;
+      }
+      products[idx] = preserveSoldState(current, nextRow);
+      if (products[idx].originalPriceKes == null) {
+        delete products[idx].originalPriceKes;
+      }
+      if (products[idx].compareAtPrice == null) {
+        delete products[idx].compareAtPrice;
+      }
       await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
       updated = products[idx];
     } catch (err) {
@@ -624,44 +641,7 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
 
   const newBuyerTotal = Math.round(Number(updated.priceKes) || 0);
 
-  try {
-    const { isDbEnabled, query } = await import("../db/pool.js");
-    const { upsertCatalogProduct } = await import("../db/repositories/products.js");
-    if (isDbEnabled()) {
-      await upsertCatalogProduct(updated);
-      // Ensure ranking bump even if upsert path is partial.
-      await query(
-        `UPDATE products
-            SET price_kes = $2,
-                source_price_kes = $3,
-                shipping_kes = $4,
-                updated_at = NOW(),
-                legacy_json = CASE
-                  WHEN legacy_json IS NULL THEN jsonb_build_object(
-                    'sellerNetKes', $3::int,
-                    'priceKes', $2::int,
-                    'refreshedAt', $5::bigint,
-                    'priceUpdatedAt', $5::bigint
-                  )
-                  ELSE legacy_json
-                       || jsonb_build_object('sellerNetKes', $3::int)
-                       || jsonb_build_object('priceKes', $2::int)
-                       || jsonb_build_object('refreshedAt', $5::bigint)
-                       || jsonb_build_object('priceUpdatedAt', $5::bigint)
-                END
-          WHERE id = $1`,
-        [
-          productId,
-          newBuyerTotal,
-          Math.round(Number(updated.sellerNetKes) || nextNet),
-          Math.round(Number(updated.shippingKes) || 0),
-          Number(updated.priceUpdatedAt || Date.now()),
-        ]
-      );
-    }
-  } catch (err) {
-    console.warn("[seller-onboard] DB price update skipped:", err.message);
-  }
+  await syncListingPriceToDb(updated);
 
   try {
     const { execSync } = await import("node:child_process");
@@ -718,6 +698,44 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
         ? `Price raised — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`
         : `Price updated — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`,
   };
+}
+
+/**
+ * Apply compare-at / original price rules for buyer-facing strike-through + % OFF.
+ * - Price drop: set compare_at to the prior buyer total (keep higher existing compare).
+ * - Price raise: clear compare_at so badges never show on a raise.
+ * - Unchanged: leave compare fields alone.
+ */
+function applyCompareAtOnBuyerPriceChange(current, oldBuyerTotal, newBuyerTotal) {
+  const oldPrice = Math.round(Number(oldBuyerTotal) || 0);
+  const newPrice = Math.round(Number(newBuyerTotal) || 0);
+  const prevCompareRaw = current?.compareAtPrice ?? current?.originalPriceKes;
+  const prevCompare =
+    prevCompareRaw != null && Number.isFinite(Number(prevCompareRaw))
+      ? Math.round(Number(prevCompareRaw))
+      : 0;
+
+  if (oldPrice > 0 && newPrice > 0 && newPrice < oldPrice) {
+    const compareAt = Math.max(prevCompare || 0, oldPrice);
+    return {
+      originalPriceKes: compareAt,
+      compareAtPrice: compareAt,
+    };
+  }
+
+  if (oldPrice > 0 && newPrice > oldPrice) {
+    const patch = {
+      originalPriceKes: null,
+      compareAtPrice: null,
+    };
+    if (current?.promo && typeof current.promo === "object" && current.promo.active) {
+      patch.promo = { ...current.promo, active: false, endedAt: Date.now() };
+      patch.promoUpdatedAt = Date.now();
+    }
+    return patch;
+  }
+
+  return {};
 }
 
 function resolvePromoSellerNet(listNet, type, value) {
@@ -829,6 +847,7 @@ export async function setSellerListingPromo({
         shippingKes: fees.shippingKes,
         freeShipping: Boolean(fees.freeShipping),
         originalPriceKes: promo.listPriceKes,
+        compareAtPrice: promo.listPriceKes,
         promo,
         publishedAt: Date.now(),
         refreshedAt: Date.now(),
@@ -920,6 +939,7 @@ export async function endSellerListingPromo({ phone, productId, sessionToken }) 
         shippingKes: fees.shippingKes,
         freeShipping: Boolean(fees.freeShipping),
         originalPriceKes: undefined,
+        compareAtPrice: undefined,
         promo: {
           ...existingPromo,
           active: false,
@@ -932,6 +952,7 @@ export async function endSellerListingPromo({ phone, productId, sessionToken }) 
       });
       // Drop undefined originalPriceKes from JSON
       delete products[idx].originalPriceKes;
+      delete products[idx].compareAtPrice;
       await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
       updated = products[idx];
     } catch (err) {
@@ -973,12 +994,20 @@ async function syncListingPriceToDb(updated) {
     if (!isDbEnabled()) return;
     await upsertCatalogProduct(updated);
     const promo = updated.promo && typeof updated.promo === "object" ? updated.promo : null;
+    const compareAt =
+      updated.compareAtPrice != null
+        ? Math.round(Number(updated.compareAtPrice))
+        : updated.originalPriceKes != null
+          ? Math.round(Number(updated.originalPriceKes))
+          : null;
+    const compareAtOrNull = Number.isFinite(compareAt) && compareAt > 0 ? compareAt : null;
     await query(
       `UPDATE products
           SET price_kes = $2,
               source_price_kes = $3,
               shipping_kes = $4,
               original_price_kes = $5,
+              compare_at_price = $5,
               updated_at = NOW(),
               legacy_json = CASE
                 WHEN legacy_json IS NULL THEN $6::jsonb
@@ -990,13 +1019,14 @@ async function syncListingPriceToDb(updated) {
         Math.round(Number(updated.priceKes) || 0),
         Math.round(Number(updated.sellerNetKes) || 0),
         Math.round(Number(updated.shippingKes) || 0),
-        updated.originalPriceKes != null ? Math.round(Number(updated.originalPriceKes)) : null,
+        compareAtOrNull,
         JSON.stringify({
           sellerNetKes: Math.round(Number(updated.sellerNetKes) || 0),
           priceKes: Math.round(Number(updated.priceKes) || 0),
           platformFeeKes: Math.round(Number(updated.platformFeeKes) || 0),
           transactionFeeKes: Math.round(Number(updated.transactionFeeKes) || 0),
-          originalPriceKes: updated.originalPriceKes != null ? Math.round(Number(updated.originalPriceKes)) : null,
+          originalPriceKes: compareAtOrNull,
+          compareAtPrice: compareAtOrNull,
           promo: promo,
           refreshedAt: Number(updated.refreshedAt || Date.now()),
           priceUpdatedAt: Number(updated.priceUpdatedAt || Date.now()),
@@ -1005,7 +1035,52 @@ async function syncListingPriceToDb(updated) {
       ]
     );
   } catch (err) {
-    console.warn("[seller-onboard] DB promo sync skipped:", err.message);
+    // compare_at_price may be missing until migration — retry without it
+    if (String(err.message || "").includes("compare_at_price")) {
+      try {
+        const { isDbEnabled, query } = await import("../db/pool.js");
+        const { upsertCatalogProduct } = await import("../db/repositories/products.js");
+        if (!isDbEnabled()) return;
+        await upsertCatalogProduct(updated);
+        const promo = updated.promo && typeof updated.promo === "object" ? updated.promo : null;
+        const compareAtOrNull =
+          updated.originalPriceKes != null ? Math.round(Number(updated.originalPriceKes)) : null;
+        await query(
+          `UPDATE products
+              SET price_kes = $2,
+                  source_price_kes = $3,
+                  shipping_kes = $4,
+                  original_price_kes = $5,
+                  updated_at = NOW(),
+                  legacy_json = CASE
+                    WHEN legacy_json IS NULL THEN $6::jsonb
+                    ELSE legacy_json || $6::jsonb
+                  END
+            WHERE id = $1`,
+          [
+            updated.id,
+            Math.round(Number(updated.priceKes) || 0),
+            Math.round(Number(updated.sellerNetKes) || 0),
+            Math.round(Number(updated.shippingKes) || 0),
+            compareAtOrNull,
+            JSON.stringify({
+              sellerNetKes: Math.round(Number(updated.sellerNetKes) || 0),
+              priceKes: Math.round(Number(updated.priceKes) || 0),
+              originalPriceKes: compareAtOrNull,
+              compareAtPrice: compareAtOrNull,
+              promo,
+              refreshedAt: Number(updated.refreshedAt || Date.now()),
+              priceUpdatedAt: Number(updated.priceUpdatedAt || Date.now()),
+            }),
+          ]
+        );
+        return;
+      } catch (err2) {
+        console.warn("[seller-onboard] DB listing price sync skipped:", err2.message);
+        return;
+      }
+    }
+    console.warn("[seller-onboard] DB listing price sync skipped:", err.message);
   }
 }
 

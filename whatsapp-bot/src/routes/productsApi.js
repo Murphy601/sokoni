@@ -72,6 +72,7 @@ function toPublicProduct(p) {
     priceKes: totals.totalKes,
     priceUsd: p.priceUsd,
     originalPriceKes: promoFields.originalPriceKes,
+    compareAtPrice: promoFields.compareAtPrice,
     onPromo: promoFields.onPromo || undefined,
     discountPct: promoFields.discountPct || undefined,
     promo: promoFields.promo,

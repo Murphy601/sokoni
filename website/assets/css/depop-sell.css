@@ -2096,3 +2096,51 @@ body.sell-depop-page #listing-wizard:not(.hidden) #seller-profile-bar {
   max-width: 100%;
   line-height: 1.25;
 }
+
+/* Fixed promo / price editor — always on top, survives My listings reloads */
+.sokoni-listing-editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+.sokoni-listing-editor-modal.hidden,
+.sokoni-listing-editor-modal[hidden] {
+  display: none !important;
+}
+.sokoni-listing-editor-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+.sokoni-listing-editor-modal__sheet {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 28rem;
+  max-height: min(92vh, 40rem);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 auto;
+  border-radius: 1.25rem 1.25rem 0 0;
+  border: 1px solid #27272a;
+  background: #09090b;
+  padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
+}
+@media (min-width: 640px) {
+  .sokoni-listing-editor-modal {
+    align-items: center;
+    padding: 1.5rem;
+  }
+  .sokoni-listing-editor-modal__sheet {
+    border-radius: 1.25rem;
+    margin: auto;
+  }
+}
+body.sokoni-listing-editor-open {
+  overflow: hidden;
+}
