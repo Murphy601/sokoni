@@ -238,9 +238,16 @@ if [ -f "$ENV_FILE" ]; then
       GROQ_API_KEY="${GROQ_API_KEY:-}" SOKONI_GROQ_API_KEY="${SOKONI_GROQ_API_KEY:-}" \
       bash "$REPO/scripts/set-groq-env.sh" || echo "WARN: set-groq-env.sh failed"
   elif [ -n "$(env_get "$ENV_FILE" GROQ_API_KEY)" ]; then
-    set_env_kv "$ENV_FILE" "AI_CHAT_PROVIDER" "$(env_get "$ENV_FILE" AI_CHAT_PROVIDER || echo auto)"
-    set_env_kv "$ENV_FILE" "AI_CHAT_TEMPERATURE" "$(env_get "$ENV_FILE" AI_CHAT_TEMPERATURE || echo 0.15)"
-    echo "==> Groq chat: GROQ_API_KEY present ($(env_get "$ENV_FILE" GROQ_API_KEY | wc -c) chars) — auto routes Groq→OpenRouter"
+    CURRENT_AI_PROV="$(env_get "$ENV_FILE" AI_CHAT_PROVIDER)"
+    CURRENT_AI_TEMP="$(env_get "$ENV_FILE" AI_CHAT_TEMPERATURE)"
+    CURRENT_GROQ_MODEL="$(env_get "$ENV_FILE" GROQ_MODEL)"
+    set_env_kv "$ENV_FILE" "AI_CHAT_PROVIDER" "${CURRENT_AI_PROV:-auto}"
+    set_env_kv "$ENV_FILE" "AI_CHAT_TEMPERATURE" "${CURRENT_AI_TEMP:-0.15}"
+    if [ -z "$CURRENT_GROQ_MODEL" ] || [ "$CURRENT_GROQ_MODEL" = "llama-3.1-8b-instant" ] || [ "$CURRENT_GROQ_MODEL" = "llama-3.3-70b-versatile" ]; then
+      set_env_kv "$ENV_FILE" "GROQ_MODEL" "openai/gpt-oss-20b"
+      echo "==> Migrated GROQ_MODEL → openai/gpt-oss-20b (retired Llama IDs)"
+    fi
+    echo "==> Groq chat: GROQ_API_KEY present — auto routes Groq→OpenRouter"
   else
     echo "==> Groq chat: GROQ_API_KEY unset — using OpenRouter only. On VM: export GROQ_API_KEY=… && bash scripts/set-groq-env.sh"
   fi

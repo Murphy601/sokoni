@@ -54,10 +54,27 @@ const meta = llmRouterMeta();
 assert(meta.avoid?.includes("ollama_local_cpu_queue"), "documents avoid ollama");
 assert(Array.isArray(meta.providers), "providers listed");
 assert(typeof meta.temperature === "number", "temperature in meta");
+assert(
+  !meta.note?.toLowerCase().includes("prefer groq_api_key or gemini"),
+  "meta should not push Gemini as default chat path"
+);
 
 // Provider chain builds without throwing (may be empty without keys)
 const chain = buildChatProviderChain();
 assert(Array.isArray(chain), "provider chain is array");
+assert(
+  !chain.some((p) => p.name === "gemini"),
+  "Gemini must stay out of chat chain unless AI_CHAT_USE_GEMINI / provider=gemini"
+);
+
+// Default Groq model ID must not be the retired Llama instant
+const routerSrc = readFileSync(path.join(root, "whatsapp-bot/src/services/llm-router.js"), "utf8");
+assert(routerSrc.includes("openai/gpt-oss-20b"), "router defaults to gpt-oss-20b");
+assert(!routerSrc.includes('llama-3.1-8b-instant"'), "router must not default to retired llama");
+
+const configSrc = readFileSync(path.join(root, "whatsapp-bot/src/config.js"), "utf8");
+assert(configSrc.includes('GROQ_MODEL || "openai/gpt-oss-20b"'), "config default gpt-oss-20b");
+assert(configSrc.includes("useGemini"), "config exposes Gemini chat opt-in");
 
 // File markers
 const agent = readFileSync(path.join(root, "whatsapp-bot/src/services/ai-agent.js"), "utf8");

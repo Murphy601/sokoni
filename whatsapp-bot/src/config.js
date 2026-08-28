@@ -40,21 +40,33 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
-  /** Fast chat: Groq Cloud (Llama 3.1 8B) — set GROQ_API_KEY for production WhatsApp latency. */
+  /**
+   * Fast chat: Groq Cloud — set GROQ_API_KEY for production WhatsApp latency.
+   * Default openai/gpt-oss-20b (replaces retired llama-3.1-8b-instant, Aug 2026).
+   */
   groq: {
     apiKey: process.env.GROQ_API_KEY || "",
     baseUrl: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
-    model: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
+    model: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
+    modelFallbacks: (process.env.GROQ_MODEL_FALLBACKS || "openai/gpt-oss-120b")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   },
   /**
-   * Chat routing: auto (Groq→Gemini→OpenRouter) | groq | gemini | openrouter
+   * Chat routing: auto (Groq→OpenRouter) | groq | gemini | openrouter
+   * Gemini chat only when AI_CHAT_PROVIDER=gemini or AI_CHAT_USE_GEMINI=true
+   * (GEMINI_API_KEY alone is for listing vision — do not put it in the chat chain).
    * Temperature kept low (0.1–0.2) for consistent buyer/seller replies.
    */
   aiChat: {
     provider: process.env.AI_CHAT_PROVIDER || "auto",
     temperature: Number(process.env.AI_CHAT_TEMPERATURE ?? 0.15),
+    useGemini:
+      process.env.AI_CHAT_PROVIDER === "gemini" ||
+      /^(1|true|yes|on)$/i.test(String(process.env.AI_CHAT_USE_GEMINI || "").trim()),
   },
-  /** Optional Google Gemini — listing vision + optional chat (GEMINI_CHAT_MODEL). */
+  /** Optional Google Gemini — listing vision + optional chat (opt-in via AI_CHAT_*). */
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
     visionModel: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",

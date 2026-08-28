@@ -4,7 +4,7 @@ Fixes the three usual bottlenecks: **latency**, **bad knowledge**, **inconsisten
 
 | Spec | What Sokoni ships |
 |------|-------------------|
-| Fast inference | `llm-router.js` — **Groq → Gemini Flash → OpenRouter** (never Ollama for WA traffic) |
+| Fast inference | `llm-router.js` — **Groq → OpenRouter** (Gemini chat opt-in; never Ollama for WA traffic) |
 | Low temperature | `AI_CHAT_TEMPERATURE=0.15` (deterministic buyer/seller answers) |
 | Strict grounding | `buildGroundedSystemPrompt` — CONTEXT + TOOL RESULTS only; escalate if missing |
 | LangGraph multi-agent | `agent-graph.js` — escalate → specialist → tools → RAG → reply |
@@ -22,7 +22,7 @@ Tool allowlist for that specialist
     ↓
 Knowledge RAG (markdown + optional platform_knowledge)
     ↓
-LLM @ temp 0.15 (Groq / Gemini / OpenRouter failover)
+LLM @ temp 0.15 (Groq → OpenRouter; Gemini opt-in)
     ↓
 Reply
 ```
@@ -30,14 +30,14 @@ Reply
 ## Env (production)
 
 ```bash
-# Prefer one of these for sub-second replies under load:
+# Prefer Groq for sub-second replies under load:
 GROQ_API_KEY=...
-# or
-GEMINI_API_KEY=...
-GEMINI_CHAT_MODEL=gemini-2.0-flash
+GROQ_MODEL=openai/gpt-oss-20b   # replaces retired llama-3.1-8b-instant
 
 AI_CHAT_PROVIDER=auto          # groq | gemini | openrouter
 AI_CHAT_TEMPERATURE=0.15
+# AI_CHAT_USE_GEMINI=true      # only if you want Gemini in the chat chain
+# GEMINI_API_KEY=...           # alone = listing vision only (not chat)
 
 # Free fallback
 OPENAI_API_KEY=...             # OpenRouter

@@ -60,13 +60,28 @@ if [[ ! "$PICKED" =~ ^gsk_ ]]; then
   echo "WARN: Groq keys usually start with gsk_ — continuing anyway (len=${#PICKED})"
 fi
 
+# llama-3.1-8b-instant retired Aug 2026 — migrate stale pin to gpt-oss-20b
+DEFAULT_GROQ_MODEL="openai/gpt-oss-20b"
+CURRENT_MODEL="$(clean_cred "$(env_get GROQ_MODEL)")"
+if [ -n "${GROQ_MODEL:-}" ]; then
+  PICKED_MODEL="$(clean_cred "$GROQ_MODEL")"
+elif [ -z "$CURRENT_MODEL" ] || [ "$CURRENT_MODEL" = "llama-3.1-8b-instant" ] || [ "$CURRENT_MODEL" = "llama-3.3-70b-versatile" ]; then
+  PICKED_MODEL="$DEFAULT_GROQ_MODEL"
+else
+  PICKED_MODEL="$CURRENT_MODEL"
+fi
+
 set_env_kv "GROQ_API_KEY" "$PICKED"
-set_env_kv "GROQ_MODEL" "${GROQ_MODEL:-llama-3.1-8b-instant}"
+set_env_kv "GROQ_MODEL" "$PICKED_MODEL"
 set_env_kv "AI_CHAT_PROVIDER" "${AI_CHAT_PROVIDER:-auto}"
 set_env_kv "AI_CHAT_TEMPERATURE" "${AI_CHAT_TEMPERATURE:-0.15}"
+# Vision GEMINI_API_KEY must not drive chat failover (400 noise) unless opted in
+if ! grep -qE "^[[:space:]]*(export[[:space:]]+)?AI_CHAT_USE_GEMINI=" "$ENV_FILE" 2>/dev/null; then
+  set_env_kv "AI_CHAT_USE_GEMINI" "false"
+fi
 
-echo "==> Wrote GROQ_API_KEY (${#PICKED} chars) + AI_CHAT_* to $ENV_FILE"
-echo "==> Chat route: Groq → OpenRouter (Gemini skipped unless GEMINI_API_KEY is set)"
+echo "==> Wrote GROQ_API_KEY (${#PICKED} chars) + GROQ_MODEL=$PICKED_MODEL + AI_CHAT_* to $ENV_FILE"
+echo "==> Chat route: Groq → OpenRouter (Gemini chat only if AI_CHAT_USE_GEMINI=true)"
 
 if [ "${SKIP_RESTART:-}" = "1" ]; then
   echo "==> SKIP_RESTART=1 — not restarting pm2"

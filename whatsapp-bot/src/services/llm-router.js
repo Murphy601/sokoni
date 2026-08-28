@@ -1,12 +1,12 @@
 /**
  * LiteLLM-style multi-provider chat routing for Sokoni Plug.
- * Prefer fast managed APIs (Groq → Gemini Flash) then OpenRouter free fallbacks.
+ * Prefer fast managed APIs (Groq → OpenRouter free). Gemini chat is opt-in only.
  * Never use Ollama for multi-user WhatsApp (serial queue / 30–60s latency).
  *
  * Env:
  *   AI_CHAT_PROVIDER=auto|groq|gemini|openrouter
- *   GROQ_API_KEY + GROQ_MODEL (default llama-3.1-8b-instant)
- *   GEMINI_API_KEY + GEMINI_CHAT_MODEL (default gemini-2.0-flash)
+ *   GROQ_API_KEY + GROQ_MODEL (default openai/gpt-oss-20b)
+ *   AI_CHAT_USE_GEMINI=true + GEMINI_API_KEY to include Gemini in chat failover
  *   OPENAI_API_KEY + OPENAI_BASE_URL + OPENAI_MODEL (OpenRouter)
  *   AI_CHAT_TEMPERATURE (default 0.15)
  */
@@ -14,6 +14,7 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 
 const OPENROUTER_FREE = ["openrouter/free", "google/gemma-4-26b-a4b-it:free"];
+const DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
 
 /** Deterministic answers — never use high temp for Plug chat. */
 export function chatTemperature(override) {
@@ -28,6 +29,21 @@ function providerPreference() {
   const raw = String(config.aiChat?.provider || "auto").trim().toLowerCase();
   if (["groq", "gemini", "openrouter"].includes(raw)) return raw;
   return "auto";
+}
+
+/** Vision GEMINI_API_KEY alone must not enter the chat chain (causes 400 noise). */
+function shouldUseGeminiForChat() {
+  const pref = providerPreference();
+  if (pref === "gemini") return true;
+  return Boolean(config.aiChat?.useGemini);
+}
+
+function groqModels() {
+  const primary = config.groq?.model || DEFAULT_GROQ_MODEL;
+  const fallbacks = Array.isArray(config.groq?.modelFallbacks)
+    ? config.groq.modelFallbacks
+    : [];
+  return [...new Set([primary, ...fallbacks].filter(Boolean))];
 }
 
 /**
@@ -50,12 +66,12 @@ export function buildChatProviderChain() {
         baseURL: config.groq.baseUrl || "https://api.groq.com/openai/v1",
         timeout: 20_000,
       }),
-      models: [config.groq.model || "llama-3.1-8b-instant"].filter(Boolean),
+      models: groqModels(),
     });
   };
 
   const pushGemini = () => {
-    if (!geminiKey) return;
+    if (!geminiKey || !shouldUseGeminiForChat()) return;
     chain.push({
       name: "gemini",
       client: new OpenAI({
@@ -98,8 +114,8 @@ export function buildChatProviderChain() {
 
   if (pref === "groq") {
     pushGroq();
-    pushGemini();
     pushOpenRouter();
+    pushGemini();
   } else if (pref === "gemini") {
     pushGemini();
     pushGroq();
@@ -107,7 +123,7 @@ export function buildChatProviderChain() {
   } else if (pref === "openrouter") {
     pushOpenRouter();
   } else {
-    // auto: Groq (fast) → OpenRouter (already on VM). Gemini only if key present.
+    // auto: Groq (fast) → OpenRouter (already on VM). Gemini only if explicitly enabled.
     pushGroq();
     pushOpenRouter();
     pushGemini();
@@ -127,7 +143,7 @@ export function getLitellmClient() {
 }
 
 /**
- * Chat completion with multi-provider failover (Groq → Gemini → OpenRouter).
+ * Chat completion with multi-provider failover (Groq → OpenRouter; Gemini opt-in).
  * Default temperature 0.15 for consistent WhatsApp replies.
  */
 export async function routedChatCompletion(
@@ -135,7 +151,11 @@ export async function routedChatCompletion(
   { maxTokens = 180, temperature = chatTemperature() } = {}
 ) {
   const chain = buildChatProviderChain();
-  if (!chain.length) throw new Error("No API key (set GROQ_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY)");
+  if (!chain.length) {
+    throw new Error(
+      "No API key (set GROQ_API_KEY or OPENAI_API_KEY; Gemini chat needs AI_CHAT_USE_GEMINI=true)"
+    );
+  }
 
   let lastError = null;
   for (const provider of chain) {
@@ -177,6 +197,6 @@ export function llmRouterMeta() {
     temperature: chatTemperature(),
     costTarget: "fast_managed_then_free",
     avoid: ["ollama_local_cpu_queue"],
-    note: "Prefer GROQ_API_KEY or GEMINI_API_KEY for sub-second WhatsApp replies under load.",
+    note: "Prefer GROQ_API_KEY (openai/gpt-oss-20b). Gemini chat is opt-in (AI_CHAT_USE_GEMINI).",
   };
 }
