@@ -8,7 +8,9 @@
   const POLL_MS = 4000;
 
   let activeThreadId = null;
+  let activeKind = null;
   let pollTimer = null;
+  let activeTab = "inbox";
 
   function el(id) {
     return document.getElementById(id);
@@ -70,11 +72,141 @@
     }
   }
 
+  function formatKes(n) {
+    if (n == null || Number.isNaN(Number(n))) return "—";
+    return `KES ${Number(n).toLocaleString()}`;
+  }
+
   function threadBadge(kind) {
     if (kind === "general") {
       return `<span class="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">General</span>`;
     }
     return `<span class="text-[10px] font-bold uppercase tracking-wide text-brand-purple/70 bg-brand-purple/10 px-1.5 py-0.5 rounded-full">Order</span>`;
+  }
+
+  function showTab(name) {
+    activeTab = name;
+    document.querySelectorAll(".desk-tab").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.getAttribute("data-tab") === name);
+    });
+    document.querySelectorAll("[data-panel]").forEach((panel) => {
+      const match = panel.getAttribute("data-panel") === name;
+      panel.classList.toggle("hidden", !match);
+    });
+    if (name === "orders") void loadOrdersDesk();
+    if (name === "payments") void loadPaymentsDesk();
+    if (name === "payouts") void loadPayoutsDesk();
+  }
+
+  function showActionResult(replies) {
+    const box = el("action-result");
+    if (!box) return;
+    const text = (replies || []).join("\n\n---\n\n").trim();
+    if (!text) {
+      box.classList.add("hidden");
+      box.textContent = "";
+      return;
+    }
+    box.classList.remove("hidden");
+    box.textContent = text;
+  }
+
+  function showCommandOutput(replies, fallback) {
+    const box = el("command-output");
+    if (!box) return;
+    const text = (replies || []).join("\n\n---\n\n").trim() || fallback || "(no reply text)";
+    box.textContent = text;
+  }
+
+  async function runCommand(command, { confirmBroadcast = true } = {}) {
+    const cmd = String(command || "").trim();
+    if (!cmd) return null;
+    if (!token()) {
+      setStatus("Enter admin token.", true);
+      return null;
+    }
+    if (confirmBroadcast && /^#broadcast\b/i.test(cmd)) {
+      const ok = window.confirm(
+        "Broadcast this message to all customers (with offer footer + STOP opt-out)?"
+      );
+      if (!ok) return null;
+    }
+    try {
+      const res = await fetch(`${SUPPORT_API}/command`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ command: cmd }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Command failed.", true);
+        showCommandOutput(data.replies, data.message || data.error);
+        showActionResult(data.replies || [data.message || data.error]);
+        return data;
+      }
+      setStatus(`Ran ${cmd.split(/\s+/)[0]}`);
+      showCommandOutput(data.replies);
+      showActionResult(data.replies);
+      return data;
+    } catch {
+      setStatus("Network error running command.", true);
+      return null;
+    }
+  }
+
+  function buildOrderCommand(action) {
+    const id = activeThreadId;
+    if (!id || activeKind === "general") return null;
+    switch (action) {
+      case "status": {
+        const st = el("status-select")?.value || "confirmed";
+        return `#status ${id} ${st}`;
+      }
+      case "payconfirm":
+        return `#payconfirm ${id}`;
+      case "fulfill":
+        return `#fulfill ${id}`;
+      case "fulfill-share":
+        return `#fulfill ${id} share`;
+      case "notify-store":
+        return `#notify-store ${id}`;
+      case "nearby":
+        return `#nearby ${id}`;
+      case "scan":
+        return `#scan ${id}`;
+      case "scan-extra": {
+        const extra = el("scan-extra")?.value?.trim() || "";
+        return `#scan ${id}${extra ? ` ${extra}` : ""}`;
+      }
+      case "paid":
+        return `#paid ${id}`;
+      case "payb2c":
+        return `#payb2c ${id}`;
+      case "apolog":
+        return `#apolog ${id}`;
+      case "damage":
+        return `#damage ${id}`;
+      case "recover":
+        return `#recover ${id}`;
+      case "delay":
+        return `#delay ${id} later today`;
+      case "oos":
+        return `#oos ${id}`;
+      case "transit": {
+        const extra = el("transit-extra")?.value?.trim() || "";
+        return `#transit ${id}${extra ? ` ${extra}` : ""}`;
+      }
+      case "pickup": {
+        const pp = el("pickup-id")?.value?.trim();
+        if (!pp) {
+          setStatus("Enter pickup point id (pp-xxxx).", true);
+          return null;
+        }
+        return `#pickup ${id} ${pp}`;
+      }
+      default:
+        return null;
+    }
   }
 
   async function loadList() {
@@ -99,7 +231,9 @@
             ...o,
             label: o.productName || o.orderId,
           }));
-      setStatus(`${threads.length} open thread${threads.length === 1 ? "" : "s"}`);
+      if (activeTab === "inbox") {
+        setStatus(`${threads.length} open thread${threads.length === 1 ? "" : "s"}`);
+      }
       const list = el("support-list");
       if (!list) return;
       if (!threads.length) {
@@ -168,6 +302,7 @@
         return;
       }
       const kind = data.kind || "order";
+      activeKind = kind;
       el("active-order").textContent =
         kind === "general"
           ? data.threadId || data.orderId || threadId
@@ -177,6 +312,7 @@
         data.displayName || data.productName,
         data.dropOff ? `→ ${data.dropOff}` : null,
         data.buyerPhone ? `+${data.buyerPhone}` : null,
+        data.order?.statusLabel ? `status ${data.order.statusLabel}` : null,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -184,6 +320,7 @@
         "hidden",
         !(data.adminTakeOver || data.disputeHold || kind === "general")
       );
+      el("order-actions")?.classList.toggle("hidden", kind !== "order");
       el("admin-input").disabled = false;
       el("admin-input").placeholder =
         kind === "general" ? "Type reply to their WhatsApp…" : "Type reply to buyer WhatsApp…";
@@ -246,9 +383,154 @@
     }
   }
 
+  function renderOrdersTable(orders, containerId, { payconfirm = false } = {}) {
+    const box = el(containerId);
+    if (!box) return;
+    if (!orders?.length) {
+      box.innerHTML = `<p class="text-brand-purple/55">None right now.</p>`;
+      return;
+    }
+    box.innerHTML = `<table class="w-full text-left">
+      <thead><tr class="text-xs uppercase tracking-wide text-brand-purple/45 border-b border-black/5">
+        <th class="py-2 pr-2">Order</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2">Customer</th><th class="py-2 pr-2">Amount</th><th class="py-2">Actions</th>
+      </tr></thead>
+      <tbody>${orders
+        .map((o) => {
+          const id = escapeHtml(o.id);
+          return `<tr class="border-b border-black/5 align-top">
+            <td class="py-2 pr-2 font-bold">${id}<br/><span class="font-normal text-brand-purple/55 text-xs">${escapeHtml(o.productName || "")}</span></td>
+            <td class="py-2 pr-2 text-xs">${escapeHtml(o.statusLabel || o.status || "")}</td>
+            <td class="py-2 pr-2 text-xs">${escapeHtml(o.customerName || "")}<br/>${escapeHtml(o.phone || "")}</td>
+            <td class="py-2 pr-2 text-xs">${escapeHtml(formatKes(o.buyerTotalKes ?? o.priceKes))}</td>
+            <td class="py-2">
+              <div class="flex flex-wrap gap-1">
+                <button type="button" data-open="${id}" class="desk-open min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">Open</button>
+                ${
+                  payconfirm
+                    ? `<button type="button" data-run="#payconfirm ${id}" class="desk-run min-h-[36px] px-2 rounded-full bg-brand-green text-brand-purple text-[11px] font-bold">Payconfirm</button>`
+                    : `<button type="button" data-run="#status ${id} confirmed" class="desk-run min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">Confirm</button>
+                       <button type="button" data-run="#fulfill ${id}" class="desk-run min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">Fulfill</button>`
+                }
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("")}</tbody></table>`;
+    box.querySelectorAll(".desk-open").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeThreadId = btn.getAttribute("data-open");
+        showTab("inbox");
+        void loadThread(activeThreadId);
+        void loadList();
+      });
+    });
+    box.querySelectorAll(".desk-run").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void runCommand(btn.getAttribute("data-run")).then(() => {
+          if (activeTab === "orders") void loadOrdersDesk();
+          if (activeTab === "payments") void loadPaymentsDesk();
+          if (activeTab === "payouts") void loadPayoutsDesk();
+        });
+      });
+    });
+  }
+
+  async function loadOrdersDesk() {
+    if (!token()) return;
+    try {
+      const res = await fetch(`${SUPPORT_API}/desk/orders`, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Could not load orders.", true);
+        return;
+      }
+      renderOrdersTable(data.orders || [], "orders-table");
+    } catch {
+      setStatus("Network error loading orders.", true);
+    }
+  }
+
+  async function loadPaymentsDesk() {
+    if (!token()) return;
+    try {
+      const res = await fetch(`${SUPPORT_API}/desk/payments`, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Could not load payments.", true);
+        return;
+      }
+      if (el("payments-note")) el("payments-note").textContent = data.message || "";
+      renderOrdersTable(data.orders || [], "payments-table", { payconfirm: true });
+    } catch {
+      setStatus("Network error loading payments.", true);
+    }
+  }
+
+  async function loadPayoutsDesk() {
+    if (!token()) return;
+    try {
+      const res = await fetch(`${SUPPORT_API}/desk/payouts`, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Could not load payouts.", true);
+        return;
+      }
+      const summary = el("payouts-summary");
+      if (summary) {
+        summary.innerHTML = `
+          <article class="rounded-2xl border border-black/5 p-3"><p class="text-[11px] uppercase text-brand-purple/45">Owed</p><p class="font-display text-xl font-bold">${escapeHtml(formatKes(data.totalOwedKes))} <span class="text-sm font-sans font-normal">(${escapeHtml(String(data.count ?? 0))})</span></p></article>
+          <article class="rounded-2xl border border-black/5 p-3"><p class="text-[11px] uppercase text-brand-purple/45">Admin queue</p><p class="font-display text-xl font-bold">${escapeHtml(formatKes(data.totalQueuedKes))} <span class="text-sm font-sans font-normal">(${escapeHtml(String(data.queuedCount ?? 0))})</span></p></article>
+          <article class="rounded-2xl border border-black/5 p-3"><p class="text-[11px] uppercase text-brand-purple/45">Failed B2C</p><p class="font-display text-xl font-bold">${escapeHtml(String(data.failedCount ?? 0))}</p></article>`;
+      }
+      const list = []
+        .concat(
+          (data.entries || []).map((e) => ({ ...e, _bucket: "owed" })),
+          (data.queued || []).map((e) => ({ ...e, _bucket: "queued" })),
+          (data.failed || []).map((e) => ({ ...e, _bucket: "failed" })),
+          (data.disbursing || []).map((e) => ({ ...e, _bucket: "disbursing" }))
+        )
+        .slice(0, 40);
+      const box = el("payouts-table");
+      if (!box) return;
+      if (!list.length) {
+        box.innerHTML = `<p class="text-brand-purple/55 text-sm">No supplier payouts owed right now. Use Commands → <code>#payouts</code> for the WhatsApp text view.</p>`;
+        return;
+      }
+      box.innerHTML = `<table class="w-full text-left">
+        <thead><tr class="text-xs uppercase tracking-wide text-brand-purple/45 border-b border-black/5">
+          <th class="py-2 pr-2">Order</th><th class="py-2 pr-2">Seller</th><th class="py-2 pr-2">Amount</th><th class="py-2 pr-2">State</th><th class="py-2">Actions</th>
+        </tr></thead>
+        <tbody>${list
+          .map((row) => {
+            const id = escapeHtml(row.orderId || row.id || "");
+            const paidTarget = escapeHtml(row.withdrawId || row.orderId || row.id || "");
+            const amt = formatKes(row.payoutAmountKes ?? row.netKes ?? row.amountKes);
+            return `<tr class="border-b border-black/5">
+              <td class="py-2 pr-2 font-bold text-xs">${id}<br/><span class="font-normal text-brand-purple/50">${escapeHtml(row.productName || "")}</span></td>
+              <td class="py-2 pr-2 text-xs">${escapeHtml(row.supplierName || row.sellerName || "")}</td>
+              <td class="py-2 pr-2 text-xs">${escapeHtml(amt)}</td>
+              <td class="py-2 pr-2 text-xs">${escapeHtml(row._bucket || row.status || "")}</td>
+              <td class="py-2"><div class="flex flex-wrap gap-1">
+                <button type="button" data-run="#paid ${paidTarget}" class="desk-run min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">#paid</button>
+                <button type="button" data-run="#payb2c ${id}" class="desk-run min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">#payb2c</button>
+              </div></td>
+            </tr>`;
+          })
+          .join("")}</tbody></table>`;
+      box.querySelectorAll(".desk-run").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          void runCommand(btn.getAttribute("data-run")).then(() => void loadPayoutsDesk());
+        });
+      });
+    } catch {
+      setStatus("Network error loading payouts.", true);
+    }
+  }
+
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(() => {
+      if (activeTab !== "inbox") return;
       void loadList();
       if (activeThreadId) void loadThread(activeThreadId);
     }, POLL_MS);
@@ -258,15 +540,64 @@
   if (el("admin-token") && !el("admin-token").value) {
     el("admin-token").value = localStorage.getItem(TOKEN_KEY) || "";
   }
-  el("refresh-btn")?.addEventListener("click", () => {
-    void loadList();
-    if (activeThreadId) void loadThread(activeThreadId);
+
+  document.querySelectorAll(".desk-tab").forEach((btn) => {
+    btn.addEventListener("click", () => showTab(btn.getAttribute("data-tab")));
   });
+
+  el("refresh-btn")?.addEventListener("click", () => {
+    if (activeTab === "inbox") {
+      void loadList();
+      if (activeThreadId) void loadThread(activeThreadId);
+    } else if (activeTab === "orders") void loadOrdersDesk();
+    else if (activeTab === "payments") void loadPaymentsDesk();
+    else if (activeTab === "payouts") void loadPayoutsDesk();
+  });
+  el("orders-refresh")?.addEventListener("click", () => void loadOrdersDesk());
+  el("payments-refresh")?.addEventListener("click", () => void loadPaymentsDesk());
+  el("payouts-refresh")?.addEventListener("click", () => void loadPayoutsDesk());
   el("reply-form")?.addEventListener("submit", sendReply);
   el("resolve-btn")?.addEventListener("click", resolveThread);
   el("admin-token")?.addEventListener("change", () => {
     localStorage.setItem(TOKEN_KEY, token());
     void loadList();
+  });
+
+  document.querySelectorAll(".order-act").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cmd = buildOrderCommand(btn.getAttribute("data-cmd"));
+      if (!cmd) return;
+      void runCommand(cmd).then(() => {
+        if (activeThreadId) void loadThread(activeThreadId);
+      });
+    });
+  });
+
+  el("command-form")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const input = el("command-input");
+    const cmd = input?.value?.trim();
+    if (!cmd) return;
+    void runCommand(cmd).then((data) => {
+      if (data?.ok && input) input.value = "";
+    });
+  });
+
+  document.querySelectorAll(".cmd-quick").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cmd = btn.getAttribute("data-quick");
+      if (el("command-input")) el("command-input").value = cmd;
+      void runCommand(cmd);
+    });
+  });
+
+  el("broadcast-form")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const msg = el("broadcast-input")?.value?.trim();
+    if (!msg) return;
+    void runCommand(`#broadcast ${msg}`).then((data) => {
+      if (data?.ok && el("broadcast-input")) el("broadcast-input").value = "";
+    });
   });
 
   void loadList();

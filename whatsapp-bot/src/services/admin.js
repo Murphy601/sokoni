@@ -2,7 +2,15 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
-import { sendText, customerKeyFromChatId, phoneDigitsFromChatId, isBotEcho, wasRecentBotSend } from "./whatsapp.js";
+import {
+  sendText,
+  toChatId,
+  withAdminReplyCapture,
+  customerKeyFromChatId,
+  phoneDigitsFromChatId,
+  isBotEcho,
+  wasRecentBotSend,
+} from "./whatsapp.js";
 import { sendReviewPrompt } from "./reviews.js";
 import { setHumanHandoff } from "./session.js";
 import {
@@ -374,7 +382,7 @@ async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quote
   return true;
 }
 
-function adminHelpText() {
+export function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
     `Type *admin* or *#help* anytime for this menu.\n` +
@@ -414,7 +422,7 @@ function adminHelpText() {
     `✅ *#done SKN-1002-1* — end dispute/help takeover, resume bot\n` +
     `   _(alias: *#resolve SKN-1002-1* · or *#done* alone if only one open thread)_\n` +
     `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
-    `🖥️ Support inbox — https://sokonimall.com/admin-support.html?token=...\n` +
+    `🖥️ Support ops desk — https://sokonimall.com/admin-support.html (inbox + all #commands)\n` +
     `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
     `   · GET /admin/suppliers/seller-listings/flagged?token=...\n` +
     `   · POST …/seller-listings/:productId/takedown?token=…\n` +
@@ -1052,8 +1060,51 @@ async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } =
   return sendText(adminChatId, `✅ Support closed for *${orderId}*. Bot resumed.${hold}`);
 }
 
+/**
+ * Admin chat id used when the support dashboard runs #commands
+ * (must match ADMIN_PHONES so canRunAdminCommands passes).
+ */
+export function dashboardAdminChatId() {
+  const phone = config.admin.phones[0] || config.admin.primary;
+  if (!phone) return "";
+  return toChatId(phone);
+}
+
+/**
+ * Run the same WhatsApp admin #command path from the web desk.
+ * Captures admin reply texts (does not ping admin WA); customer/seller sends still go out.
+ */
+export async function executeAdminCommandFromDashboard(text, quotedText = "") {
+  const adminChatId = dashboardAdminChatId();
+  if (!adminChatId) {
+    return {
+      ok: false,
+      error: "admin_phones_unset",
+      message: "ADMIN_PHONES is not configured on the bot.",
+      replies: [],
+    };
+  }
+  const cmd = String(text || "").trim();
+  if (!cmd) {
+    return { ok: false, error: "missing_command", message: "Enter a #command.", replies: [] };
+  }
+  let handled = false;
+  const replies = await withAdminReplyCapture(adminChatId, async () => {
+    handled = await runAdminCommand(adminChatId, cmd, quotedText, { allowBusinessOwner: false });
+  });
+  if (!handled) {
+    return {
+      ok: false,
+      error: "forbidden",
+      message: "Admin command rejected — check ADMIN_PHONES.",
+      replies,
+    };
+  }
+  return { ok: true, command: cmd, replies };
+}
+
 /** Parse and run an admin command. Returns true if handled. */
-async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwner = false } = {}) {
+export async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwner = false } = {}) {
   const phone = phoneDigitsFromChatId(adminChatId) || "";
   if (!canRunAdminCommands(adminChatId, phone, { allowBusinessOwner })) {
     return false;

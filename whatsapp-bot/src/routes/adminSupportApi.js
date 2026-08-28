@@ -5,10 +5,13 @@
  * Threads:
  * - Order HELP / ADMIN_TAKE_OVER → SKN-#### (communication-hub)
  * - General “talk to a human” → SUP-YYYY-#### (support-inbox)
+ *
+ * Also exposes the WhatsApp admin #command desk so ops can run without the phone.
  */
 import { Router } from "express";
 import { requireAdminToken } from "../lib/admin-auth.js";
-import { getOrder } from "../services/orders.js";
+import { config } from "../config.js";
+import { getOrder, listRecentOrders, ORDER_STATUSES, statusLabel } from "../services/orders.js";
 import {
   listSupportOrders,
   getSupportThread,
@@ -25,6 +28,14 @@ import {
   replyGeneralSupportTicket,
   resolveGeneralSupportTicket,
 } from "../services/support-inbox.js";
+import {
+  adminHelpText,
+  executeAdminCommandFromDashboard,
+} from "../services/admin.js";
+import { filterPendingPaymentClaims } from "../services/payment.js";
+import { isDarajaConfigured } from "../services/prepaid-checkout.js";
+import { getSettlementSummary } from "../services/settlements.js";
+import { orderBuyerTotal } from "../services/shipping-tiers.js";
 
 const router = Router();
 router.use(requireAdminToken);
@@ -48,6 +59,101 @@ function mapOrderThread(o) {
   };
 }
 
+function mapRecentOrder(o) {
+  return {
+    id: o.id,
+    status: o.status,
+    statusLabel: statusLabel(o.status),
+    productName: o.productName,
+    priceKes: o.priceKes,
+    buyerTotalKes: orderBuyerTotal(o),
+    customerName: o.customerName,
+    phone: o.phone,
+    location: o.location,
+    deliveryMode: o.deliveryMode,
+    pickupPointName: o.pickupPointName || null,
+    supplierId: o.supplierId || null,
+    customerPaymentStatus: o.customerPaymentStatus || null,
+    marginKes: o.marginKes ?? null,
+    updatedAt: o.updatedAt || o.createdAt || null,
+  };
+}
+
+/** GET /admin/support/help — WhatsApp admin command cheat-sheet + statuses */
+router.get("/help", (_req, res) => {
+  res.json({
+    ok: true,
+    helpText: adminHelpText(),
+    statuses: ORDER_STATUSES,
+    links: {
+      command: "https://sokonimall.com/admin-command.html",
+      disputes: "https://sokonimall.com/admin-disputes.html",
+      listings: "https://sokonimall.com/admin-seller-listings.html",
+      support: "https://sokonimall.com/admin-support.html",
+      opsStatus: "/admin/ops/status",
+    },
+  });
+});
+
+/**
+ * POST /admin/support/command  { command, quotedText? }
+ * Runs the same handlers as the admin WhatsApp number (#orders, #status, …).
+ */
+router.post("/command", async (req, res) => {
+  const command = String(req.body?.command || req.body?.text || "").trim();
+  const quotedText = String(req.body?.quotedText || "").trim();
+  try {
+    const result = await executeAdminCommandFromDashboard(command, quotedText);
+    if (!result.ok) {
+      const status =
+        result.error === "forbidden" || result.error === "admin_phones_unset" ? 403 : 400;
+      return res.status(status).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    console.error("[admin/support/command]", err);
+    res.status(500).json({ ok: false, error: err.message, replies: [] });
+  }
+});
+
+/** GET /admin/support/desk/orders — recent orders (structured #orders) */
+router.get("/desk/orders", (_req, res) => {
+  const orders = listRecentOrders(25).map(mapRecentOrder);
+  res.json({ ok: true, orders });
+});
+
+/** GET /admin/support/desk/payments — unpaid / claimed payments (#payments) */
+router.get("/desk/payments", (_req, res) => {
+  if (isDarajaConfigured()) {
+    const awaiting = listRecentOrders(50)
+      .filter((o) => o.status === "awaiting_payment" && o.customerPaymentStatus !== "confirmed")
+      .map(mapRecentOrder);
+    return res.json({
+      ok: true,
+      mode: "daraja",
+      message: "Daraja STK auto-confirms — #payconfirm is manual fallback only.",
+      orders: awaiting,
+    });
+  }
+  const pending = filterPendingPaymentClaims(listRecentOrders(50)).map(mapRecentOrder);
+  res.json({
+    ok: true,
+    mode: "manual",
+    message: `Confirm M-Pesa on till ${config.store?.mpesaTill || "—"} first, then Payconfirm.`,
+    orders: pending,
+  });
+});
+
+/** GET /admin/support/desk/payouts — supplier amounts owed (#payouts) */
+router.get("/desk/payouts", (_req, res) => {
+  try {
+    const summary = getSettlementSummary();
+    res.json({ ok: true, ...summary });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /** GET /admin/support/orders — unified open threads (orders + general). */
 router.get("/orders", (_req, res) => {
   const orders = listSupportOrders({ limit: 50 });
@@ -68,7 +174,15 @@ router.get("/:orderId", (req, res) => {
   }
   const data = getSupportThread(id);
   if (data.error) return res.status(404).json(data);
-  res.json({ ok: true, kind: "order", threadId: data.orderId, ...data });
+  const order = getOrder(id);
+  res.json({
+    ok: true,
+    kind: "order",
+    threadId: data.orderId,
+    ...data,
+    order: order ? mapRecentOrder(order) : null,
+    statuses: ORDER_STATUSES,
+  });
 });
 
 /** POST /admin/support/:orderId/reply  { message } */
