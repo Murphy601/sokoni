@@ -4,7 +4,7 @@ Fixes the three usual bottlenecks: **latency**, **bad knowledge**, **inconsisten
 
 | Spec | What Sokoni ships |
 |------|-------------------|
-| Fast inference | `llm-router.js` — **Groq → OpenRouter** (Gemini chat opt-in; never Ollama for WA traffic) |
+| Fast inference | `llm-router.js` — **Groq → OpenRouter** (`tool_choice=none`; Gemini chat opt-in; never Ollama for WA traffic) |
 | Low temperature | `AI_CHAT_TEMPERATURE=0.15` (deterministic buyer/seller answers) |
 | Strict grounding | `buildGroundedSystemPrompt` — CONTEXT + TOOL RESULTS only; escalate if missing |
 | LangGraph multi-agent | `agent-graph.js` — escalate → specialist → tools → RAG → reply |
