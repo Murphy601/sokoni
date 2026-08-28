@@ -28,6 +28,9 @@ const PROHIBITED = [
   /\b(?:weapon|gun|knife|ammunition|explosive)\b/i,
   /\b(?:cocaine|heroin|marijuana|weed|drugs)\b/i,
   /\b(?:stolen|hot\s+goods)\b/i,
+  /\b(?:unregistered\s+)?(?:medical\s+)?(?:pills?|pharma|prescription|viagra|tramadol|antibiotics?)\b/i,
+  /\b(?:human\s+organ|blood\s+bag)\b/i,
+  /\b(?:ivory|rhino\s+horn|endangered)\b/i,
 ];
 
 const FLAG_LABELS = {

@@ -94,3 +94,6 @@ node scripts/test-agent-ops-graph.mjs
 - Refunds are **held + human finalize**, not auto-STK reverse.
 - Shipping rate **writes** stay in Seller Hub (authenticated); AI reads + guides.
 - Pgvector embeddings are optional next; keyword RAG is live.
+
+
+See also [PHASE7_AI_COMMERCE.md](./PHASE7_AI_COMMERCE.md) for cart/voice/inventory/risk/retention.
