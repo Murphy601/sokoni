@@ -672,6 +672,19 @@ export async function handleIncomingMessage(
     return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
   }
 
+  // Fulfillment disputes (damaged / wrong item / refund) — deterministic protocol BEFORE AI.
+  // LLM apologies must never replace DB freeze + seller alert + ticket + structured follow-up.
+  if (!isAdminSender(customerKey, phone) && !isHumanHandoff(customerKey)) {
+    try {
+      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
+      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute protocol skipped:", err.message);
+    }
+  }
+
   // Never let AI invent till / product-picker replies during cart checkout
   if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
     const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText);

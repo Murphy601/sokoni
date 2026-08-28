@@ -7,6 +7,7 @@ import { getOrder, getOrdersForCustomer, extractOrderIdFromText, isSokoniOrderId
 import { buildPublicTrackingPayload } from "./shipments.js";
 import { checkoutMeta } from "./prepaid-checkout.js";
 import { normalizeShopperQuery, isShopperFillerOnly } from "./shopper-language.js";
+import { isFulfillmentComplaint } from "./dispute-protocol.js";
 import { browseTaxonomyForAi, matchBrowseFromText, priceTierMaxKes } from "./browse-menu.js";
 import { isProductAvailable } from "./product-availability.js";
 import { config } from "../config.js";
@@ -429,8 +430,31 @@ export async function runToolRouter(
     }
   }
 
-  // Damaged / refund / return with order id → open return case (dispute specialist)
-  if (
+  // Damaged / wrong item / refund → ALWAYS run dispute protocol (order id optional;
+  // we resolve from the buyer's recent paid orders when omitted).
+  if (allow("open_return_case") && isFulfillmentComplaint(text)) {
+    const { runFulfillmentDisputeProtocol } = await import("./dispute-protocol.js");
+    const dispute = await runFulfillmentDisputeProtocol({
+      text,
+      phone,
+      customerKey,
+    });
+    if (dispute.handled) {
+      results.push({
+        tool: "open_return_case",
+        ok: Boolean(dispute.ok),
+        orderId: dispute.orderId,
+        disputeId: dispute.disputeId,
+        payoutHeld: Boolean(dispute.payoutHeld),
+        askForEvidence: Boolean(dispute.askForEvidence),
+        needsOrderId: Boolean(dispute.needsOrderId),
+        candidates: dispute.candidates || [],
+        message: dispute.message,
+        error: dispute.error || undefined,
+        deterministic: true,
+      });
+    }
+  } else if (
     allow("open_return_case") &&
     orderId &&
     /\b(refund|damaged|damage|return|money back|wrong item|broken|scam)\b/i.test(lower)

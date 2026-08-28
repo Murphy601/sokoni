@@ -493,6 +493,33 @@ export async function runAgentTurn({
     };
   }
 
+  // DETERMINISTIC dispute protocol — never let the LLM soften / skip DB + alerts
+  const disputeResult = toolResults.find(
+    (r) => r.tool === "open_return_case" && r.message && (r.ok || r.needsOrderId || r.deterministic)
+  );
+  if (disputeResult?.message) {
+    const reply = disputeResult.message;
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log(
+      `[ai-agent] dispute protocol (no LLM): order=${disputeResult.orderId || "—"} dispute=${
+        disputeResult.disputeId || "—"
+      } payoutHeld=${Boolean(disputeResult.payoutHeld)}`
+    );
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      specialist,
+      disputeProtocol: true,
+      payoutHeld: Boolean(disputeResult.payoutHeld),
+      disputeId: disputeResult.disputeId || null,
+      escalation: escalation.escalate ? escalation : undefined,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
+    };
+  }
+
   const products =
     toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
     toolResults.find((r) => r.tool === "search_products" && r.products?.length)?.products ||
