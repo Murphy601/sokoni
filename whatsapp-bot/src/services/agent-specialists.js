@@ -30,6 +30,7 @@ export function detectEscalation(text) {
 
 /**
  * Route to a specialist lane (prompt + tool allowlist).
+ * Buyer shop queries must NOT fall into seller (bare "stock"/"list" used to steal them).
  * @returns {"buyer"|"seller"|"dispute"|"logistics"|"general"}
  */
 export function routeSpecialist(text, { isSellerSession = false } = {}) {
@@ -48,14 +49,22 @@ export function routeSpecialist(text, { isSellerSession = false } = {}) {
   ) {
     return "logistics";
   }
-  if (
+
+  const clearSellerOps =
     isSellerSession ||
-    /\b(payout|withdraw|my shop|list(ing)?|seller|vendor|stock|inventory|promo|till|paybill|commission|fee|register as (a )?seller|onboard|shipping rate|delivery price|upcountry)\b/i.test(
+    /\b(payout|withdraw|my shop|seller hub|register as (a )?seller|as a seller|vendor portal|stock units|my inventory|update (my )?stock|my listings|create (a )?listing|list (an? )?item|promo code|till|paybill|commission|platform fee|onboard(?:ing)?|shipping rate|delivery price|upcountry)\b/i.test(
       lower
-    )
-  ) {
-    return "seller";
-  }
+    );
+
+  // Buyer merchandise questions (even if they say "stock" / "listings")
+  const clearBuyerShop =
+    /\b(do you (have|sell)|any|looking for|find( me)?|show me|browse|buy|order|want|nataka|stock of|in stock|have you got|listings? for|sneakers?|dresses?|shoes?|phones?|laptops?|headphones?|under\s*\d+|mug|bag|jeans|hoodie|denim|kiondo)\b/i.test(
+      lower
+    ) && !/\b(seller hub|my shop|payout|register as|as a seller|create (a )?listing)\b/i.test(lower);
+
+  if (clearBuyerShop) return "buyer";
+  if (clearSellerOps) return "seller";
+
   if (
     /\b(buy|order|price|kes|dress|shoe|search|find|recommend|under|budget|size|colour|color|headphones|nairobi)\b/i.test(
       lower

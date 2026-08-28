@@ -21,6 +21,10 @@ function assert(label, cond) {
 
 assert("buyer lane for catalog query", routeSpecialist("headphones under 5000 in Nairobi") === "buyer");
 assert(
+  "buyer lane for stock of shoes (not stolen by seller)",
+  routeSpecialist("do you have stock of shoes") === "buyer"
+);
+assert(
   "seller lane for till onboarding",
   routeSpecialist("How do I register as a seller and link my M-Pesa Till?") === "seller"
 );
