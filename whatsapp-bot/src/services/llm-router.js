@@ -107,10 +107,10 @@ export function buildChatProviderChain() {
   } else if (pref === "openrouter") {
     pushOpenRouter();
   } else {
-    // auto: fastest managed APIs first
+    // auto: Groq (fast) → OpenRouter (already on VM). Gemini only if key present.
     pushGroq();
-    pushGemini();
     pushOpenRouter();
+    pushGemini();
   }
 
   return chain;

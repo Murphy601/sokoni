@@ -232,6 +232,18 @@ if [ -f "$ENV_FILE" ]; then
   else
     echo "==> Gemini vision: GEMINI_API_KEY unset (OK — OpenRouter free + NVIDIA NIM cover seller photos)"
   fi
+  # Groq chat (fast WhatsApp) — OpenRouter stays as free fallback. Never commit keys.
+  if [ -n "${SOKONI_GROQ_API_KEY:-}${GROQ_API_KEY:-}" ]; then
+    ENV_FILE="$ENV_FILE" SKIP_RESTART=1 \
+      GROQ_API_KEY="${GROQ_API_KEY:-}" SOKONI_GROQ_API_KEY="${SOKONI_GROQ_API_KEY:-}" \
+      bash "$REPO/scripts/set-groq-env.sh" || echo "WARN: set-groq-env.sh failed"
+  elif [ -n "$(env_get "$ENV_FILE" GROQ_API_KEY)" ]; then
+    set_env_kv "$ENV_FILE" "AI_CHAT_PROVIDER" "$(env_get "$ENV_FILE" AI_CHAT_PROVIDER || echo auto)"
+    set_env_kv "$ENV_FILE" "AI_CHAT_TEMPERATURE" "$(env_get "$ENV_FILE" AI_CHAT_TEMPERATURE || echo 0.15)"
+    echo "==> Groq chat: GROQ_API_KEY present ($(env_get "$ENV_FILE" GROQ_API_KEY | wc -c) chars) — auto routes Groq→OpenRouter"
+  else
+    echo "==> Groq chat: GROQ_API_KEY unset — using OpenRouter only. On VM: export GROQ_API_KEY=… && bash scripts/set-groq-env.sh"
+  fi
   # Clip fallbacks: HyperFrames (HeyGen) + local Remotion worker.
   if [ -n "${SOKONI_HEYGEN_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "HEYGEN_API_KEY" "$SOKONI_HEYGEN_API_KEY"
