@@ -1,9 +1,27 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import axios from "axios";
 import { config } from "../config.js";
 import {
   catalogImageUrlCandidates,
   readCatalogImageBase64,
 } from "../lib/catalog-images.js";
+
+/**
+ * Divert sendText replies for a specific admin chat into an in-memory buffer
+ * (used by the support dashboard command runner — side-effects to customers still go out).
+ * @type {AsyncLocalStorage<{ chatId: string, replies: string[] }>}
+ */
+const adminReplyCapture = new AsyncLocalStorage();
+
+/** Run `fn` while capturing sendText destined for `chatId` (no WAHA for those). */
+export async function withAdminReplyCapture(chatId, fn) {
+  const target = toChatId(chatId);
+  const store = { chatId: target, replies: [] };
+  return adminReplyCapture.run(store, async () => {
+    await fn();
+    return store.replies.slice();
+  });
+}
 
 /** Normalize phone digits or chatId to WAHA chatId format. */
 export function toChatId(phoneOrChatId) {
@@ -504,16 +522,22 @@ export function normalizeBotMessageSpacing(text) {
 
 export async function sendText(to, text) {
   const body = normalizeBotMessageSpacing(text);
+  const dest = toChatId(to);
+  const capture = adminReplyCapture.getStore();
+  if (capture && capture.chatId === dest) {
+    capture.replies.push(body);
+    return { captured: true, chatId: dest };
+  }
   try {
     const resp = await callWaha("/api/sendText", {
       session: config.waha.session,
-      chatId: toChatId(to),
+      chatId: dest,
       text: body,
     });
     rememberSend(resp, to);
     return resp;
   } catch (err) {
-    console.error("[whatsapp] sendText failed:", toChatId(to), err.message);
+    console.error("[whatsapp] sendText failed:", dest, err.message);
     throw err;
   }
 }
