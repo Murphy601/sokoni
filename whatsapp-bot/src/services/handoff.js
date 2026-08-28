@@ -62,7 +62,10 @@ async function pingAdminSimple(title, customerKey, { chatId, displayName, phone,
   }
 }
 
-export async function startHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage }) {
+export async function startHumanHandoff(
+  customerKey,
+  { chatId, displayName, phone, lastMessage, priority = "normal", escalationReason = "" } = {}
+) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
 
   const opened = openGeneralSupportTicket({
@@ -71,10 +74,13 @@ export async function startHumanHandoff(customerKey, { chatId, displayName, phon
     displayName,
     phone,
     lastMessage,
+    priority,
+    escalationReason,
   });
 
+  const high = priority === "high" || priority === "urgent";
   await pingAdminSimple(
-    "🙋 *Customer wants a human*",
+    high ? "🚨 *HIGH PRIORITY — human needed*" : "🙋 *Customer wants a human*",
     customerKey,
     {
       chatId,

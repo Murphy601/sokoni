@@ -20,6 +20,14 @@ import {
   PROMO_CODE,
   OFFER_PERCENT,
 } from "./trust-copy.js";
+import { findSupplierByPhone } from "./suppliers.js";
+import { getSellerEscrowLedger } from "./seller-onboard.js";
+import { getWithdrawableEntries } from "./seller-withdrawals.js";
+import {
+  getVendorShippingProfile,
+  vendorKeyCandidatesFromSeller,
+} from "./vendor-shipping.js";
+import { evaluateGoodwillVoucher } from "./agent-specialists.js";
 
 export const TOOL_NAMES = [
   "search_products",
@@ -29,7 +37,19 @@ export const TOOL_NAMES = [
   "track_order",
   "list_orders",
   "store_info",
+  "open_return_case",
+  "get_seller_onboarding",
+  "get_seller_payout",
+  "get_shipping_rates",
+  "propose_goodwill",
 ];
+
+/** Keep only tools allowed for the active specialist. */
+export function filterToolsForSpecialist(toolResults, allowedTools) {
+  if (!allowedTools?.length) return toolResults || [];
+  const allow = new Set(allowedTools);
+  return (toolResults || []).filter((t) => allow.has(t.tool));
+}
 
 function extractOrderId(text) {
   return extractOrderIdFromText(text);
@@ -359,21 +379,77 @@ function shouldBrowseList(text, lower, browseMatch) {
 }
 
 /** Intent router — runs tools before LLM (works on free models without function-calling). */
-export async function runToolRouter(userMessage, { phone = "", customerKey = "" } = {}) {
+export async function runToolRouter(
+  userMessage,
+  { phone = "", customerKey = "", specialist = "general", allowedTools = null } = {}
+) {
   const text = String(userMessage || "").trim();
   const lower = text.toLowerCase();
   const results = [];
+  const allow = (name) => !allowedTools || allowedTools.includes(name);
 
   const orderId = extractOrderId(text);
-  if (orderId || /\b(track|tracking|status|wapi order|order yangu)\b/i.test(lower)) {
-    if (orderId) {
-      results.push(await executeTool("track_order", { orderId }, { phone }));
-    } else if (phone || customerKey) {
+  if (orderId || /\b(track|tracking|status|wapi order|order yangu|where is my (package|order|parcel))\b/i.test(lower)) {
+    if (orderId && allow("track_order")) {
+      results.push(await executeTool("track_order", { orderId }, { phone, customerKey }));
+    } else if ((phone || customerKey) && allow("list_orders")) {
       results.push(await executeTool("list_orders", {}, { phone, customerKey }));
     }
   }
 
+  // Damaged / refund / return with order id → open return case (dispute specialist)
   if (
+    allow("open_return_case") &&
+    orderId &&
+    /\b(refund|damaged|damage|return|money back|wrong item|broken|scam)\b/i.test(lower)
+  ) {
+    results.push(
+      await executeTool(
+        "open_return_case",
+        { orderId, reason: text.slice(0, 400) },
+        { phone, customerKey }
+      )
+    );
+  }
+
+  if (
+    allow("propose_goodwill") &&
+    /\b(goodwill|voucher|apology credit|compensation)\b/i.test(lower)
+  ) {
+    const m = text.match(/(?:kes\s*)?(\d[\d,]*)/i);
+    const amount = m ? Number(m[1].replace(/,/g, "")) : 300;
+    results.push(await executeTool("propose_goodwill", { amountKes: amount }, { phone }));
+  }
+
+  if (
+    allow("get_seller_onboarding") &&
+    /\b(register as|how (do|to) (i )?sell|become a seller|onboard|link (my )?m-?pesa|till|paybill|seller setup)\b/i.test(
+      lower
+    )
+  ) {
+    results.push(await executeTool("get_seller_onboarding", {}, { phone }));
+  }
+
+  if (
+    allow("get_seller_payout") &&
+    /\b(payout|balance|earnings|withdraw|what (is|do) i (owe|get|have)|pending (payout|balance)|this week)\b/i.test(
+      lower
+    )
+  ) {
+    results.push(await executeTool("get_seller_payout", {}, { phone }));
+  }
+
+  if (
+    allow("get_shipping_rates") &&
+    /\b(shipping rate|delivery (price|fee|rate)|upcountry|set (my )?delivery|shipping zone)\b/i.test(
+      lower
+    )
+  ) {
+    results.push(await executeTool("get_shipping_rates", {}, { phone }));
+  }
+
+  if (
+    allow("store_info") &&
     /\b(prepaid|escrow|mpesa|pay|payment|stk|till|how (?:it|sokoni) works|delivery|shipping|dispatch|return|refund|about sokoni|what is sokoni|safe|trust)\b/i.test(
       lower
     )
@@ -381,12 +457,12 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
     results.push(await executeTool("store_info", {}, { phone }));
   }
 
-  if (isTaxonomyQuery(lower)) {
+  if (allow("browse_taxonomy") && isTaxonomyQuery(lower)) {
     results.push(await executeTool("browse_taxonomy", {}, { phone }));
   }
 
   const productIdMatch = text.match(/\b(prod_[a-z0-9_-]+|[a-z]{2}-[a-z0-9]+-\d+)\b/i);
-  if (productIdMatch) {
+  if (productIdMatch && allow("get_product")) {
     results.push(await executeTool("get_product", { productId: productIdMatch[1] }, { phone }));
   }
 
@@ -396,10 +472,11 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
   const shopping = isShoppingIntent(text, { browseMatch, budget });
 
   // Every Sokoni turn gets live site facts so the LLM can answer any marketplace question.
-  if (!isOffTopicIntent(text) && !results.some((r) => r.tool === "store_info")) {
+  if (allow("store_info") && !isOffTopicIntent(text) && !results.some((r) => r.tool === "store_info")) {
     results.push(await executeTool("store_info", {}, { phone }));
   }
   if (
+    allow("browse_taxonomy") &&
     (isGuideIntent(text) ||
       isSellerTopic(text) ||
       isTaxonomyQuery(lower) ||
@@ -424,10 +501,11 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
     isSupportIntent(text) ||
     isSellerTopic(text) ||
     isOffTopicIntent(text) ||
-    text.length < 2;
+    text.length < 2 ||
+    (!allow("search_products") && !allow("browse_products"));
 
   if (!skipSearch) {
-    if (browseMatch && shouldBrowseList(text, lower, browseMatch)) {
+    if (browseMatch && shouldBrowseList(text, lower, browseMatch) && allow("browse_products")) {
       results.push(
         await executeTool(
           "browse_products",
@@ -442,7 +520,7 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
           { phone }
         )
       );
-      if (!results.some((r) => r.tool === "browse_taxonomy")) {
+      if (allow("browse_taxonomy") && !results.some((r) => r.tool === "browse_taxonomy")) {
         results.push(
           await executeTool(
             "browse_taxonomy",
@@ -451,11 +529,10 @@ export async function runToolRouter(userMessage, { phone = "", customerKey = "" 
           )
         );
       }
-    } else {
+    } else if (allow("search_products")) {
       let browseCategory = browseMatch?.browseCategory || null;
       let browseSubCategory = browseMatch?.browseSubCategory || null;
       let browseLabel = browseMatch?.label || null;
-      // Budget-only / price-tier hits: search the whole live catalog under maxPriceKes
       if (
         budget &&
         browseCategory === "sale" &&
@@ -503,6 +580,16 @@ export async function executeTool(name, args = {}, context = {}) {
         return toolListOrders(context);
       case "store_info":
         return toolStoreInfo();
+      case "open_return_case":
+        return await toolOpenReturnCase(args, context);
+      case "get_seller_onboarding":
+        return toolSellerOnboarding();
+      case "get_seller_payout":
+        return toolSellerPayout(context);
+      case "get_shipping_rates":
+        return toolShippingRates(context);
+      case "propose_goodwill":
+        return toolProposeGoodwill(args);
       default:
         return { tool: name, ok: false, error: "unknown_tool" };
     }
@@ -714,6 +801,115 @@ function toolListOrders({ phone = "", customerKey = "" } = {}) {
   };
 }
 
+async function toolOpenReturnCase({ orderId, reason = "" } = {}, { phone = "", customerKey = "" } = {}) {
+  const { openBuyerReturnCase } = await import("./communication-hub.js");
+  const result = await openBuyerReturnCase({
+    orderId,
+    phone,
+    customerKey,
+    reason,
+  });
+  return {
+    tool: "open_return_case",
+    ok: Boolean(result.ok),
+    ...result,
+  };
+}
+
+function toolSellerOnboarding() {
+  const site = "https://sokonimall.com";
+  return {
+    tool: "get_seller_onboarding",
+    ok: true,
+    steps: [
+      "Open Seller Hub → sokonimall.com/suppliers/list.html",
+      "Verify WhatsApp (Send code → enter 6-digit code)",
+      "Create shop name + optional @handle",
+      "Settings → Payouts: add M-Pesa number and/or Buy Goods Till / Paybill",
+      "Upload ID / KRA for vetting (list while pending)",
+      "List items; set stock; item promos via % Set promo on each listing",
+    ],
+    sellerHub: `${site}/suppliers/list.html`,
+    note: "Approval for verification usually within a few hours on business days.",
+  };
+}
+
+function toolSellerPayout({ phone = "" } = {}) {
+  if (!phone) {
+    return {
+      tool: "get_seller_payout",
+      ok: false,
+      error: "phone_required",
+      message: "Sign in on WhatsApp with your seller number to see payouts.",
+    };
+  }
+  const supplier = findSupplierByPhone(phone);
+  if (!supplier) {
+    return {
+      tool: "get_seller_payout",
+      ok: false,
+      error: "not_a_seller",
+      message:
+        "This WhatsApp is not a registered seller yet. Open Seller Hub to onboard, then ask again.",
+      sellerHub: "https://sokonimall.com/suppliers/list.html",
+    };
+  }
+  const ledger = getSellerEscrowLedger(supplier.id);
+  const owed = getWithdrawableEntries(supplier.id);
+  const withdrawable = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
+  return {
+    tool: "get_seller_payout",
+    ok: true,
+    shopName: supplier.businessName || supplier.shopName || supplier.id,
+    readyForMpesaKes: withdrawable,
+    pendingEscrowKes: ledger.pendingEscrow?.totalKes || 0,
+    inTransitKes: ledger.inTransit?.totalKes || 0,
+    message:
+      `Ready for M-Pesa: KES ${withdrawable.toLocaleString()}. ` +
+      `Pending escrow: KES ${(ledger.pendingEscrow?.totalKes || 0).toLocaleString()}. ` +
+      `In transit: KES ${(ledger.inTransit?.totalKes || 0).toLocaleString()}. ` +
+      `Reply WITHDRAW on WhatsApp or use Seller Hub → M-Pesa Ledger.`,
+  };
+}
+
+function toolShippingRates({ phone = "" } = {}) {
+  const guide = {
+    tool: "get_shipping_rates",
+    ok: true,
+    howToSet: [
+      "Seller Hub → Shipping Rates → Add Zone",
+      "Example: Nairobi / local = KES 300",
+      "Example: Upcountry Kenya = KES 500",
+      "Save — buyers see rates at checkout by location",
+    ],
+    sellerHub: "https://sokonimall.com/suppliers/list.html",
+  };
+  if (!phone) return guide;
+  const supplier = findSupplierByPhone(phone);
+  if (!supplier) return guide;
+  const keys = vendorKeyCandidatesFromSeller(supplier);
+  let profile = null;
+  for (const key of keys) {
+    profile = getVendorShippingProfile(key);
+    if (profile?.sellerConfigured) break;
+  }
+  if (!profile) return { ...guide, shopName: supplier.businessName || supplier.shopName };
+  return {
+    ...guide,
+    ok: true,
+    shopName: supplier.businessName || supplier.shopName,
+    configured: Boolean(profile.sellerConfigured),
+    flatLocalRateKes: profile.flatLocalRateKes,
+    flatUpcountryRateKes: profile.flatUpcountryRateKes,
+    shippingType: profile.shippingType,
+  };
+}
+
+function toolProposeGoodwill({ amountKes = 300 } = {}) {
+  const result = evaluateGoodwillVoucher(amountKes);
+  return { tool: "propose_goodwill", ...result };
+}
+
 function toolStoreInfo() {
   const meta = checkoutMeta();
   const site = (config.publicSiteUrl || "https://sokonimall.com").replace(/\/$/, "");
@@ -848,13 +1044,62 @@ export function formatToolResultsForPrompt(toolResults) {
       const steps = (t.shipmentTimeline || [])
         .map((s) => `${s.done ? "done" : s.active ? "now" : "pending"}:${s.label}`)
         .join(" → ");
-      return `TOOL track_order ${t.orderId}:\nProduct: ${t.productName}\nPayment: ${t.paymentLine}\nShipment: ${t.shipmentStatusLabel}\nTimeline: ${steps || t.orderStatusLabel}`;
+      return (
+        `TOOL track_order ${t.orderId}:\n` +
+        `Product: ${t.productName}\n` +
+        `Payment: ${t.paymentLine}\n` +
+        `Shipment: ${t.shipmentStatusLabel}\n` +
+        (t.courier ? `Courier: ${t.courier}\n` : "") +
+        (t.riderName || t.riderPhone
+          ? `Rider: ${t.riderName || "—"} ${t.riderPhone || ""}\n`
+          : "") +
+        (t.etaNote ? `ETA: ${t.etaNote}\n` : "") +
+        (t.dropOffHub ? `Hub: ${t.dropOffHub}\n` : "") +
+        `Timeline: ${steps || t.orderStatusLabel}`
+      );
     }
     if (r.tool === "list_orders" && r.orders) {
       const lines = r.orders.map(
         (o) => `${o.id} · ${o.productName} · ${o.shipmentStatus || o.status} · ${o.paid ? "paid" : "unpaid"}`
       );
       return `TOOL list_orders:\n${lines.join("\n") || "No orders found for this number."}`;
+    }
+    if (r.tool === "open_return_case") {
+      return (
+        `TOOL open_return_case:\n` +
+        `ok=${r.ok} order=${r.orderId || "—"} payoutHeld=${Boolean(r.payoutHeld)} askPhotos=${Boolean(r.askForEvidence)}\n` +
+        `${r.message || r.error || ""}`
+      );
+    }
+    if (r.tool === "get_seller_onboarding" && r.ok) {
+      return (
+        `TOOL get_seller_onboarding:\n` +
+        (r.steps || []).map((s, i) => `${i + 1}. ${s}`).join("\n") +
+        `\nHub: ${r.sellerHub}\n${r.note || ""}`
+      );
+    }
+    if (r.tool === "get_seller_payout") {
+      if (!r.ok) return `TOOL get_seller_payout: ${r.message || r.error}`;
+      return (
+        `TOOL get_seller_payout (${r.shopName}):\n` +
+        `Ready M-Pesa: KES ${Number(r.readyForMpesaKes || 0).toLocaleString()}\n` +
+        `Pending escrow: KES ${Number(r.pendingEscrowKes || 0).toLocaleString()}\n` +
+        `In transit: KES ${Number(r.inTransitKes || 0).toLocaleString()}\n` +
+        `${r.message || ""}`
+      );
+    }
+    if (r.tool === "get_shipping_rates") {
+      return (
+        `TOOL get_shipping_rates:\n` +
+        (r.howToSet || []).map((s, i) => `${i + 1}. ${s}`).join("\n") +
+        (r.configured
+          ? `\nSaved: local KES ${r.flatLocalRateKes} · upcountry KES ${r.flatUpcountryRateKes}`
+          : "") +
+        `\nHub: ${r.sellerHub}`
+      );
+    }
+    if (r.tool === "propose_goodwill") {
+      return `TOOL propose_goodwill: ${r.message || JSON.stringify(r)}`;
     }
     if (r.tool === "store_info") {
       return (

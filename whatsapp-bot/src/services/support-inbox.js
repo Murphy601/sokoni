@@ -77,6 +77,8 @@ export function openGeneralSupportTicket({
   displayName = "",
   phone = "",
   lastMessage = "",
+  priority = "normal",
+  escalationReason = "",
 } = {}) {
   load();
   const key = String(customerKey || "").trim();
@@ -89,11 +91,15 @@ export function openGeneralSupportTicket({
       (t) => t.status === "open" && String(t.customerKey) === key
     ) || null;
 
+  const pri = priority === "high" || priority === "urgent" ? "high" : "normal";
+
   if (!ticket) {
     const id = nextId();
     ticket = {
       id,
       kind: "general",
+      priority: pri,
+      escalationReason: String(escalationReason || "").slice(0, 120),
       customerKey: key,
       chatId: chatId || key,
       displayName: displayName || "",
@@ -109,6 +115,8 @@ export function openGeneralSupportTicket({
     if (displayName) ticket.displayName = displayName;
     if (phone) ticket.phone = phone;
     if (chatId) ticket.chatId = chatId;
+    if (pri === "high") ticket.priority = "high";
+    if (escalationReason) ticket.escalationReason = String(escalationReason).slice(0, 120);
   }
 
   appendMessage(ticket, {
@@ -120,7 +128,10 @@ export function openGeneralSupportTicket({
   });
   appendMessage(ticket, {
     role: "SYSTEM",
-    text: "Bot paused — waiting for Sokoni support reply from admin inbox.",
+    text:
+      pri === "high"
+        ? "HIGH PRIORITY — bot paused; waiting for Sokoni support from admin inbox."
+        : "Bot paused — waiting for Sokoni support reply from admin inbox.",
     direction: "system",
   });
 
@@ -129,6 +140,7 @@ export function openGeneralSupportTicket({
     ackSent: true,
     supportTicketId: ticket.id,
     generalSupport: true,
+    priority: pri,
   });
 
   persist();
@@ -157,15 +169,21 @@ export function listOpenGeneralSupportTickets({ limit = 40 } = {}) {
   load();
   return Object.values(store.tickets)
     .filter((t) => t.status === "open")
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .sort((a, b) => {
+      const pri = (x) => (x.priority === "high" || x.priority === "urgent" ? 1 : 0);
+      const d = pri(b) - pri(a);
+      if (d) return d;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    })
     .slice(0, limit)
     .map((t) => ({
       threadId: t.id,
       kind: "general",
+      priority: t.priority || "normal",
       orderId: null,
       productName: null,
       label: t.displayName || t.phone || t.customerKey,
-      lifecycle: "HUMAN_HANDOFF",
+      lifecycle: t.priority === "high" ? "HIGH_PRIORITY_HANDOFF" : "HUMAN_HANDOFF",
       adminTakeOver: true,
       disputeHold: false,
       dropOff: null,

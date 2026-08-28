@@ -1254,6 +1254,64 @@ async function flowHelp(customerKey, phone, orderId, rawText) {
   await sendSafeWhatsApp(customerKey, msgHelpAck(getOrder(order.id) || order));
 }
 
+/**
+ * AI / agent tool: open a buyer return/refund case (escrow hold + admin alert).
+ * Does not send WhatsApp itself — the agent replies with evidence instructions.
+ */
+export async function openBuyerReturnCase({
+  orderId,
+  customerKey = "",
+  phone = "",
+  reason = "",
+} = {}) {
+  const order = orderId ? getOrder(orderId) : null;
+  if (!order) {
+    return {
+      ok: false,
+      error: "order_not_found",
+      message: "Order not found. Check your SKN-#### (or older SK-####) number.",
+    };
+  }
+  if (!buyerOwnsOrder(order, customerKey, phone)) {
+    return {
+      ok: false,
+      error: "buyer_mismatch",
+      message: `*${order.id}* is not linked to this WhatsApp. Use the number you ordered with.`,
+    };
+  }
+  if (isAdminTakeOver(order)) {
+    return {
+      ok: true,
+      alreadyOpen: true,
+      orderId: order.id,
+      payoutHeld: true,
+      askForEvidence: true,
+      message:
+        `Support is already open on *${order.id}* (escrow held). Reply here with clear photos of the issue so admin can finalize.`,
+    };
+  }
+  const rawText =
+    String(reason || "").trim().slice(0, 400) ||
+    `AI buyer return / refund request for ${order.id}`;
+  await startAdminTakeOver(order, {
+    customerKey: customerKey || order.customerKey,
+    phone,
+    rawText,
+    role: "BUYER",
+  });
+  return {
+    ok: true,
+    orderId: order.id,
+    payoutHeld: true,
+    askForEvidence: true,
+    ticketHint: `HELP ${order.id}`,
+    message:
+      `I'm sorry — payout for *${order.id}* is temporarily held.\n` +
+      `Please reply with clear photos of the damage / issue so support can finalize within 24 hours.\n` +
+      msgHelpAck(getOrder(order.id) || order),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Reminders + 24h auto-release                                               */
 /* -------------------------------------------------------------------------- */
