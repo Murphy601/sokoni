@@ -380,7 +380,7 @@ export async function handleIncomingMessage(
       clearHumanHandoff(customerKey);
       return sendWelcome(customerKey);
     }
-    return handleCustomerWhileHandoff(customerKey);
+    return handleCustomerWhileHandoff(customerKey, combinedText || text);
   }
 
   if (
@@ -638,7 +638,14 @@ export async function handleIncomingMessage(
   // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
   try {
     const agent = await runAiAgent(customerKey, combinedText, phone);
-    if (agent.handoff) return;
+    if (agent.handoff) {
+      return sendHumanHandoff(customerKey, {
+        chatId,
+        displayName,
+        phone,
+        lastMessage: combinedText,
+      });
+    }
     if (!agent.reply) {
       return sendText(
         customerKey,
