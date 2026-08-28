@@ -239,7 +239,7 @@
             </button>
             <button type="button" class="seller-hub-drawer__link" data-hub-nav="marketing">
               <svg class="seller-hub-nav__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12v8"/><path d="M4 16h8l8-4v8l-8-4H4z"/><path d="M12 8V4l4 2-4 2z"/></svg>
-              <span>WhatsApp Promo</span>
+              <span>WhatsApp share</span>
             </button>
             <div class="seller-hub-drawer__group" data-hub-group="grow">
               <button type="button" class="seller-hub-drawer__link" data-hub-nav="grow" id="tab-grow-shop">
@@ -601,32 +601,25 @@
           </div>
         </div><!-- /stock panel -->
 
-        <!-- MARKETING: WhatsApp Promo -->
+        <!-- MARKETING: share tools (price promos are per-item under My listings) -->
         <div data-hub-panel="marketing" id="hub-panel-marketing" class="space-y-8 hidden">
           <div class="sell-dash-group space-y-4">
             <div class="sell-dash-group__head">
-              <p class="sell-dash-group__label">WhatsApp Promo</p>
-              <p class="sell-dash-group__hint">Catalog links, promo codes, and re-engage past buyers</p>
+              <p class="sell-dash-group__label">WhatsApp share</p>
+              <p class="sell-dash-group__hint">Share your shop — price cuts stay on single listings</p>
             </div>
 
-            <section class="sell-depop-section p-5 space-y-4">
-              <h2 class="font-bold text-lg text-white">Storefront promoter</h2>
-              <p class="text-sm text-zinc-400">Share sokonimall.com plus your shop handle (kept separate). Buyers still pay with prepaid escrow.</p>
-              <label class="block text-sm font-medium text-zinc-300" for="marketing-promo-code">
-                Active promo code
-                <input id="marketing-promo-code" type="text" maxlength="24" class="sell-form-input mt-1 font-mono uppercase" placeholder="SOKONI10" autocomplete="off" />
-              </label>
-              <p class="text-xs text-zinc-500">Share-code text only. For a real price cut that shows on the mall and STK pay, open <strong class="text-zinc-300">My listings → % Set promo</strong> on that item. End anytime with <strong class="text-zinc-300">End promo</strong>.</p>
-              <label class="block text-sm font-medium text-zinc-300" for="shop-promo-banner">
-                Shop promo banner
-                <input id="shop-promo-banner" type="text" maxlength="160" class="sell-form-input mt-1" placeholder="Weekend 10% off dresses — while stocks last" autocomplete="off" />
-              </label>
-              <label class="block text-sm font-medium text-zinc-300" for="shop-offer-note">
-                Offer note
-                <input id="shop-offer-note" type="text" maxlength="240" class="sell-form-input mt-1" placeholder="Free gift wrap on orders above KES 2,000" autocomplete="off" />
-              </label>
-              <button type="button" id="shop-offer-save-btn" class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold">Save shop banner</button>
-              <p class="text-xs text-zinc-500">Shows on your public shop page under the bio. Pair with <strong class="text-zinc-300">% Set promo</strong> on listings for a real STK price cut.</p>
+            <section class="sell-depop-section p-5 space-y-3">
+              <h2 class="font-bold text-lg text-white">Price promos = one item at a time</h2>
+              <p class="text-sm text-zinc-400">
+                Sokoni does not run shop-wide sale prices. Open
+                <strong class="text-zinc-300">My listings</strong>, tap
+                <strong class="text-zinc-300">% Set promo</strong> on the item you want cheaper.
+                Only that product’s mall price and M-Pesa STK change.
+              </p>
+              <button type="button" class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold" data-hub-nav="listings">
+                Go to My listings
+              </button>
             </section>
 
             <section class="sell-depop-section p-5 space-y-3">
@@ -680,7 +673,33 @@
             <p id="bulk-drafts-hint" class="hidden text-sm text-zinc-400">
               Drafts from CSV need photos — tap <strong>Continue editing</strong>, add pics, then Post.
             </p>
+            <p class="text-xs text-zinc-500">
+              Price promos are <strong class="text-zinc-300">per listing</strong> — use
+              <strong class="text-zinc-300">% Set promo</strong> on one item. Nothing here discounts your whole shop.
+            </p>
             <div id="my-listings" class="seller-hub-stack" role="list"></div>
+          </section>
+
+          <section id="item-promo-panel" class="sell-depop-section p-5 space-y-3 hidden" aria-live="polite">
+            <h2 class="font-bold text-lg text-white">Item promo</h2>
+            <p id="item-promo-target" class="text-sm text-zinc-400"></p>
+            <label class="block text-sm font-medium text-zinc-300" for="item-promo-type">
+              Promo type
+              <select id="item-promo-type" class="sell-form-input mt-1">
+                <option value="percent">Percent off what you receive</option>
+                <option value="kes_off">KES off what you receive</option>
+                <option value="sale_net">Set promo amount you receive (KES)</option>
+              </select>
+            </label>
+            <label class="block text-sm font-medium text-zinc-300" for="item-promo-value">
+              Value
+              <input id="item-promo-value" type="number" min="1" step="1" class="sell-form-input mt-1" placeholder="15" inputmode="decimal" />
+            </label>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" id="item-promo-save-btn" class="depop-btn-accent min-h-[44px] px-4 text-sm font-semibold">Start promo on this item</button>
+              <button type="button" id="item-promo-cancel-btn" class="depop-btn-ghost min-h-[44px] px-4 text-sm font-semibold">Cancel</button>
+            </div>
+            <p id="item-promo-status" class="text-sm text-zinc-500" role="status"></p>
           </section>
         </div>
         </div><!-- /listings panel -->
@@ -1342,7 +1361,7 @@
 
   <script src="../assets/js/account-auth.js?v=account-1"></script>
   <script src="../assets/js/seller-analytics.js?v=analytics-5"></script>
-  <script src="../assets/js/seller-listing.js?v=hub-promo-session-2"></script>
+  <script src="../assets/js/seller-listing.js?v=hub-promo-session-3"></script>
   <script src="../assets/js/vendor-shipping-manager.js?v=shipping-save-5"></script>
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->

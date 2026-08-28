@@ -195,18 +195,27 @@ function clearSession() {
   } catch {}
 }
 
+function softSessionStatus(msg) {
+  setStatus(msg, true);
+  setOnboardStatus(msg, true);
+  if (el("marketing-status")) el("marketing-status").textContent = msg;
+  if (el("stock-status")) el("stock-status").textContent = msg;
+  if (el("variants-status")) el("variants-status").textContent = msg;
+  if (el("item-promo-status")) el("item-promo-status").textContent = msg;
+  console.warn("[seller-hub] soft session error (hub kept open):", msg);
+}
+
 function handleSessionExpired(data, { force = false } = {}) {
   const msg =
     data?.message || "Session expired — verify WhatsApp again to continue.";
-  // Never wipe an active Seller Hub session for routine API 401s (promo/stock/listings).
-  // Only force-logout when explicitly requested (sign-out, phone number change, cold restore).
-  if (!force && (sellerProfile || verificationToken || phoneVerified)) {
-    setStatus(msg, true);
-    setOnboardStatus(msg, true);
-    if (el("marketing-status")) el("marketing-status").textContent = msg;
-    if (el("stock-status")) el("stock-status").textContent = msg;
-    if (el("variants-status")) el("variants-status").textContent = msg;
-    console.warn("[seller-hub] soft session error (hub kept open):", data?.error || msg);
+  // Absolute rule: an open Seller Hub (sellerProfile) never auto-logs out.
+  // Sign out calls clearSession() directly. Cold restore may force before profile loads.
+  if (sellerProfile) {
+    softSessionStatus(msg);
+    return;
+  }
+  if (!force && (verificationToken || phoneVerified)) {
+    softSessionStatus(msg);
     return;
   }
   clearSession();
@@ -2519,6 +2528,16 @@ function showSellerProfile(profile, opts = {}) {
   el("listing-wizard")?.classList.remove("hidden");
   el("onboard-panel")?.classList.add("hidden");
   el("sell-intro")?.classList.add("hidden");
+  const phoneInput = el("seller-phone");
+  if (phoneInput) {
+    phoneInput.readOnly = true;
+    const locked =
+      (profile.phone && normalizePhoneInput(profile.phone)) ||
+      localStorage.getItem(PHONE_KEY) ||
+      phoneInput.value ||
+      "";
+    if (locked) phoneInput.value = locked;
+  }
   fillShopEditFormFromSeller(profile);
   void hydrateShopEditFormFromSocial();
   void loadSellerActivity();
@@ -3444,37 +3463,58 @@ async function dropListingPrice(productId, currentSellerNet, currentBuyerTotal) 
   return updateListingPrice(productId, currentSellerNet, currentBuyerTotal, "drop");
 }
 
-async function setListingPromo(productId, currentSellerNet, currentBuyerTotal) {
-  const phone = apiPhone();
-  if (!phone || !productId) return;
+/** Pending per-item promo editor (no window.prompt — prompts caused phone blur → logout). */
+let pendingItemPromo = null;
+
+function closeItemPromoPanel() {
+  pendingItemPromo = null;
+  el("item-promo-panel")?.classList.add("hidden");
+  if (el("item-promo-status")) el("item-promo-status").textContent = "";
+}
+
+function openItemPromoPanel(productId, currentSellerNet, currentBuyerTotal) {
   const currentNet = Math.round(Number(currentSellerNet) || 0);
   const currentBuyer = Math.round(Number(currentBuyerTotal) || 0);
-  const typeRaw = window.prompt(
-    `Promo type for this item only:\n` +
-      `• percent — e.g. 15 for 15% off your receive amount\n` +
-      `• kes_off — e.g. 100 to take KES 100 off what you receive\n` +
-      `• sale_net — e.g. 800 as the promo amount you receive\n\n` +
-      `Current: you receive KES ${currentNet.toLocaleString()}${
-        currentBuyer ? ` (buyer pays ${formatKes(currentBuyer)})` : ""
-      }`,
-    "percent"
-  );
-  if (typeRaw == null) return;
-  const type = String(typeRaw).trim().toLowerCase() || "percent";
-  const valueRaw = window.prompt(
-    type.startsWith("sale")
-      ? "Promo amount you receive (KES):"
-      : type.includes("kes") || type === "off"
-        ? "KES to take off what you receive:"
-        : "Percent off (e.g. 15):",
-    type.startsWith("sale") ? String(Math.max(50, currentNet - 100)) : type.includes("kes") ? "100" : "15"
-  );
-  if (valueRaw == null) return;
-  const value = Number(String(valueRaw).replace(/[^\d.]/g, ""));
+  pendingItemPromo = { productId, currentNet, currentBuyer };
+  const panel = el("item-promo-panel");
+  const target = el("item-promo-target");
+  const typeSelect = el("item-promo-type");
+  const valueInput = el("item-promo-value");
+  if (target) {
+    target.textContent =
+      `This promo applies only to ${productId}. Other listings keep their list price.` +
+      (currentNet
+        ? ` You currently receive KES ${currentNet.toLocaleString()}${
+            currentBuyer ? ` (buyer pays ${formatKes(currentBuyer)})` : ""
+          }.`
+        : "");
+  }
+  if (typeSelect) typeSelect.value = "percent";
+  if (valueInput) valueInput.value = "15";
+  if (el("item-promo-status")) el("item-promo-status").textContent = "";
+  panel?.classList.remove("hidden");
+  showSellerView("listings");
+  panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function submitItemPromo() {
+  const phone = apiPhone();
+  const productId = pendingItemPromo?.productId;
+  if (!phone || !productId) {
+    if (el("item-promo-status")) {
+      el("item-promo-status").textContent = "Pick a listing with % Set promo first.";
+    }
+    return;
+  }
+  const type = String(el("item-promo-type")?.value || "percent").trim().toLowerCase() || "percent";
+  const value = Number(String(el("item-promo-value")?.value || "").replace(/[^\d.]/g, ""));
   if (!Number.isFinite(value) || value <= 0) {
+    if (el("item-promo-status")) el("item-promo-status").textContent = "Enter a valid promo value.";
     setStatus("Enter a valid promo value.", true);
     return;
   }
+  const status = el("item-promo-status");
+  if (status) status.textContent = "Starting promo on this item only…";
   setStatus("Starting promo…");
   try {
     const res = await fetch(`${ONBOARD_API}/promo`, {
@@ -3484,28 +3524,38 @@ async function setListingPromo(productId, currentSellerNet, currentBuyerTotal) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      setStatus(
+      const msg =
         data.message ||
-          "Session expired — verify WhatsApp at the top of Seller Hub, then try % Set promo again.",
-        true
-      );
+        "Could not save promo — tap Sign out, verify WhatsApp again, then retry. Your hub stays open.";
+      if (status) status.textContent = msg;
+      softSessionStatus(msg);
       return;
     }
     if (!res.ok) {
-      setStatus(data.message || data.error || "Could not start promo.", true);
+      const msg = data.message || data.error || "Could not start promo.";
+      if (status) status.textContent = msg;
+      setStatus(msg, true);
       return;
     }
-    setStatus(data.message || "Promo live — site + STK use the promo price.");
+    const okMsg = data.message || "Promo live on this item only — site + STK use the promo price.";
+    if (status) status.textContent = okMsg;
+    setStatus(okMsg);
+    closeItemPromoPanel();
     await loadMyListings();
   } catch {
+    if (status) status.textContent = "Network error.";
     setStatus("Network error.", true);
   }
+}
+
+async function setListingPromo(productId, currentSellerNet, currentBuyerTotal) {
+  openItemPromoPanel(productId, currentSellerNet, currentBuyerTotal);
 }
 
 async function endListingPromo(productId) {
   const phone = apiPhone();
   if (!phone || !productId) return;
-  if (!window.confirm("End promo and restore list price on the site?")) return;
+  // No window.confirm — dialogs blur the phone field and previously force-logged sellers out.
   setStatus("Ending promo…");
   try {
     const res = await fetch(`${ONBOARD_API}/promo/end`, {
@@ -3515,10 +3565,9 @@ async function endListingPromo(productId) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      setStatus(
+      softSessionStatus(
         data.message ||
-          "Session expired — verify WhatsApp at the top of Seller Hub, then try End promo again.",
-        true
+          "Could not end promo — verify WhatsApp from Sign out if needed. Hub stays open."
       );
       return;
     }
@@ -3526,7 +3575,8 @@ async function endListingPromo(productId) {
       setStatus(data.message || data.error || "Could not end promo.", true);
       return;
     }
-    setStatus(data.message || "Promo ended.");
+    setStatus(data.message || "Promo ended on this item.");
+    closeItemPromoPanel();
     await loadMyListings();
   } catch {
     setStatus("Network error.", true);
@@ -6742,14 +6792,13 @@ async function saveListingStock(productId, rawQty, btn, card = null) {
 }
 
 function buildMarketingShareMessage() {
-  const code = getSellerPromoCode();
   const handle = sellerShopHandle();
   return (
     `✨ *NEW ON SOKONI*\n\n` +
     `Check my verified shop — pay safe with M-Pesa escrow:\n\n` +
     `👉 ${sellerMallHomeUrl()}\n` +
     (handle ? `Shop: @${handle}\n` : "") +
-    `\nPromo code: *${code}* (mention it in chat)`
+    `\nItem deals are on each listing — not a shop-wide sale.`
   );
 }
 
@@ -6889,29 +6938,7 @@ async function saveShopOfferBanner() {
 
 function renderHubMarketing() {
   const preview = el("marketing-share-preview");
-  const codeInput = el("marketing-promo-code");
   const waBtn = el("marketing-wa-btn");
-  if (codeInput && !codeInput.dataset.bound) {
-    codeInput.value = getSellerPromoCode();
-    codeInput.addEventListener("input", () => {
-      setSellerPromoCode(codeInput.value);
-      renderHubMarketing();
-    });
-    codeInput.dataset.bound = "1";
-  } else if (codeInput) {
-    codeInput.value = getSellerPromoCode();
-  }
-
-  if (el("shop-promo-banner") && sellerProfile?.promoBanner != null) {
-    el("shop-promo-banner").value = sellerProfile.promoBanner || el("shop-promo-banner").value || "";
-  }
-  if (el("shop-offer-note") && sellerProfile?.offerNote != null) {
-    el("shop-offer-note").value = sellerProfile.offerNote || el("shop-offer-note").value || "";
-  }
-  if (el("shop-offer-save-btn") && !el("shop-offer-save-btn").dataset.bound) {
-    el("shop-offer-save-btn").addEventListener("click", () => void saveShopOfferBanner());
-    el("shop-offer-save-btn").dataset.bound = "1";
-  }
 
   const msg = buildMarketingShareMessage();
   if (preview) preview.textContent = msg;
@@ -6936,7 +6963,6 @@ function renderHubMarketing() {
     return;
   }
   const handle = sellerShopHandle();
-  const code = getSellerPromoCode();
   buyersWrap.innerHTML = buyers
     .map((o, idx) => {
       const name = o.customerName || o.buyerName || "Buyer";
@@ -6950,8 +6976,7 @@ function renderHubMarketing() {
       const restock =
         `Habari ${name} — *${productName}* (${productRef}) has fresh stock on Sokoni:\n\n` +
         `${sellerMallHomeUrl()}\n` +
-        (handle ? `Shop: @${handle}\n` : "") +
-        `\nPromo: *${code}* — mention it in chat`;
+        (handle ? `Shop: @${handle}` : "");
       const phone = waDigits(o.buyerPhone);
       // Always clickable: deep-link to buyer when known, otherwise open WhatsApp with the draft ready.
       const thankHref = waChatUrl(phone, thank);
@@ -7429,17 +7454,21 @@ function init() {
   bindSellerDispatchUi();
   bindShopAvatarUi();
   el("seller-phone")?.addEventListener("change", () => {
-    const prev = normalizePhoneInput(localStorage.getItem(PHONE_KEY) || "");
+    // Never auto-logout from phone field events while the hub is open.
+    // Autofill / blur previously force-logged sellers out after promo save.
+    if (sellerProfile) {
+      const locked = localStorage.getItem(PHONE_KEY) || "";
+      const phoneInput = el("seller-phone");
+      if (phoneInput) {
+        phoneInput.readOnly = true;
+        if (locked) phoneInput.value = locked;
+      }
+      return;
+    }
     savePhone();
-    const next = apiPhone();
-    // Autofill / blur / returning from window.prompt often fires change without a real number change.
-    // Wiping the hub here is what kicked sellers to "Start selling" after % Set promo.
-    if (!next || (prev && prev === next)) return;
-    handleSessionExpired(
-      { message: "WhatsApp number changed — send a new code to continue." },
-      { force: true }
-    );
   });
+  el("item-promo-save-btn")?.addEventListener("click", () => void submitItemPromo());
+  el("item-promo-cancel-btn")?.addEventListener("click", () => closeItemPromoPanel());
   el("draft-price")?.addEventListener("input", onListingPriceInput);
   el("media-price")?.addEventListener("input", onListingPriceInput);
   el("photo-caption")?.addEventListener("change", () => {
