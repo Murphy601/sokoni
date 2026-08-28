@@ -105,8 +105,8 @@ export async function searchProducts({
       if (browseSubCategory && path.sub !== browseSubCategory) return false;
     }
     if (source && product.source !== source) return false;
-    if (scope && product.scope !== scope) return false;
-    if (fulfillment && product.fulfillment !== fulfillment) return false;
+    if (scope && scope !== "all" && product.scope !== scope) return false;
+    if (fulfillment && fulfillment !== "all" && product.fulfillment !== fulfillment) return false;
     if (maxPriceKes != null && product.priceKes != null && product.priceKes > maxPriceKes) {
       return false;
     }
@@ -280,6 +280,11 @@ const QUERY_EXPANSIONS = {
   kitenge: ["kitenge", "ankara", "wax", "print", "dress", "fashion"],
   sneakers: ["sneakers", "shoes", "trainers", "kicks", "footwear"],
   denim: ["denim", "jeans", "jacket", "fashion"],
+  yogurt: ["yogurt", "yoghurt"],
+  yoghurt: ["yoghurt", "yogurt"],
+  mug: ["mug", "mugs", "cup", "cups"],
+  bag: ["bag", "bags", "handbag", "tote"],
+  hat: ["hat", "hats", "cap", "caps"],
 };
 
 function expandKeywordTokens(raw) {
@@ -431,18 +436,33 @@ function isMenuBoilerplate(text) {
 }
 
 function productHaystack(product) {
-  return [product.name, product.category, product.subcategory, ...(product.tags || [])]
+  return [
+    product.name,
+    product.description,
+    product.brand,
+    product.category,
+    product.subcategory,
+    product.browseCategory,
+    product.browseSubCategory,
+    ...(product.tags || []),
+  ]
+    .filter(Boolean)
     .join(" ")
     .toLowerCase();
 }
 
 function scoreProduct(product, tokens) {
   const hay = productHaystack(product);
+  const nameHay = String(product.name || "").toLowerCase();
   let score = 0;
   for (const token of tokens) {
     if (isSizeToken(token)) continue;
-    if (token.length < 4) continue;
-    if (hay.includes(token)) score += token.length >= 4 ? 2 : 1;
+    // Allow 3-char merchandise tokens (mug, bag, hat, oil) — was <4 which dropped them
+    if (token.length < 3 && token !== "tv") continue;
+    if (!hay.includes(token)) continue;
+    const weight = token.length >= 4 ? 2 : 1;
+    score += weight;
+    if (nameHay.includes(token)) score += 2;
   }
   return score;
 }

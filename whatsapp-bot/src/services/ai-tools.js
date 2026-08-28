@@ -120,7 +120,22 @@ export function isGuideIntent(text) {
 /** Seller-side marketplace topics (listing, payouts, hubs). */
 export function isSellerTopic(text) {
   const lower = String(text || "").toLowerCase();
-  return /\b(sell(?:er|ing)?|list(?:ing|ings)?|payout|withdraw(?:al)?|b2c|drop-?offs?|mashinani|inventory|stock units?|m-?pesa ledger|seller hub|onboard(?:ing)?|commission|platform fee|hub drop)\b/i.test(
+  // Buyer asking to see merchandise — not Seller Hub ops
+  if (
+    /\b(listings? for|list(?:ings?)?\s+(?:of\s+)?(?:the\s+)?(?:dresses?|shoes?|sneakers?|phones?|items?|products?|bags?))\b/i.test(
+      lower
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\b(do you have|looking for|show me|find|stock of|any)\b/i.test(lower) &&
+    /\b(shoes?|dress(?:es)?|sneaker|phone|laptop|stock|mug|bag|jeans)\b/i.test(lower) &&
+    !/\b(seller hub|my shop|payout|as a seller)\b/i.test(lower)
+  ) {
+    return false;
+  }
+  return /\b(sell(?:er|ing)?|list(?:ing|ings)?|payout|withdraw(?:al)?|b2c|drop-?offs?|mashinani|inventory|stock units?|m-?pesa ledger|seller hub|onboard(?:ing)?|commission|platform fee|hub drop|create (a )?listing|list (an? )?item)\b/i.test(
     lower
   );
 }
@@ -277,7 +292,11 @@ export function isShoppingIntent(text, { browseMatch = null, budget = null } = {
   if (isPaymentOrSiteInfoQuery(raw.toLowerCase()) && budget == null && !browseMatch) return false;
   // Guide / seller Q without a product keyword is conversational, not a SKU hunt
   if ((isGuideIntent(raw) || isSellerTopic(raw)) && !browseMatch && budget == null) {
-    if (!/\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift|denim|kiondo)\b/i.test(raw)) {
+    if (
+      !/\b(dress(?:es)?|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift|denim|kiondo|mug|bag)\b/i.test(
+        raw
+      )
+    ) {
       return false;
     }
   }
@@ -285,22 +304,30 @@ export function isShoppingIntent(text, { browseMatch = null, budget = null } = {
   if (browseMatch) return true;
   if (isSokoniOrderId(raw) || extractOrderIdFromText(raw)) return false;
 
+  // Availability / stock checks are shopping (must run catalog search)
+  if (
+    /\b(do you (have|sell)|have you got|any|in stock|stock of|still (have|sell))\b/i.test(raw) &&
+    !/\b(how (does|do|to)|escrow|fee|commission|account|login)\b/i.test(raw)
+  ) {
+    return true;
+  }
+
   // Explicit hunt verbs (avoid bare "need" / "any" / "list" — those match escrow help too)
   if (
-    /\b(show me|find( me)?|looking for|search( for)?|nataka|nipee|shop for|browse for)\b/i.test(raw)
+    /\b(show me|find( me)?|looking for|search( for)?|nataka|nipee|shop for|browse for|listings? for)\b/i.test(raw)
   ) {
     return true;
   }
   if (
     /\b(buy|want|order)\b/i.test(raw) &&
-    /\b(dress|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift|denim|kiondo|bag|shirt|under|chini|kes)\b/i.test(
+    /\b(dress(?:es)?|sneaker|phone|laptop|shoes?|jeans|hoodie|electronics|fashion|thrift|denim|kiondo|bag|shirt|mug|under|chini|kes)\b/i.test(
       raw
     )
   ) {
     return true;
   }
   if (
-    /\b(sneakers?|dresses?|phones?|laptops?|shoes?|jeans|hoodie|electronics|fashion|thrift|kicks|denim|kiondo)\b/i.test(
+    /\b(sneakers?|dresses?|phones?|laptops?|shoes?|jeans|hoodie|electronics|fashion|thrift|kicks|denim|kiondo|mugs?|bags?)\b/i.test(
       raw
     ) &&
     !/\b(how (does|do|to|can)|what is|explain|policy|escrow|fee|commission|refund|dispute|account|login)\b/i.test(
@@ -310,7 +337,7 @@ export function isShoppingIntent(text, { browseMatch = null, budget = null } = {
     return true;
   }
 
-  // 1–2 token merchandise keywords only (e.g. "denim", "kiondo") — not full questions
+  // 1–2 token merchandise keywords only (e.g. "denim", "kiondo", "mug") — not full questions
   const tokens = raw
     .toLowerCase()
     .replace(/[^a-z0-9'\s-]/g, " ")
@@ -582,7 +609,7 @@ export async function runToolRouter(
     isShopperFillerOnly(text) ||
     isGreetingIntent(text) ||
     isSupportIntent(text) ||
-    isSellerTopic(text) ||
+    (isSellerTopic(text) && !shopping) ||
     isOffTopicIntent(text) ||
     text.length < 2 ||
     (!allow("search_products") && !allow("browse_products"));
@@ -716,12 +743,11 @@ async function toolSearchProducts({
     products = smart.products || [];
     suggestions = smart.suggestions || [];
   } catch {
+    // Never force scope/fulfillment here — seller rows may use other values
     products = await searchProducts({
       keywords,
       browseCategory: browseCategory || undefined,
       browseSubCategory: browseSubCategory || undefined,
-      fulfillment: "store",
-      scope: "local",
       maxPriceKes: maxPriceKes && Number.isFinite(Number(maxPriceKes)) ? Number(maxPriceKes) : undefined,
       limit: Math.min(Number(limit) || 5, 8),
     });
@@ -775,6 +801,9 @@ async function toolBrowseProducts({
     browseCategory,
     browseSubCategory: browseSubCategory || undefined,
     maxPriceKes: maxPriceKes && Number.isFinite(Number(maxPriceKes)) ? Number(maxPriceKes) : undefined,
+    // AI aisle browse must see all live stock, not only platform "local/store" rows
+    scope: "all",
+    fulfillment: "all",
   });
 
   if (secondhandOnly) {
@@ -1165,9 +1194,15 @@ export function formatToolResultsForPrompt(toolResults) {
           ? `${r.browseCategory}${r.browseSubCategory ? `/${r.browseSubCategory}` : ""}`
           : "");
       return (
-        `TOOL search_products (${r.count || 0} hits for "${r.query}"${path ? `; aisle ${path}` : ""}):\n` +
+        `LOOKUP search_products (${r.count || 0} hits for "${r.query}"${path ? `; aisle ${path}` : ""}):\n` +
         (r.suggestions?.length ? `Suggestions: ${r.suggestions.join(", ")}\n` : "") +
         (formatProductLines(r.products).join("\n") || "(no products)")
+      );
+    }
+    if (r.tool === "search_products") {
+      return (
+        `LOOKUP search_products: 0 hits for "${r.query || ""}". ` +
+        `Do not invent products. Suggest another keyword, aisle, or escalate if needed.`
       );
     }
     if (r.tool === "browse_products" && r.products?.length) {

@@ -147,8 +147,37 @@ export async function smartSearch({
     limit: Math.max(Number(limit) || 12, 24),
   });
 
+  // Hybrid fallback: keyword scorer can miss short tokens / description-only hits.
+  // Re-scan live catalog with fuzzy blob (name+description+brand+tags) when empty.
+  if (!products.length && (expandedQuery || query)) {
+    const pool = await searchProducts({
+      browseCategory: browseCategory || undefined,
+      browseSubCategory: browseSubCategory || undefined,
+      maxPriceKes: maxPriceKes != null ? Number(maxPriceKes) : undefined,
+      limit: 5000,
+    });
+    products = pool
+      .map((p) => {
+        const blob = [
+          p.name,
+          p.description,
+          p.brand,
+          p.category,
+          p.subcategory,
+          p.browseCategory,
+          p.browseSubCategory,
+          ...(p.tags || []),
+        ].join(" ");
+        return { p, score: fuzzyBlobScore(blob, tokens) };
+      })
+      .filter((row) => row.score > 0)
+      .sort((a, b) => b.score - a.score || (b.p.rating || 0) - (a.p.rating || 0))
+      .map((row) => row.p)
+      .slice(0, Math.max(Number(limit) || 12, 24));
+  }
+
   // Soft typo re-rank
-  if (baseTokens.length) {
+  if (baseTokens.length && products.length) {
     products = products
       .map((p) => {
         const blob = [
