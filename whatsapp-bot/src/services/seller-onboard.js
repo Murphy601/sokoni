@@ -573,7 +573,24 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
   for (const file of paths) {
     try {
       const products = JSON.parse(await readFile(file, "utf-8"));
-      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      const sellerHandle = String(check.supplier.shopHandle || "")
+        .replace(/^@+/, "")
+        .trim()
+        .toLowerCase();
+      const sellerDigits = normalizePhone(phone);
+      const idx = products.findIndex((p) => {
+        if (p.id !== productId) return false;
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerHandle) {
+          const ph = String(p.shopHandle || p.sellerHandle || "")
+            .replace(/^@+/, "")
+            .trim()
+            .toLowerCase();
+          if (ph && ph === sellerHandle) return true;
+        }
+        if (sellerDigits && normalizePhone(p.sellerPhone) === sellerDigits) return true;
+        return false;
+      });
       if (idx === -1) continue;
 
       const current = products[idx];
@@ -642,6 +659,12 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
   const newBuyerTotal = Math.round(Number(updated.priceKes) || 0);
 
   await syncListingPriceToDb(updated);
+  try {
+    const { invalidateProductCache } = await import("./catalog.js");
+    invalidateProductCache();
+  } catch {
+    /* ignore */
+  }
 
   try {
     const { execSync } = await import("node:child_process");
@@ -681,6 +704,12 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
 
   const drop = oldBuyerTotal != null && newBuyerTotal < oldBuyerTotal;
   const raise = oldBuyerTotal != null && newBuyerTotal > oldBuyerTotal;
+  const compareAt =
+    updated.compareAtPrice != null
+      ? Math.round(Number(updated.compareAtPrice))
+      : updated.originalPriceKes != null
+        ? Math.round(Number(updated.originalPriceKes))
+        : null;
   return {
     success: true,
     productId,
@@ -688,6 +717,8 @@ export async function updateSellerListingPrice({ phone, productId, sellerNetKes,
     priceKes: newBuyerTotal,
     previousPriceKes: oldBuyerTotal,
     previousSellerNetKes: oldSellerNet,
+    compareAtPrice: Number.isFinite(compareAt) && compareAt > 0 ? compareAt : null,
+    originalPriceKes: Number.isFinite(compareAt) && compareAt > 0 ? compareAt : null,
     priceDropped: drop,
     priceRaised: raise,
     likersNotified: notified,

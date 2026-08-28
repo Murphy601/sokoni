@@ -3717,6 +3717,33 @@ async function submitListingPrice(editor) {
     const okMsg = data.message || (raising ? "Price raised." : "Price dropped.");
     if (status) status.textContent = okMsg;
     setStatus(okMsg);
+    // Optimistic patch so hub shows DB-synced totals even if JSON master lags
+    if (data.success !== false && productId && Array.isArray(hubCache.listings)) {
+      const listing = hubCache.listings.find((l) => (l.id || l.productId) === productId);
+      if (listing) {
+        const net = Math.round(Number(data.sellerNetKes) || nextNet);
+        const buyer = Math.round(Number(data.priceKes) || 0);
+        listing.draft = {
+          ...(listing.draft || {}),
+          sellerNetKes: net,
+          sourcePriceKes: net,
+          priceKes: buyer || listing.draft?.priceKes,
+          buyerTotalKes: buyer || listing.draft?.buyerTotalKes,
+        };
+        if (data.priceRaised) {
+          listing.draft.compareAtPrice = null;
+          listing.draft.originalPriceKes = null;
+          listing.compareAtPrice = null;
+          listing.originalPriceKes = null;
+        } else if (data.compareAtPrice != null || data.originalPriceKes != null) {
+          const compare = Math.round(Number(data.compareAtPrice ?? data.originalPriceKes));
+          listing.draft.compareAtPrice = compare;
+          listing.draft.originalPriceKes = compare;
+          listing.compareAtPrice = compare;
+          listing.originalPriceKes = compare;
+        }
+      }
+    }
     closeItemPromoPanel();
     await loadMyListings();
   } catch {
