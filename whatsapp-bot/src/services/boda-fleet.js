@@ -514,6 +514,26 @@ export async function requestBodaDispatch({
   const paid = order.customerPaymentStatus === "confirmed" || order.paid || order.paymentStatus === "paid";
   if (!paid) return { error: "unpaid", message: "Buyer must pay into escrow first." };
 
+  // Block boda when geo-routing says seller courier / upcountry
+  try {
+    const { resolveOrderFulfillment } = await import("./upcountry-shipments.js");
+    const { FULFILLMENT_SELLER_COURIER } = await import("../lib/geo-zones.js");
+    const mode = resolveOrderFulfillment(order, {
+      sellerLocationText: check.supplier?.location || check.supplier?.shopName || "",
+    });
+    if (mode?.mode === FULFILLMENT_SELLER_COURIER || order.requiresRider === false) {
+      return {
+        error: "upcountry_courier",
+        message:
+          `*${id}* is outside local rider coverage. Drop the parcel with your courier, then reply:\n` +
+          `*WAYBILL ${id} Easy Coach TRACKING123*\n` +
+          `(or use Seller Hub tracking field)`,
+      };
+    }
+  } catch (err) {
+    console.warn("[boda-fleet] fulfillment check:", err.message);
+  }
+
   const town = normalizeBodaZone(zone) || "NAIROBI";
   const pickup =
     String(pickupAddress || "").trim() ||
