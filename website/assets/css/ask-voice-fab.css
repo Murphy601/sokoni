@@ -75,6 +75,26 @@
   background: #fff;
 }
 
+.sokoni-ask-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.sokoni-ask-speak-toggle {
+  font-size: 0.65rem !important;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  min-width: 3.25rem;
+  padding: 0 0.4rem !important;
+}
+
+.sokoni-ask-speak-toggle.is-muted {
+  opacity: 0.55;
+}
+
 .sokoni-ask-panel__eyebrow {
   margin: 0;
   font-size: 0.65rem;
