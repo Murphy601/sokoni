@@ -540,6 +540,26 @@ export async function notifyAdminEvent(eventType, { orderId = null, details = ""
 export function msgSellerPaid(order) {
   const payout = order.sellerPayoutKes ?? order.sellerNetKes;
   const listingId = order.productId || order.supplierSku || null;
+  const localRider =
+    order.fulfillmentMode === "LOCAL_RIDER" ||
+    order.requiresRider === true ||
+    order.deliveryMode === "sokoni_boda";
+
+  if (localRider) {
+    return (
+      `🎉 *New Paid Order on Sokoni!*\n` +
+      `Order: *${order.id}*\n` +
+      (listingId ? `Listing: *${listingId}*\n` : "") +
+      `Item: *${order.productName || "Order"}*\n` +
+      `Location: *${dropOffLine(order)}*\n` +
+      (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
+      `\n🛵 *Sokoni assigns the rider* — prepare the parcel.\n` +
+      `A verified rider will arrive. Hand over *only* after the *Pickup OTP*.\n` +
+      `You do not pick or pin riders.\n\n` +
+      `Problem? Reply: HELP ${order.id}`
+    );
+  }
+
   return (
     `🎉 *New Paid Order on Sokoni!*\n` +
     `Order: *${order.id}*\n` +
@@ -548,7 +568,8 @@ export function msgSellerPaid(order) {
     `Location: *${dropOffLine(order)}*\n` +
     (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
     `\nPlease pack the item. Once handed to the buyer/courier, reply:\n` +
-    `*DISPATCH ${order.id}*\n\n` +
+    `*DISPATCH ${order.id}*\n` +
+    `(Upcountry: *WAYBILL ${order.id} Courier TRACKING*)\n\n` +
     `Problem? Reply: HELP ${order.id}`
   );
 }

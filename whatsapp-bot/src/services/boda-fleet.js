@@ -113,6 +113,9 @@ function mapRider(row) {
     verificationStatus: row.verification_status,
     isAvailable: Boolean(row.is_available),
     rating: row.rating != null ? Number(row.rating) : 5,
+    lastLat: row.last_lat != null ? Number(row.last_lat) : null,
+    lastLng: row.last_lng != null ? Number(row.last_lng) : null,
+    lastLocationAt: row.last_location_at || null,
     suspendReason: row.suspend_reason || null,
     docs: {
       nationalIdFrontUrl: row.national_id_front_url || null,
@@ -148,6 +151,9 @@ function mapDispatch(row) {
     acceptedAt: row.accepted_at,
     pickedUpAt: row.picked_up_at,
     deliveredAt: row.delivered_at,
+    pinnedRiderId: row.pinned_rider_id != null ? Number(row.pinned_rider_id) : null,
+    pinOfferedAt: row.pin_offered_at || null,
+    dispatchSource: row.dispatch_source || null,
     createdAt: row.created_at,
   };
 }
@@ -454,6 +460,16 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
 async function listAvailableRiders(zone) {
   const z = normalizeBodaZone(zone);
   if (!z) return [];
+  try {
+    await query(`
+      ALTER TABLE riders
+        ADD COLUMN IF NOT EXISTS last_lat DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS last_lng DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ
+    `);
+  } catch {
+    /* ignore */
+  }
   const { rows } = await query(
     `SELECT * FROM riders
       WHERE operating_town = $1
@@ -464,6 +480,468 @@ async function listAvailableRiders(zone) {
     [z, BROADCAST_LIMIT]
   );
   return rows.map(mapRider);
+}
+
+/**
+ * Rank riders by distance to pickup (last GPS / stage), then rating.
+ */
+async function rankRidersNearPickup(zone, pickupCoords) {
+  const riders = await listAvailableRiders(zone);
+  if (!riders.length) return [];
+  if (!pickupCoords) {
+    return riders.map((r) => ({ ...r, distanceM: null, pinRank: 0 }));
+  }
+
+  const ranked = [];
+  for (const r of riders) {
+    let coords = parseCoordPair(r.lastLat, r.lastLng);
+    if (!coords && r.stageLocation) {
+      coords = await geocodeKenyaAddress(`${r.stageLocation}, ${r.operatingTown}, Kenya`);
+    }
+    const distanceM = coords
+      ? haversineMeters(coords.lat, coords.lng, pickupCoords.lat, pickupCoords.lng)
+      : null;
+    ranked.push({ ...r, distanceM, pinRank: distanceM == null ? 1e12 : distanceM });
+  }
+  ranked.sort((a, b) => {
+    if (a.pinRank !== b.pinRank) return a.pinRank - b.pinRank;
+    return (b.rating || 0) - (a.rating || 0);
+  });
+  return ranked;
+}
+
+function zoneFromOrder(order) {
+  const blob = `${order?.deliveryCounty || ""} ${order?.deliveryTown || ""} ${order?.location || ""} ${order?.bodaZone || ""}`.toUpperCase();
+  if (/\bTHIKA\b|\bJUJA\b|\bRUIRU\b|\bKIAMBU\b/.test(blob)) return "THIKA";
+  return "NAIROBI";
+}
+
+async function ensurePinColumns() {
+  await query(`
+    ALTER TABLE delivery_dispatches
+      ADD COLUMN IF NOT EXISTS pinned_rider_id INT,
+      ADD COLUMN IF NOT EXISTS pin_offered_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS dispatch_source VARCHAR(40) DEFAULT 'platform',
+      ADD COLUMN IF NOT EXISTS backup_pinged_at TIMESTAMPTZ
+  `);
+  await query(`
+    ALTER TABLE riders
+      ADD COLUMN IF NOT EXISTS last_lat DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS last_lng DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ
+  `);
+}
+
+/**
+ * Platform-owned dispatch: Sokoni pins nearest rider and offers the job.
+ * Sellers do not choose riders.
+ */
+export async function createPlatformBodaDispatch({
+  orderId,
+  zone = null,
+  pickupAddress = "",
+  deliveryAddress = "",
+  deliveryFeeKes = 0,
+  sellerPhone = null,
+  sellerHandle = null,
+  dropoffLat = null,
+  dropoffLng = null,
+  pickupLat = null,
+  pickupLng = null,
+  source = "platform",
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Boda fleet needs Postgres." };
+  }
+  const id = normalizeOrderId(orderId);
+  if (!id) return { error: "invalid_order_id", message: "Enter a valid SKN order id." };
+  const order = getOrder(id);
+  if (!order) return { error: "not_found", message: `Order ${id} not found.` };
+
+  const paid =
+    order.customerPaymentStatus === "confirmed" || order.paid || order.paymentStatus === "paid";
+  if (!paid) return { error: "unpaid", message: "Buyer must pay into escrow first." };
+  if (order.disputeHold || order.adminTakeOver) {
+    return { error: "support_hold", message: "Order is with Sokoni support." };
+  }
+
+  try {
+    const { resolveOrderFulfillment } = await import("./upcountry-shipments.js");
+    const { FULFILLMENT_SELLER_COURIER } = await import("../lib/geo-zones.js");
+    const mode = resolveOrderFulfillment(order);
+    if (mode?.mode === FULFILLMENT_SELLER_COURIER || order.requiresRider === false) {
+      return {
+        error: "upcountry_courier",
+        message: `*${id}* is outside local rider coverage — seller courier / WAYBILL flow.`,
+      };
+    }
+  } catch (err) {
+    console.warn("[boda-fleet] fulfillment check:", err.message);
+  }
+
+  const existing = await getOpenDispatchForOrder(id);
+  if (existing) {
+    return {
+      ok: true,
+      already: true,
+      dispatch: existing,
+      message: `Boda already open for *${id}* (${existing.status}).`,
+    };
+  }
+
+  const town = normalizeBodaZone(zone) || zoneFromOrder(order);
+  const pickup =
+    String(pickupAddress || "").trim() ||
+    String(order.sellerLocation || order.pickupAddress || "Seller pickup").slice(0, 240);
+  const drop =
+    String(deliveryAddress || "").trim() ||
+    String(order.location || order.dropOff || order.customerLocation || "Buyer drop-off").slice(0, 240);
+  const defaultFee = town === "THIKA" ? 250 : 350;
+  const fee = Math.max(
+    0,
+    Number(deliveryFeeKes) > 0
+      ? Number(deliveryFeeKes)
+      : Number(order.shippingKes) > 0
+        ? Number(order.shippingKes)
+        : defaultFee
+  );
+
+  let dropCoords =
+    parseCoordPair(dropoffLat, dropoffLng) ||
+    parseCoordPair(order.buyerLat, order.buyerLng) ||
+    parseCoordPair(order.dropoffLat ?? order.dropOffLat, order.dropoffLng ?? order.dropOffLng) ||
+    null;
+  if (!dropCoords) dropCoords = await geocodeKenyaAddress(drop);
+
+  let pickupCoords = parseCoordPair(pickupLat, pickupLng);
+  if (!pickupCoords) pickupCoords = await geocodeKenyaAddress(pickup);
+
+  const ranked = await rankRidersNearPickup(town, pickupCoords || dropCoords);
+  if (!ranked.length) {
+    return {
+      error: "no_riders",
+      message: `No verified available Sokoni riders in ${town} right now.`,
+    };
+  }
+
+  try {
+    await ensureOtpSafeguardColumns();
+    await ensurePinColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] pin columns:", err.message);
+  }
+
+  const primary = ranked[0];
+  const riderIds = ranked.map((r) => r.id);
+  const distLabel =
+    primary.distanceM != null ? `~${Math.round(primary.distanceM / 100) / 10} km away` : "nearby";
+
+  const { rows } = await query(
+    `INSERT INTO delivery_dispatches (
+       order_ref, seller_phone, pickup_address, delivery_address,
+       delivery_fee_kes, operating_town, status, broadcast_rider_ids, meta,
+       dropoff_lat, dropoff_lng, pinned_rider_id, pin_offered_at, dispatch_source
+     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb, $9, $10, $11, NOW(), $12)
+     RETURNING *`,
+    [
+      id,
+      sellerPhone ? normalizeRiderPhone(sellerPhone) : null,
+      pickup,
+      drop,
+      fee,
+      town,
+      riderIds,
+      JSON.stringify({
+        productName: order.productName || null,
+        sellerHandle: sellerHandle || null,
+        dropoffGeocoded: Boolean(dropCoords),
+        pickupGeocoded: Boolean(pickupCoords),
+        pinnedRiderName: primary.fullName,
+        pinnedDistanceM: primary.distanceM,
+        platformPin: true,
+        rankedRiderIds: riderIds,
+      }),
+      dropCoords?.lat ?? null,
+      dropCoords?.lng ?? null,
+      primary.id,
+      String(source || "platform").slice(0, 40),
+    ]
+  );
+  const dispatch = mapDispatch(rows[0]);
+
+  const { sendText } = await import("./whatsapp.js");
+  const feeLine = fee > 0 ? `Delivery fee: *KES ${fee.toLocaleString()}*\n` : "";
+  const pinMsg =
+    `🛵 *Sokoni pinned you for a delivery*\n\n` +
+    `Order *${id}*\n` +
+    `You are ${distLabel} · rating ${Number(primary.rating || 5).toFixed(1)}\n` +
+    `Pickup: ${pickup}\n` +
+    `Drop-off: ${drop}\n` +
+    feeLine +
+    `\nReply *ACCEPT ${id}* within a few minutes to take the job.\n` +
+    `If you are busy, ignore — Sokoni will offer the next rider.`;
+
+  try {
+    await sendText(`${primary.phone}@c.us`, pinMsg);
+  } catch (err) {
+    console.warn("[boda-fleet] pin ping failed:", primary.phone, err.message);
+  }
+
+  // Escalate to backups shortly if still REQUESTED (non-blocking).
+  const backupIds = riderIds.slice(1, 4);
+  if (backupIds.length) {
+    setTimeout(() => {
+      escalateBodaPinBackups(rows[0].id).catch((err) =>
+        console.warn("[boda-fleet] backup escalate:", err.message)
+      );
+    }, 45 * 1000);
+  }
+
+  updateOrderMeta(id, {
+    bodaDispatchId: dispatch.id,
+    bodaZone: town,
+    bodaStatus: "REQUESTED",
+    bodaPinnedRiderId: primary.id,
+    bodaPinnedRiderName: primary.fullName,
+    deliveryMode: "sokoni_boda",
+    fulfillmentMode: "LOCAL_RIDER",
+    requiresRider: true,
+  });
+
+  // Seller: prepare item — do not pick a rider
+  if (sellerPhone || order.supplierId) {
+    try {
+      const { getSupplier } = await import("./suppliers.js");
+      const { sellerNotifyTargets, dispatchMessages } = await import("./communication-hub.js");
+      const sup = order.supplierId ? getSupplier(order.supplierId) : null;
+      const phoneForNotify = sellerPhone || sup?.phone;
+      if (phoneForNotify) {
+        const targets = sellerNotifyTargets(phoneForNotify);
+        const msg =
+          `🛵 *Sokoni is assigning a rider for ${id}*\n\n` +
+          `Prepare the parcel. A verified Sokoni rider will arrive.\n` +
+          `Hand over *only* after they show the *Pickup OTP* (we will send it when they accept).\n` +
+          `You do not choose or pin riders — Sokoni handles logistics.`;
+        for (const to of targets.slice(0, 1)) {
+          void dispatchMessages([{ to, message: msg }]);
+        }
+      }
+    } catch (err) {
+      console.warn("[boda-fleet] seller pin notify:", err.message);
+    }
+  }
+
+  console.log(
+    `[boda-fleet] PLATFORM PIN ${id} zone=${town} rider=#${primary.id} ${primary.fullName} dist=${primary.distanceM ?? "—"}`
+  );
+  return {
+    ok: true,
+    dispatch,
+    pinnedRider: {
+      id: primary.id,
+      fullName: primary.fullName,
+      distanceM: primary.distanceM,
+      rating: primary.rating,
+    },
+    ridersAvailable: ranked.length,
+    message: `Sokoni pinned ${primary.fullName} for *${id}*.`,
+  };
+}
+
+/**
+ * After payment: auto-dispatch local-rider orders (Sokoni pins — sellers never choose).
+ */
+export async function autoDispatchBodaForOrder(orderId) {
+  const id = normalizeOrderId(orderId);
+  if (!id) return { skipped: true, reason: "invalid_order" };
+  const order = getOrder(id);
+  if (!order) return { skipped: true, reason: "not_found" };
+
+  try {
+    const { resolveOrderFulfillment } = await import("./upcountry-shipments.js");
+    const { FULFILLMENT_LOCAL_RIDER } = await import("../lib/geo-zones.js");
+    const mode = resolveOrderFulfillment(order);
+    const local =
+      mode?.mode === FULFILLMENT_LOCAL_RIDER ||
+      order.fulfillmentMode === FULFILLMENT_LOCAL_RIDER ||
+      order.requiresRider === true;
+    if (!local) {
+      return { skipped: true, reason: "not_local_rider", mode: mode?.mode || order.fulfillmentMode };
+    }
+  } catch (err) {
+    console.warn("[boda-fleet] autoDispatch mode:", err.message);
+  }
+
+  const { getSupplier } = await import("./suppliers.js");
+  const sup = order.supplierId ? getSupplier(order.supplierId) : null;
+  return createPlatformBodaDispatch({
+    orderId: id,
+    zone: zoneFromOrder(order),
+    pickupAddress: sup?.location || order.sellerLocation || "",
+    deliveryAddress: order.location || order.dropOff || "",
+    deliveryFeeKes: order.shippingKes || 0,
+    sellerPhone: sup?.phone || null,
+    sellerHandle: sup?.shopHandle || null,
+    dropoffLat: order.buyerLat,
+    dropoffLng: order.buyerLng,
+    source: "platform_paid",
+  });
+}
+
+/** If pinned rider did not ACCEPT, offer backups (proximity-ranked). */
+export async function escalateBodaPinBackups(dispatchId) {
+  if (!isDbEnabled()) return { skipped: true };
+  const id = Number(dispatchId);
+  if (!Number.isInteger(id) || id < 1) return { skipped: true };
+
+  const { rows } = await query(
+    `SELECT * FROM delivery_dispatches WHERE id = $1 AND status = 'REQUESTED' LIMIT 1`,
+    [id]
+  );
+  const d = rows[0];
+  if (!d || d.backup_pinged_at) return { skipped: true, reason: "already_escalated_or_gone" };
+
+  const rankedIds = Array.isArray(d.meta?.rankedRiderIds)
+    ? d.meta.rankedRiderIds.map(Number)
+    : Array.isArray(d.broadcast_rider_ids)
+      ? d.broadcast_rider_ids.map(Number)
+      : [];
+  const backups = rankedIds.filter((rid) => rid && rid !== Number(d.pinned_rider_id)).slice(0, 3);
+  if (!backups.length) {
+    await query(`UPDATE delivery_dispatches SET backup_pinged_at = NOW() WHERE id = $1`, [id]);
+    return { ok: true, pinged: 0 };
+  }
+
+  const { rows: riders } = await query(
+    `SELECT id, phone, full_name FROM riders WHERE id = ANY($1::int[]) AND is_available = TRUE`,
+    [backups]
+  );
+  const { sendText } = await import("./whatsapp.js");
+  const fee = Number(d.delivery_fee_kes || 0);
+  const blast =
+    `🛵 *Sokoni delivery still open*\n` +
+    `Order *${d.order_ref}*\n` +
+    `Pickup: ${d.pickup_address}\n` +
+    `Drop-off: ${d.delivery_address}\n` +
+    (fee > 0 ? `Fee: KES ${fee.toLocaleString()}\n` : "") +
+    `\nReply *ACCEPT ${d.order_ref}* to claim (first ACCEPT wins).`;
+
+  let pinged = 0;
+  for (const r of riders) {
+    try {
+      await sendText(`${r.phone}@c.us`, blast);
+      pinged += 1;
+    } catch (err) {
+      console.warn("[boda-fleet] backup ping:", r.phone, err.message);
+    }
+  }
+  await query(`UPDATE delivery_dispatches SET backup_pinged_at = NOW(), updated_at = NOW() WHERE id = $1`, [
+    id,
+  ]);
+  return { ok: true, pinged };
+}
+
+/**
+ * Seller Hub: sellers cannot pin riders — Sokoni assigns automatically.
+ * Returns current dispatch status so the UI can show progress.
+ */
+export async function requestBodaDispatch({
+  orderId,
+  phone,
+  sessionToken,
+  zone = "NAIROBI",
+  pickupAddress = "",
+  deliveryAddress = "",
+  deliveryFeeKes = 0,
+  dropoffLat = null,
+  dropoffLng = null,
+  adminForce = false,
+} = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Boda fleet needs Postgres." };
+  }
+
+  // Admin / internal force path (ops only)
+  if (adminForce) {
+    return createPlatformBodaDispatch({
+      orderId,
+      zone,
+      pickupAddress,
+      deliveryAddress,
+      deliveryFeeKes,
+      dropoffLat,
+      dropoffLng,
+      sellerPhone: phone,
+      source: "admin_force",
+    });
+  }
+
+  const { requireAuthenticatedSeller } = await import("./seller-onboard.js");
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const id = normalizeOrderId(orderId);
+  if (!id) return { error: "invalid_order_id", message: "Enter a valid SKN order id." };
+  const order = getOrder(id);
+  if (!order) return { error: "not_found", message: `Order ${id} not found.` };
+  if (order.supplierId && order.supplierId !== check.supplier.id) {
+    return { error: "forbidden", message: "This order is not linked to your shop." };
+  }
+
+  const open = await getOpenDispatchForOrder(id);
+  if (open) {
+    return {
+      ok: true,
+      already: true,
+      platformAssigns: true,
+      dispatch: open,
+      message:
+        open.status === "REQUESTED"
+          ? `Sokoni already offered *${id}* to a verified rider. Prepare the parcel — wait for Pickup OTP.`
+          : `Rider assigned for *${id}* (${open.status}). Hand over only after Pickup OTP.`,
+    };
+  }
+
+  // Soft nudge: if paid + local and somehow missed auto-dispatch, platform creates it
+  // (still Sokoni-controlled — seller cannot choose who gets pinned).
+  const paid =
+    order.customerPaymentStatus === "confirmed" || order.paid || order.paymentStatus === "paid";
+  if (paid) {
+    const result = await createPlatformBodaDispatch({
+      orderId: id,
+      zone: zoneFromOrder(order) || zone,
+      pickupAddress:
+        pickupAddress || check.supplier?.location || check.supplier?.shopName || "",
+      deliveryAddress: deliveryAddress || order.location || "",
+      deliveryFeeKes: deliveryFeeKes || order.shippingKes || 0,
+      sellerPhone: check.supplier?.phone || phone,
+      sellerHandle: check.supplier?.shopHandle || null,
+      dropoffLat: dropoffLat ?? order.buyerLat,
+      dropoffLng: dropoffLng ?? order.buyerLng,
+      source: "platform_seller_nudge",
+    });
+    if (result.ok) {
+      return {
+        ...result,
+        platformAssigns: true,
+        message:
+          `Sokoni is assigning a rider for *${id}* — you cannot pick riders.\n` +
+          `Prepare the parcel. Hand over only after the Pickup OTP arrives.`,
+      };
+    }
+    if (result.error === "upcountry_courier" || result.error === "no_riders") {
+      return result;
+    }
+  }
+
+  return {
+    error: "platform_assigns_riders",
+    platformAssigns: true,
+    message:
+      `Sokoni assigns verified riders automatically after payment.\n` +
+      `Prepare *${id}* and wait — you will get a Pickup OTP when the rider is confirmed.\n` +
+      `Sellers cannot pin or choose riders.`,
+  };
 }
 
 export async function getOpenDispatchForOrder(orderRef) {
@@ -478,178 +956,6 @@ export async function getOpenDispatchForOrder(orderRef) {
     [id]
   );
   return rows[0] ? mapDispatch(rows[0]) : null;
-}
-
-/**
- * Seller Hub / API: create REQUESTED dispatch and ping verified riders in zone.
- */
-export async function requestBodaDispatch({
-  orderId,
-  phone,
-  sessionToken,
-  zone = "NAIROBI",
-  pickupAddress = "",
-  deliveryAddress = "",
-  deliveryFeeKes = 0,
-  dropoffLat = null,
-  dropoffLng = null,
-} = {}) {
-  if (!isDbEnabled()) {
-    return { error: "database_not_configured", message: "Boda fleet needs Postgres." };
-  }
-  const { requireAuthenticatedSeller } = await import("./seller-onboard.js");
-  const check = await requireAuthenticatedSeller(phone, sessionToken);
-  if (check.error) return check;
-
-  const id = normalizeOrderId(orderId);
-  if (!id) return { error: "invalid_order_id", message: "Enter a valid SKN order id." };
-  const order = getOrder(id);
-  if (!order) return { error: "not_found", message: `Order ${id} not found.` };
-  if (order.supplierId && order.supplierId !== check.supplier.id) {
-    return { error: "forbidden", message: "This order is not linked to your shop." };
-  }
-  if (order.disputeHold || order.adminTakeOver) {
-    return { error: "support_hold", message: "Order is with Sokoni support — cannot call a boda yet." };
-  }
-  const paid = order.customerPaymentStatus === "confirmed" || order.paid || order.paymentStatus === "paid";
-  if (!paid) return { error: "unpaid", message: "Buyer must pay into escrow first." };
-
-  // Block boda when geo-routing says seller courier / upcountry
-  try {
-    const { resolveOrderFulfillment } = await import("./upcountry-shipments.js");
-    const { FULFILLMENT_SELLER_COURIER } = await import("../lib/geo-zones.js");
-    const mode = resolveOrderFulfillment(order, {
-      sellerLocationText: check.supplier?.location || check.supplier?.shopName || "",
-    });
-    if (mode?.mode === FULFILLMENT_SELLER_COURIER || order.requiresRider === false) {
-      return {
-        error: "upcountry_courier",
-        message:
-          `*${id}* is outside local rider coverage. Drop the parcel with your courier, then reply:\n` +
-          `*WAYBILL ${id} Easy Coach TRACKING123*\n` +
-          `(or use Seller Hub tracking field)`,
-      };
-    }
-  } catch (err) {
-    console.warn("[boda-fleet] fulfillment check:", err.message);
-  }
-
-  const town = normalizeBodaZone(zone) || "NAIROBI";
-  const pickup =
-    String(pickupAddress || "").trim() ||
-    String(check.supplier?.location || check.supplier?.shopName || "Seller pickup").slice(0, 240);
-  const drop =
-    String(deliveryAddress || "").trim() ||
-    String(order.location || order.dropOff || order.customerLocation || "Buyer drop-off").slice(0, 240);
-  // Zone default fees when seller omits an amount (ops can override later).
-  const defaultFee = town === "THIKA" ? 250 : 350;
-  const fee = Math.max(
-    0,
-    Number(deliveryFeeKes) > 0
-      ? Number(deliveryFeeKes)
-      : Number(order.shippingKes) > 0
-        ? Number(order.shippingKes)
-        : defaultFee
-  );
-
-  let dropCoords =
-    parseCoordPair(dropoffLat, dropoffLng) ||
-    parseCoordPair(order.dropoffLat ?? order.dropOffLat, order.dropoffLng ?? order.dropOffLng) ||
-    parseCoordPair(order.meta?.dropoffLat, order.meta?.dropoffLng) ||
-    null;
-  if (!dropCoords) {
-    dropCoords = await geocodeKenyaAddress(drop);
-  }
-
-  const existing = await getOpenDispatchForOrder(id);
-  if (existing) {
-    return {
-      ok: true,
-      already: true,
-      dispatch: existing,
-      message: `Boda request already open for *${id}* (${existing.status}).`,
-    };
-  }
-
-  const riders = await listAvailableRiders(town);
-  if (!riders.length) {
-    return {
-      error: "no_riders",
-      message: `No verified available Sokoni boda riders in ${town} right now. Try again shortly or mark dispatched yourself.`,
-    };
-  }
-
-  try {
-    await ensureOtpSafeguardColumns();
-  } catch (err) {
-    console.warn("[boda-fleet] safeguard columns on request:", err.message);
-  }
-
-  const riderIds = riders.map((r) => r.id);
-  const { rows } = await query(
-    `INSERT INTO delivery_dispatches (
-       order_ref, seller_phone, pickup_address, delivery_address,
-       delivery_fee_kes, operating_town, status, broadcast_rider_ids, meta,
-       dropoff_lat, dropoff_lng
-     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb, $9, $10)
-     RETURNING *`,
-    [
-      id,
-      normalizeRiderPhone(phone) || check.supplier?.phone || null,
-      pickup,
-      drop,
-      fee,
-      town,
-      riderIds,
-      JSON.stringify({
-        productName: order.productName || null,
-        sellerHandle: check.supplier?.shopHandle || null,
-        dropoffGeocoded: Boolean(dropCoords),
-      }),
-      dropCoords?.lat ?? null,
-      dropCoords?.lng ?? null,
-    ]
-  );
-  const dispatch = mapDispatch(rows[0]);
-
-  const { sendText } = await import("./whatsapp.js");
-  const feeLine = fee > 0 ? `Fee: KES ${fee.toLocaleString()}\n` : "";
-  const blast =
-    `🛵 *New Sokoni pickup*\n` +
-    `Order *${id}*\n` +
-    `Pickup: ${pickup}\n` +
-    `Drop-off: ${drop}\n` +
-    feeLine +
-    `Zone: ${town}\n\n` +
-    `Reply *ACCEPT ${id}* to claim.\n` +
-    `Busy? Ignore — first ACCEPT wins.`;
-
-  let pinged = 0;
-  for (const rider of riders) {
-    try {
-      await sendText(`${rider.phone}@c.us`, blast);
-      pinged += 1;
-    } catch (err) {
-      console.warn("[boda-fleet] rider ping failed:", rider.phone, err.message);
-    }
-  }
-
-  updateOrderMeta(id, {
-    bodaDispatchId: dispatch.id,
-    bodaZone: town,
-    bodaStatus: "REQUESTED",
-  });
-
-  console.log(`[boda-fleet] REQUESTED ${id} zone=${town} riders=${pinged}/${riders.length}`);
-  return {
-    ok: true,
-    dispatch,
-    ridersPinged: pinged,
-    ridersAvailable: riders.length,
-    message:
-      `Calling ${pinged} verified rider${pinged === 1 ? "" : "s"} in ${town} for *${id}*. ` +
-      `You'll get a WhatsApp when one accepts.`,
-  };
 }
 
 /**
@@ -1359,6 +1665,20 @@ export async function recordRiderConfirmLocation({
      RETURNING d.order_ref, d.id`,
     [riderPhone, coords.lat, coords.lng]
   );
+
+  try {
+    await query(
+      `UPDATE riders SET
+         last_lat = $2,
+         last_lng = $3,
+         last_location_at = NOW(),
+         updated_at = NOW()
+       WHERE phone = $1`,
+      [riderPhone, coords.lat, coords.lng]
+    );
+  } catch (err) {
+    console.warn("[boda-fleet] rider last gps:", err.message);
+  }
 
   if (!rows.length) {
     return {
