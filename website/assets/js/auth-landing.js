@@ -107,6 +107,8 @@
     const buy = document.getElementById("auth-hero-buy");
     const sell = document.getElementById("auth-hero-sell");
     const ride = document.getElementById("auth-hero-ride");
+    const statsBuy = document.getElementById("auth-stat-buy");
+    const statsRide = document.getElementById("auth-stat-ride");
     if (!toggle || !buy || !sell) return;
     toggle.querySelectorAll("button").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -120,6 +122,11 @@
         buy.hidden = mode !== "buy";
         sell.hidden = mode !== "sell";
         if (ride) ride.hidden = mode !== "ride";
+        if (statsBuy && statsRide) {
+          const showRideStats = mode === "ride";
+          statsBuy.hidden = showRideStats;
+          statsRide.hidden = !showRideStats;
+        }
       });
     });
   }
