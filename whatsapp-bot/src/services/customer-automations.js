@@ -160,32 +160,23 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
     ) ||
     /imefika\s+(vibaya|sio\s+sahihi)/i.test(t)
   ) {
-    const order = latestRelevantOrder(customerKey, phone);
-    const oid = orderIdFromText(text) || order?.id;
-    const resolved = oid ? getOrder(oid) : order;
-    const msg = resolved
-      ? wrongOrderApologyMessage({
-          orderId: resolved.id,
-          productName: resolved.productName,
-          customerName: displayName || resolved.customerName,
-        })
-      : damagedReturnMessage({ orderId: "your order", productName: "your item", reason: "wrong item" });
-    setCustomerMeta(customerKey, {
-      awaitingWrongOrderFix: true,
-      wrongOrderIssueId: resolved?.id || null,
-    });
-    await sendText(customerKey, msg);
-    if (resolved && config.admin.primary) {
-      try {
-        await sendText(
-          config.admin.primary,
-          `⚠️ *Wrong order report*\nOrder: *${resolved.id}*\nCustomer: ${displayName || "—"} · ${phone || customerKey}\n\nSend: #apolog ${resolved.id}`
-        );
-      } catch {
-        /* ignore */
-      }
+    // Hard dispute protocol owns wrong-item (freeze + evidence photos). Soft REPLACE/CANCEL
+    // only applies after ops already set awaitingWrongOrderFix via #apolog.
+    if (getCustomerMeta(customerKey)?.awaitingWrongOrderFix) {
+      const order = latestRelevantOrder(customerKey, phone);
+      const oid = orderIdFromText(text) || order?.id;
+      const resolved = oid ? getOrder(oid) : order;
+      const msg = resolved
+        ? wrongOrderApologyMessage({
+            orderId: resolved.id,
+            productName: resolved.productName,
+            customerName: displayName || resolved.customerName,
+          })
+        : damagedReturnMessage({ orderId: "your order", productName: "your item", reason: "wrong item" });
+      await sendText(customerKey, msg);
+      return true;
     }
-    return true;
+    return false;
   }
 
   // Damaged / broken / photo evidence → dispute-protocol.js (stateful; must beat catalog search).

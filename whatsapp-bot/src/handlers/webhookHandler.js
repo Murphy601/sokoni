@@ -471,6 +471,58 @@ export async function handleIncomingMessage(
     return sendWelcome(customerKey);
   }
 
+  // Dispute evidence photos BEFORE automations + catalog search (stateful routing).
+  if (hasMedia && !isAdminSender(customerKey, phone)) {
+    try {
+      const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+      if (
+        await tryHandleDisputeEvidencePhoto(customerKey, {
+          hasMedia,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+          text: combinedText || text,
+          phone,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute evidence skipped:", err.message);
+    }
+  }
+
+  // Fulfillment disputes BEFORE soft automations + image search + AI.
+  if (!isAdminSender(customerKey, phone) && !isHumanHandoff(customerKey)) {
+    try {
+      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
+      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
+        if (hasMedia) {
+          try {
+            const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+            await tryHandleDisputeEvidencePhoto(customerKey, {
+              hasMedia,
+              mediaUrl,
+              mediaMimetype,
+              messageId,
+              chatId,
+              session: wahaSession,
+              text: combinedText || text,
+              phone,
+            });
+          } catch (err) {
+            console.warn("[webhook] dispute evidence after open skipped:", err.message);
+          }
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute protocol skipped:", err.message);
+    }
+  }
+
   if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
 
   if (await handleSellerWalletMessage(customerKey, text, { phone })) return;
@@ -505,62 +557,8 @@ export async function handleIncomingMessage(
     if (await startCartFromHandoff(customerKey, combinedText)) return;
   }
 
-  // Dispute evidence photos BEFORE visual catalog search (stateful routing).
-  if (hasMedia && !isAdminSender(customerKey, phone)) {
-    try {
-      const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
-      if (
-        await tryHandleDisputeEvidencePhoto(customerKey, {
-          hasMedia,
-          mediaUrl,
-          mediaMimetype,
-          messageId,
-          chatId,
-          session: wahaSession,
-          text: combinedText || text,
-          phone,
-        })
-      ) {
-        return;
-      }
-    } catch (err) {
-      console.warn("[webhook] dispute evidence skipped:", err.message);
-    }
-  }
-
-  // Fulfillment disputes (damaged / wrong item / refund) — BEFORE image search + AI.
-  // Caption+photo on the same message must open the dispute, not catalog-match.
-  if (!isAdminSender(customerKey, phone) && !isHumanHandoff(customerKey)) {
-    try {
-      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
-      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
-        // Same message included evidence media — attach it now.
-        if (hasMedia) {
-          try {
-            const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
-            await tryHandleDisputeEvidencePhoto(customerKey, {
-              hasMedia,
-              mediaUrl,
-              mediaMimetype,
-              messageId,
-              chatId,
-              session: wahaSession,
-              text: combinedText || text,
-              phone,
-            });
-          } catch (err) {
-            console.warn("[webhook] dispute evidence after open skipped:", err.message);
-          }
-        }
-        return;
-      }
-    } catch (err) {
-      console.warn("[webhook] dispute protocol skipped:", err.message);
-    }
-  }
-
   // Product photo → stock match must beat stuck checkout.
-  // Mid-order "County, Town…" was eating image messages (empty caption → re-prompt).
+  // Dispute evidence already handled earlier; image-search also hard-gates disputes.
   if (hasMedia && !isInSupplierOnboarding(customerKey) && looksLikeBuyerProductPhoto(mediaMimetype, combinedText || text)) {
     const hadCheckout = Boolean(getPendingCart(customerKey) || getPendingOrder(customerKey));
     if (hadCheckout) {
@@ -581,6 +579,7 @@ export async function handleIncomingMessage(
         chatId,
         session: wahaSession,
         text: combinedText || text,
+        phone,
       });
       if (imageHit) {
         if (imageHit === true) return;
