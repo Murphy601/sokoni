@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sokoni rider workspace — WhatsApp commands</title>
+<meta name="description" content="Rider workspace cheat sheet: AVAILABLE, ACCEPT, PICKUP, CONFIRM, NO_SHOW. Live jobs run on WhatsApp after verification." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("sokoni-theme");
+      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.classList.add("dark");
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/css/design-tokens.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white min-h-screen">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/95 dark:bg-brand-purple/95 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+      <a href="index.html" class="font-display font-bold text-lg">SOKONI<span class="text-brand-green">.</span> <span class="text-sm font-sans font-medium text-brand-purple/60 dark:text-white/50">Rider</span></a>
+      <nav class="flex flex-wrap gap-2 text-sm font-semibold">
+        <a href="index.html" class="min-h-[44px] inline-flex items-center px-3">Pitch</a>
+        <a href="apply.html" class="min-h-[44px] inline-flex items-center px-4 rounded-full btn-whatsapp font-bold">Apply</a>
+        <a href="https://wa.me/254117422428" target="_blank" rel="noopener" class="min-h-[44px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 dark:border-white/20">Open WhatsApp</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-10 md:py-14 space-y-10">
+    <div>
+      <h1 class="font-display text-3xl md:text-4xl font-bold mb-2">Rider workspace</h1>
+      <p class="text-sm text-brand-purple/70 dark:text-white/65 max-w-2xl">
+        Live jobs, OTPs, and payouts run on <strong>WhatsApp</strong> after ops verifies you.
+        This page is your command sheet and status guide — not a separate GPS app.
+      </p>
+    </div>
+
+    <!-- Stats strip (informational placeholders — live totals come via WhatsApp) -->
+    <section aria-label="Daily focus" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Today’s earnings</p>
+        <p class="font-display text-xl font-bold mt-1">On WhatsApp</p>
+      </div>
+      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Active jobs</p>
+        <p class="font-display text-xl font-bold mt-1">Pinned offers</p>
+      </div>
+      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Handovers</p>
+        <p class="font-display text-xl font-bold mt-1">CONFIRM done</p>
+      </div>
+      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Dispute hold</p>
+        <p class="font-display text-xl font-bold mt-1">~15 min window</p>
+      </div>
+    </section>
+
+    <section class="grid md:grid-cols-2 gap-8">
+      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/80 dark:bg-brand-purpleLight/35 p-6 space-y-4">
+        <h2 class="font-bold text-lg">Active job (on WhatsApp)</h2>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65">
+          When pinned, your chat shows pickup notes, fee, and order id. Enter OTPs with the exact commands below — don’t paste codes alone.
+        </p>
+        <ul class="text-sm space-y-2 text-brand-purple/80 dark:text-white/75">
+          <li><span class="font-semibold">Pickup:</span> seller speaks 4-digit Vendor OTP</li>
+          <li><span class="font-semibold">Drop-off:</span> buyer speaks 4-digit Delivery OTP</li>
+          <li><span class="font-semibold">No-show:</span> <span class="font-mono text-xs">NO_SHOW SKN-####</span> → wait 15 min → return flow</li>
+        </ul>
+        <a href="https://wa.me/254117422428?text=AVAILABLE" target="_blank" rel="noopener"
+           class="inline-flex items-center justify-center min-h-[48px] w-full rounded-full btn-whatsapp font-bold text-sm">
+          Go AVAILABLE on WhatsApp
+        </a>
+      </div>
+
+      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/80 dark:bg-brand-purpleLight/35 p-6">
+        <h2 class="font-bold text-lg mb-4">Command cheat sheet</h2>
+        <dl class="space-y-3 text-sm font-mono">
+          <div>
+            <dt class="text-brand-green font-bold">AVAILABLE</dt>
+            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Go online for pins</dd>
+          </div>
+          <div>
+            <dt class="text-brand-green font-bold">OFFLINE</dt>
+            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Stop offers</dd>
+          </div>
+          <div>
+            <dt class="text-brand-green font-bold">ACCEPT SKN-####</dt>
+            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Claim offered job</dd>
+          </div>
+          <div>
+            <dt class="text-brand-green font-bold">PICKUP SKN-#### ####</dt>
+            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Seller OTP → custody</dd>
+          </div>
+          <div>
+            <dt class="text-brand-green font-bold">CONFIRM SKN-#### ####</dt>
+            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Buyer OTP → delivery + payout path</dd>
+          </div>
+          <div>
+            <dt class="text-brand-green font-bold">DECLINE SKN-####</dt>
+            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Skip; next rider gets offered</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="rounded-3xl border border-dashed border-brand-purple/20 dark:border-white/20 p-6 md:p-8 text-center">
+      <h2 class="font-display text-xl font-bold mb-2">Not verified yet?</h2>
+      <p class="text-sm text-brand-purple/65 dark:text-white/55 mb-5 max-w-md mx-auto">
+        Apply with ID, Class A licence, and stage letter. Until then, commands reply “not a registered rider.”
+      </p>
+      <a href="apply.html" class="inline-flex items-center justify-center min-h-[48px] px-6 rounded-full btn-whatsapp font-bold text-sm">Apply to ride</a>
+    </section>
+  </main>
+
+  <footer class="max-w-5xl mx-auto px-5 py-8 text-xs text-brand-purple/45 dark:text-white/40">
+    <a href="index.html" class="hover:underline">← Rider pitch</a>
+  </footer>
+</body>
+</html>

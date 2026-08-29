@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Drive with Sokoni — WhatsApp boda jobs, escrow-backed</title>
+<meta name="description" content="Join Sokoni as a delivery rider. WhatsApp dispatch, escrow-backed jobs, M-Pesa payouts after CONFIRM. Apply with your docs." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("sokoni-theme");
+      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.classList.add("dark");
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/css/design-tokens.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<style>
+  .boda-hero {
+    min-height: min(88vh, 720px);
+    background:
+      linear-gradient(105deg, rgba(27, 16, 53, 0.88) 0%, rgba(27, 16, 53, 0.55) 48%, rgba(27, 16, 53, 0.25) 100%),
+      url("https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .boda-slide { scroll-margin-top: 5rem; }
+  }
+  .boda-slide { scroll-margin-top: 5.5rem; }
+</style>
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/95 dark:bg-brand-purple/95 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+      <a href="../index.html" class="font-display font-bold text-lg tracking-tight">SOKONI<span class="text-brand-green">.</span></a>
+      <nav class="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <a href="#why" class="min-h-[44px] inline-flex items-center px-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10">Why ride</a>
+        <a href="#steps" class="min-h-[44px] inline-flex items-center px-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10">How jobs work</a>
+        <a href="#pay" class="min-h-[44px] inline-flex items-center px-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10">Payouts</a>
+        <a href="dashboard.html" class="min-h-[44px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 dark:border-white/20">Workspace</a>
+        <a href="apply.html" class="min-h-[44px] inline-flex items-center px-4 rounded-full btn-whatsapp font-bold">Apply to ride</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero: one composition — brand, headline, one line, CTAs, full-bleed photo -->
+  <section class="boda-hero text-white flex items-end" aria-label="Drive with Sokoni">
+    <div class="max-w-5xl mx-auto w-full px-5 pb-12 pt-28 md:pb-16 md:pt-36">
+      <p class="text-sm font-semibold text-brand-green mb-3">Sokoni boda network</p>
+      <h1 class="font-display text-4xl md:text-6xl font-bold leading-[1.05] max-w-xl mb-4">
+        Drive with Sokoni
+      </h1>
+      <p class="text-base md:text-lg text-white/85 max-w-lg mb-8">
+        Escrow-backed WhatsApp jobs. Accept, pick up, deliver — then M-Pesa after confirmation.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a href="apply.html" class="inline-flex items-center justify-center min-h-[48px] px-6 rounded-full btn-whatsapp font-bold text-sm">Apply to ride</a>
+        <a href="#steps" class="inline-flex items-center justify-center min-h-[48px] px-6 rounded-full border border-white/40 text-white font-semibold text-sm hover:bg-white/10">See the 4 steps</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 1: Why ride -->
+  <section id="why" class="boda-slide max-w-5xl mx-auto px-5 py-16 md:py-20">
+    <p class="text-sm font-semibold text-brand-green mb-2">Slide 1 · Value</p>
+    <h2 class="font-display text-3xl md:text-4xl font-bold mb-3">Earn daily. Stay in control.</h2>
+    <p class="text-brand-purple/70 dark:text-white/65 max-w-2xl mb-10 text-sm md:text-base">
+      Sokoni pins you for prepaid local orders. No browsing a job board — offers come on WhatsApp when you’re AVAILABLE.
+    </p>
+    <div class="grid md:grid-cols-3 gap-8 md:gap-10">
+      <div>
+        <h3 class="font-bold text-lg mb-2">WhatsApp dispatch</h3>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65 leading-relaxed">
+          Job offers arrive in chat. Reply <span class="font-mono text-xs">ACCEPT SKN-####</span> — no heavy third-party rider app required for MVP.
+        </p>
+      </div>
+      <div>
+        <h3 class="font-bold text-lg mb-2">Escrow before you roll</h3>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65 leading-relaxed">
+          Buyer prepaid funds are already held. You’re not burning fuel on unpaid “cash on delivery” ghost trips.
+        </p>
+      </div>
+      <div>
+        <h3 class="font-bold text-lg mb-2">M-Pesa after CONFIRM</h3>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65 leading-relaxed">
+          After delivery OTP confirmation there’s a short (~15 min) hold, then rider fee rails run toward M-Pesa B2C (when auto-payout is enabled).
+        </p>
+      </div>
+    </div>
+    <p class="mt-8 text-xs text-brand-purple/55 dark:text-white/45 max-w-2xl">
+      Buyer no-show: start <span class="font-mono">NO_SHOW</span>, wait 15 minutes, then return flow — return trip pays <strong>50% of the delivery fee</strong> (not a bonus multiplier). Exact commands arrive on WhatsApp when you’re verified.
+    </p>
+  </section>
+
+  <!-- Slide 2: 4 steps -->
+  <section id="steps" class="boda-slide bg-white/60 dark:bg-brand-purpleLight/30 border-y border-brand-purple/10 dark:border-white/10">
+    <div class="max-w-5xl mx-auto px-5 py-16 md:py-20">
+      <p class="text-sm font-semibold text-brand-green mb-2">Slide 2 · Workflow</p>
+      <h2 class="font-display text-3xl md:text-4xl font-bold mb-3">Simple 4-step delivery</h2>
+      <p class="text-sm text-brand-purple/70 dark:text-white/65 mb-10 max-w-xl">
+        Exact formats matter — the bot reads commands, not freeform chat.
+      </p>
+      <ol class="space-y-8 max-w-2xl">
+        <li class="flex gap-4">
+          <span class="font-display text-2xl font-bold text-brand-green shrink-0 w-10">1</span>
+          <div>
+            <h3 class="font-bold mb-1">Offer on WhatsApp</h3>
+            <p class="text-sm text-brand-purple/70 dark:text-white/65">You get pickup area, drop-off, and fee when Sokoni pins you.</p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="font-display text-2xl font-bold text-brand-green shrink-0 w-10">2</span>
+          <div>
+            <h3 class="font-bold mb-1">Accept the job</h3>
+            <p class="text-sm text-brand-purple/70 dark:text-white/65">Reply <span class="font-mono text-xs">*ACCEPT SKN-####*</span> to lock it (one rider wins).</p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="font-display text-2xl font-bold text-brand-green shrink-0 w-10">3</span>
+          <div>
+            <h3 class="font-bold mb-1">Seller pickup OTP</h3>
+            <p class="text-sm text-brand-purple/70 dark:text-white/65">Collect the parcel; reply <span class="font-mono text-xs">*PICKUP SKN-#### ####*</span> with the seller’s 4-digit code.</p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="font-display text-2xl font-bold text-brand-green shrink-0 w-10">4</span>
+          <div>
+            <h3 class="font-bold mb-1">Buyer delivery OTP</h3>
+            <p class="text-sm text-brand-purple/70 dark:text-white/65">Hand over; reply <span class="font-mono text-xs">*CONFIRM SKN-#### ####*</span> with the buyer’s 4-digit code to finish.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Slide 3: Pay -->
+  <section id="pay" class="boda-slide max-w-5xl mx-auto px-5 py-16 md:py-20">
+    <p class="text-sm font-semibold text-brand-green mb-2">Slide 3 · Earnings</p>
+    <h2 class="font-display text-3xl md:text-4xl font-bold mb-3">How and when you get paid</h2>
+    <div class="grid md:grid-cols-2 gap-10 mt-8">
+      <div>
+        <h3 class="font-bold text-lg mb-2">Payout trigger</h3>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65 leading-relaxed mb-4">
+          <span class="font-mono text-xs">CONFIRM</span> delivery OTP → ~15 minute hold (buyer can dispute) → fee clear / M-Pesa B2C when configured.
+        </p>
+        <h3 class="font-bold text-lg mb-2">WhatsApp ledger pings</h3>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65 leading-relaxed">
+          After jobs, Sokoni texts fee status updates. Keep the same WhatsApp / M-Pesa number you registered with.
+        </p>
+      </div>
+      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/15 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
+        <h3 class="font-bold mb-3">Honest fee note</h3>
+        <p class="text-sm text-brand-purple/70 dark:text-white/65 leading-relaxed">
+          Platform takes a small cut of the delivery fee (about 10%) plus M-Pesa B2C tariff where applicable — so the wallet amount can be slightly under the gross fee shown on the offer. High single-job fees may need ops approval before auto-send.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Visual note + CTA -->
+  <section class="border-t border-brand-purple/10 dark:border-white/10 bg-brand-purple text-white">
+    <div class="max-w-5xl mx-auto px-5 py-14 md:py-16 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+      <div class="max-w-lg">
+        <h2 class="font-display text-2xl md:text-3xl font-bold mb-2">Ready to apply?</h2>
+        <p class="text-sm text-white/70">
+          Upload ID, Class A licence, and stage letter. Ops reviews — then WhatsApp commands unlock on your verified number.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3 shrink-0">
+        <a href="apply.html" class="inline-flex items-center justify-center min-h-[48px] px-6 rounded-full btn-whatsapp font-bold text-sm">Open application</a>
+        <a href="dashboard.html" class="inline-flex items-center justify-center min-h-[48px] px-6 rounded-full border border-white/35 font-semibold text-sm hover:bg-white/10">Rider workspace</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="max-w-5xl mx-auto px-5 py-8 text-xs text-brand-purple/50 dark:text-white/40 flex flex-wrap gap-4 justify-between">
+    <span>© Sokoni Mall · Countrywide Kenya</span>
+    <div class="flex gap-4">
+      <a href="../index.html" class="hover:underline">Shop</a>
+      <a href="../login.html" class="hover:underline">Log in</a>
+      <a href="https://wa.me/254117422428?text=Habari%20Sokoni%20—%20rider%20help" target="_blank" rel="noopener" class="hover:underline">WhatsApp help</a>
+    </div>
+  </footer>
+</body>
+</html>
