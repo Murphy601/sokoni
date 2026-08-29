@@ -401,12 +401,12 @@
     "subcategory": "kitchen",
     "browseCategory": "home",
     "browseSubCategory": "kitchen",
-    "sellerNetKes": 80,
-    "sourcePriceKes": 80,
-    "priceKes": 88,
-    "platformFeeKes": 8,
+    "sellerNetKes": 85,
+    "sourcePriceKes": 85,
+    "priceKes": 94,
+    "platformFeeKes": 9,
     "transactionFeeKes": 0,
-    "sellerPayoutKes": 80,
+    "sellerPayoutKes": 85,
     "deliveryMethod": "seller_express",
     "shippingRecipient": "seller",
     "description": "A white ceramic mug with blue and red 'COFFEE' text on the side. The mug appears to have been used.",
@@ -440,22 +440,24 @@
     ],
     "videoUrl": "https://bot.sokonimall.com/catalog-images/ho-tlom7-002.mp4",
     "videoKind": "seller",
-    "publishedAt": 1787936870903,
+    "publishedAt": 1788001822563,
     "moderation": {
       "status": "pending_scan"
     },
-    "refreshedAt": 1787936870903,
-    "priceUpdatedAt": 1787936799148,
+    "refreshedAt": 1788001822563,
+    "priceUpdatedAt": 1788001822563,
     "promo": {
-      "active": false,
+      "active": true,
       "type": "kes_off",
       "value": 15,
-      "listSellerNetKes": 80,
-      "listPriceKes": 88,
-      "startedAt": 1787936689414,
-      "endedAt": 1787936799148
+      "listSellerNetKes": 100,
+      "listPriceKes": 117,
+      "startedAt": 1788001822563,
+      "endedAt": null
     },
-    "promoUpdatedAt": 1787936799148
+    "promoUpdatedAt": 1788001822563,
+    "originalPriceKes": 117,
+    "compareAtPrice": 117
   },
   {
     "id": "sm-tlom7-002",

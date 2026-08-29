@@ -107,7 +107,16 @@
     "id": "ho-tlom7-002",
     "name": "White Coffee Mug",
     "category": "home-office",
-    "priceKes": 88,
+    "priceKes": 94,
+    "originalPriceKes": 117,
+    "compareAtPrice": 117,
+    "onPromo": true,
+    "discountPct": 20,
+    "promo": {
+      "active": true,
+      "type": "kes_off",
+      "value": 15
+    },
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
