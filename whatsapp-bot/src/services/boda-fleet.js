@@ -4,6 +4,9 @@
  * Order refs are SKN-#### strings (never integer order PKs).
  */
 import { createHash, randomInt } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { isDbEnabled, query } from "../db/pool.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
@@ -141,6 +144,183 @@ export async function upsertRiderProfile(input = {}) {
     ]
   );
   return { ok: true, rider: mapRider(rows[0]) };
+}
+
+const BODA_DOCS_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "data",
+  "boda-docs"
+);
+const MAX_DOC_BYTES = 4 * 1024 * 1024;
+
+function decodeUploadBuffer(dataUrlOrB64) {
+  const raw = String(dataUrlOrB64 || "");
+  const m = raw.match(/^data:([^;]+);base64,(.+)$/i);
+  if (m) {
+    try {
+      return { buffer: Buffer.from(m[2], "base64"), mime: m[1].toLowerCase() };
+    } catch {
+      return { buffer: Buffer.alloc(0), mime: "" };
+    }
+  }
+  try {
+    return { buffer: Buffer.from(raw.replace(/\s/g, ""), "base64"), mime: "" };
+  } catch {
+    return { buffer: Buffer.alloc(0), mime: "" };
+  }
+}
+
+function sniffDocExt(buffer, mime = "", filename = "") {
+  const name = String(filename || "").toLowerCase();
+  if (name.endsWith(".pdf") || String(mime).includes("pdf")) return "pdf";
+  if (String(mime).includes("png") || (buffer[0] === 0x89 && buffer[1] === 0x50)) return "png";
+  if (String(mime).includes("webp")) return "webp";
+  return "jpg";
+}
+
+async function saveRiderDoc({ phone, kind, data, filename = "" }) {
+  if (!data) return null;
+  const { buffer, mime } = decodeUploadBuffer(data);
+  if (!buffer?.byteLength) return null;
+  if (buffer.byteLength > MAX_DOC_BYTES) {
+    const err = new Error(`${kind}_too_large`);
+    err.code = "too_large";
+    throw err;
+  }
+  await mkdir(BODA_DOCS_DIR, { recursive: true });
+  const ext = sniffDocExt(buffer, mime, filename);
+  const safePhone = String(phone).replace(/\D/g, "").slice(-12);
+  const file = `${safePhone}-${kind}-${Date.now()}.${ext}`;
+  await writeFile(path.join(BODA_DOCS_DIR, file), buffer);
+  const base = (config.botPublicUrl || "https://bot.sokonimall.com").replace(/\/$/, "");
+  return `${base}/assets/boda-docs/${encodeURIComponent(file)}`;
+}
+
+/**
+ * Public web onboarding — creates/updates rider as PENDING with verification docs.
+ * Docs: idDocument, dlDocument, stageLetter (base64 or data-URL).
+ */
+export async function registerRiderApplication(input = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const phone = normalizeRiderPhone(input.phone);
+  const fullName = String(input.fullName || "").trim().slice(0, 120);
+  const zone = normalizeBodaZone(input.operatingTown || input.zone);
+  const plate = String(input.motorbikePlate || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 32);
+  const nationalId = String(input.nationalId || "")
+    .trim()
+    .slice(0, 32);
+  const stageLocation = String(input.stageLocation || "").trim().slice(0, 120);
+
+  if (!phone || !fullName || !zone || !plate || !nationalId || !stageLocation) {
+    return {
+      error: "invalid_application",
+      message:
+        "Fill full name, WhatsApp/M-Pesa phone, national ID, town (Nairobi or Thika), stage, and bike plate.",
+    };
+  }
+  if (!input.idDocument || !input.dlDocument || !input.stageLetter) {
+    return {
+      error: "docs_required",
+      message: "Upload National ID, driving licence (Class A), and stage chairman letter.",
+    };
+  }
+
+  const existing = await query(`SELECT id, verification_status FROM riders WHERE phone = $1 LIMIT 1`, [
+    phone,
+  ]);
+  if (existing.rows[0]?.verification_status === "VERIFIED") {
+    return {
+      error: "already_verified",
+      message: "This phone is already a verified Sokoni rider. Message Sokoni support to update docs.",
+    };
+  }
+  if (existing.rows[0]?.verification_status === "SUSPENDED") {
+    return {
+      error: "suspended",
+      message: "This rider profile is suspended. Contact Sokoni support before re-applying.",
+    };
+  }
+
+  let nationalIdFrontUrl;
+  let licenseUrl;
+  let stageLetterUrl;
+  try {
+    nationalIdFrontUrl = await saveRiderDoc({
+      phone,
+      kind: "national-id",
+      data: input.idDocument,
+      filename: input.idDocumentName || "",
+    });
+    licenseUrl = await saveRiderDoc({
+      phone,
+      kind: "license",
+      data: input.dlDocument,
+      filename: input.dlDocumentName || "",
+    });
+    stageLetterUrl = await saveRiderDoc({
+      phone,
+      kind: "stage-letter",
+      data: input.stageLetter,
+      filename: input.stageLetterName || "",
+    });
+  } catch (err) {
+    if (err?.code === "too_large") {
+      return { error: "file_too_large", message: "Each document must be under 4 MB (image or PDF)." };
+    }
+    console.warn("[boda-fleet] doc save failed:", err.message);
+    return { error: "upload_failed", message: "Could not save documents. Try again." };
+  }
+
+  if (!nationalIdFrontUrl || !licenseUrl || !stageLetterUrl) {
+    return {
+      error: "docs_required",
+      message: "One or more documents could not be read. Re-select the files.",
+    };
+  }
+
+  const result = await upsertRiderProfile({
+    fullName,
+    phone,
+    nationalId,
+    operatingTown: zone,
+    stageLocation,
+    motorbikePlate: plate,
+    licenseClass: "A",
+    nationalIdFrontUrl,
+    licenseUrl,
+    stageLetterUrl,
+    verificationStatus: "PENDING",
+  });
+  if (result.error) return result;
+
+  await query(
+    `UPDATE riders SET
+       verification_status = 'PENDING',
+       is_available = FALSE,
+       national_id_front_url = $2,
+       license_url = $3,
+       stage_letter_url = $4,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [result.rider.id, nationalIdFrontUrl, licenseUrl, stageLetterUrl]
+  );
+
+  console.log(`[boda-fleet] rider application PENDING #${result.rider.id} ${phone} ${zone}`);
+  return {
+    ok: true,
+    riderId: result.rider.id,
+    status: "PENDING",
+    message:
+      "Application received. Sokoni will review your documents and WhatsApp you when you're verified.",
+  };
 }
 
 export async function setRiderVerificationStatus(riderId, status, { reason = "" } = {}) {
