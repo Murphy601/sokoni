@@ -100,6 +100,7 @@ const KNOWLEDGE_FILES = [
   "seller-onboarding.md",
   "shipping-sop.md",
   "rider-delivery.md",
+  "ai-architecture.md",
 ];
 
 /** Prefer docs by specialist lane. */
