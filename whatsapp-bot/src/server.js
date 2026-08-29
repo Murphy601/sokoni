@@ -409,6 +409,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startPayoutScheduler();
   startOrderCommunicationScheduler();
   startFeedScheduler();
+  startBodaDisputeWindowScheduler();
   // Ensure platform storefront has a social user id (Make an offer / inbox).
   if (isDbEnabled()) {
     import("./db/repositories/sellers.js")
@@ -418,6 +419,18 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
       .catch((err) => console.warn("[sellers] default storefront ensure:", err.message));
   }
 });
+
+/** Clear boda rider fees after the 15-min buyer DISPUTE window elapses. */
+function startBodaDisputeWindowScheduler() {
+  const tick = () => {
+    import("./services/boda-fleet.js")
+      .then(({ processBodaDisputeWindows }) => processBodaDisputeWindows())
+      .catch((err) => console.warn("[boda-fleet] dispute window tick:", err.message));
+  };
+  tick();
+  setInterval(tick, 5 * 60 * 1000);
+  console.log("✓ Boda dispute-window scheduler enabled (5 min)");
+}
 
 /** Refresh trending / price-tier feed slices hourly. */
 function startFeedScheduler() {
