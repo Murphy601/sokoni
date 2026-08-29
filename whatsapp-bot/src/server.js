@@ -420,7 +420,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   }
 });
 
-/** Clear boda rider fees after the 15-min buyer DISPUTE window elapses. */
+/** Clear boda rider fees after the 15-min buyer DISPUTE / HOLD_ESCROW window elapses. */
 function startBodaDisputeWindowScheduler() {
   const tick = () => {
     import("./services/boda-fleet.js")
@@ -428,8 +428,8 @@ function startBodaDisputeWindowScheduler() {
       .catch((err) => console.warn("[boda-fleet] dispute window tick:", err.message));
   };
   tick();
-  setInterval(tick, 5 * 60 * 1000);
-  console.log("✓ Boda dispute-window scheduler enabled (5 min)");
+  setInterval(tick, 2 * 60 * 1000);
+  console.log("✓ Boda HOLD_ESCROW scheduler enabled (every 2 min)");
 }
 
 /** Refresh trending / price-tier feed slices hourly. */
