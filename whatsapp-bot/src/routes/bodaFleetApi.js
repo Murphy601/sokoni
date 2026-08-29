@@ -86,6 +86,17 @@ adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
   res.json(result);
 });
 
+adminBodaRouter.post("/dispatches/:id/release-fee", async (req, res) => {
+  const { releaseBodaRiderFee } = await import("../services/boda-fleet.js");
+  const result = await releaseBodaRiderFee({
+    dispatchId: req.params.id,
+    reason: req.body?.reason || "admin_manual",
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
 adminBodaRouter.get("/summary", (_req, res) => {
   res.json({ ok: true, ...bodaSupportSummary() });
 });

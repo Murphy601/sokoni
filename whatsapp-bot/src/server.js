@@ -287,6 +287,7 @@ app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStati
       maxAge: "1d",
       setHeaders(res) {
         res.setHeader("Cache-Control", "private, max-age=86400");
+        res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Access-Control-Allow-Origin", "*");
       },
     })
