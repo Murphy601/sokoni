@@ -57,6 +57,7 @@ assert(block.includes("EXCLUSIVELY") || block.includes("KNOWLEDGE"), "knowledge 
 const meta = llmRouterMeta();
 assert(meta.avoid?.includes("ollama_local_cpu_queue"), "documents avoid ollama");
 assert(meta.avoid?.includes("groq_builtin_tools_for_chat"), "documents avoid groq built-in tools");
+assert(meta.avoid?.includes("openrouter_free_auto_first"), "documents avoid openrouter/free as primary");
 assert(Array.isArray(meta.providers), "providers listed");
 assert(typeof meta.temperature === "number", "temperature in meta");
 assert(
@@ -80,6 +81,8 @@ assert(routerSrc.includes('tool_choice = "none"') || routerSrc.includes('tool_ch
 assert(routerSrc.includes("google/gemma-4-31b-it:free"), "openrouter free fallback uses live gemma-4-31b");
 assert(!routerSrc.includes("gemma-4-26b-a4b-it:free"), "drops flaky gemma-4-26b a4b free slug");
 assert(routerSrc.includes("Do NOT use tool_choice=auto"), "documents why tool_choice stays none");
+assert(routerSrc.includes("orderOpenRouterChatModels"), "chat deprioritizes openrouter/free auto");
+assert(routerSrc.includes('finishReason === "length"'), "retries truncated completions");
 
 assert(
   isToolUseFailedError({ error: { code: "tool_use_failed", message: "Tool choice is none, but model called a tool" } }),
@@ -98,6 +101,8 @@ assert(
 const configSrc = readFileSync(path.join(root, "whatsapp-bot/src/config.js"), "utf8");
 assert(configSrc.includes('GROQ_MODEL || "openai/gpt-oss-20b"'), "config default gpt-oss-20b");
 assert(configSrc.includes("useGemini"), "config exposes Gemini chat opt-in");
+assert(configSrc.includes("google/gemma-4-31b-it:free"), "default OpenRouter chat is named free model");
+assert(configSrc.includes("AI_CHAT_MAX_TOKENS"), "exposes AI_CHAT_MAX_TOKENS");
 
 // File markers
 const agent = readFileSync(path.join(root, "whatsapp-bot/src/services/ai-agent.js"), "utf8");

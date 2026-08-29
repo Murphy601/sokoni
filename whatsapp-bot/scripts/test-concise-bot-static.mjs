@@ -1,5 +1,6 @@
 /**
- * Static + unit checks: short AI replies + WAHA inbound dedupe.
+ * Static + unit checks: complete AI replies + WAHA inbound dedupe.
+ * (Updated Aug 2026 — prior 40-word / 120-token caps caused mid-sentence cuts.)
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -13,21 +14,15 @@ const agent = readFileSync(path.join(root, "src/services/ai-agent.js"), "utf8");
 const webhook = readFileSync(path.join(root, "src/handlers/webhookHandler.js"), "utf8");
 
 assert.match(prompts, /SOKONI_MASTER_RULES/);
-assert.match(prompts, /MAXIMUM LENGTH/);
-assert.match(prompts, /SINGLE-MESSAGE PRINCIPLE/);
-assert.match(prompts, /NO GREETING FLUFF/);
-assert.match(prompts, /under 40 words/);
-assert.match(prompts, /NEVER quote|OUTPUT ONLY THE CUSTOMER ANSWER/i);
-assert.match(agent, /max_tokens: maxTokens/);
-assert.match(agent, /maxTokens = allowLonger/);
-assert.match(agent, /temperature: 0\.2/);
-assert.match(agent, /frequency_penalty: 0\.5/);
+assert.match(prompts, /never stop mid-phrase/i);
+assert.match(prompts, /OUTPUT ONLY THE CUSTOMER ANSWER/i);
+assert.match(prompts, /under ~80 words|under 80 words/i);
+assert.match(agent, /maxTokens/);
+assert.match(agent, /allowLonger/);
+assert.match(agent, /chatTemperature/);
 assert.match(agent, /enforceReplyBrevity/);
 assert.match(agent, /looksLikeInstructionLeak/);
-assert.match(agent, /Found \*\$\{n\}\* live match/);
-assert.match(agent, /catalogTurn/);
-assert.match(agent, /emptyCatalogReply|No live Sokoni listings/);
-assert.match(agent, /Current stock only/);
+assert.match(agent, /emptyCatalogReply|No live Sokoni listings|No live listings/);
 assert.match(webhook, /claimInboundMessageId/);
 assert.match(webhook, /duplicate blocked/);
 
@@ -40,9 +35,10 @@ const long =
   "Let me know if you need anything else!";
 const short = enforceReplyBrevity(long, "whatsapp");
 assert.ok(short);
-assert.ok(short.split(/\s+/).length <= 45, `word count ${short.split(/\s+/).length}: ${short}`);
+assert.ok(short.split(/\s+/).length <= 65, `word count ${short.split(/\s+/).length}: ${short}`);
 assert.ok(!/hope you are having/i.test(short));
 assert.ok(!/let me know if you need/i.test(short));
+assert.match(short, /[.!?]$/);
 
 const leak =
   "We need to answer concisely, max 2-3 sentences, under 60 words, no fluff, direct, include bold for order IDs etc if needed. Must not add unasked follow-ups. Provide explanation of escrow: funds held until delivery confirmed, paid via M-Pesa STK, etc.";

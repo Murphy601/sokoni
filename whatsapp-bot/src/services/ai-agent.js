@@ -66,27 +66,30 @@ const FLUFF_SENTENCE =
 
 /**
  * Hard brevity guard after the model (WhatsApp notifications must fit one glance).
- * Policy / trust answers get a slightly larger budget so lists are not sliced mid-point.
+ * Prefer complete sentences — never slice mid-word / mid-thought (that looked like
+ * "unfinished" replies when max_tokens was too low and this guard word-chopped).
  */
 export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = false } = {}) {
   let cleaned = sanitizeReply(text);
   if (!cleaned) return null;
 
+  // Budgets are soft caps after the model finishes; keep them high enough for
+  // escrow / logistics answers without mid-sentence cuts.
   const maxWords = allowLonger
     ? channel === "web"
-      ? 110
-      : 70
+      ? 130
+      : 95
     : channel === "web"
-      ? 70
-      : 45;
+      ? 90
+      : 60;
   const maxChars = allowLonger
     ? channel === "web"
-      ? 720
-      : 420
+      ? 900
+      : 650
     : channel === "web"
-      ? 480
-      : 300;
-  const maxSentences = allowLonger ? 5 : 3;
+      ? 600
+      : 420;
+  const maxSentences = allowLonger ? 6 : 4;
 
   // Strip corporate fluff sentences (leading / trailing / mid-stack).
   let sentences = cleaned
@@ -113,21 +116,26 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
 
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) {
-    // Prefer cutting on a sentence boundary when possible
+    // Always cut on a sentence boundary — never mid-phrase word chop.
     let trimmed = "";
-    for (const s of sentences) {
+    for (const s of sentences.slice(0, maxSentences)) {
       const next = trimmed ? `${trimmed} ${s}` : s;
       if (next.split(/\s+/).filter(Boolean).length > maxWords) break;
       trimmed = next;
     }
-    cleaned = trimmed || words.slice(0, maxWords).join(" ");
+    cleaned = trimmed || sentences[0] || cleaned;
     if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
   }
   if (cleaned.length > maxChars) {
     const cut = cleaned.slice(0, maxChars);
     const lastStop = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
-    cleaned = (lastStop > 80 ? cut.slice(0, lastStop + 1) : cut.replace(/\s+\S*$/, "")).trim();
-    if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
+    // Prefer a full sentence; if none fit, keep the first sentence whole.
+    if (lastStop > 40) {
+      cleaned = cut.slice(0, lastStop + 1).trim();
+    } else {
+      cleaned = (sentences[0] || cut.replace(/\s+\S*$/, "")).trim();
+      if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
+    }
   }
   if (looksLikeInstructionLeak(cleaned)) return null;
   return cleaned || null;
@@ -374,14 +382,18 @@ function offlineReply(toolResults, channel, userMessage = "") {
 }
 
 async function callLLM(messages, { channel = "whatsapp", allowLonger = false } = {}) {
-  // Enough headroom to finish a short trust answer without mid-sentence cutoffs.
-  const maxTokens = allowLonger
-    ? channel === "web"
-      ? 280
-      : 180
-    : channel === "web"
-      ? 200
-      : 120;
+  // Headroom so the model finishes sentences; enforceReplyBrevity trims cleanly after.
+  // (Previously 120–180 WhatsApp tokens → frequent mid-sentence stop on free models.)
+  const configured = Number(config.aiChat?.maxTokens);
+  const maxTokens = Number.isFinite(configured) && configured > 0
+    ? Math.min(800, Math.max(200, Math.floor(configured)))
+    : allowLonger
+      ? channel === "web"
+        ? 520
+        : 480
+      : channel === "web"
+        ? 360
+        : 320;
 
   // Low temperature everywhere — consistent buyer/seller replies (no creative drift).
   const temperature = chatTemperature();
@@ -389,16 +401,22 @@ async function callLLM(messages, { channel = "whatsapp", allowLonger = false } =
   const reply = enforceReplyBrevity(result.content, channel, { allowLonger });
   if (!reply) throw new Error("Empty/leaked reply after brevity enforce");
   console.log(
-    `[ai-agent] replied via ${result.provider}/${result.model} (temp=${temperature}, max_tokens=${maxTokens})`
+    `[ai-agent] replied via ${result.provider}/${result.model} (temp=${temperature}, max_tokens=${maxTokens}${
+      result.finishReason ? `, finish=${result.finishReason}` : ""
+    })`
   );
   return reply;
 }
 
 function sanitizeHistory(history = []) {
+  // Last 6 turns only — enough continuity without bloating TTFT on free models.
   return (history || [])
     .filter((m) => m && m.content && !looksLikeInstructionLeak(m.content))
-    .slice(-12)
-    .map((m) => ({ role: m.role, content: m.content }));
+    .slice(-6)
+    .map((m) => ({
+      role: m.role,
+      content: String(m.content).length > 600 ? `${String(m.content).slice(0, 600)}…` : m.content,
+    }));
 }
 
 /**

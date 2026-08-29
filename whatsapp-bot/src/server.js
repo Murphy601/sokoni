@@ -226,12 +226,22 @@ app.get("/health", async (_req, res) => {
     studioClipEnabled = false;
   }
 
+  const chatRouting = agent.routing || {};
   res.json({
     status: "ok",
     build: BUILD_ID,
-    aiModel: config.openai.model || null,
+    aiModel: chatRouting.primaryModel || config.openai.model || null,
     catalogVisionModel: config.catalog.visionModel || null,
-    aiConfigured: Boolean(config.openai.apiKey),
+    aiConfigured: Boolean(config.openai.apiKey || config.groq?.apiKey),
+    aiChat: {
+      providerPreference: chatRouting.providerPreference || config.aiChat?.provider || "auto",
+      primaryProvider: chatRouting.primaryProvider || null,
+      primaryModel: chatRouting.primaryModel || null,
+      temperature: chatRouting.temperature ?? config.aiChat?.temperature ?? 0.15,
+      maxTokens: Number(config.aiChat?.maxTokens) || 480,
+      groqConfigured: Boolean(config.groq?.apiKey),
+      openrouterConfigured: Boolean(config.openai?.apiKey),
+    },
     aiAgent: agent.name,
     aiTools: agent.tools,
     feedPhase: feed.phase,
