@@ -71,7 +71,7 @@ function wahaHeaders(extra = {}) {
   return headers;
 }
 
-async function callWaha(endpoint, body) {
+async function callWaha(endpoint, body, { timeoutMs = 30000 } = {}) {
   if (!config.waha.apiUrl) {
     console.log("[waha:dry-run]", endpoint, JSON.stringify(body, null, 2));
     return { dryRun: true };
@@ -79,7 +79,7 @@ async function callWaha(endpoint, body) {
   try {
     const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, {
       headers: wahaHeaders({ "Content-Type": "application/json" }),
-      timeout: 30000,
+      timeout: timeoutMs,
     });
     return data;
   } catch (err) {
@@ -537,25 +537,80 @@ export async function sendText(to, text) {
     capture.replies.push(body);
     return { captured: true, chatId: dest };
   }
-  return sendTextReliable(to, body, { label: "whatsapp" });
+  // Hot path: single attempt only. Never route normal chat through multi-JID
+  // retries — those can stack 30s WAHA timeouts and freeze the whole bot.
+  try {
+    const resp = await callWaha("/api/sendText", {
+      session: config.waha.session,
+      chatId: dest,
+      text: body,
+    });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.error("[whatsapp] sendText failed:", dest, err.message);
+    throw err;
+  }
+}
+
+function isWahaTimeoutError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  const code = String(err?.code || "").toUpperCase();
+  return (
+    code === "ECONNABORTED" ||
+    code === "ETIMEDOUT" ||
+    msg.includes("timeout") ||
+    msg.includes("timed out")
+  );
+}
+
+function isRetryableWahaChatError(err) {
+  if (isWahaTimeoutError(err)) return false;
+  const status = err?.response?.status;
+  const detail = String(
+    err?.response?.data?.message || err?.response?.data?.error || err?.message || ""
+  ).toLowerCase();
+  // Only flip JID form on "bad chat" style failures — not on transport timeouts.
+  if (status === 404 || status === 400 || status === 422) return true;
+  return (
+    detail.includes("chat not found") ||
+    detail.includes("invalid chat") ||
+    detail.includes("no chat") ||
+    detail.includes("not a valid") ||
+    detail.includes("jid")
+  );
 }
 
 /**
- * WAHA send with JID fallbacks (@c.us ↔ @s.whatsapp.net ↔ @lid).
- * Logs clearly when WAHA_API_URL is missing (dry-run = NOT delivered).
+ * Dispute-alert path only: try phone JID forms once each.
+ * Does NOT retry after WAHA timeout (avoids 60–90s freezes).
+ * Do not use for normal customer replies — use sendText.
  */
-export async function sendTextReliable(to, text, { label = "whatsapp" } = {}) {
+export async function sendTextReliable(to, text, { label = "whatsapp", timeoutMs = 20000 } = {}) {
   const body = normalizeBotMessageSpacing(text);
-  const primary = toChatId(to) || String(to || "").trim();
+  const raw = String(to || "").trim();
+  const primary = toChatId(to) || raw;
+  const isLid = primary.includes("@lid") || raw.includes("@lid");
   const digits =
     phoneDigitsFromChatId(primary) ||
-    (String(to || "").includes("@") ? null : String(to || "").replace(/\D/g, ""));
-  const candidates = uniqueChatIds(
-    primary,
-    digits && digits.length >= 9 ? `${digits}@c.us` : null,
-    digits && digits.length >= 9 ? `${digits}@s.whatsapp.net` : null,
-    String(to || "").includes("@lid") ? String(to) : null
-  ).filter(Boolean);
+    (!raw.includes("@")
+      ? (() => {
+          let d = raw.replace(/\D/g, "");
+          if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+          if (d.length === 9 && /^[17]/.test(d)) d = `254${d}`;
+          return d.length >= 10 && d.length <= 15 ? d : null;
+        })()
+      : null);
+
+  // @lid has no phone digits — single attempt only (never invent @c.us from LID).
+  // Real phones: prefer @c.us then @s.whatsapp.net.
+  const candidates = isLid
+    ? uniqueChatIds(primary).filter(Boolean)
+    : uniqueChatIds(
+        digits ? `${digits}@c.us` : primary,
+        digits ? `${digits}@s.whatsapp.net` : null,
+        primary
+      ).filter(Boolean);
 
   if (!config.waha.apiUrl) {
     console.error(
@@ -575,13 +630,18 @@ export async function sendTextReliable(to, text, { label = "whatsapp" } = {}) {
   }
 
   let lastErr = null;
-  for (const chatId of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const chatId = candidates[i];
     try {
-      const resp = await callWaha("/api/sendText", {
-        session: config.waha.session,
-        chatId,
-        text: body,
-      });
+      const resp = await callWaha(
+        "/api/sendText",
+        {
+          session: config.waha.session,
+          chatId,
+          text: body,
+        },
+        { timeoutMs }
+      );
       rememberSend(resp, chatId);
       const mid = resp?.id || resp?.key?.id || resp?.messageId || "ok";
       console.log(`[${label}] WAHA sendText OK → ${chatId} id=${mid}`);
@@ -589,6 +649,11 @@ export async function sendTextReliable(to, text, { label = "whatsapp" } = {}) {
     } catch (err) {
       lastErr = err;
       console.warn(`[${label}] WAHA sendText failed → ${chatId}:`, err.message);
+      // Timeout / transport failure: stop immediately — retrying another JID
+      // only stacks more waits and can wedge the bot under load.
+      if (isWahaTimeoutError(err)) break;
+      if (!isRetryableWahaChatError(err)) break;
+      if (i === candidates.length - 1) break;
     }
   }
   console.error(`[${label}] WAHA sendText exhausted targets:`, candidates.join(","));
