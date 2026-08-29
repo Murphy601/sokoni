@@ -2,36 +2,49 @@
 /**
  * Direct WAHA dispute-alert smoke test (not Baileys).
  *
- * On the VM:
- *   cd ~/sokoni/whatsapp-bot
- *   node scripts/test-waha-dispute-alert.mjs 2547XXXXXXXX
+ * Deploy first from repo root (NOT from whatsapp-bot/):
+ *   cd ~/sokoni
+ *   SKIP_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
  *
- * Pass a REAL Kenya phone (2547…), not the placeholder string.
- * Uses the same sendTextReliable path as dispute alerts (not normal chat sendText).
- * Exit 0 = WAHA accepted the send; exit 1 = failed / dry-run.
+ * Then smoke-test with a REAL phone (your WhatsApp number digits):
+ *   cd ~/sokoni/whatsapp-bot
+ *   node scripts/test-waha-dispute-alert.mjs 254712345678
+ *
+ * Do NOT paste placeholders like 2547XXXXXXXX or 2547YOURREALNUMBER.
+ * Uses sendTextReliable (dispute alerts only) — not normal chat sendText.
  */
 import { config } from "../src/config.js";
 import { sendTextReliable, toChatId } from "../src/services/whatsapp.js";
 
 const phone = process.argv[2] || config.admin.primary || "";
 if (!phone) {
-  console.error("Usage: node scripts/test-waha-dispute-alert.mjs <2547XXXXXXXX>");
-  console.error("Also set ADMIN_PHONES or pass a real phone argument.");
+  console.error("Usage: node scripts/test-waha-dispute-alert.mjs 254712345678");
+  console.error("Pass your real Kenya WhatsApp number (2547…), or set ADMIN_PHONES.");
   process.exit(1);
 }
 
-const digits = String(phone).replace(/\D/g, "");
-if (/x/i.test(String(phone)) || digits.length < 10 || digits === "2547") {
-  console.error(
-    "FAIL: pass a real phone like 254712345678 — not the placeholder 2547XXXXXXXX"
-  );
-  console.error("Got:", phone, "→ chatId would be", toChatId(phone) || "(empty)");
+const raw = String(phone).trim();
+const digits = raw.replace(/\D/g, "");
+const looksLikePlaceholder =
+  /x{2,}|your|real|number|placeholder|example|xxxx/i.test(raw) ||
+  digits.length < 11 ||
+  digits.length > 15 ||
+  digits === "2547" ||
+  /^2547+$/.test(digits);
+
+if (looksLikePlaceholder) {
+  console.error("FAIL: that is not a real phone number.");
+  console.error("  Got:", raw);
+  console.error("  Digits:", digits || "(none)", "→ would become", toChatId(raw) || "(empty)");
+  console.error("  Example: node scripts/test-waha-dispute-alert.mjs 254712345678");
+  console.error("  Tip: use YOUR WhatsApp number in international form (254…), no spaces.");
   process.exit(1);
 }
 
+const chatId = toChatId(phone);
 console.log("WAHA_API_URL:", config.waha.apiUrl || "(UNSET — dry-run, will NOT deliver)");
 console.log("WAHA session:", config.waha.session);
-console.log("Target:", toChatId(phone));
+console.log("Target:", chatId);
 
 const msg =
   `🚨 *TEST DISPUTE ALERT*\n\n` +
@@ -48,5 +61,6 @@ try {
   process.exit(0);
 } catch (err) {
   console.error("FAIL:", err.message);
+  console.error("If this is a timeout, WAHA may be hung — run: node scripts/test-waha-ping.mjs");
   process.exit(1);
 }
