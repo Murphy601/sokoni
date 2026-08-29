@@ -95,7 +95,17 @@ async function handleReplaceOrCancel(customerKey, action, { phone = "", displayN
 
   if (action === "CANCEL") {
     if (!["cancelled", "delivered"].includes(order.status)) {
-      updateOrderStatus(order.id, "cancelled");
+      const cancelResult = updateOrderStatus(order.id, "cancelled", {
+        source: "customer-automations",
+      });
+      if (cancelResult?.error) {
+        await sendText(
+          customerKey,
+          cancelResult.message ||
+            `Cannot cancel *${order.id}* in its current state. Reply *HELP ${order.id}* for support.`
+        );
+        return true;
+      }
     }
     setCustomerMeta(customerKey, {
       awaitingWrongOrderFix: false,

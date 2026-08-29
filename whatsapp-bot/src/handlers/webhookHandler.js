@@ -298,6 +298,19 @@ export async function handleIncomingMessage(
 ) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
+
+  // Per-user rate limit (max ~10 msgs/min) — spam bypasses LLM with static reply
+  try {
+    const { checkWhatsAppUserRateLimit } = await import("../middleware/wa-user-rate-limit.js");
+    const rate = checkWhatsAppUserRateLimit(customerKey, phone);
+    if (!rate.allowed) {
+      await sendText(customerKey, rate.message || "⏳ Please slow down and try again shortly.");
+      return;
+    }
+  } catch (err) {
+    console.warn("[webhook] user rate limit skipped:", err.message);
+  }
+
   try {
     await hydrateSessionFromDb(customerKey, phone);
   } catch {

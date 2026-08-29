@@ -128,9 +128,9 @@ export async function handleOosCommand(adminChatId, args) {
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
-  const result = updateOrderStatus(orderId, "cancelled");
+  const result = updateOrderStatus(orderId, "cancelled", { force: true, source: "ops-admin.oos" });
   if (!result || result.error) {
-    return sendText(adminChatId, `⚠️ Could not cancel *${orderId}*.`);
+    return sendText(adminChatId, `⚠️ Could not cancel *${orderId}*.${result?.message ? ` ${result.message}` : ""}`);
   }
 
   const msg = orderCancellationMessage({

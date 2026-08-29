@@ -241,7 +241,7 @@ export async function executeReturnTrip({ orderId, phone, customerKey = "", forc
     disputeHold: false,
   });
   try {
-    if (order && order.status !== "cancelled") updateOrderStatus(id, "cancelled");
+    if (order && order.status !== "cancelled") updateOrderStatus(id, "cancelled", { force: true, source: "boda-no-show" });
   } catch {
     /* ignore */
   }

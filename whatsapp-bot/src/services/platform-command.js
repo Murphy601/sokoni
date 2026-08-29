@@ -395,7 +395,7 @@ export function refundEscrowOrder(orderId, { reason = "", adminLabel = "admin" }
   });
   try {
     if (order.status !== "cancelled") {
-      updateOrderStatus(order.id, "cancelled");
+      updateOrderStatus(order.id, "cancelled", { force: true, source: "platform-command.refund" });
     }
   } catch {
     /* ignore */
