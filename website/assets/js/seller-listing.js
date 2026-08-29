@@ -3333,7 +3333,6 @@ async function onOnboard() {
   let shopHandle = el("onboard-shop-handle")?.value.trim().replace(/^@/, "");
   const mpesaNumber = el("onboard-mpesa")?.value.trim();
   const nationalId = el("onboard-national-id")?.value.trim();
-  const kraPin = el("onboard-kra-pin")?.value.trim();
 
   if (!phone) {
     setOnboardStatus("Enter your WhatsApp number.", true);
@@ -3366,8 +3365,7 @@ async function onOnboard() {
           shopName,
           shopHandle: shopHandle || undefined,
           mpesaNumber: normalizePhoneInput(mpesaNumber),
-          nationalId,
-          kraPin: kraPin || undefined,
+          nationalId: nationalId || undefined,
         })
       ),
     });
