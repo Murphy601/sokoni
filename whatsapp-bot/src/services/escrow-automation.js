@@ -237,6 +237,13 @@ async function notifySellersForPaidCart(parent, children) {
  */
 export async function applyPostPaymentAutomation(order, payment = {}) {
   if (!order?.id) return { error: "missing_order" };
+
+  try {
+    const { maybeAlertHighValueEscrow } = await import("./exec-briefing.js");
+    void maybeAlertHighValueEscrow(order);
+  } catch (err) {
+    console.warn("[escrow] HV alert skipped:", err.message);
+  }
   if (order.kind === "cart_child") {
     return { error: "cart_child_not_payable", message: "Pay the parent cart order (SKN-####)." };
   }

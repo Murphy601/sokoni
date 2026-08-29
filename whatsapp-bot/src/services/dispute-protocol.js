@@ -510,6 +510,31 @@ export async function sendAdminDisputeAlert(
       console.warn(`[Dispute Alert] Admin send failed → ${admin}:`, err.message);
     }
   }
+
+  // Numbered action card (1 refund / 2 release / 3 split / 4 portal)
+  try {
+    const order = orderId ? (await import("./orders.js")).getOrder(orderId) : null;
+    const amountKes =
+      Number(order?.buyerTotalKes) ||
+      Number(order?.priceKes) + Number(order?.shippingKes || 0) ||
+      Number(order?.priceKes) ||
+      0;
+    const sellerPhone = order?.supplierId
+      ? (await import("./suppliers.js")).getSupplier(order.supplierId)?.phone || ""
+      : "";
+    const { sendDisputeActionCardsToAdmins } = await import("./dispute-admin-actions.js");
+    await sendDisputeActionCardsToAdmins(admins, {
+      orderId,
+      disputeId,
+      buyerPhone: phone || order?.phone || "",
+      sellerPhone,
+      amountKes,
+      issueType,
+    });
+  } catch (err) {
+    console.warn("[Dispute Alert] action card skipped:", err.message);
+  }
+
   return sent;
 }
 
