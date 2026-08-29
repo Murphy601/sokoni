@@ -263,21 +263,26 @@ export async function createDispute({
   const fresh = getOrder(order.id) || order;
   const reasonLabel = text || cleanReason;
   const short = String(reasonLabel).slice(0, 140);
-  void notifyDisputeParties(fresh, dispute, {
-    eventType: "DISPUTE_OPENED",
-    adminDetails:
-      `Buyer opened a dispute (#${dispute.id}).\n` +
-      `Reason: ${cleanReason}\n` +
-      `${short}\n` +
-      `Escrow: ${freeze.frozen ? "frozen" : "not frozen"}`,
-    sellerMessage:
-      `⚠️ *URGENT DISPUTE* on *${fresh.id}*.\n` +
-      `Reason: ${cleanReason}\n` +
-      `${short}\n\n` +
-      `Payout is on hold. Reply in Seller Hub → Disputes with dispatch photos within 24 hours.`,
-    buyerMessage:
-      `✅ Dispute opened for *${fresh.id}*. Escrow is on hold — reply with clear evidence photos so we can finalize.`,
-  });
+  // Await so WAHA seller/admin fan-out finishes before the webhook returns.
+  try {
+    await notifyDisputeParties(fresh, dispute, {
+      eventType: "DISPUTE_OPENED",
+      adminDetails:
+        `Buyer opened a dispute (#${dispute.id}).\n` +
+        `Reason: ${cleanReason}\n` +
+        `${short}\n` +
+        `Escrow: ${freeze.frozen ? "frozen" : "not frozen"}`,
+      sellerMessage:
+        `⚠️ *URGENT DISPUTE* on *${fresh.id}*.\n` +
+        `Reason: ${cleanReason}\n` +
+        `${short}\n\n` +
+        `Payout is on hold. Reply in Seller Hub → Disputes with dispatch photos within 24 hours.`,
+      // Buyer already gets the structured protocol reply — avoid double WhatsApp.
+      buyerMessage: null,
+    });
+  } catch (err) {
+    console.warn("[disputes] notifyDisputeParties failed:", err?.message || err);
+  }
 
   return { success: true, dispute, escrowFrozen: Boolean(freeze.frozen) };
 }

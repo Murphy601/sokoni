@@ -262,20 +262,23 @@ export const config = {
    * sent here. Defaults to the business number (self-chat) if unset.
    */
   admin: (() => {
-    const phones = (process.env.ADMIN_PHONES || "")
-      .split(",")
-      .map((p) => p.replace(/\D/g, ""))
+    const phones = [
+      ...(process.env.ADMIN_PHONES || "").split(","),
+      process.env.ADMIN_WHATSAPP_NUMBER || "",
+    ]
+      .map((p) => String(p || "").replace(/\D/g, ""))
       .filter(Boolean);
+    const unique = [...new Set(phones)];
     const alertPhone =
-      phones[0] ||
+      unique[0] ||
       (process.env.BUSINESS_WHATSAPP_NUMBER || "").replace(/\D/g, "") ||
       "";
-    if (phones.length === 0) {
+    if (unique.length === 0) {
       console.warn(
-        "[config] ADMIN_PHONES not set — admin commands disabled; alerts go to business number only"
+        "[config] ADMIN_PHONES / ADMIN_WHATSAPP_NUMBER not set — admin commands disabled; alerts go to business number only"
       );
     }
-    return { phones, primary: alertPhone };
+    return { phones: unique, primary: alertPhone };
   })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),

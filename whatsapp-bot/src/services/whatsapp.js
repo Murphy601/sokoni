@@ -23,13 +23,18 @@ export async function withAdminReplyCapture(chatId, fn) {
   });
 }
 
-/** Normalize phone digits or chatId to WAHA chatId format. */
+/** Normalize phone digits or chatId to WAHA chatId format (`254…@c.us`). */
 export function toChatId(phoneOrChatId) {
-  if (phoneOrChatId.includes("@")) {
-    return phoneOrChatId.replace(/@s\.whatsapp\.net$/, "@c.us");
+  if (!phoneOrChatId) return "";
+  const raw = String(phoneOrChatId).trim();
+  if (raw.includes("@")) {
+    return raw.replace(/@s\.whatsapp\.net$/i, "@c.us");
   }
-  const digits = String(phoneOrChatId).replace(/\D/g, "");
-  return `${digits}@c.us`;
+  let digits = raw.replace(/\D/g, "");
+  // Kenya local 07xx / 01xx → E.164 254…
+  if (digits.startsWith("0") && digits.length >= 10) digits = `254${digits.slice(1)}`;
+  if (digits.length === 9 && /^[17]/.test(digits)) digits = `254${digits}`;
+  return digits ? `${digits}@c.us` : "";
 }
 
 /** Session key + display id from WAHA `from` field (supports @c.us and @lid). */

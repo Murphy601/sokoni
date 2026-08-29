@@ -18,7 +18,7 @@ import { CATALOG_IMAGES_DIR } from "../lib/catalog-images.js";
 import { config } from "../config.js";
 
 const COMPLAINT_RE =
-  /\b(refund|damaged|damage|return|money back|wrong item|wrong order|broken|scam|not as described|fake|counterfeit|defective|cracked|torn)\b/i;
+  /\b(refund|damaged|damage|return|money back|wrong item|wrong order|broken|scam|not as described|fake|counterfeit|defective|cracked|torn|missing|not received|never (arrived|received)|didn'?t (arrive|receive)|haijafika|haikufika|imepotea|sivyo)\b/i;
 
 const AWAITING_TTL_MS = 48 * 60 * 60 * 1000;
 
@@ -326,61 +326,132 @@ async function ensurePayoutFrozen(orderId) {
   return { frozen: true, order: getOrder(orderId) || order };
 }
 
-/** Explicit seller WhatsApp alert — payout frozen + evidence received. */
-export async function sendSellerDisputeAlert(orderId, { evidenceUrl = null, disputeId = null } = {}) {
-  const order = orderId ? getOrder(orderId) : null;
-  if (!order) return false;
-  const { sendText } = await import("./whatsapp.js");
+/** Explicit seller WhatsApp alert — payout frozen (open or evidence). */
+export async function sendSellerDisputeAlert(
+  orderId,
+  { evidenceUrl = null, disputeId = null, issueType = "damaged / wrong item" } = {}
+) {
+  let order = orderId ? getOrder(orderId) : null;
+  if (!order) {
+    console.error(`[Dispute Alert] Order ${orderId} not found — seller alert skipped`);
+    return false;
+  }
+  const { sendText, toChatId } = await import("./whatsapp.js");
   const { getSupplier } = await import("./suppliers.js");
-  const { sellerNotifyTargets } = await import("./communication-hub.js");
-  const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+  const { sellerNotifyTargets, ensureOrderSupplier, getOrderPartyChats } = await import(
+    "./communication-hub.js"
+  );
+
+  try {
+    order = (await ensureOrderSupplier(order)) || order;
+  } catch {
+    /* ignore */
+  }
+
   const amount = Number(order.priceKes || order.buyerTotalKes || 0);
   const msg =
-    `⚠️ *URGENT SOKONI MALL NOTICE*\n\n` +
-    `Buyer reported a wrong/damaged item for Order *${order.id}* (${order.productName || "item"}).\n` +
-    `• *Payout Status:* FROZEN` +
+    `⚠️ *URGENT SOKONI MALL DISPUTE*\n\n` +
+    `Buyer reported: *${String(issueType || "issue").toUpperCase()}*\n` +
+    `• *Order:* *${order.id}*\n` +
+    `• *Item:* ${order.productName || "item"}\n` +
+    `• *Payout Status:* 🛑 FROZEN` +
     (amount ? ` (KES ${amount.toLocaleString()})` : "") +
     `\n` +
     (disputeId ? `• *Dispute:* #${disputeId}\n` : "") +
     (evidenceUrl ? `• *Evidence:* ${evidenceUrl}\n` : "") +
-    `• *Required Action:* Review evidence in Seller Hub → Disputes within 24 hours.`;
-  const targets = supplier?.phone ? sellerNotifyTargets(supplier.phone) : [];
-  if (!targets.length && supplier?.phone) targets.push(supplier.phone);
+    `Please reply with dispatch proof within 24 hours (or open Seller Hub → Disputes).`;
+
+  const targets = new Set();
+  const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+  for (const phone of [supplier?.phone, supplier?.mpesaNumber, order.sellerPhone].filter(Boolean)) {
+    for (const t of sellerNotifyTargets(phone)) targets.add(t);
+    try {
+      targets.add(toChatId(phone));
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const parties = await getOrderPartyChats(order, {
+      sellerUserId: order.sellerUserId || null,
+    });
+    for (const t of parties.seller || []) targets.add(t);
+  } catch {
+    /* ignore */
+  }
+
+  if (!targets.size) {
+    console.error(
+      `[Dispute Alert] Missing seller phone/chat for Order ${order.id} (supplierId=${order.supplierId || "—"})`
+    );
+    return false;
+  }
+
   let sent = false;
   for (const to of targets) {
     try {
       await sendText(to, msg);
+      console.log(`[Dispute Alert] Sent to Seller: ${to}`);
       sent = true;
     } catch (err) {
-      console.warn("[dispute-protocol] seller alert failed:", to, err.message);
+      console.warn(`[Dispute Alert] Seller send failed → ${to}:`, err.message);
     }
   }
   return sent;
 }
 
-/** Explicit admin WhatsApp alert. */
-export async function sendAdminDisputeAlert(orderId, { evidenceUrl = null, disputeId = null, phone = "", attached = false } = {}) {
-  const admin = config.admin.primary;
-  if (!admin) {
-    console.warn("[dispute-protocol] ADMIN_PHONES unset — admin dispute alert skipped");
+/** Explicit admin WhatsApp alert (all ADMIN_PHONES + ADMIN_WHATSAPP_NUMBER). */
+export async function sendAdminDisputeAlert(
+  orderId,
+  {
+    evidenceUrl = null,
+    disputeId = null,
+    phone = "",
+    attached = false,
+    issueType = "dispute",
+    opened = false,
+  } = {}
+) {
+  const admins = [
+    ...new Set(
+      [...(config.admin.phones || []), config.admin.primary]
+        .map((p) => String(p || "").replace(/\D/g, ""))
+        .filter((p) => p.length >= 9)
+    ),
+  ];
+  if (!admins.length) {
+    console.warn(
+      "[Dispute Alert] ADMIN_PHONES / ADMIN_WHATSAPP_NUMBER unset — admin dispute alert skipped"
+    );
     return false;
   }
   const { sendText } = await import("./whatsapp.js");
   const ticket = disputeId ? `#${disputeId}` : orderId || "—";
+  const headline = opened
+    ? `🚨 *ADMIN ALERT: NEW DISPUTE FILED*`
+    : `🚨 *ADMIN ALERT: DISPUTE EVIDENCE*`;
   const msg =
-    `🚨 *DISPUTE EVIDENCE — TICKET ${ticket}*\n\n` +
-    `Order *${orderId || "—"}* flagged (damaged / wrong item).\n` +
-    `Payout is ON_HOLD. Buyer: ${phone || "—"}\n` +
-    (evidenceUrl ? `Evidence: ${evidenceUrl}\n` : "") +
-    `DB attach: ${attached ? "✅" : "relayed / pending"}\n` +
+    `${headline}\n\n` +
+    `• *Order:* *${orderId || "—"}*\n` +
+    `• *Issue:* ${issueType}\n` +
+    (disputeId ? `• *Ticket:* ${ticket}\n` : "") +
+    `• *Buyer:* ${phone || "—"}\n` +
+    `• *Payout:* held_for_dispute (ON HOLD)\n` +
+    (evidenceUrl ? `• *Evidence:* ${evidenceUrl}\n` : "") +
+    (opened ? "" : `• *DB attach:* ${attached ? "✅" : "relayed / pending"}\n`) +
     `Check Admin Portal → Disputes.`;
-  try {
-    await sendText(admin, msg);
-    return true;
-  } catch (err) {
-    console.warn("[dispute-protocol] admin alert failed:", err.message);
-    return false;
+
+  let sent = false;
+  for (const admin of admins) {
+    try {
+      await sendText(admin, msg);
+      console.log(`[Dispute Alert] Sent to Admin: ${admin}`);
+      sent = true;
+    } catch (err) {
+      console.warn(`[Dispute Alert] Admin send failed → ${admin}:`, err.message);
+    }
   }
+  return sent;
 }
 
 /**
@@ -464,12 +535,21 @@ export async function tryHandleFulfillmentDispute(customerKey, text, { phone = "
 
   if (result.ok && result.orderId) {
     await ensurePayoutFrozen(result.orderId);
-    // Opening alerts (seller/admin) already fire via createDispute / startAdminTakeOver;
-    // reinforce when DB path was skipped so ops still see the freeze.
-    if (!result.disputeId) {
-      await sendSellerDisputeAlert(result.orderId, { disputeId: null });
-      await sendAdminDisputeAlert(result.orderId, { phone, attached: false });
-    }
+    const issueType = String(text || "dispute").slice(0, 80);
+    // Always await explicit seller+admin WAHA alerts (do not rely on void createDispute fan-out).
+    const sellerOk = await sendSellerDisputeAlert(result.orderId, {
+      disputeId: result.disputeId || null,
+      issueType,
+    });
+    const adminOk = await sendAdminDisputeAlert(result.orderId, {
+      phone,
+      disputeId: result.disputeId || null,
+      issueType,
+      opened: true,
+    });
+    console.log(
+      `[Dispute Alert] open order=${result.orderId} seller=${sellerOk ? "ok" : "FAIL"} admin=${adminOk ? "ok" : "FAIL"}`
+    );
   }
 
   await sendText(customerKey, result.message);
@@ -610,12 +690,18 @@ export async function tryHandleDisputeEvidencePhoto(
   clearAwaitingDisputeEvidence(customerKey, phone);
 
   // Always fire explicit seller + admin alerts (even if DB attach failed)
-  await sendSellerDisputeAlert(orderId, { evidenceUrl: publicUrl, disputeId });
+  await sendSellerDisputeAlert(orderId, {
+    evidenceUrl: publicUrl,
+    disputeId,
+    issueType: "evidence photo",
+  });
   await sendAdminDisputeAlert(orderId, {
     evidenceUrl: publicUrl,
     disputeId,
     phone: phoneDigits(phone) || phone,
     attached,
+    issueType: "evidence photo",
+    opened: false,
   });
 
   await sendText(
