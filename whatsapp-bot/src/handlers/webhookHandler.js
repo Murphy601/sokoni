@@ -134,6 +134,37 @@ function extractMedia(payload) {
   };
 }
 
+/** WAHA / WhatsApp live location pin (degrees). */
+export function extractWahaLocation(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const d = payload._data || {};
+  const loc = payload.location || d.location || d.msg?.location || {};
+  const lat = Number(
+    payload.latitude ??
+      payload.lat ??
+      loc.latitude ??
+      loc.lat ??
+      d.lat ??
+      d.latitude ??
+      loc.degreesLatitude ??
+      d.degreesLatitude
+  );
+  const lng = Number(
+    payload.longitude ??
+      payload.lng ??
+      loc.longitude ??
+      loc.lng ??
+      d.lng ??
+      d.longitude ??
+      loc.degreesLongitude ??
+      d.degreesLongitude
+  );
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  if (lat === 0 && lng === 0) return null;
+  return { lat, lng };
+}
+
 /** Album container messages have no real file — skip them; individual photos follow separately. */
 function isAlbumPlaceholder(payload) {
   const d = payload?._data || {};
@@ -152,8 +183,9 @@ export function parseWahaMessage(body) {
 
   const text = String(payload.body || "").trim();
   const mediaInfo = extractMedia(payload);
+  const location = extractWahaLocation(payload);
   const hasProductCard = Boolean(extractWahaProductMessage(payload));
-  if (!text && !mediaInfo.hasMedia && !hasProductCard) return null;
+  if (!text && !mediaInfo.hasMedia && !hasProductCard && !location) return null;
   if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
 
   const quotedText = extractQuotedText(payload);
@@ -173,6 +205,7 @@ export function parseWahaMessage(body) {
       quotedText,
       session: body.session || config.waha.session,
       rawPayload: payload,
+      location,
       ...mediaInfo,
     };
   }
@@ -193,6 +226,7 @@ export function parseWahaMessage(body) {
     combinedText,
     session: body.session || config.waha.session,
     rawPayload: payload,
+    location,
     ...mediaInfo,
     ...meta,
   };
@@ -259,6 +293,7 @@ export async function handleIncomingMessage(
     mediaMimetype = null,
     messageId = null,
     wahaSession = null,
+    location = null,
   } = {}
 ) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
@@ -412,11 +447,11 @@ export async function handleIncomingMessage(
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
   }
 
-  // Sokoni boda fleet: ACCEPT / PICKED / CONFIRM / DELIVERED / CODE (riders + buyer OTP).
+  // Sokoni boda fleet: ACCEPT / PICKED / CONFIRM / DELIVERED / CODE + rider GPS pin.
   {
     try {
       const { tryHandleBodaFleetMessage } = await import("../services/boda-fleet.js");
-      if (await tryHandleBodaFleetMessage(customerKey, text, { phone })) return;
+      if (await tryHandleBodaFleetMessage(customerKey, text, { phone, location })) return;
     } catch (err) {
       console.warn("[webhook] boda fleet skipped:", err.message);
     }
@@ -853,7 +888,7 @@ export async function handleWahaWebhook(body) {
     if (handled !== false) return handled;
   }
 
-  if (!parsed.text && !parsed.hasMedia) return;
+  if (!parsed.text && !parsed.hasMedia && !parsed.location) return;
 
   return handleIncomingMessage(parsed.customerKey, parsed.text || "", {
     quotedText: parsed.quotedText,
@@ -866,5 +901,6 @@ export async function handleWahaWebhook(body) {
     mediaMimetype: parsed.mediaMimetype,
     messageId: parsed.messageId,
     session: parsed.session,
+    location: parsed.location || null,
   });
 }

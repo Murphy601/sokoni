@@ -35,6 +35,56 @@ function hashOtp(code) {
   return createHash("sha256").update(String(code)).digest("hex");
 }
 
+const GEOFENCE_RADIUS_M = 200;
+const RIDER_LOCATION_MAX_AGE_MS = 10 * 60 * 1000;
+
+/** Great-circle distance in metres (WGS84). */
+export function haversineMeters(lat1, lng1, lat2, lng2) {
+  const toRad = (d) => (Number(d) * Math.PI) / 180;
+  const R = 6371000;
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δφ = toRad(Number(lat2) - Number(lat1));
+  const Δλ = toRad(Number(lng2) - Number(lng1));
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function parseCoordPair(lat, lng) {
+  const a = Number(lat);
+  const b = Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (Math.abs(a) > 90 || Math.abs(b) > 180) return null;
+  if (a === 0 && b === 0) return null;
+  return { lat: a, lng: b };
+}
+
+/** Best-effort Nominatim geocode for Kenya drop-offs (fail-soft). */
+async function geocodeKenyaAddress(address) {
+  const q = String(address || "").trim();
+  if (q.length < 6) return null;
+  try {
+    const axios = (await import("axios")).default;
+    const { data } = await axios.get("https://nominatim.openstreetmap.org/search", {
+      params: {
+        q: `${q}, Kenya`,
+        format: "json",
+        limit: 1,
+        countrycodes: "ke",
+      },
+      headers: { "User-Agent": "SokoniBodaFleet/1.0 (ops@sokonimall.com)" },
+      timeout: 6000,
+    });
+    const hit = Array.isArray(data) ? data[0] : null;
+    return parseCoordPair(hit?.lat, hit?.lon);
+  } catch (err) {
+    console.warn("[boda-fleet] geocode skipped:", err.message);
+    return null;
+  }
+}
+
 function mapRider(row) {
   if (!row) return null;
   return {
@@ -425,6 +475,8 @@ export async function requestBodaDispatch({
   pickupAddress = "",
   deliveryAddress = "",
   deliveryFeeKes = 0,
+  dropoffLat = null,
+  dropoffLng = null,
 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Boda fleet needs Postgres." };
@@ -464,6 +516,15 @@ export async function requestBodaDispatch({
         : defaultFee
   );
 
+  let dropCoords =
+    parseCoordPair(dropoffLat, dropoffLng) ||
+    parseCoordPair(order.dropoffLat ?? order.dropOffLat, order.dropoffLng ?? order.dropOffLng) ||
+    parseCoordPair(order.meta?.dropoffLat, order.meta?.dropoffLng) ||
+    null;
+  if (!dropCoords) {
+    dropCoords = await geocodeKenyaAddress(drop);
+  }
+
   const existing = await getOpenDispatchForOrder(id);
   if (existing) {
     return {
@@ -482,12 +543,19 @@ export async function requestBodaDispatch({
     };
   }
 
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] safeguard columns on request:", err.message);
+  }
+
   const riderIds = riders.map((r) => r.id);
   const { rows } = await query(
     `INSERT INTO delivery_dispatches (
        order_ref, seller_phone, pickup_address, delivery_address,
-       delivery_fee_kes, operating_town, status, broadcast_rider_ids, meta
-     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb)
+       delivery_fee_kes, operating_town, status, broadcast_rider_ids, meta,
+       dropoff_lat, dropoff_lng
+     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb, $9, $10)
      RETURNING *`,
     [
       id,
@@ -497,7 +565,13 @@ export async function requestBodaDispatch({
       fee,
       town,
       riderIds,
-      JSON.stringify({ productName: order.productName || null, sellerHandle: check.supplier?.shopHandle || null }),
+      JSON.stringify({
+        productName: order.productName || null,
+        sellerHandle: check.supplier?.shopHandle || null,
+        dropoffGeocoded: Boolean(dropCoords),
+      }),
+      dropCoords?.lat ?? null,
+      dropCoords?.lng ?? null,
     ]
   );
   const dispatch = mapDispatch(rows[0]);
@@ -773,6 +847,8 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
        picked_up_at = COALESCE(d.picked_up_at, NOW()),
        delivery_otp_hash = $3,
        delivery_otp_sent_at = NOW(),
+       otp_failed_attempts = 0,
+       otp_locked_at = NULL,
        updated_at = NOW()
      FROM riders r
      WHERE UPPER(d.order_ref) = UPPER($1)
@@ -808,9 +884,9 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
 
   const cleanRiderMsg =
     `📦 Marked *${id}* picked up — OTP sent to the buyer.\n` +
-    `At drop-off, ask for their 4-digit code, then reply:\n` +
+    `At drop-off: 1) share your *live WhatsApp location*, then 2) reply:\n` +
     `*CONFIRM ${id} 1234*\n` +
-    `(use the buyer's real code)` +
+    `(use the buyer's real code — 3 wrong tries locks your account)` +
     (feeKes > 0 ? `\n\nFee held: KES ${feeKes.toLocaleString()} — credited after CONFIRM.` : "");
 
   return { ok: true, dispatch: mapDispatch(rows[0]), message: cleanRiderMsg };
@@ -829,12 +905,15 @@ export async function markBodaDeliveredRequestOtp({ orderId, phone, customerKey 
        status = 'OTP_SENT',
        delivery_otp_hash = $3,
        delivery_otp_sent_at = NOW(),
+       otp_failed_attempts = 0,
+       otp_locked_at = NULL,
+       status = 'OTP_SENT',
        updated_at = NOW()
      FROM riders r
      WHERE UPPER(d.order_ref) = UPPER($1)
        AND d.rider_id = r.id
        AND r.phone = $2
-       AND d.status IN ('ACCEPTED','PICKED_UP','OTP_SENT')
+       AND d.status IN ('ACCEPTED','PICKED_UP','OTP_SENT','OTP_LOCKED')
      RETURNING d.*`,
     [id, riderPhone, hashOtp(otp)]
   );
@@ -882,6 +961,77 @@ async function ensureRiderPayoutsTable() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_rider_payouts_order_rider
       ON rider_payouts (UPPER(order_ref), rider_id)
   `);
+}
+
+/**
+ * Rider shared live WhatsApp location — store on active OTP_SENT job(s).
+ */
+export async function recordRiderConfirmLocation({
+  phone = "",
+  customerKey = "",
+  lat,
+  lng,
+} = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
+  const coords = parseCoordPair(lat, lng);
+  if (!riderPhone || !coords) {
+    return { error: "invalid_location", message: "Share a valid live WhatsApp location pin." };
+  }
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] safeguard columns on location:", err.message);
+  }
+
+  const { rows } = await query(
+    `UPDATE delivery_dispatches d SET
+       rider_confirm_lat = $2,
+       rider_confirm_lng = $3,
+       rider_location_at = NOW(),
+       updated_at = NOW()
+     FROM riders r
+     WHERE d.rider_id = r.id
+       AND r.phone = $1
+       AND d.status = 'OTP_SENT'
+     RETURNING d.order_ref, d.id`,
+    [riderPhone, coords.lat, coords.lng]
+  );
+
+  if (!rows.length) {
+    return {
+      error: "no_active_job",
+      message:
+        "Location saved only for active pickup jobs. Claim a job (`ACCEPT` + `PICKED`) first, then share location before `CONFIRM`.",
+    };
+  }
+
+  const refs = rows.map((r) => r.order_ref).join(", ");
+  return {
+    ok: true,
+    orders: rows.map((r) => r.order_ref),
+    message:
+      `📍 Location locked for *${refs}*.\n` +
+      `You must be within ${GEOFENCE_RADIUS_M}m of the drop-off.\n` +
+      `Now reply *CONFIRM ${rows[0].order_ref} ####* with the buyer's code.`,
+  };
+}
+
+async function resolveDropoffCoords(dispatch) {
+  let drop = parseCoordPair(dispatch.dropoff_lat, dispatch.dropoff_lng);
+  if (drop) return drop;
+  drop = await geocodeKenyaAddress(dispatch.delivery_address);
+  if (drop && dispatch.id) {
+    try {
+      await query(
+        `UPDATE delivery_dispatches SET dropoff_lat = $2, dropoff_lng = $3, updated_at = NOW() WHERE id = $1`,
+        [dispatch.id, drop.lat, drop.lng]
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] persist dropoff coords:", err.message);
+    }
+  }
+  return drop;
 }
 
 async function ensureOtpSafeguardColumns() {
@@ -1130,6 +1280,76 @@ export async function verifyDeliveryOTP({
     }
   }
 
+  // Step 2 — GPS geofence (rider must share live WA location within 200m of drop-off)
+  const riderGps = parseCoordPair(dispatch.rider_confirm_lat, dispatch.rider_confirm_lng);
+  const locAge = dispatch.rider_location_at
+    ? Date.now() - new Date(dispatch.rider_location_at).getTime()
+    : Infinity;
+  if (!riderGps || !Number.isFinite(locAge) || locAge > RIDER_LOCATION_MAX_AGE_MS) {
+    await writeOtpAudit({
+      orderRef: id,
+      dispatchId: dispatch.id,
+      riderId: dispatch.rider_id,
+      otpEntered: otp,
+      otpMatch: true,
+      result: "NO_GPS",
+      escrowStatus: dispatch.fee_status,
+      meta: { locAgeMs: Number.isFinite(locAge) ? locAge : null },
+    });
+    return {
+      error: "location_required",
+      message:
+        `📍 Share your *live WhatsApp location* at the buyer's door first (must be fresh, <10 min),\n` +
+        `then reply *CONFIRM ${id} ${otp}* again.`,
+    };
+  }
+
+  const dropCoords = await resolveDropoffCoords(dispatch);
+  if (!dropCoords) {
+    await writeOtpAudit({
+      orderRef: id,
+      dispatchId: dispatch.id,
+      riderId: dispatch.rider_id,
+      otpEntered: otp,
+      otpMatch: true,
+      riderGpsLat: riderGps.lat,
+      riderGpsLng: riderGps.lng,
+      geofenceOk: false,
+      result: "NO_DROPOFF_GPS",
+      escrowStatus: dispatch.fee_status,
+    });
+    return {
+      error: "dropoff_gps_missing",
+      message:
+        `❌ Drop-off GPS is not on file for *${id}*. Cannot verify you are at the door.\n` +
+        `Ask Sokoni ops / the seller to set the pin, then try again.`,
+    };
+  }
+
+  const distanceM = haversineMeters(riderGps.lat, riderGps.lng, dropCoords.lat, dropCoords.lng);
+  if (distanceM > GEOFENCE_RADIUS_M) {
+    await writeOtpAudit({
+      orderRef: id,
+      dispatchId: dispatch.id,
+      riderId: dispatch.rider_id,
+      otpEntered: otp,
+      otpMatch: true,
+      riderGpsLat: riderGps.lat,
+      riderGpsLng: riderGps.lng,
+      distanceM: Math.round(distanceM),
+      geofenceOk: false,
+      result: "GEOFENCE_FAIL",
+      escrowStatus: dispatch.fee_status,
+      meta: { dropoff: dropCoords, radiusM: GEOFENCE_RADIUS_M },
+    });
+    return {
+      error: "geofence_fail",
+      message:
+        `❌ You are ~${Math.round(distanceM)}m from the drop-off (limit ${GEOFENCE_RADIUS_M}m).\n` +
+        `Move to the buyer's door, share a fresh WhatsApp location, then CONFIRM again.`,
+    };
+  }
+
   const feeKes = Number(dispatch.delivery_fee_kes || 0);
 
   await query(
@@ -1172,11 +1392,16 @@ export async function verifyDeliveryOTP({
     riderId: dispatch.rider_id,
     otpEntered: otp,
     otpMatch: true,
+    riderGpsLat: riderGps.lat,
+    riderGpsLng: riderGps.lng,
+    distanceM: Math.round(distanceM),
+    geofenceOk: true,
     result: "DELIVERED",
     escrowStatus: "PENDING_MPESA",
     meta: {
       riderName: dispatch.rider_name || null,
       plate: dispatch.motorbike_plate || null,
+      dropoff: dropCoords,
     },
   });
 
@@ -1470,11 +1695,24 @@ export async function suspendBodaRiderForOrderDispute(orderRef, { reason = "Buye
  * WhatsApp command hook for riders + buyer OTP.
  * @returns {Promise<boolean>} true if consumed
  */
-export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "" } = {}) {
+export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "", location = null } = {}) {
   const trimmed = String(text || "").trim();
-  if (!trimmed) return false;
   const { sendText } = await import("./whatsapp.js");
   const { extractOrderIdFromText } = await import("./orders.js");
+
+  // Live WhatsApp location pin (geofence for CONFIRM)
+  if (location?.lat != null && location?.lng != null) {
+    const result = await recordRiderConfirmLocation({
+      phone,
+      customerKey,
+      lat: location.lat,
+      lng: location.lng,
+    });
+    await sendText(customerKey, result.message || result.error || "Location received.");
+    return true;
+  }
+
+  if (!trimmed) return false;
 
   const accept = trimmed.match(/^ACCEPT\s+(SKN?-?\d{1,6}(?:-\d+)?)\b/i);
   if (accept) {
@@ -1565,6 +1803,7 @@ export function bodaSupportSummary() {
       "SET ZONE NAIROBI|THIKA",
       "AVAILABLE / OFFLINE",
       "PICKED SKN-####",
+      "share live WhatsApp location",
       "CONFIRM SKN-#### 1234",
       "DELIVERED SKN-####",
       "CODE 1234",
