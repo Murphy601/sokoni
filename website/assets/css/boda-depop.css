@@ -238,11 +238,12 @@ body.boda-depop .boda-eyebrow {
   margin: 0 0 0.5rem;
 }
 
-/* Photo proof grid */
+/* Photo proof grid — locked portrait cards (never full native height) */
 body.boda-depop .boda-photo-grid {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
   grid-template-columns: 1fr;
+  align-items: stretch;
 }
 
 @media (min-width: 768px) {
@@ -252,33 +253,108 @@ body.boda-depop .boda-photo-grid {
 }
 
 body.boda-depop .boda-photo-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--boda-white);
   border: 1px solid var(--boda-border);
+  border-radius: 1rem;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(26, 26, 26, 0.06);
 }
 
-body.boda-depop .boda-photo-card img {
+body.boda-depop .boda-photo-media {
+  position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 4 / 5;
+  max-height: min(28rem, 70vh);
+  overflow: hidden;
+  background: #e8e8e8;
+}
+
+body.boda-depop .boda-photo-media img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
   object-fit: cover;
+  object-position: center;
+}
+
+body.boda-depop .boda-photo-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2.5rem 1rem 1rem;
+  background: linear-gradient(to top, rgba(26, 26, 26, 0.85), transparent);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  z-index: 1;
+  pointer-events: none;
 }
 
 body.boda-depop .boda-photo-card figcaption {
   padding: 0.85rem 1rem 1.1rem;
+  flex: 1;
 }
 
-body.boda-depop .boda-photo-card strong {
+body.boda-depop .boda-photo-card figcaption strong {
   display: block;
   font-size: 0.875rem;
   font-weight: 800;
   margin-bottom: 0.25rem;
+  color: var(--boda-black);
 }
 
-body.boda-depop .boda-photo-card span {
+body.boda-depop .boda-photo-card figcaption span {
   font-size: 0.8rem;
   color: var(--boda-muted);
   line-height: 1.4;
+}
+
+/* Community pair — same containment rules */
+body.boda-depop .boda-community {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  body.boda-depop .boda-community {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+body.boda-depop .boda-community figure {
+  margin: 0;
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(26, 26, 26, 0.06);
+}
+
+body.boda-depop .boda-community .boda-photo-media {
+  aspect-ratio: 16 / 10;
+  max-height: min(22rem, 55vh);
+}
+
+body.boda-depop .boda-community figcaption {
+  padding: 0.85rem 1rem 1.1rem;
+  font-size: 0.8rem;
+  color: var(--boda-muted);
+}
+
+body.boda-depop .boda-community figcaption strong {
+  display: block;
+  color: var(--boda-black);
+  font-weight: 800;
+  margin-bottom: 0.2rem;
 }
 
 /* Value / step cards — not decorative marketing cards; interaction containers */
@@ -421,45 +497,6 @@ body.boda-depop .boda-phone-cap {
   font-size: 0.75rem;
   font-weight: 700;
   border-top: 1px solid var(--boda-border);
-}
-
-/* Community strip */
-body.boda-depop .boda-community {
-  display: grid;
-  gap: 1rem;
-}
-
-@media (min-width: 768px) {
-  body.boda-depop .boda-community {
-    grid-template-columns: 1.2fr 1fr;
-  }
-}
-
-body.boda-depop .boda-community figure {
-  margin: 0;
-  background: var(--boda-white);
-  border: 1px solid var(--boda-border);
-  overflow: hidden;
-}
-
-body.boda-depop .boda-community img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-}
-
-body.boda-depop .boda-community figcaption {
-  padding: 0.85rem 1rem 1.1rem;
-  font-size: 0.8rem;
-  color: var(--boda-muted);
-}
-
-body.boda-depop .boda-community figcaption strong {
-  display: block;
-  color: var(--boda-black);
-  font-weight: 800;
-  margin-bottom: 0.2rem;
 }
 
 /* Footer band */
