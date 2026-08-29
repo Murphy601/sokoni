@@ -2016,6 +2016,62 @@ export function bodaFleetConfigured() {
   return isDbEnabled();
 }
 
+/**
+ * Admin: OTP submission audit trail (evidence for disputes / NTSA).
+ */
+export async function listDeliveryOtpAudit({
+  orderId = "",
+  riderId = null,
+  limit = 50,
+} = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured", entries: [] };
+  try {
+    await ensureDeliveryOtpAuditTable();
+  } catch (err) {
+    console.warn("[boda-fleet] audit table ensure:", err.message);
+  }
+
+  const id = orderId ? normalizeOrderId(orderId) || String(orderId).toUpperCase() : null;
+  const rid = riderId != null && riderId !== "" ? Number(riderId) : null;
+  const { rows } = await query(
+    `SELECT a.*, r.full_name AS rider_name, r.motorbike_plate, r.phone AS rider_phone
+       FROM delivery_otp_audit a
+       LEFT JOIN riders r ON r.id = a.rider_id
+      WHERE ($1::text IS NULL OR UPPER(a.order_ref) = UPPER($1))
+        AND ($2::int IS NULL OR a.rider_id = $2)
+      ORDER BY a.submission_time DESC
+      LIMIT $3`,
+    [id, Number.isInteger(rid) && rid > 0 ? rid : null, Math.min(Math.max(Number(limit) || 50, 1), 200)]
+  );
+
+  return {
+    ok: true,
+    entries: rows.map((row) => ({
+      id: Number(row.id),
+      orderRef: row.order_ref,
+      dispatchId: row.dispatch_id != null ? Number(row.dispatch_id) : null,
+      riderId: row.rider_id != null ? Number(row.rider_id) : null,
+      riderLabel:
+        row.rider_id != null
+          ? `Rider #${row.rider_id} (${row.rider_name || "—"} — ${row.motorbike_plate || "—"})`
+          : null,
+      riderPhone: row.rider_phone || null,
+      otpEntered: row.otp_entered || null,
+      otpMatch: Boolean(row.otp_match),
+      submissionTime: row.submission_time,
+      riderGps:
+        row.rider_gps_lat != null && row.rider_gps_lng != null
+          ? { lat: Number(row.rider_gps_lat), lng: Number(row.rider_gps_lng) }
+          : null,
+      distanceM: row.distance_m != null ? Number(row.distance_m) : null,
+      geofenceOk: row.geofence_ok == null ? null : Boolean(row.geofence_ok),
+      escrowStatus: row.escrow_status || null,
+      result: row.result,
+      meta: row.meta || {},
+    })),
+  };
+}
+
 export function bodaSupportSummary() {
   return {
     zones: [...ZONES],
