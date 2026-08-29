@@ -552,6 +552,10 @@
       if (status) status.textContent = "Enter an order ID.";
       return;
     }
+    if (action === "release" && !reason) {
+      if (status) status.textContent = "Reason is required for Boss payout override audit.";
+      return;
+    }
     if (!token()) {
       setStatus("Enter admin token.", true);
       return;
@@ -561,7 +565,10 @@
       const res = await fetch(`${CMD_API}/escrow/${encodeURIComponent(orderId)}/${action}`, {
         method: "POST",
         headers: adminHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({
+          reason: action === "release" ? `Boss payout override: ${reason}` : reason,
+          adminLabel: action === "release" ? "boss-dead-man-ui" : "admin-command",
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

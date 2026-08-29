@@ -28,6 +28,7 @@ const SCHEMA_PHASE28_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE29_PATH = path.join(__dirname, "..", "..", "db", "schema-phase29-ops-edge-safeguards.sql");
 const SCHEMA_PHASE30_PATH = path.join(__dirname, "..", "..", "db", "schema-phase30-audit-logs.sql");
 const SCHEMA_PHASE31_PATH = path.join(__dirname, "..", "..", "db", "schema-phase31-staff-roles.sql");
+const SCHEMA_PHASE32_PATH = path.join(__dirname, "..", "..", "db", "schema-phase32-admin-logs.sql");
 
 async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
@@ -79,6 +80,7 @@ export async function runMigrations() {
     ["phase29 ops edge safeguards", SCHEMA_PHASE29_PATH],
     ["phase30 audit logs + dispatch status", SCHEMA_PHASE30_PATH],
     ["phase31 staff roles RBAC", SCHEMA_PHASE31_PATH],
+    ["phase32 admin_logs Boss overrides", SCHEMA_PHASE32_PATH],
   ];
 
   for (const [label, filePath] of phases) {

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rider Fleet · Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+</head>
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Riders</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <a href="admin-support.html">Support</a>
+          <a href="admin-boda.html">Boda</a>
+          <span class="is-active">Riders</span>
+          <a href="admin-finances.html">Finances</a>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Fleet map desk</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-5 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Rider logistics &amp; fleet</h1>
+          <p class="text-sm text-brand-purple/65 mt-1 max-w-2xl">
+            Live availability · on-delivery custody · suspend / reassign without touching the AI path.
+          </p>
+        </div>
+        <button id="refresh-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          Refresh fleet
+        </button>
+      </div>
+      <label class="block text-sm font-medium max-w-md">
+        Admin token
+        <input id="admin-token" type="password" autocomplete="off"
+               class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+               placeholder="ADMIN_SETUP_TOKEN" />
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="fleet-filter is-active min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-filter="all">All</button>
+        <button type="button" class="fleet-filter min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-filter="ON_DELIVERY">On delivery</button>
+        <button type="button" class="fleet-filter min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-filter="AVAILABLE">Available</button>
+        <button type="button" class="fleet-filter min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-filter="OFFLINE">Offline</button>
+        <button type="button" class="fleet-filter min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-filter="SUSPENDED">Suspended</button>
+      </div>
+      <p id="fleet-status" class="text-sm text-brand-purple/60" role="status"></p>
+    </section>
+
+    <div id="rider-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <h2 class="font-display text-xl font-black uppercase tracking-tight">Reassign route</h2>
+      <p class="text-sm text-brand-purple/65">Pins a new rider on an order (same as WhatsApp <code>REASSIGN RIDER</code>).</p>
+      <div class="grid gap-3 md:grid-cols-3">
+        <label class="block text-sm font-medium">
+          Order ID
+          <input id="reassign-order" type="text" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm font-mono" placeholder="SKN-8820" />
+        </label>
+        <label class="block text-sm font-medium">
+          Rider phone
+          <input id="reassign-phone" type="text" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="07…" />
+        </label>
+        <div class="flex items-end">
+          <button id="reassign-btn" type="button" class="w-full min-h-[44px] px-4 rounded-full bg-[#1A1A1A] text-white text-xs font-black">
+            Reassign route
+          </button>
+        </div>
+      </div>
+      <p id="reassign-status" class="text-sm" role="status"></p>
+    </section>
+  </main>
+
+  <script src="assets/js/admin-riders.js"></script>
+</body>
+</html>

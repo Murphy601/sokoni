@@ -460,14 +460,45 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
   const z = zone ? normalizeBodaZone(zone) : null;
   const st = status ? String(status).toUpperCase() : null;
   const { rows } = await query(
-    `SELECT * FROM riders
-      WHERE ($1::text IS NULL OR operating_town = $1)
-        AND ($2::text IS NULL OR verification_status = $2)
-      ORDER BY created_at DESC
+    `SELECT r.*,
+            d.status AS active_dispatch_status,
+            d.order_ref AS active_order_ref,
+            d.id AS active_dispatch_id
+       FROM riders r
+       LEFT JOIN LATERAL (
+         SELECT dd.status, dd.order_ref, dd.id
+           FROM delivery_dispatches dd
+          WHERE dd.rider_id = r.id
+            AND dd.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT', 'OTP_LOCKED')
+          ORDER BY dd.id DESC
+          LIMIT 1
+       ) d ON TRUE
+      WHERE ($1::text IS NULL OR r.operating_town = $1)
+        AND ($2::text IS NULL OR r.verification_status = $2)
+      ORDER BY r.created_at DESC
       LIMIT $3`,
     [z, st, Math.min(Math.max(Number(limit) || 50, 1), 200)]
   );
-  return { ok: true, riders: rows.map(mapRider) };
+  return {
+    ok: true,
+    riders: rows.map((row) => {
+      const rider = mapRider(row);
+      const onDelivery = Boolean(row.active_dispatch_status);
+      let fleetStatus = "OFFLINE";
+      if (rider.verificationStatus === "SUSPENDED") fleetStatus = "SUSPENDED";
+      else if (onDelivery) fleetStatus = "ON_DELIVERY";
+      else if (rider.verificationStatus === "VERIFIED" && rider.isAvailable) fleetStatus = "AVAILABLE";
+      else if (rider.verificationStatus === "PENDING") fleetStatus = "PENDING";
+      else if (rider.verificationStatus === "VERIFIED") fleetStatus = "OFFLINE";
+      return {
+        ...rider,
+        fleetStatus,
+        activeDispatchStatus: row.active_dispatch_status || null,
+        activeOrderRef: row.active_order_ref || null,
+        activeDispatchId: row.active_dispatch_id != null ? Number(row.active_dispatch_id) : null,
+      };
+    }),
+  };
 }
 
 /**

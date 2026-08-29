@@ -56,7 +56,18 @@ ADMIN_PHONES=254757764009
 # Hardwired last-9 757764009 always matches even if env is wrong
 MASTER_ADMIN_SECRET=long-random
 ADMIN_BOSS_TITLE=Boss
+# Webhook auth (at least one in production)
+WEBHOOK_HMAC_KEY=shared-with-waha
+# Optional Meta Cloud API dual-path
+META_APP_SECRET=from-meta-app-dashboard
 ```
+
+## Audit + dead-man UI
+
+- Every `FORCE RELEASE` / `REFUND BUYER` / `SUSPEND SHOP` / `PAUSE PAYOUTS` writes **`admin_logs`** (Postgres) and mirrors into `audit_logs` when order-linked.
+- Module: `src/services/boss-intercept.js` (pre-LLM) → `executeMasterAdminCommand` → `admin-logs.js`
+- Dead-man panel: **Boss payout override** on `/admin-command.html` (Overrides tab) and `/admin-finances.html` — calls `POST /admin/command/escrow/:id/release` (no WhatsApp required).
+- Fleet desk: `/admin-riders.html` · Finances: `/admin-finances.html`
 
 ## Deploy
 
@@ -65,3 +76,4 @@ SKIP_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
 ```
 
 Then text: `OVERRIDE TEST` → expect `Yes, Boss. Executive routing is live…`
+Text: `FORCE RELEASE SKN-…` → escrow release + `admin_logs` row (DB online).
