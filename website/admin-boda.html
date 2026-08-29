@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Admin · Sokoni Boda Riders</title>
+<title>Boda Fleet Desk · Sokoni Admin</title>
 <meta name="robots" content="noindex,nofollow" />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
@@ -13,37 +13,45 @@
     theme: {
       extend: {
         colors: {
-          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
         },
         fontFamily: {
           sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
-          display: ["Fraunces", "Georgia", "serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         },
       },
     },
   };
 </script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
-  <header class="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-20">
-    <div class="max-w-5xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
       <div>
-        <a href="admin-command.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
-        <p class="text-xs text-brand-purple/55 mt-0.5">Verification · disputes · rider payouts</p>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Boda</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <a href="admin-support.html">Support</a>
+          <span class="is-active">Boda</span>
+        </nav>
       </div>
-      <nav class="flex flex-wrap gap-2 text-xs font-semibold">
-        <a href="admin-command.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Command</a>
-        <a href="admin-boda.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Boda</a>
-        <a href="admin-disputes.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Disputes</a>
-      </nav>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Fleet desk</span>
+      </div>
     </div>
   </header>
 
   <main class="max-w-5xl mx-auto px-5 py-8 space-y-6">
     <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
-      <h1 class="font-display text-3xl font-bold">Boda riders</h1>
+      <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Boda fleet desk</h1>
       <p class="text-sm text-brand-purple/65">Review PENDING applications, open docs, then Verify or Reject. Verified riders get WhatsApp and become AVAILABLE.</p>
       <label class="block text-sm font-medium max-w-md">
         Admin token

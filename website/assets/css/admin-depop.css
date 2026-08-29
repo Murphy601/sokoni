@@ -122,7 +122,24 @@ body.admin-depop .admin-nav a:hover {
 body.admin-depop .admin-nav .is-active {
   background: var(--admin-red);
   color: #fff;
-  border-color: var(--admin-red);
+  border-color: var(--admin-ink);
+}
+
+/* Sticky suite chrome (shared across Tailwind admin pages) */
+body.admin-depop .admin-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--admin-canvas);
+  border-bottom: 2px solid var(--admin-ink);
+  padding: 1rem 1.25rem;
+  margin: 0;
+}
+
+body.admin-depop.admin-body,
+body.admin-body {
+  background-color: var(--depop-bg, #f4f4f4);
+  color: var(--depop-black, #1a1a1a);
 }
 
 /* Metric cards */
@@ -669,3 +686,336 @@ body.admin-depop .admin-empty {
   font-weight: 700;
   color: var(--admin-muted);
 }
+
+/* ── Global Depop tokens (also available as CSS vars) ── */
+:root {
+  --depop-red: #ff2300;
+  --depop-black: #1a1a1a;
+  --depop-bg: #f4f4f4;
+  --depop-card: #ffffff;
+  --depop-green: #00d26a;
+}
+
+/* Signature utilities for all Admin OS pages */
+body.admin-depop .depop-card,
+body.admin-depop .admin-card {
+  background: var(--admin-surface);
+  border: 2px solid var(--admin-ink);
+  border-radius: 1rem;
+  box-shadow: var(--admin-shadow);
+  padding: 1.25rem;
+}
+
+body.admin-depop .depop-btn-primary,
+body.admin-depop .btn-red {
+  background: var(--admin-red);
+  color: #fff;
+  font-weight: 800;
+  border-radius: 9999px;
+  padding: 0.5rem 1.25rem;
+  border: 2px solid var(--admin-ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.75rem;
+  transition: transform 0.1s ease;
+}
+
+body.admin-depop .depop-btn-primary:active,
+body.admin-depop .btn-red:active {
+  transform: translate(2px, 2px);
+}
+
+body.admin-depop .depop-btn-dark {
+  background: var(--admin-ink);
+  color: #fff;
+  font-weight: 800;
+  border-radius: 9999px;
+  padding: 0.5rem 1.25rem;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.75rem;
+}
+
+body.admin-depop .admin-tab,
+body.admin-depop .cmd-tab,
+body.admin-depop .desk-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 9999px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+body.admin-depop .admin-tab.is-active,
+body.admin-depop .cmd-tab.is-active,
+body.admin-depop .desk-tab.is-active {
+  background: var(--admin-red);
+  color: #fff;
+  border-color: var(--admin-red);
+}
+
+body.admin-depop .admin-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--admin-ink);
+}
+
+body.admin-depop .admin-section-head h1,
+body.admin-depop .admin-section-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+body.admin-depop .admin-live-pill {
+  display: inline-flex;
+  background: var(--admin-red);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+}
+
+body.admin-depop .admin-count-pill {
+  display: inline-flex;
+  background: var(--admin-ink);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+}
+
+body.admin-depop .cmd-bar {
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(26, 26, 26, 0.1);
+  overflow: hidden;
+}
+
+body.admin-depop .cmd-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--admin-red);
+  border-radius: inherit;
+}
+
+body.admin-depop .cmd-out {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  background: var(--admin-canvas);
+  border: 2px solid var(--admin-ink);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+}
+
+/* Order / dispute cards injected by JS */
+body.admin-depop .order-escrow-strip {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--admin-canvas);
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--admin-ink);
+  margin-bottom: 1rem;
+}
+
+/* ── Remap legacy cream/purple Tailwind under Admin OS ── */
+body.admin-depop .bg-brand-cream,
+body.admin-depop .bg-brand-cream\/80 {
+  background: var(--admin-canvas) !important;
+}
+
+body.admin-depop .text-brand-purple,
+body.admin-depop .text-brand-purple\/70,
+body.admin-depop .text-brand-purple\/65,
+body.admin-depop .text-brand-purple\/60,
+body.admin-depop .text-brand-purple\/55,
+body.admin-depop .text-brand-purple\/50,
+body.admin-depop .text-brand-purple\/80 {
+  color: var(--admin-ink) !important;
+}
+
+body.admin-depop .text-brand-purple\/55,
+body.admin-depop .text-brand-purple\/60,
+body.admin-depop .text-brand-purple\/50,
+body.admin-depop .text-brand-purple\/65,
+body.admin-depop .text-brand-purple\/70 {
+  color: var(--admin-muted) !important;
+}
+
+body.admin-depop .text-brand-green {
+  color: var(--admin-green) !important;
+}
+
+body.admin-depop .bg-brand-green {
+  background: var(--admin-red) !important;
+  color: #fff !important;
+  border-color: var(--admin-ink) !important;
+}
+
+body.admin-depop .text-brand-purple.bg-brand-green,
+body.admin-depop .bg-brand-green.text-brand-purple {
+  color: #fff !important;
+}
+
+body.admin-depop .border-brand-purple\/10,
+body.admin-depop .border-brand-purple\/15,
+body.admin-depop .border-brand-purple\/20,
+body.admin-depop .border-black\/5,
+body.admin-depop .border-black\/10 {
+  border-color: var(--admin-ink) !important;
+}
+
+body.admin-depop .rounded-3xl.border.bg-white,
+body.admin-depop article.rounded-3xl.border.bg-white,
+body.admin-depop section.rounded-3xl.border.bg-white,
+body.admin-depop .rounded-3xl.border.border-black\/5.bg-white {
+  border-width: 2px !important;
+  border-color: var(--admin-ink) !important;
+  border-radius: 1rem !important;
+  box-shadow: var(--admin-shadow);
+}
+
+body.admin-depop .font-display {
+  font-family: var(--font-body) !important;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+body.admin-depop input[type="password"],
+body.admin-depop input[type="text"],
+body.admin-depop input[type="search"],
+body.admin-depop select,
+body.admin-depop textarea {
+  border: 2px solid var(--admin-ink) !important;
+  border-radius: 9999px !important;
+  background: var(--admin-surface) !important;
+  color: var(--admin-ink) !important;
+  font-weight: 600;
+}
+
+body.admin-depop textarea {
+  border-radius: 0.75rem !important;
+}
+
+body.admin-depop input:focus,
+body.admin-depop select:focus,
+body.admin-depop textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--admin-red);
+}
+
+body.admin-depop button.min-h-\[44px\].rounded-full.bg-brand-green,
+body.admin-depop button.rounded-full.bg-brand-green {
+  background: var(--admin-red) !important;
+  color: #fff !important;
+  border: 2px solid var(--admin-ink) !important;
+  font-weight: 800;
+}
+
+body.admin-depop button.min-h-\[44px\].rounded-full.border,
+body.admin-depop button.rounded-full.border.border-brand-purple\/20,
+body.admin-depop button.rounded-full.border.border-brand-purple\/15 {
+  border: 2px solid var(--admin-ink) !important;
+  background: var(--admin-surface) !important;
+  color: var(--admin-ink) !important;
+  font-weight: 800;
+}
+
+body.admin-depop .border-emerald-200,
+body.admin-depop .bg-emerald-50\/60 {
+  border-color: var(--admin-green) !important;
+  background: rgba(0, 210, 106, 0.08) !important;
+}
+
+body.admin-depop .border-amber-200,
+body.admin-depop .bg-amber-50\/60,
+body.admin-depop .border-amber-400 {
+  border-color: #c45c00 !important;
+}
+
+body.admin-depop .border-red-200,
+body.admin-depop .border-red-300,
+body.admin-depop .bg-red-50\/60 {
+  border-color: var(--admin-red) !important;
+}
+
+body.admin-depop .text-emerald-800,
+body.admin-depop .text-emerald-900 {
+  color: #0a7a3e !important;
+}
+
+body.admin-depop .text-red-800,
+body.admin-depop .text-red-900 {
+  color: var(--admin-red) !important;
+}
+
+body.admin-depop .hover\:border-brand-green:hover {
+  border-color: var(--admin-red) !important;
+}
+
+body.admin-depop .hover\:text-brand-green:hover {
+  color: var(--admin-red) !important;
+}
+
+body.admin-depop .bg-brand-purple,
+body.admin-depop .bg-brand-purple\/80 {
+  background: var(--admin-ink) !important;
+  color: #fff !important;
+}
+
+body.admin-depop .ring-brand-green,
+body.admin-depop .ring-2.ring-brand-green {
+  --tw-ring-color: var(--admin-red) !important;
+  box-shadow: 0 0 0 2px var(--admin-red) !important;
+}
+
+body.admin-depop .border-sky-200,
+body.admin-depop .bg-sky-50\/60 {
+  border-color: var(--admin-ink) !important;
+  background: rgba(26, 26, 26, 0.04) !important;
+}
+
+body.admin-depop button[data-resolve="refund"],
+body.admin-depop button.bg-\[\#00D26A\] {
+  background: var(--admin-green) !important;
+  color: #fff !important;
+  border: 2px solid var(--admin-ink) !important;
+}
+
+body.admin-depop .cmd-bar > span {
+  background: var(--admin-green) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.admin-depop .depop-btn-primary,
+  body.admin-depop .btn-red {
+    transition: none;
+  }
+}
+

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Support ops desk — Sokoni Admin</title>
+<title>Support Ops Desk · Sokoni Admin</title>
 <meta name="robots" content="noindex,nofollow" />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
@@ -13,11 +13,11 @@
     theme: {
       extend: {
         colors: {
-          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
         },
         fontFamily: {
           sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
-          display: ["Fraunces", "Georgia", "serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         },
       },
     },
@@ -25,33 +25,38 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
 <style>
-  .desk-tab.is-active { background: #25D366; color: #1B1035; }
   .cmd-out { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 </style>
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
-  <header class="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-20">
-    <div class="max-w-6xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
       <div>
-        <a href="index.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
-        <p class="text-xs text-brand-purple/55 mt-0.5">Support ops desk — same tools as the admin WhatsApp number</p>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Support</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <span class="is-active">Support</span>
+          <a href="admin-boda.html">Boda</a>
+        </nav>
       </div>
-      <nav class="flex flex-wrap gap-2 text-xs font-semibold">
-        <a href="admin-command.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Command</a>
-        <a href="admin-disputes.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Disputes</a>
-        <a href="admin-support.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Support</a>
-        <a href="admin-seller-listings.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Listings</a>
-        <a href="admin-sellers-shops.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 hover:border-brand-green">Sellers &amp; Shops</a>
-      </nav>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Ops desk</span>
+      </div>
     </div>
   </header>
 
   <main class="max-w-6xl mx-auto px-5 py-8 space-y-5">
     <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
-      <h1 class="font-display text-2xl font-bold">Support ops desk</h1>
+      <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Support ops desk</h1>
       <p class="text-sm text-brand-purple/65 max-w-3xl">
         Inbox for HELP / “Talk to a Human”, plus every admin <code>#command</code>
         (status, fulfill, payconfirm, scan, issue macros, broadcast, ops…).
