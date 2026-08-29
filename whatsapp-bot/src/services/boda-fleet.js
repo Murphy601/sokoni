@@ -129,6 +129,9 @@ function mapDispatch(row) {
     operatingTown: row.operating_town,
     status: row.status,
     feeStatus: row.fee_status,
+    payoutStatus: row.payout_status || null,
+    payoutHoldUntil: row.payout_hold_until || null,
+    disputeWindowEndsAt: row.dispute_window_ends_at || null,
     acceptedAt: row.accepted_at,
     pickedUpAt: row.picked_up_at,
     deliveredAt: row.delivered_at,
@@ -1044,7 +1047,9 @@ async function ensureOtpSafeguardColumns() {
       ADD COLUMN IF NOT EXISTS rider_confirm_lat DOUBLE PRECISION,
       ADD COLUMN IF NOT EXISTS rider_confirm_lng DOUBLE PRECISION,
       ADD COLUMN IF NOT EXISTS rider_location_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS dispute_window_ends_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS dispute_window_ends_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS payout_status VARCHAR(30) DEFAULT 'HOLD_ESCROW',
+      ADD COLUMN IF NOT EXISTS payout_hold_until TIMESTAMPTZ
   `);
 }
 
@@ -1357,9 +1362,11 @@ export async function verifyDeliveryOTP({
        status = 'DELIVERED',
        delivered_at = NOW(),
        fee_status = 'PENDING_MPESA',
+       payout_status = 'HOLD_ESCROW',
+       payout_hold_until = NOW() + INTERVAL '15 minutes',
+       dispute_window_ends_at = NOW() + INTERVAL '15 minutes',
        delivery_otp_hash = NULL,
        otp_failed_attempts = 0,
-       dispute_window_ends_at = NOW() + INTERVAL '15 minutes',
        updated_at = NOW()
      WHERE id = $1`,
     [dispatch.id]
@@ -1388,7 +1395,9 @@ export async function verifyDeliveryOTP({
   updateOrderMeta(id, {
     bodaStatus: "DELIVERED",
     bodaFeeStatus: "PENDING_MPESA",
+    bodaPayoutStatus: "HOLD_ESCROW",
     bodaDisputeWindowEndsAt: Date.now() + 15 * 60 * 1000,
+    payoutStatus: "ESCROW",
   });
 
   await writeOtpAudit({
@@ -1402,18 +1411,22 @@ export async function verifyDeliveryOTP({
     distanceM: Math.round(distanceM),
     geofenceOk: true,
     result: "DELIVERED",
-    escrowStatus: "PENDING_CLEAR",
+    escrowStatus: "HOLD_ESCROW",
     meta: {
       riderName: dispatch.rider_name || null,
       plate: dispatch.motorbike_plate || null,
       dropoff: dropCoords,
       disputeWindowMinutes: 15,
+      payoutStatus: "HOLD_ESCROW",
     },
   });
 
-  // Buyer escrow YES path when we can resolve the buyer chat.
   const order = getOrder(id);
   const { sendText } = await import("./whatsapp.js");
+  const itemName = order?.productName || order?.title || "your item";
+  const shortId = String(id).replace(/^SKN-?/i, "");
+
+  // Buyer escrow YES path (item escrow) — rider fee stays on 15-min hold.
   if (order?.customerKey) {
     try {
       const { handleOrderBusMessage } = await import("./communication-hub.js");
@@ -1423,29 +1436,28 @@ export async function verifyDeliveryOTP({
     } catch (err) {
       console.warn("[boda-fleet] YES after rider CONFIRM:", err.message);
     }
-    // Step 3 — dual confirmation / 15-minute dispute window
     try {
-      const shortId = String(id).replace(/^SKN-?/i, "");
       await sendText(
         order.customerKey,
-        `📦 Order *${id}* was just marked as *DELIVERED* via your secret PIN.\n\n` +
-          `If you did *NOT* receive your package, reply *DISPUTE ${shortId}* within *15 minutes* to freeze the rider payout.\n` +
-          `After 15 minutes the delivery fee is released.`
+        `📦 *ORDER ${id} DELIVERED*\n\n` +
+          `Item: *${itemName}*\n` +
+          `Your delivery code was entered by the rider.\n\n` +
+          `⚠️ *DID NOT RECEIVE YOUR ITEM OR IT IS DAMAGED?*\n` +
+          `Reply *DISPUTE ${shortId}* within *15 minutes* to instantly freeze rider payment and alert Sokoni Admin.`
       );
     } catch (err) {
       console.warn("[boda-fleet] buyer dispute-window notify skipped:", err.message);
     }
   }
 
-  // Fee release waits for dispute window (processBodaDisputeWindows / no DISPUTE).
   return {
     ok: true,
     orderId: id,
     message:
-      `✅ *DELIVERY CONFIRMED!*\n` +
-      `Order *${id}* marked complete.` +
+      `✅ *DELIVERY CODE VERIFIED FOR ORDER ${id}*\n\n` +
+      `Package marked delivered.` +
       (feeKes > 0
-        ? ` KES ${feeKes.toLocaleString()} pending clear — buyer has 15 min to dispute.`
+        ? ` Delivery fee (KES ${feeKes.toLocaleString()}) is in *escrow lock for 15 minutes*. Funds release automatically unless the buyer disputes.`
         : ""),
   };
 }
@@ -1474,10 +1486,10 @@ export async function handleBuyerBodaDispute({
     [id]
   );
   const dispatch = rows[0];
-  if (!dispatch || dispatch.status !== "DELIVERED") {
+  if (!dispatch || (dispatch.status !== "DELIVERED" && dispatch.status !== "DISPUTED")) {
     return {
       error: "not_found",
-      message: `No recently confirmed delivery for *${id}* to dispute.`,
+      message: `❌ Couldn't locate an active order *${id}* for a delivery dispute.`,
     };
   }
 
@@ -1491,14 +1503,32 @@ export async function handleBuyerBodaDispute({
     }
   }
 
-  const endsAt = dispatch.dispute_window_ends_at
-    ? new Date(dispatch.dispute_window_ends_at).getTime()
+  if (dispatch.payout_status === "RELEASED" || dispatch.fee_status === "RELEASED") {
+    return {
+      error: "window_closed",
+      message:
+        `⚠️ The 15-minute instant dispute window for Order *${id}* has expired and payout was released.\n` +
+        `Sokoni admin will contact you to resolve this manually — reply *HELP ${id}*.`,
+    };
+  }
+
+  if (dispatch.payout_status === "FROZEN" || dispatch.fee_status === "ON_HOLD" || dispatch.status === "DISPUTED") {
+    return {
+      ok: true,
+      already: true,
+      message: `Dispute for *${id}* is already open — payout remains *FROZEN*. Sokoni admin is reviewing.`,
+    };
+  }
+
+  const endsAt = dispatch.payout_hold_until || dispatch.dispute_window_ends_at
+    ? new Date(dispatch.payout_hold_until || dispatch.dispute_window_ends_at).getTime()
     : 0;
   if (!endsAt || Date.now() > endsAt) {
     return {
       error: "window_closed",
       message:
-        `The 15-minute dispute window for *${id}* has closed. Contact Sokoni support if you still need help.`,
+        `⚠️ The 15-minute instant dispute window for Order *${id}* has expired.\n` +
+        `Reply *HELP ${id}* so Sokoni admin can assist manually.`,
     };
   }
 
@@ -1506,6 +1536,7 @@ export async function handleBuyerBodaDispute({
     `UPDATE delivery_dispatches SET
        status = 'DISPUTED',
        fee_status = 'ON_HOLD',
+       payout_status = 'FROZEN',
        updated_at = NOW(),
        meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
      WHERE id = $1`,
@@ -1546,7 +1577,13 @@ export async function handleBuyerBodaDispute({
     console.warn("[boda-fleet] payout ON_HOLD:", err.message);
   }
 
-  updateOrderMeta(id, { bodaStatus: "DISPUTED", bodaFeeStatus: "ON_HOLD", disputeHold: true });
+  updateOrderMeta(id, {
+    bodaStatus: "DISPUTED",
+    bodaFeeStatus: "ON_HOLD",
+    bodaPayoutStatus: "FROZEN",
+    payoutStatus: "ON_HOLD",
+    disputeHold: true,
+  });
 
   await writeOtpAudit({
     orderRef: id,
@@ -1556,11 +1593,12 @@ export async function handleBuyerBodaDispute({
     riderGpsLat: dispatch.rider_confirm_lat,
     riderGpsLng: dispatch.rider_confirm_lng,
     result: "BUYER_DISPUTE",
-    escrowStatus: "ON_HOLD",
+    escrowStatus: "FROZEN",
     meta: {
       riderName: dispatch.rider_name || null,
       plate: dispatch.motorbike_plate || null,
       disputedBy: normalizeRiderPhone(phone || customerKey) || null,
+      payoutStatus: "FROZEN",
     },
   });
 
@@ -1569,12 +1607,10 @@ export async function handleBuyerBodaDispute({
     await notifyAdminEvent("DISPUTE_OPENED", {
       orderId: id,
       details:
-        `🧊 *Boda DISPUTE (15-min window)*\n` +
-        `Order *${id}*\n` +
-        `Rider #${dispatch.rider_id} ${dispatch.rider_name || ""} (${dispatch.rider_phone || "—"})\n` +
-        `Plate: ${dispatch.motorbike_plate || "—"}\n` +
-        `OTP GPS: ${dispatch.rider_confirm_lat || "—"}, ${dispatch.rider_confirm_lng || "—"}\n` +
-        `Payout ON_HOLD · rider SUSPENDED.`,
+        `🚨 *URGENT DISPUTE ALERT*\n` +
+        `Buyer flagged Order *${id}* within 15-min window.\n` +
+        `Fee *FROZEN*. Rider ${dispatch.rider_name || `#${dispatch.rider_id}`} (${dispatch.rider_phone || "—"}) suspended.\n` +
+        `OTP GPS: ${dispatch.rider_confirm_lat || "—"}, ${dispatch.rider_confirm_lng || "—"}`,
     });
   } catch (err) {
     console.warn("[boda-fleet] dispute admin alert:", err.message);
@@ -1585,8 +1621,8 @@ export async function handleBuyerBodaDispute({
       const { sendText } = await import("./whatsapp.js");
       await sendText(
         `${normalizeRiderPhone(dispatch.rider_phone)}@c.us`,
-        `⚠️ Buyer disputed *${id}* within 15 minutes of CONFIRM.\n` +
-          `Your payout is *ON_HOLD* and your rider profile is *SUSPENDED* pending Sokoni review.`
+        `⛔ *URGENT NOTICE*: Buyer flagged non-receipt/issue for Order *${id}*.\n\n` +
+          `Payout of delivery fee is *FROZEN* and your rider account is *SUSPENDED* pending investigation. Contact Sokoni Support immediately.`
       );
     } catch (err) {
       console.warn("[boda-fleet] dispute rider notify:", err.message);
@@ -1597,12 +1633,16 @@ export async function handleBuyerBodaDispute({
     ok: true,
     orderId: id,
     message:
-      `🧊 Dispute opened for *${id}*. Rider payout frozen. Sokoni admin has been alerted — keep your evidence ready.`,
+      `🚨 *DISPUTE CONFIRMED — ORDER ${id}*\n\n` +
+      `• Delivery fee payout to rider (${dispatch.rider_name || "assigned"}) has been *FROZEN*.\n` +
+      `• Rider account temporarily *SUSPENDED*.\n` +
+      `• Sokoni Management has been alerted for review.`,
   };
 }
 
 /**
- * After dispute window expires with no DISPUTE — release rider fee stub.
+ * After 15-min HOLD_ESCROW expires with no DISPUTE — release rider fee stub.
+ * Runs from the 2-minute scheduler.
  */
 export async function processBodaDisputeWindows({ limit = 40 } = {}) {
   if (!isDbEnabled()) return { ok: false, skipped: true };
@@ -1613,12 +1653,17 @@ export async function processBodaDisputeWindows({ limit = 40 } = {}) {
   }
 
   const { rows } = await query(
-    `SELECT id, order_ref FROM delivery_dispatches
-      WHERE status = 'DELIVERED'
-        AND fee_status = 'PENDING_MPESA'
-        AND dispute_window_ends_at IS NOT NULL
-        AND dispute_window_ends_at <= NOW()
-      ORDER BY dispute_window_ends_at ASC
+    `SELECT d.id, d.order_ref, d.delivery_fee_kes, r.phone AS rider_phone
+       FROM delivery_dispatches d
+       LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE d.status = 'DELIVERED'
+        AND (
+          d.payout_status = 'HOLD_ESCROW'
+          OR (d.payout_status IS NULL AND d.fee_status = 'PENDING_MPESA')
+        )
+        AND COALESCE(d.payout_hold_until, d.dispute_window_ends_at) IS NOT NULL
+        AND COALESCE(d.payout_hold_until, d.dispute_window_ends_at) <= NOW()
+      ORDER BY COALESCE(d.payout_hold_until, d.dispute_window_ends_at) ASC
       LIMIT $1`,
     [Math.min(Math.max(Number(limit) || 40, 1), 100)]
   );
@@ -1628,16 +1673,21 @@ export async function processBodaDisputeWindows({ limit = 40 } = {}) {
     try {
       await query(
         `UPDATE rider_payouts SET status = 'CLEARED'
-          WHERE UPPER(order_ref) = UPPER($1) AND status = 'PENDING_CLEAR'`,
+          WHERE UPPER(order_ref) = UPPER($1) AND status IN ('PENDING_CLEAR', 'ON_HOLD')`,
         [row.order_ref]
       );
-      await releaseBodaRiderFee({ dispatchId: row.id, reason: "dispute_window_elapsed" });
-      released += 1;
+      const feeResult = await releaseBodaRiderFee({
+        dispatchId: row.id,
+        reason: "dispute_window_elapsed",
+      });
+      if (feeResult?.ok || feeResult?.already) {
+        released += 1;
+      }
     } catch (err) {
       console.warn("[boda-fleet] dispute window release:", row.order_ref, err.message);
     }
   }
-  if (released) console.log(`[boda-fleet] dispute windows cleared: ${released}`);
+  if (released) console.log(`[boda-fleet] HOLD_ESCROW cleared: ${released}`);
   return { ok: true, released };
 }
 
@@ -1703,11 +1753,11 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
   if (d.fee_status === "RELEASED") {
     return { ok: true, already: true, feeKes: Number(d.delivery_fee_kes || 0) };
   }
-  if (d.status === "DISPUTED" || d.fee_status === "FORFEITED" || d.fee_status === "ON_HOLD") {
+  if (d.status === "DISPUTED" || d.fee_status === "FORFEITED" || d.fee_status === "ON_HOLD" || d.payout_status === "FROZEN") {
     console.log(
-      `[boda-fleet] fee stub SKIP release dispatch=#${id} order=${d.order_ref} status=${d.status} fee_status=${d.fee_status} reason=${reason}`
+      `[boda-fleet] fee stub SKIP release dispatch=#${id} order=${d.order_ref} status=${d.status} fee_status=${d.fee_status} payout_status=${d.payout_status} reason=${reason}`
     );
-    return { ok: false, skipped: true, reason: d.fee_status || d.status };
+    return { ok: false, skipped: true, reason: d.payout_status || d.fee_status || d.status };
   }
 
   const feeKes = Number(d.delivery_fee_kes || 0);
@@ -1726,6 +1776,7 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
   await query(
     `UPDATE delivery_dispatches SET
        fee_status = 'RELEASED',
+       payout_status = 'RELEASED',
        meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb,
        updated_at = NOW()
      WHERE id = $1`,
@@ -1738,16 +1789,17 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
       }),
     ]
   );
-  updateOrderMeta(d.order_ref, { bodaFeeStatus: "RELEASED" });
+  updateOrderMeta(d.order_ref, { bodaFeeStatus: "RELEASED", bodaPayoutStatus: "RELEASED" });
 
   if (d.rider_phone && feeKes > 0) {
     try {
       const { sendText } = await import("./whatsapp.js");
-      await sendText(
-        `${normalizeRiderPhone(d.rider_phone)}@c.us`,
-        `💵 Delivery fee for *${d.order_ref}* (KES ${feeKes.toLocaleString()}) is cleared for payout.\n` +
-          `Sokoni ops will send M-Pesa shortly if not already paid.`
-      );
+      const msg =
+        reason === "dispute_window_elapsed"
+          ? `💰 *PAYOUT RELEASED!*\n15-minute clearance window for Order *${d.order_ref}* passed smoothly. KES ${feeKes.toLocaleString()} credited to your payout balance.`
+          : `💵 Delivery fee for *${d.order_ref}* (KES ${feeKes.toLocaleString()}) is cleared for payout.\n` +
+            `Sokoni ops will send M-Pesa shortly if not already paid.`;
+      await sendText(`${normalizeRiderPhone(d.rider_phone)}@c.us`, msg);
     } catch (err) {
       console.warn("[boda-fleet] fee rider notify skipped:", err.message);
     }
