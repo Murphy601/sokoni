@@ -1,7 +1,7 @@
 /**
  * Session store keyed by WhatsApp customer key (phone or @lid).
- * Pending checkout state is also mirrored to disk so a bot restart
- * (or brief process recycle) does not restart the order flow mid-way.
+ * Pending checkout state is mirrored to disk; chat history / meta / handoff
+ * also persist to Postgres chat_memory when DATABASE_URL is set (fail-soft).
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const sessions = new Map();
 const MAX_HISTORY = 20;
 
-/** Normalize WhatsApp sender → LangGraph-style thread_id (avoid importing commerce-ops). */
+/** Normalize WhatsApp sender → thread_id (phone digits or chat id). */
 function threadIdFromPhoneLocal(phoneOrKey) {
   const raw = String(phoneOrKey || "").trim();
   if (!raw) return "";
@@ -87,6 +87,26 @@ function hydratePending(phoneNumber, session) {
   if (!session.pendingCart && saved.pendingCart) session.pendingCart = saved.pendingCart;
 }
 
+function scheduleDurablePersist(phoneNumber) {
+  const session = sessions.get(phoneNumber);
+  if (!session) return;
+  void import("./chat-memory.js")
+    .then(({ scheduleChatMemorySave }) => {
+      scheduleChatMemorySave(
+        phoneNumber,
+        () => ({
+          threadId: session.threadId,
+          history: session.history,
+          customerMeta: session.customerMeta,
+          humanHandoff: session.humanHandoff,
+          lastProductContext: session.lastProductContext,
+        }),
+        session.customerMeta?.phone || ""
+      );
+    })
+    .catch(() => {});
+}
+
 export function getSession(phoneNumber) {
   if (!sessions.has(phoneNumber)) {
     const session = {
@@ -99,8 +119,9 @@ export function getSession(phoneNumber) {
       humanHandoff: null,
       customerMeta: null,
       pendingReview: null,
-      /** Persistent LangGraph-style thread id = WhatsApp sender phone */
+      /** thread_id = WhatsApp sender phone / chat id */
       threadId: threadIdFromPhoneLocal(phoneNumber),
+      _dbHydrated: false,
     };
     sessions.set(phoneNumber, session);
     hydratePending(phoneNumber, session);
@@ -110,7 +131,39 @@ export function getSession(phoneNumber) {
   return session;
 }
 
-/** WhatsApp sender phone (or @lid) used as LangGraph-style thread_id. */
+/**
+ * Load durable history/meta/handoff from Postgres into the in-memory session.
+ * Call once near the start of each inbound WhatsApp message.
+ */
+export async function hydrateSessionFromDb(phoneNumber, phone = "") {
+  const session = getSession(phoneNumber);
+  if (session._dbHydrated) return session;
+  try {
+    const { loadChatMemory } = await import("./chat-memory.js");
+    const mem = await loadChatMemory(phoneNumber, phone || session.customerMeta?.phone || "");
+    if (mem) {
+      if ((!session.history || !session.history.length) && mem.history?.length) {
+        session.history = mem.history.slice(-MAX_HISTORY);
+      }
+      if (mem.customerMeta && Object.keys(mem.customerMeta).length) {
+        session.customerMeta = { ...mem.customerMeta, ...(session.customerMeta || {}) };
+      }
+      if (!session.humanHandoff && mem.humanHandoff) {
+        session.humanHandoff = mem.humanHandoff;
+      }
+      if (!session.lastProductContext && mem.lastProductContext) {
+        session.lastProductContext = mem.lastProductContext;
+      }
+      if (mem.threadId) session.threadId = mem.threadId;
+    }
+  } catch {
+    /* fail-soft */
+  }
+  session._dbHydrated = true;
+  return session;
+}
+
+/** WhatsApp sender phone (or @lid) used as thread_id. */
 export function resolveThreadId(phoneOrKey) {
   return threadIdFromPhoneLocal(phoneOrKey) || String(phoneOrKey || "").trim();
 }
@@ -121,10 +174,12 @@ export function pushMessage(phoneNumber, role, content) {
   if (session.history.length > MAX_HISTORY) {
     session.history.splice(0, session.history.length - MAX_HISTORY);
   }
+  scheduleDurablePersist(phoneNumber);
 }
 
 export function setProductContext(phoneNumber, product) {
   getSession(phoneNumber).lastProductContext = product;
+  scheduleDurablePersist(phoneNumber);
 }
 
 /**
@@ -174,6 +229,7 @@ export function clearMenuState(phoneNumber) {
 
 export function setCustomerMeta(phoneNumber, meta) {
   getSession(phoneNumber).customerMeta = { ...getSession(phoneNumber).customerMeta, ...meta };
+  scheduleDurablePersist(phoneNumber);
 }
 
 export function getCustomerMeta(phoneNumber) {
@@ -182,6 +238,7 @@ export function getCustomerMeta(phoneNumber) {
 
 export function setHumanHandoff(phoneNumber, state) {
   getSession(phoneNumber).humanHandoff = state;
+  scheduleDurablePersist(phoneNumber);
 }
 
 export function getHumanHandoff(phoneNumber) {
@@ -190,6 +247,7 @@ export function getHumanHandoff(phoneNumber) {
 
 export function clearHumanHandoff(phoneNumber) {
   getSession(phoneNumber).humanHandoff = null;
+  scheduleDurablePersist(phoneNumber);
 }
 
 export function isHumanHandoff(phoneNumber) {

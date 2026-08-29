@@ -52,11 +52,15 @@ export function buildGroundedSystemPrompt({
   channel = "whatsapp",
   contextBlocks = [],
   threadId = "",
+  preferKiswahili = false,
 } = {}) {
   const context = contextBlocks.filter(Boolean).join("\n\n").trim();
   const thread = String(threadId || "").trim();
+  const langHint = preferKiswahili
+    ? `\n### LANGUAGE:\nShopper is using Kiswahili/Sheng — reply in clear Kiswahili mixed with English where natural (Kenya WhatsApp voice). Keep SKN-#### and KES amounts in English digits.\n`
+    : "";
   return `${channelPrompt(channel)}
-
+${langHint}
 ### CONTEXT DATA:
 ${context || "(no retrieved context this turn — do not invent facts; offer to escalate if needed)"}
 

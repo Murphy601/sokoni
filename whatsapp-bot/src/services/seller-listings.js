@@ -34,7 +34,7 @@ import {
 } from "./listing-studio.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
-import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, hideListingsForSupplier, restoreListingsForSupplier, summarizeModeration } from "./listing-moderation.js";
+import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, hideListingsForSupplier, restoreListingsForSupplier, summarizeModeration, assertListingAllowedForPublish } from "./listing-moderation.js";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
 import {
   BULK_CSV_MAX_ROWS,
@@ -961,6 +961,17 @@ export async function publishSellerListing({
   }
   const product = await buildProduct(check.supplier, enriched, media, productId);
 
+  const preGate = assertListingAllowedForPublish(product);
+  if (!preGate.ok) {
+    console.warn("[seller-listings] pre-publish blocked:", productId, preGate.flags?.join(","));
+    return {
+      error: preGate.error || "moderation_blocked",
+      message: preGate.message,
+      flags: preGate.flags || [],
+      moderation: preGate.moderation,
+    };
+  }
+
   master.push(product);
   await writeFile(MASTER_CATALOG, JSON.stringify(master, null, 2) + "\n", "utf-8");
   try {
@@ -1025,6 +1036,14 @@ export async function publishSellerListing({
   }
 
   const liveProduct = mod.product || product;
+  if (mod.moderation?.passed !== false) {
+    try {
+      const { scheduleProductEmbedding } = await import("./product-embeddings.js");
+      scheduleProductEmbedding(liveProduct);
+    } catch {
+      /* ignore */
+    }
+  }
   const status = mod.moderation?.passed === false ? "hidden_pending_review" : "live";
   rememberClientPublish(clientPublishId, productId);
 

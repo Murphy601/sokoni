@@ -1,5 +1,5 @@
 /**
- * LangGraph-style multi-agent graph for Sokoni Plug (Node, no Python LangGraph runtime).
+ * Multi-agent graph for Sokoni Plug (Node specialist router — not the Python LangGraph library).
  * Nodes: escalate → route specialist → tools (allowlisted) → knowledge RAG → reply.
  */
 import {
@@ -14,7 +14,7 @@ import {
 import { runToolRouter, TOOL_NAMES, filterToolsForSpecialist } from "./ai-tools.js";
 import { threadIdFromPhone } from "./commerce-ops.js";
 
-/** Tool allowlists per specialist lane (LangGraph agent boundaries). */
+/** Tool allowlists per specialist lane (agent boundaries). */
 export const SPECIALIST_TOOLS = {
   buyer: [
     "search_products",

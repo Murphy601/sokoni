@@ -129,7 +129,7 @@ export function loadKnowledgeDocs({ specialist = "general" } = {}) {
 }
 
 /**
- * Chunk docs into ~200–300 word windows (~1000–1400 chars) for keyword / pgvector recall.
+ * Chunk docs into ~200–300 word windows (~1000–1400 chars) for keyword / optional pgvector recall.
  * Smaller atomic chunks reduce mixed-policy hallucinations.
  */
 function chunkDoc(doc) {
@@ -161,7 +161,7 @@ function guessCategory(docId) {
 }
 
 /**
- * Keyword RAG-lite (pgvector-ready shape). Tries DB platform_knowledge when available.
+ * Keyword RAG-lite. Tries DB platform_knowledge when available (embeddings optional).
  */
 export async function retrieveKnowledgeAsync(query, { limit = 2, specialist = "general" } = {}) {
   try {
