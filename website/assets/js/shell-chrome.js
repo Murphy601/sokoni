@@ -157,6 +157,16 @@
     ensureShellBody();
     renderHeader(page);
     renderBottomNav(page);
+    ensureAskFab();
+  }
+
+  function ensureAskFab() {
+    if (document.querySelector('script[data-sokoni-ask-fab]')) return;
+    const s = document.createElement("script");
+    s.src = "/assets/js/ask-voice-fab.js";
+    s.defer = true;
+    s.setAttribute("data-sokoni-ask-fab", "1");
+    document.body.appendChild(s);
   }
 
   if (document.readyState === "loading") {
