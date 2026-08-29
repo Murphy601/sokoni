@@ -4,6 +4,10 @@
  * Green (#00D26A / WhatsApp #25D366) = success / chat CTAs only.
  * Red (#FF2300) = primary conversion actions.
  */
+body.boda-depop .hidden {
+  display: none !important;
+}
+
 body.boda-depop {
   --boda-red: #ff2300;
   --boda-red-hover: #e01f00;
