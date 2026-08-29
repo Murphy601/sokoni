@@ -1511,6 +1511,14 @@ async function fireOpenDisputeWhatsAppAlerts(
   } catch (err) {
     console.error("[Dispute Alert] fireOpenDisputeWhatsAppAlerts failed:", err.message);
   }
+  try {
+    const { suspendBodaRiderForOrderDispute } = await import("./boda-fleet.js");
+    await suspendBodaRiderForOrderDispute(orderId, {
+      reason: `Buyer dispute: ${issueType}`,
+    });
+  } catch (err) {
+    console.warn("[Dispute Alert] boda suspend skipped:", err.message);
+  }
   console.log(
     `[Dispute Alert] openBuyerReturnCase order=${orderId} seller=${sellerOk ? "ok" : "FAIL"} admin=${adminOk ? "ok" : "FAIL"}` +
       (alreadyOpen ? " (alreadyOpen)" : "")
