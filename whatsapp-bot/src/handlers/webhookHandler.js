@@ -330,46 +330,15 @@ export async function handleIncomingMessage(
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
 
-  // Boss connectivity probe — no LLM required
-  if (/^\s*ping\s*$/i.test(String(text || "").trim())) {
-    const registered = tryRegisterAdminFromMessage(customerKey, phone, text);
-    if (bossHit || registered || isAdminSender(customerKey, phone)) {
-      console.log("[webhook] PING from Boss — acknowledging", phone || customerKey);
-      return sendText(
-        customerKey,
-        "Yes, Boss. System online and awaiting your command.\n\nTry *!help* or *OVERRIDE: HELP* for the master palette."
-      );
+  // Boss / staff code interceptor BEFORE any AI/RAG path (hardwired last-9 + ADMIN_PHONES)
+  try {
+    const { tryBossIntercept } = await import("../services/boss-intercept.js");
+    const hit = await tryBossIntercept({ phone, customerKey, text, chatId });
+    if (hit?.handled && hit.reply) {
+      return sendText(customerKey, hit.reply);
     }
-    console.log(
-      "[webhook] PING from non-Boss",
-      phone || "(no phone)",
-      customerKey,
-      "— check RAW SENDER logs / lid resolve"
-    );
-    return sendText(customerKey, "pong — Sokoni bot is online. Type *menu* to shop.");
-  }
-
-  // Boss executive verbs — code interceptor BEFORE any AI/RAG path
-  if (bossHit || isAdminSender(customerKey, phone) || requireAdminSender(customerKey, phone)) {
-    try {
-      const {
-        isMasterCommand,
-        softMapSpokenToMasterCommand,
-        executeMasterAdminCommand,
-      } = await import("../services/admin-override.js");
-      const mapped =
-        softMapSpokenToMasterCommand(text) || (isMasterCommand(text) ? text : null);
-      if (mapped) {
-        console.log("[webhook] Boss master command:", String(mapped).slice(0, 80));
-        const result = await executeMasterAdminCommand(mapped, {
-          adminLabel: phone || customerKey || "boss",
-          actorPhone: phone || "",
-        });
-        if (result?.reply) return sendText(customerKey, result.reply);
-      }
-    } catch (err) {
-      console.warn("[webhook] boss interceptor:", err.message);
-    }
+  } catch (err) {
+    console.warn("[webhook] boss interceptor:", err.message);
   }
 
   // Boss !ban-user — block non-admin senders before AI / commerce
@@ -508,18 +477,15 @@ export async function handleIncomingMessage(
             isAdminSender(customerKey, phone) ||
             Boolean(await (await import("../services/staff-roles.js")).resolveStaffRole(phone));
           if (adminish) {
-            const { softMapSpokenToMasterCommand, isMasterCommand, executeMasterAdminCommand } =
-              await import("../services/admin-override.js");
-            const mapped = softMapSpokenToMasterCommand(spoken) || (isMasterCommand(spoken) ? spoken : null);
-            if (mapped) {
-              const result = await executeMasterAdminCommand(mapped, {
-                adminLabel: phone || "voice-boss",
-                actorPhone: phone || "",
-              });
-              await sendText(
-                customerKey,
-                result.reply || "🫡 Voice command processed."
-              );
+            const { tryBossIntercept } = await import("../services/boss-intercept.js");
+            const hit = await tryBossIntercept({
+              phone,
+              customerKey,
+              text: spoken,
+              chatId,
+            });
+            if (hit?.handled && hit.reply) {
+              await sendText(customerKey, hit.reply);
               return;
             }
             if (containsAdminCommand(spoken) || /^(admin|orders?)\b/i.test(spoken)) {

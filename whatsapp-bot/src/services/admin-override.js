@@ -29,6 +29,7 @@ import {
   getCustomerMeta,
 } from "./session.js";
 import { resolveStaffRole, staffCan, staffToneDirective } from "./staff-roles.js";
+import { writeAdminLog } from "./admin-logs.js";
 
 const BOSS_TITLE = () =>
   String(process.env.ADMIN_BOSS_TITLE || config.contact?.founderName || "Boss")
@@ -332,9 +333,17 @@ async function banUser(phoneRaw, { ban = true, adminLabel = "boss" } = {}) {
  * Execute a master override after auth (caller must verify ADMIN_PHONES / staff / master token).
  * @returns {{ ok: boolean, reply: string, action?: string, data?: object }}
  */
+async function logBossAction(fields) {
+  try {
+    await writeAdminLog(fields);
+  } catch (err) {
+    console.warn("[admin-override] admin_logs skipped:", err.message);
+  }
+}
+
 export async function executeMasterAdminCommand(
   rawCommand,
-  { adminLabel = "boss", actorPhone = "" } = {}
+  { adminLabel = "boss", actorPhone = "", source = "master-command" } = {}
 ) {
   const phone = digitsOnly(actorPhone || adminLabel);
   const staff =
@@ -368,6 +377,18 @@ export async function executeMasterAdminCommand(
     const result = releaseEscrowOrder(orderId, {
       reason: "Boss master command: RELEASE / !force-release",
       adminLabel: String(adminLabel).slice(0, 80),
+    });
+    await logBossAction({
+      action: "FORCE_RELEASE",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      orderRef: orderId || release[1],
+      targetType: "order",
+      targetId: orderId || release[1],
+      source,
+      success: !result?.error,
+      message: result?.message || result?.error || null,
+      metadata: { amountKes, raw: String(rawCommand).slice(0, 160) },
     });
     if (result?.error) {
       return {
@@ -591,6 +612,17 @@ export async function executeMasterAdminCommand(
       reason: "Boss REFUND BUYER",
       adminLabel: String(adminLabel).slice(0, 80),
     });
+    await logBossAction({
+      action: "REFUND_BUYER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      orderRef: orderId,
+      targetType: "order",
+      targetId: orderId,
+      source,
+      success: !result?.error,
+      message: result?.message || result?.error || null,
+    });
     if (result?.error) {
       return {
         ok: false,
@@ -697,6 +729,17 @@ export async function executeMasterAdminCommand(
       return { ok: false, action: "suspend_shop", reply: ack(`Shop *${handle}* not found.`) };
     }
     const result = freezeShop(shop.id, { note });
+    await logBossAction({
+      action: "SUSPEND_SHOP",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: shop.id || handle,
+      source,
+      success: !result?.error,
+      message: note,
+      metadata: { handle: shop.shopHandle || handle },
+    });
     if (result?.error) {
       return { ok: false, action: "suspend_shop", reply: ack(result.message || result.error) };
     }
@@ -720,6 +763,16 @@ export async function executeMasterAdminCommand(
       return { ok: false, action: "pause_payouts", reply: ack(`Shop *${handle}* not found.`) };
     }
     const result = setShopPayoutHold(shop.id, { hold: true, note: "Boss PAUSE PAYOUTS" });
+    await logBossAction({
+      action: "PAUSE_PAYOUTS",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: shop.id || handle,
+      source,
+      success: !result?.error,
+      metadata: { handle: shop.shopHandle || handle },
+    });
     if (result?.error) {
       return { ok: false, action: "pause_payouts", reply: ack(result.message || result.error) };
     }

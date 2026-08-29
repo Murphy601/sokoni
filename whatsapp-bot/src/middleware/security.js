@@ -57,19 +57,54 @@ function timingSafeEqualHex(a, b) {
 }
 
 /**
+ * Optional Meta Cloud API signature (X-Hub-Signature-256) when META_APP_SECRET is set.
+ * Prevents spoofed webhook POSTs that could fake the Boss phone header.
+ */
+function verifyMetaHubSignature(req) {
+  const secret = (
+    process.env.META_APP_SECRET ||
+    process.env.WHATSAPP_APP_SECRET ||
+    process.env.FACEBOOK_APP_SECRET ||
+    ""
+  ).trim();
+  const header = String(req.headers["x-hub-signature-256"] || "").trim();
+  if (!secret || !header) return { attempted: false };
+  const raw = req.rawBody;
+  if (!raw?.length) return { attempted: true, ok: false, error: "webhook_auth_no_body" };
+  const expected =
+    "sha256=" + crypto.createHmac("sha256", secret).update(raw).digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(header);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return { attempted: true, ok: false, error: "webhook_auth_invalid_meta" };
+  }
+  return { attempted: true, ok: true };
+}
+
+/**
  * Verify WAHA webhook HMAC when WEBHOOK_HMAC_KEY is set.
  * WAHA sends X-Webhook-Hmac (sha512 hex) over the raw body.
- * When the key is unset, allow (local/dev) — log once.
+ * When Meta signature is present + META_APP_SECRET set, that path is accepted first.
+ * When no secrets are configured, allow (local/dev) — log once.
  */
 let warnedMissingHmac = false;
 
 export function requireWahaWebhookAuth(req, res, next) {
+  const meta = verifyMetaHubSignature(req);
+  if (meta.attempted) {
+    if (!meta.ok) {
+      console.warn("[security] Meta X-Hub-Signature-256 rejected:", meta.error);
+      return res.status(401).json({ error: meta.error || "webhook_auth_invalid" });
+    }
+    return next();
+  }
+
   const key = (process.env.WEBHOOK_HMAC_KEY || process.env.WAHA_WEBHOOK_HMAC_KEY || "").trim();
   if (!key) {
     if (!warnedMissingHmac) {
       warnedMissingHmac = true;
       console.warn(
-        "[security] WEBHOOK_HMAC_KEY unset — /webhook accepts any POST. Set a shared secret and reconfigure WAHA."
+        "[security] WEBHOOK_HMAC_KEY / META_APP_SECRET unset — /webhook accepts any POST. Set a shared secret."
       );
     }
     return next();
@@ -96,6 +131,9 @@ export function requireWahaWebhookAuth(req, res, next) {
   }
   next();
 }
+
+/** Alias — Meta hub signature OR WAHA HMAC. */
+export const requireWebhookSignature = requireWahaWebhookAuth;
 
 const jsonError = { error: "Too many requests, please try again later." };
 

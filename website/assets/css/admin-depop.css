@@ -758,7 +758,8 @@ body.admin-depop .desk-tab {
 
 body.admin-depop .admin-tab.is-active,
 body.admin-depop .cmd-tab.is-active,
-body.admin-depop .desk-tab.is-active {
+body.admin-depop .desk-tab.is-active,
+body.admin-depop .fleet-filter.is-active {
   background: var(--admin-red);
   color: #fff;
   border-color: var(--admin-red);

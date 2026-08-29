@@ -60,11 +60,26 @@ router.post("/escrow/:orderId/refund", (req, res) => {
 });
 
 /** POST /admin/command/escrow/:orderId/release */
-router.post("/escrow/:orderId/release", (req, res) => {
+router.post("/escrow/:orderId/release", async (req, res) => {
   const result = releaseEscrowOrder(req.params.orderId, {
     reason: req.body?.reason,
     adminLabel: req.body?.adminLabel || "admin-command",
   });
+  try {
+    const { writeAdminLog } = await import("../services/admin-logs.js");
+    await writeAdminLog({
+      action: "FORCE_RELEASE",
+      actorLabel: String(req.body?.adminLabel || "admin-command").slice(0, 80),
+      orderRef: req.params.orderId,
+      targetType: "order",
+      targetId: req.params.orderId,
+      source: "admin-command.dead-man",
+      success: !result?.error,
+      message: result?.message || result?.error || req.body?.reason || null,
+    });
+  } catch {
+    /* fail-soft */
+  }
   if (result.error) return res.status(404).json(result);
   res.json(result);
 });
@@ -224,6 +239,8 @@ router.post("/master", async (req, res) => {
     }
     const result = await executeMasterAdminCommand(command, {
       adminLabel: String(req.body?.adminLabel || "master-api").slice(0, 80),
+      actorPhone: String(req.body?.actorPhone || "").slice(0, 20),
+      source: "admin-command.master-api",
     });
     res.json({
       ok: result.ok,
@@ -233,6 +250,21 @@ router.post("/master", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "master_command_failed", message: err.message });
+  }
+});
+
+/** GET /admin/command/admin-logs — Boss FORCE RELEASE / SUSPEND SHOP trail */
+router.get("/admin-logs", async (req, res) => {
+  try {
+    const { listAdminLogs } = await import("../services/admin-logs.js");
+    const result = await listAdminLogs({
+      limit: req.query.limit,
+      action: req.query.action,
+    });
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "admin_logs_failed", message: err.message });
   }
 });
 

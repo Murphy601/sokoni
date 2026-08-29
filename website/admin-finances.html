@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Platform Finances · Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+</head>
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Finances</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <a href="admin-support.html">Support</a>
+          <a href="admin-boda.html">Boda</a>
+          <a href="admin-riders.html">Riders</a>
+          <span class="is-active">Finances</span>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Earnings &amp; escrow</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-5 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Platform analytics &amp; earnings</h1>
+          <p class="text-sm text-brand-purple/65 mt-1 max-w-2xl">
+            Locked escrow vs completed Safaricom M-Pesa B2C payouts — Boss override audit trail included.
+          </p>
+        </div>
+        <button id="refresh-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">
+          Refresh
+        </button>
+      </div>
+      <label class="block text-sm font-medium max-w-md">
+        Admin token
+        <input id="admin-token" type="password" autocomplete="off"
+               class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+               placeholder="ADMIN_SETUP_TOKEN" />
+      </label>
+      <p id="fin-status" class="text-sm text-brand-purple/60" role="status"></p>
+    </section>
+
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <article class="rounded-3xl border border-black/5 bg-white p-4 shadow-[4px_4px_0px_0px_#1A1A1A]">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 font-black">Locked escrow</p>
+        <p id="stat-escrow" class="font-display text-2xl font-black mt-1 text-[#FF2300]">—</p>
+        <p id="stat-escrow-count" class="text-xs text-brand-purple/55 mt-1">—</p>
+      </article>
+      <article class="rounded-3xl border border-black/5 bg-white p-4 shadow-[4px_4px_0px_0px_#1A1A1A]">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 font-black">Ready for M-Pesa B2C</p>
+        <p id="stat-ready" class="font-display text-2xl font-black mt-1 text-[#00D26A]">—</p>
+        <p id="stat-ready-count" class="text-xs text-brand-purple/55 mt-1">—</p>
+      </article>
+      <article class="rounded-3xl border border-black/5 bg-white p-4 shadow-[4px_4px_0px_0px_#1A1A1A]">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 font-black">Platform fees earned</p>
+        <p id="stat-fees" class="font-display text-2xl font-black mt-1">—</p>
+      </article>
+      <article class="rounded-3xl border border-black/5 bg-white p-4 shadow-[4px_4px_0px_0px_#1A1A1A]">
+        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 font-black">Fees still held</p>
+        <p id="stat-fees-held" class="font-display text-2xl font-black mt-1">—</p>
+      </article>
+    </div>
+
+    <section class="rounded-3xl border border-[#FF2300] bg-white p-5 space-y-3 shadow-[4px_4px_0px_0px_#1A1A1A]">
+      <h2 class="font-display text-xl font-black uppercase tracking-tight text-[#FF2300]">Boss payout override</h2>
+      <p class="text-sm text-brand-purple/65">
+        Dead-man switch when WhatsApp is down — same code path as <code>FORCE RELEASE</code> on the Boss line.
+      </p>
+      <div class="grid gap-3 md:grid-cols-3">
+        <label class="block text-sm font-medium md:col-span-1">
+          Order ID
+          <input id="boss-order-id" type="text" class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm font-mono" placeholder="SKN-8820" />
+        </label>
+        <label class="block text-sm font-medium md:col-span-2">
+          Reason (required)
+          <input id="boss-reason" type="text" class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm" placeholder="WhatsApp down — force seller payout" />
+        </label>
+      </div>
+      <button id="boss-override-btn" type="button" class="min-h-[48px] px-6 rounded-full bg-[#FF2300] text-white text-sm font-black border-2 border-[#1A1A1A]">
+        Boss payout override
+      </button>
+      <p id="boss-override-status" class="text-sm" role="status"></p>
+    </section>
+
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <h2 class="font-display text-xl font-black uppercase tracking-tight">Admin override audit</h2>
+      <p class="text-xs text-brand-purple/55">FORCE RELEASE · REFUND BUYER · SUSPEND SHOP from WhatsApp + this desk</p>
+      <div id="admin-logs" class="space-y-2 text-sm"></div>
+      <p id="logs-empty" class="hidden text-sm text-brand-purple/55">No admin_logs yet (Postgres required).</p>
+    </section>
+  </main>
+
+  <script src="assets/js/admin-finances.js"></script>
+</body>
+</html>
