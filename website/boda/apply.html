@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sokoni Boda Rider Registration</title>
+<meta name="description" content="Apply to join the Sokoni vetted boda delivery network. Submit ID, Class A licence, and stage letter for review." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: '#25D366', purple: '#1B1035', purpleLight: '#2E1B57', cream: '#FFF8F0' },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['Fraunces', 'Georgia', 'serif'],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('sokoni-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/design-tokens.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white">
+  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/90 dark:bg-brand-purple backdrop-blur sticky top-0 z-40">
+    <div class="max-w-2xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
+      <a href="../index.html" class="text-sm font-medium hover:text-brand-green transition">← Sokoni</a>
+      <a href="https://wa.me/254117422428?text=Habari%20Sokoni%20—%20ninaomba%20msaada%20kwa%20boda%20rider%20application"
+         target="_blank" rel="noopener"
+         class="inline-flex items-center min-h-[44px] btn-whatsapp font-bold px-4 py-2 rounded-full text-sm">
+        WhatsApp help
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-5 py-10 md:py-14">
+    <div id="success-box" class="hidden rounded-3xl border border-brand-green/40 bg-brand-green/10 p-8 text-center">
+      <h1 class="font-display text-2xl font-bold mb-2">Application received</h1>
+      <p class="text-sm text-brand-purple/70 dark:text-white/70 mb-2">Reference: rider #<strong id="application-id"></strong></p>
+      <p class="text-sm text-brand-purple/80 dark:text-white/80">
+        Status: <strong>PENDING</strong> review. Keep your WhatsApp on — Sokoni will message you when you're verified.
+      </p>
+      <a href="../index.html" class="inline-block mt-6 text-sm font-semibold text-brand-green hover:underline">Back to sokonimall.com</a>
+    </div>
+
+    <form id="boda-apply-form" class="space-y-8" enctype="multipart/form-data" novalidate>
+      <div>
+        <p class="text-sm font-semibold text-brand-green mb-2">Sokoni boda network</p>
+        <h1 class="font-display text-3xl md:text-4xl font-bold leading-tight mb-3">Join as a delivery rider</h1>
+        <p class="text-sm text-brand-purple/70 dark:text-white/70">
+          Submit your details and verification docs. First jobs run from ops bases in Nairobi and Thika — Sokoni reviews every rider before dispatch offers start.
+        </p>
+      </div>
+
+      <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
+        <h2 class="font-bold text-lg">Your details</h2>
+        <label class="block text-sm font-medium">Full name *
+          <input id="fullName" name="fullName" required autocomplete="name"
+                 class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                 placeholder="e.g. John Kamau" />
+        </label>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">WhatsApp / M-Pesa phone *
+            <input id="phone" name="phone" type="tel" required inputmode="tel" autocomplete="tel"
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="0712345678" />
+          </label>
+          <label class="block text-sm font-medium">National ID number *
+            <input id="nationalId" name="nationalId" required
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="12345678" />
+          </label>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">Operating town *
+            <select id="operatingTown" name="operatingTown" required
+                    class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5 bg-white dark:bg-brand-purple/40">
+              <option value="">Select town</option>
+              <option value="NAIROBI">Nairobi</option>
+              <option value="THIKA">Thika</option>
+            </select>
+          </label>
+          <label class="block text-sm font-medium">Base stage / location *
+            <input id="stageLocation" name="stageLocation" required
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="e.g. Westlands Stage" />
+          </label>
+        </div>
+        <label class="block text-sm font-medium">Motorbike registration plate *
+          <input id="motorbikePlate" name="motorbikePlate" required
+                 class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5 uppercase"
+                 placeholder="KMCR 123X" />
+        </label>
+      </section>
+
+      <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
+        <h2 class="font-bold text-lg">Verification uploads</h2>
+        <p class="text-xs text-brand-purple/60 dark:text-white/50">Images or PDF · max 5 MB each. Required fields marked *</p>
+        <label class="block text-sm font-medium">National ID — front *
+          <input id="idDocument" name="idDocument" type="file" accept="image/*,.pdf,application/pdf" required
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">National ID — back
+          <input id="idDocumentBack" name="idDocumentBack" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">Valid driving licence (Class A) *
+          <input id="dlDocument" name="dlDocument" type="file" accept="image/*,.pdf,application/pdf" required
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">Stage chairman recommendation letter *
+          <input id="stageLetter" name="stageLetter" type="file" accept="image/*,.pdf,application/pdf" required
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">Logbook / power of attorney
+          <input id="logbookDocument" name="logbookDocument" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">Good Conduct certificate (DCI)
+          <input id="goodConductDocument" name="goodConductDocument" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">NTSA badge / registration
+          <input id="ntsaBadgeDocument" name="ntsaBadgeDocument" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+      </section>
+
+      <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
+        <h2 class="font-bold text-lg">Guarantor / next of kin</h2>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">Guarantor full name
+            <input id="guarantorName" name="guarantorName"
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="Optional but recommended" />
+          </label>
+          <label class="block text-sm font-medium">Guarantor phone
+            <input id="guarantorPhone" name="guarantorPhone" type="tel" inputmode="tel"
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="07xx…" />
+          </label>
+        </div>
+      </section>
+
+      <p id="form-status" class="text-sm text-red-600 dark:text-red-400" role="status"></p>
+      <p class="text-xs text-brand-purple/50 dark:text-white/50">
+        By submitting you agree to our
+        <a href="../terms.html" class="text-brand-green hover:underline">Terms</a> and
+        <a href="../privacy.html" class="text-brand-green hover:underline">Privacy Policy</a>.
+        Docs are used only for rider vetting.
+      </p>
+      <button id="submit-btn" type="submit"
+              class="w-full sm:w-auto min-h-[48px] btn-whatsapp font-bold px-8 py-3.5 rounded-full shadow-lg hover:scale-105 transition disabled:opacity-60 disabled:hover:scale-100">
+        Submit rider application
+      </button>
+    </form>
+  </main>
+
+  <script src="../assets/js/boda-rider-apply.js"></script>
+</body>
+</html>

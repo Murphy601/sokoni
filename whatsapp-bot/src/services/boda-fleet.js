@@ -8,6 +8,9 @@ import { isDbEnabled, query } from "../db/pool.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
 
+/** Unique-violation Postgres code (phone / national_id / plate). */
+const PG_UNIQUE = "23505";
+
 const ZONES = new Set(["NAIROBI", "THIKA"]);
 const BROADCAST_LIMIT = 8;
 
@@ -42,11 +45,24 @@ function mapRider(row) {
     operatingTown: row.operating_town,
     stageLocation: row.stage_location || null,
     motorbikePlate: row.motorbike_plate || null,
+    licenseClass: row.license_class || null,
+    guarantorName: row.guarantor_name || null,
+    guarantorPhone: row.guarantor_phone || null,
     verificationStatus: row.verification_status,
     isAvailable: Boolean(row.is_available),
     rating: row.rating != null ? Number(row.rating) : 5,
     suspendReason: row.suspend_reason || null,
+    docs: {
+      nationalIdFrontUrl: row.national_id_front_url || null,
+      nationalIdBackUrl: row.national_id_back_url || null,
+      licenseUrl: row.license_url || null,
+      logbookUrl: row.logbook_url || null,
+      goodConductUrl: row.good_conduct_url || null,
+      ntsaBadgeUrl: row.ntsa_badge_url || null,
+      stageLetterUrl: row.stage_letter_url || null,
+    },
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -141,6 +157,160 @@ export async function upsertRiderProfile(input = {}) {
     ]
   );
   return { ok: true, rider: mapRider(rows[0]) };
+}
+
+/**
+ * Public web onboarding — creates/updates rider as PENDING with verification doc URLs.
+ * Call after multer (or other upload) has stored files and built public URLs.
+ * Required URLs: nationalIdFrontUrl, licenseUrl, stageLetterUrl.
+ */
+export async function registerRiderApplication(input = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const phone = normalizeRiderPhone(input.phone);
+  const fullName = String(input.fullName || "").trim().slice(0, 120);
+  const zone = normalizeBodaZone(input.operatingTown || input.zone);
+  const plate = String(input.motorbikePlate || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 32);
+  const nationalId = String(input.nationalId || "")
+    .trim()
+    .slice(0, 32);
+  const stageLocation = String(input.stageLocation || "").trim().slice(0, 120);
+  const guarantorName = String(input.guarantorName || "").trim().slice(0, 120) || null;
+  const guarantorPhone = normalizeRiderPhone(input.guarantorPhone) || null;
+
+  const nationalIdFrontUrl = String(input.nationalIdFrontUrl || "").trim() || null;
+  const nationalIdBackUrl = String(input.nationalIdBackUrl || "").trim() || null;
+  const licenseUrl = String(input.licenseUrl || "").trim() || null;
+  const stageLetterUrl = String(input.stageLetterUrl || "").trim() || null;
+  const logbookUrl = String(input.logbookUrl || "").trim() || null;
+  const goodConductUrl = String(input.goodConductUrl || "").trim() || null;
+  const ntsaBadgeUrl = String(input.ntsaBadgeUrl || "").trim() || null;
+
+  if (!phone || !fullName || !zone || !plate || !nationalId || !stageLocation) {
+    return {
+      error: "invalid_application",
+      message:
+        "Fill full name, WhatsApp/M-Pesa phone, national ID, town (Nairobi or Thika), stage, and bike plate.",
+    };
+  }
+  if (!nationalIdFrontUrl || !licenseUrl || !stageLetterUrl) {
+    return {
+      error: "docs_required",
+      message: "Upload National ID, driving licence (Class A), and stage chairman letter.",
+    };
+  }
+
+  const existing = await query(`SELECT id, verification_status FROM riders WHERE phone = $1 LIMIT 1`, [
+    phone,
+  ]);
+  if (existing.rows[0]?.verification_status === "VERIFIED") {
+    return {
+      error: "already_verified",
+      message: "This phone is already a verified Sokoni rider. Message Sokoni support to update docs.",
+    };
+  }
+  if (existing.rows[0]?.verification_status === "SUSPENDED") {
+    return {
+      error: "suspended",
+      message: "This rider profile is suspended. Contact Sokoni support before re-applying.",
+    };
+  }
+
+  let result;
+  try {
+    result = await upsertRiderProfile({
+      fullName,
+      phone,
+      nationalId,
+      operatingTown: zone,
+      stageLocation,
+      motorbikePlate: plate,
+      licenseClass: "A",
+      guarantorName,
+      guarantorPhone,
+      nationalIdFrontUrl,
+      nationalIdBackUrl,
+      licenseUrl,
+      logbookUrl,
+      goodConductUrl,
+      ntsaBadgeUrl,
+      stageLetterUrl,
+      verificationStatus: "PENDING",
+    });
+  } catch (err) {
+    if (err?.code === PG_UNIQUE) {
+      return {
+        error: "duplicate",
+        message: "Phone number, National ID, or number plate already registered.",
+      };
+    }
+    throw err;
+  }
+  if (result.error) return result;
+
+  await query(
+    `UPDATE riders SET
+       verification_status = 'PENDING',
+       is_available = FALSE,
+       national_id_front_url = $2,
+       national_id_back_url = COALESCE($3, national_id_back_url),
+       license_url = $4,
+       stage_letter_url = $5,
+       logbook_url = COALESCE($6, logbook_url),
+       good_conduct_url = COALESCE($7, good_conduct_url),
+       ntsa_badge_url = COALESCE($8, ntsa_badge_url),
+       guarantor_name = COALESCE($9, guarantor_name),
+       guarantor_phone = COALESCE($10, guarantor_phone),
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      result.rider.id,
+      nationalIdFrontUrl,
+      nationalIdBackUrl,
+      licenseUrl,
+      stageLetterUrl,
+      logbookUrl,
+      goodConductUrl,
+      ntsaBadgeUrl,
+      guarantorName,
+      guarantorPhone,
+    ]
+  );
+
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId: null,
+      details:
+        `🛵 New boda rider application PENDING\n` +
+        `• ${fullName} · ${phone}\n` +
+        `• Zone: ${zone} · Plate: ${plate}\n` +
+        `• Stage: ${stageLocation}\n` +
+        `Review: /admin/boda or admin-boda.html`,
+    });
+  } catch (err) {
+    console.warn("[boda-fleet] admin notify on apply skipped:", err.message);
+  }
+
+  console.log(`[boda-fleet] rider application PENDING #${result.rider.id} ${phone} ${zone}`);
+  return {
+    ok: true,
+    success: true,
+    riderId: result.rider.id,
+    status: "PENDING",
+    rider: {
+      id: result.rider.id,
+      full_name: fullName,
+      verification_status: "PENDING",
+    },
+    message:
+      "Application submitted successfully. Sokoni team will review your documents within 24 hours.",
+  };
 }
 
 export async function setRiderVerificationStatus(riderId, status, { reason = "" } = {}) {
@@ -449,8 +619,9 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     (Number(updated[0].delivery_fee_kes) > 0
       ? `Fee (held): KES ${Number(updated[0].delivery_fee_kes).toLocaleString()}\n`
       : "") +
-    `\nAfter pickup reply *PICKED ${id}*.\n` +
-    `At the door reply *DELIVERED ${id}* — buyer gets an OTP.`;
+    `\nAfter pickup reply *PICKED ${id}* — buyer gets an OTP.\n` +
+    `At the door reply *CONFIRM ${id} ####* with the buyer's code.\n` +
+    `(Need a new code? Reply *DELIVERED ${id}*)`;
 
   const sellerTo = updated[0].seller_phone
     ? `${normalizeRiderPhone(updated[0].seller_phone)}@c.us`
@@ -524,26 +695,63 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
   if (!isDbEnabled()) return { error: "database_not_configured" };
   const id = normalizeOrderId(orderId);
   const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
+  if (!id || !riderPhone) {
+    return { error: "invalid", message: "Reply like: PICKED SKN-1234" };
+  }
+
+  // Generate delivery OTP at pickup — buyer holds it until the package is verified.
+  const otp = String(randomInt(1000, 9999));
   const { rows } = await query(
     `UPDATE delivery_dispatches d SET
-       status = 'PICKED_UP',
-       picked_up_at = NOW(),
+       status = 'OTP_SENT',
+       picked_up_at = COALESCE(d.picked_up_at, NOW()),
+       delivery_otp_hash = $3,
+       delivery_otp_sent_at = NOW(),
        updated_at = NOW()
      FROM riders r
-     WHERE d.order_ref = $1
+     WHERE UPPER(d.order_ref) = UPPER($1)
        AND d.rider_id = r.id
        AND r.phone = $2
-       AND d.status = 'ACCEPTED'
+       AND d.status IN ('ACCEPTED', 'PICKED_UP')
      RETURNING d.*`,
-    [id, riderPhone]
+    [id, riderPhone, hashOtp(otp)]
   );
-  if (!rows[0]) return { error: "not_found", message: `No accepted job *${id}* for you.` };
-  updateOrderMeta(id, { bodaStatus: "PICKED_UP" });
-  return { ok: true, dispatch: mapDispatch(rows[0]), message: `Marked *${id}* picked up. Head to drop-off.` };
+  if (!rows[0]) {
+    return { error: "not_found", message: `No accepted job *${id}* for you.` };
+  }
+
+  const order = getOrder(id);
+  const { sendText } = await import("./whatsapp.js");
+  const feeKes = Number(rows[0].delivery_fee_kes || 0);
+  if (order?.customerKey) {
+    try {
+      await sendText(
+        order.customerKey,
+        `🔐 *SOKONI DELIVERY CONFIRMATION CODE*\n\n` +
+          `Your Order *${id}* is currently on its way.\n` +
+          `• *Delivery Confirmation Code:* *${otp}*\n\n` +
+          `⚠️ Give this 4-digit code to the rider ONLY after you have received and verified your package.\n` +
+          `Or reply *YES ${id}* / *CODE ${otp}* once you have the item.`
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] OTP to buyer on pickup failed:", err.message);
+    }
+  }
+
+  updateOrderMeta(id, { bodaStatus: "OTP_SENT", bodaPickedUpAt: Date.now() });
+
+  const cleanRiderMsg =
+    `📦 Marked *${id}* picked up — OTP sent to the buyer.\n` +
+    `At drop-off, ask for their 4-digit code, then reply:\n` +
+    `*CONFIRM ${id} 1234*\n` +
+    `(use the buyer's real code)` +
+    (feeKes > 0 ? `\n\nFee held: KES ${feeKes.toLocaleString()} — credited after CONFIRM.` : "");
+
+  return { ok: true, dispatch: mapDispatch(rows[0]), message: cleanRiderMsg };
 }
 
 /**
- * Rider: DELIVERED SKN-#### → send OTP to buyer.
+ * Rider: DELIVERED SKN-#### → re-send OTP to buyer (fallback if pickup OTP was missed).
  */
 export async function markBodaDeliveredRequestOtp({ orderId, phone, customerKey = "" } = {}) {
   if (!isDbEnabled()) return { error: "database_not_configured" };
@@ -574,11 +782,11 @@ export async function markBodaDeliveredRequestOtp({ orderId, phone, customerKey 
     try {
       await sendText(
         order.customerKey,
-        `🔐 *Delivery code for ${id}*\n` +
-          `Your Sokoni rider is at the door.\n` +
-          `Code: *${otp}*\n\n` +
-          `Share this code only with the rider whose plate matches your earlier alert.\n` +
-          `Or reply *YES ${id}* if you already received the item.`
+        `🔐 *SOKONI DELIVERY CONFIRMATION CODE*\n\n` +
+          `Your Order *${id}* — rider is at the door / code refreshed.\n` +
+          `• *Delivery Confirmation Code:* *${otp}*\n\n` +
+          `⚠️ Give this 4-digit code to the rider ONLY after you have received and verified your package.\n` +
+          `Or reply *YES ${id}* / *CODE ${otp}*.`
       );
     } catch (err) {
       console.warn("[boda-fleet] OTP to buyer failed:", err.message);
@@ -588,8 +796,207 @@ export async function markBodaDeliveredRequestOtp({ orderId, phone, customerKey 
   return {
     ok: true,
     dispatch: mapDispatch(rows[0]),
-    message: `OTP sent to the buyer for *${id}*. Ask them for the 4-digit code, then they can confirm — or they reply YES.`,
+    message:
+      `OTP re-sent to the buyer for *${id}*. Ask them for the 4-digit code, then reply *CONFIRM ${id} ####*.`,
   };
+}
+
+async function ensureRiderPayoutsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rider_payouts (
+      id          BIGSERIAL PRIMARY KEY,
+      rider_id    INT REFERENCES riders(id) ON DELETE SET NULL,
+      order_ref   VARCHAR(40) NOT NULL,
+      amount      NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      status      VARCHAR(20) NOT NULL DEFAULT 'CLEARED',
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_rider_payouts_order_rider
+      ON rider_payouts (UPPER(order_ref), rider_id)
+  `);
+}
+
+/**
+ * Rider WhatsApp: CONFIRM SKN-#### 1234 — OTP match → delivered + fee payout stub.
+ */
+export async function verifyDeliveryOTP({
+  orderId = "",
+  code = "",
+  phone = "",
+  customerKey = "",
+} = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  const id = normalizeOrderId(orderId);
+  const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
+  const otp = String(code || "").replace(/\D/g, "").slice(0, 4);
+  if (!id || !riderPhone) {
+    return {
+      error: "invalid",
+      message: "Reply like: CONFIRM SKN-1234 4821",
+    };
+  }
+  if (otp.length !== 4) {
+    return { error: "invalid_otp", message: "Include the buyer's 4-digit confirmation code." };
+  }
+
+  const { rows } = await query(
+    `SELECT d.*, r.phone AS rider_phone
+       FROM delivery_dispatches d
+       JOIN riders r ON d.rider_id = r.id
+      WHERE UPPER(d.order_ref) = UPPER($1)
+        AND d.status = 'OTP_SENT'
+        AND r.phone LIKE $2
+      ORDER BY d.id DESC
+      LIMIT 1`,
+    [id, `%${riderPhone.slice(-9)}`]
+  );
+
+  if (!rows[0]) {
+    return {
+      error: "not_found",
+      message: `❌ Active transit order *${id}* not found for your account.`,
+    };
+  }
+
+  const dispatch = rows[0];
+  if (dispatch.delivery_otp_hash !== hashOtp(otp)) {
+    return {
+      error: "otp_mismatch",
+      message: `❌ Incorrect OTP code for Order *${id}*. Please ask the buyer for the correct 4-digit code.`,
+    };
+  }
+
+  if (dispatch.delivery_otp_sent_at) {
+    const age = Date.now() - new Date(dispatch.delivery_otp_sent_at).getTime();
+    if (Number.isFinite(age) && age > 30 * 60 * 1000) {
+      return {
+        error: "otp_expired",
+        message: `That code expired. Reply *DELIVERED ${id}* for a fresh OTP, then CONFIRM again.`,
+      };
+    }
+  }
+
+  const feeKes = Number(dispatch.delivery_fee_kes || 0);
+
+  await query(
+    `UPDATE delivery_dispatches SET
+       status = 'DELIVERED',
+       delivered_at = NOW(),
+       fee_status = 'PENDING_MPESA',
+       delivery_otp_hash = NULL,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [dispatch.id]
+  );
+  if (dispatch.rider_id) {
+    await query(`UPDATE riders SET is_available = TRUE, updated_at = NOW() WHERE id = $1`, [
+      dispatch.rider_id,
+    ]);
+  }
+
+  try {
+    await ensureRiderPayoutsTable();
+    await query(
+      `INSERT INTO rider_payouts (rider_id, order_ref, amount, status)
+       SELECT $1, $2, $3, 'CLEARED'
+        WHERE NOT EXISTS (
+          SELECT 1 FROM rider_payouts
+           WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2)
+        )`,
+      [dispatch.rider_id, id, feeKes]
+    );
+  } catch (err) {
+    console.warn("[boda-fleet] rider_payouts insert:", err.message);
+  }
+
+  updateOrderMeta(id, { bodaStatus: "DELIVERED", bodaFeeStatus: "PENDING_MPESA" });
+
+  // Buyer escrow YES path when we can resolve the buyer chat.
+  const order = getOrder(id);
+  if (order?.customerKey) {
+    try {
+      const { handleOrderBusMessage } = await import("./communication-hub.js");
+      await handleOrderBusMessage(order.customerKey, `YES ${id}`, {
+        phone: order.phone || "",
+      });
+    } catch (err) {
+      console.warn("[boda-fleet] YES after rider CONFIRM:", err.message);
+    }
+  }
+
+  await releaseBodaRiderFee({ dispatchId: dispatch.id, reason: "rider_confirm_otp" });
+
+  return {
+    ok: true,
+    orderId: id,
+    message:
+      `✅ *DELIVERY CONFIRMED!*\n` +
+      `Order *${id}* marked complete.` +
+      (feeKes > 0
+        ? ` KES ${feeKes.toLocaleString()} credited to your payout balance.`
+        : ""),
+  };
+}
+
+/**
+ * Rider delivery fee release stub — logs clearly; marks RELEASED.
+ * Real Daraja/Paystack B2C for riders can replace this later.
+ */
+export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) {
+  if (!isDbEnabled()) return { ok: false, skipped: true };
+  const id = Number(dispatchId);
+  if (!Number.isInteger(id) || id < 1) return { error: "invalid_dispatch" };
+
+  const { rows } = await query(
+    `SELECT d.*, r.phone AS rider_phone, r.full_name AS rider_name, r.motorbike_plate
+       FROM delivery_dispatches d
+       LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE d.id = $1
+      LIMIT 1`,
+    [id]
+  );
+  const d = rows[0];
+  if (!d) return { error: "not_found" };
+  if (d.fee_status === "RELEASED") {
+    return { ok: true, already: true, feeKes: Number(d.delivery_fee_kes || 0) };
+  }
+  if (d.status === "DISPUTED" || d.fee_status === "FORFEITED") {
+    console.log(
+      `[boda-fleet] fee stub SKIP release dispatch=#${id} order=${d.order_ref} status=${d.status} fee_status=${d.fee_status} reason=${reason}`
+    );
+    return { ok: false, skipped: true, reason: d.fee_status || d.status };
+  }
+
+  const feeKes = Number(d.delivery_fee_kes || 0);
+  console.log(
+    `[boda-fleet] fee stub READY release` +
+      ` dispatch=#${id}` +
+      ` order=${d.order_ref}` +
+      ` rider=${d.rider_phone || "—"}` +
+      ` feeKes=${feeKes}` +
+      ` via=${reason}` +
+      ` (no M-Pesa API call yet — mark RELEASED for ops ledger)`
+  );
+
+  await query(
+    `UPDATE delivery_dispatches SET
+       fee_status = 'RELEASED',
+       meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      id,
+      JSON.stringify({
+        feeReleaseStubAt: new Date().toISOString(),
+        feeReleaseReason: reason,
+        feeReleaseKes: feeKes,
+      }),
+    ]
+  );
+  updateOrderMeta(d.order_ref, { bodaFeeStatus: "RELEASED" });
+  return { ok: true, feeKes, orderRef: d.order_ref, riderPhone: d.rider_phone || null };
 }
 
 /**
@@ -638,6 +1045,16 @@ export async function confirmBodaDeliveryWithOtp({
     return { error: "otp_mismatch", message: "That code doesn't match. Check the latest WhatsApp from Sokoni." };
   }
 
+  if (row.delivery_otp_sent_at) {
+    const age = Date.now() - new Date(row.delivery_otp_sent_at).getTime();
+    if (Number.isFinite(age) && age > 30 * 60 * 1000) {
+      return {
+        error: "otp_expired",
+        message: "That code expired. Ask the rider to reply DELIVERED again for a new code.",
+      };
+    }
+  }
+
   await query(
     `UPDATE delivery_dispatches SET
        status = 'DELIVERED',
@@ -663,6 +1080,8 @@ export async function confirmBodaDeliveryWithOtp({
   } catch (err) {
     console.warn("[boda-fleet] YES after OTP:", err.message);
   }
+
+  await releaseBodaRiderFee({ dispatchId: row.id, reason: "buyer_otp" });
 
   return {
     ok: true,
@@ -770,6 +1189,21 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "" 
     return true;
   }
 
+  // Rider: CONFIRM SKN-#### 1234 (OTP from buyer → delivery + fee payout)
+  const confirm = trimmed.match(
+    /^CONFIRM\s+(SKN?-?\d{1,6}(?:-\d+)?)\s+(\d{4})\b/i
+  );
+  if (confirm) {
+    const result = await verifyDeliveryOTP({
+      orderId: confirm[1],
+      code: confirm[2],
+      phone,
+      customerKey,
+    });
+    await sendText(customerKey, result.message || result.error || "Could not confirm.");
+    return true;
+  }
+
   const delivered = trimmed.match(/^DELIVERED\s+(SKN?-?\d{1,6}(?:-\d+)?)\b/i);
   if (delivered) {
     const result = await markBodaDeliveredRequestOtp({
@@ -808,6 +1242,7 @@ export function bodaSupportSummary() {
       "SET ZONE NAIROBI|THIKA",
       "AVAILABLE / OFFLINE",
       "PICKED SKN-####",
+      "CONFIRM SKN-#### 1234",
       "DELIVERED SKN-####",
       "CODE 1234",
     ],

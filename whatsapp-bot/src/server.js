@@ -20,6 +20,7 @@ import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
 import { stageSellerVideo, stageSellerVideoChunk, VIDEO_UPLOAD_CHUNK_BYTES } from "./services/seller-listings.js";
 import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
 import { sellerBodaRouter, adminBodaRouter } from "./routes/bodaFleetApi.js";
+import ridersApiRouter from "./routes/ridersApi.js";
 import socialApiRouter from "./routes/socialApi.js";
 import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
 import accountAuthApiRouter from "./routes/accountAuthApi.js";
@@ -276,6 +277,22 @@ const avatarStaticOpts = {
 app.use("/assets/images/avatars", express.static(AVATARS_DIR, avatarStaticOpts));
 app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStaticOpts));
 
+/** Rider verification docs (opaque filenames under data/boda-docs). */
+{
+  const bodaDocsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "boda-docs");
+  app.use(
+    "/assets/boda-docs",
+    express.static(bodaDocsDir, {
+      fallthrough: true,
+      maxAge: "1d",
+      setHeaders(res) {
+        res.setHeader("Cache-Control", "private, max-age=86400");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+      },
+    })
+  );
+}
+
 app.use("/api/", apiLimiter);
 /** OTP only — do NOT throttle session-authed Seller Hub routes (ledger/orders/shipping). */
 app.use("/api/seller/onboard/send-code", authLimiter);
@@ -311,6 +328,7 @@ app.use("/api/products", productsApiRouter);
 app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/api/seller/onboard", sellerOnboardApiRouter);
 app.use("/api/seller/onboard/boda", sellerBodaRouter);
+app.use("/api/riders", ridersApiRouter);
 app.use("/api/social", socialApiRouter);
 app.use("/api/buyer/auth", buyerAuthApiRouter);
 app.use("/api/account/auth", accountAuthApiRouter);
