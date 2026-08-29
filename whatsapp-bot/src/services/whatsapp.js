@@ -511,18 +511,30 @@ export function isBotEcho(messageId, destinationChatId) {
   return false;
 }
 
-/** Light spacing pass — extra breathing room between sections without bloating short replies. */
+/** Light spacing pass — extra breathing room between sections without bloating short replies.
+ * Also splits inline numbered keycaps (1️⃣…) that models mash into one WhatsApp paragraph.
+ */
 export function normalizeBotMessageSpacing(text) {
   let s = String(text || "")
     .replace(/\r\n/g, "\n")
     .trim();
   if (!s) return s;
 
-  // Blank line before emoji-led section headers (common in admin/help menus).
+  // Force a blank line before keycap digits 1️⃣–9️⃣ (even when inline mid-paragraph).
+  s = s.replace(/\s*([1-9]\uFE0F?\u20E3)\s*/gu, "\n\n$1 ");
+  // Blank line before emoji-led section headers already on their own line.
   s = s.replace(/\n(?=[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/gu, "\n\n");
   // Blank line before bold section labels like *Catalog commands*
   s = s.replace(/\n(\*[^\n*]{3,}\*)/g, "\n\n$1");
-  return s.replace(/\n{3,}/g, "\n\n");
+  // Collapse accidental triple+ newlines; strip leading blanks from keycap split
+  s = s.replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n");
+  // Tidy spaces (keep newlines)
+  s = s
+    .split("\n")
+    .map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd())
+    .join("\n")
+    .trim();
+  return s;
 }
 
 export async function sendText(to, text) {
