@@ -83,8 +83,21 @@ export async function listShopsDesk({ q = "", status = "all" } = {}) {
     const full = getSupplier(s.id) || {};
     const items = bySupplier.get(s.id) || [];
     const active = items.filter((p) => productStatus(p) === "active");
-    const thumbs = [...active, ...items].map(thumbOf).filter(Boolean);
-    const uniqueThumbs = [...new Set(thumbs)].slice(0, 4);
+    const thumbs = [...active, ...items]
+      .map((p) => ({
+        url: thumbOf(p),
+        priceKes: Number(p.priceKes ?? p.price) || 0,
+        id: p.id,
+      }))
+      .filter((t) => t.url);
+    const seen = new Set();
+    const uniqueThumbs = [];
+    for (const t of thumbs) {
+      if (seen.has(t.url)) continue;
+      seen.add(t.url);
+      uniqueThumbs.push(t);
+      if (uniqueThumbs.length >= 4) break;
+    }
     const sales = salesForSupplier(s.id);
     return {
       ...s,

@@ -1,5 +1,5 @@
 /**
- * Admin Sellers & Shops desk — searchable table, item drawer, action menu.
+ * Admin Sellers & Shops desk — Depop Admin OS UI.
  * Auth: X-Admin-Token (ADMIN_SETUP_TOKEN / MASTER_ADMIN_SECRET).
  */
 (function () {
@@ -22,8 +22,8 @@
     const node = el("shops-status-msg");
     if (!node) return;
     node.textContent = msg || "";
-    node.classList.toggle("text-red-600", isError);
-    node.classList.toggle("text-brand-green", !isError && Boolean(msg));
+    node.classList.toggle("is-error", isError);
+    node.classList.toggle("is-ok", !isError && Boolean(msg));
   }
 
   function readToken() {
@@ -91,6 +91,15 @@
     }
   }
 
+  function shortKes(n) {
+    const v = Number(n) || 0;
+    if (v >= 1000) {
+      const k = v / 1000;
+      return `KES ${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k`;
+    }
+    return formatKes(v);
+  }
+
   function formatPhone(p) {
     const d = String(p || "").replace(/\D/g, "");
     if (d.length === 12 && d.startsWith("254")) {
@@ -102,90 +111,122 @@
     return p || "—";
   }
 
-  function statusBadge(st) {
-    const s = String(st || "live").toLowerCase();
-    const map = {
-      live: "bg-brand-green/20 text-brand-purple",
-      paused: "bg-amber-100 text-amber-900",
-      under_review: "bg-orange-100 text-orange-900",
-      deactivated: "bg-red-100 text-red-800",
-    };
-    return `<span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${map[s] || "bg-black/5"}">${escapeHtml(s)}</span>`;
+  function shopStatusBadge(shop) {
+    if (shop.payoutHold && String(shop.shopStatus || "live").toLowerCase() === "live") {
+      return `<span class="badge-status is-hold">Payout hold</span>`;
+    }
+    const s = String(shop.shopStatus || "live").toLowerCase();
+    if (s === "live") return `<span class="badge-status is-active">Active</span>`;
+    if (s === "paused") return `<span class="badge-status is-paused">Paused</span>`;
+    if (s === "under_review") return `<span class="badge-status is-review">Under review</span>`;
+    if (s === "deactivated") return `<span class="badge-status is-flagged">Deactivated</span>`;
+    return `<span class="badge-status is-muted">${escapeHtml(s)}</span>`;
   }
 
   function itemStatusBadge(st) {
     const s = String(st || "active").toLowerCase();
     const map = {
-      active: "bg-brand-green/25 text-brand-purple",
-      out_of_stock: "bg-black/10 text-brand-purple/70",
-      flagged: "bg-red-100 text-red-800",
-      hidden: "bg-amber-100 text-amber-900",
+      active: "is-active",
+      out_of_stock: "is-muted",
+      flagged: "is-flagged",
+      hidden: "is-hidden",
     };
     const label =
       s === "out_of_stock" ? "Out of stock" : s.charAt(0).toUpperCase() + s.slice(1);
-    return `<span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${map[s] || "bg-black/5"}">${escapeHtml(label)}</span>`;
+    return `<span class="badge-status ${map[s] || "is-muted"}">${escapeHtml(label)}</span>`;
   }
 
   function thumbsHtml(thumbs, count) {
-    const list = Array.isArray(thumbs) ? thumbs.slice(0, 4) : [];
+    const list = Array.isArray(thumbs) ? thumbs.slice(0, 3) : [];
     if (!list.length) {
-      return `<span class="text-brand-purple/45 text-xs">${count || 0} items</span>`;
+      return `<span class="muted">${count || 0} items</span>`;
     }
-    const stack = list
-      .map(
-        (src, i) =>
-          `<img src="${escapeHtml(src)}" alt="" class="w-9 h-9 rounded-lg object-cover bg-brand-cream ${i ? "-ml-2" : ""}" loading="lazy" />`
-      )
+    const cells = list
+      .map((t) => {
+        const url = typeof t === "string" ? t : t.url;
+        const price = typeof t === "string" ? null : t.priceKes;
+        if (!url) return "";
+        return `<span class="thumb-cell" tabindex="0" role="img" aria-label="Item thumbnail">
+          <img src="${escapeHtml(url)}" alt="" loading="lazy" />
+          ${
+            price != null
+              ? `<span class="thumb-price">${escapeHtml(shortKes(price))}</span>`
+              : ""
+          }
+        </span>`;
+      })
       .join("");
-    return `<div class="thumb-stack flex items-center"><div class="flex">${stack}</div><span class="ml-2 text-xs font-semibold">${count} listed</span></div>`;
+    const extra = count > list.length ? `<span class="thumb-more">+${count - list.length} items</span>` : "";
+    return `<div class="thumb-row">${cells}${extra}</div>`;
+  }
+
+  function updateMetrics(shops) {
+    const active = shops.filter((s) => String(s.shopStatus || "live").toLowerCase() === "live").length;
+    const verified = shops.filter((s) => s.verifiedBadge).length;
+    const held = shops.filter(
+      (s) =>
+        String(s.shopStatus || "live").toLowerCase() !== "live" || Boolean(s.payoutHold)
+    ).length;
+    const holdKes = shops
+      .filter((s) => s.payoutHold)
+      .reduce((sum, s) => sum + (Number(s.escrowKes) || 0), 0);
+    if (el("metric-active")) el("metric-active").textContent = String(active);
+    if (el("metric-verified")) el("metric-verified").textContent = String(verified);
+    if (el("metric-flagged")) el("metric-flagged").textContent = String(held);
+    if (el("metric-holds")) el("metric-holds").textContent = formatKes(holdKes);
   }
 
   function rowHtml(shop) {
     const handle = shop.shopHandle || "—";
     const verified = shop.verifiedBadge
-      ? `<span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#1DA1F2] text-white text-[9px] font-bold ml-1" title="Verified">✓</span>`
-      : "";
-    const hold = shop.payoutHold
-      ? `<span class="ml-1 text-[10px] font-bold uppercase text-red-700">Hold</span>`
+      ? `<span class="badge-verified">✓ Verified</span>`
       : "";
     const commission =
       shop.commissionPct != null
-        ? `<span class="block text-[11px] text-brand-purple/50">${shop.commissionPct}% commission</span>`
+        ? `<span class="muted" style="display:block;margin-top:0.25rem;">${shop.commissionPct}% commission</span>`
         : "";
+    const primaryAction = shop.payoutHold
+      ? `<button type="button" class="js-act btn-green" data-act="payout-hold" data-id="${escapeHtml(shop.id)}">Release hold</button>`
+      : `<button type="button" class="js-act btn-red" data-act="freeze" data-id="${escapeHtml(shop.id)}">Suspend</button>`;
+
     return `
-      <tr class="align-top hover:bg-brand-cream/40" data-shop-id="${escapeHtml(shop.id)}">
-        <td class="px-4 py-3">
-          <div class="font-semibold">${escapeHtml(handle)}${verified}</div>
-          <div class="mt-1">${statusBadge(shop.shopStatus)}${hold}</div>
+      <tr data-shop-id="${escapeHtml(shop.id)}">
+        <td>
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <span class="handle-name">${escapeHtml(handle)}</span>
+            ${verified}
+          </div>
           ${commission}
         </td>
-        <td class="px-4 py-3">
-          <div class="font-medium">${escapeHtml(shop.sellerName || shop.businessName || "—")}</div>
-          <div class="text-xs text-brand-purple/60 mt-0.5 font-mono">${escapeHtml(formatPhone(shop.phone || shop.mpesaNumber))}</div>
+        <td>
+          <p style="margin:0;font-weight:800;">${escapeHtml(shop.sellerName || shop.businessName || "—")}</p>
+          <p class="muted" style="margin:0.2rem 0 0;font-family:ui-monospace,monospace;">${escapeHtml(formatPhone(shop.phone || shop.mpesaNumber))}</p>
         </td>
-        <td class="px-4 py-3">
-          <button type="button" class="js-open-items text-left hover:opacity-80" data-id="${escapeHtml(shop.id)}" title="Open item gallery">
+        <td>
+          <button type="button" class="js-open-items" data-id="${escapeHtml(shop.id)}" title="Open item gallery" style="background:none;border:none;padding:0;cursor:pointer;font:inherit;color:inherit;">
             ${thumbsHtml(shop.thumbs, shop.listingCount || 0)}
           </button>
         </td>
-        <td class="px-4 py-3">
-          <div class="font-bold">${formatKes(shop.escrowKes)}</div>
-          <div class="text-xs text-brand-purple/55">${shop.orderCount || 0} orders</div>
+        <td>
+          <p class="escrow-amt" style="margin:0;">${formatKes(shop.escrowKes)}</p>
+          <p class="muted" style="margin:0.2rem 0 0;">${shop.orderCount || 0} orders completed</p>
         </td>
-        <td class="px-4 py-3 text-right relative">
-          <div class="inline-flex flex-wrap gap-2 justify-end">
-            <button type="button" class="js-manage min-h-[40px] px-3 rounded-full border border-brand-purple/15 text-xs font-bold" data-id="${escapeHtml(shop.id)}">Manage</button>
-            <div class="relative inline-block">
-              <button type="button" class="js-actions-toggle min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold" data-id="${escapeHtml(shop.id)}" aria-haspopup="true">Actions ▾</button>
-              <div class="actions-menu absolute right-0 mt-1 w-56 rounded-2xl border border-black/10 bg-white shadow-lg z-10 py-1 text-left" role="menu" data-menu-for="${escapeHtml(shop.id)}">
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="freeze" data-id="${escapeHtml(shop.id)}">Freeze / suspend shop</button>
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="restore" data-id="${escapeHtml(shop.id)}">Restore shop</button>
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="verify" data-id="${escapeHtml(shop.id)}">${shop.verifiedBadge ? "Remove verify badge" : "Verify shop badge"}</button>
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="commission" data-id="${escapeHtml(shop.id)}">Force commission tier</button>
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="payout-hold" data-id="${escapeHtml(shop.id)}">${shop.payoutHold ? "Release payout hold" : "Manual escrow payout hold"}</button>
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="handle" data-id="${escapeHtml(shop.id)}">Override shop handle</button>
-                <button type="button" class="js-act w-full text-left px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream" data-act="edit" data-id="${escapeHtml(shop.id)}">Impersonate / edit shop</button>
-                <a class="block px-3 py-2.5 text-xs font-semibold hover:bg-brand-cream text-brand-purple" href="admin-seller-listings.html">Flag / hide item → Listings</a>
+        <td>${shopStatusBadge(shop)}</td>
+        <td style="text-align:right;">
+          <div style="display:inline-flex;flex-wrap:wrap;gap:0.4rem;justify-content:flex-end;position:relative;">
+            <button type="button" class="js-manage btn-ink" data-id="${escapeHtml(shop.id)}">Inspect</button>
+            ${primaryAction}
+            <div style="position:relative;display:inline-block;">
+              <button type="button" class="js-actions-toggle btn-outline" data-id="${escapeHtml(shop.id)}" aria-haspopup="true">Actions ▾</button>
+              <div class="actions-menu" role="menu" data-menu-for="${escapeHtml(shop.id)}">
+                <button type="button" class="js-act act-danger" data-act="freeze" data-id="${escapeHtml(shop.id)}">Freeze / suspend shop</button>
+                <button type="button" class="js-act" data-act="restore" data-id="${escapeHtml(shop.id)}">Restore shop</button>
+                <button type="button" class="js-act" data-act="verify" data-id="${escapeHtml(shop.id)}">${shop.verifiedBadge ? "Remove verify badge" : "Verify shop badge"}</button>
+                <button type="button" class="js-act" data-act="commission" data-id="${escapeHtml(shop.id)}">Force commission tier</button>
+                <button type="button" class="js-act" data-act="payout-hold" data-id="${escapeHtml(shop.id)}">${shop.payoutHold ? "Release payout hold" : "Manual escrow payout hold"}</button>
+                <button type="button" class="js-act" data-act="handle" data-id="${escapeHtml(shop.id)}">Override shop handle</button>
+                <button type="button" class="js-act" data-act="edit" data-id="${escapeHtml(shop.id)}">Impersonate / edit shop</button>
+                <a href="admin-seller-listings.html">Flag / hide item → Listings</a>
               </div>
             </div>
           </div>
@@ -220,6 +261,7 @@
       if (!tbody) return;
       tbody.innerHTML = shops.map(rowHtml).join("");
       if (empty) empty.classList.toggle("hidden", shops.length > 0);
+      updateMetrics(shops);
       setStatus(`${shops.length} shop${shops.length === 1 ? "" : "s"}`);
     } catch (err) {
       setStatus(err?.message || "Network error", true);
@@ -263,7 +305,7 @@
       el("drawer-sub").textContent = `${items.length} item${items.length === 1 ? "" : "s"} · ${data.shop?.shopHandle || ""}`;
       if (!items.length) {
         el("drawer-body").innerHTML =
-          `<p class="text-sm text-brand-purple/55 text-center py-8">No listings tied to this shop yet.</p>`;
+          `<p class="muted" style="text-align:center;padding:2rem 0;">No listings tied to this shop yet.</p>`;
         return;
       }
       el("drawer-body").innerHTML = items
@@ -276,24 +318,24 @@
                 ? "Out of stock"
                 : "In stock";
           return `
-          <article class="rounded-2xl border border-black/5 p-3 flex gap-3">
-            <button type="button" class="js-inspect shrink-0" data-src="${escapeHtml(img)}" ${img ? "" : "disabled"}>
+          <article class="item-card">
+            <button type="button" class="js-inspect" data-src="${escapeHtml(img)}" ${img ? "" : "disabled"} style="padding:0;border:none;background:none;cursor:pointer;">
               ${
                 img
-                  ? `<img src="${escapeHtml(img)}" alt="" class="w-16 h-16 rounded-xl object-cover bg-brand-cream" />`
-                  : `<div class="w-16 h-16 rounded-xl bg-brand-cream"></div>`
+                  ? `<img src="${escapeHtml(img)}" alt="" />`
+                  : `<div style="width:4rem;height:4rem;border:2px solid #1a1a1a;border-radius:0.5rem;background:#f4f4f4;"></div>`
               }
             </button>
-            <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex items-start justify-between gap-2">
-                <h3 class="font-semibold text-sm truncate">${escapeHtml(item.name)}</h3>
+            <div style="min-width:0;flex:1;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;">
+                <h3 style="margin:0;font-size:0.875rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</h3>
                 ${itemStatusBadge(item.status)}
               </div>
-              <p class="text-sm font-bold">${formatKes(item.priceKes)}</p>
-              <p class="text-xs text-brand-purple/55">${escapeHtml(stock)}</p>
-              <div class="flex flex-wrap gap-2 pt-1">
-                <button type="button" class="js-takedown min-h-[36px] px-3 rounded-full border border-red-200 text-red-800 text-[11px] font-bold" data-id="${escapeHtml(item.id)}">Flag / hide</button>
-                <button type="button" class="js-restore-item min-h-[36px] px-3 rounded-full border border-brand-purple/15 text-[11px] font-semibold" data-id="${escapeHtml(item.id)}">Restore</button>
+              <p style="margin:0.25rem 0 0;font-weight:900;">${formatKes(item.priceKes)}</p>
+              <p class="muted" style="margin:0.15rem 0 0;">${escapeHtml(stock)}</p>
+              <div style="display:flex;flex-wrap:wrap;gap:0.4rem;padding-top:0.45rem;">
+                <button type="button" class="js-takedown btn-red" data-id="${escapeHtml(item.id)}" style="min-height:2.25rem;font-size:0.65rem;">Flag / hide</button>
+                <button type="button" class="js-restore-item btn-outline" data-id="${escapeHtml(item.id)}" style="min-height:2.25rem;font-size:0.65rem;">Restore</button>
               </div>
             </div>
           </article>`;
@@ -307,11 +349,19 @@
   function openImage(src) {
     if (!src) return;
     el("img-modal-src").src = src;
-    el("img-modal")?.classList.remove("hidden");
+    const modal = el("img-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      modal.style.display = "flex";
+    }
   }
 
   function closeImage() {
-    el("img-modal")?.classList.add("hidden");
+    const modal = el("img-modal");
+    if (modal) {
+      modal.classList.add("hidden");
+      modal.style.display = "none";
+    }
     el("img-modal-src").src = "";
   }
 
@@ -388,11 +438,19 @@
     el("edit-phone").value = shop.phone || "";
     el("edit-handle").value = String(shop.shopHandle || "").replace(/^@/, "");
     el("edit-bio").value = "";
-    el("edit-modal")?.classList.remove("hidden");
+    const modal = el("edit-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      modal.style.display = "flex";
+    }
   }
 
   function closeEditModal() {
-    el("edit-modal")?.classList.add("hidden");
+    const modal = el("edit-modal");
+    if (modal) {
+      modal.classList.add("hidden");
+      modal.style.display = "none";
+    }
   }
 
   async function submitEdit(e) {
