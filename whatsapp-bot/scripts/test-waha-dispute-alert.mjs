@@ -6,7 +6,8 @@
  *   cd ~/sokoni/whatsapp-bot
  *   node scripts/test-waha-dispute-alert.mjs 2547XXXXXXXX
  *
- * Uses the same sendTextReliable path as dispute alerts.
+ * Pass a REAL Kenya phone (2547…), not the placeholder string.
+ * Uses the same sendTextReliable path as dispute alerts (not normal chat sendText).
  * Exit 0 = WAHA accepted the send; exit 1 = failed / dry-run.
  */
 import { config } from "../src/config.js";
@@ -15,7 +16,16 @@ import { sendTextReliable, toChatId } from "../src/services/whatsapp.js";
 const phone = process.argv[2] || config.admin.primary || "";
 if (!phone) {
   console.error("Usage: node scripts/test-waha-dispute-alert.mjs <2547XXXXXXXX>");
-  console.error("Also set ADMIN_PHONES or pass a phone argument.");
+  console.error("Also set ADMIN_PHONES or pass a real phone argument.");
+  process.exit(1);
+}
+
+const digits = String(phone).replace(/\D/g, "");
+if (/x/i.test(String(phone)) || digits.length < 10 || digits === "2547") {
+  console.error(
+    "FAIL: pass a real phone like 254712345678 — not the placeholder 2547XXXXXXXX"
+  );
+  console.error("Got:", phone, "→ chatId would be", toChatId(phone) || "(empty)");
   process.exit(1);
 }
 
