@@ -522,6 +522,10 @@ export function normalizeBotMessageSpacing(text) {
 
   // Force a blank line before keycap digits 1️⃣–9️⃣ (even when inline mid-paragraph).
   s = s.replace(/\s*([1-9]\uFE0F?\u20E3)\s*/gu, "\n\n$1 ");
+  // Wall-of-text fail-safe: if the model wrote 3+ sentences with no newlines, break after punctuation.
+  if (!s.includes("\n") && (s.match(/[.!?]["']?\s+/g) || []).length >= 2) {
+    s = s.replace(/([.!?]["']?)\s+(?=[A-Z*"“])/g, "$1\n\n");
+  }
   // Blank line before emoji-led section headers already on their own line.
   s = s.replace(/\n(?=[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/gu, "\n\n");
   // Blank line before bold section labels like *Catalog commands*
