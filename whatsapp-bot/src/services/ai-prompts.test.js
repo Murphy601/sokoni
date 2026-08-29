@@ -34,4 +34,11 @@ describe("ai-prompts MVP training", () => {
     assert.match(prompt, /Layer 2/);
     assert.match(prompt, /exact command format/);
   });
+
+  it("injects admin recognition only for isAdmin threads", () => {
+    const boss = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: true });
+    assert.match(boss, /ADMIN RECOGNITION/);
+    const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
+    assert.doesNotMatch(shopper, /ADMIN RECOGNITION/);
+  });
 });

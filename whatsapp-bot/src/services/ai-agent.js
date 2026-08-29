@@ -454,12 +454,23 @@ export async function runAgentTurn({
   phone = "",
   history = null,
   persist = true,
+  isAdmin = false,
 }) {
   const text = String(userMessage || "").trim();
   if (!text) return { reply: "Send a message to get started.", tools: [] };
 
   if (channel === "whatsapp" && isHumanHandoff(sessionKey)) {
     return { reply: null, tools: [], handoff: true };
+  }
+
+  let adminSender = Boolean(isAdmin);
+  if (!adminSender && channel === "whatsapp" && (phone || sessionKey)) {
+    try {
+      const { isAdminSender } = await import("./admin.js");
+      adminSender = isAdminSender(sessionKey, phone);
+    } catch {
+      adminSender = false;
+    }
   }
 
   const graph = await runAgentGraph({
@@ -638,6 +649,7 @@ export async function runAgentTurn({
           ),
           threadId,
           preferKiswahili,
+          isAdmin: adminSender,
         }),
       },
       ...sanitizeHistory(hist),
