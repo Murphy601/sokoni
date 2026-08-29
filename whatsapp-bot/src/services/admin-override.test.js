@@ -14,6 +14,17 @@ import { containsAdminCommand } from "./admin.js";
 import { isAdminTokenValid, isMasterAdminToken } from "../lib/admin-auth.js";
 
 describe("admin multi-layer obedience", () => {
+  it("maps natural Boss verbs without bang", () => {
+    assert.equal(isOverrideCommand("FORCE RELEASE SKN-8820"), true);
+    assert.equal(isOverrideCommand("REFUND BUYER SKN-1049"), true);
+    assert.equal(isOverrideCommand("VERIFY SHOP @nairobi_kicks"), true);
+    assert.equal(isOverrideCommand("OVERRIDE TEST"), true);
+    assert.equal(normalizeMasterCommand("FORCE RELEASE SKN-8820"), "RELEASE SKN-8820");
+    assert.equal(normalizeMasterCommand("REFUND BUYER SKN-1049"), "REFUND SKN-1049");
+    assert.equal(normalizeMasterCommand("BRIEFING"), "BRIEF");
+    assert.equal(normalizeMasterCommand("OVERRIDE TEST"), "OVERRIDE_TEST");
+  });
+
   it("detects OVERRIDE: and bang short-codes", () => {
     assert.equal(isOverrideCommand("OVERRIDE: RELEASE SKN-8820"), true);
     assert.equal(isMasterCommand("!force-release SKN-8820"), true);
@@ -33,8 +44,8 @@ describe("admin multi-layer obedience", () => {
   it("returns help for !help", async () => {
     const r = await executeMasterAdminCommand("!help");
     assert.equal(r.ok, true);
-    assert.match(r.reply, /force-release/i);
-    assert.match(r.reply, /agent-mode/i);
+    assert.match(r.reply, /FORCE RELEASE|force-release/i);
+    assert.match(r.reply, /VERIFY SHOP|!help|BRIEFING/i);
   });
 
   it("rejects unknown bang with help hint", async () => {
@@ -59,8 +70,9 @@ describe("admin multi-layer obedience", () => {
       isAdmin: true,
       senderPhone: "254757764009",
     });
-    assert.match(boss, /CRITICAL EXECUTIVE DIRECTIVE|EXECUTIVE DIRECTIVE/);
+    assert.match(boss, /CRITICAL EXECUTIVE DIRECTIVE|CRITICAL EXCEPTION RULE|EXECUTIVE DIRECTIVE/);
     assert.doesNotMatch(boss, /PUBLIC ESCROW GUARDRAIL/);
+    assert.doesNotMatch(boss, /I don't have those exact details in my records/);
 
     const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
     assert.match(shopper, /PUBLIC ESCROW GUARDRAIL/);

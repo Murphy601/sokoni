@@ -349,6 +349,29 @@ export async function handleIncomingMessage(
     return sendText(customerKey, "pong — Sokoni bot is online. Type *menu* to shop.");
   }
 
+  // Boss executive verbs — code interceptor BEFORE any AI/RAG path
+  if (bossHit || isAdminSender(customerKey, phone) || requireAdminSender(customerKey, phone)) {
+    try {
+      const {
+        isMasterCommand,
+        softMapSpokenToMasterCommand,
+        executeMasterAdminCommand,
+      } = await import("../services/admin-override.js");
+      const mapped =
+        softMapSpokenToMasterCommand(text) || (isMasterCommand(text) ? text : null);
+      if (mapped) {
+        console.log("[webhook] Boss master command:", String(mapped).slice(0, 80));
+        const result = await executeMasterAdminCommand(mapped, {
+          adminLabel: phone || customerKey || "boss",
+          actorPhone: phone || "",
+        });
+        if (result?.reply) return sendText(customerKey, result.reply);
+      }
+    } catch (err) {
+      console.warn("[webhook] boss interceptor:", err.message);
+    }
+  }
+
   // Boss !ban-user — block non-admin senders before AI / commerce
   if (!isAdminSender(customerKey, phone) && !bossHit) {
     try {

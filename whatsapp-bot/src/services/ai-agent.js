@@ -503,8 +503,13 @@ export async function runAgentTurn({
   const { escalation, specialist, specialistHint, tools: toolResults, knowledge, knowledgeBlock, handoffSummary } =
     graph;
 
+  // Boss / staff never hit shopper HITL escalation
+  if (adminSender && escalation?.escalate) {
+    escalation.escalate = false;
+  }
+
   // High + medium (angry) → human-in-the-loop with priority inbox ticket
-  if (escalation.escalate && channel === "whatsapp") {
+  if (escalation.escalate && channel === "whatsapp" && !adminSender) {
     try {
       const { startHumanHandoff } = await import("./handoff.js");
       await startHumanHandoff(sessionKey, {
@@ -537,6 +542,10 @@ export async function runAgentTurn({
     };
   }
 
+  // Boss / staff: never escalate to HITL on ourselves; skip RAG knowledge (causes canned refusals)
+  const knowledgeForPrompt = adminSender ? "" : knowledgeBlock;
+  const specialistForPrompt = adminSender ? "" : specialistHint;
+
   const toolBlock = formatToolResultsForPrompt(toolResults);
   let userContextBlock = "";
   try {
@@ -545,6 +554,32 @@ export async function runAgentTurn({
   } catch (err) {
     console.warn("[ai-agent] user context skipped:", err.message);
   }
+
+  // Admin freeform: intercept master verbs again (safety net if webhook missed)
+  if (adminSender && channel === "whatsapp") {
+    try {
+      const {
+        isMasterCommand,
+        softMapSpokenToMasterCommand,
+        executeMasterAdminCommand,
+      } = await import("./admin-override.js");
+      const mapped =
+        softMapSpokenToMasterCommand(text) || (isMasterCommand(text) ? text : null);
+      if (mapped) {
+        const result = await executeMasterAdminCommand(mapped, {
+          adminLabel: phone || sessionKey || "boss",
+          actorPhone: phone || "",
+        });
+        const reply = result?.reply || "Yes, Boss.";
+        if (persist) pushMessage(sessionKey, "user", text);
+        if (persist) pushMessage(sessionKey, "assistant", reply);
+        return { reply, tools: [], adminCommand: true, specialist, graph: graph.graph };
+      }
+    } catch (err) {
+      console.warn("[ai-agent] boss interceptor:", err.message);
+    }
+  }
+
   const shopping = isShoppingIntent(text);
   const hasLiveCatalogHits = toolResults.some(
     (r) =>
@@ -664,22 +699,23 @@ export async function runAgentTurn({
       {
         role: "system",
         content: adminSender
-          ? `CRITICAL EXECUTIVE DIRECTIVE: You are speaking directly to THE BOSS (+254757764009). You MUST start EVERY reply with "Yes, Boss." or "Right away, Boss." Absolute authority. Mutations use *!* / *OVERRIDE:* short-codes only — never invent escrow releases.\n\n${buildGroundedSystemPrompt({
+          ? `CRITICAL EXCEPTION RULE: You are speaking directly to THE BOSS (+254757764009). DO NOT check any knowledge base. DO NOT say you lack details. DO NOT use public escrow refusals. Start EVERY reply with "Yes, Boss." or "Right away, Boss." If they asked for a mutation, tell them the exact command (*FORCE RELEASE SKN-…*, *!help*) — the code interceptor executes mutations, not you.\n\n${buildGroundedSystemPrompt({
               channel,
-              contextBlocks: [specialistHint, userContextBlock, knowledgeBlock, toolBlock].filter(
-                Boolean
-              ),
+              contextBlocks: [userContextBlock, toolBlock].filter(Boolean),
               threadId,
-              preferKiswahili,
+              preferKiswahili: false,
               isAdmin: true,
               staff,
               senderPhone: phone || threadId,
             })}`
           : buildGroundedSystemPrompt({
               channel,
-              contextBlocks: [specialistHint, userContextBlock, knowledgeBlock, toolBlock].filter(
-                Boolean
-              ),
+              contextBlocks: [
+                specialistForPrompt,
+                userContextBlock,
+                knowledgeForPrompt,
+                toolBlock,
+              ].filter(Boolean),
               threadId,
               preferKiswahili,
               isAdmin: false,

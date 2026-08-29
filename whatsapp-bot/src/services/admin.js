@@ -281,12 +281,12 @@ export function resolveAdminIdentity(_body, parsed) {
   return { verified, phone };
 }
 
-/** Hard gate — admin features only for configured ADMIN_PHONES. */
+/** Hard gate — admin features for ADMIN_PHONES or hardwired Boss last-9. */
 export function requireAdminSender(chatId, phone = "") {
-  if (!isAdminSender(chatId, phone)) {
+  if (!isAdminSender(chatId, phone) && !checkIfBoss(phone || chatId)) {
     return false;
   }
-  if (config.admin.phones.length === 0) {
+  if (config.admin.phones.length === 0 && !checkIfBoss(phone || chatId)) {
     console.warn("[admin] ADMIN_PHONES not configured — admin console disabled");
     return false;
   }
@@ -305,6 +305,22 @@ export async function shouldRouteIncomingAsAdmin(body, parsed) {
     /^\s*OVERRIDE\s*:/i.test(text) ||
     /^\s*![a-z][\w-]*/i.test(text) ||
     /^\s*FORCE_PAYOUT\b/i.test(text) ||
+    /^\s*FORCE\s+RELEASE\b/i.test(text) ||
+    /^\s*REFUND\s+BUYER\b/i.test(text) ||
+    /^\s*SPLIT\s+ESCROW\b/i.test(text) ||
+    /^\s*PAUSE\s+PAYOUTS?\b/i.test(text) ||
+    /^\s*VERIFY\s+SHOP\b/i.test(text) ||
+    /^\s*SUSPEND\s+SHOP\b/i.test(text) ||
+    /^\s*SET\s+COMMISSION\b/i.test(text) ||
+    /^\s*HIDE\s+ITEM\b/i.test(text) ||
+    /^\s*REASSIGN\s+RIDER\b/i.test(text) ||
+    /^\s*FORCE\s+RETURN\b/i.test(text) ||
+    /^\s*UNBAN\s+RIDER\b/i.test(text) ||
+    /^\s*CLEAR\s+SESSION\b/i.test(text) ||
+    /^\s*SET\s+MODE\b/i.test(text) ||
+    /^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(text) ||
+    /^\s*SYSTEM\s+(PAUSE|RESUME)\b/i.test(text) ||
+    /^\s*OVERRIDE\s+TEST\s*$/i.test(text) ||
     /^admin\b/i.test(text) ||
     /^orders?\b/i.test(text) ||
     /^[1-4]$/.test(text) ||
@@ -313,6 +329,7 @@ export async function shouldRouteIncomingAsAdmin(body, parsed) {
   if (!looksLikeStaffCmd) return false;
 
   if (canRunAdminCommands(parsed.customerKey, parsed.phone)) return true;
+  if (checkIfBoss(parsed.phone || parsed.customerKey)) return true;
 
   try {
     const { resolveStaffRole } = await import("./staff-roles.js");
@@ -1347,6 +1364,27 @@ export async function handleAdminIncoming({ customerKey, text, quotedText, phone
     }
   } catch (err) {
     console.warn("[admin] dispute card choice skipped:", err.message);
+  }
+
+  // Master executive verbs — code interceptor (never LLM / RAG)
+  try {
+    const {
+      isMasterCommand,
+      softMapSpokenToMasterCommand,
+      executeMasterAdminCommand,
+    } = await import("./admin-override.js");
+    const mapped =
+      softMapSpokenToMasterCommand(text) || (isMasterCommand(text) ? text : null);
+    if (mapped) {
+      const result = await executeMasterAdminCommand(mapped, {
+        adminLabel: phone || customerKey || "boss",
+        actorPhone: phone || "",
+      });
+      if (result?.reply) await sendText(customerKey, result.reply);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[admin] master command skipped:", err.message);
   }
 
   const cmd = normalizeAdminCommand(text);

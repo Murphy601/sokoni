@@ -9,7 +9,7 @@
  * Regular users never reach these paths.
  */
 import { config } from "../config.js";
-import { releaseEscrowOrder } from "./platform-command.js";
+import { releaseEscrowOrder, refundEscrowOrder } from "./platform-command.js";
 import { pauseCatalog, unpauseCatalog } from "./catalog-ops.js";
 import { updatePlatformFlags, getPlatformFlags, isDispatchPaused } from "./platform-flags.js";
 import { setRiderVerificationStatus } from "./boda-fleet.js";
@@ -57,12 +57,29 @@ function deny(staff, action) {
   };
 }
 
-/** OVERRIDE: … or !short-code master commands. */
+/** OVERRIDE: … or !short-code or natural Boss verbs (FORCE RELEASE, VERIFY SHOP, …). */
 export function isOverrideCommand(text) {
   const t = String(text || "").trim();
+  if (!t) return false;
   if (/^\s*OVERRIDE\s*:/i.test(t)) return true;
   if (/^\s*![a-z][\w-]*/i.test(t)) return true;
   if (/^\s*FORCE_PAYOUT\b/i.test(t)) return true;
+  if (/^\s*FORCE\s+RELEASE\b/i.test(t)) return true;
+  if (/^\s*REFUND\s+BUYER\b/i.test(t)) return true;
+  if (/^\s*SPLIT\s+ESCROW\b/i.test(t)) return true;
+  if (/^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
+  if (/^\s*VERIFY\s+SHOP\b/i.test(t)) return true;
+  if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
+  if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
+  if (/^\s*HIDE\s+ITEM\b/i.test(t)) return true;
+  if (/^\s*REASSIGN\s+RIDER\b/i.test(t)) return true;
+  if (/^\s*FORCE\s+RETURN\b/i.test(t)) return true;
+  if (/^\s*UNBAN\s+RIDER\b/i.test(t)) return true;
+  if (/^\s*CLEAR\s+SESSION\b/i.test(t)) return true;
+  if (/^\s*SET\s+MODE\b/i.test(t)) return true;
+  if (/^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(t)) return true;
+  if (/^\s*SYSTEM\s+(PAUSE|RESUME)\b/i.test(t)) return true;
+  if (/^\s*OVERRIDE\s+TEST\s*$/i.test(t)) return true;
   return false;
 }
 
@@ -72,7 +89,7 @@ export function isMasterCommand(text) {
 
 /**
  * Normalize WhatsApp text into an internal command body (no OVERRIDE: / ! prefix).
- * Bang short-codes map to the same verbs as OVERRIDE:.
+ * Bang short-codes and natural Boss verbs map to the same verbs.
  */
 export function normalizeMasterCommand(raw) {
   let t = String(raw || "").trim();
@@ -80,6 +97,53 @@ export function normalizeMasterCommand(raw) {
   // FORCE_PAYOUT SKN-… (keyword without bang)
   const forcePay = t.match(/^FORCE_PAYOUT\s+(SKN-[\w-]+|SK-[\w-]+)/i);
   if (forcePay) return `RELEASE ${forcePay[1].toUpperCase()}`;
+
+  // Natural executive verbs (no bang / OVERRIDE: required)
+  const forceRelease = t.match(/^FORCE\s+RELEASE\s+(SKN-[\w-]+|SK-[\w-]+)/i);
+  if (forceRelease) return `RELEASE ${forceRelease[1].toUpperCase()}`;
+
+  const refundBuyer = t.match(/^REFUND\s+BUYER\s+(SKN-[\w-]+|SK-[\w-]+)/i);
+  if (refundBuyer) return `REFUND ${refundBuyer[1].toUpperCase()}`;
+
+  const split = t.match(/^SPLIT\s+ESCROW\s+(SKN-[\w-]+|SK-[\w-]+)\s+(\d{1,3})\s+(\d{1,3})/i);
+  if (split) return `SPLIT ${split[1].toUpperCase()} ${split[2]} ${split[3]}`;
+
+  const pausePay = t.match(/^PAUSE\s+PAYOUTS?\s+(@?[\w.-]+)/i);
+  if (pausePay) return `PAUSE_PAYOUTS ${pausePay[1]}`;
+
+  const verifyShop = t.match(/^VERIFY\s+SHOP\s+(@?[\w.-]+)/i);
+  if (verifyShop) return `VERIFY_SHOP ${verifyShop[1]}`;
+
+  const suspendShop = t.match(/^SUSPEND\s+SHOP\s+(@?[\w.-]+)\s*(.*)$/i);
+  if (suspendShop) return `SUSPEND_SHOP ${suspendShop[1]} ${suspendShop[2] || ""}`.trim();
+
+  const setComm = t.match(/^SET\s+COMMISSION\s+(@?[\w.-]+)\s+(\d{1,2}(?:\.\d+)?)/i);
+  if (setComm) return `SET_COMMISSION ${setComm[1]} ${setComm[2]}`;
+
+  const hideItem = t.match(/^HIDE\s+ITEM\s+(\S+)/i);
+  if (hideItem) return `HIDE_ITEM ${hideItem[1]}`;
+
+  const reassign = t.match(/^REASSIGN\s+RIDER\s+(SKN-[\w-]+|SK-[\w-]+)\s+(.+)$/i);
+  if (reassign) return `REASSIGN_RIDER ${reassign[1].toUpperCase()} ${reassign[2].trim()}`;
+
+  const forceReturn = t.match(/^FORCE\s+RETURN\s+(SKN-[\w-]+|SK-[\w-]+)/i);
+  if (forceReturn) return `FORCE_RETURN ${forceReturn[1].toUpperCase()}`;
+
+  const clearSession = t.match(/^CLEAR\s+SESSION\s+(.+)$/i);
+  if (clearSession) return `CLEAR_SESSION ${clearSession[1].trim()}`;
+
+  const setMode = t.match(/^SET\s+MODE\s+(AUTOMATED|MANUAL|MUTE|ACTIVE)\s*(.*)$/i);
+  if (setMode) {
+    const mode = setMode[1].toUpperCase();
+    const target = (setMode[2] || "").trim();
+    if (mode === "MANUAL" || mode === "MUTE") return `AGENT MUTE ${target}`.trim();
+    return `AGENT ACTIVE ${target}`.trim();
+  }
+
+  if (/^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(t)) return "BRIEF";
+  if (/^\s*SYSTEM\s+PAUSE\b/i.test(t)) return "SYSTEM PAUSE";
+  if (/^\s*SYSTEM\s+RESUME\b/i.test(t)) return "SYSTEM RESUME";
+  if (/^\s*OVERRIDE\s+TEST\s*$/i.test(t)) return "OVERRIDE_TEST";
 
   if (/^\s*OVERRIDE\s*:/i.test(t)) {
     return t.replace(/^\s*OVERRIDE\s*:/i, "").trim();
@@ -139,25 +203,32 @@ export function normalizeMasterCommand(raw) {
 export function softMapSpokenToMasterCommand(spoken) {
   const t = String(spoken || "").trim();
   if (!t) return null;
-  if (isOverrideCommand(t)) return t;
+  if (isOverrideCommand(t)) {
+    const normalized = normalizeMasterCommand(t);
+    return normalized || t;
+  }
 
   const id = extractOrderIdFromText(t);
   if (id && /\b(release|payout|pay\s+(the\s+)?seller|force[-\s]?pay|force[-\s]?release)\b/i.test(t)) {
-    return `!force-release ${id}`;
+    return `FORCE RELEASE ${id}`;
+  }
+  if (id && /\b(refund\s+(the\s+)?buyer|full\s+refund|return\s+(the\s+)?money)\b/i.test(t)) {
+    return `REFUND BUYER ${id}`;
   }
   if (id && /\b(override\s+state|mark\s+(as\s+)?(completed|cancelled|delivered)|force\s+status)\b/i.test(t)) {
     const st = t.match(/\b(completed|cancelled|canceled|delivered|disputed|confirmed|packed)\b/i);
     if (st) return `!override-state ${id} ${st[1]}`;
   }
   if (/\b(system\s+pause|pause\s+(all\s+)?(dispatch|catalog)|halt\s+dispatch)\b/i.test(t)) {
-    return "!system-pause";
+    return "SYSTEM PAUSE";
   }
   if (/\b(system\s+resume|resume\s+(dispatch|catalog)|unpause)\b/i.test(t)) {
-    return "!system-resume";
+    return "SYSTEM RESUME";
   }
   if (/\b(brief(ing)?|morning\s+status|system\s+status|exec(utive)?\s+summary)\b/i.test(t)) {
-    return "!brief";
+    return "BRIEFING";
   }
+  if (/^override\s+test$/i.test(t)) return "OVERRIDE TEST";
   return null;
 }
 
@@ -174,21 +245,28 @@ function ack(body) {
 function overrideHelp() {
   const title = BOSS_TITLE();
   return (
-    `⚡ *Master command palette* (${title} line / MASTER_ADMIN_SECRET only)\n\n` +
-    `*Bang short-codes (code interceptor — zero LLM)*\n` +
-    `• *!force-release SKN-####* — escrow release / payout rail\n` +
-    `• *!override-state SKN-#### STATUS* — force order state (e.g. completed)\n` +
-    `• *!ban-user +254…* / *!unban-user +254…* — block or clear shopper/rider\n` +
-    `• *!agent-mode MUTE|ACTIVE +254…* — silence or resume bot on a chat\n` +
-    `• *!system-pause* / *!system-resume* — catalog + auto-dispatch\n` +
-    `• *!brief* — executive status briefing now\n` +
-    `• *!help*\n\n` +
-    `*Aliases*\n` +
-    `• *OVERRIDE: RELEASE SKN-####*\n` +
-    `• *OVERRIDE: UNBAN RIDER +254…*\n` +
-    `• *FORCE_PAYOUT SKN-####*\n\n` +
-    `_Roles: SUPER_ADMIN · DISPUTE_MANAGER · LOGISTICS_LEAD · SUPPORT_AGENT (staff_roles)._\n` +
-    `_Authenticated via ADMIN_PHONES / staff_roles on WhatsApp or MASTER_ADMIN_SECRET on REST._`
+    `⚡ *Master command palette* (${title} line — code interceptor, zero LLM)\n\n` +
+    `*Escrow*\n` +
+    `• *FORCE RELEASE SKN-####*\n` +
+    `• *REFUND BUYER SKN-####*\n` +
+    `• *SPLIT ESCROW SKN-#### 50 50*\n` +
+    `• *PAUSE PAYOUTS @handle*\n\n` +
+    `*Shops*\n` +
+    `• *VERIFY SHOP @handle*\n` +
+    `• *SUSPEND SHOP @handle reason*\n` +
+    `• *SET COMMISSION @handle 3*\n` +
+    `• *HIDE ITEM product_id*\n\n` +
+    `*Riders*\n` +
+    `• *REASSIGN RIDER SKN-#### +254…*\n` +
+    `• *FORCE RETURN SKN-####*\n` +
+    `• *UNBAN RIDER +254…*\n\n` +
+    `*Ops*\n` +
+    `• *STATUS* / *BRIEFING*\n` +
+    `• *SYSTEM PAUSE* / *SYSTEM RESUME*\n` +
+    `• *CLEAR SESSION +254…*\n` +
+    `• *SET MODE MANUAL|AUTOMATED +254…*\n` +
+    `• *OVERRIDE TEST* / *PING* / *!help*\n\n` +
+    `_Also: *!force-release*, *OVERRIDE: RELEASE*, *FORCE_PAYOUT*._`
   );
 }
 
@@ -490,6 +568,317 @@ export async function executeMasterAdminCommand(
             isDispatchPaused() ? "on" : "off"
           }`
       ),
+    };
+  }
+
+  if (/^OVERRIDE_TEST\b/i.test(cmd)) {
+    return {
+      ok: true,
+      action: "override_test",
+      reply: ack(
+        "Executive routing is live. Code interceptor owns mutations — RAG/knowledge is bypassed on this line.\n" +
+          "Try *FORCE RELEASE SKN-…* or *!help*."
+      ),
+    };
+  }
+
+  // REFUND BUYER
+  const refund = cmd.match(/^REFUND\s+(SKN-[\w-]+|SK-[\w-]+)/i);
+  if (refund) {
+    const orderId = normalizeOrderId(refund[1]);
+    if (!staffCan("release", staff)) return deny(staff, "refund");
+    const result = refundEscrowOrder(orderId, {
+      reason: "Boss REFUND BUYER",
+      adminLabel: String(adminLabel).slice(0, 80),
+    });
+    if (result?.error) {
+      return {
+        ok: false,
+        action: "refund",
+        reply: ack(`Refund failed for *${orderId}*: ${result.message || result.error}`),
+      };
+    }
+    return {
+      ok: true,
+      action: "refund",
+      reply: ack(
+        `Escrow for *${result.order?.id || orderId}* marked for *100% buyer refund* (OTP bypassed).\n` +
+          `${result.message || "Complete M-Pesa reverse outside the bot if needed."}`
+      ),
+    };
+  }
+
+  // SPLIT ESCROW buyer% seller%
+  const splitCmd = cmd.match(/^SPLIT\s+(SKN-[\w-]+|SK-[\w-]+)\s+(\d{1,3})\s+(\d{1,3})/i);
+  if (splitCmd) {
+    const orderId = normalizeOrderId(splitCmd[1]);
+    const buyerPct = Number(splitCmd[2]);
+    const sellerPct = Number(splitCmd[3]);
+    if (!staffCan("release", staff)) return deny(staff, "split");
+    if (buyerPct + sellerPct !== 100) {
+      return {
+        ok: false,
+        action: "split",
+        reply: ack("Buyer% + Seller% must equal 100 (e.g. *SPLIT ESCROW SKN-4402 50 50*)."),
+      };
+    }
+    const order = getOrder(orderId);
+    if (!order) {
+      return { ok: false, action: "split", reply: ack(`Order *${orderId}* not found.`) };
+    }
+    const total =
+      Number(order.buyerTotalKes) ||
+      Number(order.priceKes) + Number(order.shippingKes || 0) ||
+      Number(order.priceKes) ||
+      0;
+    const buyerKes = Math.round((total * buyerPct) / 100);
+    updateOrderMeta(orderId, {
+      bossSplitAt: Date.now(),
+      bossSplitBuyerPct: buyerPct,
+      bossSplitSellerPct: sellerPct,
+      bossSplitBuyerKes: buyerKes,
+      bossSplitBy: String(adminLabel).slice(0, 80),
+      escrowStatus: "split_pending",
+      disputeHold: false,
+    });
+    if (buyerPct >= 100) {
+      refundEscrowOrder(orderId, { reason: `Boss SPLIT ${buyerPct}/${sellerPct}`, adminLabel });
+    } else if (sellerPct >= 100) {
+      releaseEscrowOrder(orderId, { reason: `Boss SPLIT ${buyerPct}/${sellerPct}`, adminLabel });
+    } else {
+      // Record split intent; release seller share when buyer share is zero-ish remainder path
+      if (sellerPct >= 50) {
+        releaseEscrowOrder(orderId, {
+          reason: `Boss SPLIT seller ${sellerPct}% (buyer ${buyerPct}% manual Till)`,
+          adminLabel,
+        });
+      }
+    }
+    return {
+      ok: true,
+      action: "split",
+      reply: ack(
+        `Split recorded for *${orderId}*: buyer *${buyerPct}%* (≈ KES ${buyerKes.toLocaleString()}) · seller *${sellerPct}%* of KES ${total.toLocaleString()}.\n` +
+          `OTP checks bypassed. Confirm any remaining M-Pesa legs in Command Center if needed.`
+      ),
+    };
+  }
+
+  // Shop verbs
+  const verifyShopCmd = cmd.match(/^VERIFY_SHOP\s+(@?[\w.-]+)/i);
+  if (verifyShopCmd) {
+    const { getSupplierByHandle } = await import("./suppliers.js");
+    const { setShopVerifiedBadge } = await import("./shops-desk.js");
+    const handle = verifyShopCmd[1];
+    const shop = getSupplierByHandle(handle);
+    if (!shop) {
+      return { ok: false, action: "verify_shop", reply: ack(`Shop *${handle}* not found.`) };
+    }
+    const result = setShopVerifiedBadge(shop.id, true);
+    if (result?.error) {
+      return { ok: false, action: "verify_shop", reply: ack(result.message || result.error) };
+    }
+    return {
+      ok: true,
+      action: "verify_shop",
+      reply: ack(`Verified badge ON for *${shop.shopHandle || handle}*.`),
+    };
+  }
+
+  const suspendShopCmd = cmd.match(/^SUSPEND_SHOP\s+(@?[\w.-]+)\s*(.*)$/i);
+  if (suspendShopCmd) {
+    const { getSupplierByHandle } = await import("./suppliers.js");
+    const { freezeShop } = await import("./shops-desk.js");
+    const { hideListingsForSupplier } = await import("./seller-listings.js");
+    const handle = suspendShopCmd[1];
+    const note = String(suspendShopCmd[2] || "Suspended by Boss").trim() || "Suspended by Boss";
+    const shop = getSupplierByHandle(handle);
+    if (!shop) {
+      return { ok: false, action: "suspend_shop", reply: ack(`Shop *${handle}* not found.`) };
+    }
+    const result = freezeShop(shop.id, { note });
+    if (result?.error) {
+      return { ok: false, action: "suspend_shop", reply: ack(result.message || result.error) };
+    }
+    await hideListingsForSupplier(shop.id, { reason: note });
+    return {
+      ok: true,
+      action: "suspend_shop",
+      reply: ack(
+        `Shop *${shop.shopHandle || handle}* frozen. Listings hidden. New orders blocked. Note: ${note}`
+      ),
+    };
+  }
+
+  const pausePayoutsCmd = cmd.match(/^PAUSE_PAYOUTS\s+(@?[\w.-]+)/i);
+  if (pausePayoutsCmd) {
+    const { getSupplierByHandle } = await import("./suppliers.js");
+    const { setShopPayoutHold } = await import("./shops-desk.js");
+    const handle = pausePayoutsCmd[1];
+    const shop = getSupplierByHandle(handle);
+    if (!shop) {
+      return { ok: false, action: "pause_payouts", reply: ack(`Shop *${handle}* not found.`) };
+    }
+    const result = setShopPayoutHold(shop.id, { hold: true, note: "Boss PAUSE PAYOUTS" });
+    if (result?.error) {
+      return { ok: false, action: "pause_payouts", reply: ack(result.message || result.error) };
+    }
+    return {
+      ok: true,
+      action: "pause_payouts",
+      reply: ack(`Payout hold ON for *${shop.shopHandle || handle}* — B2C wallet locked.`),
+    };
+  }
+
+  const setCommCmd = cmd.match(/^SET_COMMISSION\s+(@?[\w.-]+)\s+(\d{1,2}(?:\.\d+)?)/i);
+  if (setCommCmd) {
+    const { getSupplierByHandle } = await import("./suppliers.js");
+    const { setShopCommissionOverride } = await import("./shops-desk.js");
+    const handle = setCommCmd[1];
+    const pct = Number(setCommCmd[2]);
+    const shop = getSupplierByHandle(handle);
+    if (!shop) {
+      return { ok: false, action: "set_commission", reply: ack(`Shop *${handle}* not found.`) };
+    }
+    const result = setShopCommissionOverride(shop.id, pct);
+    if (result?.error) {
+      return { ok: false, action: "set_commission", reply: ack(result.message || result.error) };
+    }
+    return {
+      ok: true,
+      action: "set_commission",
+      reply: ack(`Commission for *${shop.shopHandle || handle}* forced to *${pct}%*.`),
+    };
+  }
+
+  const hideItemCmd = cmd.match(/^HIDE_ITEM\s+(\S+)/i);
+  if (hideItemCmd) {
+    const { takedownListing } = await import("./seller-listings.js");
+    const result = await takedownListing(hideItemCmd[1], "Boss HIDE ITEM");
+    if (result?.error) {
+      return { ok: false, action: "hide_item", reply: ack(result.message || result.error) };
+    }
+    return {
+      ok: true,
+      action: "hide_item",
+      reply: ack(`Listing *${hideItemCmd[1]}* hidden from public search.`),
+    };
+  }
+
+  const forceReturnCmd = cmd.match(/^FORCE_RETURN\s+(SKN-[\w-]+|SK-[\w-]+)/i);
+  if (forceReturnCmd) {
+    const orderId = normalizeOrderId(forceReturnCmd[1]);
+    try {
+      const { forceBuyerNoShowReturn } = await import("./boda-no-show.js");
+      if (typeof forceBuyerNoShowReturn === "function") {
+        const result = await forceBuyerNoShowReturn(orderId, { adminLabel });
+        if (result?.error) {
+          return {
+            ok: false,
+            action: "force_return",
+            reply: ack(result.message || result.error),
+          };
+        }
+        return {
+          ok: true,
+          action: "force_return",
+          reply: ack(
+            result.message ||
+              `Return protocol started for *${orderId}* (rider return fee per live ops rules — typically 50% of trip fee).`
+          ),
+        };
+      }
+    } catch {
+      /* fall through */
+    }
+    updateOrderMeta(orderId, {
+      bossForceReturnAt: Date.now(),
+      bossForceReturnBy: String(adminLabel).slice(0, 80),
+    });
+    return {
+      ok: true,
+      action: "force_return",
+      reply: ack(
+        `Force-return flagged on *${orderId}*. Rider should take item back to vendor; return fee follows live no-show rules (≈50% of trip fee, not 150%).`
+      ),
+    };
+  }
+
+  const reassignCmd = cmd.match(/^REASSIGN_RIDER\s+(SKN-[\w-]+|SK-[\w-]+)\s+(.+)$/i);
+  if (reassignCmd) {
+    const orderId = normalizeOrderId(reassignCmd[1]);
+    const riderPhone = digitsOnly(reassignCmd[2]);
+    const found = await findRiderByPhone(riderPhone);
+    if (found.error) {
+      return {
+        ok: false,
+        action: "reassign_rider",
+        reply: ack(`Rider not found: ${found.message || found.error}`),
+      };
+    }
+    updateOrderMeta(orderId, {
+      bossReassignRiderAt: Date.now(),
+      bossReassignRiderId: found.rider.id,
+      bossReassignRiderPhone: found.rider.phone,
+      bossReassignBy: String(adminLabel).slice(0, 80),
+    });
+    try {
+      const { forceReassignDispatch } = await import("./boda-fleet.js");
+      if (typeof forceReassignDispatch === "function") {
+        const result = await forceReassignDispatch(orderId, found.rider.id, { adminLabel });
+        if (result?.error) {
+          return {
+            ok: false,
+            action: "reassign_rider",
+            reply: ack(result.message || result.error),
+          };
+        }
+        return {
+          ok: true,
+          action: "reassign_rider",
+          reply: ack(
+            result.message ||
+              `Job *${orderId}* reassigned to *${found.rider.fullName || found.rider.phone}*.`
+          ),
+        };
+      }
+    } catch {
+      /* meta already set */
+    }
+    return {
+      ok: true,
+      action: "reassign_rider",
+      reply: ack(
+        `Reassign flagged: *${orderId}* → rider *${found.rider.fullName || found.rider.phone}*. Dispatch engine will pick up the pin on next sync.`
+      ),
+    };
+  }
+
+  const clearSessionCmd = cmd.match(/^CLEAR_SESSION\s+(.+)$/i);
+  if (clearSessionCmd) {
+    const target = digitsOnly(clearSessionCmd[1]);
+    if (target.length < 9) {
+      return {
+        ok: false,
+        action: "clear_session",
+        reply: ack("Usage: *CLEAR SESSION +2547…*"),
+      };
+    }
+    const key = sessionKeyFromPhone(target);
+    try {
+      const sess = await import("./session.js");
+      sess.clearMenuState?.(key);
+      sess.clearPendingOrder?.(key);
+      sess.clearPendingCart?.(key);
+      sess.clearHumanHandoff?.(key);
+    } catch {
+      clearHumanHandoff(key);
+    }
+    setCustomerMeta(key, { bossSessionClearedAt: Date.now() });
+    return {
+      ok: true,
+      action: "clear_session",
+      reply: ack(`Session cleared for *${target}* — menus, pending carts, and mute/handoff reset.`),
     };
   }
 

@@ -41,8 +41,9 @@ describe("ai-prompts MVP training", () => {
       isAdmin: true,
       senderPhone: "254757764009",
     });
-    assert.match(boss, /CRITICAL EXECUTIVE DIRECTIVE|EXECUTIVE DIRECTIVE/);
+    assert.match(boss, /CRITICAL EXECUTIVE DIRECTIVE|CRITICAL EXCEPTION RULE/);
     assert.match(boss, /254757764009/);
+    assert.doesNotMatch(boss, /I don't have those exact details in my records/);
     const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
     assert.doesNotMatch(shopper, /CRITICAL EXECUTIVE DIRECTIVE/);
     assert.doesNotMatch(shopper, /EXECUTIVE DIRECTIVE/);
