@@ -81,3 +81,16 @@ CREATE INDEX IF NOT EXISTS idx_delivery_dispatches_rider
 
 CREATE INDEX IF NOT EXISTS idx_delivery_dispatches_status
   ON delivery_dispatches (status, created_at DESC);
+
+-- Rider delivery-fee ledger (CLEARED stub until M-Pesa B2C lands)
+CREATE TABLE IF NOT EXISTS rider_payouts (
+  id          BIGSERIAL PRIMARY KEY,
+  rider_id    INT REFERENCES riders(id) ON DELETE SET NULL,
+  order_ref   VARCHAR(40) NOT NULL,
+  amount      NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  status      VARCHAR(20) NOT NULL DEFAULT 'CLEARED',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rider_payouts_order_rider
+  ON rider_payouts (UPPER(order_ref), rider_id);
