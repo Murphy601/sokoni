@@ -11,6 +11,14 @@ import {
   calculateDeliveryPayoutSplit,
   formatPayoutSplitMessage,
 } from "../lib/rider-payout-fees.js";
+import {
+  RIDER_B2C_MIN_FLOOR_KES,
+  RIDER_SINGLE_FEE_MANUAL_KES,
+} from "../lib/rider-b2c-guards.js";
+import {
+  extractMpesaDisplayName,
+  namesLikelyMatch,
+} from "../lib/mpesa-name-match.js";
 
 /** Unique-violation Postgres code (phone / national_id / plate). */
 const PG_UNIQUE = "23505";
@@ -132,6 +140,7 @@ function mapDispatch(row) {
     deliveryFeeKes: Number(row.delivery_fee_kes || 0),
     operatingTown: row.operating_town,
     status: row.status,
+    custodyStatus: row.custody_status || null,
     feeStatus: row.fee_status,
     payoutStatus: row.payout_status || null,
     payoutHoldUntil: row.payout_hold_until || null,
@@ -675,15 +684,26 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     };
   }
 
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] pickup columns on accept:", err.message);
+  }
+
+  const pickupOtp = String(randomInt(1000, 9999));
+
   const { rows: updated } = await query(
     `UPDATE delivery_dispatches SET
        rider_id = $2,
        status = 'ACCEPTED',
        accepted_at = NOW(),
+       custody_status = 'ASSIGNED',
+       pickup_otp_hash = $3,
+       pickup_otp_sent_at = NOW(),
        updated_at = NOW()
      WHERE id = $1 AND status = 'REQUESTED'
      RETURNING *`,
-    [row.id, rider.id]
+    [row.id, rider.id, hashOtp(pickupOtp)]
   );
   if (!updated[0]) {
     return { error: "taken", message: `*${id}* was claimed by another rider just now.` };
@@ -731,7 +751,9 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     `Rider: *${rider.fullName}*\n` +
     `Phone: ${rider.phone}\n` +
     `Plate: ${plate}\n` +
-    `Have the parcel ready at: ${updated[0].pickup_address}`;
+    `Have the parcel ready at: ${updated[0].pickup_address}\n\n` +
+    `📦 *PICKUP OTP (give to rider at handoff only):* *${pickupOtp}*\n` +
+    `Do not share this code on chat — speak it when the rider is at your door.`;
   const buyerMsg =
     `🛵 Your order *${id}* is on the way with a Sokoni vetted rider.\n` +
     `• Rider: *${rider.fullName}*\n` +
@@ -745,9 +767,10 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     (Number(updated[0].delivery_fee_kes) > 0
       ? `Fee (held): KES ${Number(updated[0].delivery_fee_kes).toLocaleString()}\n`
       : "") +
-    `\nAfter pickup reply *PICKED ${id}* — buyer gets an OTP.\n` +
-    `At the door reply *CONFIRM ${id} ####* with the buyer's code.\n` +
-    `(Need a new code? Reply *DELIVERED ${id}*)`;
+    `\nAt the shop ask the seller for the *Pickup OTP*, then reply:\n` +
+    `*PICKUP ${id} ####*\n` +
+    `That transfers custody to you. Buyer then gets a delivery code.\n` +
+    `At the door: share live location → *CONFIRM ${id} ####*`;
 
   const sellerTo = updated[0].seller_phone
     ? `${normalizeRiderPhone(updated[0].seller_phone)}@c.us`
@@ -838,12 +861,187 @@ export async function setRiderAvailability({ phone, customerKey = "", available 
   };
 }
 
-export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}) {
+/**
+ * Rider: PICKUP SKN-#### #### — verify seller pickup OTP, transfer custody, send buyer delivery OTP.
+ */
+export async function confirmPickupWithOtp({
+  orderId,
+  code = "",
+  phone,
+  customerKey = "",
+} = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  const id = normalizeOrderId(orderId);
+  const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
+  const otp = String(code || "").replace(/\D/g, "").slice(0, 4);
+  if (!id || !riderPhone) {
+    return { error: "invalid", message: "Reply like: PICKUP SKN-1234 4821" };
+  }
+  if (otp.length !== 4) {
+    return { error: "invalid_otp", message: "Enter the seller's 4-digit Pickup OTP." };
+  }
+
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] pickup columns:", err.message);
+  }
+
+  const { rows: found } = await query(
+    `SELECT d.*, r.phone AS rider_phone, r.full_name AS rider_name
+       FROM delivery_dispatches d
+       JOIN riders r ON r.id = d.rider_id
+      WHERE UPPER(d.order_ref) = UPPER($1)
+        AND r.phone = $2
+        AND d.status IN ('ACCEPTED', 'PICKED_UP')
+      ORDER BY d.id DESC
+      LIMIT 1`,
+    [id, riderPhone]
+  );
+  const dispatch = found[0];
+  if (!dispatch) {
+    return { error: "not_found", message: `No accepted job *${id}* for you.` };
+  }
+
+  if (dispatch.custody_status === "IN_TRANSIT" || dispatch.status === "OTP_SENT") {
+    return {
+      error: "already_picked",
+      message: `⚠️ Order *${id}* is already in transit. Proceed to the buyer — use *CONFIRM ${id} ####* with their delivery code.`,
+    };
+  }
+
+  if (!dispatch.pickup_otp_hash) {
+    // Legacy jobs before pickup OTP — fall through to delivery OTP path.
+    return markBodaPickedUp({ orderId: id, phone: riderPhone, customerKey, legacySkipPickupOtp: true });
+  }
+
+  if (hashOtp(otp) !== dispatch.pickup_otp_hash) {
+    return {
+      error: "bad_pickup_otp",
+      message: `❌ Invalid Pickup OTP. Ask the seller for the correct 4-digit code (spoken at handoff).`,
+    };
+  }
+
+  const deliveryOtp = String(randomInt(1000, 9999));
+  const { rows } = await query(
+    `UPDATE delivery_dispatches SET
+       status = 'OTP_SENT',
+       custody_status = 'IN_TRANSIT',
+       picked_up_at = COALESCE(picked_up_at, NOW()),
+       pickup_otp_hash = NULL,
+       delivery_otp_hash = $2,
+       delivery_otp_sent_at = NOW(),
+       otp_failed_attempts = 0,
+       otp_locked_at = NULL,
+       updated_at = NOW(),
+       meta = COALESCE(meta, '{}'::jsonb) || $3::jsonb
+     WHERE id = $1
+     RETURNING *`,
+    [
+      dispatch.id,
+      hashOtp(deliveryOtp),
+      JSON.stringify({
+        custodyTransferredAt: new Date().toISOString(),
+        pickupVerified: true,
+      }),
+    ]
+  );
+
+  const order = getOrder(id);
+  const { sendText } = await import("./whatsapp.js");
+  const feeKes = Number(rows[0].delivery_fee_kes || 0);
+
+  if (order?.customerKey) {
+    try {
+      await sendText(
+        order.customerKey,
+        `🔐 *SOKONI DELIVERY CONFIRMATION CODE*\n\n` +
+          `Your Order *${id}* is currently on its way.\n` +
+          `• *Delivery Confirmation Code:* *${deliveryOtp}*\n\n` +
+          `⚠️ Give this 4-digit code to the rider ONLY after you have received and verified your package.\n` +
+          `Or reply *YES ${id}* / *CODE ${deliveryOtp}* once you have the item.`
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] delivery OTP after pickup:", err.message);
+    }
+  }
+
+  const sellerTo = rows[0].seller_phone
+    ? `${normalizeRiderPhone(rows[0].seller_phone)}@c.us`
+    : null;
+  if (sellerTo) {
+    try {
+      await sendText(
+        sellerTo,
+        `✅ Pickup verified for *${id}*. Custody is with rider *${dispatch.rider_name || "assigned"}*. Parcel is in transit.`
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] seller pickup ack:", err.message);
+    }
+  }
+
+  updateOrderMeta(id, {
+    bodaStatus: "OTP_SENT",
+    bodaCustody: "IN_TRANSIT",
+    bodaPickedUpAt: Date.now(),
+  });
+
+  const cleanRiderMsg =
+    `✅ *PICKUP CONFIRMED!* You now have custody of *${id}*.\n` +
+    `Buyer has their delivery code.\n` +
+    `At drop-off: 1) share *live WhatsApp location*, then 2) *CONFIRM ${id} ####*\n` +
+    `(3 wrong tries locks your account)` +
+    (feeKes > 0 ? `\n\nFee held: KES ${feeKes.toLocaleString()} — credited after CONFIRM.` : "");
+
+  return { ok: true, dispatch: mapDispatch(rows[0]), message: cleanRiderMsg };
+}
+
+/**
+ * Legacy PICKED without OTP — prompts for PICKUP when a pickup OTP exists.
+ */
+export async function markBodaPickedUp({
+  orderId,
+  phone,
+  customerKey = "",
+  legacySkipPickupOtp = false,
+} = {}) {
   if (!isDbEnabled()) return { error: "database_not_configured" };
   const id = normalizeOrderId(orderId);
   const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
   if (!id || !riderPhone) {
-    return { error: "invalid", message: "Reply like: PICKED SKN-1234" };
+    return { error: "invalid", message: "Reply like: PICKUP SKN-1234 4821" };
+  }
+
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch {
+    /* ignore */
+  }
+
+  const { rows: found } = await query(
+    `SELECT d.pickup_otp_hash, d.custody_status, d.status
+       FROM delivery_dispatches d
+       JOIN riders r ON r.id = d.rider_id
+      WHERE UPPER(d.order_ref) = UPPER($1)
+        AND r.phone = $2
+        AND d.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT')
+      ORDER BY d.id DESC
+      LIMIT 1`,
+    [id, riderPhone]
+  );
+  const row = found[0];
+  if (!row) {
+    return { error: "not_found", message: `No accepted job *${id}* for you.` };
+  }
+
+  if (!legacySkipPickupOtp && row.pickup_otp_hash && row.custody_status !== "IN_TRANSIT") {
+    return {
+      error: "pickup_otp_required",
+      message:
+        `Ask the seller for the *Pickup OTP*, then reply:\n` +
+        `*PICKUP ${id} ####*\n` +
+        `Custody transfers only after that code is verified.`,
+    };
   }
 
   // Generate delivery OTP at pickup — buyer holds it until the package is verified.
@@ -851,7 +1049,9 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
   const { rows } = await query(
     `UPDATE delivery_dispatches d SET
        status = 'OTP_SENT',
+       custody_status = 'IN_TRANSIT',
        picked_up_at = COALESCE(d.picked_up_at, NOW()),
+       pickup_otp_hash = NULL,
        delivery_otp_hash = $3,
        delivery_otp_sent_at = NOW(),
        otp_failed_attempts = 0,
@@ -866,6 +1066,12 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
     [id, riderPhone, hashOtp(otp)]
   );
   if (!rows[0]) {
+    if (row.status === "OTP_SENT") {
+      return {
+        ok: true,
+        message: `Already in transit for *${id}*. At the door: *CONFIRM ${id} ####* with the buyer's code.`,
+      };
+    }
     return { error: "not_found", message: `No accepted job *${id}* for you.` };
   }
 
@@ -887,7 +1093,11 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
     }
   }
 
-  updateOrderMeta(id, { bodaStatus: "OTP_SENT", bodaPickedUpAt: Date.now() });
+  updateOrderMeta(id, {
+    bodaStatus: "OTP_SENT",
+    bodaCustody: "IN_TRANSIT",
+    bodaPickedUpAt: Date.now(),
+  });
 
   const cleanRiderMsg =
     `📦 Marked *${id}* picked up — OTP sent to the buyer.\n` +
@@ -900,7 +1110,7 @@ export async function markBodaPickedUp({ orderId, phone, customerKey = "" } = {}
 }
 
 /**
- * Rider: DELIVERED SKN-#### → re-send OTP to buyer (fallback if pickup OTP was missed).
+ * Rider: DELIVERED SKN-#### → re-send delivery OTP (only after pickup custody transferred).
  */
 export async function markBodaDeliveredRequestOtp({ orderId, phone, customerKey = "" } = {}) {
   if (!isDbEnabled()) return { error: "database_not_configured" };
@@ -910,22 +1120,32 @@ export async function markBodaDeliveredRequestOtp({ orderId, phone, customerKey 
   const { rows } = await query(
     `UPDATE delivery_dispatches d SET
        status = 'OTP_SENT',
+       custody_status = COALESCE(NULLIF(d.custody_status, ''), 'IN_TRANSIT'),
        delivery_otp_hash = $3,
        delivery_otp_sent_at = NOW(),
        otp_failed_attempts = 0,
        otp_locked_at = NULL,
-       status = 'OTP_SENT',
        updated_at = NOW()
      FROM riders r
      WHERE UPPER(d.order_ref) = UPPER($1)
        AND d.rider_id = r.id
        AND r.phone = $2
-       AND d.status IN ('ACCEPTED','PICKED_UP','OTP_SENT','OTP_LOCKED')
+       AND d.status IN ('PICKED_UP','OTP_SENT','OTP_LOCKED')
+       AND (
+         d.custody_status = 'IN_TRANSIT'
+         OR d.picked_up_at IS NOT NULL
+         OR d.pickup_otp_hash IS NULL
+       )
      RETURNING d.*`,
     [id, riderPhone, hashOtp(otp)]
   );
   if (!rows[0]) {
-    return { error: "not_found", message: `No active boda job *${id}* for you.` };
+    return {
+      error: "not_found",
+      message:
+        `No in-transit job *${id}* for you. Complete seller pickup first:\n` +
+        `*PICKUP ${id} ####*`,
+    };
   }
 
   const order = getOrder(id);
@@ -977,12 +1197,18 @@ async function ensureRiderPayoutsTable() {
       ADD COLUMN IF NOT EXISTS gross_delivery_fee NUMERIC(12, 2),
       ADD COLUMN IF NOT EXISTS platform_commission NUMERIC(12, 2),
       ADD COLUMN IF NOT EXISTS transaction_fee NUMERIC(12, 2),
-      ADD COLUMN IF NOT EXISTS net_amount_paid NUMERIC(12, 2)
+      ADD COLUMN IF NOT EXISTS net_amount_paid NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS retry_after TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS retry_count INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS requires_manual_approval BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS payout_hold_reason TEXT,
+      ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS approved_by VARCHAR(80)
   `);
 }
 
 /**
- * Apply 10% + B2C tariff to rider_payouts and mark CLEARED (or insert if missing).
+ * Apply 10% + B2C tariff to rider_payouts and mark CLEARED (or NEEDS_APPROVAL if fee > cap).
  */
 async function clearRiderPayoutWithFeeSplit({
   riderId,
@@ -998,15 +1224,23 @@ async function clearRiderPayoutWithFeeSplit({
   const split = calculateDeliveryPayoutSplit(deliveryFee);
   await ensureRiderPayoutsTable();
 
+  const needsApproval = split.originalDeliveryFee > RIDER_SINGLE_FEE_MANUAL_KES;
+  const nextStatus = needsApproval ? "NEEDS_APPROVAL" : "CLEARED";
+  const holdReason = needsApproval
+    ? `Single delivery fee KES ${split.originalDeliveryFee} exceeds auto-payout cap KES ${RIDER_SINGLE_FEE_MANUAL_KES}`
+    : null;
+
   const statusList = Array.isArray(statuses) && statuses.length ? statuses : ["PENDING_CLEAR", "ON_HOLD"];
   const { rows } = await query(
     `UPDATE rider_payouts SET
-       status = 'CLEARED',
+       status = $8,
        gross_delivery_fee = $3,
        platform_commission = $4,
        transaction_fee = $5,
        net_amount_paid = $6,
-       amount = $6
+       amount = $6,
+       requires_manual_approval = $9,
+       payout_hold_reason = $10
      WHERE rider_id = $1
        AND UPPER(order_ref) = UPPER($2)
        AND status = ANY($7::text[])
@@ -1019,6 +1253,9 @@ async function clearRiderPayoutWithFeeSplit({
       split.mpesaTariff,
       split.netRiderPayout,
       statusList,
+      nextStatus,
+      needsApproval,
+      holdReason,
     ]
   );
 
@@ -1026,9 +1263,10 @@ async function clearRiderPayoutWithFeeSplit({
     await query(
       `INSERT INTO rider_payouts (
          rider_id, order_ref, amount, status,
-         gross_delivery_fee, platform_commission, transaction_fee, net_amount_paid
+         gross_delivery_fee, platform_commission, transaction_fee, net_amount_paid,
+         requires_manual_approval, payout_hold_reason
        )
-       SELECT $1, $2, $3, 'CLEARED', $4, $5, $6, $3
+       SELECT $1, $2, $3, $4, $5, $6, $7, $3, $8, $9
         WHERE NOT EXISTS (
           SELECT 1 FROM rider_payouts
            WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2)
@@ -1037,14 +1275,34 @@ async function clearRiderPayoutWithFeeSplit({
         rid,
         ref,
         split.netRiderPayout,
+        nextStatus,
         split.originalDeliveryFee,
         split.platformCommission,
         split.mpesaTariff,
+        needsApproval,
+        holdReason,
       ]
     );
   }
 
-  return { ok: true, split };
+  if (needsApproval) {
+    try {
+      const { notifyAdminEvent } = await import("./communication-hub.js");
+      await notifyAdminEvent("DISPUTE_OR_HELP", {
+        orderId: ref,
+        details:
+          `⚠️ *HIGH FEE — MANUAL PAYOUT APPROVAL*\n` +
+          `Order *${ref}* · rider #${rid}\n` +
+          `Gross fee KES ${split.originalDeliveryFee.toLocaleString()} (cap ${RIDER_SINGLE_FEE_MANUAL_KES}).\n` +
+          `Net credit KES ${split.netRiderPayout.toLocaleString()} held as NEEDS_APPROVAL.\n` +
+          `Approve via admin boda desk / API before B2C.`,
+      });
+    } catch (err) {
+      console.warn("[boda-fleet] high-fee admin alert:", err.message);
+    }
+  }
+
+  return { ok: true, split, needsApproval, status: nextStatus };
 }
 
 /**
@@ -1130,7 +1388,10 @@ async function ensureOtpSafeguardColumns() {
       ADD COLUMN IF NOT EXISTS rider_location_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS dispute_window_ends_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS payout_status VARCHAR(30) DEFAULT 'HOLD_ESCROW',
-      ADD COLUMN IF NOT EXISTS payout_hold_until TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS payout_hold_until TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pickup_otp_hash VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS pickup_otp_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS custody_status VARCHAR(20) DEFAULT 'ASSIGNED'
   `);
 }
 
@@ -1441,6 +1702,7 @@ export async function verifyDeliveryOTP({
   await query(
     `UPDATE delivery_dispatches SET
        status = 'DELIVERED',
+       custody_status = 'DELIVERED',
        delivered_at = NOW(),
        fee_status = 'PENDING_MPESA',
        payout_status = 'HOLD_ESCROW',
@@ -1836,10 +2098,11 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
 
   const feeKes = Number(d.delivery_fee_kes || 0);
   let split = calculateDeliveryPayoutSplit(feeKes);
+  let cleared = null;
 
   if (d.rider_id && feeKes > 0) {
     try {
-      const cleared = await clearRiderPayoutWithFeeSplit({
+      cleared = await clearRiderPayoutWithFeeSplit({
         riderId: d.rider_id,
         orderRef: d.order_ref,
         deliveryFee: feeKes,
@@ -1892,12 +2155,19 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
   if (d.rider_phone && feeKes > 0) {
     try {
       const { sendText } = await import("./whatsapp.js");
-      const msg =
-        reason === "dispute_window_elapsed" || reason === "admin_reactivate"
-          ? formatPayoutSplitMessage(d.order_ref, split)
-          : `💵 Delivery fee for *${d.order_ref}* cleared.\n` +
-            `• Gross KES ${split.originalDeliveryFee.toLocaleString()} → net *KES ${split.netRiderPayout.toLocaleString()}*\n` +
-            `(10% platform + M-Pesa B2C fee deducted). Auto-payout via M-Pesa when balance ≥ KES 100.`;
+      let msg;
+      if (cleared?.needsApproval) {
+        msg =
+          `💰 Earnings for *${d.order_ref}* calculated (net *KES ${split.netRiderPayout.toLocaleString()}*).\n` +
+          `Gross fee KES ${split.originalDeliveryFee.toLocaleString()} is above the auto-payout threshold — Sokoni ops must approve before M-Pesa.`;
+      } else if (reason === "dispute_window_elapsed" || reason === "admin_reactivate") {
+        msg = formatPayoutSplitMessage(d.order_ref, split);
+      } else {
+        msg =
+          `💵 Delivery fee for *${d.order_ref}* cleared.\n` +
+          `• Gross KES ${split.originalDeliveryFee.toLocaleString()} → net *KES ${split.netRiderPayout.toLocaleString()}*\n` +
+          `(10% platform + M-Pesa B2C fee deducted). Auto-payout via M-Pesa when balance ≥ KES ${RIDER_B2C_MIN_FLOOR_KES}.`;
+      }
       await sendText(`${normalizeRiderPhone(d.rider_phone)}@c.us`, msg);
     } catch (err) {
       console.warn("[boda-fleet] fee rider notify skipped:", err.message);
@@ -1908,6 +2178,7 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
     ok: true,
     feeKes,
     split,
+    needsApproval: Boolean(cleared?.needsApproval),
     orderRef: d.order_ref,
     riderPhone: d.rider_phone || null,
   };
@@ -2125,6 +2396,21 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
   if (picked) {
     const result = await markBodaPickedUp({ orderId: picked[1], phone, customerKey });
     await sendText(customerKey, result.message || result.error || "Could not update.");
+    return true;
+  }
+
+  // Rider: PICKUP SKN-#### 1234 (seller OTP → custody transfer)
+  const pickupCmd = trimmed.match(
+    /^PICKUP\s+(SKN?-?\d{1,6}(?:-\d+)?)\s+(\d{4})\b/i
+  );
+  if (pickupCmd) {
+    const result = await confirmPickupWithOtp({
+      orderId: pickupCmd[1],
+      code: pickupCmd[2],
+      phone,
+      customerKey,
+    });
+    await sendText(customerKey, result.message || result.error || "Could not confirm pickup.");
     return true;
   }
 
@@ -2468,13 +2754,115 @@ export function bodaSupportSummary() {
       "ACCEPT SKN-####",
       "SET ZONE NAIROBI|THIKA",
       "AVAILABLE / OFFLINE",
-      "PICKED SKN-####",
+      "PICKUP SKN-#### 1234 (seller OTP)",
+      "PICKED SKN-#### (legacy → prompts for PICKUP)",
       "share live WhatsApp location",
       "CONFIRM SKN-#### 1234",
       "DISPUTE SKN-#### (buyer, 15 min)",
       "DELIVERED SKN-####",
       "CODE 1234",
     ],
+    payoutGuards: {
+      minFloorKes: RIDER_B2C_MIN_FLOOR_KES,
+      singleFeeManualKes: RIDER_SINGLE_FEE_MANUAL_KES,
+    },
     botPublicUrl: config.botPublicUrl || null,
   };
+}
+
+/**
+ * Admin: approve a NEEDS_APPROVAL rider payout so it becomes CLEARED for B2C.
+ */
+export async function approveRiderPayout({ payoutId = null, orderId = "", approvedBy = "admin" } = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  await ensureRiderPayoutsTable();
+  const id = Number(payoutId);
+  const ref = orderId ? normalizeOrderId(orderId) || String(orderId).toUpperCase() : null;
+
+  let rows;
+  if (Number.isInteger(id) && id > 0) {
+    ({ rows } = await query(
+      `UPDATE rider_payouts SET
+         status = 'CLEARED',
+         requires_manual_approval = FALSE,
+         approved_at = NOW(),
+         approved_by = $2,
+         payout_hold_reason = NULL
+       WHERE id = $1 AND status = 'NEEDS_APPROVAL'
+       RETURNING *`,
+      [id, String(approvedBy || "admin").slice(0, 80)]
+    ));
+  } else if (ref) {
+    ({ rows } = await query(
+      `UPDATE rider_payouts SET
+         status = 'CLEARED',
+         requires_manual_approval = FALSE,
+         approved_at = NOW(),
+         approved_by = $2,
+         payout_hold_reason = NULL
+       WHERE UPPER(order_ref) = UPPER($1) AND status = 'NEEDS_APPROVAL'
+       RETURNING *`,
+      [ref, String(approvedBy || "admin").slice(0, 80)]
+    ));
+  } else {
+    return { error: "invalid", message: "Provide payoutId or orderId." };
+  }
+
+  if (!rows.length) {
+    return { error: "not_found", message: "No NEEDS_APPROVAL payout matched." };
+  }
+  return { ok: true, success: true, payouts: rows };
+}
+
+/**
+ * Compare B2C ReceiverPartyPublicName to rider.full_name; flag mismatches for audit.
+ */
+export async function auditRiderMpesaName({ riderId, receiverPublicName } = {}) {
+  if (!isDbEnabled() || !riderId || !receiverPublicName) return { matched: false, skipped: true };
+  const display = extractMpesaDisplayName(receiverPublicName);
+  const { rows } = await query(`SELECT id, full_name, phone FROM riders WHERE id = $1 LIMIT 1`, [
+    Number(riderId),
+  ]);
+  const rider = rows[0];
+  if (!rider) return { matched: false, skipped: true };
+
+  const verdict = namesLikelyMatch(rider.full_name, display);
+  const status = verdict.match ? "MATCH" : "MISMATCH";
+
+  await query(
+    `ALTER TABLE riders
+       ADD COLUMN IF NOT EXISTS mpesa_account_name VARCHAR(160),
+       ADD COLUMN IF NOT EXISTS mpesa_name_match_status VARCHAR(20) DEFAULT 'UNKNOWN',
+       ADD COLUMN IF NOT EXISTS mpesa_name_flagged_at TIMESTAMPTZ,
+       ADD COLUMN IF NOT EXISTS mpesa_name_last_checked_at TIMESTAMPTZ`
+  ).catch(() => {});
+
+  await query(
+    `UPDATE riders SET
+       mpesa_account_name = $2,
+       mpesa_name_match_status = $3,
+       mpesa_name_last_checked_at = NOW(),
+       mpesa_name_flagged_at = CASE WHEN $3 = 'MISMATCH' THEN NOW() ELSE mpesa_name_flagged_at END,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [rider.id, String(display).slice(0, 160), status]
+  );
+
+  if (!verdict.match) {
+    try {
+      const { notifyAdminEvent } = await import("./communication-hub.js");
+      await notifyAdminEvent("DISPUTE_OR_HELP", {
+        orderId: null,
+        details:
+          `🚩 *M-PESA NAME MISMATCH*\n` +
+          `Rider #${rider.id} *${rider.full_name}* (${rider.phone})\n` +
+          `M-Pesa received as: *${display}*\n` +
+          `Flag for manual audit before further payouts.`,
+      });
+    } catch (err) {
+      console.warn("[boda-fleet] mpesa name alert:", err.message);
+    }
+  }
+
+  return { matched: verdict.match, status, display, reason: verdict.reason };
 }
