@@ -459,6 +459,21 @@ export async function addDisputeEvidence({
      RETURNING id, kind, url, note, created_at`,
     [d.id, uid, cleanKind, cleanUrl, cleanNote || null]
   );
+
+  // MAS Phase 1/4 shadow — never auto-decides escrow
+  try {
+    const { shadowDisputeVideo, shadowInboundText } = await import("./mas/index.js");
+    if (cleanUrl && /\.(mp4|webm|mov)(\?|$)/i.test(cleanUrl)) {
+      shadowDisputeVideo(cleanUrl, { orderId: d.orderRef, disputeId: d.id, kind: cleanKind });
+    } else if (cleanUrl) {
+      const { shadowListingImage } = await import("./mas/index.js");
+      shadowListingImage(cleanUrl, { caption: cleanNote || "dispute evidence" });
+    }
+    if (cleanNote) shadowInboundText(cleanNote, { channel: "dispute", disputeId: d.id });
+  } catch (err) {
+    console.warn("[disputes] MAS shadow skipped:", err.message);
+  }
+
   const actorRole = uid === d.buyerUserId ? "buyer" : "seller";
   await appendEvent(d.id, actorRole, "evidence_added", cleanKind);
   await query(`UPDATE order_disputes SET status = 'under_review', updated_at = NOW() WHERE id = $1 AND status = 'open'`, [

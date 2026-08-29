@@ -1099,9 +1099,18 @@ export async function attachVideoFromCleanImageUrls(imageUrls) {
     }
   }
 
-  // No Cloudinary clip URL possible — optional HyperFrames / Remotion.
+  // No Cloudinary clip URL possible — optional HyperFrames / Remotion (unchanged order).
   const fallback = await tryClipFallbacks(list);
   if (fallback?.videoUrl) return { videoUrl: fallback.videoUrl, videoKind: "preview" };
+
+  // MAS last resort ONLY after Cloudinary → HeyGen → Remotion all failed (flag off by default).
+  try {
+    const { tryMasClipLastResort } = await import("./mas/assist.js");
+    const masClip = await tryMasClipLastResort(list, { reason: "cloudinary_heygen_remotion_exhausted" });
+    if (masClip?.videoUrl) return masClip;
+  } catch (err) {
+    console.warn("[listing-studio] MAS clip last-resort skipped:", err.message);
+  }
   return null;
 }
 

@@ -752,6 +752,18 @@ export async function formatListingBrowseLabel(product) {
  * @param {string} [caption]
  */
 export async function generateListingFromImage(buffer, mimetype, caption = "") {
+  // MAS Phase 1 shadow — does not change primary OpenRouter→NVIDIA→Gemini chain
+  try {
+    const { shadowInboundText, shadowTask } = await import("./mas/index.js");
+    const { MAS_TASKS } = await import("./mas/tasks.js");
+    shadowInboundText(String(caption || "").slice(0, 2000), { channel: "listing" });
+    shadowTask(MAS_TASKS.FAST_VISION, {
+      text: `Listing draft assist (shadow). Caption: ${String(caption || "").slice(0, 400)}`,
+    });
+  } catch {
+    /* fail-soft */
+  }
+
   const prompt = await buildListingPrompt(caption);
   let lastError = null;
 

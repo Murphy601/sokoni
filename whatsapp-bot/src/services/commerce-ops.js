@@ -521,6 +521,18 @@ export async function transcribeWhatsAppAudio({
   languageHint = undefined,
 } = {}) {
   if (!config.openai?.apiKey || !buffer?.length) {
+    // Primary STT unavailable — optional MAS voice assist (flag off by default)
+    try {
+      const { tryMasSttAssist } = await import("./mas/assist.js");
+      const mas = await tryMasSttAssist({
+        audioBuffer: buffer,
+        mimeType: mimetype,
+        filename: "voice.ogg",
+      });
+      if (mas?.text) return { ok: true, text: mas.text, model: "mas_stt", language: languageHint || null };
+    } catch {
+      /* ignore */
+    }
     return { ok: false, error: "stt_unavailable", text: "" };
   }
   try {
@@ -540,6 +552,17 @@ export async function transcribeWhatsAppAudio({
     return { ok: Boolean(text), text, model, language: lang || null };
   } catch (err) {
     console.warn("[commerce-ops] whisper/stt:", err.message);
+    try {
+      const { tryMasSttAssist } = await import("./mas/assist.js");
+      const mas = await tryMasSttAssist({
+        audioBuffer: buffer,
+        mimeType: mimetype,
+        filename: "voice.ogg",
+      });
+      if (mas?.text) return { ok: true, text: mas.text, model: "mas_stt_fallback", language: languageHint || null };
+    } catch (masErr) {
+      console.warn("[commerce-ops] MAS STT assist:", masErr.message);
+    }
     return { ok: false, error: err.message, text: "" };
   }
 }

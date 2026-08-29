@@ -46,6 +46,7 @@ import { paystackMeta, resolvePayoutRail } from "./services/paystack-transfers.j
 import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
+import { masMeta } from "./services/mas/index.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 import {
   corsAllowlist,
@@ -242,6 +243,7 @@ app.get("/health", async (_req, res) => {
       groqConfigured: Boolean(config.groq?.apiKey),
       openrouterConfigured: Boolean(config.openai?.apiKey),
     },
+    mas: masMeta(),
     aiAgent: agent.name,
     aiTools: agent.tools,
     feedPhase: feed.phase,
