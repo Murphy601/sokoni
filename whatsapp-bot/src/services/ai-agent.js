@@ -15,8 +15,9 @@ import {
   isSellerTopic,
   isOffTopicIntent,
   isContactInfoIntent,
+  isHowItWorksIntent,
 } from "./ai-tools.js";
-import { formatWhatsAppLink, humanHandoffAck, supportContactCard } from "./trust-copy.js";
+import { formatWhatsAppLink, humanHandoffAck, supportContactCard, howItWorksMessage } from "./trust-copy.js";
 import { runAgentGraph } from "./agent-graph.js";
 import {
   llmRouterMeta,
@@ -552,6 +553,23 @@ export async function runAgentTurn({
       products: [],
       tracking: trackingPayload,
       contactCard: true,
+      specialist,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
+    };
+  }
+
+  // DETERMINISTIC how-it-works card — spaced steps (no LLM wall of text)
+  if (isHowItWorksIntent(text)) {
+    const reply = howItWorksMessage(channel);
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log("[ai-agent] how-it-works card (no LLM)");
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      howItWorksCard: true,
       specialist,
       graph: graph.graph,
       threadId: resolveThreadId(phone || sessionKey),

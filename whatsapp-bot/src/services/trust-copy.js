@@ -153,15 +153,26 @@ export function orderConfirmedMessage(args) {
   return prepaidOrderPlacedMessage(args);
 }
 
-export function howItWorksMessage() {
+export function howItWorksMessage(channel = "whatsapp") {
+  if (channel === "web") {
+    return (
+      `How Sokoni works:\n\n` +
+      `1. Browse sokonimall.com or ask on WhatsApp.\n` +
+      `2. Order on WhatsApp (reply with the item number).\n` +
+      `3. Pay M-Pesa STK — funds stay in prepaid escrow until delivery is confirmed.\n` +
+      `4. Local delivery: seller gives a Pickup OTP; you confirm with a Delivery OTP (*CONFIRM SKN-#### ####*).\n` +
+      `5. Track anytime with your SKN-####.\n\n` +
+      `Support: support@sokonimall.com · ${formatPhoneDisplay()}`
+    );
+  }
   return (
-    `*How Sokoni works*\n\n` +
-    `1. Browse WhatsApp or sokonimall.com\n` +
-    `2. Reply *1* to order\n` +
-    `3. Send county → confirm fee → name + phone\n` +
-    `4. Pay M-Pesa (escrow)\n` +
-    `5. Track with *SKN-####*\n\n` +
-    `Type *menu* anytime.`
+    `🔒 *How Sokoni works*\n\n` +
+    `1️⃣ Browse sokonimall.com or WhatsApp (*menu*), then order.\n\n` +
+    `2️⃣ Pay *M-Pesa STK* — money stays in *escrow* until you confirm delivery.\n\n` +
+    `3️⃣ Local orders: Sokoni pins a rider. Seller gives a *4-digit Pickup OTP*; rider replies *PICKUP SKN-#### ####*.\n\n` +
+    `4️⃣ At delivery you give a *4-digit Delivery OTP*; rider replies *CONFIRM SKN-#### ####*.\n\n` +
+    `5️⃣ Track anytime with your *SKN-####*.\n\n` +
+    `_No COD. Never pay personal tills._ Type *menu* to shop.`
   );
 }
 

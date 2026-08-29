@@ -133,11 +133,30 @@ export function isSupportIntent(text) {
   );
 }
 
+/**
+ * "How does Sokoni / everything work?" — deterministic spaced card (no LLM wall of text).
+ */
+export function isHowItWorksIntent(text) {
+  const lower = String(text || "").toLowerCase().trim();
+  if (!lower) return false;
+  if (
+    /\b(how (does|do|is) (everything|sokoni|this|it|the (process|system|platform|escrow)) (work|handled|happen)|how (sokoni|everything) works|explain (how|the process|escrow)|how (do|does) (prepaid|escrow|delivery) work)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  // Short confirmations after a how-it-works answer are handled elsewhere; this is the ask itself.
+  if (/^(how (does|do|is) (it|this|everything)\??)$/i.test(lower)) return true;
+  return false;
+}
+
 /** How to buy / how can you help / guide me. */
 export function isGuideIntent(text) {
   const lower = String(text || "").toLowerCase();
   // "how are you" is small talk, not a buy guide
   if (isGreetingIntent(lower, { allowGuideOverlap: true })) return false;
+  if (isHowItWorksIntent(text)) return false;
   return /\b(how (can|do) (you|i)|help me|guide me|make a purchase|how to (buy|order|shop|pay|sell|list)|what can you (do|help)|assist me|what do you (sell|have|offer)|how does (sokoni|this|it) work)\b/i.test(
     lower
   );
