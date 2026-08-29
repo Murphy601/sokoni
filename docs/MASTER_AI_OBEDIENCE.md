@@ -8,61 +8,60 @@ Multi-layer authority so the Boss line controls the platform **in code**, not by
 Incoming WhatsApp / REST
         │
         ▼
- Identity: ADMIN_PHONES (WA) or MASTER_ADMIN_SECRET / ADMIN_SETUP_TOKEN (API)
+ Identity: ADMIN_PHONES / hardwired last-9 757764009 / MASTER_ADMIN_SECRET
         │
    ┌────┴────┐
    │ Boss    │ Regular user
    ▼         ▼
- ! / OVERRIDE:     Standard escrow / OTP / AI
- code interceptor  + PUBLIC_ESCROW_GUARDRAIL prompt
- (no LLM)
+ Natural verbs / ! / OVERRIDE:     Standard escrow / OTP / AI
+ code interceptor (no LLM, no RAG)  + PUBLIC_ESCROW_GUARDRAIL
    │
    ▼
- Freeform Boss chat → ADMIN SYSTEM PROMPT (executive tone;
- mutations still via ! short-codes)
+ Freeform Boss chat → Boss-only system prompt (no “I don’t have those details”)
 ```
 
-## WhatsApp short-codes (`ADMIN_PHONES` only)
+## Natural executive commands (code interceptor)
 
 | Command | Effect |
 |---------|--------|
-| `!force-release SKN-####` | Escrow release (same as `OVERRIDE: RELEASE`) |
-| `!override-state SKN-#### STATUS` | Force order status (`force: true`) |
-| `!ban-user +254…` / `!unban-user +254…` | Session ban flag (+ rider suspend/verify if found) |
-| `!agent-mode MUTE\|ACTIVE +254…` | Silence / resume bot on a chat |
-| `!system-pause` / `!system-resume` | Catalog + auto-dispatch pause |
-| `FORCE_PAYOUT SKN-####` | Alias for release |
-| `OVERRIDE: …` | Long-form aliases (still supported) |
-| `!help` | Palette |
+| `FORCE RELEASE SKN-####` | Escrow release to seller (OTP bypass) |
+| `REFUND BUYER SKN-####` | Full buyer refund path |
+| `SPLIT ESCROW SKN-#### 50 50` | Record split + release/refund rails |
+| `PAUSE PAYOUTS @handle` | Seller payout hold |
+| `VERIFY SHOP @handle` | Verified badge on |
+| `SUSPEND SHOP @handle reason` | Freeze shop + hide listings |
+| `SET COMMISSION @handle 3` | Force commission % |
+| `HIDE ITEM product_id` | Takedown one listing |
+| `REASSIGN RIDER SKN-#### +254…` | Flag / force reassign |
+| `FORCE RETURN SKN-####` | Return-to-vendor protocol |
+| `UNBAN RIDER +254…` | Clear rider suspension |
+| `STATUS` / `BRIEFING` | Executive briefing |
+| `SYSTEM PAUSE` / `SYSTEM RESUME` | Catalog + dispatch halt |
+| `CLEAR SESSION +254…` | Reset stuck chat state |
+| `SET MODE MANUAL\|AUTOMATED +254…` | Mute / unmute bot on a chat |
+| `OVERRIDE TEST` / `PING` | Connectivity probe |
+| `!force-release` / `OVERRIDE: …` | Legacy aliases |
 
-## REST
+## Why “I don’t have those exact details…” happened
 
-`POST /admin/command/master`  
-Headers: `X-Admin-Token` or `X-Master-Admin-Secret`  
-Body: `{ "command": "!force-release SKN-8820" }`
+That line is the **public RAG grounding rule**. Boss freeform was falling through to the shopper LLM+knowledge path. Fix:
+
+1. Natural verbs route to the **code interceptor** before AI
+2. Admin LLM turns **drop knowledge/RAG** and use a Boss-only system prompt that forbids that refusal
 
 ## Env
 
 ```bash
-# Always use international Kenya format (Meta/WAHA send 254…, not 07…)
 ADMIN_PHONES=254757764009
-# Optional aliases (also accepted; normalized to 254… on boot):
-# ADMIN_PHONES=0757764009
-# BOSS_PHONES=254757764009,+254757764009
-MASTER_ADMIN_SECRET=long-random    # optional permanent dashboard secret
-ADMIN_SETUP_TOKEN=…                # existing Command Center token (still valid)
-ADMIN_BOSS_TITLE=Boss              # optional honorific
-# ADMIN_PHONE_DEBUG=1              # log Incoming Phone on every admin identity check
+# Hardwired last-9 757764009 always matches even if env is wrong
+MASTER_ADMIN_SECRET=long-random
+ADMIN_BOSS_TITLE=Boss
 ```
 
-Matching accepts `254757764009`, `0757764009`, and `+254757764009` via last-9 national tail so WAHA/Meta formats never miss the Boss line.
+## Deploy
 
-## Explicit identity injection
+```bash
+SKIP_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
+```
 
-When `isAdminSender` / `staff_roles` matches SUPER_ADMIN, `messages[0]` (system) gets an **EXECUTIVE DIRECTIVE** with the verified sender phone — salutation required ("Yes, Boss."), mutations still via `!` / `OVERRIDE:` interceptor only. Shoppers get `PUBLIC_ESCROW_GUARDRAIL` instead (no override powers).
-
-## What this does *not* do
-
-- The LLM never executes SQL or escrow mutations — only the interceptor does.
-- Shoppers never receive the admin system prompt or command palette.
-- Spoofing protection remains WhatsApp sender ID + configured `ADMIN_PHONES` (and token on REST).
+Then text: `OVERRIDE TEST` → expect `Yes, Boss. Executive routing is live…`

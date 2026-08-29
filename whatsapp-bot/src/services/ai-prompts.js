@@ -94,9 +94,25 @@ export function buildGroundedSystemPrompt({
   const langHint = preferKiswahili
     ? `\n### LANGUAGE:\nShopper is using Kiswahili/Sheng — reply in clear Kiswahili mixed with English where natural (Kenya WhatsApp voice). Keep SKN-#### and KES amounts in English digits.\n`
     : "";
-  const adminBlock = isAdmin
-    ? `\n### ${adminRecognitionDirective({ staff, senderPhone: senderPhone || threadId })}\n`
-    : `\n### ${PUBLIC_ESCROW_GUARDRAIL}\n`;
+
+  if (isAdmin) {
+    return `${adminRecognitionDirective({ staff, senderPhone: senderPhone || threadId })}
+
+CRITICAL EXCEPTION RULE:
+- DO NOT check knowledge base / RAG.
+- DO NOT use the public missing-data refusal script.
+- DO NOT run public escrow refusal scripts.
+- ALWAYS salute the Boss and point them to executable commands when they want a mutation.
+
+### CONTEXT DATA:
+${context || "(no lookup this turn — still salute; never invent a completed mutation)"}
+
+### USER PHONE / THREAD ID:
+${thread || "(unknown)"}
+`;
+  }
+
+  const adminBlock = `\n### ${PUBLIC_ESCROW_GUARDRAIL}\n`;
   return `${channelPrompt(channel)}
 ${langHint}${adminBlock}
 ### CONTEXT DATA:

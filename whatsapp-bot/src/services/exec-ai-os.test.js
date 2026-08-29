@@ -17,10 +17,10 @@ describe("executive AI OS", () => {
     assert.equal(isMasterCommand("!brief"), true);
     assert.equal(
       softMapSpokenToMasterCommand("Hey, override escrow for order SKN-8820 and pay the seller"),
-      "!force-release SKN-8820"
+      "FORCE RELEASE SKN-8820"
     );
-    assert.equal(softMapSpokenToMasterCommand("system pause please"), "!system-pause");
-    assert.equal(softMapSpokenToMasterCommand("give me the morning briefing"), "!brief");
+    assert.equal(softMapSpokenToMasterCommand("system pause please"), "SYSTEM PAUSE");
+    assert.equal(softMapSpokenToMasterCommand("give me the morning briefing"), "BRIEFING");
   });
 
   it("RBAC: SUPER_ADMIN unlimited; DISPUTE_MANAGER capped; SUPPORT blocked on release", () => {
