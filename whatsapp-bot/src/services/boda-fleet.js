@@ -8,6 +8,9 @@ import { isDbEnabled, query } from "../db/pool.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
 
+/** Unique-violation Postgres code (phone / national_id / plate). */
+const PG_UNIQUE = "23505";
+
 const ZONES = new Set(["NAIROBI", "THIKA"]);
 const BROADCAST_LIMIT = 8;
 
@@ -42,11 +45,24 @@ function mapRider(row) {
     operatingTown: row.operating_town,
     stageLocation: row.stage_location || null,
     motorbikePlate: row.motorbike_plate || null,
+    licenseClass: row.license_class || null,
+    guarantorName: row.guarantor_name || null,
+    guarantorPhone: row.guarantor_phone || null,
     verificationStatus: row.verification_status,
     isAvailable: Boolean(row.is_available),
     rating: row.rating != null ? Number(row.rating) : 5,
     suspendReason: row.suspend_reason || null,
+    docs: {
+      nationalIdFrontUrl: row.national_id_front_url || null,
+      nationalIdBackUrl: row.national_id_back_url || null,
+      licenseUrl: row.license_url || null,
+      logbookUrl: row.logbook_url || null,
+      goodConductUrl: row.good_conduct_url || null,
+      ntsaBadgeUrl: row.ntsa_badge_url || null,
+      stageLetterUrl: row.stage_letter_url || null,
+    },
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -141,6 +157,160 @@ export async function upsertRiderProfile(input = {}) {
     ]
   );
   return { ok: true, rider: mapRider(rows[0]) };
+}
+
+/**
+ * Public web onboarding — creates/updates rider as PENDING with verification doc URLs.
+ * Call after multer (or other upload) has stored files and built public URLs.
+ * Required URLs: nationalIdFrontUrl, licenseUrl, stageLetterUrl.
+ */
+export async function registerRiderApplication(input = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+
+  const phone = normalizeRiderPhone(input.phone);
+  const fullName = String(input.fullName || "").trim().slice(0, 120);
+  const zone = normalizeBodaZone(input.operatingTown || input.zone);
+  const plate = String(input.motorbikePlate || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 32);
+  const nationalId = String(input.nationalId || "")
+    .trim()
+    .slice(0, 32);
+  const stageLocation = String(input.stageLocation || "").trim().slice(0, 120);
+  const guarantorName = String(input.guarantorName || "").trim().slice(0, 120) || null;
+  const guarantorPhone = normalizeRiderPhone(input.guarantorPhone) || null;
+
+  const nationalIdFrontUrl = String(input.nationalIdFrontUrl || "").trim() || null;
+  const nationalIdBackUrl = String(input.nationalIdBackUrl || "").trim() || null;
+  const licenseUrl = String(input.licenseUrl || "").trim() || null;
+  const stageLetterUrl = String(input.stageLetterUrl || "").trim() || null;
+  const logbookUrl = String(input.logbookUrl || "").trim() || null;
+  const goodConductUrl = String(input.goodConductUrl || "").trim() || null;
+  const ntsaBadgeUrl = String(input.ntsaBadgeUrl || "").trim() || null;
+
+  if (!phone || !fullName || !zone || !plate || !nationalId || !stageLocation) {
+    return {
+      error: "invalid_application",
+      message:
+        "Fill full name, WhatsApp/M-Pesa phone, national ID, town (Nairobi or Thika), stage, and bike plate.",
+    };
+  }
+  if (!nationalIdFrontUrl || !licenseUrl || !stageLetterUrl) {
+    return {
+      error: "docs_required",
+      message: "Upload National ID, driving licence (Class A), and stage chairman letter.",
+    };
+  }
+
+  const existing = await query(`SELECT id, verification_status FROM riders WHERE phone = $1 LIMIT 1`, [
+    phone,
+  ]);
+  if (existing.rows[0]?.verification_status === "VERIFIED") {
+    return {
+      error: "already_verified",
+      message: "This phone is already a verified Sokoni rider. Message Sokoni support to update docs.",
+    };
+  }
+  if (existing.rows[0]?.verification_status === "SUSPENDED") {
+    return {
+      error: "suspended",
+      message: "This rider profile is suspended. Contact Sokoni support before re-applying.",
+    };
+  }
+
+  let result;
+  try {
+    result = await upsertRiderProfile({
+      fullName,
+      phone,
+      nationalId,
+      operatingTown: zone,
+      stageLocation,
+      motorbikePlate: plate,
+      licenseClass: "A",
+      guarantorName,
+      guarantorPhone,
+      nationalIdFrontUrl,
+      nationalIdBackUrl,
+      licenseUrl,
+      logbookUrl,
+      goodConductUrl,
+      ntsaBadgeUrl,
+      stageLetterUrl,
+      verificationStatus: "PENDING",
+    });
+  } catch (err) {
+    if (err?.code === PG_UNIQUE) {
+      return {
+        error: "duplicate",
+        message: "Phone number, National ID, or number plate already registered.",
+      };
+    }
+    throw err;
+  }
+  if (result.error) return result;
+
+  await query(
+    `UPDATE riders SET
+       verification_status = 'PENDING',
+       is_available = FALSE,
+       national_id_front_url = $2,
+       national_id_back_url = COALESCE($3, national_id_back_url),
+       license_url = $4,
+       stage_letter_url = $5,
+       logbook_url = COALESCE($6, logbook_url),
+       good_conduct_url = COALESCE($7, good_conduct_url),
+       ntsa_badge_url = COALESCE($8, ntsa_badge_url),
+       guarantor_name = COALESCE($9, guarantor_name),
+       guarantor_phone = COALESCE($10, guarantor_phone),
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      result.rider.id,
+      nationalIdFrontUrl,
+      nationalIdBackUrl,
+      licenseUrl,
+      stageLetterUrl,
+      logbookUrl,
+      goodConductUrl,
+      ntsaBadgeUrl,
+      guarantorName,
+      guarantorPhone,
+    ]
+  );
+
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId: null,
+      details:
+        `🛵 New boda rider application PENDING\n` +
+        `• ${fullName} · ${phone}\n` +
+        `• Zone: ${zone} · Plate: ${plate}\n` +
+        `• Stage: ${stageLocation}\n` +
+        `Review: /admin/boda or admin-boda.html`,
+    });
+  } catch (err) {
+    console.warn("[boda-fleet] admin notify on apply skipped:", err.message);
+  }
+
+  console.log(`[boda-fleet] rider application PENDING #${result.rider.id} ${phone} ${zone}`);
+  return {
+    ok: true,
+    success: true,
+    riderId: result.rider.id,
+    status: "PENDING",
+    rider: {
+      id: result.rider.id,
+      full_name: fullName,
+      verification_status: "PENDING",
+    },
+    message:
+      "Application submitted successfully. Sokoni team will review your documents within 24 hours.",
+  };
 }
 
 export async function setRiderVerificationStatus(riderId, status, { reason = "" } = {}) {
