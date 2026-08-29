@@ -156,7 +156,7 @@ function guessCategory(docId) {
   if (id.includes("seller") || id.includes("payout") || id.includes("vendor") || id.includes("onboard")) {
     return "seller_policy";
   }
-  if (id.includes("ship")) return "shipping";
+  if (id.includes("rider") || id.includes("ship")) return "shipping";
   if (id.includes("return") || id.includes("buyer") || id.includes("trust")) return "buyer_policy";
   return "general";
 }
