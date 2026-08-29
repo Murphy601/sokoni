@@ -83,7 +83,7 @@ const SPECIALIST_HINTS = {
   dispute:
     "SPECIALIST: Dispute Agent — for damaged/refund use open_return_case when an SKN order id is present. Hold payout; ask for photos. Never invent refunds. Legal/fraud → human.",
   logistics:
-    "SPECIALIST: Logistics — use track_order. Share rider/courier/ETA from tools only.",
+    "SPECIALIST: Logistics — use track_order. Share rider/courier/ETA from tools only. Riders are Sokoni-pinned (no self-select). For custody actions instruct exact commands: ACCEPT / PICKUP SKN-#### #### / CONFIRM SKN-#### ####. Never invent OTPs.",
   general:
     "SPECIALIST: General concierge — short helpful answers; use store_info + catalog tools.",
 };
@@ -99,14 +99,15 @@ const KNOWLEDGE_FILES = [
   "vendor-terms.md",
   "seller-onboarding.md",
   "shipping-sop.md",
+  "rider-delivery.md",
 ];
 
 /** Prefer docs by specialist lane. */
 const LANE_DOCS = {
   seller: ["seller-onboarding.md", "seller-payouts.md", "shipping-sop.md", "vendor-terms.md"],
-  dispute: ["returns-policy.md", "buyer-trust.md"],
-  logistics: ["shipping-sop.md", "buyer-trust.md"],
-  buyer: ["buyer-trust.md", "returns-policy.md"],
+  dispute: ["returns-policy.md", "buyer-trust.md", "rider-delivery.md"],
+  logistics: ["rider-delivery.md", "shipping-sop.md", "buyer-trust.md"],
+  buyer: ["buyer-trust.md", "returns-policy.md", "shipping-sop.md"],
   general: KNOWLEDGE_FILES,
 };
 
