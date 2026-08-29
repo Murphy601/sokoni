@@ -9,6 +9,10 @@
         {
           "id": "personal-care",
           "label": "Personal Care"
+        },
+        {
+          "id": "mens-grooming",
+          "label": "Men's Grooming"
         }
       ]
     },

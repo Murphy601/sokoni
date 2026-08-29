@@ -80,7 +80,7 @@
     "fulfillment": "store",
     "payment": "prepaid",
     "inStock": true,
-    "stockQuantity": 3,
+    "stockQuantity": 2,
     "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg",
     "images": [
       "https://res.cloudinary.com/rztynxme/image/upload/v1786240694/sokoni-studio/cutout_1786240691_ce9c7b03.jpg"
@@ -107,7 +107,7 @@
     "id": "ho-tlom7-002",
     "name": "White Coffee Mug",
     "category": "home-office",
-    "priceKes": 115,
+    "priceKes": 88,
     "rating": 4.5,
     "reviews": 0,
     "source": "Sokoni",
@@ -171,5 +171,44 @@
     "shopHandle": "adiv_thrift",
     "sellerHandle": "adiv_thrift",
     "shopName": "Adiv's Mini Mart"
+  },
+  {
+    "id": "hb-pekbd-001",
+    "name": "Imperial Leather Body Lotion - Men - Menthol & Blackmint",
+    "category": "health-beauty",
+    "priceKes": 447,
+    "rating": 4.5,
+    "reviews": 0,
+    "source": "Sokoni",
+    "emoji": "💄",
+    "scope": "local",
+    "fulfillment": "store",
+    "payment": "prepaid",
+    "inStock": true,
+    "stockQuantity": 1,
+    "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1787987410/sokoni-studio/cutout_1787987388_33ad4e51.jpg",
+    "images": [
+      "https://res.cloudinary.com/rztynxme/image/upload/v1787987410/sokoni-studio/cutout_1787987388_33ad4e51.jpg"
+    ],
+    "videoUrl": "https://res.cloudinary.com/rztynxme/image/upload/c_pad,w_1080,h_1080,b_rgb:FFF8F0/e_shadow:45/e_zoompan:du_4;fps_30;mode_ofl;maxzoom_1.4/w_720,q_auto:eco,vc_h264/f_mp4/v1787987410/sokoni-studio/cutout_1787987388_33ad4e51.mp4",
+    "videoKind": "preview",
+    "subcategory": "mens-grooming",
+    "browseCategory": "health-beauty",
+    "browseSubCategory": "mens-grooming",
+    "condition": "brand_new_with_tags",
+    "isSecondhand": false,
+    "brand": "Cussons",
+    "color": "black",
+    "tags": [
+      "luxury",
+      "fragrance",
+      "refreshing",
+      "calming",
+      "cool"
+    ],
+    "description": "A men's body lotion with menthol and blackmint scent, enriched with Vitamin E and Argan Oil, offering refreshing, calming, and intense cool effects.",
+    "shopHandle": "beauty_shop",
+    "sellerHandle": "beauty_shop",
+    "shopName": "Beauty Collections"
   }
 ]
