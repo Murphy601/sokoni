@@ -557,23 +557,49 @@ export function isBotEcho(messageId, destinationChatId) {
 
 /** Light spacing pass — extra breathing room between sections without bloating short replies.
  * Also splits inline numbered keycaps (1️⃣…) that models mash into one WhatsApp paragraph.
+ * Converts literal `\n` / `\\n` from JSON/LLM dumps into real line breaks.
  */
+export function formatWhatsAppText(aiResponseText) {
+  if (!aiResponseText) return "";
+  let s = String(aiResponseText);
+  // Literal escaped newlines (JSON / model dumps) → real breaks
+  s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
+  s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  // Cap runaway vertical gaps
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}
+
 export function normalizeBotMessageSpacing(text) {
-  let s = String(text || "")
-    .replace(/\r\n/g, "\n")
-    .trim();
+  let s = formatWhatsAppText(text);
   if (!s) return s;
 
   // Force a blank line before keycap digits 1️⃣–9️⃣ (even when inline mid-paragraph).
   s = s.replace(/\s*([1-9]\uFE0F?\u20E3)\s*/gu, "\n\n$1 ");
-  // Wall-of-text fail-safe: if the model wrote 3+ sentences with no newlines, break after punctuation.
-  if (!s.includes("\n") && (s.match(/[.!?]["']?\s+/g) || []).length >= 2) {
-    s = s.replace(/([.!?]["']?)\s+(?=[A-Z*"“])/g, "$1\n\n");
-  }
+  // Blank line after Boss salute when the model mashed the rest onto the same line
+  s = s.replace(
+    /^(Yes,\s*Boss\.|Right away,\s*Boss\.|On it,\s*Boss\.|Yes,\s*Chief\.)\s+(?=\S)/i,
+    "$1\n\n"
+  );
+  // Per-paragraph wall-of-text fail-safe (runs even after salute already inserted \n\n)
+  s = s
+    .split(/\n\n+/)
+    .map((para) => {
+      const p = para.trim();
+      if (!p || p.includes("\n")) return p;
+      if ((p.match(/[.!?]["']?\s+/g) || []).length >= 1) {
+        return p.replace(/([.!?]["']?)\s+(?=[A-Z*"“•])/g, "$1\n\n");
+      }
+      return p;
+    })
+    .filter(Boolean)
+    .join("\n\n");
   // Blank line before emoji-led section headers already on their own line.
   s = s.replace(/\n(?=[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/gu, "\n\n");
   // Blank line before bold section labels like *Catalog commands*
   s = s.replace(/\n(\*[^\n*]{3,}\*)/g, "\n\n$1");
+  // Blank line before bullet lines mashed mid-paragraph
+  s = s.replace(/([.!?:])\s+(•\s)/g, "$1\n\n$2");
   // Collapse accidental triple+ newlines; strip leading blanks from keycap split
   s = s.replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n");
   // Tidy spaces (keep newlines)
