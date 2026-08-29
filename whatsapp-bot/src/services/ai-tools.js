@@ -994,7 +994,7 @@ function toolSellerOnboarding() {
       "Verify WhatsApp (Send code → enter 6-digit code)",
       "Create shop name + optional @handle",
       "Settings → Payouts: add M-Pesa number and/or Buy Goods Till / Paybill",
-      "Upload ID / KRA for vetting (list while pending)",
+      "Optional: add National ID for vetting (list without it)",
       "List items; set stock; item promos via % Set promo on each listing",
     ],
     sellerHub: `${site}/suppliers/list.html`,

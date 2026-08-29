@@ -4,7 +4,7 @@
 1. Open Seller Hub: https://sokonimall.com/suppliers/list.html
 2. Enter your WhatsApp number → Send code → enter the 6-digit code from Sokoni.
 3. Create your shop name + optional @handle.
-4. Add National ID and KRA PIN for vetting (you can list while review is pending).
+4. Optional: add National ID for vetting (you can list without it).
 
 ## Link M-Pesa payouts (Till / Paybill / number)
 1. Seller Hub → Settings → Payouts.
