@@ -623,6 +623,29 @@ export async function runAgentTurn({
     };
   } catch (err) {
     console.error("[ai-agent] error:", err.message);
+    // Phase 3: MAS chat failover only when flag on AND primary LLM path failed
+    try {
+      const { tryMasChatFailover } = await import("./mas/assist.js");
+      const mas = await tryMasChatFailover([
+        { role: "user", content: text },
+      ]);
+      if (mas?.content) {
+        const reply =
+          enforceReplyBrevity(mas.content, channel, { allowLonger: true }) ||
+          offlineReply(toolResults, channel, text);
+        if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+        return {
+          reply,
+          tools: toolResults,
+          products,
+          tracking: trackingPayload,
+          masFailover: true,
+          error: err.message,
+        };
+      }
+    } catch (masErr) {
+      console.warn("[ai-agent] MAS chat failover skipped:", masErr.message);
+    }
     const reply = offlineReply(toolResults, channel, text);
     if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
     return { reply, tools: toolResults, products, tracking: trackingPayload, error: err.message };

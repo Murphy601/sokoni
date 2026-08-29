@@ -69,6 +69,21 @@ export const config = {
       process.env.AI_CHAT_PROVIDER === "gemini" ||
       /^(1|true|yes|on)$/i.test(String(process.env.AI_CHAT_USE_GEMINI || "").trim()),
   },
+  /**
+   * Multi-Agent System fallback gateway (strangler fig).
+   * Does NOT replace Cloudinary→HeyGen→Remotion, Groq chat, or listing vision primaries.
+   * Shadow on by default when MAS_ENABLED; live assists need explicit flags.
+   */
+  mas: {
+    enabled: process.env.MAS_ENABLED !== "false",
+    shadow: process.env.MAS_SHADOW !== "false",
+    mediaFallback: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_MEDIA_FALLBACK || "")),
+    voiceAssist: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_VOICE_ASSIST || "")),
+    moderationLive: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_MODERATION_LIVE || "")),
+    chatFailover: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_CHAT_FAILOVER || "")),
+    transactionalShadow: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_TX_SHADOW || "")),
+    timeoutMs: Number(process.env.MAS_TIMEOUT_MS ?? 2000) || 2000,
+  },
   /** Optional Google Gemini — listing vision + optional chat (opt-in via AI_CHAT_*). */
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",

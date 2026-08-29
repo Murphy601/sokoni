@@ -311,6 +311,25 @@ export async function handleIncomingMessage(
     console.warn("[webhook] user rate limit skipped:", err.message);
   }
 
+  // MAS Phase 1: shadow security agents (never blocks unless MAS_ENABLE_MODERATION_LIVE)
+  try {
+    const { shadowInboundText, tryMasModerationGate } = await import("../services/mas/index.js");
+    shadowInboundText(String(combinedText || text || "").slice(0, 4000), {
+      customerKey,
+      channel: "whatsapp",
+    });
+    const gate = await tryMasModerationGate(String(text || "").slice(0, 2000));
+    if (gate.blocked) {
+      await sendText(
+        customerKey,
+        "That message couldn't be processed for safety reasons. Ask about Sokoni orders, stock, or delivery — or type *menu*."
+      );
+      return;
+    }
+  } catch (err) {
+    console.warn("[webhook] MAS shadow/moderation skipped:", err.message);
+  }
+
   try {
     await hydrateSessionFromDb(customerKey, phone);
   } catch {
