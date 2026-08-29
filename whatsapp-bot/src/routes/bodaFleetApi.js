@@ -97,6 +97,18 @@ adminBodaRouter.post("/dispatches/:id/release-fee", async (req, res) => {
   res.json(result);
 });
 
+/** GET /admin/boda/otp-audit?orderId=&riderId=&limit= */
+adminBodaRouter.get("/otp-audit", async (req, res) => {
+  const { listDeliveryOtpAudit } = await import("../services/boda-fleet.js");
+  const result = await listDeliveryOtpAudit({
+    orderId: req.query.orderId,
+    riderId: req.query.riderId,
+    limit: req.query.limit,
+  });
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  res.json(result);
+});
+
 adminBodaRouter.get("/summary", (_req, res) => {
   res.json({ ok: true, ...bodaSupportSummary() });
 });

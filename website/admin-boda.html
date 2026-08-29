@@ -59,6 +59,21 @@
       <p id="boda-status" class="text-sm text-brand-purple/60" role="status"></p>
     </section>
     <div id="rider-list" class="space-y-4"></div>
+
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <h2 class="font-display text-2xl font-bold">OTP audit trail</h2>
+      <p class="text-sm text-brand-purple/65">Evidence log for every CONFIRM attempt — OTP, GPS, geofence distance, escrow status.</p>
+      <div class="flex flex-wrap gap-3 items-end">
+        <label class="block text-sm font-medium">
+          Order id
+          <input id="audit-order" type="text" placeholder="SKN-8812"
+                 class="mt-1 w-44 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" />
+        </label>
+        <button type="button" id="load-audit" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Load audit</button>
+      </div>
+      <p id="audit-status" class="text-sm text-brand-purple/60" role="status"></p>
+      <div id="audit-list" class="space-y-3"></div>
+    </section>
   </main>
 
   <script src="assets/js/admin-boda.js"></script>

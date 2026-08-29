@@ -163,4 +163,67 @@
     if (!id) return;
     setStatusForRider(id, btn.getAttribute("data-verify"));
   });
+
+  const auditStatusEl = document.getElementById("audit-status");
+  const auditListEl = document.getElementById("audit-list");
+
+  function setAuditStatus(msg) {
+    if (auditStatusEl) auditStatusEl.textContent = msg || "";
+  }
+
+  async function loadAudit() {
+    const t = token();
+    if (!t) {
+      setAuditStatus("Enter admin token first.");
+      return;
+    }
+    const orderId = String(document.getElementById("audit-order")?.value || "").trim();
+    setAuditStatus("Loading audit…");
+    const q = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "?limit=40";
+    try {
+      const res = await fetch(`${API_BASE}/admin/boda/otp-audit${q}`, {
+        headers: { "X-Admin-Token": t },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAuditStatus(data.message || data.error || `HTTP ${res.status}`);
+        return;
+      }
+      const entries = data.entries || [];
+      setAuditStatus(`${entries.length} log${entries.length === 1 ? "" : "s"}`);
+      if (!auditListEl) return;
+      if (!entries.length) {
+        auditListEl.innerHTML = `<p class="text-sm text-brand-purple/60">No OTP submissions found.</p>`;
+        return;
+      }
+      auditListEl.innerHTML = entries
+        .map((e) => {
+          const gps =
+            e.riderGps != null
+              ? `${e.riderGps.lat.toFixed(5)}, ${e.riderGps.lng.toFixed(5)}`
+              : "—";
+          const dist = e.distanceM != null ? `${Math.round(e.distanceM)} m` : "—";
+          const when = e.submissionTime ? new Date(e.submissionTime).toLocaleString() : "—";
+          return `<article class="rounded-2xl border border-black/5 bg-brand-cream/60 p-4 text-sm space-y-1">
+            <p class="font-bold">${escapeHtml(e.orderRef)} · <span class="text-brand-purple/70">${escapeHtml(
+            e.result
+          )}</span></p>
+            <p>${escapeHtml(e.riderLabel || "Rider —")}</p>
+            <p>OTP entered: <code>${escapeHtml(e.otpEntered || "—")}</code> · match ${
+            e.otpMatch ? "yes" : "no"
+          }</p>
+            <p>Time: ${escapeHtml(when)}</p>
+            <p>GPS: ${escapeHtml(gps)} · distance ${escapeHtml(dist)} · geofence ${
+            e.geofenceOk == null ? "—" : e.geofenceOk ? "ok" : "fail"
+          }</p>
+            <p>Escrow: ${escapeHtml(e.escrowStatus || "—")}</p>
+          </article>`;
+        })
+        .join("");
+    } catch (err) {
+      setAuditStatus(err.message || "Audit load failed");
+    }
+  }
+
+  document.getElementById("load-audit")?.addEventListener("click", () => loadAudit());
 })();
