@@ -26,7 +26,7 @@ import {
   buildChatProviderChain,
 } from "./llm-router.js";
 import { GOODWILL_VOUCHER_CAP_KES } from "./agent-specialists.js";
-import { normalizeBotMessageSpacing } from "./whatsapp.js";
+import { normalizeBotMessageSpacing, formatWhatsAppText } from "./whatsapp.js";
 
 /** Free models sometimes echo planning / system rules instead of answering. */
 const INSTRUCTION_LEAK =
@@ -50,12 +50,19 @@ function looksLikeInstructionLeak(text) {
 function sanitizeReply(text) {
   if (!text) return null;
   if (/fruit|vegetable|veggie|produce only|fresh produce/i.test(text)) return null;
-  let cleaned = String(text).trim();
-  // Drop planning / rule-echo lines that free models sometimes emit
+  // Unescape literal \n before filtering so paragraph structure survives
+  let cleaned = formatWhatsAppText(String(text));
+  if (!cleaned) return null;
+  // Drop planning / rule-echo lines — keep blank lines between kept paragraphs
   cleaned = cleaned
-    .split(/\n+/)
-    .filter((line) => !looksLikeInstructionLeak(line))
+    .split(/\n/)
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true; // preserve paragraph gaps
+      return !looksLikeInstructionLeak(t);
+    })
     .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
   if (!cleaned || looksLikeInstructionLeak(cleaned)) return null;
   if ((cleaned.match(/\*/g) || []).length % 2 !== 0) {
@@ -68,9 +75,16 @@ const FLUFF_SENTENCE =
   /^(?:hello[!.,]?\s*)?(?:hi[!.,]?\s*)?(?:i hope (?:this|you|that)[^.!?]*[.!?]|thank you for (?:choosing|contacting|reaching out to) sokoni[^.!?]*[.!?]|i(?:'d| would) be delighted[^.!?]*[.!?]|hope (?:this|that) helps[^.!?]*[.!?]|(?:let me know if you need|is there anything else|would you (?:also )?like)[^.!?]*[.!?])\s*/i;
 
 const STEP_LEAD = /^([1-9]\uFE0F?\u20E3|[1-9][.)]\s|•\s)/u;
+const BOSS_SALUTE = /^(Yes,\s*Boss\.|Right away,\s*Boss\.|On it,\s*Boss\.|Yes,\s*Chief\.)/i;
 
-/** Join sentences; WhatsApp steps get blank-line breaks so they are not one wall of text. */
-function joinReplySentences(sentences, channel) {
+/**
+ * Join sentences for WhatsApp without flattening into a wall of text.
+ * - Steps / bullets → blank line
+ * - Boss salute → blank line after
+ * - allowLonger (admin / escrow answers) → paragraph break between sentences
+ * - Short shopper replies → single spaces (still fixed by normalizeBotMessageSpacing)
+ */
+function joinReplySentences(sentences, channel, { allowLonger = false } = {}) {
   if (channel !== "whatsapp") return sentences.join(" ");
   let out = "";
   for (const s of sentences) {
@@ -78,7 +92,12 @@ function joinReplySentences(sentences, channel) {
       out = s;
       continue;
     }
-    out += STEP_LEAD.test(s) ? `\n\n${s}` : ` ${s}`;
+    const lastLine = out.split(/\n/).pop() || "";
+    if (STEP_LEAD.test(s) || BOSS_SALUTE.test(lastLine) || allowLonger || sentences.length >= 3) {
+      out += `\n\n${s}`;
+    } else {
+      out += ` ${s}`;
+    }
   }
   return out;
 }
@@ -87,7 +106,7 @@ function joinReplySentences(sentences, channel) {
  * Hard brevity guard after the model (WhatsApp notifications must fit one glance).
  * Prefer complete sentences — never slice mid-word / mid-thought (that looked like
  * "unfinished" replies when max_tokens was too low and this guard word-chopped).
- * WhatsApp: preserve / restore step line-breaks (do not mash 1️⃣2️⃣ into one paragraph).
+ * WhatsApp: preserve / restore paragraph line-breaks (do not mash into one wall).
  */
 export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = false } = {}) {
   let cleaned = sanitizeReply(text);
@@ -111,6 +130,39 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
       : 420;
   const maxSentences = allowLonger ? 6 : 4;
 
+  // Prefer paragraph-aware trimming when the model already used blank lines
+  const paragraphs = cleaned.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+  if (channel === "whatsapp" && paragraphs.length >= 2) {
+    const keptParas = [];
+    let wordCount = 0;
+    let sentenceCount = 0;
+    for (const para of paragraphs) {
+      const sents = para
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((s) => !FLUFF_SENTENCE.test(s));
+      const use = sents.length ? sents.join(" ") : para;
+      const words = use.split(/\s+/).filter(Boolean).length;
+      const nextSentences = sentenceCount + Math.max(sents.length, 1);
+      if (keptParas.length && (wordCount + words > maxWords || nextSentences > maxSentences)) break;
+      keptParas.push(use);
+      wordCount += words;
+      sentenceCount = nextSentences;
+      if (wordCount >= maxWords || sentenceCount >= maxSentences) break;
+    }
+    cleaned = (keptParas.length ? keptParas : [paragraphs[0]]).join("\n\n").trim();
+    if (cleaned.length > maxChars) {
+      // Trim trailing paragraphs rather than mid-sentence chop
+      while (cleaned.length > maxChars && cleaned.includes("\n\n")) {
+        cleaned = cleaned.slice(0, cleaned.lastIndexOf("\n\n")).trim();
+      }
+    }
+    if (looksLikeInstructionLeak(cleaned)) return null;
+    if (!cleaned) return null;
+    return normalizeBotMessageSpacing(cleaned);
+  }
+
   // Strip corporate fluff sentences (leading / trailing / mid-stack).
   let sentences = cleaned
     .split(/(?<=[.!?])\s+/)
@@ -132,18 +184,20 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
       .slice(0, 2);
   }
 
-  cleaned = joinReplySentences(sentences.slice(0, maxSentences), channel).trim();
+  cleaned = joinReplySentences(sentences.slice(0, maxSentences), channel, { allowLonger }).trim();
 
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) {
     // Always cut on a sentence boundary — never mid-phrase word chop.
     const kept = [];
     for (const s of sentences.slice(0, maxSentences)) {
-      const next = joinReplySentences([...kept, s], channel);
+      const next = joinReplySentences([...kept, s], channel, { allowLonger });
       if (next.split(/\s+/).filter(Boolean).length > maxWords) break;
       kept.push(s);
     }
-    cleaned = joinReplySentences(kept.length ? kept : [sentences[0] || cleaned], channel);
+    cleaned = joinReplySentences(kept.length ? kept : [sentences[0] || cleaned], channel, {
+      allowLonger,
+    });
     if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
   }
   if (cleaned.length > maxChars) {
@@ -159,7 +213,7 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
   }
   if (looksLikeInstructionLeak(cleaned)) return null;
   if (!cleaned) return null;
-  // Fail-safe: split inline keycaps (1️⃣…) even when the model mashed them into one paragraph.
+  // Fail-safe: restore paragraph / keycap spacing for WhatsApp
   return channel === "whatsapp" ? normalizeBotMessageSpacing(cleaned) : cleaned;
 }
 
@@ -699,7 +753,7 @@ export async function runAgentTurn({
       {
         role: "system",
         content: adminSender
-          ? `CRITICAL EXCEPTION RULE: You are speaking directly to THE BOSS (+254757764009). DO NOT check any knowledge base. DO NOT say you lack details. DO NOT use public escrow refusals. Start EVERY reply with "Yes, Boss." or "Right away, Boss." If they asked for a mutation, tell them the exact command (*FORCE RELEASE SKN-…*, *!help*) — the code interceptor executes mutations, not you.\n\n${buildGroundedSystemPrompt({
+          ? `CRITICAL EXCEPTION RULE: You are speaking directly to THE BOSS (+254757764009). DO NOT check any knowledge base. DO NOT say you lack details. DO NOT use public escrow refusals. Start EVERY reply with "Yes, Boss." or "Right away, Boss." After the salute, put a blank line, then short paragraphs (2–3 sentences max) separated by blank lines. Use • bullets for lists — never one wall of text. If they asked for a mutation, tell them the exact command (*FORCE RELEASE SKN-…*, *!help*) — the code interceptor executes mutations, not you.\n\n${buildGroundedSystemPrompt({
               channel,
               contextBlocks: [userContextBlock, toolBlock].filter(Boolean),
               threadId,
