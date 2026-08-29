@@ -232,6 +232,8 @@ export function registerAdminChatId(chatId, phone = "") {
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
   if (/^\s*OVERRIDE\s*:/i.test(t)) return true;
+  if (/^\s*![a-z][\w-]*/i.test(t)) return true;
+  if (/^\s*FORCE_PAYOUT\b/i.test(t)) return true;
   if (/^#(?:help|orders|status|broadcast|fulfill|payouts|payb2c|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit|resolve|done)\b/i.test(t)) return true;
   if (new RegExp(`^#${ORDER_ID_CAPTURE}\\s+`, "i").test(t)) return true;
   return false;
@@ -274,6 +276,8 @@ export function shouldRouteIncomingAsAdmin(body, parsed) {
 
   const text = (parsed.text || "").trim();
   if (/^\s*OVERRIDE\s*:/i.test(text)) return true;
+  if (/^\s*![a-z][\w-]*/i.test(text)) return true;
+  if (/^\s*FORCE_PAYOUT\b/i.test(text)) return true;
   if (/^admin\b/i.test(text)) return true;
   if (/^orders?\b/i.test(text)) return true;
   if (containsAdminCommand(parsed.text)) return true;
@@ -435,11 +439,10 @@ export function adminHelpText() {
     `• *#catalog live* · *#catalog pause* · *#sync* · *#sync push*\n` +
     `• *#stock prod_abc in|out* · *#flags prepaid on|off*\n` +
     `• *#db migrate* · *#db seed* · REST \`/admin/ops/status?token=...\`\n\n` +
-    `⚡ *Master OVERRIDE* (ADMIN_PHONES only)\n` +
-    `• *OVERRIDE: RELEASE SKN-####* — force escrow release\n` +
-    `• *OVERRIDE: UNBAN RIDER +254…* — rider → VERIFIED\n` +
-    `• *OVERRIDE: SYSTEM PAUSE* / *RESUME* — halt/restore auto-dispatch + catalog\n` +
-    `• *OVERRIDE: HELP*\n\n` +
+    `⚡ *Master palette* (ADMIN_PHONES / MASTER_ADMIN_SECRET)\n` +
+    `• *!force-release SKN-####* · *!override-state SKN-#### STATUS*\n` +
+    `• *!ban-user / !unban-user +254…* · *!agent-mode MUTE|ACTIVE +254…*\n` +
+    `• *!system-pause* / *!system-resume* · *OVERRIDE: …* · *!help*\n\n` +
     `❓ *#help* — this list`
   );
 }
@@ -1120,7 +1123,14 @@ export async function runAdminCommand(
   }
   const t = normalizeAdminCommand(text.trim());
 
-  if (/^\s*OVERRIDE\s*:/i.test(t) || /^\s*OVERRIDE\s*:/i.test(text)) {
+  if (
+    /^\s*OVERRIDE\s*:/i.test(t) ||
+    /^\s*OVERRIDE\s*:/i.test(text) ||
+    /^\s*![a-z][\w-]*/i.test(t) ||
+    /^\s*![a-z][\w-]*/i.test(text) ||
+    /^\s*FORCE_PAYOUT\b/i.test(t) ||
+    /^\s*FORCE_PAYOUT\b/i.test(text)
+  ) {
     const { executeMasterAdminCommand } = await import("./admin-override.js");
     const result = await executeMasterAdminCommand(text, {
       adminLabel: phone || phoneDigitsFromChatId(adminChatId) || "boss",

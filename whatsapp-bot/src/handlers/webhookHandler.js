@@ -20,6 +20,7 @@ import {
   isHumanHandoff,
   clearHumanHandoff,
   setCustomerMeta,
+  getCustomerMeta,
   hydrateSessionFromDb,
 } from "../services/session.js";
 import { findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
@@ -298,6 +299,24 @@ export async function handleIncomingMessage(
 ) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
+
+  // Boss !ban-user — block non-admin senders before AI / commerce
+  if (!isAdminSender(customerKey, phone)) {
+    try {
+      const digits = String(phone || "").replace(/\D/g, "");
+      const meta = getCustomerMeta(customerKey);
+      const alt = digits.length >= 9 ? getCustomerMeta(`${digits}@c.us`) : null;
+      if (meta?.banned || alt?.banned) {
+        await sendText(
+          customerKey,
+          "Your Sokoni access is restricted. Email *support@sokonimall.com* if you think this is a mistake."
+        );
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] ban check skipped:", err.message);
+    }
+  }
 
   // Per-user rate limit (max ~10 msgs/min) — spam bypasses LLM with static reply
   try {
