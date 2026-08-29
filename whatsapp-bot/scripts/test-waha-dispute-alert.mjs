@@ -1,50 +1,59 @@
 #!/usr/bin/env node
 /**
- * Direct WAHA dispute-alert smoke test (not Baileys).
+ * Direct WAHA sendText smoke test (dispute-alert path).
  *
- * Deploy first from repo root (NOT from whatsapp-bot/):
- *   cd ~/sokoni
- *   SKIP_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
- *
- * Then smoke-test with a REAL phone (your WhatsApp number digits):
+ * Prefer no phone arg — uses ADMIN_PHONES / ADMIN_WHATSAPP_NUMBER / BUSINESS from .env:
  *   cd ~/sokoni/whatsapp-bot
+ *   node scripts/test-waha-dispute-alert.mjs
+ *
+ * Or pass YOUR real digits only (12 digits like 2547…):
  *   node scripts/test-waha-dispute-alert.mjs 254712345678
  *
- * Do NOT paste placeholders like 2547XXXXXXXX or 2547YOURREALNUMBER.
- * Uses sendTextReliable (dispute alerts only) — not normal chat sendText.
+ * Never pass 2547XXXXXXXX or 2547YOURREALNUMBER.
  */
 import { config } from "../src/config.js";
 import { sendTextReliable, toChatId } from "../src/services/whatsapp.js";
 
 const phone = process.argv[2] || config.admin.primary || "";
 if (!phone) {
-  console.error("Usage: node scripts/test-waha-dispute-alert.mjs 254712345678");
-  console.error("Pass your real Kenya WhatsApp number (2547…), or set ADMIN_PHONES.");
+  console.error("Usage: node scripts/test-waha-dispute-alert.mjs");
+  console.error("  (uses ADMIN_PHONES from .env)  OR pass 254712345678");
   process.exit(1);
 }
 
+const fromArgv = Boolean(process.argv[2]);
 const raw = String(phone).trim();
 const digits = raw.replace(/\D/g, "");
 const looksLikePlaceholder =
-  /x{2,}|your|real|number|placeholder|example|xxxx/i.test(raw) ||
-  digits.length < 11 ||
-  digits.length > 15 ||
-  digits === "2547" ||
-  /^2547+$/.test(digits);
+  fromArgv &&
+  (/x{2,}|your|real|number|placeholder|example|xxxx/i.test(raw) ||
+    digits.length < 11 ||
+    digits.length > 15 ||
+    digits === "2547" ||
+    /^2547+$/.test(digits));
 
 if (looksLikePlaceholder) {
   console.error("FAIL: that is not a real phone number.");
   console.error("  Got:", raw);
   console.error("  Digits:", digits || "(none)", "→ would become", toChatId(raw) || "(empty)");
-  console.error("  Example: node scripts/test-waha-dispute-alert.mjs 254712345678");
-  console.error("  Tip: use YOUR WhatsApp number in international form (254…), no spaces.");
+  console.error("  Fix: run with NO args (uses .env ADMIN_PHONES), or pass real 2547… digits:");
+  console.error("    node scripts/test-waha-dispute-alert.mjs");
+  console.error("    node scripts/test-waha-dispute-alert.mjs 254712345678");
+  process.exit(1);
+}
+
+if (digits.length < 11) {
+  console.error("FAIL: admin/business phone in .env is too short:", digits || "(empty)");
+  console.error("Set ADMIN_PHONES=2547… in whatsapp-bot/.env then: pm2 restart sokoni-bot --update-env");
   process.exit(1);
 }
 
 const chatId = toChatId(phone);
+const redacted = digits.length >= 6 ? `${digits.slice(0, 4)}…${digits.slice(-2)}` : digits;
 console.log("WAHA_API_URL:", config.waha.apiUrl || "(UNSET — dry-run, will NOT deliver)");
 console.log("WAHA session:", config.waha.session);
-console.log("Target:", chatId);
+console.log("API key:", config.waha.apiKey ? `set (${config.waha.apiKey.length} chars)` : "MISSING");
+console.log("Target:", chatId, fromArgv ? "(from argv)" : `(from .env admin/business → ${redacted})`);
 
 const msg =
   `🚨 *TEST DISPUTE ALERT*\n\n` +
@@ -61,6 +70,7 @@ try {
   process.exit(0);
 } catch (err) {
   console.error("FAIL:", err.message);
-  console.error("If this is a timeout, WAHA may be hung — run: node scripts/test-waha-ping.mjs");
+  console.error("Next: node scripts/test-waha-ping.mjs");
+  console.error("If ping fails or send times out: docker restart 93f51c97b10d");
   process.exit(1);
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WAHA health ping (no sendText). Diagnoses hung API without needing a phone.
+ * WAHA health ping (uses WAHA_API_KEY from whatsapp-bot/.env — no sendText).
  *
  *   cd ~/sokoni/whatsapp-bot
  *   node scripts/test-waha-ping.mjs
@@ -12,15 +12,17 @@ const base = String(config.waha.apiUrl || "").replace(/\/$/, "");
 const session = config.waha.session || "default";
 
 if (!base) {
-  console.error("FAIL: WAHA_API_URL unset");
+  console.error("FAIL: WAHA_API_URL unset in .env");
   process.exit(1);
 }
 
 const headers = {};
 if (config.waha.apiKey) headers["X-Api-Key"] = config.waha.apiKey;
+else console.warn("WARN: WAHA_API_KEY unset — session call may return 401 Unauthorized");
 
 console.log("WAHA_API_URL:", base);
 console.log("WAHA session:", session);
+console.log("API key:", config.waha.apiKey ? `set (${config.waha.apiKey.length} chars)` : "MISSING");
 
 try {
   const started = Date.now();
@@ -31,16 +33,37 @@ try {
   const ms = Date.now() - started;
   const st = data?.status || data?.engine?.status || "(unknown)";
   console.log(`OK: session HTTP ${status} in ${ms}ms — status=${st}`);
-  console.log(JSON.stringify({ status: st, name: data?.name, engine: data?.engine?.engine }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        status: st,
+        name: data?.name,
+        engine: data?.engine?.engine || data?.engine,
+        me: data?.me?.id || data?.me?.user || null,
+      },
+      null,
+      2
+    )
+  );
   if (String(st).toUpperCase() !== "WORKING") {
     console.error("WARN: session is not WORKING — sendText will fail until linked/recovered");
     process.exit(2);
   }
   process.exit(0);
 } catch (err) {
-  console.error("FAIL: WAHA session ping timed out or errored:", err.message);
-  console.error("WAHA is likely wedged. Soft-restart (keeps session, usually no QR):");
-  console.error("  docker ps --format '{{.ID}} {{.Names}}' | grep -i waha");
-  console.error("  docker restart <waha-container-id>");
+  const status = err.response?.status;
+  const body = err.response?.data;
+  console.error(
+    "FAIL: WAHA session ping:",
+    status ? `HTTP ${status}` : err.message,
+    body ? JSON.stringify(body) : ""
+  );
+  if (status === 401) {
+    console.error("→ Fix: WAHA_API_KEY in whatsapp-bot/.env must match the key WAHA was started with.");
+  } else {
+    console.error("→ Soft-restart WAHA (usually no QR):");
+    console.error("   docker restart 93f51c97b10d");
+    console.error("   # or: docker ps --format '{{.ID}} {{.Names}}' | grep -i waha");
+  }
   process.exit(1);
 }
