@@ -7,6 +7,7 @@ import {
   resolveOrderFromPaystackCharge,
 } from "../services/escrow-automation.js";
 import { applyB2CResult, applyPaystackTransferEvent } from "../services/settlements.js";
+import { applyRiderB2CResult } from "../services/rider-b2c.js";
 import {
   parsePaystackChargeEvent,
   parsePaystackTransferEvent,
@@ -48,7 +49,7 @@ async function handleMpesaStkCallback(req, res) {
   }
 }
 
-/** Safaricom B2C ResultURL — seller payout completed or failed. */
+/** Safaricom B2C ResultURL — seller + rider payouts completed or failed. */
 async function handleB2CResult(req, res) {
   try {
     const parsed = parseB2CResultCallback(req.body);
@@ -56,6 +57,11 @@ async function handleB2CResult(req, res) {
       console.warn("[b2c-result] invalid payload", JSON.stringify(req.body || {}).slice(0, 300));
     } else {
       applyB2CResult(parsed);
+      try {
+        await applyRiderB2CResult(parsed);
+      } catch (err) {
+        console.warn("[b2c-result] rider apply:", err.message);
+      }
     }
     res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch (err) {
@@ -69,13 +75,19 @@ async function handleB2CTimeout(req, res) {
   try {
     const parsed = parseB2CResultCallback({ ...(req.body || {}), timeout: true });
     if (parsed.valid) {
-      applyB2CResult({
+      const failed = {
         ...parsed,
         success: false,
         failed: true,
         timeout: true,
         resultDesc: parsed.resultDesc || "B2C queue timeout",
-      });
+      };
+      applyB2CResult(failed);
+      try {
+        await applyRiderB2CResult(failed);
+      } catch (err) {
+        console.warn("[b2c-timeout] rider apply:", err.message);
+      }
     } else {
       console.warn("[b2c-timeout] payload", JSON.stringify(req.body || {}).slice(0, 300));
     }

@@ -410,6 +410,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startOrderCommunicationScheduler();
   startFeedScheduler();
   startBodaDisputeWindowScheduler();
+  startRiderB2CScheduler();
   // Ensure platform storefront has a social user id (Make an offer / inbox).
   if (isDbEnabled()) {
     import("./db/repositories/sellers.js")
@@ -430,6 +431,27 @@ function startBodaDisputeWindowScheduler() {
   tick();
   setInterval(tick, 2 * 60 * 1000);
   console.log("✓ Boda HOLD_ESCROW scheduler enabled (every 2 min)");
+}
+
+/** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 100). */
+function startRiderB2CScheduler() {
+  const tick = () => {
+    import("./services/rider-b2c.js")
+      .then(({ processRiderB2CPayouts, riderB2cConfigured }) => {
+        if (!riderB2cConfigured()) return null;
+        return processRiderB2CPayouts({ minKes: 100, limit: 10 });
+      })
+      .then((result) => {
+        if (result?.triggered > 0) {
+          console.log(`[rider-b2c] triggered ${result.triggered} payout batch(es)`);
+        }
+      })
+      .catch((err) => console.warn("[rider-b2c] tick:", err.message));
+  };
+  // Offset from hold-window tick; hourly is enough for batch B2C.
+  setTimeout(tick, 90 * 1000);
+  setInterval(tick, 60 * 60 * 1000);
+  console.log("✓ Rider B2C payout scheduler enabled (hourly when B2C ready)");
 }
 
 /** Refresh trending / price-tier feed slices hourly. */
