@@ -412,6 +412,16 @@ export async function handleIncomingMessage(
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
   }
 
+  // Sokoni boda fleet: ACCEPT / SET ZONE / DELIVERED / CODE (riders + buyer OTP).
+  {
+    try {
+      const { tryHandleBodaFleetMessage } = await import("../services/boda-fleet.js");
+      if (await tryHandleBodaFleetMessage(customerKey, text, { phone })) return;
+    } catch (err) {
+      console.warn("[webhook] boda fleet skipped:", err.message);
+    }
+  }
+
   // Customers must never see admin console
   if (!requireAdminSender(customerKey, phone)) {
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {

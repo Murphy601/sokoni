@@ -4267,6 +4267,9 @@ function renderSellerOrderCard(o, { allowPrintLabel = true } = {}) {
     actions.push(
       `<button type="button" class="sell-order-action sell-order-action--primary" data-dispatch-toggle="${escapeHtml(o.orderId || "")}">Mark dispatched</button>`
     );
+    actions.push(
+      `<button type="button" class="sell-order-action" data-boda-request="${escapeHtml(o.orderId || "")}">Call Sokoni boda</button>`
+    );
   }
   if (phase === "shipped" && o.trackUrl) {
     actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
@@ -6774,18 +6777,104 @@ function renderHubLogistics() {
 }
 
 function updateLogisticsBodaLink() {
-  const a = el("logistics-boda-btn");
-  if (!a) return;
-  const hub = getSellerDefaultHub();
-  const handle = sellerShopHandle();
-  const pending = hubDropOffOrders().length;
-  const msg =
-    `Habari Sokoni — ninaomba boda rider pickup.\n` +
-    (handle ? `Shop: @${handle}\n` : "") +
-    `Hub preference: ${hub}\n` +
-    (pending ? `I have ${pending} parcel${pending === 1 ? "" : "s"} ready for drop-off.\n` : "") +
-    `Please confirm which order + my exact pickup location — I'll reply with details.`;
-  a.href = waChatUrl(SOKONI_SUPPORT_WA, msg);
+  const support = el("logistics-boda-support");
+  if (support) {
+    const hub = getSellerDefaultHub();
+    const handle = sellerShopHandle();
+    const pending = hubDropOffOrders().length;
+    const msg =
+      `Habari Sokoni — ninaomba boda rider pickup.\n` +
+      (handle ? `Shop: @${handle}\n` : "") +
+      `Hub preference: ${hub}\n` +
+      (pending ? `I have ${pending} parcel${pending === 1 ? "" : "s"} ready for drop-off.\n` : "") +
+      `Please confirm which order + my exact pickup location — I'll reply with details.`;
+    support.href = waChatUrl(SOKONI_SUPPORT_WA, msg);
+  }
+
+  const select = el("logistics-boda-order");
+  if (!select) return;
+  const rows = hubOrdersAwaitingShip();
+  const prev = select.value;
+  select.innerHTML =
+    rows.length === 0
+      ? `<option value="">No paid orders awaiting dispatch</option>`
+      : rows
+          .map(
+            (o) =>
+              `<option value="${escapeHtml(o.orderId)}">${escapeHtml(o.orderId)} — ${escapeHtml(
+                String(o.productName || "Item").slice(0, 40)
+              )}</option>`
+          )
+          .join("");
+  if (prev && rows.some((o) => o.orderId === prev)) select.value = prev;
+}
+
+async function requestSokoniBoda(orderId, { zone, pickupAddress } = {}) {
+  const status = el("logistics-boda-status");
+  const phone = getPhone();
+  if (!phone || !getSessionToken()) {
+    if (status) status.textContent = "Sign in to Seller Hub first.";
+    return;
+  }
+  const id = String(orderId || el("logistics-boda-order")?.value || "").trim();
+  if (!id) {
+    if (status) status.textContent = "Pick a paid order first.";
+    return;
+  }
+  const z = String(zone || el("logistics-boda-zone")?.value || "NAIROBI").toUpperCase();
+  const pickup =
+    pickupAddress != null
+      ? String(pickupAddress)
+      : String(el("logistics-boda-pickup")?.value || "").trim();
+  if (status) status.textContent = `Calling verified riders in ${z}…`;
+  try {
+    const res = await fetch(`${ONBOARD_API}/boda/request`, {
+      method: "POST",
+      headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(
+        jsonAuthBody({
+          phone: normalizePhoneInput(phone),
+          orderId: id,
+          zone: z,
+          pickupAddress: pickup,
+        })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (!res.ok || data.error) {
+      if (status) status.textContent = data.message || data.error || "Could not call boda.";
+      return;
+    }
+    if (status) {
+      status.textContent =
+        data.message ||
+        `Riders pinged: ${data.ridersPinged || 0}. You'll get WhatsApp when one accepts.`;
+    }
+  } catch (err) {
+    if (status) status.textContent = err.message || "Network error calling boda.";
+  }
+}
+
+function bindLogisticsBodaUi() {
+  const btn = el("logistics-boda-btn");
+  if (btn && btn.dataset.bodaBound !== "1") {
+    btn.dataset.bodaBound = "1";
+    btn.addEventListener("click", () => void requestSokoniBoda());
+  }
+  if (document.documentElement.dataset.bodaOrderClickBound === "1") return;
+  document.documentElement.dataset.bodaOrderClickBound = "1";
+  document.addEventListener("click", (ev) => {
+    const bodaBtn = ev.target?.closest?.("[data-boda-request]");
+    if (!bodaBtn) return;
+    const id = bodaBtn.getAttribute("data-boda-request");
+    const zoneEl = el("logistics-boda-zone");
+    void requestSokoniBoda(id, { zone: zoneEl?.value || "NAIROBI" });
+    el("logistics-boda-status")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  });
 }
 
 function generateHubManifest() {
@@ -7440,6 +7529,7 @@ function bindSellerCommandCenterUi() {
     loadSellerOrders();
     renderHubLogistics();
   });
+  bindLogisticsBodaUi();
   el("marketing-copy-btn")?.addEventListener("click", async () => {
     const msg = buildMarketingShareMessage();
     try {
