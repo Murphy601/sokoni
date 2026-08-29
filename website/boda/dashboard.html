@@ -4,141 +4,192 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Sokoni rider workspace — WhatsApp commands</title>
-<meta name="description" content="Rider workspace cheat sheet: AVAILABLE, ACCEPT, PICKUP, CONFIRM, NO_SHOW. Live jobs run on WhatsApp after verification." />
+<meta name="description" content="Rider workspace: earnings strip, route map, escrow badges, OTP fields, and ledger. Live jobs run on WhatsApp after verification." />
 <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
-        },
-        fontFamily: {
-          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
-          display: ["Fraunces", "Georgia", "serif"],
-        },
-      },
-    },
-  };
-</script>
-<script>
-  (function () {
-    try {
-      var t = localStorage.getItem("sokoni-theme");
-      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-        document.documentElement.classList.add("dark");
-      }
-    } catch (e) {}
-  })();
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="../assets/css/design-tokens.css" />
-<link rel="stylesheet" href="../assets/css/styles.css" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/css/boda-depop.css" />
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased dark:bg-brand-purple dark:text-white min-h-screen">
-  <header class="border-b border-black/5 dark:border-white/10 bg-brand-cream/95 dark:bg-brand-purple/95 backdrop-blur sticky top-0 z-40">
-    <div class="max-w-5xl mx-auto px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-      <a href="index.html" class="font-display font-bold text-lg">SOKONI<span class="text-brand-green">.</span> <span class="text-sm font-sans font-medium text-brand-purple/60 dark:text-white/50">Rider</span></a>
-      <nav class="flex flex-wrap gap-2 text-sm font-semibold">
-        <a href="index.html" class="min-h-[44px] inline-flex items-center px-3">Pitch</a>
-        <a href="apply.html" class="min-h-[44px] inline-flex items-center px-4 rounded-full btn-whatsapp font-bold">Apply</a>
-        <a href="https://wa.me/254117422428" target="_blank" rel="noopener" class="min-h-[44px] inline-flex items-center px-3 rounded-full border border-brand-purple/15 dark:border-white/20">Open WhatsApp</a>
+<body class="boda-depop">
+  <header class="boda-nav">
+    <div class="boda-wrap boda-nav-inner">
+      <a href="index.html" class="boda-logo">SOKONI<span>.</span> <span style="color:#6b6b6b;font-weight:700;font-size:0.75rem;letter-spacing:0;text-transform:none">Rider</span></a>
+      <nav class="boda-nav-links" aria-label="Workspace">
+        <a href="index.html">Pitch</a>
+        <a href="apply.html" class="boda-btn boda-btn--red" style="min-height:44px;padding:0.5rem 1.15rem">Apply</a>
+        <a href="https://wa.me/254117422428" target="_blank" rel="noopener" class="boda-btn boda-btn--wa" style="min-height:44px;padding:0.5rem 1.15rem">Open WhatsApp</a>
       </nav>
     </div>
   </header>
 
-  <main class="max-w-5xl mx-auto px-5 py-10 md:py-14 space-y-10">
-    <div>
-      <h1 class="font-display text-3xl md:text-4xl font-bold mb-2">Rider workspace</h1>
-      <p class="text-sm text-brand-purple/70 dark:text-white/65 max-w-2xl">
-        Live jobs, OTPs, and payouts run on <strong>WhatsApp</strong> after ops verifies you.
-        This page is your command sheet and status guide — not a separate GPS app.
+  <main class="boda-wrap" style="padding-top:2.5rem;padding-bottom:3.5rem">
+    <div style="margin-bottom:2rem">
+      <h1 style="font-size:clamp(1.75rem,4vw,2.5rem);font-weight:900;letter-spacing:-0.03em;margin:0 0 0.5rem">Rider workspace</h1>
+      <p style="margin:0;max-width:36rem;color:#6b6b6b;font-size:0.9rem;line-height:1.5">
+        Live jobs, OTPs, and payouts run on <strong style="color:#1a1a1a">WhatsApp</strong> after ops verifies you.
+        This page is your command sheet — flat UI, no decorative illustrations.
       </p>
     </div>
 
-    <!-- Stats strip (informational placeholders — live totals come via WhatsApp) -->
-    <section aria-label="Daily focus" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
-        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Today’s earnings</p>
-        <p class="font-display text-xl font-bold mt-1">On WhatsApp</p>
+    <section class="boda-stats" aria-label="Daily focus" style="margin-bottom:1.5rem">
+      <div class="boda-stat">
+        <div class="l">Today’s earnings (KES)</div>
+        <div class="v">On WA</div>
       </div>
-      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
-        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Active jobs</p>
-        <p class="font-display text-xl font-bold mt-1">Pinned offers</p>
+      <div class="boda-stat">
+        <div class="l">Active jobs</div>
+        <div class="v">Pinned</div>
       </div>
-      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
-        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Handovers</p>
-        <p class="font-display text-xl font-bold mt-1">CONFIRM done</p>
+      <div class="boda-stat">
+        <div class="l">Completed handovers</div>
+        <div class="v">CONFIRM</div>
       </div>
-      <div class="rounded-2xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-4">
-        <p class="text-[11px] uppercase tracking-wide text-brand-purple/50 dark:text-white/40 font-semibold">Dispute hold</p>
-        <p class="font-display text-xl font-bold mt-1">~15 min window</p>
+      <div class="boda-stat">
+        <div class="l">Dispute hold</div>
+        <div class="v">KES 0*</div>
       </div>
     </section>
+    <p style="font-size:0.7rem;color:#6b6b6b;margin:-0.75rem 0 1.75rem">* Live totals arrive as WhatsApp text after each job. Hold window ~15 min after CONFIRM.</p>
 
-    <section class="grid md:grid-cols-2 gap-8">
-      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/80 dark:bg-brand-purpleLight/35 p-6 space-y-4">
-        <h2 class="font-bold text-lg">Active job (on WhatsApp)</h2>
-        <p class="text-sm text-brand-purple/70 dark:text-white/65">
-          When pinned, your chat shows pickup notes, fee, and order id. Enter OTPs with the exact commands below — don’t paste codes alone.
+    <div style="display:grid;gap:1.25rem;margin-bottom:1.5rem" class="boda-dash-grid">
+      <style>
+        @media (min-width: 900px) {
+          .boda-dash-grid { grid-template-columns: 1.1fr 0.9fr; }
+        }
+      </style>
+
+      <div class="boda-panel">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.75rem">
+          <h2 style="margin:0">Active job</h2>
+          <span class="boda-badge boda-badge--active">IN TRANSIT</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem">
+          <span class="boda-badge boda-badge--escrow">🔒 Held in Escrow</span>
+          <span class="boda-badge boda-badge--transit">🚚 In Transit</span>
+          <span class="boda-badge boda-badge--paid">✅ Payout Released</span>
+        </div>
+        <p style="font-size:0.85rem;color:#6b6b6b;margin:0 0 1rem;line-height:1.45">
+          Example layout — your chat shows real pickup notes, vendor phone, drop-off, and fee when pinned.
         </p>
-        <ul class="text-sm space-y-2 text-brand-purple/80 dark:text-white/75">
-          <li><span class="font-semibold">Pickup:</span> seller speaks 4-digit Vendor OTP</li>
-          <li><span class="font-semibold">Drop-off:</span> buyer speaks 4-digit Delivery OTP</li>
-          <li><span class="font-semibold">No-show:</span> <span class="font-mono text-xs">NO_SHOW SKN-####</span> → wait 15 min → return flow</li>
-        </ul>
-        <a href="https://wa.me/254117422428?text=AVAILABLE" target="_blank" rel="noopener"
-           class="inline-flex items-center justify-center min-h-[48px] w-full rounded-full btn-whatsapp font-bold text-sm">
-          Go AVAILABLE on WhatsApp
-        </a>
-      </div>
-
-      <div class="rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/80 dark:bg-brand-purpleLight/35 p-6">
-        <h2 class="font-bold text-lg mb-4">Command cheat sheet</h2>
-        <dl class="space-y-3 text-sm font-mono">
-          <div>
-            <dt class="text-brand-green font-bold">AVAILABLE</dt>
-            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Go online for pins</dd>
+        <dl style="margin:0 0 1.25rem;font-size:0.85rem;display:grid;gap:0.65rem">
+          <div style="display:grid;grid-template-columns:7rem 1fr;gap:0.5rem">
+            <dt style="font-weight:800;color:#6b6b6b">Pickup</dt>
+            <dd style="margin:0">Westlands shop · vendor on WhatsApp</dd>
           </div>
-          <div>
-            <dt class="text-brand-green font-bold">OFFLINE</dt>
-            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Stop offers</dd>
+          <div style="display:grid;grid-template-columns:7rem 1fr;gap:0.5rem">
+            <dt style="font-weight:800;color:#6b6b6b">Drop-off</dt>
+            <dd style="margin:0">Kilimani gate · buyer contact in offer</dd>
           </div>
-          <div>
-            <dt class="text-brand-green font-bold">ACCEPT SKN-####</dt>
-            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Claim offered job</dd>
-          </div>
-          <div>
-            <dt class="text-brand-green font-bold">PICKUP SKN-#### ####</dt>
-            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Seller OTP → custody</dd>
-          </div>
-          <div>
-            <dt class="text-brand-green font-bold">CONFIRM SKN-#### ####</dt>
-            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Buyer OTP → delivery + payout path</dd>
-          </div>
-          <div>
-            <dt class="text-brand-green font-bold">DECLINE SKN-####</dt>
-            <dd class="font-sans text-brand-purple/65 dark:text-white/55 mt-0.5">Skip; next rider gets offered</dd>
+          <div style="display:grid;grid-template-columns:7rem 1fr;gap:0.5rem">
+            <dt style="font-weight:800;color:#6b6b6b">Order</dt>
+            <dd style="margin:0"><span class="boda-mono">SKN-8820</span> · fee shown on offer</dd>
           </div>
         </dl>
+
+        <label style="display:block;font-size:0.75rem;font-weight:800;margin-bottom:0.35rem;letter-spacing:0.04em;text-transform:uppercase">Pickup OTP</label>
+        <input class="boda-otp" type="text" inputmode="numeric" maxlength="4" placeholder="••••" aria-label="Pickup OTP demo field" readonly value="" />
+        <p style="font-size:0.75rem;color:#6b6b6b;margin:0.4rem 0 1rem">Enter on WhatsApp: <span class="boda-mono">*PICKUP SKN-8820 ####*</span></p>
+
+        <label style="display:block;font-size:0.75rem;font-weight:800;margin-bottom:0.35rem;letter-spacing:0.04em;text-transform:uppercase">Delivery OTP</label>
+        <input class="boda-otp" type="text" inputmode="numeric" maxlength="4" placeholder="••••" aria-label="Delivery OTP demo field" readonly />
+        <p style="font-size:0.75rem;color:#6b6b6b;margin:0.4rem 0 1.25rem">Enter on WhatsApp: <span class="boda-mono">*CONFIRM SKN-8820 ####*</span></p>
+
+        <a href="https://wa.me/254117422428?text=NO_SHOW%20SKN-8820" target="_blank" rel="noopener" class="boda-btn boda-btn--black" style="width:100%">
+          Start 15-min buyer no-show timer
+        </a>
+        <p style="font-size:0.7rem;color:#6b6b6b;margin:0.65rem 0 0;line-height:1.4">
+          After 15 minutes with no buyer, follow return flow. Return fee = <strong>50%</strong> of delivery fee when item is handed back.
+        </p>
+      </div>
+
+      <div style="display:grid;gap:1.25rem">
+        <div class="boda-panel">
+          <h2>Route sketch</h2>
+          <div class="boda-map" role="img" aria-label="Simple pickup and drop-off map">
+            <div class="boda-route" aria-hidden="true"></div>
+            <div class="boda-pin boda-pin--pick" title="Pickup"></div>
+            <div class="boda-pin boda-pin--drop" title="Drop-off"></div>
+            <div class="boda-map-legend">
+              <span>● Pickup</span>
+              <span>● Drop-off</span>
+            </div>
+          </div>
+          <p style="font-size:0.75rem;color:#6b6b6b;margin:0.75rem 0 0">Flat vector pins — live GPS stays on WhatsApp / your maps app.</p>
+        </div>
+
+        <div class="boda-panel">
+          <h2>Go live</h2>
+          <a href="https://wa.me/254117422428?text=AVAILABLE" target="_blank" rel="noopener" class="boda-btn boda-btn--red" style="width:100%;margin-bottom:0.75rem">
+            Go AVAILABLE on WhatsApp
+          </a>
+          <a href="https://wa.me/254117422428?text=BUSY" target="_blank" rel="noopener" class="boda-btn boda-btn--ghost" style="width:100%">
+            Set BUSY
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <section class="boda-panel" aria-label="Earnings ledger">
+      <h2>Earnings ledger (sample)</h2>
+      <p style="font-size:0.8rem;color:#6b6b6b;margin:0 0 1rem">Minimal table — real M-Pesa refs arrive in chat after B2C.</p>
+      <div style="overflow-x:auto">
+        <table class="boda-ledger">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Completed</th>
+              <th>Gross fee</th>
+              <th>Status</th>
+              <th>M-Pesa ref</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="boda-mono">SKN-1049</span></td>
+              <td>Today 14:12</td>
+              <td>KES 250</td>
+              <td><span class="boda-badge boda-badge--paid">Payout released</span></td>
+              <td><span class="boda-mono">QH82SKN9</span></td>
+            </tr>
+            <tr>
+              <td><span class="boda-mono">SKN-1031</span></td>
+              <td>Today 11:40</td>
+              <td>KES 180</td>
+              <td><span class="boda-badge boda-badge--escrow">Held (~15m)</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><span class="boda-mono">SKN-0988</span></td>
+              <td>Yesterday</td>
+              <td>KES 300</td>
+              <td><span class="boda-badge boda-badge--paid">Payout released</span></td>
+              <td><span class="boda-mono">QG71SKN2</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
-    <section class="rounded-3xl border border-dashed border-brand-purple/20 dark:border-white/20 p-6 md:p-8 text-center">
-      <h2 class="font-display text-xl font-bold mb-2">Not verified yet?</h2>
-      <p class="text-sm text-brand-purple/65 dark:text-white/55 mb-5 max-w-md mx-auto">
-        Apply with ID, Class A licence, and stage letter. Until then, commands reply “not a registered rider.”
-      </p>
-      <a href="apply.html" class="inline-flex items-center justify-center min-h-[48px] px-6 rounded-full btn-whatsapp font-bold text-sm">Apply to ride</a>
+    <section class="boda-panel" style="margin-top:1.25rem">
+      <h2>Command cheat sheet</h2>
+      <ul style="margin:0;padding-left:1.1rem;font-size:0.85rem;line-height:1.7;color:#1a1a1a">
+        <li><span class="boda-mono">AVAILABLE</span> / <span class="boda-mono">BUSY</span> — pin status</li>
+        <li><span class="boda-mono">*ACCEPT SKN-####*</span> — lock job</li>
+        <li><span class="boda-mono">*PICKUP SKN-#### ####*</span> — seller OTP</li>
+        <li><span class="boda-mono">*CONFIRM SKN-#### ####*</span> — buyer OTP</li>
+        <li><span class="boda-mono">NO_SHOW SKN-####</span> — start 15-min timer</li>
+      </ul>
     </section>
   </main>
 
-  <footer class="max-w-5xl mx-auto px-5 py-8 text-xs text-brand-purple/45 dark:text-white/40">
-    <a href="index.html" class="hover:underline">← Rider pitch</a>
+  <footer class="boda-wrap boda-footer">
+    <span>© Sokoni Mall · Rider workspace</span>
+    <div style="display:flex;gap:1rem">
+      <a href="index.html">Pitch</a>
+      <a href="apply.html">Apply</a>
+      <a href="../login.html">Log in</a>
+    </div>
   </footer>
 </body>
 </html>
