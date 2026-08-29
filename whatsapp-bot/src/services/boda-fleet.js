@@ -7,6 +7,10 @@ import { createHash, randomInt } from "node:crypto";
 import { isDbEnabled, query } from "../db/pool.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
+import {
+  calculateDeliveryPayoutSplit,
+  formatPayoutSplitMessage,
+} from "../lib/rider-payout-fees.js";
 
 /** Unique-violation Postgres code (phone / national_id / plate). */
 const PG_UNIQUE = "23505";
@@ -969,8 +973,78 @@ async function ensureRiderPayoutsTable() {
       ADD COLUMN IF NOT EXISTS b2c_conversation_id VARCHAR(64),
       ADD COLUMN IF NOT EXISTS b2c_originator_id VARCHAR(64),
       ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS mpesa_receipt VARCHAR(64)
+      ADD COLUMN IF NOT EXISTS mpesa_receipt VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS gross_delivery_fee NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS platform_commission NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS transaction_fee NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS net_amount_paid NUMERIC(12, 2)
   `);
+}
+
+/**
+ * Apply 10% + B2C tariff to rider_payouts and mark CLEARED (or insert if missing).
+ */
+async function clearRiderPayoutWithFeeSplit({
+  riderId,
+  orderRef,
+  deliveryFee,
+  statuses = ["PENDING_CLEAR", "ON_HOLD", "FORFEITED"],
+} = {}) {
+  const rid = Number(riderId);
+  const ref = String(orderRef || "").trim();
+  if (!Number.isInteger(rid) || rid < 1 || !ref) {
+    return { ok: false, error: "invalid_payout_target" };
+  }
+  const split = calculateDeliveryPayoutSplit(deliveryFee);
+  await ensureRiderPayoutsTable();
+
+  const statusList = Array.isArray(statuses) && statuses.length ? statuses : ["PENDING_CLEAR", "ON_HOLD"];
+  const { rows } = await query(
+    `UPDATE rider_payouts SET
+       status = 'CLEARED',
+       gross_delivery_fee = $3,
+       platform_commission = $4,
+       transaction_fee = $5,
+       net_amount_paid = $6,
+       amount = $6
+     WHERE rider_id = $1
+       AND UPPER(order_ref) = UPPER($2)
+       AND status = ANY($7::text[])
+     RETURNING id`,
+    [
+      rid,
+      ref,
+      split.originalDeliveryFee,
+      split.platformCommission,
+      split.mpesaTariff,
+      split.netRiderPayout,
+      statusList,
+    ]
+  );
+
+  if (!rows.length) {
+    await query(
+      `INSERT INTO rider_payouts (
+         rider_id, order_ref, amount, status,
+         gross_delivery_fee, platform_commission, transaction_fee, net_amount_paid
+       )
+       SELECT $1, $2, $3, 'CLEARED', $4, $5, $6, $3
+        WHERE NOT EXISTS (
+          SELECT 1 FROM rider_payouts
+           WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2)
+        )`,
+      [
+        rid,
+        ref,
+        split.netRiderPayout,
+        split.originalDeliveryFee,
+        split.platformCommission,
+        split.mpesaTariff,
+      ]
+    );
+  }
+
+  return { ok: true, split };
 }
 
 /**
@@ -1387,8 +1461,8 @@ export async function verifyDeliveryOTP({
   try {
     await ensureRiderPayoutsTable();
     await query(
-      `INSERT INTO rider_payouts (rider_id, order_ref, amount, status)
-       SELECT $1, $2, $3, 'PENDING_CLEAR'
+      `INSERT INTO rider_payouts (rider_id, order_ref, amount, gross_delivery_fee, status)
+       SELECT $1, $2, $3, $3, 'PENDING_CLEAR'
         WHERE NOT EXISTS (
           SELECT 1 FROM rider_payouts
            WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2)
@@ -1648,7 +1722,7 @@ export async function handleBuyerBodaDispute({
 }
 
 /**
- * After 15-min HOLD_ESCROW expires with no DISPUTE — release rider fee stub.
+ * After 15-min HOLD_ESCROW expires with no DISPUTE — apply fee split + RELEASED.
  * Runs from the 2-minute scheduler.
  */
 export async function processBodaDisputeWindows({ limit = 40 } = {}) {
@@ -1678,11 +1752,6 @@ export async function processBodaDisputeWindows({ limit = 40 } = {}) {
   let released = 0;
   for (const row of rows) {
     try {
-      await query(
-        `UPDATE rider_payouts SET status = 'CLEARED'
-          WHERE UPPER(order_ref) = UPPER($1) AND status IN ('PENDING_CLEAR', 'ON_HOLD')`,
-        [row.order_ref]
-      );
       const feeResult = await releaseBodaRiderFee({
         dispatchId: row.id,
         reason: "dispute_window_elapsed",
@@ -1738,10 +1807,8 @@ export async function syncBodaDispatchOnOrderDelivered(orderRef, { via = "buyer_
 }
 
 /**
- * Rider delivery fee release stub — logs clearly; marks RELEASED.
- * Real Daraja/Paystack B2C for riders can replace this later.
+ * Mark rider fee RELEASED, apply 10% + B2C tariff to CLEARED ledger, notify rider.
  */
-
 export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) {
   if (!isDbEnabled()) return { ok: false, skipped: true };
   const id = Number(dispatchId);
@@ -1768,16 +1835,32 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
   }
 
   const feeKes = Number(d.delivery_fee_kes || 0);
+  let split = calculateDeliveryPayoutSplit(feeKes);
+
+  if (d.rider_id && feeKes > 0) {
+    try {
+      const cleared = await clearRiderPayoutWithFeeSplit({
+        riderId: d.rider_id,
+        orderRef: d.order_ref,
+        deliveryFee: feeKes,
+        statuses: ["PENDING_CLEAR", "ON_HOLD", "FORFEITED", "CLEARED"],
+      });
+      if (cleared.split) split = cleared.split;
+    } catch (err) {
+      console.warn("[boda-fleet] payout split clear:", err.message);
+    }
+  }
+
   console.log(
-    `[boda-fleet] fee stub READY release` +
+    `[boda-fleet] fee RELEASE` +
       ` dispatch=#${id}` +
       ` order=${d.order_ref}` +
       ` rider=${d.rider_phone || "—"}` +
-      ` name=${d.rider_name || "—"}` +
-      ` plate=${d.motorbike_plate || "—"}` +
-      ` feeKes=${feeKes}` +
-      ` via=${reason}` +
-      ` (no M-Pesa API call yet — mark RELEASED for ops ledger)`
+      ` gross=${split.originalDeliveryFee}` +
+      ` platform=${split.platformCommission}` +
+      ` mpesa=${split.mpesaTariff}` +
+      ` net=${split.netRiderPayout}` +
+      ` via=${reason}`
   );
 
   await query(
@@ -1793,26 +1876,41 @@ export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) 
         feeReleaseStubAt: new Date().toISOString(),
         feeReleaseReason: reason,
         feeReleaseKes: feeKes,
+        platformCommission: split.platformCommission,
+        mpesaTariff: split.mpesaTariff,
+        netRiderPayout: split.netRiderPayout,
       }),
     ]
   );
-  updateOrderMeta(d.order_ref, { bodaFeeStatus: "RELEASED", bodaPayoutStatus: "RELEASED" });
+  updateOrderMeta(d.order_ref, {
+    bodaFeeStatus: "RELEASED",
+    bodaPayoutStatus: "RELEASED",
+    bodaPlatformCommission: split.platformCommission,
+    bodaNetRiderPayout: split.netRiderPayout,
+  });
 
   if (d.rider_phone && feeKes > 0) {
     try {
       const { sendText } = await import("./whatsapp.js");
       const msg =
-        reason === "dispute_window_elapsed"
-          ? `💰 *PAYOUT RELEASED!*\n15-minute clearance window for Order *${d.order_ref}* passed smoothly. KES ${feeKes.toLocaleString()} credited to your payout balance.`
-          : `💵 Delivery fee for *${d.order_ref}* (KES ${feeKes.toLocaleString()}) is cleared for payout.\n` +
-            `Sokoni ops will send M-Pesa shortly if not already paid.`;
+        reason === "dispute_window_elapsed" || reason === "admin_reactivate"
+          ? formatPayoutSplitMessage(d.order_ref, split)
+          : `💵 Delivery fee for *${d.order_ref}* cleared.\n` +
+            `• Gross KES ${split.originalDeliveryFee.toLocaleString()} → net *KES ${split.netRiderPayout.toLocaleString()}*\n` +
+            `(10% platform + M-Pesa B2C fee deducted). Auto-payout via M-Pesa when balance ≥ KES 100.`;
       await sendText(`${normalizeRiderPhone(d.rider_phone)}@c.us`, msg);
     } catch (err) {
       console.warn("[boda-fleet] fee rider notify skipped:", err.message);
     }
   }
 
-  return { ok: true, feeKes, orderRef: d.order_ref, riderPhone: d.rider_phone || null };
+  return {
+    ok: true,
+    feeKes,
+    split,
+    orderRef: d.order_ref,
+    riderPhone: d.rider_phone || null,
+  };
 }
 
 /** On fulfillment dispute: suspend assigned rider + mark dispatch DISPUTED. */
@@ -2203,16 +2301,11 @@ export async function resolveRiderDispute({
       ]
     );
     try {
-      await ensureRiderPayoutsTable();
-      await query(
-        `UPDATE rider_payouts SET status = 'CLEARED'
-          WHERE UPPER(order_ref) = UPPER($1) AND status IN ('ON_HOLD', 'PENDING_CLEAR', 'FORFEITED')`,
-        [orderId]
-      );
+      // Split + CLEARED applied inside releaseBodaRiderFee
+      await releaseBodaRiderFee({ dispatchId: id, reason: "admin_reactivate" });
     } catch (err) {
-      console.warn("[boda-fleet] payout CLEARED on reactivate:", err.message);
+      console.warn("[boda-fleet] payout clear on reactivate:", err.message);
     }
-    await releaseBodaRiderFee({ dispatchId: id, reason: "admin_reactivate" });
     updateOrderMeta(orderId, {
       bodaStatus: "DELIVERED",
       bodaFeeStatus: "RELEASED",

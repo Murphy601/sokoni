@@ -1,5 +1,6 @@
 /**
  * Sokoni rider delivery-fee B2C — Daraja BusinessPayment for CLEARED rider_payouts.
+ * Ledger `amount` / `net_amount_paid` are post 10% + M-Pesa tariff.
  * Reuses existing daraja-mpesa + ResultURL; originator ids are prefixed skrboda-.
  */
 import { isDbEnabled, query } from "../db/pool.js";
@@ -8,6 +9,7 @@ import {
   isB2CReady,
   b2cMeta,
 } from "./daraja-mpesa.js";
+import { calculateDeliveryPayoutSplit } from "../lib/rider-payout-fees.js";
 
 function normalizePhone(raw) {
   let d = String(raw || "").replace(/\D/g, "");
@@ -22,12 +24,58 @@ async function ensureColumns() {
       ADD COLUMN IF NOT EXISTS b2c_conversation_id VARCHAR(64),
       ADD COLUMN IF NOT EXISTS b2c_originator_id VARCHAR(64),
       ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS mpesa_receipt VARCHAR(64)
+      ADD COLUMN IF NOT EXISTS mpesa_receipt VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS gross_delivery_fee NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS platform_commission NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS transaction_fee NUMERIC(12, 2),
+      ADD COLUMN IF NOT EXISTS net_amount_paid NUMERIC(12, 2)
   `);
 }
 
 /**
- * Aggregate CLEARED rider balances (>= minKes) and kick Daraja B2C.
+ * Backfill 10% + tariff on CLEARED rows that still hold gross-only amounts.
+ */
+async function backfillMissingFeeSplits() {
+  const { rows } = await query(
+    `SELECT id, amount, gross_delivery_fee, platform_commission, net_amount_paid
+       FROM rider_payouts
+      WHERE status = 'CLEARED'
+        AND (
+          platform_commission IS NULL
+          OR net_amount_paid IS NULL
+          OR transaction_fee IS NULL
+        )
+      ORDER BY id ASC
+      LIMIT 200`
+  );
+  for (const row of rows) {
+    const gross = Math.round(
+      Number(row.gross_delivery_fee != null ? row.gross_delivery_fee : row.amount) || 0
+    );
+    if (gross < 1) continue;
+    const split = calculateDeliveryPayoutSplit(gross);
+    await query(
+      `UPDATE rider_payouts SET
+         gross_delivery_fee = $2,
+         platform_commission = $3,
+         transaction_fee = $4,
+         net_amount_paid = $5,
+         amount = $5
+       WHERE id = $1 AND status = 'CLEARED'`,
+      [
+        row.id,
+        split.originalDeliveryFee,
+        split.platformCommission,
+        split.mpesaTariff,
+        split.netRiderPayout,
+      ]
+    );
+  }
+  return rows.length;
+}
+
+/**
+ * Aggregate CLEARED rider balances (>= minKes net) and kick Daraja B2C.
  */
 export async function processRiderB2CPayouts({ minKes = 100, limit = 10 } = {}) {
   if (!isDbEnabled()) return { ok: false, skipped: true, reason: "database_not_configured" };
@@ -38,19 +86,21 @@ export async function processRiderB2CPayouts({ minKes = 100, limit = 10 } = {}) 
 
   try {
     await ensureColumns();
+    await backfillMissingFeeSplits();
   } catch (err) {
-    console.warn("[rider-b2c] columns:", err.message);
+    console.warn("[rider-b2c] columns/backfill:", err.message);
   }
 
   const { rows } = await query(
-    `SELECT r.id AS rider_id, r.full_name, r.phone, SUM(p.amount)::numeric AS total_amount
+    `SELECT r.id AS rider_id, r.full_name, r.phone,
+            SUM(COALESCE(p.net_amount_paid, p.amount))::numeric AS total_amount
        FROM rider_payouts p
        JOIN riders r ON p.rider_id = r.id
       WHERE p.status = 'CLEARED'
         AND r.verification_status = 'VERIFIED'
       GROUP BY r.id, r.full_name, r.phone
-     HAVING SUM(p.amount) >= $1
-      ORDER BY SUM(p.amount) DESC
+     HAVING SUM(COALESCE(p.net_amount_paid, p.amount)) >= $1
+      ORDER BY SUM(COALESCE(p.net_amount_paid, p.amount)) DESC
       LIMIT $2`,
     [Math.max(1, Number(minKes) || 100), Math.min(Math.max(Number(limit) || 10, 1), 25)]
   );
@@ -92,7 +142,7 @@ export async function processRiderB2CPayouts({ minKes = 100, limit = 10 } = {}) 
     );
     triggered += 1;
     console.log(
-      `[rider-b2c] triggered KES ${amount} → ${row.full_name} (${phone}) originator=${originator}`
+      `[rider-b2c] triggered net KES ${amount} → ${row.full_name} (${phone}) originator=${originator}`
     );
   }
 
@@ -143,7 +193,8 @@ export async function applyRiderB2CResult(parsed) {
     for (const row of rows) {
       try {
         const info = await query(
-          `SELECT r.phone, COALESCE(SUM(p.amount),0)::numeric AS total
+          `SELECT r.phone,
+                  COALESCE(SUM(COALESCE(p.net_amount_paid, p.amount)),0)::numeric AS total
              FROM rider_payouts p
              JOIN riders r ON r.id = p.rider_id
             WHERE p.rider_id = $1
