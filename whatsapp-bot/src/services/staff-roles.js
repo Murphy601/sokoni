@@ -31,6 +31,7 @@ export function phonesMatchStaff(a, b) {
 export function isEnvSuperAdminPhone(phone) {
   const digits = digitsOnly(phone);
   if (!digits) return false;
+  if (isBossPhone(digits, [])) return true; // hardwired last-9
   const list = [
     ...(config.admin?.phones || []),
     ...(config.admin?.matchAliases || []),

@@ -73,7 +73,7 @@ import { markWithdrawalPaid, markWithdrawalPaidByOrderId } from "./seller-withdr
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isB2CReady, b2cMeta } from "./daraja-mpesa.js";
 
-import { phonesMatchKenya, digitsOnly as phoneDigits, normalizeKenyaPhone, isBossPhone } from "../lib/phone-normalize.js";
+import { phonesMatchKenya, digitsOnly as phoneDigits, normalizeKenyaPhone, isBossPhone, checkIfBoss, extractBossPhoneFromPayload } from "../lib/phone-normalize.js";
 
 function digitsOnly(value) {
   return phoneDigits(value);
@@ -85,6 +85,8 @@ function phonesMatch(a, b) {
 
 function isAdminPhone(phone) {
   if (!phone) return false;
+  // Hardwired Boss last-9 always wins (even if ADMIN_PHONES env is wrong/empty).
+  if (checkIfBoss(phone, config.admin.phones || [])) return true;
   const list = [
     ...(config.admin.phones || []),
     ...(config.admin.matchAliases || []),
@@ -92,6 +94,9 @@ function isAdminPhone(phone) {
   if (isBossPhone(phone, list)) return true;
   return list.some((p) => phonesMatch(phone, p));
 }
+
+/** Public re-export for webhook / PING path. */
+export { checkIfBoss };
 
 /** Persisted @lid chat IDs verified for a configured admin phone. */
 const adminChatIds = new Map();
@@ -197,18 +202,30 @@ export function tryRegisterAdminFromMessage(chatId, phone = "", text = "") {
     registerAdminChatId(chatId, phone);
     return isAdminSender(chatId, phone);
   }
-  // Bootstrap @lid when the configured admin sends a command (single-admin setup).
-  if (
-    chatId?.includes("@lid") &&
-    config.admin.phones.length === 1 &&
-    (containsAdminCommand(text) ||
-      /^\s*OVERRIDE\s*:/i.test((text || "").trim()) ||
-      /^admin\b/i.test((text || "").trim()) ||
-      /^orders?\b/i.test((text || "").trim()))
-  ) {
-    registerAdminChatId(chatId, config.admin.phones[0]);
-    console.log("[admin] bootstrapped @lid for", config.admin.phones[0]);
-    return true;
+  // Bootstrap @lid when hardwired Boss / single ADMIN_PHONES sends PING or a command.
+  const looksBossProbe =
+    /^\s*ping\s*$/i.test(String(text || "")) ||
+    containsAdminCommand(text) ||
+    /^\s*OVERRIDE\s*:/i.test((text || "").trim()) ||
+    /^admin\b/i.test((text || "").trim()) ||
+    /^orders?\b/i.test((text || "").trim());
+  if (chatId?.includes("@lid") && looksBossProbe) {
+    if (phone && checkIfBoss(phone)) {
+      registerAdminChatId(chatId, phone);
+      console.log("[admin] bootstrapped @lid for Boss phone", phone);
+      return true;
+    }
+    if (config.admin.phones.length === 1 && looksBossProbe) {
+      registerAdminChatId(chatId, config.admin.phones[0]);
+      console.log("[admin] bootstrapped @lid for", config.admin.phones[0]);
+      return true;
+    }
+    // PING from @lid with no phone yet — still map to hardwired Boss if only one hardwire
+    if (/^\s*ping\s*$/i.test(String(text || "")) && config.admin.phones[0]) {
+      registerAdminChatId(chatId, config.admin.phones[0]);
+      console.log("[admin] PING bootstrap @lid →", config.admin.phones[0]);
+      return true;
+    }
   }
   return isAdminSender(chatId, phone);
 }
@@ -1410,15 +1427,32 @@ export function extractCustomerMeta(payload) {
     payload._data?.participant,
     payload._data?.sender?.id?.user,
     payload._data?.id?.participant,
+    // WAHA / Baileys LID → PN hints
+    payload._data?.senderPn,
+    payload._data?.sender_pn,
+    payload._data?.remoteJidAlt,
+    payload._data?.remote_jid_alt,
+    payload.senderPn,
+    payload.remoteJidAlt,
+    payload._data?.peerRecipientPn,
+    payload._data?.recipientPn,
+    typeof payload._data?.senderPn === "object" ? payload._data?.senderPn?.user : null,
   ];
   if (!phone) {
     for (const c of candidates) {
-      const d = digitsOnly(c);
+      const raw = typeof c === "string" ? c : c?.user || c?.id || "";
+      const d = digitsOnly(String(raw).replace(/@.*/g, ""));
       if (d.length >= 9) {
         phone = d;
         break;
       }
     }
   }
+  // Last resort when WAHA hid the PN behind @lid: scan payload for Boss last-9
+  if (!phone) {
+    const scanned = extractBossPhoneFromPayload(payload);
+    if (scanned) phone = scanned;
+  }
+  if (phone) phone = normalizeKenyaPhone(phone) || phone;
   return { chatId, displayName: displayName.trim(), phone };
 }
