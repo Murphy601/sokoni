@@ -394,6 +394,24 @@ export async function getOrderPartyChats(order, opts = {}) {
     /* ignore */
   }
 
+  if (!seller.length && order.sellerPhone) {
+    try {
+      seller.push(...sellerNotifyTargets(order.sellerPhone));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!seller.length && order.productId) {
+    try {
+      const { getProductById } = await import("./catalog.js");
+      const product = await getProductById(order.productId);
+      if (product?.sellerPhone) seller.push(...sellerNotifyTargets(product.sellerPhone));
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (!seller.length) {
     try {
       const uid = Number(opts.sellerUserId ?? order.sellerUserId ?? order.seller_user_id);
@@ -1326,13 +1344,43 @@ export async function openBuyerReturnCase({
   phone = "",
   reason = "",
 } = {}) {
-  const order = orderId ? getOrder(orderId) : null;
+  let order = orderId ? getOrder(orderId) : null;
   if (!order) {
     return {
       ok: false,
       error: "order_not_found",
       message: "Order not found. Check your SKN-#### (or older SK-####) number.",
     };
+  }
+  try {
+    order = (await ensureOrderSupplier(order)) || order;
+  } catch {
+    /* ignore */
+  }
+  // Stamp seller phone onto the order so dispute alerts always have a WAHA target.
+  try {
+    if (!order.sellerPhone && order.productId) {
+      const { getProductById } = await import("./catalog.js");
+      const product = await getProductById(order.productId);
+      const sellerPhone = product?.sellerPhone || null;
+      const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+      const phoneToStamp = sellerPhone || supplier?.phone || null;
+      if (phoneToStamp || (product?.supplierId && !order.supplierId)) {
+        updateOrderMeta(order.id, {
+          ...(product?.supplierId && !order.supplierId ? { supplierId: product.supplierId } : {}),
+          ...(phoneToStamp ? { sellerPhone: phoneToStamp } : {}),
+        });
+        order = getOrder(order.id) || order;
+      }
+    } else if (!order.sellerPhone && order.supplierId) {
+      const supplier = getSupplier(order.supplierId);
+      if (supplier?.phone) {
+        updateOrderMeta(order.id, { sellerPhone: supplier.phone });
+        order = getOrder(order.id) || order;
+      }
+    }
+  } catch (err) {
+    console.warn("[communication-hub] stamp sellerPhone skipped:", err.message);
   }
   if (!buyerOwnsOrder(order, customerKey, phone)) {
     return {

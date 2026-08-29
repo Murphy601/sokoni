@@ -336,16 +336,40 @@ export async function sendSellerDisputeAlert(
     console.error(`[Dispute Alert] Order ${orderId} not found — seller alert skipped`);
     return false;
   }
-  const { sendText, toChatId } = await import("./whatsapp.js");
+  const { sendTextReliable, toChatId } = await import("./whatsapp.js");
   const { getSupplier } = await import("./suppliers.js");
   const { sellerNotifyTargets, ensureOrderSupplier, getOrderPartyChats } = await import(
     "./communication-hub.js"
   );
+  const { updateOrderMeta } = await import("./orders.js");
 
   try {
     order = (await ensureOrderSupplier(order)) || order;
   } catch {
     /* ignore */
+  }
+
+  // Product.sellerPhone is often present even when supplierId is missing.
+  let productSellerPhone = order.sellerPhone || null;
+  try {
+    if (order.productId) {
+      const { getProductById } = await import("./catalog.js");
+      const product = await getProductById(order.productId);
+      productSellerPhone =
+        productSellerPhone || product?.sellerPhone || product?.seller?.phone || null;
+      if (!order.supplierId && product?.supplierId) {
+        updateOrderMeta(order.id, {
+          supplierId: product.supplierId,
+          sellerPhone: productSellerPhone || undefined,
+        });
+        order = getOrder(order.id) || order;
+      } else if (productSellerPhone && !order.sellerPhone) {
+        updateOrderMeta(order.id, { sellerPhone: productSellerPhone });
+        order = getOrder(order.id) || order;
+      }
+    }
+  } catch (err) {
+    console.warn("[Dispute Alert] product seller phone lookup:", err.message);
   }
 
   const amount = Number(order.priceKes || order.buyerTotalKes || 0);
@@ -363,13 +387,15 @@ export async function sendSellerDisputeAlert(
 
   const targets = new Set();
   const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
-  for (const phone of [supplier?.phone, supplier?.mpesaNumber, order.sellerPhone].filter(Boolean)) {
+  for (const phone of [
+    supplier?.phone,
+    supplier?.mpesaNumber,
+    order.sellerPhone,
+    productSellerPhone,
+  ].filter(Boolean)) {
     for (const t of sellerNotifyTargets(phone)) targets.add(t);
-    try {
-      targets.add(toChatId(phone));
-    } catch {
-      /* ignore */
-    }
+    const chat = toChatId(phone);
+    if (chat) targets.add(chat);
   }
   try {
     const parties = await getOrderPartyChats(order, {
@@ -382,17 +408,24 @@ export async function sendSellerDisputeAlert(
 
   if (!targets.size) {
     console.error(
-      `[Dispute Alert] Missing seller phone/chat for Order ${order.id} (supplierId=${order.supplierId || "—"})`
+      `[Dispute Alert] Missing seller phone/chat for Order ${order.id} ` +
+        `(supplierId=${order.supplierId || "—"} product=${order.productId || "—"} sellerPhone=${productSellerPhone || "—"})`
     );
     return false;
   }
 
+  console.log(`[Dispute Alert] seller targets for ${order.id}:`, [...targets].join(", "));
+
   let sent = false;
   for (const to of targets) {
     try {
-      await sendText(to, msg);
-      console.log(`[Dispute Alert] Sent to Seller: ${to}`);
-      sent = true;
+      const result = await sendTextReliable(to, msg, { label: "Dispute Alert/Seller" });
+      if (result?.ok) {
+        console.log(`[Dispute Alert] Sent to Seller: ${result.chatId || to}`);
+        sent = true;
+      } else if (result?.dryRun) {
+        console.error(`[Dispute Alert] DRY-RUN (not delivered) → ${to}`);
+      }
     } catch (err) {
       console.warn(`[Dispute Alert] Seller send failed → ${to}:`, err.message);
     }
@@ -425,7 +458,7 @@ export async function sendAdminDisputeAlert(
     );
     return false;
   }
-  const { sendText } = await import("./whatsapp.js");
+  const { sendTextReliable } = await import("./whatsapp.js");
   const ticket = disputeId ? `#${disputeId}` : orderId || "—";
   const headline = opened
     ? `🚨 *ADMIN ALERT: NEW DISPUTE FILED*`
@@ -441,12 +474,18 @@ export async function sendAdminDisputeAlert(
     (opened ? "" : `• *DB attach:* ${attached ? "✅" : "relayed / pending"}\n`) +
     `Check Admin Portal → Disputes.`;
 
+  console.log(`[Dispute Alert] admin targets:`, admins.join(", "));
+
   let sent = false;
   for (const admin of admins) {
     try {
-      await sendText(admin, msg);
-      console.log(`[Dispute Alert] Sent to Admin: ${admin}`);
-      sent = true;
+      const result = await sendTextReliable(admin, msg, { label: "Dispute Alert/Admin" });
+      if (result?.ok) {
+        console.log(`[Dispute Alert] Sent to Admin: ${result.chatId || admin}`);
+        sent = true;
+      } else if (result?.dryRun) {
+        console.error(`[Dispute Alert] DRY-RUN (not delivered) → ${admin}`);
+      }
     } catch (err) {
       console.warn(`[Dispute Alert] Admin send failed → ${admin}:`, err.message);
     }

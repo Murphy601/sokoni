@@ -528,23 +528,71 @@ export function normalizeBotMessageSpacing(text) {
 export async function sendText(to, text) {
   const body = normalizeBotMessageSpacing(text);
   const dest = toChatId(to);
+  if (!dest) {
+    console.error("[whatsapp] sendText aborted — empty chatId from", to);
+    throw new Error("empty_chat_id");
+  }
   const capture = adminReplyCapture.getStore();
   if (capture && capture.chatId === dest) {
     capture.replies.push(body);
     return { captured: true, chatId: dest };
   }
-  try {
-    const resp = await callWaha("/api/sendText", {
-      session: config.waha.session,
-      chatId: dest,
-      text: body,
+  return sendTextReliable(to, body, { label: "whatsapp" });
+}
+
+/**
+ * WAHA send with JID fallbacks (@c.us ↔ @s.whatsapp.net ↔ @lid).
+ * Logs clearly when WAHA_API_URL is missing (dry-run = NOT delivered).
+ */
+export async function sendTextReliable(to, text, { label = "whatsapp" } = {}) {
+  const body = normalizeBotMessageSpacing(text);
+  const primary = toChatId(to) || String(to || "").trim();
+  const digits =
+    phoneDigitsFromChatId(primary) ||
+    (String(to || "").includes("@") ? null : String(to || "").replace(/\D/g, ""));
+  const candidates = uniqueChatIds(
+    primary,
+    digits && digits.length >= 9 ? `${digits}@c.us` : null,
+    digits && digits.length >= 9 ? `${digits}@s.whatsapp.net` : null,
+    String(to || "").includes("@lid") ? String(to) : null
+  ).filter(Boolean);
+
+  if (!config.waha.apiUrl) {
+    console.error(
+      `[${label}] WAHA_API_URL unset — message NOT delivered (dry-run). targets=`,
+      candidates.join(",") || "(none)"
+    );
+    console.log("[waha:dry-run]", "/api/sendText", {
+      chatId: candidates[0] || primary,
+      text: String(body).slice(0, 160),
     });
-    rememberSend(resp, to);
-    return resp;
-  } catch (err) {
-    console.error("[whatsapp] sendText failed:", dest, err.message);
-    throw err;
+    return { dryRun: true, ok: false, chatId: candidates[0] || primary };
   }
+
+  if (!candidates.length) {
+    console.error(`[${label}] no valid WAHA chatId for`, to);
+    throw new Error("empty_chat_id");
+  }
+
+  let lastErr = null;
+  for (const chatId of candidates) {
+    try {
+      const resp = await callWaha("/api/sendText", {
+        session: config.waha.session,
+        chatId,
+        text: body,
+      });
+      rememberSend(resp, chatId);
+      const mid = resp?.id || resp?.key?.id || resp?.messageId || "ok";
+      console.log(`[${label}] WAHA sendText OK → ${chatId} id=${mid}`);
+      return { ok: true, dryRun: false, chatId, resp };
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[${label}] WAHA sendText failed → ${chatId}:`, err.message);
+    }
+  }
+  console.error(`[${label}] WAHA sendText exhausted targets:`, candidates.join(","));
+  throw lastErr || new Error("sendText_failed");
 }
 
 /** Public HTTPS URL for a catalog image (prefers bot server for WhatsApp). */

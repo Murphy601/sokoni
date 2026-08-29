@@ -444,7 +444,37 @@ export async function handleIncomingMessage(
   // Numbered menu replies (1, 2, 3…) — before handoff silence swallows them.
   if (await tryNumberedMenuReply(customerKey, text, { phone })) return;
 
-  // Human handoff — bot stays silent except menu / track (handled above).
+  // Fulfillment disputes MUST run even during human handoff — otherwise seller/admin
+  // alerts never fire once ADMIN_TAKE_OVER is set, and text complaints are swallowed.
+  if (!isAdminSender(customerKey, phone) && String(combinedText || text || "").trim()) {
+    try {
+      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
+      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
+        if (hasMedia) {
+          try {
+            const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+            await tryHandleDisputeEvidencePhoto(customerKey, {
+              hasMedia,
+              mediaUrl,
+              mediaMimetype,
+              messageId,
+              chatId,
+              session: wahaSession,
+              text: combinedText || text,
+              phone,
+            });
+          } catch (err) {
+            console.warn("[webhook] dispute evidence after open skipped:", err.message);
+          }
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute protocol skipped:", err.message);
+    }
+  }
+
+  // Human handoff — bot stays silent except menu / track / disputes (handled above).
   // Exception: dispute evidence photos must still attach (not silent-drop / not catalog search).
   if (isHumanHandoff(customerKey)) {
     if (normalized === "menu") {
@@ -521,34 +551,7 @@ export async function handleIncomingMessage(
     }
   }
 
-  // Fulfillment disputes BEFORE soft automations + image search + AI.
-  if (!isAdminSender(customerKey, phone) && !isHumanHandoff(customerKey)) {
-    try {
-      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
-      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
-        if (hasMedia) {
-          try {
-            const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
-            await tryHandleDisputeEvidencePhoto(customerKey, {
-              hasMedia,
-              mediaUrl,
-              mediaMimetype,
-              messageId,
-              chatId,
-              session: wahaSession,
-              text: combinedText || text,
-              phone,
-            });
-          } catch (err) {
-            console.warn("[webhook] dispute evidence after open skipped:", err.message);
-          }
-        }
-        return;
-      }
-    } catch (err) {
-      console.warn("[webhook] dispute protocol skipped:", err.message);
-    }
-  }
+  // Fulfillment disputes already handled earlier (before handoff). Soft automations next.
 
   if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
 
