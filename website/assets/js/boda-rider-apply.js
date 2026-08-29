@@ -1,5 +1,5 @@
 /**
- * Sokoni boda rider onboarding — posts JSON + base64 docs to /api/riders/register.
+ * Sokoni boda rider onboarding — multipart FormData to POST /api/riders/register.
  */
 (function () {
   const API_BASE =
@@ -11,6 +11,7 @@
   const statusEl = document.getElementById("form-status");
   const submitBtn = document.getElementById("submit-btn");
   const successBox = document.getElementById("success-box");
+  const MAX_BYTES = 5 * 1024 * 1024;
 
   if (!form) return;
 
@@ -19,27 +20,12 @@
     statusEl.textContent = msg || "";
     statusEl.classList.toggle("text-red-600", Boolean(isError));
     statusEl.classList.toggle("dark:text-red-400", Boolean(isError));
-    statusEl.classList.toggle("text-brand-purple", !isError);
   }
 
-  function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      if (!file) return resolve("");
-      if (file.size > 4 * 1024 * 1024) {
-        reject(new Error(`${file.name || "File"} is over 4 MB`));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Could not read file"));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function optionalFile(id) {
-    const file = document.getElementById(id)?.files?.[0];
-    if (!file) return { data: "", name: "" };
-    return { data: await fileToDataUrl(file), name: file.name || "" };
+  function assertFileSize(file, label) {
+    if (file && file.size > MAX_BYTES) {
+      throw new Error(`${label} is over 5 MB`);
+    }
   }
 
   form.addEventListener("submit", async (ev) => {
@@ -57,47 +43,40 @@
       if (!idFile || !dlFile || !stageFile) {
         throw new Error("Upload National ID, driving licence, and stage letter.");
       }
+      assertFileSize(idFile, "National ID");
+      assertFileSize(dlFile, "Driving licence");
+      assertFileSize(stageFile, "Stage letter");
 
-      const [idDocument, dlDocument, stageLetter, idBack, logbook, goodConduct, ntsa] =
-        await Promise.all([
-          fileToDataUrl(idFile),
-          fileToDataUrl(dlFile),
-          fileToDataUrl(stageFile),
-          optionalFile("idDocumentBack"),
-          optionalFile("logbookDocument"),
-          optionalFile("goodConductDocument"),
-          optionalFile("ntsaBadgeDocument"),
-        ]);
+      const fd = new FormData();
+      fd.append("fullName", String(document.getElementById("fullName")?.value || "").trim());
+      fd.append("phone", String(document.getElementById("phone")?.value || "").trim());
+      fd.append("nationalId", String(document.getElementById("nationalId")?.value || "").trim());
+      fd.append("operatingTown", String(document.getElementById("operatingTown")?.value || "").trim());
+      fd.append("stageLocation", String(document.getElementById("stageLocation")?.value || "").trim());
+      fd.append("motorbikePlate", String(document.getElementById("motorbikePlate")?.value || "").trim());
+      fd.append("guarantorName", String(document.getElementById("guarantorName")?.value || "").trim());
+      fd.append("guarantorPhone", String(document.getElementById("guarantorPhone")?.value || "").trim());
 
-      const payload = {
-        fullName: String(document.getElementById("fullName")?.value || "").trim(),
-        phone: String(document.getElementById("phone")?.value || "").trim(),
-        nationalId: String(document.getElementById("nationalId")?.value || "").trim(),
-        operatingTown: String(document.getElementById("operatingTown")?.value || "").trim(),
-        stageLocation: String(document.getElementById("stageLocation")?.value || "").trim(),
-        motorbikePlate: String(document.getElementById("motorbikePlate")?.value || "").trim(),
-        guarantorName: String(document.getElementById("guarantorName")?.value || "").trim(),
-        guarantorPhone: String(document.getElementById("guarantorPhone")?.value || "").trim(),
-        idDocument,
-        idDocumentName: idFile.name || "",
-        idDocumentBack: idBack.data || undefined,
-        idDocumentBackName: idBack.name || undefined,
-        dlDocument,
-        dlDocumentName: dlFile.name || "",
-        stageLetter,
-        stageLetterName: stageFile.name || "",
-        logbookDocument: logbook.data || undefined,
-        logbookDocumentName: logbook.name || undefined,
-        goodConductDocument: goodConduct.data || undefined,
-        goodConductDocumentName: goodConduct.name || undefined,
-        ntsaBadgeDocument: ntsa.data || undefined,
-        ntsaBadgeDocumentName: ntsa.name || undefined,
-      };
+      fd.append("idDocument", idFile);
+      fd.append("dlDocument", dlFile);
+      fd.append("stageLetter", stageFile);
+
+      const optional = [
+        ["idDocumentBack", "ID back"],
+        ["logbookDocument", "Logbook"],
+        ["goodConductDocument", "Good conduct"],
+        ["ntsaBadgeDocument", "NTSA badge"],
+      ];
+      for (const [id, label] of optional) {
+        const f = document.getElementById(id)?.files?.[0];
+        if (!f) continue;
+        assertFileSize(f, label);
+        fd.append(id, f);
+      }
 
       const res = await fetch(`${API_BASE}/api/riders/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: fd,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
@@ -108,7 +87,7 @@
       if (successBox) {
         successBox.classList.remove("hidden");
         const idEl = document.getElementById("application-id");
-        if (idEl) idEl.textContent = String(data.riderId || "—");
+        if (idEl) idEl.textContent = String(data.riderId || data.rider?.id || "—");
       }
       setStatus("");
     } catch (err) {

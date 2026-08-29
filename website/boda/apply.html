@@ -53,7 +53,6 @@
 
   <main class="max-w-2xl mx-auto px-5 py-10 md:py-14">
     <div id="success-box" class="hidden rounded-3xl border border-brand-green/40 bg-brand-green/10 p-8 text-center">
-      <p class="text-3xl mb-3" aria-hidden="true">✅</p>
       <h1 class="font-display text-2xl font-bold mb-2">Application received</h1>
       <p class="text-sm text-brand-purple/70 dark:text-white/70 mb-2">Reference: rider #<strong id="application-id"></strong></p>
       <p class="text-sm text-brand-purple/80 dark:text-white/80">
@@ -62,7 +61,7 @@
       <a href="../index.html" class="inline-block mt-6 text-sm font-semibold text-brand-green hover:underline">Back to sokonimall.com</a>
     </div>
 
-    <form id="boda-apply-form" class="space-y-8" novalidate>
+    <form id="boda-apply-form" class="space-y-8" enctype="multipart/form-data" novalidate>
       <div>
         <p class="text-sm font-semibold text-brand-green mb-2">Sokoni boda network</p>
         <h1 class="font-display text-3xl md:text-4xl font-bold leading-tight mb-3">Join as a delivery rider</h1>
@@ -114,7 +113,7 @@
 
       <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
         <h2 class="font-bold text-lg">Verification uploads</h2>
-        <p class="text-xs text-brand-purple/60 dark:text-white/50">Images or PDF · max 4 MB each. Required fields marked *</p>
+        <p class="text-xs text-brand-purple/60 dark:text-white/50">Images or PDF · max 5 MB each. Required fields marked *</p>
         <label class="block text-sm font-medium">National ID — front *
           <input id="idDocument" name="idDocument" type="file" accept="image/*,.pdf,application/pdf" required
                  class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />

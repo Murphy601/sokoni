@@ -412,7 +412,7 @@ export async function handleIncomingMessage(
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
   }
 
-  // Sokoni boda fleet: ACCEPT / SET ZONE / DELIVERED / CODE (riders + buyer OTP).
+  // Sokoni boda fleet: ACCEPT / PICKED / CONFIRM / DELIVERED / CODE (riders + buyer OTP).
   {
     try {
       const { tryHandleBodaFleetMessage } = await import("../services/boda-fleet.js");

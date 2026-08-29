@@ -277,16 +277,18 @@ const avatarStaticOpts = {
 app.use("/assets/images/avatars", express.static(AVATARS_DIR, avatarStaticOpts));
 app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStaticOpts));
 
-/** Rider verification docs (opaque hashed filenames under data/boda-docs). */
+/** Rider verification docs (opaque filenames under data/boda-docs). */
 {
   const bodaDocsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "boda-docs");
   app.use(
     "/assets/boda-docs",
     express.static(bodaDocsDir, {
       fallthrough: true,
-      maxAge: "7d",
+      maxAge: "1d",
       setHeaders(res) {
+        res.setHeader("Cache-Control", "private, max-age=86400");
         res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Access-Control-Allow-Origin", "*");
       },
     })
   );
