@@ -94,11 +94,28 @@ export async function sendReviewPrompt(customerKey, order) {
 
   markReviewPromptSent(order.id);
   clearMenuState(customerKey);
+
+  const riderName = order.riderName || null;
+  const hasBoda = Boolean(order.bodaRiderId || riderName);
+
   setPendingReview(customerKey, {
     orderId: order.id,
     productName: order.productName,
     step: "stars",
+    rateRider: hasBoda,
+    riderName: riderName || null,
   });
+
+  if (hasBoda) {
+    await sendText(
+      customerKey,
+      `⭐ *How was your delivery${riderName ? ` with ${riderName}` : ""}?*\n\n` +
+        `Reply *1–5* stars for the rider.\n` +
+        `1 ⭐  ·  2 ⭐⭐  ·  3 ⭐⭐⭐  ·  4 ⭐⭐⭐⭐  ·  5 ⭐⭐⭐⭐⭐\n\n` +
+        `_Your rating helps Sokoni pin the best riders next time._`
+    );
+    return;
+  }
 
   await sendText(
     customerKey,
@@ -119,6 +136,11 @@ export async function handleReviewReply(customerKey, text) {
   if (!trimmed) return false;
 
   if (pending.step === "stars") {
+    if (/^skip$/i.test(trimmed)) {
+      clearPendingReview(customerKey);
+      await sendText(customerKey, `Asante! 🙏 Type *menu* anytime to shop again.\n\n${siteUrlLine()}`);
+      return true;
+    }
     const match = trimmed.match(/^([1-5])$/);
     if (!match) {
       await sendText(
@@ -127,13 +149,18 @@ export async function handleReviewReply(customerKey, text) {
       );
       return true;
     }
-    if (/^skip$/i.test(trimmed)) {
-      clearPendingReview(customerKey);
-      await sendText(customerKey, `Asante! 🙏 Type *menu* anytime to shop again.\n\n${siteUrlLine()}`);
-      return true;
-    }
 
     const stars = Number(match[1]);
+
+    if (pending.rateRider) {
+      try {
+        const { applyBuyerRiderRating } = await import("./boda-fleet.js");
+        await applyBuyerRiderRating(pending.orderId, stars);
+      } catch (err) {
+        console.warn("[reviews] rider rating apply:", err.message);
+      }
+    }
+
     setPendingReview(customerKey, { ...pending, step: "comment", stars });
 
     await sendText(
