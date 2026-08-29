@@ -433,25 +433,28 @@ function startBodaDisputeWindowScheduler() {
   console.log("✓ Boda HOLD_ESCROW scheduler enabled (every 2 min)");
 }
 
-/** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 100). */
+/** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */
 function startRiderB2CScheduler() {
   const tick = () => {
     import("./services/rider-b2c.js")
-      .then(({ processRiderB2CPayouts, riderB2cConfigured }) => {
+      .then(({ processRiderB2CPayouts, riderB2cConfigured, RIDER_B2C_MIN_FLOOR_KES }) => {
         if (!riderB2cConfigured()) return null;
-        return processRiderB2CPayouts({ minKes: 100, limit: 10 });
+        return processRiderB2CPayouts({ minKes: RIDER_B2C_MIN_FLOOR_KES, limit: 10 });
       })
       .then((result) => {
         if (result?.triggered > 0) {
           console.log(`[rider-b2c] triggered ${result.triggered} payout batch(es)`);
         }
+        if (result?.capped > 0) {
+          console.log(`[rider-b2c] daily-cap deferred ${result.capped} rider(s)`);
+        }
       })
       .catch((err) => console.warn("[rider-b2c] tick:", err.message));
   };
-  // Offset from hold-window tick; hourly is enough for batch B2C.
+  // 30-min cadence so PENDING_RETRY backoff can fire; also covers morning rollover.
   setTimeout(tick, 90 * 1000);
-  setInterval(tick, 60 * 60 * 1000);
-  console.log("✓ Rider B2C payout scheduler enabled (hourly when B2C ready)");
+  setInterval(tick, 30 * 60 * 1000);
+  console.log("✓ Rider B2C payout scheduler enabled (every 30 min when B2C ready; floor KES 200)");
 }
 
 /** Refresh trending / price-tier feed slices hourly. */
