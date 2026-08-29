@@ -1,0 +1,671 @@
+/**
+ * Admin OS — Depop editorial shell.
+ * Scoped to body.admin-depop so cream/purple storefront tokens stay untouched.
+ * Canvas #F4F4F4 · Ink #1A1A1A · Accent #FF2300 · Success #00D26A · Muted #8E8E93
+ */
+body.admin-depop .hidden {
+  display: none !important;
+}
+
+body.admin-depop {
+  --admin-canvas: #f4f4f4;
+  --admin-surface: #ffffff;
+  --admin-ink: #1a1a1a;
+  --admin-red: #ff2300;
+  --admin-red-hover: #e01f00;
+  --admin-green: #00d26a;
+  --admin-muted: #8e8e93;
+  --admin-shadow: 4px 4px 0 0 #1a1a1a;
+  --admin-shadow-lg: 6px 6px 0 0 #1a1a1a;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  margin: 0;
+  min-height: 100vh;
+  background: var(--admin-canvas);
+  color: var(--admin-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+body.admin-depop a {
+  color: inherit;
+  text-decoration: none;
+}
+
+body.admin-depop .admin-wrap {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+@media (min-width: 768px) {
+  body.admin-depop .admin-wrap {
+    padding: 2.5rem 2.5rem 4rem;
+  }
+}
+
+/* Top bar */
+body.admin-depop .admin-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid var(--admin-ink);
+}
+
+body.admin-depop .admin-os-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--admin-red);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+}
+
+body.admin-depop .admin-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+body.admin-depop .admin-title .dot {
+  color: var(--admin-red);
+}
+
+body.admin-depop .admin-boss {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: var(--admin-ink);
+  color: #fff;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+}
+
+body.admin-depop .admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+body.admin-depop .admin-nav a,
+body.admin-depop .admin-nav span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--admin-surface);
+}
+
+body.admin-depop .admin-nav a:hover {
+  background: var(--admin-ink);
+  color: #fff;
+}
+
+body.admin-depop .admin-nav .is-active {
+  background: var(--admin-red);
+  color: #fff;
+  border-color: var(--admin-red);
+}
+
+/* Metric cards */
+body.admin-depop .admin-metrics {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 768px) {
+  body.admin-depop .admin-metrics {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+body.admin-depop .admin-metric {
+  background: var(--admin-surface);
+  border: 2px solid var(--admin-ink);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: var(--admin-shadow);
+}
+
+body.admin-depop .admin-metric-label {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--admin-muted);
+}
+
+body.admin-depop .admin-metric-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.75rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+body.admin-depop .admin-metric-value.is-green {
+  color: var(--admin-green);
+}
+
+body.admin-depop .admin-metric-value.is-red {
+  color: var(--admin-red);
+}
+
+/* Panel / table shell */
+body.admin-depop .admin-panel {
+  background: var(--admin-surface);
+  border: 2px solid var(--admin-ink);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: var(--admin-shadow-lg);
+}
+
+body.admin-depop .admin-panel-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-bottom: 2px solid var(--admin-ink);
+  background: var(--admin-surface);
+}
+
+@media (min-width: 768px) {
+  body.admin-depop .admin-panel-toolbar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+body.admin-depop .admin-panel-toolbar h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+body.admin-depop .admin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+body.admin-depop .admin-input,
+body.admin-depop .admin-select {
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 9999px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+body.admin-depop .admin-input:focus,
+body.admin-depop .admin-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--admin-red);
+}
+
+body.admin-depop .admin-input-wide {
+  width: 100%;
+  min-width: 12rem;
+}
+
+@media (min-width: 768px) {
+  body.admin-depop .admin-input-wide {
+    width: 20rem;
+  }
+}
+
+body.admin-depop .admin-token-row {
+  margin-bottom: 1.25rem;
+}
+
+body.admin-depop .admin-token-row label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+}
+
+body.admin-depop .admin-token-row .admin-input {
+  width: 100%;
+  max-width: 28rem;
+  border-radius: 0.75rem;
+}
+
+body.admin-depop .admin-status {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--admin-muted);
+}
+
+body.admin-depop .admin-status.is-error {
+  color: var(--admin-red);
+}
+
+body.admin-depop .admin-status.is-ok {
+  color: var(--admin-green);
+}
+
+/* Buttons */
+body.admin-depop .btn-ink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 9999px;
+  background: var(--admin-ink);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+body.admin-depop .btn-ink:hover {
+  background: #000;
+}
+
+body.admin-depop .btn-red {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 9999px;
+  background: var(--admin-red);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.admin-depop .btn-red:hover {
+  background: var(--admin-red-hover);
+}
+
+body.admin-depop .btn-green {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 9999px;
+  background: var(--admin-green);
+  color: var(--admin-ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.admin-depop .btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 9999px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.admin-depop .btn-outline:hover {
+  background: var(--admin-canvas);
+}
+
+/* Table */
+body.admin-depop .admin-table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+body.admin-depop .admin-table thead tr {
+  background: var(--admin-canvas);
+  border-bottom: 2px solid var(--admin-ink);
+}
+
+body.admin-depop .admin-table th {
+  padding: 1rem;
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+body.admin-depop .admin-table tbody tr {
+  border-bottom: 2px solid var(--admin-ink);
+  transition: background 0.15s ease;
+}
+
+body.admin-depop .admin-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+body.admin-depop .admin-table tbody tr:hover {
+  background: rgba(244, 244, 244, 0.65);
+}
+
+body.admin-depop .admin-table td {
+  padding: 1rem;
+  vertical-align: top;
+}
+
+body.admin-depop .handle-name {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+body.admin-depop .badge-verified {
+  display: inline-flex;
+  align-items: center;
+  background: var(--admin-green);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+}
+
+body.admin-depop .badge-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+}
+
+body.admin-depop .badge-status.is-active {
+  color: var(--admin-green);
+  background: rgba(0, 210, 106, 0.1);
+}
+
+body.admin-depop .badge-status.is-hold,
+body.admin-depop .badge-status.is-paused,
+body.admin-depop .badge-status.is-flagged {
+  color: var(--admin-red);
+  background: rgba(255, 35, 0, 0.1);
+}
+
+body.admin-depop .badge-status.is-review,
+body.admin-depop .badge-status.is-hidden {
+  color: #c45c00;
+  background: rgba(245, 166, 35, 0.12);
+  border-color: #c45c00;
+}
+
+body.admin-depop .badge-status.is-muted {
+  color: var(--admin-muted);
+  background: rgba(142, 142, 147, 0.12);
+}
+
+body.admin-depop .muted {
+  color: var(--admin-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+body.admin-depop .escrow-amt {
+  font-weight: 900;
+  font-size: 0.95rem;
+}
+
+/* Inventory thumbs with price hover */
+body.admin-depop .thumb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+body.admin-depop .thumb-cell {
+  position: relative;
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #ececec;
+  cursor: pointer;
+}
+
+body.admin-depop .thumb-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+body.admin-depop .thumb-cell .thumb-price {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 800;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  text-align: center;
+  padding: 0.15rem;
+}
+
+body.admin-depop .thumb-cell:hover .thumb-price,
+body.admin-depop .thumb-cell:focus-visible .thumb-price {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.admin-depop .thumb-cell .thumb-price {
+    transition: none;
+  }
+}
+
+body.admin-depop .thumb-more {
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: var(--admin-muted);
+  padding-left: 0.15rem;
+}
+
+/* Actions menu */
+body.admin-depop .actions-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  margin-top: 0.35rem;
+  width: 15rem;
+  background: var(--admin-surface);
+  border: 2px solid var(--admin-ink);
+  border-radius: 0.85rem;
+  box-shadow: var(--admin-shadow);
+  z-index: 20;
+  padding: 0.25rem 0;
+  text-align: left;
+}
+
+body.admin-depop .actions-menu.is-open {
+  display: block;
+}
+
+body.admin-depop .actions-menu button,
+body.admin-depop .actions-menu a {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border: none;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--admin-ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+body.admin-depop .actions-menu button:hover,
+body.admin-depop .actions-menu a:hover {
+  background: var(--admin-canvas);
+}
+
+body.admin-depop .actions-menu .act-danger {
+  color: var(--admin-red);
+}
+
+/* Drawer */
+body.admin-depop .shops-drawer {
+  transform: translateX(100%);
+  transition: transform 0.25s ease-out;
+  border-left: 2px solid var(--admin-ink);
+  box-shadow: -6px 0 0 0 rgba(26, 26, 26, 0.08);
+}
+
+body.admin-depop .shops-drawer.is-open {
+  transform: translateX(0);
+}
+
+body.admin-depop .shops-backdrop {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-out;
+  background: rgba(26, 26, 26, 0.45);
+}
+
+body.admin-depop .shops-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.admin-depop .shops-drawer,
+  body.admin-depop .shops-backdrop {
+    transition: none;
+  }
+}
+
+body.admin-depop .drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 2px solid var(--admin-ink);
+}
+
+body.admin-depop .drawer-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+body.admin-depop .item-card {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 0.85rem;
+  background: var(--admin-surface);
+  box-shadow: 2px 2px 0 0 #1a1a1a;
+}
+
+body.admin-depop .item-card img {
+  width: 4rem;
+  height: 4rem;
+  object-fit: cover;
+  border: 2px solid var(--admin-ink);
+  border-radius: 0.5rem;
+  background: var(--admin-canvas);
+}
+
+/* Modals */
+body.admin-depop .admin-modal-panel {
+  background: var(--admin-surface);
+  border: 2px solid var(--admin-ink);
+  border-radius: 1rem;
+  box-shadow: var(--admin-shadow-lg);
+  padding: 1.25rem;
+}
+
+body.admin-depop .admin-modal-panel h3 {
+  margin: 0 0 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.admin-depop .admin-modal-panel label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-bottom: 0.65rem;
+}
+
+body.admin-depop .admin-modal-panel input,
+body.admin-depop .admin-modal-panel textarea {
+  width: 100%;
+  margin-top: 0.3rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--admin-ink);
+  border-radius: 0.75rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+body.admin-depop .admin-empty {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--admin-muted);
+}
