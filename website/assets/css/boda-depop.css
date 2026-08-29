@@ -1,0 +1,767 @@
+/**
+ * Boda / rider recruit shell — Depop-contrast light canvas.
+ * Scoped to body.boda-depop so cream/purple shop tokens stay untouched.
+ * Green (#00D26A / WhatsApp #25D366) = success / chat CTAs only.
+ * Red (#FF2300) = primary conversion actions.
+ */
+body.boda-depop .hidden {
+  display: none !important;
+}
+
+body.boda-depop {
+  --boda-red: #ff2300;
+  --boda-red-hover: #e01f00;
+  --boda-black: #1a1a1a;
+  --boda-white: #ffffff;
+  --boda-bg: #f4f4f4;
+  --boda-border: #e0e0e0;
+  --boda-muted: #6b6b6b;
+  --boda-success: #00d26a;
+  --boda-escrow: #f5a623;
+  --boda-transit: #2f80ed;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  margin: 0;
+  background: var(--boda-bg);
+  color: var(--boda-black);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+body.boda-depop a {
+  color: inherit;
+  text-decoration: none;
+}
+
+body.boda-depop .boda-wrap {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+/* Header */
+body.boda-depop .boda-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--boda-white);
+  border-bottom: 1px solid var(--boda-border);
+}
+
+body.boda-depop .boda-nav-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+body.boda-depop .boda-logo {
+  font-weight: 900;
+  font-size: 1.05rem;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+body.boda-depop .boda-logo span {
+  color: var(--boda-red);
+}
+
+body.boda-depop .boda-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+body.boda-depop .boda-nav-links a:not(.boda-btn) {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  border-radius: 9999px;
+}
+
+body.boda-depop .boda-nav-links a:not(.boda-btn):hover {
+  background: var(--boda-bg);
+}
+
+/* Buttons */
+body.boda-depop .boda-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  font-weight: 800;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+body.boda-depop .boda-btn:hover {
+  opacity: 0.92;
+}
+
+body.boda-depop .boda-btn:active {
+  transform: scale(0.97);
+}
+
+body.boda-depop .boda-btn--red {
+  background: var(--boda-red);
+  color: var(--boda-white);
+}
+
+body.boda-depop .boda-btn--black {
+  background: var(--boda-black);
+  color: var(--boda-white);
+}
+
+body.boda-depop .boda-btn--ghost {
+  background: transparent;
+  color: var(--boda-black);
+  border: 1.5px solid var(--boda-black);
+}
+
+body.boda-depop .boda-btn--wa {
+  background: #25d366;
+  color: #111;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.boda-depop .boda-btn:active {
+    transform: none;
+  }
+}
+
+/* Hero */
+body.boda-depop .boda-hero {
+  position: relative;
+  min-height: min(88vh, 680px);
+  display: flex;
+  align-items: flex-end;
+  color: var(--boda-white);
+  background-color: var(--boda-black);
+  background-size: cover;
+  background-position: center;
+}
+
+body.boda-depop .boda-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    rgba(26, 26, 26, 0.92) 0%,
+    rgba(26, 26, 26, 0.55) 50%,
+    rgba(26, 26, 26, 0.2) 100%
+  );
+}
+
+body.boda-depop .boda-hero-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 6.5rem 0 3rem;
+}
+
+body.boda-depop .boda-kicker {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--boda-red);
+  margin: 0 0 0.75rem;
+}
+
+body.boda-depop .boda-hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 6vw, 3.75rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  max-width: 16ch;
+  margin: 0 0 1rem;
+}
+
+body.boda-depop .boda-hero-lead {
+  font-size: 1.05rem;
+  max-width: 32rem;
+  opacity: 0.88;
+  margin: 0 0 1.75rem;
+  line-height: 1.45;
+}
+
+body.boda-depop .boda-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Sections */
+body.boda-depop .boda-section {
+  padding: 4rem 0;
+  scroll-margin-top: 4.5rem;
+}
+
+body.boda-depop .boda-section h2 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.5rem;
+  line-height: 1.15;
+}
+
+body.boda-depop .boda-section .boda-sub {
+  color: var(--boda-muted);
+  font-size: 0.95rem;
+  max-width: 36rem;
+  margin: 0 0 2rem;
+  line-height: 1.5;
+}
+
+body.boda-depop .boda-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--boda-red);
+  margin: 0 0 0.5rem;
+}
+
+/* Photo proof grid */
+body.boda-depop .boda-photo-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  body.boda-depop .boda-photo-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+body.boda-depop .boda-photo-card {
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  overflow: hidden;
+}
+
+body.boda-depop .boda-photo-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+body.boda-depop .boda-photo-card figcaption {
+  padding: 0.85rem 1rem 1.1rem;
+}
+
+body.boda-depop .boda-photo-card strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+body.boda-depop .boda-photo-card span {
+  font-size: 0.8rem;
+  color: var(--boda-muted);
+  line-height: 1.4;
+}
+
+/* Value / step cards — not decorative marketing cards; interaction containers */
+body.boda-depop .boda-tri {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  body.boda-depop .boda-tri {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+}
+
+body.boda-depop .boda-tri h3 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 0.4rem;
+}
+
+body.boda-depop .boda-tri p {
+  font-size: 0.875rem;
+  color: var(--boda-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+body.boda-depop .boda-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78em;
+  font-weight: 700;
+  color: var(--boda-black);
+}
+
+body.boda-depop .boda-note {
+  margin-top: 1.75rem;
+  font-size: 0.75rem;
+  color: var(--boda-muted);
+  max-width: 40rem;
+  line-height: 1.5;
+}
+
+/* Steps */
+body.boda-depop .boda-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 36rem;
+}
+
+body.boda-depop .boda-steps li {
+  display: flex;
+  gap: 1rem;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--boda-border);
+}
+
+body.boda-depop .boda-steps li:last-child {
+  border-bottom: none;
+}
+
+body.boda-depop .boda-steps .n {
+  flex-shrink: 0;
+  width: 2rem;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--boda-red);
+  letter-spacing: -0.04em;
+}
+
+/* Phone mockups — live UI transparency */
+body.boda-depop .boda-phones {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  body.boda-depop .boda-phones {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+body.boda-depop .boda-phone {
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(26, 26, 26, 0.06);
+}
+
+body.boda-depop .boda-phone-bar {
+  background: #075e54;
+  color: #fff;
+  padding: 0.65rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+body.boda-depop .boda-phone-body {
+  padding: 1rem;
+  background: #ece5dd;
+  min-height: 12rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+body.boda-depop .boda-bubble {
+  background: #fff;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.06);
+  color: #111;
+  white-space: pre-wrap;
+}
+
+body.boda-depop .boda-bubble--out {
+  background: #dcf8c6;
+  margin-left: 1.5rem;
+}
+
+body.boda-depop .boda-bubble--sys {
+  background: #fff8e1;
+  border-left: 3px solid var(--boda-success);
+}
+
+body.boda-depop .boda-mpesa {
+  background: #111;
+  color: #e8e8e8;
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+body.boda-depop .boda-phone-cap {
+  padding: 0.75rem 1rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-top: 1px solid var(--boda-border);
+}
+
+/* Community strip */
+body.boda-depop .boda-community {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  body.boda-depop .boda-community {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+body.boda-depop .boda-community figure {
+  margin: 0;
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  overflow: hidden;
+}
+
+body.boda-depop .boda-community img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+body.boda-depop .boda-community figcaption {
+  padding: 0.85rem 1rem 1.1rem;
+  font-size: 0.8rem;
+  color: var(--boda-muted);
+}
+
+body.boda-depop .boda-community figcaption strong {
+  display: block;
+  color: var(--boda-black);
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+}
+
+/* Footer band */
+body.boda-depop .boda-band {
+  background: var(--boda-black);
+  color: var(--boda-white);
+  padding: 3.5rem 0;
+}
+
+body.boda-depop .boda-band h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.5rem;
+}
+
+body.boda-depop .boda-band p {
+  opacity: 0.7;
+  font-size: 0.9rem;
+  max-width: 28rem;
+  margin: 0;
+  line-height: 1.45;
+}
+
+body.boda-depop .boda-band-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+body.boda-depop .boda-footer {
+  padding: 1.5rem 0 2.5rem;
+  font-size: 0.75rem;
+  color: var(--boda-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+body.boda-depop .boda-footer a:hover {
+  color: var(--boda-black);
+  text-decoration: underline;
+}
+
+/* ── Dashboard ── */
+body.boda-depop .boda-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  body.boda-depop .boda-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+body.boda-depop .boda-stat {
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  padding: 1rem 1.1rem;
+}
+
+body.boda-depop .boda-stat .l {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--boda-muted);
+}
+
+body.boda-depop .boda-stat .v {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  margin-top: 0.25rem;
+}
+
+body.boda-depop .boda-panel {
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  padding: 1.35rem 1.35rem 1.5rem;
+}
+
+body.boda-depop .boda-panel h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 0.75rem;
+}
+
+body.boda-depop .boda-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 28px;
+  padding: 0.2rem 0.7rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+body.boda-depop .boda-badge--escrow {
+  background: #fff4d6;
+  color: #8a5a00;
+}
+
+body.boda-depop .boda-badge--transit {
+  background: #e8f1ff;
+  color: #1a5bb8;
+}
+
+body.boda-depop .boda-badge--paid {
+  background: #e6fff2;
+  color: #067a3e;
+}
+
+body.boda-depop .boda-badge--active {
+  background: var(--boda-black);
+  color: var(--boda-red);
+}
+
+body.boda-depop .boda-map {
+  position: relative;
+  height: 220px;
+  background:
+    linear-gradient(90deg, rgba(224, 224, 224, 0.5) 1px, transparent 1px),
+    linear-gradient(rgba(224, 224, 224, 0.5) 1px, transparent 1px),
+    #fafafa;
+  background-size: 28px 28px;
+  border: 1px solid var(--boda-border);
+  overflow: hidden;
+}
+
+body.boda-depop .boda-pin {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+body.boda-depop .boda-pin--pick {
+  background: var(--boda-escrow);
+  top: 38%;
+  left: 28%;
+}
+
+body.boda-depop .boda-pin--drop {
+  background: var(--boda-transit);
+  top: 58%;
+  left: 68%;
+}
+
+body.boda-depop .boda-route {
+  position: absolute;
+  top: 42%;
+  left: 30%;
+  width: 38%;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--boda-black) 0 6px,
+    transparent 6px 12px
+  );
+  transform: rotate(12deg);
+  transform-origin: left center;
+  opacity: 0.35;
+}
+
+body.boda-depop .boda-map-legend {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--boda-border);
+}
+
+body.boda-depop .boda-otp {
+  width: 100%;
+  min-height: 52px;
+  border: 2px solid var(--boda-black);
+  background: var(--boda-white);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body.boda-depop .boda-otp:focus {
+  outline: 2px solid var(--boda-red);
+  outline-offset: 2px;
+}
+
+body.boda-depop .boda-ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+body.boda-depop .boda-ledger th {
+  text-align: left;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--boda-muted);
+  font-weight: 800;
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--boda-border);
+}
+
+body.boda-depop .boda-ledger td {
+  padding: 0.75rem 0.4rem;
+  border-bottom: 1px solid var(--boda-border);
+  vertical-align: top;
+}
+
+body.boda-depop .boda-ledger tr:last-child td {
+  border-bottom: none;
+}
+
+/* Apply form */
+body.boda-depop .boda-form-card {
+  background: var(--boda-white);
+  border: 1px solid var(--boda-border);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+body.boda-depop .boda-form-card h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 1rem;
+}
+
+body.boda-depop .boda-field {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+body.boda-depop .boda-field input,
+body.boda-depop .boda-field select {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  min-height: 44px;
+  border: 1.5px solid var(--boda-border);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  background: var(--boda-white);
+  color: var(--boda-black);
+}
+
+body.boda-depop .boda-field input:focus,
+body.boda-depop .boda-field select:focus {
+  outline: 2px solid var(--boda-red);
+  outline-offset: 1px;
+  border-color: var(--boda-black);
+}
+
+body.boda-depop .boda-field input[type="file"] {
+  border: none;
+  padding: 0.35rem 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+body.boda-depop .boda-grid-2 {
+  display: grid;
+  gap: 0 1rem;
+}
+
+@media (min-width: 640px) {
+  body.boda-depop .boda-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+body.boda-depop .boda-success-box {
+  background: var(--boda-white);
+  border: 2px solid var(--boda-success);
+  padding: 2rem;
+  text-align: center;
+}
+
+body.boda-depop .boda-success-box h1 {
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin: 0 0 0.5rem;
+}
