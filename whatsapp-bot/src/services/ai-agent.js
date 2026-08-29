@@ -469,9 +469,17 @@ export async function runAgentTurn({
     try {
       const { isAdminSender } = await import("./admin.js");
       const { resolveStaffRole } = await import("./staff-roles.js");
+      console.log("[ai-agent] Incoming Phone:", phone || "(empty)", "sessionKey:", sessionKey);
       if (!adminSender) adminSender = isAdminSender(sessionKey, phone);
       staff = await resolveStaffRole(phone || sessionKey);
       if (staff) adminSender = true;
+      if (adminSender) {
+        console.log(
+          "[ai-agent] Boss/staff identity matched:",
+          staff?.role || "ADMIN",
+          staff?.source || "isAdminSender"
+        );
+      }
     } catch {
       /* ignore */
     }
@@ -655,6 +663,7 @@ export async function runAgentTurn({
           preferKiswahili,
           isAdmin: adminSender,
           staff,
+          senderPhone: phone || threadId,
         }),
       },
       ...sanitizeHistory(hist),

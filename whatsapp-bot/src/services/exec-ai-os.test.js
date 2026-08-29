@@ -35,9 +35,11 @@ describe("executive AI OS", () => {
   it("executive directive mentions role verification", () => {
     const d = adminRecognitionDirective({
       staff: { role: "SUPER_ADMIN", displayName: "Boss" },
+      senderPhone: "254757764009",
     });
-    assert.match(d, /EXECUTIVE ROLE DIRECTIVE/);
-    assert.match(d, /staff_roles/);
+    assert.match(d, /EXECUTIVE DIRECTIVE/);
+    assert.match(d, /Yes, Boss/i);
+    assert.match(d, /254757764009/);
     assert.match(staffToneDirective({ role: "DISPUTE_MANAGER" }), /DISPUTE_MANAGER/);
   });
 
@@ -68,7 +70,9 @@ describe("executive AI OS", () => {
       channel: "whatsapp",
       isAdmin: true,
       staff: { role: "SUPER_ADMIN", displayName: "Boss" },
+      senderPhone: "254757764009",
     });
-    assert.match(boss, /EXECUTIVE ROLE DIRECTIVE/);
+    assert.match(boss, /EXECUTIVE DIRECTIVE/);
+    assert.match(boss, /Yes, Boss/i);
   });
 });

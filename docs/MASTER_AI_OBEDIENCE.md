@@ -44,11 +44,22 @@ Body: `{ "command": "!force-release SKN-8820" }`
 ## Env
 
 ```bash
-ADMIN_PHONES=2547XXXXXXXX          # WhatsApp Boss line(s)
+# Always use international Kenya format (Meta/WAHA send 254…, not 07…)
+ADMIN_PHONES=254757764009
+# Optional aliases (also accepted; normalized to 254… on boot):
+# ADMIN_PHONES=0757764009
+# BOSS_PHONES=254757764009,+254757764009
 MASTER_ADMIN_SECRET=long-random    # optional permanent dashboard secret
 ADMIN_SETUP_TOKEN=…                # existing Command Center token (still valid)
 ADMIN_BOSS_TITLE=Boss              # optional honorific
+# ADMIN_PHONE_DEBUG=1              # log Incoming Phone on every admin identity check
 ```
+
+Matching accepts `254757764009`, `0757764009`, and `+254757764009` via last-9 national tail so WAHA/Meta formats never miss the Boss line.
+
+## Explicit identity injection
+
+When `isAdminSender` / `staff_roles` matches SUPER_ADMIN, `messages[0]` (system) gets an **EXECUTIVE DIRECTIVE** with the verified sender phone — salutation required ("Yes, Boss."), mutations still via `!` / `OVERRIDE:` interceptor only. Shoppers get `PUBLIC_ESCROW_GUARDRAIL` instead (no override powers).
 
 ## What this does *not* do
 
