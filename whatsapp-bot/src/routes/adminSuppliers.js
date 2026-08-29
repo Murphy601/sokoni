@@ -10,6 +10,16 @@ import {
   setSellerShopStatus,
   listShopsForAdminReview,
 } from "../services/suppliers.js";
+import {
+  listShopsDesk,
+  listShopItemsForAdmin,
+  setShopVerifiedBadge,
+  setShopCommissionOverride,
+  setShopPayoutHold,
+  overrideShopHandle,
+  freezeShop,
+  editShopProfile,
+} from "../services/shops-desk.js";
 import { getSettlementSummary, markPayoutPaid } from "../services/settlements.js";
 import {
   listFlaggedListings,
@@ -69,6 +79,87 @@ router.post("/kyc/:id/reject", (req, res) => {
   const result = reviewSellerKyc(req.params.id, { approve: false, note: req.body?.note || "" });
   if (result.error) return res.status(404).json(result);
   res.json({ ok: true, seller: result.supplier });
+});
+
+/**
+ * Sellers & Shops desk — searchable table of all merchant inventories.
+ * GET /admin/suppliers/shops-desk?q=&status=
+ */
+router.get("/shops-desk", async (req, res) => {
+  try {
+    const q = String(req.query.q || "");
+    const status = String(req.query.status || "all");
+    const shops = await listShopsDesk({ q, status });
+    res.json({ shops });
+  } catch (err) {
+    res.status(500).json({ error: "shops_desk_failed", message: err?.message || "Failed" });
+  }
+});
+
+/** Items + image gallery for one shop (drawer). */
+router.get("/shops/:id/items", async (req, res) => {
+  try {
+    const result = await listShopItemsForAdmin(req.params.id);
+    if (result.error) return res.status(404).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "shop_items_failed", message: err?.message || "Failed" });
+  }
+});
+
+router.post("/shops/:id/verify", (req, res) => {
+  const verified = req.body?.verified !== false && req.body?.verified !== "false";
+  const result = setShopVerifiedBadge(req.params.id, verified);
+  if (result.error) return res.status(404).json(result);
+  res.json({ ok: true, shop: result.supplier });
+});
+
+router.post("/shops/:id/commission", (req, res) => {
+  const result = setShopCommissionOverride(req.params.id, req.body?.percent);
+  if (result.error) {
+    return res.status(result.error === "not_found" ? 404 : 400).json(result);
+  }
+  res.json({ ok: true, shop: result.supplier });
+});
+
+router.post("/shops/:id/payout-hold", (req, res) => {
+  const hold = req.body?.hold !== false && req.body?.hold !== "false";
+  const result = setShopPayoutHold(req.params.id, {
+    hold,
+    note: req.body?.note || "",
+  });
+  if (result.error) return res.status(404).json(result);
+  res.json({ ok: true, shop: result.supplier });
+});
+
+router.post("/shops/:id/handle", (req, res) => {
+  const result = overrideShopHandle(req.params.id, req.body?.handle || "");
+  if (result.error) {
+    return res.status(result.error === "not_found" ? 404 : 400).json(result);
+  }
+  res.json({ ok: true, shop: result.supplier });
+});
+
+/** Freeze = pause new orders; existing escrow untouched; listings hidden. */
+router.post("/shops/:id/freeze", async (req, res) => {
+  const note = req.body?.note || "Frozen by Sokoni admin";
+  const result = freezeShop(req.params.id, { note });
+  if (result.error) return res.status(result.error === "not_found" ? 404 : 400).json(result);
+  const listings = await hideListingsForSupplier(req.params.id, { reason: note });
+  res.json({ ok: true, shop: result.supplier, listings });
+});
+
+router.post("/shops/:id/edit", (req, res) => {
+  const result = editShopProfile(req.params.id, {
+    name: req.body?.name,
+    phone: req.body?.phone,
+    bio: req.body?.bio,
+    shopHandle: req.body?.shopHandle,
+  });
+  if (result.error) {
+    return res.status(result.error === "not_found" ? 404 : 400).json(result);
+  }
+  res.json({ ok: true, shop: result.supplier });
 });
 
 /** Shops paused / under review / deactivated (payouts held). */

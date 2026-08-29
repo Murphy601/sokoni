@@ -442,6 +442,10 @@ export function adminHelpText() {
     `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
     `🖥️ Support ops desk — https://sokonimall.com/admin-support.html (inbox + all #commands)\n` +
     `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
+    `🏪 Sellers & Shops desk — https://sokonimall.com/admin-sellers-shops.html?token=...\n` +
+    `   · GET /admin/suppliers/shops-desk?q=&status=\n` +
+    `   · GET /admin/suppliers/shops/:id/items\n` +
+    `   · POST …/shops/:id/{freeze|verify|commission|payout-hold|handle|edit}\n` +
     `   · GET /admin/suppliers/seller-listings/flagged?token=...\n` +
     `   · POST …/seller-listings/:productId/takedown?token=…\n` +
     `   · POST …/seller-listings/:productId/restore?token=…\n\n` +

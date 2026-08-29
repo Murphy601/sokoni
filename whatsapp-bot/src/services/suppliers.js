@@ -641,6 +641,87 @@ export function listShopsForAdminReview({ status = "all" } = {}) {
       kycStatus: s.kycStatus || (s.isSellerVerified ? "approved" : "pending"),
       nationalId: s.nationalId || null,
       kraPin: s.kraPin || null,
+      isSellerVerified: Boolean(s.isSellerVerified),
+      verifiedBadge: Boolean(s.verifiedBadge ?? s.isSellerVerified),
+      commissionPct:
+        s.commissionPct != null
+          ? Number(s.commissionPct)
+          : s.platformCommissionPct != null
+            ? Number(s.platformCommissionPct)
+            : null,
     }))
     .sort((a, b) => (b.shopStatusAt || b.approvedAt || 0) - (a.shopStatusAt || a.approvedAt || 0));
+}
+
+/**
+ * Admin patch for Sellers & Shops desk (badge, commission, payout hold, handle).
+ */
+export function patchSupplierAdmin(supplierId, patch = {}) {
+  loadSuppliers();
+  const s = supplierStore.suppliers[supplierId];
+  if (!s) return { error: "not_found", message: "Seller not found." };
+
+  if (patch.verifiedBadge != null || patch.isSellerVerified != null) {
+    const v = Boolean(patch.verifiedBadge ?? patch.isSellerVerified);
+    s.verifiedBadge = v;
+    s.isSellerVerified = v;
+    if (v && s.kycStatus !== "approved") s.kycStatus = "approved";
+  }
+
+  if (patch.commissionPct != null) {
+    const pct = Number(patch.commissionPct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 40) {
+      return { error: "invalid_commission", message: "commissionPct must be 0–40." };
+    }
+    s.commissionPct = pct;
+    s.platformCommissionPct = pct;
+    s.commissionUpdatedAt = Date.now();
+  }
+
+  if (patch.payoutHold != null) {
+    s.payoutHold = Boolean(patch.payoutHold);
+    s.payoutHoldNote = String(patch.payoutHoldNote || patch.note || "").slice(0, 280) || null;
+    s.payoutHoldAt = Date.now();
+  }
+
+  if (patch.shopHandle != null) {
+    const cleaned = String(patch.shopHandle || "")
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "")
+      .slice(0, 40);
+    if (!cleaned || cleaned.length < 3) {
+      return { error: "invalid_handle", message: "Handle must be 3–40 letters/numbers/_." };
+    }
+    const clash = Object.values(supplierStore.suppliers).find((other) => {
+      if (other.id === supplierId) return false;
+      return (
+        String(other.shopHandle || "")
+          .replace(/^@/, "")
+          .toLowerCase() === cleaned
+      );
+    });
+    if (clash) {
+      return { error: "handle_taken", message: `@${cleaned} is already used.` };
+    }
+    s.shopHandle = `@${cleaned}`;
+  }
+
+  if (patch.businessName != null) {
+    const name = String(patch.businessName || "").trim().slice(0, 100);
+    if (name) s.businessName = name;
+  }
+
+  if (patch.phone != null) {
+    const phone = String(patch.phone || "").replace(/\D/g, "");
+    if (phone.length >= 9) s.phone = phone;
+  }
+
+  if (patch.description != null || patch.bio != null) {
+    s.description = String(patch.description || patch.bio || "").slice(0, 500);
+  }
+
+  persistSuppliers();
+  return { ok: true, supplier: s };
 }
