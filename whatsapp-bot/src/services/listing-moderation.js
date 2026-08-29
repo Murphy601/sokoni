@@ -1,6 +1,7 @@
 /**
- * Phase 4 — Post-publish listing moderation (Depop-style).
- * Listings go live instantly; automated scans flag/hide policy violations after publish.
+ * Phase 4 — Listing moderation (Depop-style).
+ * Hard pre-publish gate blocks prohibited / off-platform / incomplete listings.
+ * Soft post-publish scan remains as a second line (hide + notify).
  */
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -117,6 +118,37 @@ export function scanListingLocally(product) {
     flags,
     action: passed ? "live" : "hidden",
     scannedAt: Date.now(),
+  };
+}
+
+/** Hard flags that must block publish (never go live, even briefly). */
+const HARD_PUBLISH_BLOCK = new Set([
+  "prohibited_item",
+  "off_platform_contact",
+  "missing_title",
+  "invalid_price",
+  "missing_image",
+]);
+
+/**
+ * Pre-publish gate — reject before master/catalog write.
+ * Soft/post-publish hide remains as a second line for edge cases.
+ */
+export function assertListingAllowedForPublish(product) {
+  const result = scanListingLocally(product);
+  const hardFlags = result.flags.filter((f) => HARD_PUBLISH_BLOCK.has(f));
+  if (!hardFlags.length) {
+    return { ok: true, flags: result.flags, moderation: result };
+  }
+  const labels = hardFlags.map(labelForFlag);
+  return {
+    ok: false,
+    error: "moderation_blocked",
+    flags: hardFlags,
+    moderation: result,
+    message:
+      `Listing blocked before going live: ${labels.join(" · ")}. ` +
+      `Fix the title/price/photo or remove prohibited / off-platform contact details, then post again.`,
   };
 }
 

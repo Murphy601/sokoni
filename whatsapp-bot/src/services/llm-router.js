@@ -1,6 +1,6 @@
 /**
- * LiteLLM-style multi-provider chat routing for Sokoni Plug.
- * Prefer fast managed APIs (Groq → OpenRouter free). Gemini chat is opt-in only.
+ * Multi-provider chat routing for Sokoni Plug (Groq → OpenRouter free failover).
+ * Gemini chat is opt-in only. Not LiteLLM — Node OpenAI-compatible clients only.
  * Never use Ollama for multi-user WhatsApp (serial queue / 30–60s latency).
  *
  * Env:
@@ -205,13 +205,23 @@ export function buildChatProviderChain() {
 }
 
 /** @deprecated use buildChatProviderChain — kept for meta/tests */
-export function litellmModelChain() {
+export function modelFailoverChain() {
   return buildChatProviderChain().flatMap((p) => p.models.map((m) => `${p.name}:${m}`));
 }
 
-export function getLitellmClient() {
+/** @deprecated alias — historical name; not LiteLLM */
+export function litellmModelChain() {
+  return modelFailoverChain();
+}
+
+export function getChatRouterClient() {
   const chain = buildChatProviderChain();
   return chain[0]?.client || null;
+}
+
+/** @deprecated alias — historical name; not LiteLLM */
+export function getLitellmClient() {
+  return getChatRouterClient();
 }
 
 function successPayload(content, model, provider, temperature) {
@@ -293,7 +303,7 @@ export async function routedChatCompletion(
 export function llmRouterMeta() {
   const chain = buildChatProviderChain();
   return {
-    style: "litellm-compatible-multi-provider",
+    style: "multi-provider-failover-groq-openrouter",
     providerPreference: providerPreference(),
     providers: chain.map((p) => ({ name: p.name, models: p.models })),
     temperature: chatTemperature(),

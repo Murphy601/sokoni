@@ -20,6 +20,7 @@ import {
   isHumanHandoff,
   clearHumanHandoff,
   setCustomerMeta,
+  hydrateSessionFromDb,
 } from "../services/session.js";
 import { findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
@@ -262,6 +263,11 @@ export async function handleIncomingMessage(
 ) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
+  try {
+    await hydrateSessionFromDb(customerKey, phone);
+  } catch {
+    /* fail-soft */
+  }
 
   // Persist seller phone ↔ chatId early (critical for WhatsApp @lid replies).
   if (phone) {
@@ -299,7 +305,7 @@ export async function handleIncomingMessage(
   if (await tryPickupContinueFromRef(customerKey, combinedText, { phone })) return;
   if (await trySupplierContinueFromRef(customerKey, combinedText, { phone })) return;
 
-  // Voice note → Whisper/OpenRouter STT → continue as text (phone = thread_id).
+  // Voice note → Whisper STT (EN/SW hint) → continue as text (phone = thread_id).
   if (
     hasMedia &&
     looksLikeVoiceNote(mediaMimetype) &&
@@ -308,17 +314,38 @@ export async function handleIncomingMessage(
     try {
       const { downloadWahaMedia } = await import("../services/whatsapp.js");
       const { transcribeWhatsAppAudio } = await import("../services/commerce-ops.js");
+      const { detectSpeechLanguageHint, prefersKiswahiliReply } = await import(
+        "../services/shopper-language.js"
+      );
       const buffer = await downloadWahaMedia(mediaUrl, {
         messageId,
         chatId,
         session: wahaSession,
         mimetype: mediaMimetype,
       });
-      const stt = await transcribeWhatsAppAudio({ buffer, mimetype: mediaMimetype });
+      const hist = getSession(customerKey)?.history || [];
+      const recentText = hist
+        .slice(-4)
+        .map((m) => m.content)
+        .filter(Boolean)
+        .join(" ");
+      const languageHint = detectSpeechLanguageHint(recentText) || detectSpeechLanguageHint(quotedText);
+      const stt = await transcribeWhatsAppAudio({
+        buffer,
+        mimetype: mediaMimetype,
+        languageHint,
+      });
       if (stt.ok && stt.text) {
-        return handleIncomingMessage(customerKey, stt.text, {
+        const spoken = String(stt.text).trim();
+        // Keep original transcript for the LLM; catalog search still normalizes internally.
+        if (prefersKiswahiliReply(spoken) || languageHint === "sw") {
+          setCustomerMeta(customerKey, { preferKiswahiliReply: true, lastVoiceLang: stt.language || "sw" });
+        } else {
+          setCustomerMeta(customerKey, { lastVoiceLang: stt.language || "en" });
+        }
+        return handleIncomingMessage(customerKey, spoken, {
           quotedText,
-          combinedText: stt.text,
+          combinedText: spoken,
           displayName,
           phone,
           chatId,
@@ -333,7 +360,7 @@ export async function handleIncomingMessage(
       );
       return;
     } catch (err) {
-      console.warn("[webhook] voice STT:", err.message);
+      console.warn("[webhook] voice stt skipped:", err.message);
     }
   }
 

@@ -75,6 +75,7 @@ export async function getCategories() {
 /**
  * Simple in-memory search used both by the menu-driven flow and by the
  * AI agent's `search_products` tool call.
+ * Hybrid: keyword score + optional pgvector cosine hits when embeddings exist.
  */
 export async function searchProducts({
   category,
@@ -94,6 +95,25 @@ export async function searchProducts({
   const menu = await loadBrowseMenuData();
 
   const keywordTokens = expandKeywordTokens(keywords);
+  const byId = new Map(products.map((p) => [p.id, p]));
+
+  /** @type {Map<string, number>} */
+  const vectorBoost = new Map();
+  if (keywordTokens.length > 0 && String(keywords || "").trim()) {
+    try {
+      const { searchProductEmbeddingHits } = await import("./product-embeddings.js");
+      const hits = await searchProductEmbeddingHits(String(keywords), {
+        limit: Math.max(12, (limit || 3) * 4),
+        maxPriceKes,
+        minPriceKes,
+      });
+      for (const h of hits) {
+        if (h.score > 0.25) vectorBoost.set(h.id, h.score);
+      }
+    } catch {
+      /* keyword-only fallback */
+    }
+  }
 
   let results = products.filter((product) => {
     if (!isProductAvailable(product)) return false;
@@ -114,16 +134,41 @@ export async function searchProducts({
       return false;
     }
     if (keywordTokens.length > 0) {
-      const score = scoreProduct(product, keywordTokens);
-      if (score === 0) return false;
+      const kwScore = scoreProduct(product, keywordTokens);
+      const vScore = vectorBoost.get(product.id) || 0;
+      // Keep keyword-matched OR strong vector neighbors
+      if (kwScore === 0 && vScore < 0.45) return false;
       const scentTokens = scentKeywordTokens(keywordTokens);
-      if (scentTokens.length > 0 && scoreProduct(product, scentTokens) === 0) return false;
+      if (scentTokens.length > 0 && kwScore > 0 && scoreProduct(product, scentTokens) === 0) {
+        return false;
+      }
     }
     return true;
   });
 
+  // Include strong vector hits that passed filters but were missing from keyword-only set
+  if (vectorBoost.size && keywordTokens.length > 0) {
+    for (const [id, vScore] of vectorBoost) {
+      if (vScore < 0.45) continue;
+      if (results.some((p) => p.id === id)) continue;
+      const product = byId.get(id);
+      if (!product || !isProductAvailable(product)) continue;
+      if (category && product.category !== category) continue;
+      if (maxPriceKes != null && product.priceKes != null && product.priceKes > maxPriceKes) continue;
+      if (minPriceKes != null && product.priceKes != null && product.priceKes < minPriceKes) continue;
+      if (scope && scope !== "all" && product.scope !== scope) continue;
+      results.push(product);
+    }
+  }
+
   if (keywordTokens.length > 0) {
-    results.sort((a, b) => scoreProduct(b, keywordTokens) - scoreProduct(a, keywordTokens));
+    results.sort((a, b) => {
+      const sa =
+        scoreProduct(a, keywordTokens) + (vectorBoost.get(a.id) || 0) * 8;
+      const sb =
+        scoreProduct(b, keywordTokens) + (vectorBoost.get(b.id) || 0) * 8;
+      return sb - sa;
+    });
   } else {
     results.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }

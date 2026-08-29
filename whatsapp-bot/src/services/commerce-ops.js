@@ -512,9 +512,14 @@ export async function processAbandonedCheckoutRecovery({ olderThanMs = 30 * 60 *
 }
 
 /**
- * Optional voice → text via OpenRouter/OpenAI-compatible audio transcription ($0 free models when available).
+ * Optional voice → text via OpenRouter/OpenAI-compatible Whisper.
+ * Pass languageHint "sw" | "en" when known (Kiswahili / English); omit for auto.
  */
-export async function transcribeWhatsAppAudio({ buffer, mimetype = "audio/ogg" } = {}) {
+export async function transcribeWhatsAppAudio({
+  buffer,
+  mimetype = "audio/ogg",
+  languageHint = undefined,
+} = {}) {
   if (!config.openai?.apiKey || !buffer?.length) {
     return { ok: false, error: "stt_unavailable", text: "" };
   }
@@ -526,12 +531,13 @@ export async function transcribeWhatsAppAudio({ buffer, mimetype = "audio/ogg" }
     });
     const file = new File([buffer], "voice.ogg", { type: mimetype || "audio/ogg" });
     const model = process.env.OPENAI_TRANSCRIBE_MODEL || "openai/whisper-large-v3-turbo";
-    const result = await client.audio.transcriptions.create({
-      file,
-      model,
-    });
+    const lang =
+      languageHint === "sw" || languageHint === "en" ? languageHint : undefined;
+    const params = { file, model };
+    if (lang) params.language = lang;
+    const result = await client.audio.transcriptions.create(params);
     const text = String(result?.text || "").trim();
-    return { ok: Boolean(text), text, model };
+    return { ok: Boolean(text), text, model, language: lang || null };
   } catch (err) {
     console.warn("[commerce-ops] whisper/stt:", err.message);
     return { ok: false, error: err.message, text: "" };

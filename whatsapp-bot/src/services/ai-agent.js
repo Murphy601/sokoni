@@ -3,8 +3,9 @@
  * Chat goes through llm-router (Groq → Gemini → OpenRouter). Never Ollama for WA traffic.
  */
 import { config } from "../config.js";
-import { getSession, pushMessage, isHumanHandoff, resolveThreadId } from "./session.js";
+import { getSession, pushMessage, isHumanHandoff, resolveThreadId, getCustomerMeta } from "./session.js";
 import { channelPrompt, offTopicRedirect, buildGroundedSystemPrompt } from "./ai-prompts.js";
+import { prefersKiswahiliReply } from "./shopper-language.js";
 import {
   formatToolResultsForPrompt,
   isGreetingIntent,
@@ -540,6 +541,8 @@ export async function runAgentTurn({
   }
 
   const threadId = resolveThreadId(phone || sessionKey);
+  const preferKiswahili =
+    Boolean(getCustomerMeta(sessionKey)?.preferKiswahiliReply) || prefersKiswahiliReply(text);
 
   // Default path: LLM answers every Sokoni question using tool results (site facts, taxonomy, stock, tracking).
   try {
@@ -550,6 +553,7 @@ export async function runAgentTurn({
           channel,
           contextBlocks: [specialistHint, knowledgeBlock, toolBlock].filter(Boolean),
           threadId,
+          preferKiswahili,
         }),
       },
       ...sanitizeHistory(hist),
@@ -602,9 +606,10 @@ export function agentMeta() {
   return {
     phase: 7.3,
     name: "Sokoni Plug",
-    engine: "langgraph-style-multi-agent",
+    engine: "node-specialist-router",
     specialists: ["buyer", "seller", "dispute", "logistics", "general"],
-    knowledge: "chunked knowledge/*.md (~200–300 words) + optional pgvector platform_knowledge",
+    knowledge:
+      "chunked knowledge/*.md + optional pgvector platform_knowledge; product search = keyword + optional product_search_embeddings",
     routing: llmRouterMeta(),
     temperature: chatTemperature(),
     guardrails: {
