@@ -13,8 +13,17 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
 
-const OPENROUTER_FREE = ["openrouter/free", "google/gemma-4-31b-it:free"];
+/** Concrete free slugs first — `openrouter/free` auto-router is slow / queue-prone. */
+const OPENROUTER_FREE = ["google/gemma-4-31b-it:free", "openrouter/free"];
 const DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
+
+/** Prefer named free models; keep openrouter/free as last-resort failover only. */
+export function orderOpenRouterChatModels(models) {
+  const list = [...new Set((models || []).filter(Boolean))];
+  const slowAuto = list.filter((m) => /^openrouter\/free$/i.test(m));
+  const rest = list.filter((m) => !/^openrouter\/free$/i.test(m));
+  return [...rest, ...slowAuto];
+}
 
 /** gpt-oss on Groq may emit built-in browser_search — steer + tool_choice none.
  * Do NOT use tool_choice=auto: Sokoni runs lookups server-side and never sends tools
@@ -162,19 +171,18 @@ export function buildChatProviderChain() {
 
   const pushOpenRouter = () => {
     if (!openrouterKey) return;
-    const models = [
-      ...new Set(
-        [config.openai.model, ...(config.openai.modelFallbacks || []), ...OPENROUTER_FREE].filter(
-          Boolean
-        )
-      ),
-    ];
+    const models = orderOpenRouterChatModels([
+      config.openai.model,
+      ...(config.openai.modelFallbacks || []),
+      ...OPENROUTER_FREE,
+    ]);
     chain.push({
       name: "openrouter",
       client: new OpenAI({
         apiKey: openrouterKey,
         baseURL: config.openai.baseUrl || "https://openrouter.ai/api/v1",
-        timeout: 35_000,
+        // Free models can queue; fail over sooner rather than stall WhatsApp 35s+.
+        timeout: 22_000,
         defaultHeaders: {
           "HTTP-Referer": config.publicSiteUrl || "http://localhost:3001",
           "X-Title": config.brand.name,
@@ -224,22 +232,34 @@ export function getLitellmClient() {
   return getChatRouterClient();
 }
 
-function successPayload(content, model, provider, temperature) {
+function successPayload(content, model, provider, temperature, finishReason = null) {
   return {
     content: String(content).trim(),
     model,
     provider: provider.name,
     temperature: chatTemperature(temperature),
+    finishReason: finishReason || null,
   };
+}
+
+async function completeOnce(provider, model, messages, maxTokens, temperature, opts = {}) {
+  const response = await provider.client.chat.completions.create(
+    buildCompletionParams(provider, model, messages, maxTokens, temperature, opts)
+  );
+  const choice = response.choices?.[0];
+  const content = choice?.message?.content;
+  const finishReason = choice?.finish_reason || null;
+  return { content, finishReason };
 }
 
 /**
  * Chat completion with multi-provider failover (Groq → OpenRouter; Gemini opt-in).
  * Default temperature 0.15 for consistent WhatsApp replies.
+ * If finish_reason=length, one bump retry so replies do not stop mid-sentence.
  */
 export async function routedChatCompletion(
   messages,
-  { maxTokens = 180, temperature = chatTemperature() } = {}
+  { maxTokens = 480, temperature = chatTemperature() } = {}
 ) {
   const chain = buildChatProviderChain();
   if (!chain.length) {
@@ -252,12 +272,35 @@ export async function routedChatCompletion(
   for (const provider of chain) {
     for (const model of provider.models) {
       try {
-        const response = await provider.client.chat.completions.create(
-          buildCompletionParams(provider, model, messages, maxTokens, temperature)
+        let usedTokens = maxTokens;
+        let { content, finishReason } = await completeOnce(
+          provider,
+          model,
+          messages,
+          usedTokens,
+          temperature
         );
-        const content = response.choices[0]?.message?.content;
+
+        // Hit output ceiling → one higher-budget retry on the same model
+        if (content && String(content).trim() && finishReason === "length") {
+          const bump = Math.min(800, Math.ceil(usedTokens * 1.6));
+          if (bump > usedTokens) {
+            console.warn(
+              `[llm-router] ${provider.name}/${model} finish_reason=length — retry max_tokens=${bump}`
+            );
+            usedTokens = bump;
+            ({ content, finishReason } = await completeOnce(
+              provider,
+              model,
+              messages,
+              usedTokens,
+              temperature
+            ));
+          }
+        }
+
         if (content && String(content).trim()) {
-          return successPayload(content, model, provider, temperature);
+          return successPayload(content, model, provider, temperature, finishReason);
         }
       } catch (err) {
         lastError = err;
@@ -271,20 +314,22 @@ export async function routedChatCompletion(
             console.log(
               `[llm-router] ${provider.name}/${model} recovered plain text from failed_generation (non-fatal)`
             );
-            return successPayload(recovered, model, provider, temperature);
+            return successPayload(recovered, model, provider, temperature, "recovered");
           }
           try {
             console.log(
               `[llm-router] ${provider.name}/${model} tool_use_failed — plain-text retry (non-fatal)`
             );
-            const retry = await provider.client.chat.completions.create(
-              buildCompletionParams(provider, model, messages, maxTokens, temperature, {
-                strongPlain: true,
-              })
+            const { content, finishReason } = await completeOnce(
+              provider,
+              model,
+              messages,
+              maxTokens,
+              temperature,
+              { strongPlain: true }
             );
-            const content = retry.choices[0]?.message?.content;
             if (content && String(content).trim()) {
-              return successPayload(content, model, provider, temperature);
+              return successPayload(content, model, provider, temperature, finishReason);
             }
           } catch (retryErr) {
             lastError = retryErr;
@@ -302,13 +347,16 @@ export async function routedChatCompletion(
 
 export function llmRouterMeta() {
   const chain = buildChatProviderChain();
+  const primary = chain[0];
   return {
     style: "multi-provider-failover-groq-openrouter",
     providerPreference: providerPreference(),
     providers: chain.map((p) => ({ name: p.name, models: p.models })),
+    primaryProvider: primary?.name || null,
+    primaryModel: primary?.models?.[0] || null,
     temperature: chatTemperature(),
     costTarget: "fast_managed_then_free",
-    avoid: ["ollama_local_cpu_queue", "groq_builtin_tools_for_chat"],
-    note: "Prefer GROQ_API_KEY (openai/gpt-oss-20b) with tool_choice=none. Gemini chat is opt-in.",
+    avoid: ["ollama_local_cpu_queue", "groq_builtin_tools_for_chat", "openrouter_free_auto_first"],
+    note: "Prefer GROQ_API_KEY (openai/gpt-oss-20b) with tool_choice=none. OpenRouter uses named free models before openrouter/free. Gemini chat is opt-in.",
   };
 }

@@ -33,9 +33,10 @@ export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    model: process.env.OPENAI_MODEL || "openrouter/free",
+    // Named free model (fast) — avoid openrouter/free auto-router as primary (slow queues).
+    model: process.env.OPENAI_MODEL || "google/gemma-4-31b-it:free",
     modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
-      "google/gemma-4-31b-it:free")
+      "openrouter/free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
@@ -62,6 +63,8 @@ export const config = {
   aiChat: {
     provider: process.env.AI_CHAT_PROVIDER || "auto",
     temperature: Number(process.env.AI_CHAT_TEMPERATURE ?? 0.15),
+    /** Soft ceiling for chat completions (WhatsApp); clamped 200–800 in ai-agent. */
+    maxTokens: Number(process.env.AI_CHAT_MAX_TOKENS ?? 480),
     useGemini:
       process.env.AI_CHAT_PROVIDER === "gemini" ||
       /^(1|true|yes|on)$/i.test(String(process.env.AI_CHAT_USE_GEMINI || "").trim()),
