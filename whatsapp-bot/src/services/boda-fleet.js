@@ -1524,8 +1524,28 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     bodaDispatchId: Number(updated.id),
     bodaStatus: "ACCEPTED",
     bodaRiderId: rider.id,
+    bodaCustody: "ASSIGNED",
     deliveryMode: "sokoni_boda",
   });
+
+  try {
+    const { writeAuditLog } = await import("./audit-log.js");
+    await writeAuditLog({
+      orderRef: id,
+      dispatchId: updated.id,
+      riderId: rider.id,
+      actorPhone: rider.phone,
+      actorRole: "RIDER",
+      action: "ACCEPT_JOB",
+      fromStatus: "REQUESTED",
+      toStatus: "ACCEPTED",
+      fromCustody: "UNASSIGNED",
+      toCustody: "ASSIGNED",
+      source: "boda.acceptBodaDispatch",
+    });
+  } catch {
+    /* ignore */
+  }
 
   const fresh = getOrder(id) || order;
   const { sendText } = await import("./whatsapp.js");
@@ -1871,6 +1891,26 @@ export async function confirmPickupWithOtp({
   const order = getOrder(id);
   const { sendText } = await import("./whatsapp.js");
   const feeKes = Number(rows[0].delivery_fee_kes || 0);
+
+  updateOrderMeta(id, { bodaStatus: "OTP_SENT", bodaCustody: "IN_TRANSIT" });
+  try {
+    const { writeAuditLog } = await import("./audit-log.js");
+    await writeAuditLog({
+      orderRef: id,
+      dispatchId: rows[0].id,
+      riderId: rows[0].rider_id,
+      actorPhone: riderPhone,
+      actorRole: "RIDER",
+      action: "VENDOR_PICKUP_OTP_SUCCESS",
+      fromStatus: dispatch.status,
+      toStatus: "OTP_SENT",
+      fromCustody: "ASSIGNED",
+      toCustody: "IN_TRANSIT",
+      source: "boda.confirmPickupWithOtp",
+    });
+  } catch {
+    /* ignore */
+  }
 
   if (order?.customerKey) {
     try {
@@ -2672,6 +2712,7 @@ export async function verifyDeliveryOTP({
 
   updateOrderMeta(id, {
     bodaStatus: "DELIVERED",
+    bodaCustody: "DELIVERED",
     bodaFeeStatus: "PENDING_MPESA",
     bodaPayoutStatus: "HOLD_ESCROW",
     bodaDisputeWindowEndsAt: Date.now() + 15 * 60 * 1000,
@@ -2698,6 +2739,26 @@ export async function verifyDeliveryOTP({
       payoutStatus: "HOLD_ESCROW",
     },
   });
+
+  try {
+    const { writeAuditLog } = await import("./audit-log.js");
+    await writeAuditLog({
+      orderRef: id,
+      dispatchId: dispatch.id,
+      riderId: dispatch.rider_id,
+      actorPhone: riderPhone,
+      actorRole: "RIDER",
+      action: "DELIVERY_OTP_SUCCESS",
+      fromStatus: dispatch.status,
+      toStatus: "DELIVERED",
+      fromCustody: "IN_TRANSIT",
+      toCustody: "DELIVERED",
+      source: "boda.verifyDeliveryOTP",
+      metadata: { payout_hold_minutes: 15 },
+    });
+  } catch {
+    /* ignore */
+  }
 
   const order = getOrder(id);
   const { sendText } = await import("./whatsapp.js");

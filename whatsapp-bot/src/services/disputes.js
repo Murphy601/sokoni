@@ -602,7 +602,9 @@ export async function resolveDispute({
         refundPendingManual: true,
       });
       try {
-        if (order.status !== "cancelled") updateOrderStatus(order.id, "cancelled");
+        if (order.status !== "cancelled") {
+          updateOrderStatus(order.id, "cancelled", { force: true, source: "disputes.resolve.refund" });
+        }
       } catch {
         /* ignore */
       }

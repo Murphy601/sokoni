@@ -4,6 +4,7 @@ import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
 import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
 import { assertPurchaseQty, findVariant } from "./product-availability.js";
+import { assertOrderTransition, canCancelOrder } from "../lib/status-transitions.js";
 export {
   normalizeOrderId,
   extractOrderIdFromText,
@@ -506,16 +507,50 @@ export function listRecentOrders(limit = 10) {
     .slice(0, limit);
 }
 
-export function updateOrderStatus(id, statusInput) {
+export function updateOrderStatus(id, statusInput, opts = {}) {
+  const { force = false, actorPhone = null, source = "orders.updateOrderStatus" } = opts;
   const order = getOrder(id);
   if (!order) return null;
   const status = normalizeStatus(statusInput);
   if (!status) return { error: "invalid_status", order };
   if (order.status === status) return { order, status, unchanged: true };
+
+  const gate = assertOrderTransition(order.status, status, { force });
+  if (!gate.ok) {
+    return { error: gate.error, message: gate.message, order, from: gate.from, to: gate.to };
+  }
+  if (status === "cancelled" && !force) {
+    const cancelGate = canCancelOrder({
+      orderStatus: order.status,
+      dispatchStatus: order.bodaStatus,
+      custodyStatus: order.bodaCustody,
+      force,
+    });
+    if (!cancelGate.ok) {
+      return { error: cancelGate.error, message: cancelGate.message, order };
+    }
+  }
+
+  const fromStatus = order.status;
   order.status = status;
   order.history.push({ status, at: Date.now() });
   order.updatedAt = Date.now();
   persist();
+
+  import("./audit-log.js")
+    .then(({ writeAuditLog }) =>
+      writeAuditLog({
+        orderRef: order.id,
+        actorPhone,
+        action: `ORDER_STATUS_${String(status).toUpperCase()}`,
+        fromStatus,
+        toStatus: status,
+        source,
+        metadata: { force: Boolean(force) },
+      })
+    )
+    .catch(() => {});
+
   return { order, status };
 }
 
