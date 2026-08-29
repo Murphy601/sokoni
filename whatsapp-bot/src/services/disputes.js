@@ -142,6 +142,8 @@ export async function createDispute({
   reason = "other",
   statement = "",
   buyerPhone = "",
+  /** When false, skip notifyDisputeParties — caller sends WAHA alerts (openBuyerReturnCase). */
+  notifyWhatsApp = true,
 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
@@ -217,6 +219,52 @@ export async function createDispute({
     }
   }
 
+  // Resolve seller from product.sellerPhone / order.sellerPhone → users.phone
+  if (!resolvedSellerId) {
+    try {
+      const phones = [];
+      if (order.sellerPhone) phones.push(order.sellerPhone);
+      if (order.productId) {
+        const { getProductById } = await import("./catalog.js");
+        const product = await getProductById(order.productId);
+        if (product?.sellerPhone) phones.push(product.sellerPhone);
+      }
+      const { getSupplier } = await import("./suppliers.js");
+      const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+      if (supplier?.phone) phones.push(supplier.phone);
+      const { findUserByPhone } = await import("../db/repositories/users.js");
+      for (const p of phones) {
+        const found = await findUserByPhone(p);
+        const uid = Number(found?.user?.id);
+        if (Number.isInteger(uid) && uid > 0) {
+          resolvedSellerId = uid;
+          break;
+        }
+      }
+      if (!resolvedSellerId) {
+        for (const p of phones) {
+          try {
+            const { ensureSellerSocialProfile } = await import("../db/repositories/users.js");
+            const ensured = await ensureSellerSocialProfile({
+              phone: p,
+              handle: supplier?.shopHandle || `seller-${String(p).replace(/\D/g, "").slice(-6)}`,
+              shopName: supplier?.businessName || "Sokoni seller",
+            });
+            const uid = Number(ensured?.user?.id);
+            if (Number.isInteger(uid) && uid > 0) {
+              resolvedSellerId = uid;
+              break;
+            }
+          } catch {
+            /* try next phone */
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[disputes] seller phone resolve skipped:", err.message);
+    }
+  }
+
   if (!resolvedSellerId) {
     return {
       error: "seller_not_found",
@@ -263,25 +311,27 @@ export async function createDispute({
   const fresh = getOrder(order.id) || order;
   const reasonLabel = text || cleanReason;
   const short = String(reasonLabel).slice(0, 140);
-  // Await so WAHA seller/admin fan-out finishes before the webhook returns.
-  try {
-    await notifyDisputeParties(fresh, dispute, {
-      eventType: "DISPUTE_OPENED",
-      adminDetails:
-        `Buyer opened a dispute (#${dispute.id}).\n` +
-        `Reason: ${cleanReason}\n` +
-        `${short}\n` +
-        `Escrow: ${freeze.frozen ? "frozen" : "not frozen"}`,
-      sellerMessage:
-        `⚠️ *URGENT DISPUTE* on *${fresh.id}*.\n` +
-        `Reason: ${cleanReason}\n` +
-        `${short}\n\n` +
-        `Payout is on hold. Reply in Seller Hub → Disputes with dispatch photos within 24 hours.`,
-      // Buyer already gets the structured protocol reply — avoid double WhatsApp.
-      buyerMessage: null,
-    });
-  } catch (err) {
-    console.warn("[disputes] notifyDisputeParties failed:", err?.message || err);
+  // Optional WAHA fan-out (openBuyerReturnCase prefers its own sendTextReliable alerts).
+  if (notifyWhatsApp !== false) {
+    try {
+      await notifyDisputeParties(fresh, dispute, {
+        eventType: "DISPUTE_OPENED",
+        adminDetails:
+          `Buyer opened a dispute (#${dispute.id}).\n` +
+          `Reason: ${cleanReason}\n` +
+          `${short}\n` +
+          `Escrow: ${freeze.frozen ? "frozen" : "not frozen"}`,
+        sellerMessage:
+          `⚠️ *URGENT DISPUTE* on *${fresh.id}*.\n` +
+          `Reason: ${cleanReason}\n` +
+          `${short}\n\n` +
+          `Payout is on hold. Reply in Seller Hub → Disputes with dispatch photos within 24 hours.`,
+        // Buyer already gets the structured protocol reply — avoid double WhatsApp.
+        buyerMessage: null,
+      });
+    } catch (err) {
+      console.warn("[disputes] notifyDisputeParties failed:", err?.message || err);
+    }
   }
 
   return { success: true, dispute, escrowFrozen: Boolean(freeze.frozen) };

@@ -1390,12 +1390,19 @@ export async function openBuyerReturnCase({
     };
   }
   if (isAdminTakeOver(order)) {
+    const alerts = await fireOpenDisputeWhatsAppAlerts(order.id, {
+      phone,
+      reason,
+      disputeId: null,
+      alreadyOpen: true,
+    });
     return {
       ok: true,
       alreadyOpen: true,
       orderId: order.id,
       payoutHeld: true,
       askForEvidence: true,
+      alerts,
       message:
         `Support is already open on *${order.id}* (escrow held). Reply here with clear photos of the issue so admin can finalize.`,
     };
@@ -1428,6 +1435,8 @@ export async function openBuyerReturnCase({
             reason: disputeReason,
             statement: rawText,
             buyerPhone,
+            // Hub sends the reliable WAHA seller/admin alerts below.
+            notifyWhatsApp: false,
           });
           if (created?.success && created.dispute) {
             dispute = created.dispute;
@@ -1452,6 +1461,13 @@ export async function openBuyerReturnCase({
     skipCounterpartNotify: disputeNotified,
   });
 
+  const alerts = await fireOpenDisputeWhatsAppAlerts(order.id, {
+    phone: phone || buyerPhone,
+    reason: rawText,
+    disputeId: dispute?.id || null,
+    alreadyOpen: false,
+  });
+
   const ticketLabel = dispute?.id ? `Dispute #${dispute.id}` : `HELP ${order.id}`;
   const site = String(config.publicSiteUrl || "https://sokonimall.com").replace(/\/$/, "");
   return {
@@ -1462,6 +1478,7 @@ export async function openBuyerReturnCase({
     disputeId: dispute?.id || null,
     disputeReason,
     ticketHint: ticketLabel,
+    alerts,
     message:
       `I'm sorry — payout for *${order.id}* is on hold (${ticketLabel}).\n` +
       `• Seller and support have been notified.\n` +
@@ -1469,6 +1486,36 @@ export async function openBuyerReturnCase({
       `• You can also upload evidence at ${site}/disputes.html\n` +
       msgHelpAck(getOrder(order.id) || order),
   };
+}
+
+/** Reliable WAHA seller + admin dispute alerts (used by every openBuyerReturnCase path). */
+async function fireOpenDisputeWhatsAppAlerts(
+  orderId,
+  { phone = "", reason = "", disputeId = null, alreadyOpen = false } = {}
+) {
+  const issueType = String(reason || "dispute").slice(0, 80);
+  let sellerOk = false;
+  let adminOk = false;
+  try {
+    const { sendSellerDisputeAlert, sendAdminDisputeAlert } = await import("./dispute-protocol.js");
+    sellerOk = await sendSellerDisputeAlert(orderId, {
+      disputeId,
+      issueType: alreadyOpen ? `follow-up: ${issueType}` : issueType,
+    });
+    adminOk = await sendAdminDisputeAlert(orderId, {
+      phone,
+      disputeId,
+      issueType: alreadyOpen ? `follow-up: ${issueType}` : issueType,
+      opened: !alreadyOpen,
+    });
+  } catch (err) {
+    console.error("[Dispute Alert] fireOpenDisputeWhatsAppAlerts failed:", err.message);
+  }
+  console.log(
+    `[Dispute Alert] openBuyerReturnCase order=${orderId} seller=${sellerOk ? "ok" : "FAIL"} admin=${adminOk ? "ok" : "FAIL"}` +
+      (alreadyOpen ? " (alreadyOpen)" : "")
+  );
+  return { seller: sellerOk, admin: adminOk };
 }
 
 /* -------------------------------------------------------------------------- */

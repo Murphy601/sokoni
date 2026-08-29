@@ -406,6 +406,26 @@ export async function sendSellerDisputeAlert(
     /* ignore */
   }
 
+  // Last resort: seller_user_id → users.phone
+  if (!targets.size && order.sellerUserId) {
+    try {
+      const { isDbEnabled, query } = await import("../db/pool.js");
+      if (isDbEnabled()) {
+        const { rows } = await query(`SELECT phone FROM users WHERE id = $1 LIMIT 1`, [
+          Number(order.sellerUserId),
+        ]);
+        const ph = rows[0]?.phone;
+        if (ph) {
+          for (const t of sellerNotifyTargets(ph)) targets.add(t);
+          const chat = toChatId(ph);
+          if (chat) targets.add(chat);
+        }
+      }
+    } catch (err) {
+      console.warn("[Dispute Alert] seller_user_id phone lookup:", err.message);
+    }
+  }
+
   if (!targets.size) {
     console.error(
       `[Dispute Alert] Missing seller phone/chat for Order ${order.id} ` +
@@ -541,6 +561,7 @@ export async function runFulfillmentDisputeProtocol({
     payoutHeld: Boolean(result.payoutHeld),
     askForEvidence: Boolean(result.askForEvidence),
     needsOrderId: false,
+    alerts: result.alerts || null,
     message:
       result.message ||
       `Dispute registered for *${orderId}*. Reply with clear photos of the issue.`,
@@ -574,21 +595,12 @@ export async function tryHandleFulfillmentDispute(customerKey, text, { phone = "
 
   if (result.ok && result.orderId) {
     await ensurePayoutFrozen(result.orderId);
-    const issueType = String(text || "dispute").slice(0, 80);
-    // Always await explicit seller+admin WAHA alerts (do not rely on void createDispute fan-out).
-    const sellerOk = await sendSellerDisputeAlert(result.orderId, {
-      disputeId: result.disputeId || null,
-      issueType,
-    });
-    const adminOk = await sendAdminDisputeAlert(result.orderId, {
-      phone,
-      disputeId: result.disputeId || null,
-      issueType,
-      opened: true,
-    });
-    console.log(
-      `[Dispute Alert] open order=${result.orderId} seller=${sellerOk ? "ok" : "FAIL"} admin=${adminOk ? "ok" : "FAIL"}`
-    );
+    // Seller/admin WAHA alerts are fired inside openBuyerReturnCase (AI tool + protocol).
+    if (result.alerts) {
+      console.log(
+        `[Dispute Alert] protocol order=${result.orderId} seller=${result.alerts.seller ? "ok" : "FAIL"} admin=${result.alerts.admin ? "ok" : "FAIL"}`
+      );
+    }
   }
 
   await sendText(customerKey, result.message);
