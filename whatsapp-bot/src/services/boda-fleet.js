@@ -884,6 +884,86 @@ async function ensureRiderPayoutsTable() {
   `);
 }
 
+async function ensureOtpSafeguardColumns() {
+  await query(`
+    ALTER TABLE delivery_dispatches
+      ADD COLUMN IF NOT EXISTS otp_failed_attempts INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS otp_locked_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS dropoff_lat DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS dropoff_lng DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS rider_confirm_lat DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS rider_confirm_lng DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS rider_location_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS dispute_window_ends_at TIMESTAMPTZ
+  `);
+}
+
+async function ensureDeliveryOtpAuditTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS delivery_otp_audit (
+      id                BIGSERIAL PRIMARY KEY,
+      order_ref         VARCHAR(40) NOT NULL,
+      dispatch_id       BIGINT,
+      rider_id          INT,
+      otp_entered       VARCHAR(8),
+      otp_match         BOOLEAN NOT NULL DEFAULT FALSE,
+      submission_time   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      rider_gps_lat     DOUBLE PRECISION,
+      rider_gps_lng     DOUBLE PRECISION,
+      distance_m        NUMERIC(12, 2),
+      geofence_ok       BOOLEAN,
+      escrow_status     VARCHAR(30),
+      result            VARCHAR(40) NOT NULL DEFAULT 'ATTEMPT',
+      meta              JSONB NOT NULL DEFAULT '{}'::jsonb
+    )
+  `);
+}
+
+async function writeOtpAudit(row = {}) {
+  try {
+    await ensureDeliveryOtpAuditTable();
+    await query(
+      `INSERT INTO delivery_otp_audit (
+         order_ref, dispatch_id, rider_id, otp_entered, otp_match,
+         rider_gps_lat, rider_gps_lng, distance_m, geofence_ok,
+         escrow_status, result, meta
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)`,
+      [
+        row.orderRef,
+        row.dispatchId || null,
+        row.riderId || null,
+        row.otpEntered != null ? String(row.otpEntered).slice(0, 8) : null,
+        Boolean(row.otpMatch),
+        row.riderGpsLat ?? null,
+        row.riderGpsLng ?? null,
+        row.distanceM ?? null,
+        row.geofenceOk ?? null,
+        row.escrowStatus || null,
+        row.result || "ATTEMPT",
+        JSON.stringify(row.meta || {}),
+      ]
+    );
+  } catch (err) {
+    console.warn("[boda-fleet] otp audit write skipped:", err.message);
+  }
+}
+
+async function alertAdminOtpLock({ orderId, riderId, riderPhone, attempts }) {
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId,
+      details:
+        `⛔ *URGENT — OTP brute-force lock*\n` +
+        `Order *${orderId}*\n` +
+        `Rider #${riderId} (${riderPhone}) hit ${attempts} wrong OTP attempts.\n` +
+        `Rider SUSPENDED · dispatch OTP_LOCKED.`,
+    });
+  } catch (err) {
+    console.warn("[boda-fleet] admin OTP lock alert skipped:", err.message);
+  }
+}
+
 /**
  * Rider WhatsApp: CONFIRM SKN-#### 1234 — OTP match → delivered + fee payout stub.
  */
@@ -894,6 +974,12 @@ export async function verifyDeliveryOTP({
   customerKey = "",
 } = {}) {
   if (!isDbEnabled()) return { error: "database_not_configured" };
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] safeguard columns:", err.message);
+  }
+
   const id = normalizeOrderId(orderId);
   const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
   const otp = String(code || "").replace(/\D/g, "").slice(0, 4);
@@ -908,11 +994,11 @@ export async function verifyDeliveryOTP({
   }
 
   const { rows } = await query(
-    `SELECT d.*, r.phone AS rider_phone
+    `SELECT d.*, r.phone AS rider_phone, r.full_name AS rider_name, r.motorbike_plate
        FROM delivery_dispatches d
        JOIN riders r ON d.rider_id = r.id
       WHERE UPPER(d.order_ref) = UPPER($1)
-        AND d.status = 'OTP_SENT'
+        AND d.status IN ('OTP_SENT', 'OTP_LOCKED')
         AND r.phone LIKE $2
       ORDER BY d.id DESC
       LIMIT 1`,
@@ -927,16 +1013,116 @@ export async function verifyDeliveryOTP({
   }
 
   const dispatch = rows[0];
+  const failedAttempts = Number(dispatch.otp_failed_attempts || 0);
+
+  // Step 1 — 3-strike lockout (anti-brute-force)
+  if (dispatch.status === "OTP_LOCKED" || failedAttempts >= 3 || dispatch.otp_locked_at) {
+    await writeOtpAudit({
+      orderRef: id,
+      dispatchId: dispatch.id,
+      riderId: dispatch.rider_id,
+      otpEntered: otp,
+      otpMatch: false,
+      result: "LOCKED",
+      escrowStatus: dispatch.fee_status,
+      meta: { reason: "already_locked", failedAttempts },
+    });
+    return {
+      error: "otp_locked",
+      message:
+        `⛔ Account locked due to multiple incorrect OTP entries. Order *${id}* escalated to Admin.`,
+    };
+  }
+
   if (dispatch.delivery_otp_hash !== hashOtp(otp)) {
+    const nextFails = failedAttempts + 1;
+    if (nextFails >= 3) {
+      await query(
+        `UPDATE delivery_dispatches SET
+           otp_failed_attempts = $2,
+           otp_locked_at = NOW(),
+           status = 'OTP_LOCKED',
+           updated_at = NOW()
+         WHERE id = $1`,
+        [dispatch.id, nextFails]
+      );
+      if (dispatch.rider_id) {
+        await query(
+          `UPDATE riders SET
+             verification_status = 'SUSPENDED',
+             is_available = FALSE,
+             suspend_reason = $2,
+             suspended_at = NOW(),
+             suspended_order_ref = $3,
+             updated_at = NOW()
+           WHERE id = $1`,
+          [
+            dispatch.rider_id,
+            `OTP brute-force lock on ${id} (${nextFails} failed attempts)`,
+            id,
+          ]
+        );
+      }
+      await writeOtpAudit({
+        orderRef: id,
+        dispatchId: dispatch.id,
+        riderId: dispatch.rider_id,
+        otpEntered: otp,
+        otpMatch: false,
+        result: "LOCKOUT",
+        escrowStatus: dispatch.fee_status,
+        meta: { failedAttempts: nextFails },
+      });
+      await alertAdminOtpLock({
+        orderId: id,
+        riderId: dispatch.rider_id,
+        riderPhone,
+        attempts: nextFails,
+      });
+      return {
+        error: "otp_locked",
+        message:
+          `⛔ Account locked due to multiple incorrect OTP entries. Order *${id}* escalated to Admin.`,
+      };
+    }
+
+    await query(
+      `UPDATE delivery_dispatches SET
+         otp_failed_attempts = $2,
+         updated_at = NOW()
+       WHERE id = $1`,
+      [dispatch.id, nextFails]
+    );
+    await writeOtpAudit({
+      orderRef: id,
+      dispatchId: dispatch.id,
+      riderId: dispatch.rider_id,
+      otpEntered: otp,
+      otpMatch: false,
+      result: "MISMATCH",
+      escrowStatus: dispatch.fee_status,
+      meta: { failedAttempts: nextFails },
+    });
     return {
       error: "otp_mismatch",
-      message: `❌ Incorrect OTP code for Order *${id}*. Please ask the buyer for the correct 4-digit code.`,
+      message:
+        `❌ Incorrect OTP code for Order *${id}* (${nextFails}/3).\n` +
+        `Please ask the buyer for the correct 4-digit code.`,
     };
   }
 
   if (dispatch.delivery_otp_sent_at) {
     const age = Date.now() - new Date(dispatch.delivery_otp_sent_at).getTime();
     if (Number.isFinite(age) && age > 30 * 60 * 1000) {
+      await writeOtpAudit({
+        orderRef: id,
+        dispatchId: dispatch.id,
+        riderId: dispatch.rider_id,
+        otpEntered: otp,
+        otpMatch: true,
+        result: "EXPIRED",
+        escrowStatus: dispatch.fee_status,
+      });
       return {
         error: "otp_expired",
         message: `That code expired. Reply *DELIVERED ${id}* for a fresh OTP, then CONFIRM again.`,
@@ -952,6 +1138,7 @@ export async function verifyDeliveryOTP({
        delivered_at = NOW(),
        fee_status = 'PENDING_MPESA',
        delivery_otp_hash = NULL,
+       otp_failed_attempts = 0,
        updated_at = NOW()
      WHERE id = $1`,
     [dispatch.id]
@@ -978,6 +1165,20 @@ export async function verifyDeliveryOTP({
   }
 
   updateOrderMeta(id, { bodaStatus: "DELIVERED", bodaFeeStatus: "PENDING_MPESA" });
+
+  await writeOtpAudit({
+    orderRef: id,
+    dispatchId: dispatch.id,
+    riderId: dispatch.rider_id,
+    otpEntered: otp,
+    otpMatch: true,
+    result: "DELIVERED",
+    escrowStatus: "PENDING_MPESA",
+    meta: {
+      riderName: dispatch.rider_name || null,
+      plate: dispatch.motorbike_plate || null,
+    },
+  });
 
   // Buyer escrow YES path when we can resolve the buyer chat.
   const order = getOrder(id);
