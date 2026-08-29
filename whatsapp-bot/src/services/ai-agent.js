@@ -465,6 +465,13 @@ export async function runAgentTurn({
   }
 
   const toolBlock = formatToolResultsForPrompt(toolResults);
+  let userContextBlock = "";
+  try {
+    const { buildUserContextBlock } = await import("./ai-user-context.js");
+    userContextBlock = await buildUserContextBlock({ phone, customerKey: sessionKey });
+  } catch (err) {
+    console.warn("[ai-agent] user context skipped:", err.message);
+  }
   const shopping = isShoppingIntent(text);
   const hasLiveCatalogHits = toolResults.some(
     (r) =>
@@ -551,7 +558,9 @@ export async function runAgentTurn({
         role: "system",
         content: buildGroundedSystemPrompt({
           channel,
-          contextBlocks: [specialistHint, knowledgeBlock, toolBlock].filter(Boolean),
+          contextBlocks: [specialistHint, userContextBlock, knowledgeBlock, toolBlock].filter(
+            Boolean
+          ),
           threadId,
           preferKiswahili,
         }),

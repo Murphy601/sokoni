@@ -2,9 +2,12 @@
  * Channel-specific system prompts (WhatsApp + web).
  * Strict grounding: answer only from LOOKUP RESULTS + retrieved CONTEXT.
  *
- * Layer model (MVP):
- * - Layer 1 (code): deterministic command router handles ACCEPT / PICKUP / CONFIRM / etc.
- * - Layer 2 (this file): LLM only answers freeform support — never executes custody actions.
+ * 4-tier model (additive — editing prompts does not wipe prior training):
+ * 1) Command router (webhook) — ACCEPT / PICKUP / CONFIRM / …
+ * 2) This system prompt — identity + Stable Facts
+ * 3) Dynamic user context — ai-user-context.js each turn
+ * 4) RAG — knowledge/*.md (+ optional pgvector)
+ * Tools run server-side before the LLM (LOOKUP RESULTS), not via OpenAI tool_calls.
  */
 
 /** Shared hard rules applied to every Sokoni AI surface. */
