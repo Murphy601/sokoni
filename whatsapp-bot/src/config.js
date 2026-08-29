@@ -358,34 +358,4 @@ export const config = {
     /** Sandbox/unaudited apps must use SELF_ONLY until TikTok app audit passes. */
     privacyLevel: process.env.TIKTOK_PRIVACY_LEVEL || "SELF_ONLY",
   },
-  /**
-   * Neural TTS for Ask Voice ("Zara"-style). Keys server-only.
-   * Chain: ElevenLabs → Cartesia → Hugging Face / Kokoro proxy → browser fallback.
-   */
-  neuralTts: {
-    preferred: (process.env.NEURAL_TTS_PROVIDER || "auto").trim().toLowerCase(),
-    maxChars: Number(process.env.NEURAL_TTS_MAX_CHARS) || 400,
-    timeoutMs: Number(process.env.NEURAL_TTS_TIMEOUT_MS) || 12_000,
-    elevenLabs: {
-      apiKey: process.env.ELEVENLABS_API_KEY || "",
-      voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-      modelId: process.env.ELEVENLABS_MODEL_ID || "eleven_turbo_v2",
-      stability: Number(process.env.ELEVENLABS_STABILITY ?? 0.4),
-      similarityBoost: Number(process.env.ELEVENLABS_SIMILARITY ?? 0.85),
-      style: Number(process.env.ELEVENLABS_STYLE ?? 0.2),
-    },
-    cartesia: {
-      apiKey: process.env.CARTESIA_API_KEY || "",
-      voiceId: process.env.CARTESIA_VOICE_ID || "",
-      modelId: process.env.CARTESIA_MODEL_ID || "sonic-english",
-      language: process.env.CARTESIA_LANGUAGE || "en",
-    },
-    huggingface: {
-      apiKey: process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN || "",
-      /** Custom Kokoro / StyleTTS Space or Inference Endpoint URL (preferred free path). */
-      url: process.env.NEURAL_TTS_HF_URL || "",
-      model: process.env.NEURAL_TTS_HF_MODEL || "hexgrad/Kokoro-82M",
-      voice: process.env.NEURAL_TTS_HF_VOICE || "af_sarah",
-    },
-  },
 };
