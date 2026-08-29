@@ -89,6 +89,61 @@ adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
   res.json(result);
 });
 
+/** POST /admin/boda/riders/:id/bonus — fuel advance / bonus into CLEARED ledger */
+adminBodaRouter.post("/riders/:id/bonus", async (req, res) => {
+  const { adminRiderBonusPayout } = await import("../services/boda-fleet.js");
+  const result = await adminRiderBonusPayout({
+    riderId: req.params.id,
+    amountKes: req.body?.amountKes ?? req.body?.amount,
+    reason: req.body?.reason || "admin_bonus",
+    orderRef: req.body?.orderRef || null,
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /admin/boda/riders/:id/override-noshow — bypass 15-min wait, start return */
+adminBodaRouter.post("/riders/:id/override-noshow", async (req, res) => {
+  const { adminOverrideNoShowTimer } = await import("../services/boda-fleet.js");
+  const result = await adminOverrideNoShowTimer({
+    orderId: req.body?.orderId || req.body?.orderRef,
+    riderId: req.params.id,
+    reason: req.body?.reason || "",
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /admin/boda/dispatches/force-reassign — REASSIGN RIDER via master path meta */
+adminBodaRouter.post("/dispatches/force-reassign", async (req, res) => {
+  try {
+    const orderId = String(req.body?.orderId || req.body?.orderRef || "").trim();
+    const toPhone = String(req.body?.toRiderPhone || req.body?.phone || "").trim();
+    if (!orderId || !toPhone) {
+      return res.status(400).json({
+        error: "missing_fields",
+        message: "orderId and toRiderPhone required.",
+      });
+    }
+    const { executeMasterAdminCommand } = await import("../services/admin-override.js");
+    const result = await executeMasterAdminCommand(`REASSIGN RIDER ${orderId} ${toPhone}`, {
+      adminLabel: String(req.body?.adminLabel || "fleet-directory").slice(0, 80),
+      source: "admin-boda.force-reassign",
+    });
+    res.status(result.ok ? 200 : 400).json({
+      ok: result.ok,
+      action: result.action,
+      reply: result.reply,
+      data: result.data || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "force_reassign_failed", message: err.message });
+  }
+});
+
 /** POST /admin/boda/dispatches/auto-pin — ops force Sokoni pin for an order */
 adminBodaRouter.post("/dispatches/auto-pin", async (req, res) => {
   const { createPlatformBodaDispatch } = await import("../services/boda-fleet.js");

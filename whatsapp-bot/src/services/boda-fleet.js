@@ -459,26 +459,84 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
   if (!isDbEnabled()) return { riders: [], error: "database_not_configured" };
   const z = zone ? normalizeBodaZone(zone) : null;
   const st = status ? String(status).toUpperCase() : null;
-  const { rows } = await query(
-    `SELECT r.*,
-            d.status AS active_dispatch_status,
-            d.order_ref AS active_order_ref,
-            d.id AS active_dispatch_id
-       FROM riders r
-       LEFT JOIN LATERAL (
-         SELECT dd.status, dd.order_ref, dd.id
-           FROM delivery_dispatches dd
-          WHERE dd.rider_id = r.id
-            AND dd.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT', 'OTP_LOCKED')
-          ORDER BY dd.id DESC
-          LIMIT 1
-       ) d ON TRUE
-      WHERE ($1::text IS NULL OR r.operating_town = $1)
-        AND ($2::text IS NULL OR r.verification_status = $2)
-      ORDER BY r.created_at DESC
-      LIMIT $3`,
-    [z, st, Math.min(Math.max(Number(limit) || 50, 1), 200)]
-  );
+  const lim = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  let rows = [];
+  try {
+    const result = await query(
+      `SELECT r.*,
+              d.status AS active_dispatch_status,
+              d.order_ref AS active_order_ref,
+              d.id AS active_dispatch_id,
+              COALESCE(jobs.completed_trips, 0)::int AS completed_trips,
+              COALESCE(ledger.unpaid_kes, 0)::numeric AS unpaid_ledger_kes
+         FROM riders r
+         LEFT JOIN LATERAL (
+           SELECT dd.status, dd.order_ref, dd.id
+             FROM delivery_dispatches dd
+            WHERE dd.rider_id = r.id
+              AND dd.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT', 'OTP_LOCKED')
+            ORDER BY dd.id DESC
+            LIMIT 1
+         ) d ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*)::int AS completed_trips
+             FROM delivery_dispatches dd
+            WHERE dd.rider_id = r.id
+              AND dd.status = 'DELIVERED'
+         ) jobs ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(COALESCE(p.net_amount_paid, p.amount, 0)), 0) AS unpaid_kes
+             FROM rider_payouts p
+            WHERE p.rider_id = r.id
+              AND UPPER(COALESCE(p.status, '')) IN (
+                'CLEARED', 'ON_HOLD', 'NEEDS_APPROVAL', 'PENDING_RETRY', 'HELD', 'OWED'
+              )
+              AND p.paid_at IS NULL
+         ) ledger ON TRUE
+        WHERE ($1::text IS NULL OR r.operating_town = $1)
+          AND ($2::text IS NULL OR r.verification_status = $2)
+        ORDER BY r.created_at DESC
+        LIMIT $3`,
+      [z, st, lim]
+    );
+    rows = result.rows;
+  } catch (err) {
+    console.warn("[boda-fleet] listRiders enriched query fallback:", err.message);
+    try {
+      const result = await query(
+        `SELECT r.*,
+                d.status AS active_dispatch_status,
+                d.order_ref AS active_order_ref,
+                d.id AS active_dispatch_id
+           FROM riders r
+           LEFT JOIN LATERAL (
+             SELECT dd.status, dd.order_ref, dd.id
+               FROM delivery_dispatches dd
+              WHERE dd.rider_id = r.id
+                AND dd.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT', 'OTP_LOCKED')
+              ORDER BY dd.id DESC
+              LIMIT 1
+           ) d ON TRUE
+          WHERE ($1::text IS NULL OR r.operating_town = $1)
+            AND ($2::text IS NULL OR r.verification_status = $2)
+          ORDER BY r.created_at DESC
+          LIMIT $3`,
+        [z, st, lim]
+      );
+      rows = result.rows;
+    } catch (err2) {
+      console.warn("[boda-fleet] listRiders basic fallback:", err2.message);
+      const result = await query(
+        `SELECT * FROM riders
+          WHERE ($1::text IS NULL OR operating_town = $1)
+            AND ($2::text IS NULL OR verification_status = $2)
+          ORDER BY created_at DESC
+          LIMIT $3`,
+        [z, st, lim]
+      );
+      rows = result.rows;
+    }
+  }
   return {
     ok: true,
     riders: rows.map((row) => {
@@ -490,14 +548,81 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
       else if (rider.verificationStatus === "VERIFIED" && rider.isAvailable) fleetStatus = "AVAILABLE";
       else if (rider.verificationStatus === "PENDING") fleetStatus = "PENDING";
       else if (rider.verificationStatus === "VERIFIED") fleetStatus = "OFFLINE";
+      const bikeLabel = [rider.licenseClass, rider.motorbikePlate].filter(Boolean).join(" · ") ||
+        rider.motorbikePlate ||
+        "Bike —";
       return {
         ...rider,
+        bikeLabel,
         fleetStatus,
+        completedTrips:
+          row.completed_trips != null
+            ? Number(row.completed_trips)
+            : Number(rider.offersAccepted || 0),
+        unpaidLedgerKes: Number(row.unpaid_ledger_kes || 0),
         activeDispatchStatus: row.active_dispatch_status || null,
         activeOrderRef: row.active_order_ref || null,
         activeDispatchId: row.active_dispatch_id != null ? Number(row.active_dispatch_id) : null,
       };
     }),
+  };
+}
+
+/**
+ * Manual bonus / fuel advance — CLEARED ledger row for B2C cycle (or accounting stub).
+ */
+export async function adminRiderBonusPayout({
+  riderId,
+  amountKes,
+  reason = "admin_bonus",
+  orderRef = null,
+} = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  const id = Number(riderId);
+  const amount = Math.round(Number(amountKes) || 0);
+  if (!id || amount < 1) {
+    return { error: "invalid", message: "riderId and amountKes (>= 1) required." };
+  }
+  const { rows } = await query(`SELECT * FROM riders WHERE id = $1`, [id]);
+  if (!rows[0]) return { error: "not_found", message: "Rider not found." };
+  await ensureRiderPayoutsTable();
+  const ref = String(orderRef || `BONUS-${id}-${Date.now()}`).slice(0, 40);
+  const { rows: inserted } = await query(
+    `INSERT INTO rider_payouts (rider_id, order_ref, amount, gross_delivery_fee, net_amount_paid, status, payout_hold_reason)
+     VALUES ($1, $2, $3, $3, $3, 'CLEARED', $4)
+     RETURNING *`,
+    [id, ref, amount, String(reason || "admin_bonus").slice(0, 200)]
+  );
+  return {
+    ok: true,
+    payout: inserted[0],
+    rider: mapRider(rows[0]),
+    message: `KES ${amount.toLocaleString()} bonus queued for ${rows[0].full_name || rows[0].phone}. Run B2C or mark paid in payouts.`,
+  };
+}
+
+/**
+ * Admin: force-bypass the 15-min no-show wait and start return trip.
+ */
+export async function adminOverrideNoShowTimer({ orderId, riderId = null, reason = "" } = {}) {
+  const { executeReturnTrip } = await import("./boda-no-show.js");
+  let phone = "";
+  if (riderId && isDbEnabled()) {
+    const { rows } = await query(`SELECT phone FROM riders WHERE id = $1`, [Number(riderId)]);
+    phone = rows[0]?.phone || "";
+  }
+  const result = await executeReturnTrip({
+    orderId,
+    phone,
+    force: true,
+  });
+  if (result?.error) return result;
+  return {
+    ok: true,
+    ...result,
+    message:
+      result.message ||
+      `No-show timer overridden for ${orderId}.${reason ? ` (${reason})` : ""}`,
   };
 }
 
