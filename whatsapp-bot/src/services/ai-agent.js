@@ -25,6 +25,7 @@ import {
   buildChatProviderChain,
 } from "./llm-router.js";
 import { GOODWILL_VOUCHER_CAP_KES } from "./agent-specialists.js";
+import { normalizeBotMessageSpacing } from "./whatsapp.js";
 
 /** Free models sometimes echo planning / system rules instead of answering. */
 const INSTRUCTION_LEAK =
@@ -65,10 +66,27 @@ function sanitizeReply(text) {
 const FLUFF_SENTENCE =
   /^(?:hello[!.,]?\s*)?(?:hi[!.,]?\s*)?(?:i hope (?:this|you|that)[^.!?]*[.!?]|thank you for (?:choosing|contacting|reaching out to) sokoni[^.!?]*[.!?]|i(?:'d| would) be delighted[^.!?]*[.!?]|hope (?:this|that) helps[^.!?]*[.!?]|(?:let me know if you need|is there anything else|would you (?:also )?like)[^.!?]*[.!?])\s*/i;
 
+const STEP_LEAD = /^([1-9]\uFE0F?\u20E3|[1-9][.)]\s|•\s)/u;
+
+/** Join sentences; WhatsApp steps get blank-line breaks so they are not one wall of text. */
+function joinReplySentences(sentences, channel) {
+  if (channel !== "whatsapp") return sentences.join(" ");
+  let out = "";
+  for (const s of sentences) {
+    if (!out) {
+      out = s;
+      continue;
+    }
+    out += STEP_LEAD.test(s) ? `\n\n${s}` : ` ${s}`;
+  }
+  return out;
+}
+
 /**
  * Hard brevity guard after the model (WhatsApp notifications must fit one glance).
  * Prefer complete sentences — never slice mid-word / mid-thought (that looked like
  * "unfinished" replies when max_tokens was too low and this guard word-chopped).
+ * WhatsApp: preserve / restore step line-breaks (do not mash 1️⃣2️⃣ into one paragraph).
  */
 export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = false } = {}) {
   let cleaned = sanitizeReply(text);
@@ -113,18 +131,18 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
       .slice(0, 2);
   }
 
-  cleaned = sentences.slice(0, maxSentences).join(" ").trim();
+  cleaned = joinReplySentences(sentences.slice(0, maxSentences), channel).trim();
 
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) {
     // Always cut on a sentence boundary — never mid-phrase word chop.
-    let trimmed = "";
+    const kept = [];
     for (const s of sentences.slice(0, maxSentences)) {
-      const next = trimmed ? `${trimmed} ${s}` : s;
+      const next = joinReplySentences([...kept, s], channel);
       if (next.split(/\s+/).filter(Boolean).length > maxWords) break;
-      trimmed = next;
+      kept.push(s);
     }
-    cleaned = trimmed || sentences[0] || cleaned;
+    cleaned = joinReplySentences(kept.length ? kept : [sentences[0] || cleaned], channel);
     if (!/[.!?…]$/.test(cleaned)) cleaned += ".";
   }
   if (cleaned.length > maxChars) {
@@ -139,7 +157,9 @@ export function enforceReplyBrevity(text, channel = "whatsapp", { allowLonger = 
     }
   }
   if (looksLikeInstructionLeak(cleaned)) return null;
-  return cleaned || null;
+  if (!cleaned) return null;
+  // Fail-safe: split inline keycaps (1️⃣…) even when the model mashed them into one paragraph.
+  return channel === "whatsapp" ? normalizeBotMessageSpacing(cleaned) : cleaned;
 }
 
 function formatProductLine(p, channel = "whatsapp", index = 0) {
