@@ -441,6 +441,11 @@ export async function notifyOrderParties(
   { buyerMessage = null, sellerMessage = null, sellerUserId = null } = {}
 ) {
   if (!order) return;
+  try {
+    order = (await ensureOrderSupplier(order)) || order;
+  } catch {
+    /* ignore */
+  }
   const parties = await getOrderPartyChats(order, { sellerUserId });
   const jobs = [];
   if (buyerMessage) {
@@ -449,7 +454,14 @@ export async function notifyOrderParties(
   if (sellerMessage) {
     for (const to of parties.seller) jobs.push({ to, message: sellerMessage });
   }
-  if (jobs.length) void dispatchMessages(jobs);
+  if (!jobs.length) {
+    console.warn(
+      `[communication-hub] notifyOrderParties: no chat targets for ${order.id} ` +
+        `(buyer=${parties.buyer.length} seller=${parties.seller.length})`
+    );
+    return;
+  }
+  await dispatchMessages(jobs);
 }
 
 export async function notifyAdminEvent(eventType, { orderId = null, details = "", silent = false } = {}) {
