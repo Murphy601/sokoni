@@ -4,7 +4,7 @@
  * Order refs are SKN-#### strings (never integer order PKs).
  */
 import { createHash, randomInt } from "node:crypto";
-import { isDbEnabled, query } from "../db/pool.js";
+import { isDbEnabled, query, withTransaction } from "../db/pool.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
 import {
@@ -746,10 +746,10 @@ export async function createPlatformBodaDispatch({
   const { rows } = await query(
     `INSERT INTO delivery_dispatches (
        order_ref, seller_phone, pickup_address, delivery_address,
-       delivery_fee_kes, operating_town, status, broadcast_rider_ids, meta,
+       delivery_fee_kes, operating_town, status, custody_status, broadcast_rider_ids, meta,
        dropoff_lat, dropoff_lng, pinned_rider_id, pin_offered_at, dispatch_source,
        offer_index, offer_expires_at, offer_queue
-     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb, $9, $10, $11, NOW(), $12, 0, $13, $7::int[])
+     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED','UNASSIGNED',$7::int[], $8::jsonb, $9, $10, $11, NOW(), $12, 0, $13, $7::int[])
      RETURNING *`,
     [
       id,
@@ -1064,17 +1064,19 @@ export async function processBodaOfferTimeouts({ limit = 25 } = {}) {
 }
 
 /**
- * Late pickup penalty: ACCEPTED > 30 min without pickup / seller OTP → −0.2 stars once.
+ * Late pickup SLA: ACCEPTED > 10 min without Pickup OTP → −0.2 stars,
+ * unassign rider, reset to UNASSIGNED, re-offer next ranked riders.
  */
 export async function applyLatePickupPenalties({ limit = 40 } = {}) {
-  if (!isDbEnabled()) return { penalized: 0 };
+  if (!isDbEnabled()) return { penalized: 0, reopened: 0 };
   try {
     await ensurePinColumns();
   } catch {
-    return { penalized: 0 };
+    return { penalized: 0, reopened: 0 };
   }
+
   const { rows } = await query(
-    `SELECT id, rider_id, order_ref
+    `SELECT id
        FROM delivery_dispatches
       WHERE status = 'ACCEPTED'
         AND rider_id IS NOT NULL
@@ -1086,20 +1088,116 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
       LIMIT $2`,
     [LATE_PICKUP_MINUTES, Math.min(Math.max(Number(limit) || 40, 1), 100)]
   );
+
   let penalized = 0;
-  for (const row of rows) {
+  let reopened = 0;
+  const { sendText } = await import("./whatsapp.js");
+
+  for (const stub of rows) {
     try {
-      await adjustRiderRating(row.rider_id, -LATE_PICKUP_PENALTY, `late_pickup:${row.order_ref}`);
-      await query(
-        `UPDATE delivery_dispatches SET late_pickup_penalized = TRUE, updated_at = NOW() WHERE id = $1`,
-        [row.id]
+      const expired = await withTransaction(async (client) => {
+        const { rows: locked } = await client.query(
+          `SELECT * FROM delivery_dispatches WHERE id = $1 FOR UPDATE`,
+          [stub.id]
+        );
+        const row = locked[0];
+        if (
+          !row ||
+          row.status !== "ACCEPTED" ||
+          !row.rider_id ||
+          row.picked_up_at ||
+          row.late_pickup_penalized
+        ) {
+          return null;
+        }
+
+        const riderId = Number(row.rider_id);
+        const queue = (
+          Array.isArray(row.offer_queue) && row.offer_queue.length
+            ? row.offer_queue
+            : Array.isArray(row.broadcast_rider_ids)
+              ? row.broadcast_rider_ids
+              : []
+        )
+          .map(Number)
+          .filter((n) => n && n !== riderId);
+
+        const expires = new Date(Date.now() + OFFER_TIMEOUT_MS);
+        await client.query(
+          `UPDATE delivery_dispatches SET
+             rider_id = NULL,
+             status = 'REQUESTED',
+             accepted_at = NULL,
+             custody_status = 'UNASSIGNED',
+             pickup_otp_hash = NULL,
+             pickup_otp_sent_at = NULL,
+             pinned_rider_id = NULL,
+             offer_index = -1,
+             offer_expires_at = $2,
+             offer_queue = $3::int[],
+             broadcast_rider_ids = $3::int[],
+             late_pickup_penalized = TRUE,
+             updated_at = NOW(),
+             meta = COALESCE(meta, '{}'::jsonb) || $4::jsonb
+           WHERE id = $1`,
+          [
+            row.id,
+            expires.toISOString(),
+            queue,
+            JSON.stringify({
+              latePickupExpiredAt: new Date().toISOString(),
+              latePickupRiderId: riderId,
+              latePickupMinutes: LATE_PICKUP_MINUTES,
+            }),
+          ]
+        );
+        await client.query(
+          `UPDATE riders SET is_available = TRUE, updated_at = NOW() WHERE id = $1`,
+          [riderId]
+        );
+        return { row, riderId, orderRef: row.order_ref };
+      });
+
+      if (!expired) continue;
+
+      await adjustRiderRating(
+        expired.riderId,
+        -LATE_PICKUP_PENALTY,
+        `late_pickup_expire:${expired.orderRef}`
       );
       penalized += 1;
+
+      updateOrderMeta(expired.orderRef, {
+        bodaStatus: "REQUESTED",
+        bodaRiderId: null,
+        riderName: null,
+        riderPhone: null,
+      });
+
+      try {
+        const { rows: rrows } = await query(`SELECT phone, full_name FROM riders WHERE id = $1`, [
+          expired.riderId,
+        ]);
+        const phone = rrows[0]?.phone;
+        if (phone) {
+          await sendText(
+            `${phone}@c.us`,
+            `⏱️ *Pickup timed out* for *${expired.orderRef}*\n` +
+              `You did not enter the seller Pickup OTP within ${LATE_PICKUP_MINUTES} minutes.\n` +
+              `Job released (−${LATE_PICKUP_PENALTY} ★). Stay AVAILABLE for the next offer.`
+          );
+        }
+      } catch (err) {
+        console.warn("[boda-fleet] late pickup notify:", err.message);
+      }
+
+      await advanceBodaOfferQueue(expired.row.id, { reason: "late_pickup_expire" });
+      reopened += 1;
     } catch (err) {
-      console.warn("[boda-fleet] late pickup penalty:", err.message);
+      console.warn("[boda-fleet] late pickup expire:", err.message);
     }
   }
-  return { penalized };
+  return { penalized, reopened };
 }
 
 /**
@@ -1254,6 +1352,7 @@ export async function getOpenDispatchForOrder(orderRef) {
 
 /**
  * Rider WhatsApp: ACCEPT SKN-####
+ * Atomic claim via BEGIN + SELECT … FOR UPDATE so only one concurrent accept wins.
  */
 export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = {}) {
   if (!isDbEnabled()) return { error: "database_not_configured", message: "Database offline." };
@@ -1263,96 +1362,144 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     return { error: "invalid", message: "Reply like: ACCEPT SKN-1234" };
   }
 
-  const { rows: riderRows } = await query(`SELECT * FROM riders WHERE phone = $1 LIMIT 1`, [riderPhone]);
-  const rider = mapRider(riderRows[0]);
-  if (!rider) {
-    return {
-      error: "not_a_rider",
-      message: "This WhatsApp is not a registered Sokoni boda rider. Ask ops to onboard you.",
-    };
-  }
-  if (rider.verificationStatus === "SUSPENDED") {
-    return { error: "suspended", message: "Your rider profile is suspended pending investigation." };
-  }
-  if (rider.verificationStatus !== "VERIFIED") {
-    return { error: "not_verified", message: "Your rider profile is not VERIFIED yet." };
-  }
-  if (!rider.isAvailable) {
-    return { error: "unavailable", message: "You are marked unavailable. Reply *AVAILABLE* first." };
-  }
-
-  const { rows: dispRows } = await query(
-    `SELECT * FROM delivery_dispatches
-      WHERE UPPER(order_ref) = UPPER($1)
-        AND status = 'REQUESTED'
-      ORDER BY id DESC
-      LIMIT 1`,
-    [id]
-  );
-  const row = dispRows[0];
-  if (!row) {
-    const open = await getOpenDispatchForOrder(id);
-    if (open?.status === "ACCEPTED" || open?.status === "PICKED_UP" || open?.status === "OTP_SENT") {
-      return { error: "taken", message: `*${id}* was already claimed by another rider.` };
-    }
-    return { error: "not_found", message: `No open boda request for *${id}*.` };
-  }
-  if (row.operating_town && row.operating_town !== rider.operatingTown) {
-    return {
-      error: "wrong_zone",
-      message: `This job is ${row.operating_town}. Your zone is ${rider.operatingTown}. Reply *SET ZONE ${row.operating_town}* if you relocated.`,
-    };
-  }
-
-  // Only the currently offered (pinned) rider may accept — sequential radius engine.
-  const pinnedId = row.pinned_rider_id != null ? Number(row.pinned_rider_id) : null;
-  if (pinnedId && pinnedId !== rider.id) {
-    return {
-      error: "not_your_offer",
-      message:
-        `*${id}* is currently offered to another rider. Sokoni will ping you if they decline or time out.`,
-    };
-  }
+  const takenMsg =
+    `⚡ *Too late!* Another rider just accepted this delivery. Stay online for the next job!`;
 
   try {
     await ensureOtpSafeguardColumns();
+    await ensurePinColumns();
   } catch (err) {
     console.warn("[boda-fleet] pickup columns on accept:", err.message);
   }
 
-  const pickupOtp = String(randomInt(1000, 9999));
-
-  const { rows: updated } = await query(
-    `UPDATE delivery_dispatches SET
-       rider_id = $2,
-       status = 'ACCEPTED',
-       accepted_at = NOW(),
-       custody_status = 'ASSIGNED',
-       pickup_otp_hash = $3,
-       pickup_otp_sent_at = NOW(),
-       offer_expires_at = NULL,
-       updated_at = NOW()
-     WHERE id = $1 AND status = 'REQUESTED'
-     RETURNING *`,
-    [row.id, rider.id, hashOtp(pickupOtp)]
-  );
-  if (!updated[0]) {
-    return { error: "taken", message: `*${id}* was claimed by another rider just now.` };
-  }
-
+  let claim;
   try {
-    await recordOfferAccepted(rider.id);
+    claim = await withTransaction(async (client) => {
+      const { rows: riderRows } = await client.query(
+        `SELECT * FROM riders WHERE phone = $1 LIMIT 1 FOR UPDATE`,
+        [riderPhone]
+      );
+      const rider = mapRider(riderRows[0]);
+      if (!rider) {
+        return {
+          error: "not_a_rider",
+          message: "This WhatsApp is not a registered Sokoni boda rider. Ask ops to onboard you.",
+        };
+      }
+      if (rider.verificationStatus === "SUSPENDED") {
+        return { error: "suspended", message: "Your rider profile is suspended pending investigation." };
+      }
+      if (rider.verificationStatus !== "VERIFIED") {
+        return { error: "not_verified", message: "Your rider profile is not VERIFIED yet." };
+      }
+      if (!rider.isAvailable) {
+        return { error: "unavailable", message: "You are marked unavailable. Reply *AVAILABLE* first." };
+      }
+
+      const { rows: busy } = await client.query(
+        `SELECT 1 FROM delivery_dispatches
+          WHERE rider_id = $1 AND status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT')
+          LIMIT 1`,
+        [rider.id]
+      );
+      if (busy[0]) {
+        return {
+          error: "busy",
+          message: "You already have an active delivery. Finish it before accepting another.",
+        };
+      }
+
+      // Lock the latest dispatch row for this order — concurrent accepts serialize here.
+      const { rows: dispRows } = await client.query(
+        `SELECT * FROM delivery_dispatches
+          WHERE UPPER(order_ref) = UPPER($1)
+          ORDER BY id DESC
+          LIMIT 1
+          FOR UPDATE`,
+        [id]
+      );
+      const row = dispRows[0];
+      if (!row) {
+        return { error: "not_found", message: `No open boda request for *${id}*.` };
+      }
+
+      const custody = String(row.custody_status || "UNASSIGNED").toUpperCase();
+      const alreadyClaimed =
+        row.status !== "REQUESTED" ||
+        row.rider_id != null ||
+        (custody !== "UNASSIGNED" && custody !== "");
+      if (alreadyClaimed) {
+        return { error: "taken", message: takenMsg };
+      }
+
+      if (row.operating_town && row.operating_town !== rider.operatingTown) {
+        return {
+          error: "wrong_zone",
+          message: `This job is ${row.operating_town}. Your zone is ${rider.operatingTown}. Reply *SET ZONE ${row.operating_town}* if you relocated.`,
+        };
+      }
+
+      const pinnedId = row.pinned_rider_id != null ? Number(row.pinned_rider_id) : null;
+      if (pinnedId && pinnedId !== rider.id) {
+        return {
+          error: "not_your_offer",
+          message:
+            `*${id}* is currently offered to another rider. Sokoni will ping you if they decline or time out.`,
+        };
+      }
+
+      const pickupOtp = String(randomInt(1000, 9999));
+      const { rows: updated } = await client.query(
+        `UPDATE delivery_dispatches SET
+           rider_id = $2,
+           status = 'ACCEPTED',
+           accepted_at = NOW(),
+           custody_status = 'ASSIGNED',
+           pickup_otp_hash = $3,
+           pickup_otp_sent_at = NOW(),
+           offer_expires_at = NULL,
+           updated_at = NOW()
+         WHERE id = $1
+           AND status = 'REQUESTED'
+           AND rider_id IS NULL
+           AND (custody_status IS NULL OR custody_status = 'UNASSIGNED')
+         RETURNING *`,
+        [row.id, rider.id, hashOtp(pickupOtp)]
+      );
+      if (!updated[0]) {
+        return { error: "taken", message: takenMsg };
+      }
+
+      await client.query(
+        `UPDATE riders SET
+           is_available = FALSE,
+           offers_accepted = COALESCE(offers_accepted, 0) + 1,
+           acceptance_rate = CASE
+             WHEN COALESCE(offers_sent, 0) < 1 THEN 100
+             ELSE ROUND(((COALESCE(offers_accepted, 0) + 1)::numeric * 100) / GREATEST(COALESCE(offers_sent, 0), 1), 2)
+           END,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [rider.id]
+      );
+
+      return { ok: true, rider, updated: updated[0], pickupOtp };
+    });
   } catch (err) {
-    console.warn("[boda-fleet] offer accepted stats:", err.message);
+    console.error("[boda-fleet] atomic accept failed:", err.message);
+    return { error: "system", message: "System error processing job acceptance. Try again." };
   }
 
-  await query(
-    `UPDATE riders SET is_available = FALSE, updated_at = NOW() WHERE id = $1`,
-    [rider.id]
-  );
+  if (!claim?.ok) {
+    return {
+      error: claim?.error || "taken",
+      message: claim?.message || takenMsg,
+    };
+  }
+
+  const { rider, updated, pickupOtp } = claim;
 
   const order = getOrder(id);
-  // Mark order in_transit with rider details (same path as seller DISPATCH).
   try {
     const { advanceShipmentStatus } = await import("./shipments.js");
     const { isDispatched } = await import("./communication-hub.js");
@@ -1374,7 +1521,7 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     riderName: rider.fullName,
     riderPhone: rider.phone,
     riderPlate: rider.motorbikePlate,
-    bodaDispatchId: Number(updated[0].id),
+    bodaDispatchId: Number(updated.id),
     bodaStatus: "ACCEPTED",
     bodaRiderId: rider.id,
     deliveryMode: "sokoni_boda",
@@ -1388,7 +1535,7 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     `Rider: *${rider.fullName}*\n` +
     `Phone: ${rider.phone}\n` +
     `Plate: ${plate}\n` +
-    `Have the parcel ready at: ${updated[0].pickup_address}\n\n` +
+    `Have the parcel ready at: ${updated.pickup_address}\n\n` +
     `📦 *PICKUP OTP (give to rider at handoff only):* *${pickupOtp}*\n` +
     `Do not share this code on chat — speak it when the rider is at your door.`;
   const buyerMsg =
@@ -1398,19 +1545,19 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     `• Plate: ${plate}\n` +
     `When it arrives, you'll get a 4-digit code — share it only with this rider to confirm delivery.`;
   const riderMsg =
-    `✅ You claimed *${id}*.\n` +
-    `Pickup: ${updated[0].pickup_address}\n` +
-    `Drop-off: ${updated[0].delivery_address}\n` +
-    (Number(updated[0].delivery_fee_kes) > 0
-      ? `Fee (held): KES ${Number(updated[0].delivery_fee_kes).toLocaleString()}\n`
+    `🎉 *JOB CONFIRMED!* You have been assigned to Order *${id}*. Proceed to pickup.\n\n` +
+    `Pickup: ${updated.pickup_address}\n` +
+    `Drop-off: ${updated.delivery_address}\n` +
+    (Number(updated.delivery_fee_kes) > 0
+      ? `Fee (held): KES ${Number(updated.delivery_fee_kes).toLocaleString()}\n`
       : "") +
-    `\nAt the shop ask the seller for the *Pickup OTP*, then reply:\n` +
-    `*PICKUP ${id} ####*\n` +
+    `\n⏱ Enter the seller *Pickup OTP* within *${LATE_PICKUP_MINUTES} minutes* or the job is released.\n` +
+    `At the shop reply: *PICKUP ${id} ####*\n` +
     `That transfers custody to you. Buyer then gets a delivery code.\n` +
     `At the door: share live location → *CONFIRM ${id} ####*`;
 
-  const sellerTo = updated[0].seller_phone
-    ? `${normalizeRiderPhone(updated[0].seller_phone)}@c.us`
+  const sellerTo = updated.seller_phone
+    ? `${normalizeRiderPhone(updated.seller_phone)}@c.us`
     : null;
   const buyerTo = fresh?.customerKey || null;
 
@@ -1430,14 +1577,12 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     console.warn("[boda-fleet] rider ack:", err.message);
   }
 
-
-  // Tell other riders who already received an offer that the job is taken.
-  const offerIdx = Number(updated[0].offer_index || 0);
+  const offerIdx = Number(updated.offer_index || 0);
   const queueIds = (
-    Array.isArray(updated[0].offer_queue) && updated[0].offer_queue.length
-      ? updated[0].offer_queue
-      : Array.isArray(updated[0].broadcast_rider_ids)
-        ? updated[0].broadcast_rider_ids
+    Array.isArray(updated.offer_queue) && updated.offer_queue.length
+      ? updated.offer_queue
+      : Array.isArray(updated.broadcast_rider_ids)
+        ? updated.broadcast_rider_ids
         : []
   )
     .map(Number)
@@ -1449,10 +1594,7 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
       const { rows: others } = await query(`SELECT phone FROM riders WHERE id = $1 LIMIT 1`, [otherId]);
       const otherPhone = others[0]?.phone;
       if (!otherPhone) continue;
-      await sendText(
-        `${otherPhone}@c.us`,
-        `ℹ️ Order *${id}* was claimed by another Sokoni rider. Stay AVAILABLE for the next job.`
-      );
+      await sendText(`${otherPhone}@c.us`, takenMsg);
     } catch (err) {
       console.warn("[boda-fleet] loser notify skipped:", err.message);
     }
@@ -1460,7 +1602,7 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
 
   return {
     ok: true,
-    dispatch: mapDispatch(updated[0]),
+    dispatch: mapDispatch(updated),
     rider,
     message: riderMsg,
   };
@@ -1562,7 +1704,7 @@ export async function cancelAcceptedBodaJob({ orderId, phone, customerKey = "" }
        rider_id = NULL,
        status = 'REQUESTED',
        accepted_at = NULL,
-       custody_status = NULL,
+       custody_status = 'UNASSIGNED',
        pickup_otp_hash = NULL,
        pickup_otp_sent_at = NULL,
        pinned_rider_id = NULL,
@@ -3583,6 +3725,8 @@ export function bodaSupportSummary() {
       tier1Km: 3,
       tier2Km: 7,
       offerTimeoutSec: 45,
+      pickupSlaMinutes: LATE_PICKUP_MINUTES,
+      atomicAccept: "SELECT FOR UPDATE",
       score: "(Rating×40) − (DistanceKm×20) + (AcceptanceRate%×0.4)",
     },
     payoutGuards: {
