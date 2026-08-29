@@ -65,9 +65,10 @@
   <main>
     <section class="auth-hero-split" aria-label="Welcome">
       <div>
-        <div class="auth-mode-toggle" id="auth-mode-toggle" role="tablist" aria-label="Buy or sell">
+        <div class="auth-mode-toggle" id="auth-mode-toggle" role="tablist" aria-label="Buy, sell, or ride">
           <button type="button" class="is-active" data-mode="buy" role="tab" aria-selected="true">Buy</button>
           <button type="button" data-mode="sell" role="tab" aria-selected="false">Sell</button>
+          <button type="button" data-mode="ride" role="tab" aria-selected="false">Ride</button>
         </div>
         <div id="auth-hero-buy">
           <h1>Buy preloved. Wear it your way.</h1>
@@ -83,6 +84,14 @@
           <div class="auth-hero-cta-row">
             <a href="suppliers/list.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Start selling</a>
             <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="signup">Create account</button>
+          </div>
+        </div>
+        <div id="auth-hero-ride" hidden>
+          <h1>Drive with Sokoni. Escrow-backed jobs on WhatsApp.</h1>
+          <p class="auth-hero-lead">Guaranteed prepaid jobs, ACCEPT / PICKUP / CONFIRM in chat, M-Pesa after delivery confirmation.</p>
+          <div class="auth-hero-cta-row">
+            <a href="boda/apply.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Apply to ride</a>
+            <a href="boda/index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center">How it works</a>
           </div>
         </div>
         <div class="auth-stat-row" aria-label="Why Sokoni">
