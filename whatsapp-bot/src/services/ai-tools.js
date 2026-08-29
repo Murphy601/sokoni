@@ -17,6 +17,7 @@ import {
   tillExplainLine,
   formatPhoneDisplay,
   formatWhatsAppLink,
+  formatSupportEmail,
   offerLine,
   PROMO_CODE,
   OFFER_PERCENT,
@@ -85,13 +86,35 @@ function isTrackOnlyQuery(text, lower) {
 
 function isPaymentOrSiteInfoQuery(lower) {
   return (
-    /\b(prepaid|escrow|mpesa|pay|payment|stk|till|how (?:it|sokoni) works|how does|delivery|shipping|dispatch|courier|pickup|return|refund|scam|safe|trust|about sokoni|what is sokoni)\b/i.test(
+    /\b(prepaid|escrow|mpesa|pay|payment|stk|till|how (?:it|sokoni) works|how does|delivery|shipping|dispatch|courier|pickup|return|refund|scam|safe|trust|about sokoni|what is sokoni|support\s*email|customer\s*care|contact\s*(us|info|details)?|email\s*address)\b/i.test(
       lower
     ) &&
     !/\b(buy|want|need|find|search|show|looking|nataka|yoghurt|yogurt|dress|shoes|phone|simu)\b/i.test(
       lower
     )
   );
+}
+
+/**
+ * Static contact facts (email / phone / customer care) — answer from config, not LLM guess.
+ */
+export function isContactInfoIntent(text) {
+  const lower = String(text || "").toLowerCase();
+  if (!lower.trim()) return false;
+  // Explicit contact / email / phone / customer care
+  if (
+    /\b(support\s*email|email\s*address|e-?mail|contact\s*(email|number|phone|details|info)|customer\s*care|call\s*centre|call\s*center|office\s*(number|phone|email)|how (do i|to) (reach|contact|email)|write\s*to\s*(you|sokoni)|barua\s*pepe|nambari\s*ya\s*(simu|support))\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  // "what is your email" / "sokoni email" / "support contact"
+  if (/\b(email|e-?mail|whatsapp\s*number|phone\s*number|hotline)\b/i.test(lower) &&
+      /\b(sokoni|support|you|your|official|team|care)\b/i.test(lower)) {
+    return true;
+  }
+  return false;
 }
 
 function isTaxonomyQuery(lower) {
@@ -103,6 +126,8 @@ function isTaxonomyQuery(lower) {
 /** Human support / agent handoff. */
 export function isSupportIntent(text) {
   const lower = String(text || "").toLowerCase();
+  // Contact-info questions are handled by isContactInfoIntent (include email) — not HITL alone
+  if (isContactInfoIntent(text)) return false;
   return /\b(support|customer\s*care|help\s*desk|human|agent|speak to|talk to|connect me|representative|complaint|escalate)\b/i.test(
     lower
   );
@@ -1151,7 +1176,11 @@ function toolStoreInfo() {
     autoConfirm: meta.autoConfirm,
     escrow: meta.escrow,
     phoneDisplay: formatPhoneDisplay(),
+    supportEmail: formatSupportEmail(),
     whatsappLink: formatWhatsAppLink(),
+    humanSupportHours: `${config.businessHours?.humanSupportStart || "07:30"}–${
+      config.businessHours?.humanSupportEnd || "21:00"
+    } EAT`,
     promoCode: PROMO_CODE,
     offerPercent: OFFER_PERCENT,
     offerLine: offerLine(),
@@ -1359,7 +1388,9 @@ export function formatToolResultsForPrompt(toolResults) {
         `Payment: ${(r.paymentMethods || []).join(", ") || "mpesa_stk"}\n` +
         `Pay how: ${r.paymentLine || "M-Pesa STK on WhatsApp / site"}\n` +
         `Phone: ${r.phoneDisplay}\n` +
+        `Support email: ${r.supportEmail || "support@sokonimall.com"}\n` +
         `WhatsApp: ${r.whatsappLink}\n` +
+        `Human support hours: ${r.humanSupportHours || "07:30–21:00 EAT"}\n` +
         `Promo: ${r.offerLine}\n` +
         `Delivery: ${r.deliveryNote}\n` +
         `Site: ${r.siteUrls?.home}\n` +

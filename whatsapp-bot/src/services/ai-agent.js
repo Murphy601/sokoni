@@ -14,8 +14,9 @@ import {
   isShoppingIntent,
   isSellerTopic,
   isOffTopicIntent,
+  isContactInfoIntent,
 } from "./ai-tools.js";
-import { formatWhatsAppLink, humanHandoffAck } from "./trust-copy.js";
+import { formatWhatsAppLink, humanHandoffAck, supportContactCard } from "./trust-copy.js";
 import { runAgentGraph } from "./agent-graph.js";
 import {
   llmRouterMeta,
@@ -217,9 +218,10 @@ function conversationalReply(channel, userMessage = "", toolResults = []) {
 
   if (isSupportIntent(userMessage)) {
     const handoff = humanHandoffAck(false);
+    const card = supportContactCard(channel);
     return channel === "web"
-      ? `${handoff} Message the team on WhatsApp: ${wa}. I can still help with live stock, escrow, delivery, or tracking an SKN-####.`
-      : `${handoff} WhatsApp ${wa}. Or send your *SKN-####* / ask about escrow — I can help meanwhile.`;
+      ? `${handoff}\n\n${card}`
+      : `${handoff}\n\n${card}`;
   }
 
   if (isSellerTopic(userMessage)) {
@@ -516,6 +518,23 @@ export async function runAgentTurn({
       offTopic: true,
       products: [],
       tracking: null,
+    };
+  }
+
+  // DETERMINISTIC contact card — email / phone / customer care (no LLM guess)
+  if (isContactInfoIntent(text)) {
+    const reply = supportContactCard(channel);
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log("[ai-agent] contact card (no LLM)");
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      contactCard: true,
+      specialist,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
     };
   }
 
