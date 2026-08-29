@@ -152,6 +152,8 @@ export const config = {
     phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
     phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "+254 117 422 428",
     email: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
+    /** Alias used by some menus — same as email */
+    supportEmail: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
     founderName: process.env.FOUNDER_NAME || "David Thuku Muiruri",
     location: process.env.BUSINESS_LOCATION || "Sokoni Mall Startup Hub, Nairobi, Kenya",
   },

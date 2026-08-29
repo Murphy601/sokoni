@@ -8,9 +8,51 @@ export function formatPhoneDisplay() {
   return config.contact?.phoneDisplay || "+254 117 422 428";
 }
 
+export function formatSupportEmail() {
+  return (
+    config.contact?.email ||
+    config.contact?.supportEmail ||
+    process.env.SUPPORT_EMAIL ||
+    "support@sokonimall.com"
+  );
+}
+
 export function formatWhatsAppLink() {
   const n = config.store.businessNumber.replace(/\D/g, "");
   return `https://wa.me/${n}`;
+}
+
+/**
+ * Deterministic contact card — never invent emails/phones.
+ * Prefer this over LLM for "support email / customer care" queries.
+ */
+export function supportContactCard(channel = "whatsapp") {
+  const email = formatSupportEmail();
+  const phone = formatPhoneDisplay();
+  const wa = formatWhatsAppLink();
+  const hours = `${config.businessHours?.humanSupportStart || "07:30"}–${
+    config.businessHours?.humanSupportEnd || "21:00"
+  } EAT`;
+  if (channel === "web") {
+    return (
+      `Sokoni support contacts:\n` +
+      `• Email: ${email}\n` +
+      `• WhatsApp / calls: ${phone}\n` +
+      `• Chat: ${wa}\n` +
+      `• Site: https://sokonimall.com\n` +
+      `• Human support hours: ${hours}\n` +
+      `For an order issue, include your SKN-####.`
+    );
+  }
+  return (
+    `📞 *Sokoni support*\n` +
+    `• Email: *${email}*\n` +
+    `• WhatsApp / calls: *${phone}*\n` +
+    `• Link: ${wa}\n` +
+    `• Site: sokonimall.com\n` +
+    `• Humans: *${hours}*\n` +
+    `Got an order? Send your *SKN-####* here too.`
+  );
 }
 
 /** Customer-facing payment line — never expose till numbers or till account names. */

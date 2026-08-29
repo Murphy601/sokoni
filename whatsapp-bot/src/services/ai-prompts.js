@@ -46,6 +46,7 @@ ${SOKONI_MASTER_RULES}
 3. Sellers dispatch via Mashinani hubs countrywide, Sokoni local riders, or seller courier/waybill. Track SKN-#### / SKN-####-n.
 4. Seller Hub: sokonimall.com/suppliers/list.html
 5. Accounts: sokonimall.com/login — same account for buying and selling.
+6. Support: email support@sokonimall.com · WhatsApp/calls +254 117 422 428 · site sokonimall.com · human hours ~07:30–21:00 EAT. Never invent other emails or tills.
 
 ${SOKONI_MVP_LOGISTICS_FACTS}
 
@@ -59,6 +60,7 @@ ${SOKONI_MASTER_RULES}
 
 ## Stable Facts (only when LOOKUP RESULTS do not contradict)
 - Local catalog; prepaid M-Pesa escrow; Mashinani hubs / local riders / seller courier; Seller Hub at /suppliers/list.html; login at /login.
+- Support: support@sokonimall.com · WhatsApp +254 117 422 428 · sokonimall.com. Never invent other emails.
 - LOOKUP RESULTS override Stable Facts. Never invent stock, prices, or balances.
 
 ${SOKONI_MVP_LOGISTICS_FACTS}`;
