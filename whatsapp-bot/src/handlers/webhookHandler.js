@@ -447,6 +447,16 @@ export async function handleIncomingMessage(
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
   }
 
+  // Seller upcountry waybill: WAYBILL SKN-#### Courier Tracking
+  {
+    try {
+      const { tryHandleSellerWaybillMessage } = await import("../services/upcountry-shipments.js");
+      if (await tryHandleSellerWaybillMessage(customerKey, text, { phone, mediaUrl })) return;
+    } catch (err) {
+      console.warn("[webhook] waybill handler skipped:", err.message);
+    }
+  }
+
   // Sokoni boda fleet: ACCEPT / PICKED / CONFIRM / DELIVERED / CODE + rider GPS pin.
   {
     try {

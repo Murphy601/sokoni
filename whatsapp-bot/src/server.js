@@ -500,6 +500,9 @@ function startOrderCommunicationScheduler() {
     import("./services/communication-hub.js")
       .then(({ processOrderCommunicationReminders }) => processOrderCommunicationReminders())
       .catch((err) => console.error("[communication-hub] reminder cron:", err.message));
+    import("./services/upcountry-shipments.js")
+      .then(({ processUpcountryEscrowReleases }) => processUpcountryEscrowReleases())
+      .catch((err) => console.error("[upcountry] escrow cron:", err.message));
     import("./services/commerce-ops.js")
       .then(({ processAbandonedCheckoutRecovery }) => processAbandonedCheckoutRecovery())
       .catch((err) => console.error("[commerce-ops] abandon cron:", err.message));
@@ -507,7 +510,7 @@ function startOrderCommunicationScheduler() {
   // Offset from payout cron so we don't stampede the WAHA API.
   setTimeout(tick, 90_000);
   setInterval(tick, 60 * 60 * 1000);
-  console.log("✓ Order communication + abandon-recovery scheduler enabled (hourly)");
+  console.log("✓ Order communication + upcountry escrow + abandon-recovery scheduler enabled (hourly)");
 }
 
 /** Parse "HH:MM" slots for daily posting. */

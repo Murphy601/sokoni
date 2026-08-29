@@ -602,17 +602,34 @@ export function msgBuyerPaid(order) {
 }
 
 export function msgBuyerDispatched(order) {
+  const tracking =
+    order.courierTrackingRef || order.courierName
+      ? `\nCourier: *${order.courierName || "—"}*\nTracking: *${order.courierTrackingRef || "—"}*\n`
+      : "";
+  const hours = Number(order.autoReleaseHours) || (order.fulfillmentMode === "SELLER_COURIER" ? 48 : 24);
   return (
     `📦 *Item Dispatched!*\n` +
-    `Order *${order.id}* is en route to *${dropOffLine(order)}*.\n\n` +
-    `Once received and inspected, reply:\n` +
+    `Order *${order.id}* is en route to *${dropOffLine(order)}*.` +
+    tracking +
+    `\nOnce received and inspected, reply:\n` +
     `*YES ${order.id}*\n` +
     `to release payment to the seller.\n\n` +
-    `⚠️ Wrong/damaged item? Do *not* reply YES — reply:\nHELP ${order.id}`
+    `⚠️ Wrong/damaged item? Do *not* reply YES — reply:\nHELP ${order.id}\n` +
+    `(Escrow auto-clears after ~${hours}h with no dispute.)`
   );
 }
 
 export function msgSellerDispatchAck(order) {
+  const upcountry =
+    order.fulfillmentMode === "SELLER_COURIER" || order.deliveryMode === "seller_courier";
+  if (upcountry && !order.courierTrackingRef) {
+    return (
+      `✅ *Status updated — ${order.id}*\n\n` +
+      `Buyer was asked for *YES ${order.id}*.\n` +
+      `Add tracking so they can collect:\n` +
+      `*WAYBILL ${order.id} Easy Coach TRACKING123*`
+    );
+  }
   return (
     `✅ *Status updated — ${order.id}*\n\n` +
     `We asked the buyer to confirm receipt upon inspection with:\n` +
@@ -1162,6 +1179,18 @@ async function flowSellerDispatch(customerKey, phone, orderId) {
     deliveryMode: order.deliveryMode === "pending" ? "seller_dispatch" : order.deliveryMode,
   });
 
+  // Stamp geo fulfillment if missing (late orders without shipping apply)
+  try {
+    const { resolveOrderFulfillment, stampFulfillmentOnOrder } = await import("./upcountry-shipments.js");
+    const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
+    const mode = resolveOrderFulfillment(order, {
+      sellerLocationText: supplier?.location || supplier?.shopName || "",
+    });
+    if (mode && !order.fulfillmentMode) stampFulfillmentOnOrder(orderId, mode);
+  } catch (err) {
+    console.warn("[communication-hub] fulfillment stamp:", err.message);
+  }
+
   const fresh = getOrder(orderId) || order;
   void notifyAdminEvent("SELLER_DISPATCHED", {
     orderId: fresh.id,
@@ -1537,24 +1566,27 @@ async function fireOpenDisputeWhatsAppAlerts(
 /* Reminders + 24h auto-release                                               */
 /* -------------------------------------------------------------------------- */
 
-async function autoReleaseOrder(order) {
+async function autoReleaseOrder(order, { hours = 24 } = {}) {
   const result = advanceShipmentStatus(order.id, "delivered", {
-    actor: "auto_release_24h",
-    note: "Auto-released 24h after DISPATCH with no YES and no dispute",
+    actor: hours >= 48 ? "auto_release_48h" : "auto_release_24h",
+    note: `Auto-released ${hours}h after DISPATCH with no YES and no dispute`,
     skipBuyerNotify: true,
   });
   if (result.error) return false;
 
   updateOrderMeta(order.id, {
     buyerConfirmedAt: Date.now(),
-    buyerConfirmedVia: "auto_release_24h",
+    buyerConfirmedVia: hours >= 48 ? "auto_release_48h" : "auto_release_24h",
     autoReleasedAt: Date.now(),
     confirmReminded24hAt: Date.now(),
+    escrowStatus: "released",
   });
 
   try {
     const { syncBodaDispatchOnOrderDelivered } = await import("./boda-fleet.js");
-    await syncBodaDispatchOnOrderDelivered(order.id, { via: "auto_release_24h" });
+    await syncBodaDispatchOnOrderDelivered(order.id, {
+      via: hours >= 48 ? "auto_release_48h" : "auto_release_24h",
+    });
   } catch (err) {
     console.warn("[communication-hub] boda sync on auto-release skipped:", err.message);
   }
@@ -1587,7 +1619,7 @@ async function autoReleaseOrder(order) {
   }
   void notifyAdminEvent("AUTO_RELEASED", {
     orderId: fresh.id,
-    details: `Auto-completed 24h after dispatch (no YES, no dispute). Payout scheduled.`,
+    details: `Auto-completed ${hours}h after dispatch (no YES, no dispute). Payout scheduled.`,
   });
   return true;
 }
@@ -1636,8 +1668,15 @@ export async function processOrderCommunicationReminders() {
 
     if (isDispatched(order) && dispatchedAt) {
       const age = now - dispatchedAt;
+      const releaseHours = Number(order.autoReleaseHours) > 0
+        ? Number(order.autoReleaseHours)
+        : order.fulfillmentMode === "SELLER_COURIER" || order.escrowStatus === "hold_upcountry"
+          ? 48
+          : 24;
+      const releaseMs = releaseHours * HOUR_MS;
+      const remindMs = Math.min(CONFIRM_REMIND_12H, Math.floor(releaseMs / 2));
 
-      if (age >= CONFIRM_REMIND_12H && age < CONFIRM_AUTO_RELEASE_24H && !order.confirmReminded12hAt) {
+      if (age >= remindMs && age < releaseMs && !order.confirmReminded12hAt) {
         updateOrderMeta(order.id, { confirmReminded12hAt: now });
         if (order.customerKey) {
           void sendSafeWhatsApp(
@@ -1650,7 +1689,7 @@ export async function processOrderCommunicationReminders() {
         n += 1;
       }
 
-      if (age >= CONFIRM_AUTO_RELEASE_24H && !order.autoReleasedAt) {
+      if (age >= releaseMs && !order.autoReleasedAt) {
         let openDispute = false;
         try {
           const { orderHasOpenDispute } = await import("./disputes.js");
@@ -1667,14 +1706,14 @@ export async function processOrderCommunicationReminders() {
             });
             void notifyAdminEvent("CONFIRM_OVERDUE", {
               orderId: order.id,
-              details: `24h after dispatch but dispute/hold is open — no auto-release.`,
+              details: `${releaseHours}h after dispatch but dispute/hold is open — no auto-release.`,
             });
             n += 1;
           }
           continue;
         }
 
-        const ok = await autoReleaseOrder(order);
+        const ok = await autoReleaseOrder(order, { hours: releaseHours });
         if (ok) n += 1;
       }
     }

@@ -16,6 +16,9 @@ import {
   isConfiguredShippingProfile,
   normalizeVendorKey,
 } from "./vendor-shipping.js";
+import {
+  evaluateFulfillmentMode,
+} from "../lib/geo-zones.js";
 
 const CART_PARENT_KIND = "cart_parent";
 
@@ -106,6 +109,38 @@ export async function applyShippingToOrder(orderId, location = {}) {
   if (location.buyerTown) patch.landmarkTown = location.buyerTown;
   if (location.landmarkNote) patch.landmarkNote = String(location.landmarkNote).slice(0, 280);
 
+  // Auto fulfillment route: local boda OTP vs seller courier / waybill
+  try {
+    const buyerCounty =
+      location.buyerCounty ||
+      order.deliveryCounty ||
+      inferCountyFromText(locationLine || order.location || "")?.county ||
+      "";
+    const sellerLoc =
+      profile?.shopLocation ||
+      profile?.baseCounty ||
+      (Array.isArray(profile?.localCounties) ? profile.localCounties[0] : "") ||
+      "";
+    const fulfillment = evaluateFulfillmentMode({
+      sellerCounty: sellerLoc,
+      buyerCounty,
+      buyerTown: location.buyerTown || order.deliveryTown || "",
+      sellerLocationText: String(sellerLoc || ""),
+      buyerLocationText: locationLine || order.location || "",
+    });
+    Object.assign(patch, {
+      fulfillmentMode: fulfillment.mode,
+      requiresRider: fulfillment.requiresRider,
+      sellerCounty: fulfillment.sellerCounty || null,
+      buyerCountyResolved: fulfillment.buyerCounty || null,
+      fulfillmentDescription: fulfillment.description,
+      autoReleaseHours: fulfillment.autoReleaseHours,
+      escrowHoldHours: fulfillment.escrowHoldHours,
+    });
+  } catch (err) {
+    console.warn("[apply-shipping] fulfillment mode:", err.message);
+  }
+
   // Only rewrite money fields when the seller explicitly saved shipping rates.
   if (configured) {
     const shippingKes = Math.round(Number(line.shippingFee) || 0);
@@ -138,6 +173,8 @@ export async function applyShippingToOrder(orderId, location = {}) {
     shippingKes: Math.round(Number(updated.shippingKes) || 0),
     totalKes: orderBuyerTotal(updated),
     profilePresent: configured,
+    fulfillmentMode: updated.fulfillmentMode || null,
+    requiresRider: Boolean(updated.requiresRider),
     calc,
     order: {
       orderId: updated.id,
@@ -147,6 +184,8 @@ export async function applyShippingToOrder(orderId, location = {}) {
       deliveryTown: updated.deliveryTown,
       buyerLat: updated.buyerLat,
       buyerLng: updated.buyerLng,
+      fulfillmentMode: updated.fulfillmentMode || null,
+      requiresRider: Boolean(updated.requiresRider),
     },
   };
 }
@@ -265,7 +304,8 @@ async function applyShippingToCartParent(orderId, location = {}) {
   const txnFee = mpesaTransactionFeeKes(chargeBeforeTxn);
   const totalKes = chargeBeforeTxn + txnFee;
 
-  updateOrderMeta(orderId, {
+  /** @type {Record<string, unknown>} */
+  const parentPatch = {
     deliveryCounty: location.buyerCounty || parent.deliveryCounty || null,
     deliveryTown: location.buyerTown || parent.deliveryTown || null,
     shippingKes: shipSum,
@@ -284,7 +324,27 @@ async function applyShippingToCartParent(orderId, location = {}) {
       profilePresent: anyProfile,
       at: new Date().toISOString(),
     },
-  });
+  };
+
+  try {
+    const fulfillment = evaluateFulfillmentMode({
+      sellerCounty: "NAIROBI",
+      buyerCounty: location.buyerCounty || parent.deliveryCounty || "",
+      buyerTown: location.buyerTown || parent.deliveryTown || "",
+      buyerLocationText: [location.buyerCounty, location.buyerTown].filter(Boolean).join(" "),
+    });
+    Object.assign(parentPatch, {
+      fulfillmentMode: fulfillment.mode,
+      requiresRider: fulfillment.requiresRider,
+      autoReleaseHours: fulfillment.autoReleaseHours,
+      escrowHoldHours: fulfillment.escrowHoldHours,
+      fulfillmentDescription: fulfillment.description,
+    });
+  } catch {
+    /* ignore */
+  }
+
+  updateOrderMeta(orderId, parentPatch);
 
   const updated = getOrder(orderId);
   return {
@@ -293,6 +353,8 @@ async function applyShippingToCartParent(orderId, location = {}) {
     shippingKes: Math.round(Number(updated.shippingKes) || 0),
     totalKes: orderBuyerTotal(updated),
     profilePresent: anyProfile,
+    fulfillmentMode: updated.fulfillmentMode || null,
+    requiresRider: Boolean(updated.requiresRider),
     calc,
     order: {
       orderId: updated.id,
@@ -300,6 +362,7 @@ async function applyShippingToCartParent(orderId, location = {}) {
       shippingKes: updated.shippingKes,
       deliveryCounty: updated.deliveryCounty,
       deliveryTown: updated.deliveryTown,
+      fulfillmentMode: updated.fulfillmentMode || null,
     },
   };
 }

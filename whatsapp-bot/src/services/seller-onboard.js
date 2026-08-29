@@ -1474,6 +1474,27 @@ export async function sellerDispatchOrder({
   const riderTel = String(riderPhone || "").replace(/\D/g, "").slice(0, 15);
   const waybill = String(trackingRef || "").trim().slice(0, 80);
 
+  // If seller already has a tracking ref on an upcountry order, register waybill path.
+  if (waybill && (order.fulfillmentMode === "SELLER_COURIER" || order.requiresRider === false)) {
+    const { registerSellerWaybill } = await import("./upcountry-shipments.js");
+    const wb = await registerSellerWaybill({
+      orderId: id,
+      sellerPhone: phone,
+      courierName: rider || order.courierName || "Courier",
+      waybillNumber: waybill,
+    });
+    if (wb.ok) {
+      return {
+        ok: true,
+        orderId: id,
+        message: wb.message,
+        trackingRef: waybill,
+        fulfillmentMode: "SELLER_COURIER",
+        trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(id)}`,
+      };
+    }
+  }
+
   const result = advanceShipmentStatus(id, "in_transit", {
     actor: "seller_hub_dispatch",
     note: "Seller DISPATCH via Seller Hub",

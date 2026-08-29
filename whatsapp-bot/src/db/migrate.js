@@ -21,6 +21,7 @@ const SCHEMA_PHASE21_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE22_PATH = path.join(__dirname, "..", "..", "db", "schema-phase22-rider-b2c.sql");
 const SCHEMA_PHASE23_PATH = path.join(__dirname, "..", "..", "db", "schema-phase23-rider-payout-split.sql");
 const SCHEMA_PHASE24_PATH = path.join(__dirname, "..", "..", "db", "schema-phase24-boda-ops-safeguards.sql");
+const SCHEMA_PHASE25_PATH = path.join(__dirname, "..", "..", "db", "schema-phase25-upcountry-waybill.sql");
 
 async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
@@ -65,6 +66,7 @@ export async function runMigrations() {
     ["phase22 rider b2c payouts", SCHEMA_PHASE22_PATH],
     ["phase23 rider payout fee split", SCHEMA_PHASE23_PATH],
     ["phase24 boda ops safeguards", SCHEMA_PHASE24_PATH],
+    ["phase25 upcountry waybill", SCHEMA_PHASE25_PATH],
   ];
 
   for (const [label, filePath] of phases) {
