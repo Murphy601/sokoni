@@ -36,10 +36,15 @@ describe("ai-prompts MVP training", () => {
   });
 
   it("injects admin recognition only for isAdmin threads", () => {
-    const boss = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: true });
-    assert.match(boss, /EXECUTIVE ROLE DIRECTIVE/);
+    const boss = buildGroundedSystemPrompt({
+      channel: "whatsapp",
+      isAdmin: true,
+      senderPhone: "254757764009",
+    });
+    assert.match(boss, /EXECUTIVE DIRECTIVE/);
+    assert.match(boss, /254757764009/);
     const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
-    assert.doesNotMatch(shopper, /EXECUTIVE ROLE DIRECTIVE/);
+    assert.doesNotMatch(shopper, /EXECUTIVE DIRECTIVE/);
     assert.match(shopper, /PUBLIC ESCROW GUARDRAIL/);
   });
 });

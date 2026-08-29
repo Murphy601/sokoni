@@ -44,18 +44,27 @@ describe("admin multi-layer obedience", () => {
   });
 
   it("dual prompts: admin vs public escrow guardrail", () => {
-    const d = adminRecognitionDirective({ founderName: "Test Founder" });
-    assert.match(d, /EXECUTIVE ROLE DIRECTIVE/);
+    const d = adminRecognitionDirective({
+      founderName: "Test Founder",
+      senderPhone: "254757764009",
+    });
+    assert.match(d, /EXECUTIVE DIRECTIVE/);
+    assert.match(d, /Yes, Boss/i);
+    assert.match(d, /254757764009/);
     assert.match(d, /CODE INTERCEPTOR/);
     assert.match(PUBLIC_ESCROW_GUARDRAIL, /strict escrow/i);
 
-    const boss = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: true });
-    assert.match(boss, /EXECUTIVE ROLE DIRECTIVE/);
+    const boss = buildGroundedSystemPrompt({
+      channel: "whatsapp",
+      isAdmin: true,
+      senderPhone: "254757764009",
+    });
+    assert.match(boss, /EXECUTIVE DIRECTIVE/);
     assert.doesNotMatch(boss, /PUBLIC ESCROW GUARDRAIL/);
 
     const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
     assert.match(shopper, /PUBLIC ESCROW GUARDRAIL/);
-    assert.doesNotMatch(shopper, /EXECUTIVE ROLE DIRECTIVE/);
+    assert.doesNotMatch(shopper, /EXECUTIVE DIRECTIVE/);
   });
 
   it("MASTER_ADMIN_SECRET is accepted as admin token", () => {

@@ -87,6 +87,7 @@ export function buildGroundedSystemPrompt({
   preferKiswahili = false,
   isAdmin = false,
   staff = null,
+  senderPhone = "",
 } = {}) {
   const context = contextBlocks.filter(Boolean).join("\n\n").trim();
   const thread = String(threadId || "").trim();
@@ -94,7 +95,7 @@ export function buildGroundedSystemPrompt({
     ? `\n### LANGUAGE:\nShopper is using Kiswahili/Sheng — reply in clear Kiswahili mixed with English where natural (Kenya WhatsApp voice). Keep SKN-#### and KES amounts in English digits.\n`
     : "";
   const adminBlock = isAdmin
-    ? `\n### ${adminRecognitionDirective({ staff })}\n`
+    ? `\n### ${adminRecognitionDirective({ staff, senderPhone: senderPhone || threadId })}\n`
     : `\n### ${PUBLIC_ESCROW_GUARDRAIL}\n`;
   return `${channelPrompt(channel)}
 ${langHint}${adminBlock}

@@ -1,6 +1,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { normalizeKenyaPhone, expandKenyaPhoneAliases } from "./lib/phone-normalize.js";
 
 // Always load whatsapp-bot/.env as source of truth. Default dotenv does not
 // override existing process.env, so a polluted `pm2 restart --update-env` from
@@ -279,26 +280,42 @@ export const config = {
    * Admin console phone(s). Set ADMIN_PHONES to a number DIFFERENT from the bot
    * so the owner can manage the shop from their own WhatsApp. Messages from
    * these numbers are treated as admin commands, and order/handoff alerts are
-   * sent here. Defaults to the business number (self-chat) if unset.
+   * sent here. Always stored as Kenya international digits (2547…).
+   * Local 07… / +254… forms in env are normalized automatically.
    */
   admin: (() => {
     const phones = [
       ...(process.env.ADMIN_PHONES || "").split(","),
       process.env.ADMIN_WHATSAPP_NUMBER || "",
+      ...(process.env.BOSS_PHONES || "").split(","),
     ]
-      .map((p) => String(p || "").replace(/\D/g, ""))
-      .filter(Boolean);
+      .map((p) => normalizeKenyaPhone(p))
+      .filter((p) => p && p.length >= 9);
     const unique = [...new Set(phones)];
+    // Seed aliases in-memory for matching (international + national) without duplicating primary.
+    const matchAliases = [
+      ...new Set(
+        unique.flatMap((p) =>
+          expandKenyaPhoneAliases(p)
+            .map((a) => String(a).replace(/\D/g, ""))
+            .filter(Boolean)
+        )
+      ),
+    ];
     const alertPhone =
       unique[0] ||
-      (process.env.BUSINESS_WHATSAPP_NUMBER || "").replace(/\D/g, "") ||
+      normalizeKenyaPhone(process.env.BUSINESS_WHATSAPP_NUMBER || "") ||
       "";
     if (unique.length === 0) {
       console.warn(
         "[config] ADMIN_PHONES / ADMIN_WHATSAPP_NUMBER not set — admin commands disabled; alerts go to business number only"
       );
+    } else {
+      console.log(
+        `[config] ADMIN_PHONES normalized → ${unique.join(", ")} (aliases: ${matchAliases.length})`
+      );
     }
-    return { phones: unique, primary: alertPhone };
+    return { phones: unique, matchAliases, primary: alertPhone };
   })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),

@@ -3,6 +3,7 @@
  */
 import { config } from "../config.js";
 import { isDbEnabled, query } from "../db/pool.js";
+import { digitsOnly, nationalTail9, phonesMatchKenya, isBossPhone } from "../lib/phone-normalize.js";
 
 export const STAFF_ROLES = Object.freeze([
   "SUPER_ADMIN",
@@ -18,26 +19,23 @@ const ROLE_RANK = {
   SUPPORT_AGENT: 40,
 };
 
-function digitsOnly(v) {
-  return String(v || "").replace(/\D/g, "");
-}
-
 function nationalTail(v) {
-  const d = digitsOnly(v);
-  return d.length >= 9 ? d.slice(-9) : d;
+  return nationalTail9(v);
 }
 
 export function phonesMatchStaff(a, b) {
-  const x = nationalTail(a);
-  const y = nationalTail(b);
-  return Boolean(x && y && x === y);
+  return phonesMatchKenya(a, b);
 }
 
 /** Env ADMIN_PHONES are always SUPER_ADMIN (bootstrap even without DB). */
 export function isEnvSuperAdminPhone(phone) {
   const digits = digitsOnly(phone);
   if (!digits) return false;
-  return (config.admin?.phones || []).some((p) => phonesMatchStaff(p, digits));
+  const list = [
+    ...(config.admin?.phones || []),
+    ...(config.admin?.matchAliases || []),
+  ];
+  return isBossPhone(digits, list) || list.some((p) => phonesMatchStaff(p, digits));
 }
 
 /**

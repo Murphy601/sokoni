@@ -73,28 +73,24 @@ import { markWithdrawalPaid, markWithdrawalPaidByOrderId } from "./seller-withdr
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isB2CReady, b2cMeta } from "./daraja-mpesa.js";
 
+import { phonesMatchKenya, digitsOnly as phoneDigits, normalizeKenyaPhone, isBossPhone } from "../lib/phone-normalize.js";
+
 function digitsOnly(value) {
-  return String(value || "").replace(/\D/g, "");
+  return phoneDigits(value);
 }
 
 function phonesMatch(a, b) {
-  const da = digitsOnly(a);
-  const db = digitsOnly(b);
-  if (!da || !db) return false;
-  if (da === db) return true;
-  // Kenya: 2547XXXXXXXX vs 07XXXXXXXX — same national number only
-  const norm = (d) => {
-    if (d.startsWith("254")) return d;
-    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
-    if (d.length === 9) return `254${d}`;
-    return d;
-  };
-  return norm(da) === norm(db);
+  return phonesMatchKenya(a, b);
 }
 
 function isAdminPhone(phone) {
   if (!phone) return false;
-  return config.admin.phones.some((p) => phonesMatch(phone, p));
+  const list = [
+    ...(config.admin.phones || []),
+    ...(config.admin.matchAliases || []),
+  ];
+  if (isBossPhone(phone, list)) return true;
+  return list.some((p) => phonesMatch(phone, p));
 }
 
 /** Persisted @lid chat IDs verified for a configured admin phone. */
@@ -104,7 +100,14 @@ const ADMIN_IDS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "
 
 function seedAdminCusIds() {
   for (const p of config.admin.phones) {
-    adminChatIds.set(`${p}@c.us`, p);
+    const n = normalizeKenyaPhone(p) || digitsOnly(p);
+    if (!n) continue;
+    adminChatIds.set(`${n}@c.us`, n);
+    // Also seed national-zero form if someone stored that historically
+    if (n.startsWith("254") && n.length >= 12) {
+      const national = `0${n.slice(3)}`;
+      adminChatIds.set(`${national}@c.us`, n);
+    }
   }
 }
 
@@ -151,12 +154,17 @@ function persistAdminChatIds() {
 export function isAdminSender(chatId, phone = "") {
   loadAdminChatIds();
 
+  const chatDigits = phoneDigitsFromChatId(chatId);
+  const incoming = digitsOnly(phone) || chatDigits || "";
+  if (process.env.ADMIN_PHONE_DEBUG === "1" || process.env.ADMIN_PHONE_DEBUG === "true") {
+    console.log("[admin] Incoming Phone:", phone || "(empty)", "chatId:", chatId, "digits:", incoming);
+  }
+
   if (chatId && adminChatIds.has(chatId)) {
     return isAdminPhone(adminChatIds.get(chatId));
   }
 
-  const chatDigits = phoneDigitsFromChatId(chatId);
-  if (chatDigits && config.admin.phones.some((p) => phonesMatch(chatDigits, p))) {
+  if (chatDigits && isAdminPhone(chatDigits)) {
     if (chatId && chatId.includes("@lid")) {
       registerAdminChatId(chatId, chatDigits);
     }
@@ -173,8 +181,11 @@ export function isAdminSender(chatId, phone = "") {
   }
 
   // Metadata phone must match the sender chat id, not a random field in the payload.
-  if (isAdminPhone(phone) && chatDigits && phonesMatch(phone, chatDigits)) {
-    return true;
+  // Relaxed: if chatDigits missing (some WAHA payloads), still trust isAdminPhone(phone).
+  if (isAdminPhone(phone)) {
+    if (!chatDigits || phonesMatch(phone, chatDigits)) {
+      return true;
+    }
   }
 
   return false;
