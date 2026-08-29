@@ -36,6 +36,12 @@
     });
   }
 
+  async function optionalFile(id) {
+    const file = document.getElementById(id)?.files?.[0];
+    if (!file) return { data: "", name: "" };
+    return { data: await fileToDataUrl(file), name: file.name || "" };
+  }
+
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     setStatus("");
@@ -52,11 +58,16 @@
         throw new Error("Upload National ID, driving licence, and stage letter.");
       }
 
-      const [idDocument, dlDocument, stageLetter] = await Promise.all([
-        fileToDataUrl(idFile),
-        fileToDataUrl(dlFile),
-        fileToDataUrl(stageFile),
-      ]);
+      const [idDocument, dlDocument, stageLetter, idBack, logbook, goodConduct, ntsa] =
+        await Promise.all([
+          fileToDataUrl(idFile),
+          fileToDataUrl(dlFile),
+          fileToDataUrl(stageFile),
+          optionalFile("idDocumentBack"),
+          optionalFile("logbookDocument"),
+          optionalFile("goodConductDocument"),
+          optionalFile("ntsaBadgeDocument"),
+        ]);
 
       const payload = {
         fullName: String(document.getElementById("fullName")?.value || "").trim(),
@@ -65,12 +76,22 @@
         operatingTown: String(document.getElementById("operatingTown")?.value || "").trim(),
         stageLocation: String(document.getElementById("stageLocation")?.value || "").trim(),
         motorbikePlate: String(document.getElementById("motorbikePlate")?.value || "").trim(),
+        guarantorName: String(document.getElementById("guarantorName")?.value || "").trim(),
+        guarantorPhone: String(document.getElementById("guarantorPhone")?.value || "").trim(),
         idDocument,
         idDocumentName: idFile.name || "",
+        idDocumentBack: idBack.data || undefined,
+        idDocumentBackName: idBack.name || undefined,
         dlDocument,
         dlDocumentName: dlFile.name || "",
         stageLetter,
         stageLetterName: stageFile.name || "",
+        logbookDocument: logbook.data || undefined,
+        logbookDocumentName: logbook.name || undefined,
+        goodConductDocument: goodConduct.data || undefined,
+        goodConductDocumentName: goodConduct.name || undefined,
+        ntsaBadgeDocument: ntsa.data || undefined,
+        ntsaBadgeDocumentName: ntsa.name || undefined,
       };
 
       const res = await fetch(`${API_BASE}/api/riders/register`, {

@@ -45,11 +45,24 @@ function mapRider(row) {
     operatingTown: row.operating_town,
     stageLocation: row.stage_location || null,
     motorbikePlate: row.motorbike_plate || null,
+    licenseClass: row.license_class || null,
+    guarantorName: row.guarantor_name || null,
+    guarantorPhone: row.guarantor_phone || null,
     verificationStatus: row.verification_status,
     isAvailable: Boolean(row.is_available),
     rating: row.rating != null ? Number(row.rating) : 5,
     suspendReason: row.suspend_reason || null,
+    docs: {
+      nationalIdFrontUrl: row.national_id_front_url || null,
+      nationalIdBackUrl: row.national_id_back_url || null,
+      licenseUrl: row.license_url || null,
+      logbookUrl: row.logbook_url || null,
+      goodConductUrl: row.good_conduct_url || null,
+      ntsaBadgeUrl: row.ntsa_badge_url || null,
+      stageLetterUrl: row.stage_letter_url || null,
+    },
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -200,7 +213,9 @@ async function saveRiderDoc({ phone, kind, data, filename = "" }) {
 
 /**
  * Public web onboarding — creates/updates rider as PENDING with verification docs.
- * Docs: idDocument, dlDocument, stageLetter (base64 or data-URL).
+ * Required: idDocument, dlDocument, stageLetter.
+ * Optional: idDocumentBack, logbookDocument, goodConductDocument, ntsaBadgeDocument,
+ *           guarantorName, guarantorPhone.
  */
 export async function registerRiderApplication(input = {}) {
   if (!isDbEnabled()) {
@@ -218,6 +233,8 @@ export async function registerRiderApplication(input = {}) {
     .trim()
     .slice(0, 32);
   const stageLocation = String(input.stageLocation || "").trim().slice(0, 120);
+  const guarantorName = String(input.guarantorName || "").trim().slice(0, 120) || null;
+  const guarantorPhone = normalizeRiderPhone(input.guarantorPhone) || null;
 
   if (!phone || !fullName || !zone || !plate || !nationalId || !stageLocation) {
     return {
@@ -250,8 +267,12 @@ export async function registerRiderApplication(input = {}) {
   }
 
   let nationalIdFrontUrl;
+  let nationalIdBackUrl = null;
   let licenseUrl;
   let stageLetterUrl;
+  let logbookUrl = null;
+  let goodConductUrl = null;
+  let ntsaBadgeUrl = null;
   try {
     nationalIdFrontUrl = await saveRiderDoc({
       phone,
@@ -259,6 +280,14 @@ export async function registerRiderApplication(input = {}) {
       data: input.idDocument,
       filename: input.idDocumentName || "",
     });
+    if (input.idDocumentBack) {
+      nationalIdBackUrl = await saveRiderDoc({
+        phone,
+        kind: "national-id-back",
+        data: input.idDocumentBack,
+        filename: input.idDocumentBackName || "",
+      });
+    }
     licenseUrl = await saveRiderDoc({
       phone,
       kind: "license",
@@ -271,6 +300,30 @@ export async function registerRiderApplication(input = {}) {
       data: input.stageLetter,
       filename: input.stageLetterName || "",
     });
+    if (input.logbookDocument) {
+      logbookUrl = await saveRiderDoc({
+        phone,
+        kind: "logbook",
+        data: input.logbookDocument,
+        filename: input.logbookDocumentName || "",
+      });
+    }
+    if (input.goodConductDocument) {
+      goodConductUrl = await saveRiderDoc({
+        phone,
+        kind: "good-conduct",
+        data: input.goodConductDocument,
+        filename: input.goodConductDocumentName || "",
+      });
+    }
+    if (input.ntsaBadgeDocument) {
+      ntsaBadgeUrl = await saveRiderDoc({
+        phone,
+        kind: "ntsa-badge",
+        data: input.ntsaBadgeDocument,
+        filename: input.ntsaBadgeDocumentName || "",
+      });
+    }
   } catch (err) {
     if (err?.code === "too_large") {
       return { error: "file_too_large", message: "Each document must be under 4 MB (image or PDF)." };
@@ -282,7 +335,7 @@ export async function registerRiderApplication(input = {}) {
   if (!nationalIdFrontUrl || !licenseUrl || !stageLetterUrl) {
     return {
       error: "docs_required",
-      message: "One or more documents could not be read. Re-select the files.",
+      message: "One or more required documents could not be read. Re-select the files.",
     };
   }
 
@@ -294,8 +347,14 @@ export async function registerRiderApplication(input = {}) {
     stageLocation,
     motorbikePlate: plate,
     licenseClass: "A",
+    guarantorName,
+    guarantorPhone,
     nationalIdFrontUrl,
+    nationalIdBackUrl,
     licenseUrl,
+    logbookUrl,
+    goodConductUrl,
+    ntsaBadgeUrl,
     stageLetterUrl,
     verificationStatus: "PENDING",
   });
@@ -306,12 +365,45 @@ export async function registerRiderApplication(input = {}) {
        verification_status = 'PENDING',
        is_available = FALSE,
        national_id_front_url = $2,
-       license_url = $3,
-       stage_letter_url = $4,
+       national_id_back_url = COALESCE($3, national_id_back_url),
+       license_url = $4,
+       stage_letter_url = $5,
+       logbook_url = COALESCE($6, logbook_url),
+       good_conduct_url = COALESCE($7, good_conduct_url),
+       ntsa_badge_url = COALESCE($8, ntsa_badge_url),
+       guarantor_name = COALESCE($9, guarantor_name),
+       guarantor_phone = COALESCE($10, guarantor_phone),
        updated_at = NOW()
      WHERE id = $1`,
-    [result.rider.id, nationalIdFrontUrl, licenseUrl, stageLetterUrl]
+    [
+      result.rider.id,
+      nationalIdFrontUrl,
+      nationalIdBackUrl,
+      licenseUrl,
+      stageLetterUrl,
+      logbookUrl,
+      goodConductUrl,
+      ntsaBadgeUrl,
+      guarantorName,
+      guarantorPhone,
+    ]
   );
+
+  // Ping admin that a new rider is waiting review.
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId: null,
+      details:
+        `🛵 New boda rider application PENDING\n` +
+        `• ${fullName} · ${phone}\n` +
+        `• Zone: ${zone} · Plate: ${plate}\n` +
+        `• Stage: ${stageLocation}\n` +
+        `Review: /admin/boda or admin-boda.html`,
+    });
+  } catch (err) {
+    console.warn("[boda-fleet] admin notify on apply skipped:", err.message);
+  }
 
   console.log(`[boda-fleet] rider application PENDING #${result.rider.id} ${phone} ${zone}`);
   return {
@@ -332,16 +424,51 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "" 
   const { rows } = await query(
     `UPDATE riders SET
        verification_status = $2,
-       is_available = CASE WHEN $2 = 'VERIFIED' THEN is_available ELSE FALSE END,
+       is_available = CASE WHEN $2 = 'VERIFIED' THEN TRUE ELSE FALSE END,
        suspend_reason = CASE WHEN $2 = 'SUSPENDED' THEN $3 ELSE NULL END,
        suspended_at = CASE WHEN $2 = 'SUSPENDED' THEN NOW() ELSE NULL END,
+       suspended_order_ref = CASE WHEN $2 = 'SUSPENDED' THEN suspended_order_ref ELSE NULL END,
        updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
     [Number(riderId), st, String(reason || "").slice(0, 400) || null]
   );
   if (!rows[0]) return { error: "not_found", message: "Rider not found." };
-  return { ok: true, rider: mapRider(rows[0]) };
+  const rider = mapRider(rows[0]);
+
+  try {
+    const { sendText } = await import("./whatsapp.js");
+    if (st === "VERIFIED") {
+      await sendText(
+        `${rider.phone}@c.us`,
+        `✅ *You're a verified Sokoni rider*\n` +
+          `Zone: *${rider.operatingTown}*\n` +
+          `You're marked AVAILABLE for jobs.\n\n` +
+          `Commands:\n` +
+          `• *ACCEPT SKN-####* — claim a job\n` +
+          `• *SET ZONE NAIROBI* or *THIKA*\n` +
+          `• *OFFLINE* / *AVAILABLE*`
+      );
+    } else if (st === "REJECTED") {
+      await sendText(
+        `${rider.phone}@c.us`,
+        `❌ Your Sokoni boda application was not approved.` +
+          (reason ? `\nReason: ${reason}` : "") +
+          `\nYou can fix docs and re-apply at sokonimall.com/boda/apply.html`
+      );
+    } else if (st === "SUSPENDED") {
+      await sendText(
+        `${rider.phone}@c.us`,
+        `⚠️ Your Sokoni rider profile is *SUSPENDED*.` +
+          (reason ? `\n${reason}` : "") +
+          `\nDo not accept new jobs until ops clears you.`
+      );
+    }
+  } catch (err) {
+    console.warn("[boda-fleet] verify notify skipped:", err.message);
+  }
+
+  return { ok: true, rider };
 }
 
 export async function listRiders({ zone = null, status = null, limit = 50 } = {}) {
@@ -427,7 +554,16 @@ export async function requestBodaDispatch({
   const drop =
     String(deliveryAddress || "").trim() ||
     String(order.location || order.dropOff || order.customerLocation || "Buyer drop-off").slice(0, 240);
-  const fee = Math.max(0, Number(deliveryFeeKes) || Number(order.shippingKes) || 0);
+  // Zone default fees when seller omits an amount (ops can override later).
+  const defaultFee = town === "THIKA" ? 250 : 350;
+  const fee = Math.max(
+    0,
+    Number(deliveryFeeKes) > 0
+      ? Number(deliveryFeeKes)
+      : Number(order.shippingKes) > 0
+        ? Number(order.shippingKes)
+        : defaultFee
+  );
 
   const existing = await getOpenDispatchForOrder(id);
   if (existing) {
@@ -653,6 +789,25 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     console.warn("[boda-fleet] rider ack:", err.message);
   }
 
+  // Tell other broadcast riders the job is taken.
+  const broadcastIds = Array.isArray(updated[0].broadcast_rider_ids)
+    ? updated[0].broadcast_rider_ids.map(Number).filter(Boolean)
+    : [];
+  for (const otherId of broadcastIds) {
+    if (otherId === rider.id) continue;
+    try {
+      const { rows: others } = await query(`SELECT phone FROM riders WHERE id = $1 LIMIT 1`, [otherId]);
+      const otherPhone = others[0]?.phone;
+      if (!otherPhone) continue;
+      await sendText(
+        `${otherPhone}@c.us`,
+        `ℹ️ Order *${id}* was claimed by another Sokoni rider. Stay AVAILABLE for the next job.`
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] loser notify skipped:", err.message);
+    }
+  }
+
   return {
     ok: true,
     dispatch: mapDispatch(updated[0]),
@@ -818,6 +973,17 @@ export async function confirmBodaDeliveryWithOtp({
     return { error: "otp_mismatch", message: "That code doesn't match. Check the latest WhatsApp from Sokoni." };
   }
 
+  // OTP age check (30 minutes).
+  if (row.delivery_otp_sent_at) {
+    const age = Date.now() - new Date(row.delivery_otp_sent_at).getTime();
+    if (Number.isFinite(age) && age > 30 * 60 * 1000) {
+      return {
+        error: "otp_expired",
+        message: "That code expired. Ask the rider to reply DELIVERED again for a new code.",
+      };
+    }
+  }
+
   await query(
     `UPDATE delivery_dispatches SET
        status = 'DELIVERED',
@@ -836,7 +1002,7 @@ export async function confirmBodaDeliveryWithOtp({
 
   updateOrderMeta(id, { bodaStatus: "DELIVERED", bodaFeeStatus: "PENDING_MPESA" });
 
-  // Reuse buyer YES escrow confirmation path.
+  // Reuse buyer YES escrow confirmation path (syncs seller escrow; boda fee stub below).
   try {
     const { handleOrderBusMessage } = await import("./communication-hub.js");
     await handleOrderBusMessage(customerKey, `YES ${id}`, { phone });
@@ -844,11 +1010,127 @@ export async function confirmBodaDeliveryWithOtp({
     console.warn("[boda-fleet] YES after OTP:", err.message);
   }
 
+  await releaseBodaRiderFee({ dispatchId: row.id, reason: "buyer_otp" });
+
   return {
     ok: true,
     orderId: id,
     message: `✅ Code accepted — *${id}* marked delivered. Thank you.`,
   };
+}
+
+/**
+ * When buyer YES / auto-release marks the order delivered, close open boda dispatch
+ * and run the fee-release stub (if a rider was assigned).
+ */
+export async function syncBodaDispatchOnOrderDelivered(orderRef, { via = "buyer_yes" } = {}) {
+  if (!isDbEnabled()) return { ok: false, skipped: true };
+  const id = normalizeOrderId(orderRef) || String(orderRef || "").toUpperCase();
+  if (!id) return { ok: false };
+
+  const { rows } = await query(
+    `UPDATE delivery_dispatches SET
+       status = 'DELIVERED',
+       delivered_at = COALESCE(delivered_at, NOW()),
+       fee_status = CASE
+         WHEN fee_status IN ('RELEASED', 'FORFEITED') THEN fee_status
+         ELSE 'PENDING_MPESA'
+       END,
+       delivery_otp_hash = NULL,
+       updated_at = NOW()
+     WHERE UPPER(order_ref) = UPPER($1)
+       AND status IN ('REQUESTED', 'ACCEPTED', 'PICKED_UP', 'OTP_SENT')
+     RETURNING *`,
+    [id]
+  );
+  const row = rows[0];
+  if (!row) return { ok: true, synced: false };
+
+  if (row.rider_id) {
+    await query(
+      `UPDATE riders SET is_available = TRUE, updated_at = NOW()
+        WHERE id = $1 AND verification_status = 'VERIFIED'`,
+      [row.rider_id]
+    );
+  }
+  updateOrderMeta(id, { bodaStatus: "DELIVERED", bodaFeeStatus: row.fee_status || "PENDING_MPESA" });
+  await releaseBodaRiderFee({ dispatchId: row.id, reason: via });
+  return { ok: true, synced: true, dispatch: mapDispatch(row) };
+}
+
+/**
+ * Rider delivery fee release stub — logs clearly; marks RELEASED.
+ * Real Daraja/Paystack B2C for riders can replace this later.
+ */
+export async function releaseBodaRiderFee({ dispatchId, reason = "stub" } = {}) {
+  if (!isDbEnabled()) return { ok: false, skipped: true };
+  const id = Number(dispatchId);
+  if (!Number.isInteger(id) || id < 1) return { error: "invalid_dispatch" };
+
+  const { rows } = await query(
+    `SELECT d.*, r.phone AS rider_phone, r.full_name AS rider_name, r.motorbike_plate
+       FROM delivery_dispatches d
+       LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE d.id = $1
+      LIMIT 1`,
+    [id]
+  );
+  const d = rows[0];
+  if (!d) return { error: "not_found" };
+  if (d.fee_status === "RELEASED") {
+    return { ok: true, already: true, feeKes: Number(d.delivery_fee_kes || 0) };
+  }
+  if (d.status === "DISPUTED" || d.fee_status === "FORFEITED") {
+    console.log(
+      `[boda-fleet] fee stub SKIP release dispatch=#${id} order=${d.order_ref} status=${d.status} fee_status=${d.fee_status} reason=${reason}`
+    );
+    return { ok: false, skipped: true, reason: d.fee_status || d.status };
+  }
+
+  const feeKes = Number(d.delivery_fee_kes || 0);
+  console.log(
+    `[boda-fleet] fee stub READY release` +
+      ` dispatch=#${id}` +
+      ` order=${d.order_ref}` +
+      ` rider=${d.rider_phone || "—"}` +
+      ` name=${d.rider_name || "—"}` +
+      ` plate=${d.motorbike_plate || "—"}` +
+      ` feeKes=${feeKes}` +
+      ` via=${reason}` +
+      ` (no M-Pesa API call yet — mark RELEASED for ops ledger)`
+  );
+
+  await query(
+    `UPDATE delivery_dispatches SET
+       fee_status = 'RELEASED',
+       meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      id,
+      JSON.stringify({
+        feeReleaseStubAt: new Date().toISOString(),
+        feeReleaseReason: reason,
+        feeReleaseKes: feeKes,
+      }),
+    ]
+  );
+  updateOrderMeta(d.order_ref, { bodaFeeStatus: "RELEASED" });
+
+  if (d.rider_phone && feeKes > 0) {
+    try {
+      const { sendText } = await import("./whatsapp.js");
+      await sendText(
+        `${normalizeRiderPhone(d.rider_phone)}@c.us`,
+        `💵 Delivery fee for *${d.order_ref}* (KES ${feeKes.toLocaleString()}) is cleared for payout.\n` +
+          `Sokoni ops will send M-Pesa shortly if not already paid.`
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] fee rider notify skipped:", err.message);
+    }
+  }
+
+  return { ok: true, feeKes, orderRef: d.order_ref, riderPhone: d.rider_phone || null };
 }
 
 /** On fulfillment dispute: suspend assigned rider + mark dispatch DISPUTED. */

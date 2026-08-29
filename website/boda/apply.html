@@ -114,9 +114,13 @@
 
       <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
         <h2 class="font-bold text-lg">Verification uploads</h2>
-        <p class="text-xs text-brand-purple/60 dark:text-white/50">Images or PDF · max 4 MB each</p>
-        <label class="block text-sm font-medium">National ID (front &amp; back) *
+        <p class="text-xs text-brand-purple/60 dark:text-white/50">Images or PDF · max 4 MB each. Required fields marked *</p>
+        <label class="block text-sm font-medium">National ID — front *
           <input id="idDocument" name="idDocument" type="file" accept="image/*,.pdf,application/pdf" required
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">National ID — back
+          <input id="idDocumentBack" name="idDocumentBack" type="file" accept="image/*,.pdf,application/pdf"
                  class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
         </label>
         <label class="block text-sm font-medium">Valid driving licence (Class A) *
@@ -127,6 +131,34 @@
           <input id="stageLetter" name="stageLetter" type="file" accept="image/*,.pdf,application/pdf" required
                  class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
         </label>
+        <label class="block text-sm font-medium">Logbook / power of attorney
+          <input id="logbookDocument" name="logbookDocument" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">Good Conduct certificate (DCI)
+          <input id="goodConductDocument" name="goodConductDocument" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+        <label class="block text-sm font-medium">NTSA badge / registration
+          <input id="ntsaBadgeDocument" name="ntsaBadgeDocument" type="file" accept="image/*,.pdf,application/pdf"
+                 class="mt-1 w-full text-sm file:mr-3 file:min-h-[44px] file:rounded-full file:border-0 file:bg-brand-purple file:px-4 file:text-white dark:file:bg-white dark:file:text-brand-purple" />
+        </label>
+      </section>
+
+      <section class="space-y-4 rounded-3xl border border-brand-purple/10 dark:border-white/10 bg-white/70 dark:bg-brand-purpleLight/40 p-6">
+        <h2 class="font-bold text-lg">Guarantor / next of kin</h2>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm font-medium">Guarantor full name
+            <input id="guarantorName" name="guarantorName"
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="Optional but recommended" />
+          </label>
+          <label class="block text-sm font-medium">Guarantor phone
+            <input id="guarantorPhone" name="guarantorPhone" type="tel" inputmode="tel"
+                   class="mt-1 w-full min-h-[44px] rounded-xl border border-brand-purple/15 dark:border-white/20 dark:bg-brand-purple/40 px-3 py-2.5"
+                   placeholder="07xx…" />
+          </label>
+        </div>
       </section>
 
       <p id="form-status" class="text-sm text-red-600 dark:text-red-400" role="status"></p>

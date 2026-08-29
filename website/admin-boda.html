@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin · Sokoni Boda Riders</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+</head>
+<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
+  <header class="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <a href="admin-command.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
+        <p class="text-xs text-brand-purple/55 mt-0.5">Boda rider verification</p>
+      </div>
+      <nav class="flex flex-wrap gap-2 text-xs font-semibold">
+        <a href="admin-command.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Command</a>
+        <a href="admin-boda.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Boda</a>
+        <a href="admin-disputes.html" class="min-h-[40px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Disputes</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <h1 class="font-display text-3xl font-bold">Boda riders</h1>
+      <p class="text-sm text-brand-purple/65">Review PENDING applications, open docs, then Verify or Reject. Verified riders get WhatsApp and become AVAILABLE.</p>
+      <label class="block text-sm font-medium max-w-md">
+        Admin token
+        <input id="admin-token" type="password" autocomplete="off"
+               class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+               placeholder="ADMIN_SETUP_TOKEN" />
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="load-pending" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Load PENDING</button>
+        <button type="button" id="load-verified" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Load VERIFIED</button>
+        <button type="button" id="load-all" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Load all</button>
+      </div>
+      <p id="boda-status" class="text-sm text-brand-purple/60" role="status"></p>
+    </section>
+    <div id="rider-list" class="space-y-4"></div>
+  </main>
+
+  <script src="assets/js/admin-boda.js"></script>
+</body>
+</html>

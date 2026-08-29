@@ -1253,6 +1253,13 @@ async function flowBuyerYes(customerKey, phone, orderId) {
     buyerConfirmedVia: "whatsapp_yes",
   });
 
+  try {
+    const { syncBodaDispatchOnOrderDelivered } = await import("./boda-fleet.js");
+    await syncBodaDispatchOnOrderDelivered(orderId, { via: "buyer_yes" });
+  } catch (err) {
+    console.warn("[communication-hub] boda sync on YES skipped:", err.message);
+  }
+
   const fresh = getOrder(orderId) || order;
   void notifyAdminEvent("BUYER_CONFIRMED", {
     orderId: fresh.id,
@@ -1544,6 +1551,13 @@ async function autoReleaseOrder(order) {
     autoReleasedAt: Date.now(),
     confirmReminded24hAt: Date.now(),
   });
+
+  try {
+    const { syncBodaDispatchOnOrderDelivered } = await import("./boda-fleet.js");
+    await syncBodaDispatchOnOrderDelivered(order.id, { via: "auto_release_24h" });
+  } catch (err) {
+    console.warn("[communication-hub] boda sync on auto-release skipped:", err.message);
+  }
 
   const fresh = getOrder(order.id) || order;
   void import("../db/repositories/social.js")
