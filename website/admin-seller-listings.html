@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Flagged seller listings — Sokoni Admin</title>
+<title>Listings &amp; KYC · Sokoni Admin</title>
 <meta name="robots" content="noindex,nofollow" />
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
@@ -13,11 +13,11 @@
     theme: {
       extend: {
         colors: {
-          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
         },
         fontFamily: {
           sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
-          display: ["Fraunces", "Georgia", "serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         },
       },
     },
@@ -25,25 +25,35 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
 </head>
-<body class="bg-brand-cream text-brand-purple font-sans antialiased min-h-screen">
-  <header class="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-20">
-    <div class="max-w-4xl mx-auto px-5 py-4 flex items-center justify-between gap-3">
-      <a href="index.html" class="font-display font-bold text-lg">Sokoni · Admin</a>
-      <nav class="flex flex-wrap gap-2 text-xs font-semibold">
-        <a href="admin-command.html" class="min-h-[36px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Command</a>
-        <a href="admin-disputes.html" class="min-h-[36px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Disputes</a>
-        <a href="admin-sellers-shops.html" class="min-h-[36px] inline-flex items-center px-3 rounded-full border border-brand-purple/15">Sellers &amp; Shops</a>
-        <span class="min-h-[36px] inline-flex items-center px-3 rounded-full bg-brand-green text-brand-purple">Listings &amp; KYC</span>
-      </nav>
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Listings</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <span class="is-active">Listings</span>
+          <a href="admin-support.html">Support</a>
+          <a href="admin-boda.html">Boda</a>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">KYC & flags</span>
+      </div>
     </div>
   </header>
 
   <main class="max-w-4xl mx-auto px-5 py-8 space-y-5">
     <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
-      <h1 class="font-display text-2xl font-bold">Seller listing review</h1>
+      <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Listings &amp; KYC</h1>
       <p class="text-sm text-brand-purple/65">
         Flagged listings (auto + admin), seller KYC, and shop pause / payout holds. Restore after review.
       </p>
