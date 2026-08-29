@@ -6,6 +6,8 @@ import {
   rankRidersByDispatchScore,
   TIER1_MAX_KM,
   TIER2_MAX_KM,
+  LATE_PICKUP_MINUTES,
+  LATE_PICKUP_PENALTY,
 } from "./dispatch-matcher.js";
 
 describe("dispatch-matcher", () => {
@@ -35,5 +37,10 @@ describe("dispatch-matcher", () => {
     assert.equal(ranked[0].tier, "TIER1");
     assert.ok(ranked.every((r) => r.tier !== "TOO_FAR"));
     assert.equal(ranked[ranked.length - 1].tier, "TIER2");
+  });
+
+  it("pickup SLA is 10 minutes with −0.2 late penalty", () => {
+    assert.equal(LATE_PICKUP_MINUTES, 10);
+    assert.equal(LATE_PICKUP_PENALTY, 0.2);
   });
 });

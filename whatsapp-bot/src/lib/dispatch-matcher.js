@@ -10,7 +10,8 @@ export const TIER2_MAX_KM = 7;
 export const OFFER_TIMEOUT_MS = 45 * 1000;
 export const LATE_PICKUP_PENALTY = 0.2;
 export const CANCEL_JOB_PENALTY = 0.5;
-export const LATE_PICKUP_MINUTES = 30;
+/** Minutes after ACCEPT without seller Pickup OTP before auto-unassign + re-offer. */
+export const LATE_PICKUP_MINUTES = 10;
 
 /**
  * @param {{ rating?: number, distanceM?: number|null, acceptanceRate?: number }} r
