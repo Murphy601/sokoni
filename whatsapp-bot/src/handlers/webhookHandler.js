@@ -447,13 +447,56 @@ export async function handleIncomingMessage(
     if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
   }
 
-  // Seller upcountry waybill: WAYBILL SKN-#### Courier Tracking
+  // Seller upcountry waybill: WAYBILL SKN-#### Courier Tracking (+ optional media)
   {
     try {
       const { tryHandleSellerWaybillMessage } = await import("../services/upcountry-shipments.js");
-      if (await tryHandleSellerWaybillMessage(customerKey, text, { phone, mediaUrl })) return;
+      if (
+        await tryHandleSellerWaybillMessage(customerKey, text, {
+          phone,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+        })
+      ) {
+        return;
+      }
     } catch (err) {
       console.warn("[webhook] waybill handler skipped:", err.message);
+    }
+  }
+
+  // Waybill pre-shipment photo follow-ups (media-only while session open)
+  if (hasMedia) {
+    try {
+      const { tryHandleWaybillEvidencePhoto } = await import("../services/upcountry-shipments.js");
+      if (
+        await tryHandleWaybillEvidencePhoto(customerKey, {
+          hasMedia,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+          phone,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] waybill photo skipped:", err.message);
+    }
+  }
+
+  // Seller partial escrow refund: PARTIAL_REFUND SKN-#### amount
+  {
+    try {
+      const { tryHandlePartialRefundMessage } = await import("../services/partial-escrow-refund.js");
+      if (await tryHandlePartialRefundMessage(customerKey, text, { phone })) return;
+    } catch (err) {
+      console.warn("[webhook] partial refund skipped:", err.message);
     }
   }
 
