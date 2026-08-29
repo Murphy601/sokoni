@@ -47,6 +47,9 @@ sellerBodaRouter.post("/request", async (req, res) => {
   if (result.error === "forbidden" || result.error === "support_hold") {
     return res.status(403).json(result);
   }
+  if (result.error === "platform_assigns_riders") {
+    return res.status(200).json({ ...result, ok: false });
+  }
   if (result.error) return res.status(400).json(result);
   res.json(result);
 });
@@ -80,6 +83,22 @@ adminBodaRouter.post("/riders", async (req, res) => {
 adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
   const result = await setRiderVerificationStatus(req.params.id, req.body?.status || "VERIFIED", {
     reason: req.body?.reason || "",
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /admin/boda/dispatches/auto-pin — ops force Sokoni pin for an order */
+adminBodaRouter.post("/dispatches/auto-pin", async (req, res) => {
+  const { createPlatformBodaDispatch } = await import("../services/boda-fleet.js");
+  const result = await createPlatformBodaDispatch({
+    orderId: req.body?.orderId,
+    zone: req.body?.zone,
+    pickupAddress: req.body?.pickupAddress || "",
+    deliveryAddress: req.body?.deliveryAddress || "",
+    deliveryFeeKes: req.body?.deliveryFeeKes,
+    source: "admin_force",
   });
   if (result.error === "not_found") return res.status(404).json(result);
   if (result.error) return res.status(400).json(result);

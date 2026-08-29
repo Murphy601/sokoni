@@ -300,6 +300,19 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   await notifyBuyerPaid(updated, payment);
   await notifySellerDropoff(updated, label);
 
+  // Sokoni pins nearest verified rider for local deliveries (sellers never choose).
+  try {
+    const { autoDispatchBodaForOrder } = await import("./boda-fleet.js");
+    const boda = await autoDispatchBodaForOrder(updated.id);
+    if (boda?.ok) {
+      console.log(`[escrow] platform boda pin ${updated.id} → rider #${boda.pinnedRider?.id || "—"}`);
+    } else if (!boda?.skipped) {
+      console.warn(`[escrow] boda auto-dispatch ${updated.id}:`, boda?.error || boda?.message || boda);
+    }
+  } catch (err) {
+    console.warn("[escrow] boda auto-dispatch skipped:", err.message);
+  }
+
   console.log(
     `[escrow] PAID ${order.id} receipt=${payment.mpesaReceiptNumber || "—"} auto-fulfillment started`
   );
@@ -357,6 +370,13 @@ async function applyCartParentPostPayment(order, payment = {}) {
     });
     await lockProductForOrder(getOrder(child.id));
     recordPurchaseFeedEvent(getOrder(child.id));
+
+    try {
+      const { autoDispatchBodaForOrder } = await import("./boda-fleet.js");
+      await autoDispatchBodaForOrder(child.id);
+    } catch (err) {
+      console.warn("[escrow] cart child boda pin:", child.id, err.message);
+    }
   }
 
   await notifySellersForPaidCart(parent, getCartChildren(order.id));

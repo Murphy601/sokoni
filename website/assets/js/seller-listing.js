@@ -4267,9 +4267,11 @@ function renderSellerOrderCard(o, { allowPrintLabel = true } = {}) {
     actions.push(
       `<button type="button" class="sell-order-action sell-order-action--primary" data-dispatch-toggle="${escapeHtml(o.orderId || "")}">Mark dispatched</button>`
     );
-    actions.push(
-      `<button type="button" class="sell-order-action" data-boda-request="${escapeHtml(o.orderId || "")}">Call Sokoni boda</button>`
-    );
+    if (o.fulfillmentMode === "LOCAL_RIDER" || o.requiresRider || o.bodaStatus) {
+      actions.push(
+        `<button type="button" class="sell-order-action" data-boda-status="${escapeHtml(o.orderId || "")}" title="Sokoni assigns riders">Rider status</button>`
+      );
+    }
   }
   if (phase === "shipped" && o.trackUrl) {
     actions.push(`<a href="${o.trackUrl}" class="sell-order-action">Track shipment</a>`);
@@ -6821,56 +6823,70 @@ async function requestSokoniBoda(orderId, { zone, pickupAddress } = {}) {
     if (status) status.textContent = "Pick a paid order first.";
     return;
   }
-  const z = String(zone || el("logistics-boda-zone")?.value || "NAIROBI").toUpperCase();
-  const pickup =
-    pickupAddress != null
-      ? String(pickupAddress)
-      : String(el("logistics-boda-pickup")?.value || "").trim();
-  if (status) status.textContent = `Calling verified riders in ${z}…`;
+  if (status) status.textContent = "Checking Sokoni rider assignment…";
   try {
-    const res = await fetch(`${ONBOARD_API}/boda/request`, {
+    // Sellers cannot pin riders — status / soft platform nudge only.
+    const res = await fetch(
+      `${ONBOARD_API}/boda/status?orderId=${encodeURIComponent(id)}`,
+      { headers: sellerAuthHeaders() }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      handleSessionExpired(data);
+      return;
+    }
+    if (data.dispatch) {
+      if (status) {
+        status.textContent =
+          `Sokoni rider: ${data.dispatch.status || "—"}. ` +
+          `Prepare the parcel — hand over only after Pickup OTP. You cannot choose riders.`;
+      }
+      return;
+    }
+    // No open dispatch yet — nudge platform assign (still Sokoni picks the rider).
+    const nudge = await fetch(`${ONBOARD_API}/boda/request`, {
       method: "POST",
       headers: sellerAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(
         jsonAuthBody({
           phone: normalizePhoneInput(phone),
           orderId: id,
-          zone: z,
-          pickupAddress: pickup,
+          zone: String(zone || el("logistics-boda-zone")?.value || "NAIROBI").toUpperCase(),
+          pickupAddress:
+            pickupAddress != null
+              ? String(pickupAddress)
+              : String(el("logistics-boda-pickup")?.value || "").trim(),
         })
       ),
     });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) {
-      handleSessionExpired(data);
-      return;
-    }
-    if (!res.ok || data.error) {
-      if (status) status.textContent = data.message || data.error || "Could not call boda.";
-      return;
-    }
+    const nudged = await nudge.json().catch(() => ({}));
     if (status) {
       status.textContent =
-        data.message ||
-        `Riders pinged: ${data.ridersPinged || 0}. You'll get WhatsApp when one accepts.`;
+        nudged.message ||
+        "Sokoni assigns riders automatically after payment. Prepare the parcel and wait for Pickup OTP.";
     }
   } catch (err) {
-    if (status) status.textContent = err.message || "Network error calling boda.";
+    if (status) status.textContent = err.message || "Network error checking rider status.";
   }
 }
 
 function bindLogisticsBodaUi() {
   const btn = el("logistics-boda-btn");
-  if (btn && btn.dataset.bodaBound !== "1") {
-    btn.dataset.bodaBound = "1";
-    btn.addEventListener("click", () => void requestSokoniBoda());
+  if (btn) {
+    btn.textContent = "Check rider status";
+    if (btn.dataset.bodaBound !== "1") {
+      btn.dataset.bodaBound = "1";
+      btn.addEventListener("click", () => void requestSokoniBoda());
+    }
   }
   if (document.documentElement.dataset.bodaOrderClickBound === "1") return;
   document.documentElement.dataset.bodaOrderClickBound = "1";
   document.addEventListener("click", (ev) => {
+    const statusBtn = ev.target?.closest?.("[data-boda-status]");
     const bodaBtn = ev.target?.closest?.("[data-boda-request]");
-    if (!bodaBtn) return;
-    const id = bodaBtn.getAttribute("data-boda-request");
+    const id =
+      statusBtn?.getAttribute("data-boda-status") || bodaBtn?.getAttribute("data-boda-request");
+    if (!id) return;
     const zoneEl = el("logistics-boda-zone");
     void requestSokoniBoda(id, { zone: zoneEl?.value || "NAIROBI" });
     el("logistics-boda-status")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
