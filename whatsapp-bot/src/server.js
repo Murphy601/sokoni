@@ -438,10 +438,16 @@ function startBodaDisputeWindowScheduler() {
           ])
       )
       .catch((err) => console.warn("[boda-fleet] dispute/offer window tick:", err.message));
+    import("./services/boda-no-show.js")
+      .then(({ processNoShowTimeouts }) => processNoShowTimeouts())
+      .catch((err) => console.warn("[boda-no-show] tick:", err.message));
+    import("./services/prepaid-checkout.js")
+      .then(({ expireStaleStkPayments }) => expireStaleStkPayments())
+      .catch((err) => console.warn("[checkout] stk expire tick:", err.message));
   };
   tick();
   setInterval(tick, 2 * 60 * 1000);
-  console.log("✓ Boda HOLD_ESCROW + dispatch offer scheduler enabled (every 2 min)");
+  console.log("✓ Boda HOLD_ESCROW + no-show + STK expire scheduler enabled (every 2 min)");
 }
 
 /** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */

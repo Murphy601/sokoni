@@ -3286,6 +3286,13 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
 
   if (!trimmed) return false;
 
+  try {
+    const { tryHandleBodaNoShowMessage } = await import("./boda-no-show.js");
+    if (await tryHandleBodaNoShowMessage(customerKey, trimmed, { phone })) return true;
+  } catch (err) {
+    console.warn("[boda-fleet] no-show handler:", err.message);
+  }
+
   // Buyer: DISPUTE SKN-#### / DISPUTE #### (15-min window after rider CONFIRM)
   const dispute = trimmed.match(/^DISPUTE\s+(?:SKN?-?)?(\d{1,6}(?:-\d+)?)\b/i);
   if (dispute) {
@@ -3711,6 +3718,9 @@ export function bodaSupportSummary() {
       "ACCEPT SKN-####",
       "DECLINE SKN-####",
       "CANCEL JOB SKN-#### (after accept → −0.5 rating)",
+      "NO_SHOW SKN-#### (buyer unreachable → 15-min wait)",
+      "CANCEL_NO_SHOW SKN-#### (start return trip)",
+      "VERIFY_RETURN SKN-#### #### (seller Return OTP → 50% fee)",
       "SET ZONE NAIROBI|THIKA",
       "AVAILABLE / OFFLINE",
       "PICKUP SKN-#### 1234 (seller OTP)",

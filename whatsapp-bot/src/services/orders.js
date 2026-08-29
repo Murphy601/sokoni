@@ -23,6 +23,7 @@ const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
  */
 export const ORDER_STATUSES = [
   "awaiting_payment",
+  "payment_expired",
   "received",
   "confirmed",
   "packed",
@@ -36,6 +37,9 @@ const STATUS_ALIASES = {
   awaiting: "awaiting_payment",
   unpaid: "awaiting_payment",
   payment: "awaiting_payment",
+  payment_expired: "payment_expired",
+  expired: "payment_expired",
+  stk_expired: "payment_expired",
   received: "received",
   new: "received",
   confirm: "confirmed",
@@ -59,6 +63,7 @@ const STATUS_ALIASES = {
 
 const STATUS_LABELS = {
   awaiting_payment: "💳 Awaiting payment",
+  payment_expired: "⌛ Payment expired",
   received: "🆕 Received",
   confirmed: "✅ Confirmed",
   packed: "📦 Packed",

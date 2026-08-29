@@ -869,6 +869,20 @@ export function cancelSettlementPayout(orderId, reason = "dispute") {
   return entry;
 }
 
+/** Shrink an open settlement line after a seller partial refund (does not cancel). */
+export function adjustSettlementPayoutAmount(orderId, newAmountKes) {
+  load();
+  const amt = Math.round(Number(newAmountKes));
+  if (!orderId || !Number.isFinite(amt) || amt < 0) return null;
+  const entry = store.entries.find((e) => e.orderId === orderId && isOpenSettlementStatus(e.status));
+  if (!entry) return null;
+  entry.payoutAmountKes = amt;
+  entry.amountKes = amt;
+  entry.partialAdjustedAt = Date.now();
+  persist();
+  return entry;
+}
+
 export function reinstateSettlementPayout(orderId, { payoutEligibleAt = null } = {}) {
   load();
   const entry = store.entries.find((e) => e.orderId === orderId && e.status === "cancelled");

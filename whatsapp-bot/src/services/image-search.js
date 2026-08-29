@@ -230,6 +230,27 @@ export async function tryHandleBuyerImageSearch(
   const caption = String(text || "").toLowerCase();
   if (/\b(id|passport|kra|license|national id)\b/.test(caption)) return false;
 
+  // HARD GATE: waybill pre-shipment photos must never become catalog search
+  try {
+    const { isAwaitingWaybillPhotos, tryHandleWaybillEvidencePhoto } = await import(
+      "./upcountry-shipments.js"
+    );
+    if (isAwaitingWaybillPhotos(customerKey, phone)) {
+      console.log("[image-search] blocked — waybill photo session");
+      return tryHandleWaybillEvidencePhoto(customerKey, {
+        hasMedia,
+        mediaUrl,
+        mediaMimetype,
+        messageId,
+        chatId,
+        session,
+        phone,
+      });
+    }
+  } catch (err) {
+    console.warn("[image-search] waybill gate skipped:", err.message);
+  }
+
   // HARD GATE: dispute evidence must never become catalog search
   try {
     const {

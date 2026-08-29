@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { getOrder, updateOrderMeta } from "./orders.js";
+import { getOrder, updateOrderMeta, listAllOrders, updateOrderStatus } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 import { isDarajaReady, initiateStkPush } from "./daraja-mpesa.js";
 import {
@@ -11,6 +11,7 @@ import {
 } from "./paystack-transfers.js";
 import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
 import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
+import { STK_TIMEOUT_MS } from "../lib/ops-edge-constants.js";
 
 export const ESCROW_STATUSES = ["pending", "held", "released", "refunded"];
 
@@ -42,6 +43,9 @@ export function prepaidPaymentLine(order) {
   if (order.customerPaymentStatus === "confirmed") return "✅ Paid — escrow held";
   if (order.customerPaymentStatus === "claimed") return "⏳ Payment verifying";
   if (order.paymentStatus === "processing") return "📱 STK sent — enter PIN";
+  if (order.paymentStatus === "payment_expired" || order.status === "payment_expired") {
+    return "⌛ STK expired — reply *pay* to retry";
+  }
   return "💳 Pay upfront (escrow)";
 }
 
@@ -226,4 +230,45 @@ export function checkoutMeta() {
       ? "M-Pesa STK auto-confirms payment via webhook — no admin #payconfirm needed."
       : "STK env not configured — buyers retry STK or reply paid on WhatsApp.",
   };
+}
+
+/**
+ * Expire STK pushes with no successful callback within 180s.
+ * Marks PAYMENT_EXPIRED. Inventory was never hard-locked until pay succeeded.
+ */
+export function expireStaleStkPayments({ olderThanMs = null, limit = 40 } = {}) {
+  const ttl = olderThanMs != null ? Number(olderThanMs) : STK_TIMEOUT_MS;
+  const now = Date.now();
+  let expired = 0;
+
+  const candidates = listAllOrders()
+    .filter((o) => {
+      if (o.customerPaymentStatus === "confirmed") return false;
+      if (o.paymentStatus === "payment_expired" || o.status === "payment_expired") return false;
+      if (o.status === "cancelled" || o.status === "delivered") return false;
+      if (o.paymentStatus !== "processing") return false;
+      const sentAt = Number(o.stkSentAt || 0);
+      if (!sentAt) return false;
+      return now - sentAt >= ttl;
+    })
+    .slice(0, Math.min(Math.max(Number(limit) || 40, 1), 100));
+
+  for (const o of candidates) {
+    updateOrderMeta(o.id, {
+      paymentStatus: "payment_expired",
+      stkExpiredAt: now,
+      lastPaymentError: "STK timeout — no successful callback within 180s",
+      inventoryUnlocked: true,
+    });
+    try {
+      updateOrderStatus(o.id, "payment_expired");
+    } catch {
+      /* some environments only allow a fixed status set — meta is enough */
+    }
+    expired += 1;
+    console.log(
+      `[checkout] STK expired ${o.id} after ${Math.round((now - Number(o.stkSentAt)) / 1000)}s`
+    );
+  }
+  return { expired };
 }
