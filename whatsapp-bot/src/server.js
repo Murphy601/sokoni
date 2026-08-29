@@ -425,12 +425,23 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
 function startBodaDisputeWindowScheduler() {
   const tick = () => {
     import("./services/boda-fleet.js")
-      .then(({ processBodaDisputeWindows }) => processBodaDisputeWindows())
-      .catch((err) => console.warn("[boda-fleet] dispute window tick:", err.message));
+      .then(
+        ({
+          processBodaDisputeWindows,
+          processBodaOfferTimeouts,
+          applyLatePickupPenalties,
+        }) =>
+          Promise.all([
+            processBodaDisputeWindows(),
+            processBodaOfferTimeouts(),
+            applyLatePickupPenalties(),
+          ])
+      )
+      .catch((err) => console.warn("[boda-fleet] dispute/offer window tick:", err.message));
   };
   tick();
   setInterval(tick, 2 * 60 * 1000);
-  console.log("✓ Boda HOLD_ESCROW scheduler enabled (every 2 min)");
+  console.log("✓ Boda HOLD_ESCROW + dispatch offer scheduler enabled (every 2 min)");
 }
 
 /** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */

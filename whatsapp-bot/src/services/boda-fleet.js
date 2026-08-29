@@ -19,6 +19,14 @@ import {
   extractMpesaDisplayName,
   namesLikelyMatch,
 } from "../lib/mpesa-name-match.js";
+import {
+  rankRidersByDispatchScore,
+  OFFER_TIMEOUT_MS,
+  LATE_PICKUP_PENALTY,
+  CANCEL_JOB_PENALTY,
+  LATE_PICKUP_MINUTES,
+  clampRiderRating,
+} from "../lib/dispatch-matcher.js";
 
 /** Unique-violation Postgres code (phone / national_id / plate). */
 const PG_UNIQUE = "23505";
@@ -116,6 +124,9 @@ function mapRider(row) {
     lastLat: row.last_lat != null ? Number(row.last_lat) : null,
     lastLng: row.last_lng != null ? Number(row.last_lng) : null,
     lastLocationAt: row.last_location_at || null,
+    acceptanceRate: row.acceptance_rate != null ? Number(row.acceptance_rate) : 70,
+    offersSent: row.offers_sent != null ? Number(row.offers_sent) : 0,
+    offersAccepted: row.offers_accepted != null ? Number(row.offers_accepted) : 0,
     suspendReason: row.suspend_reason || null,
     docs: {
       nationalIdFrontUrl: row.national_id_front_url || null,
@@ -415,7 +426,9 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "" 
           `Zone: *${rider.operatingTown}*\n` +
           `You're marked AVAILABLE for jobs.\n\n` +
           `Commands:\n` +
-          `• *ACCEPT SKN-####* — claim a job\n` +
+          `• *ACCEPT SKN-####* — claim a job offer\n` +
+          `• *DECLINE SKN-####* — skip; next rider gets pinged\n` +
+          `• *CANCEL JOB SKN-####* — drop after accept (−0.5 ★)\n` +
           `• *SET ZONE NAIROBI* or *THIKA*\n` +
           `• *OFFLINE* / *AVAILABLE*`
       );
@@ -457,57 +470,64 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
   return { ok: true, riders: rows.map(mapRider) };
 }
 
+/**
+ * Available = VERIFIED + online + zero active custody jobs.
+ */
 async function listAvailableRiders(zone) {
   const z = normalizeBodaZone(zone);
   if (!z) return [];
   try {
-    await query(`
-      ALTER TABLE riders
-        ADD COLUMN IF NOT EXISTS last_lat DOUBLE PRECISION,
-        ADD COLUMN IF NOT EXISTS last_lng DOUBLE PRECISION,
-        ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ
-    `);
+    await ensurePinColumns();
   } catch {
     /* ignore */
   }
   const { rows } = await query(
-    `SELECT * FROM riders
-      WHERE operating_town = $1
-        AND verification_status = 'VERIFIED'
-        AND is_available = TRUE
-      ORDER BY rating DESC, id ASC
+    `SELECT r.*
+       FROM riders r
+      WHERE r.operating_town = $1
+        AND r.verification_status = 'VERIFIED'
+        AND r.is_available = TRUE
+        AND NOT EXISTS (
+          SELECT 1 FROM delivery_dispatches d
+           WHERE d.rider_id = r.id
+             AND d.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT')
+        )
+      ORDER BY r.rating DESC, r.id ASC
       LIMIT $2`,
-    [z, BROADCAST_LIMIT]
+    [z, Math.max(BROADCAST_LIMIT, 20)]
   );
   return rows.map(mapRider);
 }
 
 /**
- * Rank riders by distance to pickup (last GPS / stage), then rating.
+ * Rank not-busy riders by radius tier + dispatch score (distance, rating, acceptance).
  */
 async function rankRidersNearPickup(zone, pickupCoords) {
   const riders = await listAvailableRiders(zone);
   if (!riders.length) return [];
-  if (!pickupCoords) {
-    return riders.map((r) => ({ ...r, distanceM: null, pinRank: 0 }));
-  }
 
-  const ranked = [];
+  const withDist = [];
   for (const r of riders) {
     let coords = parseCoordPair(r.lastLat, r.lastLng);
     if (!coords && r.stageLocation) {
       coords = await geocodeKenyaAddress(`${r.stageLocation}, ${r.operatingTown}, Kenya`);
     }
-    const distanceM = coords
-      ? haversineMeters(coords.lat, coords.lng, pickupCoords.lat, pickupCoords.lng)
-      : null;
-    ranked.push({ ...r, distanceM, pinRank: distanceM == null ? 1e12 : distanceM });
+    const distanceM =
+      pickupCoords && coords
+        ? haversineMeters(coords.lat, coords.lng, pickupCoords.lat, pickupCoords.lng)
+        : null;
+    withDist.push({
+      ...r,
+      distanceM,
+      acceptanceRate: r.acceptanceRate,
+    });
   }
-  ranked.sort((a, b) => {
-    if (a.pinRank !== b.pinRank) return a.pinRank - b.pinRank;
-    return (b.rating || 0) - (a.rating || 0);
-  });
-  return ranked;
+
+  if (!pickupCoords) {
+    // No GPS — score by rating + acceptance only (unknown distance treated as Tier2 edge).
+    return rankRidersByDispatchScore(withDist);
+  }
+  return rankRidersByDispatchScore(withDist);
 }
 
 function zoneFromOrder(order) {
@@ -522,18 +542,95 @@ async function ensurePinColumns() {
       ADD COLUMN IF NOT EXISTS pinned_rider_id INT,
       ADD COLUMN IF NOT EXISTS pin_offered_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS dispatch_source VARCHAR(40) DEFAULT 'platform',
-      ADD COLUMN IF NOT EXISTS backup_pinged_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS backup_pinged_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS offer_index INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS offer_expires_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS offer_queue INT[] DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS late_pickup_penalized BOOLEAN NOT NULL DEFAULT FALSE
   `);
   await query(`
     ALTER TABLE riders
       ADD COLUMN IF NOT EXISTS last_lat DOUBLE PRECISION,
       ADD COLUMN IF NOT EXISTS last_lng DOUBLE PRECISION,
-      ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS last_location_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS offers_sent INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS offers_accepted INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS acceptance_rate NUMERIC(5, 2) NOT NULL DEFAULT 70.00,
+      ADD COLUMN IF NOT EXISTS rating_events JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
 }
 
+async function recordOfferSent(riderId) {
+  await query(
+    `UPDATE riders SET
+       offers_sent = COALESCE(offers_sent, 0) + 1,
+       acceptance_rate = CASE
+         WHEN COALESCE(offers_sent, 0) + 1 <= 0 THEN acceptance_rate
+         ELSE ROUND((COALESCE(offers_accepted, 0)::numeric * 100) / (COALESCE(offers_sent, 0) + 1), 2)
+       END,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [riderId]
+  );
+}
+
+async function recordOfferAccepted(riderId) {
+  await query(
+    `UPDATE riders SET
+       offers_accepted = COALESCE(offers_accepted, 0) + 1,
+       acceptance_rate = CASE
+         WHEN COALESCE(offers_sent, 0) < 1 THEN 100
+         ELSE ROUND(((COALESCE(offers_accepted, 0) + 1)::numeric * 100) / GREATEST(COALESCE(offers_sent, 0), 1), 2)
+       END,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [riderId]
+  );
+}
+
+export async function adjustRiderRating(riderId, delta, reason = "") {
+  const id = Number(riderId);
+  if (!Number.isInteger(id) || id < 1) return { ok: false };
+  const { rows } = await query(`SELECT rating, rating_events FROM riders WHERE id = $1 LIMIT 1`, [id]);
+  if (!rows[0]) return { ok: false };
+  const next = clampRiderRating(Number(rows[0].rating || 5) + Number(delta));
+  const events = Array.isArray(rows[0].rating_events) ? rows[0].rating_events : [];
+  events.push({
+    at: new Date().toISOString(),
+    delta: Number(delta),
+    reason: String(reason || "").slice(0, 120),
+    ratingAfter: next,
+  });
+  await query(
+    `UPDATE riders SET rating = $2, rating_events = $3::jsonb, updated_at = NOW() WHERE id = $1`,
+    [id, next, JSON.stringify(events.slice(-40))]
+  );
+  return { ok: true, rating: next };
+}
+
+async function sendJobOfferToRider(rider, dispatchRow, { offerIndex = 0, queueLen = 1 } = {}) {
+  const { sendText } = await import("./whatsapp.js");
+  const id = dispatchRow.order_ref;
+  const fee = Number(dispatchRow.delivery_fee_kes || 0);
+  const distLabel =
+    rider.distanceM != null ? `~${Math.round(rider.distanceM / 100) / 10} km away` : "nearby";
+  const scoreLabel =
+    rider.dispatchScore != null ? ` · score ${rider.dispatchScore}` : "";
+  const pinMsg =
+    `🛵 *Sokoni delivery offer (${offerIndex + 1}/${queueLen})*\n\n` +
+    `Order *${id}*\n` +
+    `You: ${distLabel}${scoreLabel} · ★ ${Number(rider.rating || 5).toFixed(1)}\n` +
+    `Pickup: ${dispatchRow.pickup_address}\n` +
+    `Drop-off: ${dispatchRow.delivery_address}\n` +
+    (fee > 0 ? `Delivery fee: *KES ${fee.toLocaleString()}*\n` : "") +
+    `\nReply *ACCEPT ${id}* within *45 seconds*.\n` +
+    `Busy? Reply *DECLINE ${id}* — Sokoni will offer the next rider.`;
+  await sendText(`${rider.phone}@c.us`, pinMsg);
+  await recordOfferSent(rider.id);
+}
+
 /**
- * Platform-owned dispatch: Sokoni pins nearest rider and offers the job.
+ * Platform-owned dispatch: Sokoni pins highest-scoring rider in radius.
  * Sellers do not choose riders.
  */
 export async function createPlatformBodaDispatch({
@@ -618,9 +715,20 @@ export async function createPlatformBodaDispatch({
 
   const ranked = await rankRidersNearPickup(town, pickupCoords || dropCoords);
   if (!ranked.length) {
+    try {
+      const { notifyAdminEvent } = await import("./communication-hub.js");
+      await notifyAdminEvent("DISPUTE_OR_HELP", {
+        orderId: id,
+        details:
+          `⚠️ *NO RIDERS IN RADIUS*\nOrder *${id}* zone ${town}.\n` +
+          `No verified available riders within 7 km (or none online).`,
+      });
+    } catch {
+      /* ignore */
+    }
     return {
       error: "no_riders",
-      message: `No verified available Sokoni riders in ${town} right now.`,
+      message: `No verified available Sokoni riders within 7 km of pickup (${town}).`,
     };
   }
 
@@ -633,15 +741,15 @@ export async function createPlatformBodaDispatch({
 
   const primary = ranked[0];
   const riderIds = ranked.map((r) => r.id);
-  const distLabel =
-    primary.distanceM != null ? `~${Math.round(primary.distanceM / 100) / 10} km away` : "nearby";
+  const expires = new Date(Date.now() + OFFER_TIMEOUT_MS);
 
   const { rows } = await query(
     `INSERT INTO delivery_dispatches (
        order_ref, seller_phone, pickup_address, delivery_address,
        delivery_fee_kes, operating_town, status, broadcast_rider_ids, meta,
-       dropoff_lat, dropoff_lng, pinned_rider_id, pin_offered_at, dispatch_source
-     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb, $9, $10, $11, NOW(), $12)
+       dropoff_lat, dropoff_lng, pinned_rider_id, pin_offered_at, dispatch_source,
+       offer_index, offer_expires_at, offer_queue
+     ) VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED',$7::int[], $8::jsonb, $9, $10, $11, NOW(), $12, 0, $13, $7::int[])
      RETURNING *`,
     [
       id,
@@ -658,44 +766,38 @@ export async function createPlatformBodaDispatch({
         pickupGeocoded: Boolean(pickupCoords),
         pinnedRiderName: primary.fullName,
         pinnedDistanceM: primary.distanceM,
+        pinnedScore: primary.dispatchScore,
+        pinnedTier: primary.tier,
         platformPin: true,
         rankedRiderIds: riderIds,
+        rankedScores: ranked.map((r) => ({
+          id: r.id,
+          score: r.dispatchScore,
+          tier: r.tier,
+          distanceM: r.distanceM,
+        })),
       }),
       dropCoords?.lat ?? null,
       dropCoords?.lng ?? null,
       primary.id,
       String(source || "platform").slice(0, 40),
+      expires.toISOString(),
     ]
   );
   const dispatch = mapDispatch(rows[0]);
 
-  const { sendText } = await import("./whatsapp.js");
-  const feeLine = fee > 0 ? `Delivery fee: *KES ${fee.toLocaleString()}*\n` : "";
-  const pinMsg =
-    `🛵 *Sokoni pinned you for a delivery*\n\n` +
-    `Order *${id}*\n` +
-    `You are ${distLabel} · rating ${Number(primary.rating || 5).toFixed(1)}\n` +
-    `Pickup: ${pickup}\n` +
-    `Drop-off: ${drop}\n` +
-    feeLine +
-    `\nReply *ACCEPT ${id}* within a few minutes to take the job.\n` +
-    `If you are busy, ignore — Sokoni will offer the next rider.`;
-
   try {
-    await sendText(`${primary.phone}@c.us`, pinMsg);
+    await sendJobOfferToRider(primary, rows[0], { offerIndex: 0, queueLen: ranked.length });
   } catch (err) {
     console.warn("[boda-fleet] pin ping failed:", primary.phone, err.message);
   }
 
-  // Escalate to backups shortly if still REQUESTED (non-blocking).
-  const backupIds = riderIds.slice(1, 4);
-  if (backupIds.length) {
-    setTimeout(() => {
-      escalateBodaPinBackups(rows[0].id).catch((err) =>
-        console.warn("[boda-fleet] backup escalate:", err.message)
-      );
-    }, 45 * 1000);
-  }
+  // Sequential 45s escalate if still REQUESTED
+  setTimeout(() => {
+    advanceBodaOfferQueue(rows[0].id).catch((err) =>
+      console.warn("[boda-fleet] offer advance:", err.message)
+    );
+  }, OFFER_TIMEOUT_MS);
 
   updateOrderMeta(id, {
     bodaDispatchId: dispatch.id,
@@ -708,7 +810,6 @@ export async function createPlatformBodaDispatch({
     requiresRider: true,
   });
 
-  // Seller: prepare item — do not pick a rider
   if (sellerPhone || order.supplierId) {
     try {
       const { getSupplier } = await import("./suppliers.js");
@@ -732,7 +833,8 @@ export async function createPlatformBodaDispatch({
   }
 
   console.log(
-    `[boda-fleet] PLATFORM PIN ${id} zone=${town} rider=#${primary.id} ${primary.fullName} dist=${primary.distanceM ?? "—"}`
+    `[boda-fleet] PLATFORM PIN ${id} zone=${town} rider=#${primary.id} ${primary.fullName} ` +
+      `tier=${primary.tier} score=${primary.dispatchScore} dist=${primary.distanceM ?? "—"}`
   );
   return {
     ok: true,
@@ -742,9 +844,11 @@ export async function createPlatformBodaDispatch({
       fullName: primary.fullName,
       distanceM: primary.distanceM,
       rating: primary.rating,
+      tier: primary.tier,
+      dispatchScore: primary.dispatchScore,
     },
     ridersAvailable: ranked.length,
-    message: `Sokoni pinned ${primary.fullName} for *${id}*.`,
+    message: `Sokoni pinned ${primary.fullName} for *${id}* (${primary.tier}, score ${primary.dispatchScore}).`,
   };
 }
 
@@ -788,57 +892,247 @@ export async function autoDispatchBodaForOrder(orderId) {
   });
 }
 
-/** If pinned rider did not ACCEPT, offer backups (proximity-ranked). */
-export async function escalateBodaPinBackups(dispatchId) {
+/**
+ * Sequential 45s offer loop: move to next scored rider if current pin timed out / declined.
+ */
+export async function advanceBodaOfferQueue(dispatchId, { reason = "timeout" } = {}) {
   if (!isDbEnabled()) return { skipped: true };
   const id = Number(dispatchId);
   if (!Number.isInteger(id) || id < 1) return { skipped: true };
+
+  try {
+    await ensurePinColumns();
+  } catch {
+    /* ignore */
+  }
 
   const { rows } = await query(
     `SELECT * FROM delivery_dispatches WHERE id = $1 AND status = 'REQUESTED' LIMIT 1`,
     [id]
   );
   const d = rows[0];
-  if (!d || d.backup_pinged_at) return { skipped: true, reason: "already_escalated_or_gone" };
+  if (!d) return { skipped: true, reason: "not_open" };
 
-  const rankedIds = Array.isArray(d.meta?.rankedRiderIds)
-    ? d.meta.rankedRiderIds.map(Number)
-    : Array.isArray(d.broadcast_rider_ids)
-      ? d.broadcast_rider_ids.map(Number)
-      : [];
-  const backups = rankedIds.filter((rid) => rid && rid !== Number(d.pinned_rider_id)).slice(0, 3);
-  if (!backups.length) {
-    await query(`UPDATE delivery_dispatches SET backup_pinged_at = NOW() WHERE id = $1`, [id]);
-    return { ok: true, pinged: 0 };
+  const queue = (
+    Array.isArray(d.offer_queue) && d.offer_queue.length
+      ? d.offer_queue
+      : Array.isArray(d.broadcast_rider_ids)
+        ? d.broadcast_rider_ids
+        : Array.isArray(d.meta?.rankedRiderIds)
+          ? d.meta.rankedRiderIds
+          : []
+  )
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  let nextIndex = Number(d.offer_index || 0) + 1;
+  let nextRider = null;
+
+  while (nextIndex < queue.length) {
+    const candidateId = queue[nextIndex];
+    const { rows: rrows } = await query(
+      `SELECT r.*
+         FROM riders r
+        WHERE r.id = $1
+          AND r.verification_status = 'VERIFIED'
+          AND r.is_available = TRUE
+          AND NOT EXISTS (
+            SELECT 1 FROM delivery_dispatches x
+             WHERE x.rider_id = r.id
+               AND x.status IN ('ACCEPTED', 'PICKED_UP', 'OTP_SENT')
+          )
+        LIMIT 1`,
+      [candidateId]
+    );
+    if (rrows[0]) {
+      nextRider = mapRider(rrows[0]);
+      // Attach score meta from dispatch if present
+      const scored = (d.meta?.rankedScores || []).find((s) => Number(s.id) === candidateId);
+      if (scored) {
+        nextRider.distanceM = scored.distanceM ?? null;
+        nextRider.dispatchScore = scored.score ?? null;
+        nextRider.tier = scored.tier || null;
+      }
+      break;
+    }
+    nextIndex += 1;
   }
 
-  const { rows: riders } = await query(
-    `SELECT id, phone, full_name FROM riders WHERE id = ANY($1::int[]) AND is_available = TRUE`,
-    [backups]
-  );
-  const { sendText } = await import("./whatsapp.js");
-  const fee = Number(d.delivery_fee_kes || 0);
-  const blast =
-    `🛵 *Sokoni delivery still open*\n` +
-    `Order *${d.order_ref}*\n` +
-    `Pickup: ${d.pickup_address}\n` +
-    `Drop-off: ${d.delivery_address}\n` +
-    (fee > 0 ? `Fee: KES ${fee.toLocaleString()}\n` : "") +
-    `\nReply *ACCEPT ${d.order_ref}* to claim (first ACCEPT wins).`;
-
-  let pinged = 0;
-  for (const r of riders) {
+  if (!nextRider) {
+    await query(
+      `UPDATE delivery_dispatches SET backup_pinged_at = NOW(), offer_expires_at = NULL, updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
     try {
-      await sendText(`${r.phone}@c.us`, blast);
-      pinged += 1;
+      const { notifyAdminEvent } = await import("./communication-hub.js");
+      await notifyAdminEvent("DISPUTE_OR_HELP", {
+        orderId: d.order_ref,
+        details:
+          `⚠️ *DISPATCH QUEUE EXHAUSTED*\nOrder *${d.order_ref}* — no rider accepted (${reason}).\n` +
+          `Ops: rebroadcast or assign manually.`,
+      });
+    } catch {
+      /* ignore */
+    }
+    console.warn(`[boda-fleet] offer queue exhausted for ${d.order_ref} (${reason})`);
+    return { ok: true, exhausted: true, pinged: 0 };
+  }
+
+  const expires = new Date(Date.now() + OFFER_TIMEOUT_MS);
+  await query(
+    `UPDATE delivery_dispatches SET
+       pinned_rider_id = $2,
+       pin_offered_at = NOW(),
+       offer_index = $3,
+       offer_expires_at = $4,
+       offer_queue = $5::int[],
+       meta = COALESCE(meta, '{}'::jsonb) || $6::jsonb,
+       updated_at = NOW()
+     WHERE id = $1 AND status = 'REQUESTED'`,
+    [
+      id,
+      nextRider.id,
+      nextIndex,
+      expires.toISOString(),
+      queue,
+      JSON.stringify({
+        pinnedRiderName: nextRider.fullName,
+        pinnedDistanceM: nextRider.distanceM ?? null,
+        pinnedScore: nextRider.dispatchScore ?? null,
+        pinnedTier: nextRider.tier || null,
+        lastOfferAdvance: reason,
+      }),
+    ]
+  );
+
+  try {
+    await sendJobOfferToRider(nextRider, d, { offerIndex: nextIndex, queueLen: queue.length });
+  } catch (err) {
+    console.warn("[boda-fleet] next offer ping:", nextRider.phone, err.message);
+  }
+
+  setTimeout(() => {
+    advanceBodaOfferQueue(id).catch((err) =>
+      console.warn("[boda-fleet] offer advance:", err.message)
+    );
+  }, OFFER_TIMEOUT_MS);
+
+  updateOrderMeta(d.order_ref, {
+    bodaPinnedRiderId: nextRider.id,
+    bodaPinnedRiderName: nextRider.fullName,
+    bodaStatus: "REQUESTED",
+  });
+
+  console.log(
+    `[boda-fleet] OFFER ADVANCE ${d.order_ref} → rider=#${nextRider.id} idx=${nextIndex} (${reason})`
+  );
+  return { ok: true, pinged: 1, riderId: nextRider.id, offerIndex: nextIndex };
+}
+
+/** @deprecated Prefer advanceBodaOfferQueue — kept for older call sites. */
+export async function escalateBodaPinBackups(dispatchId) {
+  return advanceBodaOfferQueue(dispatchId, { reason: "escalate_alias" });
+}
+
+/** Cron: advance any REQUESTED offers whose 45s window expired. */
+export async function processBodaOfferTimeouts({ limit = 25 } = {}) {
+  if (!isDbEnabled()) return { processed: 0 };
+  try {
+    await ensurePinColumns();
+  } catch {
+    return { processed: 0 };
+  }
+  const { rows } = await query(
+    `SELECT id FROM delivery_dispatches
+      WHERE status = 'REQUESTED'
+        AND offer_expires_at IS NOT NULL
+        AND offer_expires_at < NOW()
+      ORDER BY offer_expires_at ASC
+      LIMIT $1`,
+    [Math.min(Math.max(Number(limit) || 25, 1), 80)]
+  );
+  let processed = 0;
+  for (const row of rows) {
+    try {
+      await advanceBodaOfferQueue(row.id, { reason: "timeout" });
+      processed += 1;
     } catch (err) {
-      console.warn("[boda-fleet] backup ping:", r.phone, err.message);
+      console.warn("[boda-fleet] offer timeout tick:", err.message);
     }
   }
-  await query(`UPDATE delivery_dispatches SET backup_pinged_at = NOW(), updated_at = NOW() WHERE id = $1`, [
-    id,
-  ]);
-  return { ok: true, pinged };
+  return { processed };
+}
+
+/**
+ * Late pickup penalty: ACCEPTED > 30 min without pickup / seller OTP → −0.2 stars once.
+ */
+export async function applyLatePickupPenalties({ limit = 40 } = {}) {
+  if (!isDbEnabled()) return { penalized: 0 };
+  try {
+    await ensurePinColumns();
+  } catch {
+    return { penalized: 0 };
+  }
+  const { rows } = await query(
+    `SELECT id, rider_id, order_ref
+       FROM delivery_dispatches
+      WHERE status = 'ACCEPTED'
+        AND rider_id IS NOT NULL
+        AND COALESCE(late_pickup_penalized, FALSE) = FALSE
+        AND accepted_at IS NOT NULL
+        AND accepted_at < NOW() - ($1::int * INTERVAL '1 minute')
+        AND picked_up_at IS NULL
+      ORDER BY accepted_at ASC
+      LIMIT $2`,
+    [LATE_PICKUP_MINUTES, Math.min(Math.max(Number(limit) || 40, 1), 100)]
+  );
+  let penalized = 0;
+  for (const row of rows) {
+    try {
+      await adjustRiderRating(row.rider_id, -LATE_PICKUP_PENALTY, `late_pickup:${row.order_ref}`);
+      await query(
+        `UPDATE delivery_dispatches SET late_pickup_penalized = TRUE, updated_at = NOW() WHERE id = $1`,
+        [row.id]
+      );
+      penalized += 1;
+    } catch (err) {
+      console.warn("[boda-fleet] late pickup penalty:", err.message);
+    }
+  }
+  return { penalized };
+}
+
+/**
+ * Blend buyer 1–5 stars into the assigned rider's dynamic quality score.
+ */
+export async function applyBuyerRiderRating(orderId, stars) {
+  const id = normalizeOrderId(orderId);
+  const rating = Number(stars);
+  if (!id || !Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return { ok: false };
+  }
+  if (!isDbEnabled()) return { ok: false, skipped: true };
+
+  const order = getOrder(id);
+  let riderId = order?.bodaRiderId != null ? Number(order.bodaRiderId) : null;
+  if (!riderId) {
+    const { rows } = await query(
+      `SELECT rider_id FROM delivery_dispatches
+        WHERE UPPER(order_ref) = UPPER($1) AND rider_id IS NOT NULL
+        ORDER BY id DESC LIMIT 1`,
+      [id]
+    );
+    riderId = rows[0]?.rider_id != null ? Number(rows[0].rider_id) : null;
+  }
+  if (!riderId) return { ok: false, reason: "no_rider" };
+
+  const { rows: rrows } = await query(`SELECT rating FROM riders WHERE id = $1 LIMIT 1`, [riderId]);
+  if (!rrows[0]) return { ok: false };
+  const prev = Number(rrows[0].rating || 5);
+  const next = clampRiderRating(prev * 0.7 + rating * 0.3);
+  const delta = Math.round((next - prev) * 10) / 10;
+  await adjustRiderRating(riderId, delta, `buyer_stars:${id}:${rating}`);
+  return { ok: true, riderId, rating: next, stars: rating };
 }
 
 /**
@@ -1010,6 +1304,16 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     };
   }
 
+  // Only the currently offered (pinned) rider may accept — sequential radius engine.
+  const pinnedId = row.pinned_rider_id != null ? Number(row.pinned_rider_id) : null;
+  if (pinnedId && pinnedId !== rider.id) {
+    return {
+      error: "not_your_offer",
+      message:
+        `*${id}* is currently offered to another rider. Sokoni will ping you if they decline or time out.`,
+    };
+  }
+
   try {
     await ensureOtpSafeguardColumns();
   } catch (err) {
@@ -1026,6 +1330,7 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
        custody_status = 'ASSIGNED',
        pickup_otp_hash = $3,
        pickup_otp_sent_at = NOW(),
+       offer_expires_at = NULL,
        updated_at = NOW()
      WHERE id = $1 AND status = 'REQUESTED'
      RETURNING *`,
@@ -1033,6 +1338,12 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
   );
   if (!updated[0]) {
     return { error: "taken", message: `*${id}* was claimed by another rider just now.` };
+  }
+
+  try {
+    await recordOfferAccepted(rider.id);
+  } catch (err) {
+    console.warn("[boda-fleet] offer accepted stats:", err.message);
   }
 
   await query(
@@ -1120,11 +1431,19 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
   }
 
 
-  // Tell other broadcast riders the job is taken.
-  const broadcastIds = Array.isArray(updated[0].broadcast_rider_ids)
-    ? updated[0].broadcast_rider_ids.map(Number).filter(Boolean)
-    : [];
-  for (const otherId of broadcastIds) {
+  // Tell other riders who already received an offer that the job is taken.
+  const offerIdx = Number(updated[0].offer_index || 0);
+  const queueIds = (
+    Array.isArray(updated[0].offer_queue) && updated[0].offer_queue.length
+      ? updated[0].offer_queue
+      : Array.isArray(updated[0].broadcast_rider_ids)
+        ? updated[0].broadcast_rider_ids
+        : []
+  )
+    .map(Number)
+    .filter(Boolean);
+  const alreadyOffered = queueIds.slice(0, offerIdx + 1);
+  for (const otherId of alreadyOffered) {
     if (otherId === rider.id) continue;
     try {
       const { rows: others } = await query(`SELECT phone FROM riders WHERE id = $1 LIMIT 1`, [otherId]);
@@ -1144,6 +1463,140 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     dispatch: mapDispatch(updated[0]),
     rider,
     message: riderMsg,
+  };
+}
+
+/**
+ * Rider WhatsApp: DECLINE SKN-#### — skip this offer; engine pings next ranked rider.
+ */
+export async function declineBodaDispatch({ orderId, phone, customerKey = "" } = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured", message: "Database offline." };
+  const id = normalizeOrderId(orderId);
+  const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
+  if (!id || !riderPhone) {
+    return { error: "invalid", message: "Reply like: DECLINE SKN-1234" };
+  }
+
+  const { rows: riderRows } = await query(`SELECT * FROM riders WHERE phone = $1 LIMIT 1`, [riderPhone]);
+  const rider = mapRider(riderRows[0]);
+  if (!rider) {
+    return { error: "not_a_rider", message: "This WhatsApp is not a registered Sokoni boda rider." };
+  }
+
+  const { rows: dispRows } = await query(
+    `SELECT * FROM delivery_dispatches
+      WHERE UPPER(order_ref) = UPPER($1)
+        AND status = 'REQUESTED'
+      ORDER BY id DESC
+      LIMIT 1`,
+    [id]
+  );
+  const row = dispRows[0];
+  if (!row) {
+    return { error: "not_found", message: `No open offer for *${id}*.` };
+  }
+  const pinnedId = row.pinned_rider_id != null ? Number(row.pinned_rider_id) : null;
+  if (pinnedId && pinnedId !== rider.id) {
+    return {
+      error: "not_your_offer",
+      message: `*${id}* is not currently offered to you.`,
+    };
+  }
+
+  await advanceBodaOfferQueue(row.id, { reason: "declined" });
+  return {
+    ok: true,
+    message: `Declined *${id}*. Sokoni is offering the next rider. Reply *AVAILABLE* to stay in the pool.`,
+  };
+}
+
+/**
+ * Rider: CANCEL JOB SKN-#### after ACCEPT — −0.5 stars, re-offer to next riders.
+ */
+export async function cancelAcceptedBodaJob({ orderId, phone, customerKey = "" } = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured", message: "Database offline." };
+  const id = normalizeOrderId(orderId);
+  const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
+  if (!id || !riderPhone) {
+    return { error: "invalid", message: "Reply like: CANCEL JOB SKN-1234" };
+  }
+
+  const { rows: riderRows } = await query(`SELECT * FROM riders WHERE phone = $1 LIMIT 1`, [riderPhone]);
+  const rider = mapRider(riderRows[0]);
+  if (!rider) {
+    return { error: "not_a_rider", message: "This WhatsApp is not a registered Sokoni boda rider." };
+  }
+
+  const { rows: dispRows } = await query(
+    `SELECT * FROM delivery_dispatches
+      WHERE UPPER(order_ref) = UPPER($1)
+        AND rider_id = $2
+        AND status = 'ACCEPTED'
+      ORDER BY id DESC
+      LIMIT 1`,
+    [id, rider.id]
+  );
+  const row = dispRows[0];
+  if (!row) {
+    return {
+      error: "not_found",
+      message: `No accepted job *${id}* to cancel (pickup already done cannot be dropped this way).`,
+    };
+  }
+
+  await adjustRiderRating(rider.id, -CANCEL_JOB_PENALTY, `cancel_job:${id}`);
+
+  const queue = (
+    Array.isArray(row.offer_queue) && row.offer_queue.length
+      ? row.offer_queue
+      : Array.isArray(row.broadcast_rider_ids)
+        ? row.broadcast_rider_ids
+        : []
+  )
+    .map(Number)
+    .filter((n) => n && n !== rider.id);
+
+  const expires = new Date(Date.now() + OFFER_TIMEOUT_MS);
+  await query(
+    `UPDATE delivery_dispatches SET
+       rider_id = NULL,
+       status = 'REQUESTED',
+       accepted_at = NULL,
+       custody_status = NULL,
+       pickup_otp_hash = NULL,
+       pickup_otp_sent_at = NULL,
+       pinned_rider_id = NULL,
+       offer_index = -1,
+       offer_expires_at = $2,
+       offer_queue = $3::int[],
+       broadcast_rider_ids = $3::int[],
+       updated_at = NOW(),
+       meta = COALESCE(meta, '{}'::jsonb) || $4::jsonb
+     WHERE id = $1`,
+    [
+      row.id,
+      expires.toISOString(),
+      queue,
+      JSON.stringify({ lastCancelByRiderId: rider.id, lastCancelAt: new Date().toISOString() }),
+    ]
+  );
+
+  await query(`UPDATE riders SET is_available = TRUE, updated_at = NOW() WHERE id = $1`, [rider.id]);
+
+  updateOrderMeta(id, {
+    bodaStatus: "REQUESTED",
+    bodaRiderId: null,
+    riderName: null,
+    riderPhone: null,
+  });
+
+  await advanceBodaOfferQueue(row.id, { reason: "rider_cancel" });
+
+  return {
+    ok: true,
+    message:
+      `Job *${id}* cancelled. Rating −${CANCEL_JOB_PENALTY} (accept-then-cancel).\n` +
+      `Sokoni is offering the next rider. Stay AVAILABLE for future jobs.`,
   };
 }
 
@@ -2714,6 +3167,28 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
     return true;
   }
 
+  const decline = trimmed.match(/^DECLINE\s+(SKN?-?\d{1,6}(?:-\d+)?)\b/i);
+  if (decline) {
+    const result = await declineBodaDispatch({
+      orderId: decline[1],
+      phone,
+      customerKey,
+    });
+    await sendText(customerKey, result.message || result.error || "Could not decline.");
+    return true;
+  }
+
+  const cancelJob = trimmed.match(/^CANCEL\s+JOB\s+(SKN?-?\d{1,6}(?:-\d+)?)\b/i);
+  if (cancelJob) {
+    const result = await cancelAcceptedBodaJob({
+      orderId: cancelJob[1],
+      phone,
+      customerKey,
+    });
+    await sendText(customerKey, result.message || result.error || "Could not cancel job.");
+    return true;
+  }
+
   const setZone = trimmed.match(/^SET\s+ZONE\s+(\w+)\b/i);
   if (setZone) {
     const result = await setRiderOperatingZone({ phone, customerKey, zone: setZone[1] });
@@ -3092,6 +3567,8 @@ export function bodaSupportSummary() {
     zones: [...ZONES],
     commands: [
       "ACCEPT SKN-####",
+      "DECLINE SKN-####",
+      "CANCEL JOB SKN-#### (after accept → −0.5 rating)",
       "SET ZONE NAIROBI|THIKA",
       "AVAILABLE / OFFLINE",
       "PICKUP SKN-#### 1234 (seller OTP)",
@@ -3102,6 +3579,12 @@ export function bodaSupportSummary() {
       "DELIVERED SKN-####",
       "CODE 1234",
     ],
+    dispatchEngine: {
+      tier1Km: 3,
+      tier2Km: 7,
+      offerTimeoutSec: 45,
+      score: "(Rating×40) − (DistanceKm×20) + (AcceptanceRate%×0.4)",
+    },
     payoutGuards: {
       minFloorKes: RIDER_B2C_MIN_FLOOR_KES,
       singleFeeManualKes: RIDER_SINGLE_FEE_MANUAL_KES,
