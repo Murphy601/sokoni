@@ -964,6 +964,13 @@ async function ensureRiderPayoutsTable() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_rider_payouts_order_rider
       ON rider_payouts (UPPER(order_ref), rider_id)
   `);
+  await query(`
+    ALTER TABLE rider_payouts
+      ADD COLUMN IF NOT EXISTS b2c_conversation_id VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS b2c_originator_id VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS mpesa_receipt VARCHAR(64)
+  `);
 }
 
 /**
@@ -2066,6 +2073,243 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
 
 export function bodaFleetConfigured() {
   return isDbEnabled();
+}
+
+/**
+ * Admin: open boda delivery disputes (FROZEN / DISPUTED / suspended riders).
+ */
+export async function listRiderDisputes({ limit = 40 } = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured", disputes: [] };
+  try {
+    await ensureOtpSafeguardColumns();
+  } catch (err) {
+    console.warn("[boda-fleet] list disputes columns:", err.message);
+  }
+
+  const { rows } = await query(
+    `SELECT d.*, r.full_name AS rider_name, r.phone AS rider_phone, r.motorbike_plate,
+            r.verification_status AS rider_status, r.suspend_reason
+       FROM delivery_dispatches d
+       LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE (
+              d.status = 'DISPUTED'
+           OR d.payout_status = 'FROZEN'
+           OR d.fee_status IN ('ON_HOLD', 'HELD')
+            )
+        AND COALESCE(d.fee_status, '') <> 'FORFEITED'
+        AND COALESCE(d.meta->>'adminAction', '') = ''
+      ORDER BY d.updated_at DESC
+      LIMIT $1`,
+    [Math.min(Math.max(Number(limit) || 40, 1), 100)]
+  );
+
+  const disputes = [];
+  for (const row of rows) {
+    const order = getOrder(row.order_ref);
+    let audit = null;
+    try {
+      const auditRes = await listDeliveryOtpAudit({ orderId: row.order_ref, limit: 1 });
+      audit = auditRes.entries?.[0] || null;
+    } catch {
+      /* ignore */
+    }
+    disputes.push({
+      disputeId: Number(row.id),
+      dispatchId: Number(row.id),
+      orderId: row.order_ref,
+      itemName: order?.productName || order?.title || row.meta?.productName || "—",
+      deliveryFee: Number(row.delivery_fee_kes || 0),
+      deliveryAddress: row.delivery_address,
+      buyerPhone: order?.phone || null,
+      riderId: row.rider_id != null ? Number(row.rider_id) : null,
+      riderName: row.rider_name || null,
+      riderPhone: row.rider_phone || null,
+      motorbikePlate: row.motorbike_plate || null,
+      riderStatus: row.rider_status || null,
+      suspendReason: row.suspend_reason || null,
+      payoutStatus: row.payout_status || null,
+      feeStatus: row.fee_status || null,
+      status: row.status,
+      completedAt: row.delivered_at || row.updated_at,
+      createdAt: row.updated_at || row.created_at,
+      riderGps:
+        row.rider_confirm_lat != null
+          ? { lat: Number(row.rider_confirm_lat), lng: Number(row.rider_confirm_lng) }
+          : audit?.riderGps || null,
+      otpEntered: audit?.otpEntered || null,
+      otpAudit: audit,
+    });
+  }
+
+  return { ok: true, success: true, disputes };
+}
+
+/**
+ * Admin resolve: REACTIVATE_RIDER (release fee) or PERMANENT_BAN (forfeit + ban).
+ */
+export async function resolveRiderDispute({
+  disputeId = null,
+  dispatchId = null,
+  riderId = null,
+  action = "",
+  reason = "",
+} = {}) {
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  const id = Number(disputeId || dispatchId);
+  const act = String(action || "").toUpperCase();
+  if (!Number.isInteger(id) || id < 1) return { error: "invalid_dispute", message: "Missing dispute/dispatch id." };
+  if (!["REACTIVATE_RIDER", "PERMANENT_BAN"].includes(act)) {
+    return { error: "invalid_action", message: "Use REACTIVATE_RIDER or PERMANENT_BAN." };
+  }
+
+  const { rows } = await query(
+    `SELECT d.*, r.phone AS rider_phone, r.full_name AS rider_name
+       FROM delivery_dispatches d
+       LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE d.id = $1
+      LIMIT 1`,
+    [id]
+  );
+  const dispatch = rows[0];
+  if (!dispatch) return { error: "not_found", message: "Dispute dispatch not found." };
+
+  const rid = Number(riderId || dispatch.rider_id);
+  const orderId = dispatch.order_ref;
+  const { sendText } = await import("./whatsapp.js");
+
+  if (act === "REACTIVATE_RIDER") {
+    if (rid) {
+      await setRiderVerificationStatus(rid, "VERIFIED", {
+        reason: reason || `Cleared after dispute review on ${orderId}`,
+      });
+    }
+    await query(
+      `UPDATE delivery_dispatches SET
+         status = 'DELIVERED',
+         fee_status = 'PENDING_MPESA',
+         payout_status = 'HOLD_ESCROW',
+         payout_hold_until = NOW(),
+         dispute_window_ends_at = NOW(),
+         updated_at = NOW(),
+         meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
+       WHERE id = $1`,
+      [
+        id,
+        JSON.stringify({
+          adminResolvedAt: new Date().toISOString(),
+          adminAction: act,
+          adminReason: String(reason || "").slice(0, 400),
+        }),
+      ]
+    );
+    try {
+      await ensureRiderPayoutsTable();
+      await query(
+        `UPDATE rider_payouts SET status = 'CLEARED'
+          WHERE UPPER(order_ref) = UPPER($1) AND status IN ('ON_HOLD', 'PENDING_CLEAR', 'FORFEITED')`,
+        [orderId]
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] payout CLEARED on reactivate:", err.message);
+    }
+    await releaseBodaRiderFee({ dispatchId: id, reason: "admin_reactivate" });
+    updateOrderMeta(orderId, {
+      bodaStatus: "DELIVERED",
+      bodaFeeStatus: "RELEASED",
+      bodaPayoutStatus: "RELEASED",
+      disputeHold: false,
+    });
+
+    const order = getOrder(orderId);
+    if (order?.customerKey) {
+      try {
+        await sendText(
+          order.customerKey,
+          `✅ Sokoni reviewed your dispute on *${orderId}*. Delivery stands — support closed this case. Reply *HELP ${orderId}* if you still need help.`
+        );
+      } catch (err) {
+        console.warn("[boda-fleet] buyer resolve notify:", err.message);
+      }
+    }
+
+    return {
+      ok: true,
+      success: true,
+      action: act,
+      message: `Dispute cleared. Rider reactivated and delivery fee released for ${orderId}.`,
+    };
+  }
+
+  // PERMANENT_BAN
+  if (rid) {
+    await setRiderVerificationStatus(rid, "REJECTED", {
+      reason: reason || `Permanently banned after dispute on ${orderId}`,
+    });
+    await query(
+      `UPDATE riders SET
+         suspend_reason = $2,
+         suspended_at = NOW(),
+         suspended_order_ref = $3,
+         is_available = FALSE,
+         updated_at = NOW()
+       WHERE id = $1`,
+      [rid, String(reason || `Banned after ${orderId}`).slice(0, 400), orderId]
+    );
+  }
+  await query(
+    `UPDATE delivery_dispatches SET
+       status = 'DISPUTED',
+       fee_status = 'FORFEITED',
+       payout_status = 'FROZEN',
+       updated_at = NOW(),
+       meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
+     WHERE id = $1`,
+    [
+      id,
+      JSON.stringify({
+        adminResolvedAt: new Date().toISOString(),
+        adminAction: act,
+        adminReason: String(reason || "").slice(0, 400),
+      }),
+    ]
+  );
+  try {
+    await ensureRiderPayoutsTable();
+    await query(
+      `UPDATE rider_payouts SET status = 'FORFEITED'
+        WHERE UPPER(order_ref) = UPPER($1)`,
+      [orderId]
+    );
+  } catch (err) {
+    console.warn("[boda-fleet] payout FORFEITED:", err.message);
+  }
+  updateOrderMeta(orderId, {
+    bodaStatus: "DISPUTED",
+    bodaFeeStatus: "FORFEITED",
+    bodaPayoutStatus: "FROZEN",
+    disputeHold: true,
+    buyerRefundPending: true,
+  });
+
+  const order = getOrder(orderId);
+  if (order?.customerKey) {
+    try {
+      await sendText(
+        order.customerKey,
+        `🧊 Sokoni banned the rider on *${orderId}* after review. Delivery fee forfeited.\n` +
+          `Buyer refund / replacement is with Sokoni support — reply *HELP ${orderId}*.`
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] buyer ban notify:", err.message);
+    }
+  }
+
+  return {
+    ok: true,
+    success: true,
+    action: act,
+    message: `Rider banned and fee forfeited for ${orderId}. Buyer marked for refund follow-up.`,
+  };
 }
 
 /**

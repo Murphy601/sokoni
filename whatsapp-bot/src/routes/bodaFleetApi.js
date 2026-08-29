@@ -109,6 +109,40 @@ adminBodaRouter.get("/otp-audit", async (req, res) => {
   res.json(result);
 });
 
+/** GET /admin/boda/disputes — frozen / disputed deliveries for review */
+adminBodaRouter.get("/disputes", async (req, res) => {
+  const { listRiderDisputes } = await import("../services/boda-fleet.js");
+  const result = await listRiderDisputes({ limit: req.query.limit });
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  res.json(result);
+});
+
+/** POST /admin/boda/disputes/resolve — REACTIVATE_RIDER | PERMANENT_BAN */
+adminBodaRouter.post("/disputes/resolve", async (req, res) => {
+  const { resolveRiderDispute } = await import("../services/boda-fleet.js");
+  const result = await resolveRiderDispute({
+    disputeId: req.body?.disputeId || req.body?.dispatchId,
+    dispatchId: req.body?.dispatchId,
+    riderId: req.body?.riderId,
+    action: req.body?.action,
+    reason: req.body?.reason || "",
+  });
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /admin/boda/payouts/run-b2c — manually trigger rider B2C cycle */
+adminBodaRouter.post("/payouts/run-b2c", async (req, res) => {
+  const { processRiderB2CPayouts } = await import("../services/rider-b2c.js");
+  const result = await processRiderB2CPayouts({
+    minKes: req.body?.minKes,
+    limit: req.body?.limit,
+  });
+  if (result.reason === "b2c_not_configured") return res.status(503).json(result);
+  res.json(result);
+});
+
 adminBodaRouter.get("/summary", (_req, res) => {
   res.json({ ok: true, ...bodaSupportSummary() });
 });
