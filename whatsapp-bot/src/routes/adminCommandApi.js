@@ -204,4 +204,36 @@ router.get("/suggest", async (req, res) => {
   res.json(await smartSuggest(String(req.query.q || ""), { limit: Number(req.query.limit) || 8 }));
 });
 
+/**
+ * POST /admin/command/master
+ * Body: { command: "!force-release SKN-…" } — code interceptor, no LLM.
+ * Auth: X-Admin-Token or X-Master-Admin-Secret (MASTER_ADMIN_SECRET / ADMIN_SETUP_TOKEN).
+ */
+router.post("/master", async (req, res) => {
+  try {
+    const command = String(req.body?.command || req.body?.text || "").trim();
+    if (!command) {
+      return res.status(400).json({ error: "missing_command", message: "Provide command / text." });
+    }
+    const { executeMasterAdminCommand, isMasterCommand } = await import("../services/admin-override.js");
+    if (!isMasterCommand(command) && !/^(admin|#help|OVERRIDE)/i.test(command)) {
+      return res.status(400).json({
+        error: "not_master_command",
+        message: "Use !force-release, !override-state, OVERRIDE:, etc. See !help",
+      });
+    }
+    const result = await executeMasterAdminCommand(command, {
+      adminLabel: String(req.body?.adminLabel || "master-api").slice(0, 80),
+    });
+    res.json({
+      ok: result.ok,
+      action: result.action,
+      reply: result.reply,
+      data: result.data || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "master_command_failed", message: err.message });
+  }
+});
+
 export default router;
