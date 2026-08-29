@@ -858,6 +858,17 @@ export async function createPlatformBodaDispatch({
 export async function autoDispatchBodaForOrder(orderId) {
   const id = normalizeOrderId(orderId);
   if (!id) return { skipped: true, reason: "invalid_order" };
+
+  try {
+    const { isDispatchPaused } = await import("./platform-flags.js");
+    if (isDispatchPaused()) {
+      console.warn("[boda-fleet] autoDispatch skipped — dispatchPaused (OVERRIDE: SYSTEM PAUSE)");
+      return { skipped: true, reason: "dispatch_paused" };
+    }
+  } catch {
+    /* ignore */
+  }
+
   const order = getOrder(id);
   if (!order) return { skipped: true, reason: "not_found" };
 
