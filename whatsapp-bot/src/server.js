@@ -418,6 +418,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   }
   startTokenRefreshScheduler();
   startTiktokScheduler();
+  startExecutiveBriefingScheduler();
   startPayoutScheduler();
   startOrderCommunicationScheduler();
   startFeedScheduler();
@@ -590,4 +591,49 @@ function startTiktokScheduler() {
 
   const label = slots.map((s) => `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`).join(", ");
   console.log(`✓ TikTok cron enabled (${tz}): ${label}`);
+}
+
+/** Daily Boss briefing (default 08:00 EAT) + hourly stale-dispute nag. */
+function startExecutiveBriefingScheduler() {
+  if (/^(0|false|off|no)$/i.test(String(process.env.BOSS_BRIEFING_ENABLED || "true"))) {
+    console.log("⚠️ Boss briefing cron disabled (BOSS_BRIEFING_ENABLED=false)");
+    return;
+  }
+  const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  let lastBriefKey = "";
+  let lastStaleHour = "";
+
+  setInterval(() => {
+    const now = clockInTimezone(tz);
+    import("./services/exec-briefing.js")
+      .then(async ({ briefingHourEat, sendExecutiveBriefingToAdmins, alertStaleOpenDisputes }) => {
+        const hour = briefingHourEat();
+        if (now.hour === hour && now.minute === 0) {
+          const key = `${now.dateKey}-${hour}`;
+          if (key !== lastBriefKey) {
+            lastBriefKey = key;
+            const r = await sendExecutiveBriefingToAdmins();
+            console.log("[exec-briefing] daily sent:", r.sent);
+          }
+        }
+        // Every hour at :15 — stale disputes >30m
+        if (now.minute === 15) {
+          const hk = `${now.dateKey}-${now.hour}`;
+          if (hk !== lastStaleHour) {
+            lastStaleHour = hk;
+            await alertStaleOpenDisputes({ olderThanMinutes: 30 });
+          }
+        }
+      })
+      .catch((err) => console.warn("[exec-briefing] cron:", err.message));
+  }, 60_000);
+
+  import("./services/staff-roles.js")
+    .then(({ seedEnvAdminsAsSuperAdmin }) => seedEnvAdminsAsSuperAdmin())
+    .then((r) => {
+      if (r?.seeded) console.log(`✓ staff_roles seeded SUPER_ADMIN ×${r.seeded}`);
+    })
+    .catch((err) => console.warn("[staff-roles] seed:", err.message));
+
+  console.log(`✓ Boss briefing cron enabled (${tz})`);
 }

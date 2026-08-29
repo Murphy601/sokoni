@@ -429,6 +429,37 @@ export async function handleIncomingMessage(
         } else {
           setCustomerMeta(customerKey, { lastVoiceLang: stt.language || "en" });
         }
+
+        // Staff / Boss voice → code interceptor (before shopper AI)
+        try {
+          const adminish =
+            isAdminSender(customerKey, phone) ||
+            Boolean(await (await import("../services/staff-roles.js")).resolveStaffRole(phone));
+          if (adminish) {
+            const { softMapSpokenToMasterCommand, isMasterCommand, executeMasterAdminCommand } =
+              await import("../services/admin-override.js");
+            const mapped = softMapSpokenToMasterCommand(spoken) || (isMasterCommand(spoken) ? spoken : null);
+            if (mapped) {
+              const result = await executeMasterAdminCommand(mapped, {
+                adminLabel: phone || "voice-boss",
+                actorPhone: phone || "",
+              });
+              await sendText(
+                customerKey,
+                result.reply || "🫡 Voice command processed."
+              );
+              return;
+            }
+            if (containsAdminCommand(spoken) || /^(admin|orders?)\b/i.test(spoken)) {
+              const { runAdminCommand } = await import("../services/admin.js");
+              await runAdminCommand(customerKey, spoken, quotedText);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("[webhook] admin voice route skipped:", err.message);
+        }
+
         return handleIncomingMessage(customerKey, spoken, {
           quotedText,
           combinedText: spoken,
@@ -984,7 +1015,7 @@ export async function handleWahaWebhook(body) {
     }
   }
 
-  if (shouldRouteIncomingAsAdmin(body, parsed)) {
+  if (await shouldRouteIncomingAsAdmin(body, parsed)) {
     const handled = await handleAdminIncoming({
       ...parsed,
       phone: parsed.phone || undefined,

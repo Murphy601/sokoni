@@ -269,19 +269,30 @@ export function requireAdminSender(chatId, phone = "") {
  * Route to admin handler only for explicit admin commands — not every admin message.
  * Admin can still type "menu" / shop like a normal customer otherwise.
  */
-export function shouldRouteIncomingAsAdmin(body, parsed) {
+export async function shouldRouteIncomingAsAdmin(body, parsed) {
   tryRegisterAdminFromMessage(parsed.customerKey, parsed.phone, parsed.text);
 
-  if (!canRunAdminCommands(parsed.customerKey, parsed.phone)) return false;
-
   const text = (parsed.text || "").trim();
-  if (/^\s*OVERRIDE\s*:/i.test(text)) return true;
-  if (/^\s*![a-z][\w-]*/i.test(text)) return true;
-  if (/^\s*FORCE_PAYOUT\b/i.test(text)) return true;
-  if (/^admin\b/i.test(text)) return true;
-  if (/^orders?\b/i.test(text)) return true;
-  if (containsAdminCommand(parsed.text)) return true;
-  return false;
+  const looksLikeStaffCmd =
+    /^\s*OVERRIDE\s*:/i.test(text) ||
+    /^\s*![a-z][\w-]*/i.test(text) ||
+    /^\s*FORCE_PAYOUT\b/i.test(text) ||
+    /^admin\b/i.test(text) ||
+    /^orders?\b/i.test(text) ||
+    /^[1-4]$/.test(text) ||
+    containsAdminCommand(parsed.text);
+
+  if (!looksLikeStaffCmd) return false;
+
+  if (canRunAdminCommands(parsed.customerKey, parsed.phone)) return true;
+
+  try {
+    const { resolveStaffRole } = await import("./staff-roles.js");
+    const staff = await resolveStaffRole(parsed.phone || phoneDigitsFromChatId(parsed.customerKey));
+    return Boolean(staff);
+  } catch {
+    return false;
+  }
 }
 
 function isBusinessChat(chatId) {
@@ -1134,6 +1145,7 @@ export async function runAdminCommand(
     const { executeMasterAdminCommand } = await import("./admin-override.js");
     const result = await executeMasterAdminCommand(text, {
       adminLabel: phone || phoneDigitsFromChatId(adminChatId) || "boss",
+      actorPhone: phone || phoneDigitsFromChatId(adminChatId) || "",
     });
     await sendText(adminChatId, result.reply || "Override processed.");
     return true;
@@ -1279,8 +1291,30 @@ export async function runAdminCommand(
 export async function handleAdminIncoming({ customerKey, text, quotedText, phone = "" }) {
   tryRegisterAdminFromMessage(customerKey, phone, text);
   if (!canRunAdminCommands(customerKey, phone)) {
-    console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
-    return false;
+    // Staff table may have roles not in ADMIN_PHONES — allow if resolveStaffRole hits
+    try {
+      const { resolveStaffRole } = await import("./staff-roles.js");
+      const staff = await resolveStaffRole(phone || phoneDigitsFromChatId(customerKey));
+      if (!staff) {
+        console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
+        return false;
+      }
+    } catch {
+      console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
+      return false;
+    }
+  }
+
+  // Numbered dispute action card (1–4)
+  try {
+    const { tryHandleDisputeAdminChoice } = await import("./dispute-admin-actions.js");
+    const choice = await tryHandleDisputeAdminChoice(customerKey, text, { phone });
+    if (choice.handled) {
+      if (choice.reply) await sendText(customerKey, choice.reply);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[admin] dispute card choice skipped:", err.message);
   }
 
   const cmd = normalizeAdminCommand(text);

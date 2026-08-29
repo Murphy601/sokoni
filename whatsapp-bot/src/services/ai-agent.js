@@ -464,12 +464,16 @@ export async function runAgentTurn({
   }
 
   let adminSender = Boolean(isAdmin);
-  if (!adminSender && channel === "whatsapp" && (phone || sessionKey)) {
+  let staff = null;
+  if (channel === "whatsapp" && (phone || sessionKey)) {
     try {
       const { isAdminSender } = await import("./admin.js");
-      adminSender = isAdminSender(sessionKey, phone);
+      const { resolveStaffRole } = await import("./staff-roles.js");
+      if (!adminSender) adminSender = isAdminSender(sessionKey, phone);
+      staff = await resolveStaffRole(phone || sessionKey);
+      if (staff) adminSender = true;
     } catch {
-      adminSender = false;
+      /* ignore */
     }
   }
 
@@ -650,6 +654,7 @@ export async function runAgentTurn({
           threadId,
           preferKiswahili,
           isAdmin: adminSender,
+          staff,
         }),
       },
       ...sanitizeHistory(hist),

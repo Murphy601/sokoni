@@ -37,9 +37,9 @@ describe("ai-prompts MVP training", () => {
 
   it("injects admin recognition only for isAdmin threads", () => {
     const boss = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: true });
-    assert.match(boss, /ADMIN SYSTEM PROMPT/);
+    assert.match(boss, /EXECUTIVE ROLE DIRECTIVE/);
     const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
-    assert.doesNotMatch(shopper, /ADMIN SYSTEM PROMPT/);
+    assert.doesNotMatch(shopper, /EXECUTIVE ROLE DIRECTIVE/);
     assert.match(shopper, /PUBLIC ESCROW GUARDRAIL/);
   });
 });
