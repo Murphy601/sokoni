@@ -1,7 +1,8 @@
 /**
  * Floating Ask Plug — sitewide chat panel + optional browser SpeechRecognition mic.
  * Reuses POST /api/agent/chat (same as ask.html). Fail-soft if API/mic unavailable.
- * Phase 1 of voice: no Vapi/NVIDIA WebRTC required. See docs/VOICE_AI_ROADMAP.md.
+ * TTS: tries POST /api/agent/speak (ElevenLabs / Cartesia / Kokoro HF) then browser voices.
+ * See docs/VOICE_AI_ROADMAP.md.
  */
 (function () {
   if (window.__sokoniAskFabMounted) return;
@@ -13,6 +14,7 @@
       : "https://bot.sokonimall.com/api/agent";
   const WA = "https://wa.me/254117422428?text=" + encodeURIComponent("Hi Sokoni, I need help");
   const SESSION_KEY = "sokoni-ai-session";
+  const SPEAK_KEY = "sokoni-ask-speak";
 
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -24,10 +26,19 @@
     /* ignore */
   }
 
+  let speakOn = true;
+  try {
+    const saved = localStorage.getItem(SPEAK_KEY);
+    if (saved === "0") speakOn = false;
+  } catch {
+    /* ignore */
+  }
+
   let open = false;
   let listening = false;
   let recognition = null;
   let busy = false;
+  let activeAudio = null;
 
   function injectCss() {
     if (document.getElementById("sokoni-ask-fab-css")) return;
@@ -60,7 +71,10 @@
             <p class="sokoni-ask-panel__eyebrow">Sokoni Plug</p>
             <h2 class="sokoni-ask-panel__title">Ask · talk · track</h2>
           </div>
-          <button type="button" id="sokoni-ask-close" class="sokoni-ask-icon-btn" aria-label="Close">×</button>
+          <div class="sokoni-ask-panel__actions">
+            <button type="button" id="sokoni-ask-speak-toggle" class="sokoni-ask-icon-btn sokoni-ask-speak-toggle" aria-pressed="true" title="Toggle spoken replies" aria-label="Toggle spoken replies">Speak</button>
+            <button type="button" id="sokoni-ask-close" class="sokoni-ask-icon-btn" aria-label="Close">×</button>
+          </div>
         </header>
         <div id="sokoni-ask-log" class="sokoni-ask-log" role="log" aria-live="polite"></div>
         <div class="sokoni-ask-chips" id="sokoni-ask-chips">
@@ -122,6 +136,7 @@
       }
     } else {
       stopMic();
+      stopAudio();
     }
   }
 
@@ -189,19 +204,113 @@
     }
   }
 
-  function maybeSpeak(text) {
+  function stopAudio() {
     try {
-      if (!window.speechSynthesis || !text) return;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      if (!document.getElementById("sokoni-ask-fab")?.classList.contains("is-open")) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(String(text).slice(0, 280));
-      u.rate = 1.05;
-      u.lang = "en-KE";
-      window.speechSynthesis.speak(u);
+      activeAudio?.pause();
     } catch {
       /* ignore */
     }
+    activeAudio = null;
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function pickBrowserVoice() {
+    try {
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      if (!voices.length) return null;
+      const prefer = [
+        /samantha|karen|moira|fiona|zira|google uk english female|google us english/i,
+        /female|woman/i,
+        /en-GB|en_GB|en-US|en_US|en-KE|en_KE|en-ZA/i,
+      ];
+      for (const re of prefer) {
+        const hit = voices.find((v) => re.test(`${v.name} ${v.lang}`));
+        if (hit) return hit;
+      }
+      return voices.find((v) => /^en/i.test(v.lang)) || voices[0];
+    } catch {
+      return null;
+    }
+  }
+
+  function speakBrowser(text) {
+    if (!window.speechSynthesis || !text) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(String(text).slice(0, 280));
+    u.rate = 1.02;
+    u.pitch = 1.05;
+    u.lang = "en-GB";
+    const voice = pickBrowserVoice();
+    if (voice) u.voice = voice;
+    window.speechSynthesis.speak(u);
+  }
+
+  async function maybeSpeak(text) {
+    try {
+      if (!speakOn || !text) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (!document.getElementById("sokoni-ask-fab")?.classList.contains("is-open")) return;
+
+      stopAudio();
+      const clipped = String(text).slice(0, 400);
+
+      try {
+        const res = await fetch(`${API}/speak`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: clipped }),
+        });
+        const ctype = String(res.headers.get("content-type") || "");
+        if (res.ok && ctype.includes("audio")) {
+          const blob = await res.blob();
+          if (blob.size > 0) {
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            activeAudio = audio;
+            audio.onended = () => {
+              URL.revokeObjectURL(url);
+              if (activeAudio === audio) activeAudio = null;
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(url);
+              speakBrowser(clipped);
+            };
+            await audio.play();
+            return;
+          }
+        }
+      } catch {
+        /* neural path unavailable — browser fallback */
+      }
+
+      speakBrowser(clipped);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function syncSpeakToggle() {
+    const btn = document.getElementById("sokoni-ask-speak-toggle");
+    if (!btn) return;
+    btn.setAttribute("aria-pressed", speakOn ? "true" : "false");
+    btn.textContent = speakOn ? "Speak" : "Muted";
+    btn.title = speakOn ? "Spoken replies on — tap to mute" : "Spoken replies off — tap to enable";
+    btn.classList.toggle("is-muted", !speakOn);
+  }
+
+  function toggleSpeak() {
+    speakOn = !speakOn;
+    try {
+      localStorage.setItem(SPEAK_KEY, speakOn ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    if (!speakOn) stopAudio();
+    syncSpeakToggle();
   }
 
   function stopMic() {
@@ -253,6 +362,7 @@
   function bind() {
     document.getElementById("sokoni-ask-fab")?.addEventListener("click", () => setOpen(!open));
     document.getElementById("sokoni-ask-close")?.addEventListener("click", () => setOpen(false));
+    document.getElementById("sokoni-ask-speak-toggle")?.addEventListener("click", () => toggleSpeak());
     document.getElementById("sokoni-ask-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const v = document.getElementById("sokoni-ask-input")?.value;
@@ -263,6 +373,14 @@
       const btn = e.target.closest("[data-ask]");
       if (btn) void sendMessage(btn.getAttribute("data-ask"));
     });
+    syncSpeakToggle();
+    // Chrome loads voices async — warm the list for better browser fallback
+    try {
+      window.speechSynthesis?.getVoices?.();
+      window.speechSynthesis?.addEventListener?.("voiceschanged", () => pickBrowserVoice());
+    } catch {
+      /* ignore */
+    }
   }
 
   function boot() {
