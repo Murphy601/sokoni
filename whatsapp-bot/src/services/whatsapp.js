@@ -50,6 +50,50 @@ export function phoneDigitsFromChatId(chatId) {
   return digits.length >= 9 ? digits : null;
 }
 
+/**
+ * Resolve WAHA @lid → phone (@c.us) via Contacts Lids API.
+ * Caches in-memory for the process lifetime.
+ */
+const lidPhoneCache = new Map();
+
+export async function resolveWahaLidToPhone(lidChatId, session = "") {
+  const lid = String(lidChatId || "").trim();
+  if (!lid.includes("@lid")) return "";
+  if (lidPhoneCache.has(lid)) return lidPhoneCache.get(lid) || "";
+
+  if (!config.waha.apiUrl) {
+    lidPhoneCache.set(lid, "");
+    return "";
+  }
+
+  const sess = session || config.waha.session || "default";
+  const lidPath = lid.replace(/@/g, "%40");
+  const urls = [
+    `${config.waha.apiUrl}/api/${encodeURIComponent(sess)}/lids/${lidPath}`,
+    `${config.waha.apiUrl}/api/${encodeURIComponent(sess)}/lids/${lid.replace(/@lid$/, "")}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const { data } = await axios.get(url, {
+        headers: wahaHeaders(),
+        timeout: 8000,
+      });
+      const pn = data?.pn || data?.phone || data?.phoneNumber || "";
+      const digits = phoneDigitsFromChatId(pn) || String(pn || "").replace(/\D/g, "");
+      if (digits && digits.length >= 9) {
+        lidPhoneCache.set(lid, digits);
+        console.log("[waha] resolved @lid → phone", lid, "→", digits);
+        return digits;
+      }
+    } catch (err) {
+      console.warn("[waha] lid resolve failed:", url.split("/").pop(), err.message);
+    }
+  }
+  lidPhoneCache.set(lid, "");
+  return "";
+}
+
 /** Extract phone digits from WAHA chatId. */
 export function fromChatId(chatId) {
   return customerKeyFromChatId(chatId);

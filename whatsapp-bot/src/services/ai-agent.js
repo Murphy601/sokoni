@@ -467,19 +467,28 @@ export async function runAgentTurn({
   let staff = null;
   if (channel === "whatsapp" && (phone || sessionKey)) {
     try {
-      const { isAdminSender } = await import("./admin.js");
+      const { isAdminSender, checkIfBoss } = await import("./admin.js");
       const { resolveStaffRole } = await import("./staff-roles.js");
+      const { checkIfBoss: bossDigits } = await import("../lib/phone-normalize.js");
       console.log("[ai-agent] Incoming Phone:", phone || "(empty)", "sessionKey:", sessionKey);
-      if (!adminSender) adminSender = isAdminSender(sessionKey, phone);
+      const hardBoss = bossDigits(phone || sessionKey);
+      if (!adminSender) adminSender = hardBoss || isAdminSender(sessionKey, phone);
       staff = await resolveStaffRole(phone || sessionKey);
       if (staff) adminSender = true;
-      if (adminSender) {
-        console.log(
-          "[ai-agent] Boss/staff identity matched:",
-          staff?.role || "ADMIN",
-          staff?.source || "isAdminSender"
-        );
+      if (hardBoss && !staff) {
+        staff = {
+          phone: String(phone || "").replace(/\D/g, ""),
+          role: "SUPER_ADMIN",
+          displayName: "Boss",
+          source: "hardwire",
+        };
       }
+      console.log(
+        "[ai-agent] IS_BOSS_ADMIN?:",
+        adminSender,
+        staff?.role || "none",
+        staff?.source || ""
+      );
     } catch {
       /* ignore */
     }
@@ -654,17 +663,29 @@ export async function runAgentTurn({
     const messages = [
       {
         role: "system",
-        content: buildGroundedSystemPrompt({
-          channel,
-          contextBlocks: [specialistHint, userContextBlock, knowledgeBlock, toolBlock].filter(
-            Boolean
-          ),
-          threadId,
-          preferKiswahili,
-          isAdmin: adminSender,
-          staff,
-          senderPhone: phone || threadId,
-        }),
+        content: adminSender
+          ? `CRITICAL EXECUTIVE DIRECTIVE: You are speaking directly to THE BOSS (+254757764009). You MUST start EVERY reply with "Yes, Boss." or "Right away, Boss." Absolute authority. Mutations use *!* / *OVERRIDE:* short-codes only — never invent escrow releases.\n\n${buildGroundedSystemPrompt({
+              channel,
+              contextBlocks: [specialistHint, userContextBlock, knowledgeBlock, toolBlock].filter(
+                Boolean
+              ),
+              threadId,
+              preferKiswahili,
+              isAdmin: true,
+              staff,
+              senderPhone: phone || threadId,
+            })}`
+          : buildGroundedSystemPrompt({
+              channel,
+              contextBlocks: [specialistHint, userContextBlock, knowledgeBlock, toolBlock].filter(
+                Boolean
+              ),
+              threadId,
+              preferKiswahili,
+              isAdmin: false,
+              staff,
+              senderPhone: phone || threadId,
+            }),
       },
       ...sanitizeHistory(hist),
       { role: "user", content: text },

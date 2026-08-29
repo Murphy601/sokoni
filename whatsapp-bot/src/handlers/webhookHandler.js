@@ -12,7 +12,7 @@ import {
   sendHumanHandoff,
   tryNumberedMenuReply,
 } from "../services/menu.js";
-import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend } from "../services/whatsapp.js";
+import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend, resolveWahaLidToPhone, extractWahaProductMessage } from "../services/whatsapp.js";
 import { runAiAgent } from "../services/ai.js";
 import {
   getMenuState,
@@ -25,9 +25,23 @@ import {
 } from "../services/session.js";
 import { findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
-import { extractWahaProductMessage } from "../services/whatsapp.js";
+import {
+  handleAdminOutgoing,
+  handleAdminIncoming,
+  isAdminSender,
+  containsAdminCommand,
+  shouldRouteIncomingAsAdmin,
+  requireAdminSender,
+  canRunAdminCommands,
+  extractCustomerMeta,
+  isAdminQuickStatusText,
+  isBusinessOwnerSender,
+  checkIfBoss,
+  tryRegisterAdminFromMessage,
+  registerAdminChatId,
+} from "../services/admin.js";
 import { config } from "../config.js";
+import { normalizeKenyaPhone } from "../lib/phone-normalize.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
 import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
@@ -297,11 +311,46 @@ export async function handleIncomingMessage(
     location = null,
   } = {}
 ) {
+  // If still @lid with no phone, try WAHA lids API once more
+  if ((!phone || !String(phone).replace(/\D/g, "")) && String(customerKey || "").includes("@lid")) {
+    try {
+      const resolved = await resolveWahaLidToPhone(customerKey, wahaSession);
+      if (resolved) phone = normalizeKenyaPhone(resolved) || resolved;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const bossHit = checkIfBoss(phone || customerKey, config.admin.phones || []);
+  if (bossHit && phone) {
+    tryRegisterAdminFromMessage(customerKey, phone, text);
+    registerAdminChatId(customerKey, phone);
+  }
+
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
 
+  // Boss connectivity probe — no LLM required
+  if (/^\s*ping\s*$/i.test(String(text || "").trim())) {
+    const registered = tryRegisterAdminFromMessage(customerKey, phone, text);
+    if (bossHit || registered || isAdminSender(customerKey, phone)) {
+      console.log("[webhook] PING from Boss — acknowledging", phone || customerKey);
+      return sendText(
+        customerKey,
+        "Yes, Boss. System online and awaiting your command.\n\nTry *!help* or *OVERRIDE: HELP* for the master palette."
+      );
+    }
+    console.log(
+      "[webhook] PING from non-Boss",
+      phone || "(no phone)",
+      customerKey,
+      "— check RAW SENDER logs / lid resolve"
+    );
+    return sendText(customerKey, "pong — Sokoni bot is online. Type *menu* to shop.");
+  }
+
   // Boss !ban-user — block non-admin senders before AI / commerce
-  if (!isAdminSender(customerKey, phone)) {
+  if (!isAdminSender(customerKey, phone) && !bossHit) {
     try {
       const digits = String(phone || "").replace(/\D/g, "");
       const meta = getCustomerMeta(customerKey);
@@ -992,8 +1041,52 @@ export async function handleIncomingMessage(
 }
 
 export async function handleWahaWebhook(body) {
+  // Compact sender log — exact WAHA fields (Meta Cloud shape differs; we use WAHA).
+  try {
+    const p = body?.payload || {};
+    console.log(
+      "[webhook] RAW SENDER:",
+      JSON.stringify({
+        event: body?.event,
+        from: p.from,
+        to: p.to,
+        fromMe: p.fromMe,
+        pushName: p.pushName,
+        senderPn: p._data?.senderPn || p.senderPn || null,
+        remoteJidAlt: p._data?.remoteJidAlt || p.remoteJidAlt || null,
+        bodyPreview: String(p.body || "").slice(0, 80),
+      })
+    );
+  } catch {
+    /* ignore */
+  }
+
   const parsed = parseWahaMessage(body);
   if (!parsed) return;
+
+  // Resolve @lid → real phone via WAHA lids API when missing
+  if (parsed.direction === "incoming" && parsed.customerKey?.includes("@lid") && !parsed.phone) {
+    try {
+      const resolved = await resolveWahaLidToPhone(parsed.customerKey, parsed.session);
+      if (resolved) {
+        parsed.phone = normalizeKenyaPhone(resolved) || resolved;
+        console.log("[webhook] PARSED SENDER NUMBER (lid→pn):", parsed.phone);
+      }
+    } catch (err) {
+      console.warn("[webhook] lid resolve:", err.message);
+    }
+  }
+
+  if (parsed.direction === "incoming") {
+    console.log(
+      "[webhook] PARSED SENDER NUMBER:",
+      parsed.phone || "(empty)",
+      "chatId:",
+      parsed.customerKey,
+      "IS_BOSS?:",
+      checkIfBoss(parsed.phone || parsed.customerKey, config.admin.phones || [])
+    );
+  }
 
   if (parsed.direction === "outgoing") {
     if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
@@ -1035,7 +1128,7 @@ export async function handleWahaWebhook(body) {
     mediaUrl: parsed.mediaUrl,
     mediaMimetype: parsed.mediaMimetype,
     messageId: parsed.messageId,
-    session: parsed.session,
+    wahaSession: parsed.session,
     location: parsed.location || null,
   });
 }

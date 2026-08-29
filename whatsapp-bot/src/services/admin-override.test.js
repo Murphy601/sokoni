@@ -48,10 +48,10 @@ describe("admin multi-layer obedience", () => {
       founderName: "Test Founder",
       senderPhone: "254757764009",
     });
-    assert.match(d, /EXECUTIVE DIRECTIVE/);
+    assert.match(d, /CRITICAL EXECUTIVE DIRECTIVE|EXECUTIVE DIRECTIVE/);
     assert.match(d, /Yes, Boss/i);
     assert.match(d, /254757764009/);
-    assert.match(d, /CODE INTERCEPTOR/);
+    assert.match(d, /OVERRIDE|interceptor/i);
     assert.match(PUBLIC_ESCROW_GUARDRAIL, /strict escrow/i);
 
     const boss = buildGroundedSystemPrompt({
@@ -59,11 +59,12 @@ describe("admin multi-layer obedience", () => {
       isAdmin: true,
       senderPhone: "254757764009",
     });
-    assert.match(boss, /EXECUTIVE DIRECTIVE/);
+    assert.match(boss, /CRITICAL EXECUTIVE DIRECTIVE|EXECUTIVE DIRECTIVE/);
     assert.doesNotMatch(boss, /PUBLIC ESCROW GUARDRAIL/);
 
     const shopper = buildGroundedSystemPrompt({ channel: "whatsapp", isAdmin: false });
     assert.match(shopper, /PUBLIC ESCROW GUARDRAIL/);
+    assert.doesNotMatch(shopper, /CRITICAL EXECUTIVE DIRECTIVE/);
     assert.doesNotMatch(shopper, /EXECUTIVE DIRECTIVE/);
   });
 

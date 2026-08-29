@@ -37,7 +37,7 @@ describe("executive AI OS", () => {
       staff: { role: "SUPER_ADMIN", displayName: "Boss" },
       senderPhone: "254757764009",
     });
-    assert.match(d, /EXECUTIVE DIRECTIVE/);
+    assert.match(d, /CRITICAL EXECUTIVE DIRECTIVE|EXECUTIVE DIRECTIVE/);
     assert.match(d, /Yes, Boss/i);
     assert.match(d, /254757764009/);
     assert.match(staffToneDirective({ role: "DISPUTE_MANAGER" }), /DISPUTE_MANAGER/);
@@ -72,7 +72,7 @@ describe("executive AI OS", () => {
       staff: { role: "SUPER_ADMIN", displayName: "Boss" },
       senderPhone: "254757764009",
     });
-    assert.match(boss, /EXECUTIVE DIRECTIVE/);
+    assert.match(boss, /CRITICAL EXECUTIVE DIRECTIVE|EXECUTIVE DIRECTIVE/);
     assert.match(boss, /Yes, Boss/i);
   });
 });
