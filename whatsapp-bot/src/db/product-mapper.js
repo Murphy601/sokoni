@@ -78,13 +78,33 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
     sellerSalesCount:
       row.seller_sales_count != null ? Number(row.seller_sales_count) || 0 : undefined,
-    sellerTrust: sellerTrustPayload({
-      isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
-      salesCount: Number(row.seller_sales_count || 0),
-      avgDispatchHours: null,
-      avgRating: Number(row.seller_avg_rating || 0),
-      totalReviews: Number(row.seller_total_reviews || 0),
-    }),
+    sellerTrust: (() => {
+      // Prefer rolling-window profile on users (phase33); fall back to order_reviews AVG.
+      const weightedCount = Number(row.seller_rating_count || 0);
+      const fallbackCount = Number(row.seller_total_reviews || 0);
+      const totalReviews = weightedCount > 0 ? weightedCount : fallbackCount;
+      const avgRating =
+        weightedCount > 0
+          ? Number(row.seller_rating_score || 0)
+          : Number(row.seller_avg_rating || 0);
+      const completedOrders = Math.max(
+        Number(row.seller_completed_orders || 0),
+        Number(row.seller_sales_count || 0)
+      );
+      const unrated = totalReviews < 5;
+      return sellerTrustPayload({
+        isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
+        salesCount: completedOrders,
+        completedOrders,
+        avgDispatchHours: null,
+        avgRating,
+        totalReviews,
+        unrated,
+        disputeCount: Number(row.seller_dispute_count || 0),
+        unresolvedDisputes: Number(row.seller_unresolved_disputes || 0),
+        badgeTier: row.seller_badge_tier || "newbie",
+      });
+    })(),
     description: row.description || undefined,
 
     isSecondhand: Boolean(row.is_secondhand),
@@ -142,17 +162,25 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     retailPerMlKes: row.retail_per_ml_kes != null ? Number(row.retail_per_ml_kes) : undefined,
     volumeMl: row.volume_ml != null ? Number(row.volume_ml) : undefined,
 
-    // Prefer live seller shop ratings over catalog placeholder 4.5 / 0.
-    rating:
-      Number(row.seller_total_reviews || 0) > 0
-        ? Number(row.seller_avg_rating || 0)
-        : row.rating != null
-          ? Number(row.rating)
-          : 0,
-    reviews:
-      Number(row.seller_total_reviews || 0) > 0
-        ? Number(row.seller_total_reviews || 0)
-        : Number(row.review_count) || 0,
+    // Prefer live seller shop ratings (weighted profile → order_reviews → catalog placeholder).
+    rating: (() => {
+      const weightedCount = Number(row.seller_rating_count || 0);
+      const fallbackCount = Number(row.seller_total_reviews || 0);
+      if (weightedCount > 0) {
+        return weightedCount < 5 ? 0 : Number(row.seller_rating_score || 0);
+      }
+      if (fallbackCount > 0) {
+        return fallbackCount < 5 ? 0 : Number(row.seller_avg_rating || 0);
+      }
+      return row.rating != null ? Number(row.rating) : 0;
+    })(),
+    reviews: (() => {
+      const weightedCount = Number(row.seller_rating_count || 0);
+      if (weightedCount > 0) return weightedCount;
+      const fallbackCount = Number(row.seller_total_reviews || 0);
+      if (fallbackCount > 0) return fallbackCount;
+      return Number(row.review_count) || 0;
+    })(),
 
     source: row.source || "Sokoni",
     sourceUrl: row.source_url || undefined,

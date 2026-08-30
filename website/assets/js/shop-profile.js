@@ -468,11 +468,17 @@ function renderShopHeader(payload) {
 
   const avg = Number(stats.avgRating || 0);
   const totalReviews = Number(stats.totalReviews || 0);
+  const trustPayload = stats.trust || shop;
+  const unrated =
+    Boolean(trustPayload.unrated) ||
+    trustPayload.displayLabel === "UNRATED" ||
+    totalReviews < 5;
   const topSeller = el("shop-top-seller");
   if (topSeller) {
     const qualifies =
       !trustIds.has("top_seller") &&
       !trustIds.has("top_rated") &&
+      !unrated &&
       avg >= 4.8 &&
       totalReviews >= 20;
     topSeller.classList.toggle("hidden", !qualifies);
@@ -482,7 +488,7 @@ function renderShopHeader(payload) {
   if (trustRow) {
     // badgesHtml wraps in a span — inject inner chips only into the host node.
     const wrapped =
-      window.SokoniSellerTrust?.badgesHtml?.(stats.trust || shop, {
+      window.SokoniSellerTrust?.badgesHtml?.(trustPayload, {
         max: 4,
         className: "seller-trust-badges-inner",
       }) || "";
@@ -553,8 +559,11 @@ function renderShopHeader(payload) {
     }
   }
 
-  el("shop-rating").textContent =
-    totalReviews > 0 ? `★ ${avg.toFixed(1)} (${totalReviews.toLocaleString()} reviews)` : "New seller";
+  el("shop-rating").textContent = unrated
+    ? totalReviews > 0
+      ? `UNRATED · ${totalReviews.toLocaleString()} review${totalReviews === 1 ? "" : "s"}`
+      : "New store · UNRATED"
+    : `★ ${avg.toFixed(1)} (${totalReviews.toLocaleString()} reviews)`;
 
   el("shop-listings-count").textContent = String(Number(stats.listingsCount || 0));
   el("shop-followers-count").textContent = String(Number(stats.followersCount || 0));
@@ -562,8 +571,11 @@ function renderShopHeader(payload) {
   el("shop-likes-count").textContent = String(Number(stats.likesReceivedCount || 0));
   const reviewsMetric = el("shop-reviews-metric");
   if (reviewsMetric) {
-    reviewsMetric.textContent =
-      totalReviews > 0 ? `★ ${avg.toFixed(1)} · ${totalReviews.toLocaleString()}` : "No reviews yet";
+    reviewsMetric.textContent = unrated
+      ? totalReviews > 0
+        ? `UNRATED · ${totalReviews.toLocaleString()}`
+        : "No reviews yet"
+      : `★ ${avg.toFixed(1)} · ${totalReviews.toLocaleString()}`;
   }
   const salesMetric = el("shop-sales-metric");
   if (salesMetric) {
