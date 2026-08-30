@@ -11,6 +11,7 @@ import {
 } from "./paystack-transfers.js";
 import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
 import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
+import { gateShippingBeforeStk } from "./shipping-gate.js";
 import { STK_TIMEOUT_MS } from "../lib/ops-edge-constants.js";
 
 export const ESCROW_STATUSES = ["pending", "held", "released", "refunded"];
@@ -116,15 +117,32 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     return { ok: false, method: "missing_phone", message: "No phone for STK push" };
   }
 
-  // Hybrid logistics: fold seller county/tier rates into total before STK.
+  // Hybrid logistics: require seller Hub shipping rates before any STK push.
   let payOrder = order;
   try {
-    const ensured = await ensureHybridShippingBeforePayment(order);
-    if (ensured?.order) payOrder = ensured.order;
-    else payOrder = getOrder(order.id) || order;
+    const gated = await gateShippingBeforeStk(order);
+    if (!gated.ok) {
+      return {
+        ok: false,
+        method: "shipping_blocked",
+        cancelled: Boolean(gated.cancelled),
+        error: gated.error || "missing_shipping_rates",
+        message:
+          gated.message ||
+          "Order cancelled — seller has not set delivery rates for this area. No funds were deducted.",
+      };
+    }
+    payOrder = gated.order || getOrder(order.id) || order;
   } catch (err) {
-    console.warn("[checkout] hybrid shipping ensure skipped:", err?.message || err);
-    payOrder = getOrder(order.id) || order;
+    console.warn("[checkout] shipping gate skipped:", err?.message || err);
+    try {
+      const ensured = await ensureHybridShippingBeforePayment(order);
+      if (ensured?.order) payOrder = ensured.order;
+      else payOrder = getOrder(order.id) || order;
+    } catch (err2) {
+      console.warn("[checkout] hybrid shipping ensure skipped:", err2?.message || err2);
+      payOrder = getOrder(order.id) || order;
+    }
   }
 
   const amountKes = orderBuyerTotal(payOrder);

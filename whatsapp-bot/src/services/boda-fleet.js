@@ -862,21 +862,20 @@ export async function adjustRiderRating(riderId, delta, reason = "") {
 
 async function sendJobOfferToRider(rider, dispatchRow, { offerIndex = 0, queueLen = 1 } = {}) {
   const { sendText } = await import("./whatsapp.js");
+  const { msgRiderJobOffer } = await import("../lib/wa-ux.js");
   const id = dispatchRow.order_ref;
   const fee = Number(dispatchRow.delivery_fee_kes || 0);
   const distLabel =
     rider.distanceM != null ? `~${Math.round(rider.distanceM / 100) / 10} km away` : "nearby";
   const scoreLabel =
     rider.dispatchScore != null ? ` · score ${rider.dispatchScore}` : "";
-  const pinMsg =
-    `🛵 *Sokoni delivery offer (${offerIndex + 1}/${queueLen})*\n\n` +
-    `Order *${id}*\n` +
-    `You: ${distLabel}${scoreLabel} · ★ ${Number(rider.rating || 5).toFixed(1)}\n` +
-    `Pickup: ${dispatchRow.pickup_address}\n` +
-    `Drop-off: ${dispatchRow.delivery_address}\n` +
-    (fee > 0 ? `Delivery fee: *KES ${fee.toLocaleString()}*\n` : "") +
-    `\nReply *ACCEPT ${id}* within *45 seconds*.\n` +
-    `Busy? Reply *DECLINE ${id}* — Sokoni will offer the next rider.`;
+  const pinMsg = msgRiderJobOffer({
+    orderId: id,
+    pickup: dispatchRow.pickup_address,
+    dropoff: dispatchRow.delivery_address,
+    feeKes: fee,
+    offerLabel: `You: ${distLabel}${scoreLabel} · ★ ${Number(rider.rating || 5).toFixed(1)} · offer ${offerIndex + 1}/${queueLen}`,
+  });
   await sendText(`${rider.phone}@c.us`, pinMsg);
   await recordOfferSent(rider.id);
 }
@@ -945,7 +944,7 @@ export async function createPlatformBodaDispatch({
   const drop =
     String(deliveryAddress || "").trim() ||
     String(order.location || order.dropOff || order.customerLocation || "Buyer drop-off").slice(0, 240);
-  const defaultFee = town === "THIKA" ? 250 : 350;
+  const defaultFee = 0; // never invent a mock fee (was Nairobi 350 / Thika 250)
   const fee = Math.max(
     0,
     Number(deliveryFeeKes) > 0
@@ -954,6 +953,13 @@ export async function createPlatformBodaDispatch({
         ? Number(order.shippingKes)
         : defaultFee
   );
+  if (fee <= 0) {
+    console.warn(`[boda-fleet] refuse dispatch ${id} — missing shippingKes / deliveryFeeKes`);
+    return {
+      error: "missing_delivery_fee",
+      message: `Cannot dispatch *${id}* — no delivery fee on the order (seller must set Hub shipping rates).`,
+    };
+  }
 
   let dropCoords =
     parseCoordPair(dropoffLat, dropoffLng) ||
@@ -1828,32 +1834,51 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
 
   const fresh = getOrder(id) || order;
   const { sendText } = await import("./whatsapp.js");
+  const {
+    msgRiderPickupStep,
+    msgBuyerRiderAssigned,
+    msgSellerRiderAssigned,
+  } = await import("../lib/wa-ux.js");
   const plate = rider.motorbikePlate || "—";
-  const sellerMsg =
-    `✅ *Boda assigned — ${id}*\n` +
-    `Rider: *${rider.fullName}*\n` +
-    `Phone: ${rider.phone}\n` +
-    `Plate: ${plate}\n` +
-    `Have the parcel ready at: ${updated.pickup_address}\n\n` +
-    `📦 *PICKUP OTP (give to rider at handoff only):* *${pickupOtp}*\n` +
-    `Do not share this code on chat — speak it when the rider is at your door.`;
-  const buyerMsg =
-    `🛵 Your order *${id}* is on the way with a Sokoni vetted rider.\n` +
-    `• Rider: *${rider.fullName}*\n` +
-    `• Phone: ${rider.phone}\n` +
-    `• Plate: ${plate}\n` +
-    `When it arrives, you'll get a 4-digit code — share it only with this rider to confirm delivery.`;
-  const riderMsg =
-    `🎉 *JOB CONFIRMED!* You have been assigned to Order *${id}*. Proceed to pickup.\n\n` +
-    `Pickup: ${updated.pickup_address}\n` +
-    `Drop-off: ${updated.delivery_address}\n` +
-    (Number(updated.delivery_fee_kes) > 0
-      ? `Fee (held): KES ${Number(updated.delivery_fee_kes).toLocaleString()}\n`
-      : "") +
-    `\n⏱ Enter the seller *Pickup OTP* within *${LATE_PICKUP_MINUTES} minutes* or the job is released.\n` +
-    `At the shop reply: *PICKUP ${id} ####*\n` +
-    `That transfers custody to you. Buyer then gets a delivery code.\n` +
-    `At the door: share live location → *CONFIRM ${id} ####*`;
+
+  let shopName = fresh?.shopHandle || "Seller shop";
+  let sellerContact = updated.seller_phone || "—";
+  try {
+    const { getSupplier, findSupplierByPhone } = await import("./suppliers.js");
+    const sup =
+      (fresh?.supplierId && getSupplier(fresh.supplierId)) ||
+      findSupplierByPhone(updated.seller_phone) ||
+      null;
+    if (sup?.shopName) shopName = sup.shopName;
+    else if (sup?.shopHandle) shopName = `@${String(sup.shopHandle).replace(/^@/, "")}`;
+    if (sup?.phone) sellerContact = normalizeRiderPhone(sup.phone) || sup.phone;
+    else if (updated.seller_phone) sellerContact = normalizeRiderPhone(updated.seller_phone);
+  } catch {
+    /* ignore */
+  }
+
+  const sellerMsg = msgSellerRiderAssigned({
+    orderId: id,
+    riderName: rider.fullName,
+    riderPhone: rider.phone,
+    plate,
+    pickupAddr: updated.pickup_address,
+    pickupOtp,
+  });
+  const buyerMsg = msgBuyerRiderAssigned({
+    orderId: id,
+    riderName: rider.fullName,
+    riderPhone: rider.phone,
+    plate,
+  });
+  const riderMsg = msgRiderPickupStep({
+    orderId: id,
+    shopName,
+    pickupAddr: updated.pickup_address,
+    sellerPhone: sellerContact,
+    feeKes: Number(updated.delivery_fee_kes || 0),
+    lateMins: LATE_PICKUP_MINUTES,
+  });
 
   const sellerTo = updated.seller_phone
     ? `${normalizeRiderPhone(updated.seller_phone)}@c.us`
@@ -2192,8 +2217,13 @@ export async function confirmPickupWithOtp({
 
   const order = getOrder(id);
   const { sendText } = await import("./whatsapp.js");
+  const {
+    msgRiderDeliveryStep,
+    msgBuyerOutForDelivery,
+    msgAdminPickupHandover,
+  } = await import("../lib/wa-ux.js");
   const feeKes = Number(rows[0].delivery_fee_kes || 0);
-
+  const riderName = dispatch.rider_name || "Rider";
   updateOrderMeta(id, { bodaStatus: "OTP_SENT", bodaCustody: "IN_TRANSIT" });
   try {
     const { writeAuditLog } = await import("./audit-log.js");
@@ -2214,21 +2244,43 @@ export async function confirmPickupWithOtp({
     /* ignore */
   }
 
+  let riderPlate = "—";
+  try {
+    const { rows: rrows } = await query(
+      `SELECT full_name, phone, motorbike_plate FROM riders WHERE id = $1 LIMIT 1`,
+      [rows[0].rider_id]
+    );
+    if (rrows[0]?.motorbike_plate) riderPlate = rrows[0].motorbike_plate;
+  } catch {
+    /* ignore */
+  }
+
+  const buyerName = order?.customerName || order?.buyerName || "Buyer";
+  const buyerPhone =
+    order?.phone ||
+    (order?.customerKey ? String(order.customerKey).replace(/@c\.us$/i, "") : "") ||
+    "—";
+  const dropoff = rows[0].delivery_address || order?.location || "—";
+
+  // 1) Buyer: out for delivery + OTP
   if (order?.customerKey) {
     try {
       await sendText(
         order.customerKey,
-        `🔐 *SOKONI DELIVERY CONFIRMATION CODE*\n\n` +
-          `Your Order *${id}* is currently on its way.\n` +
-          `• *Delivery Confirmation Code:* *${deliveryOtp}*\n\n` +
-          `⚠️ Give this 4-digit code to the rider ONLY after you have received and verified your package.\n` +
-          `Or reply *YES ${id}* / *CODE ${deliveryOtp}* once you have the item.`
+        msgBuyerOutForDelivery({
+          orderId: id,
+          riderName,
+          riderPhone,
+          plate: riderPlate,
+          deliveryOtp,
+        })
       );
     } catch (err) {
       console.warn("[boda-fleet] delivery OTP after pickup:", err.message);
     }
   }
 
+  // 2) Seller ack
   const sellerTo = rows[0].seller_phone
     ? `${normalizeRiderPhone(rows[0].seller_phone)}@c.us`
     : null;
@@ -2236,11 +2288,28 @@ export async function confirmPickupWithOtp({
     try {
       await sendText(
         sellerTo,
-        `✅ Pickup verified for *${id}*. Custody is with rider *${dispatch.rider_name || "assigned"}*. Parcel is in transit.`
+        `🟢 *PICKUP VERIFIED* [${id}]\n\nCustody is with rider *${riderName}*. Parcel is *IN_TRANSIT*.`
       );
     } catch (err) {
       console.warn("[boda-fleet] seller pickup ack:", err.message);
     }
+  }
+
+  // 3) Admin handover audit
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId: id,
+      details: msgAdminPickupHandover({
+        orderId: id,
+        riderName,
+        riderPhone,
+        plate: riderPlate,
+        sellerPhone: rows[0].seller_phone || "—",
+      }),
+    });
+  } catch (err) {
+    console.warn("[boda-fleet] admin pickup audit:", err.message);
   }
 
   updateOrderMeta(id, {
@@ -2249,12 +2318,13 @@ export async function confirmPickupWithOtp({
     bodaPickedUpAt: Date.now(),
   });
 
-  const cleanRiderMsg =
-    `✅ *PICKUP CONFIRMED!* You now have custody of *${id}*.\n` +
-    `Buyer has their delivery code.\n` +
-    `At drop-off: 1) share *live WhatsApp location*, then 2) *CONFIRM ${id} ####*\n` +
-    `(3 wrong tries locks your account)` +
-    (feeKes > 0 ? `\n\nFee held: KES ${feeKes.toLocaleString()} — credited after CONFIRM.` : "");
+  const cleanRiderMsg = msgRiderDeliveryStep({
+    orderId: id,
+    buyerName,
+    dropoffAddr: dropoff,
+    buyerPhone: String(buyerPhone).replace(/\D/g, "") || buyerPhone,
+    feeKes,
+  });
 
   return { ok: true, dispatch: mapDispatch(rows[0]), message: cleanRiderMsg };
 }
@@ -3637,7 +3707,7 @@ export async function suspendBodaRiderForOrderDispute(orderRef, { reason = "Buye
  * @returns {Promise<boolean>} true if consumed
  */
 export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "", location = null } = {}) {
-  const trimmed = String(text || "").trim();
+  const trimmed = String(text || "").replace(/\s+/g, " ").trim();
   const { sendText } = await import("./whatsapp.js");
   const { extractOrderIdFromText } = await import("./orders.js");
 
@@ -3732,9 +3802,11 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
     return true;
   }
 
-  // Rider: PICKUP SKN-#### 1234 (seller OTP → custody transfer)
-  const pickupCmd = trimmed.match(
-    /^PICKUP\s+(SKN?-?\d{1,6}(?:-\d+)?)\s+(\d{4})\b/i
+  // Rider: PICKUP / PICK UP SKN-#### 1234 (seller OTP → custody transfer)
+  // Normalize "Pick up SkN-1015 5972" style messages.
+  const pickupNormalized = trimmed.replace(/\s+/g, " ");
+  const pickupCmd = pickupNormalized.match(
+    /^(?:PICK\s*UP|PICKUP)\s+(SKN?-?\d{1,6}(?:-\d+)?)\s+(\d{4})\b/i
   );
   if (pickupCmd) {
     const result = await confirmPickupWithOtp({
@@ -3744,6 +3816,16 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
       customerKey,
     });
     await sendText(customerKey, result.message || result.error || "Could not confirm pickup.");
+    return true;
+  }
+
+  // Near-miss: "PICK UP SKN-…" / "PICKUP SKN-…" without a valid 4-digit OTP
+  const pickupNear = pickupNormalized.match(
+    /^(?:PICK\s*UP|PICKUP)\s+(SKN?-?\d{1,6}(?:-\d+)?)\b/i
+  );
+  if (pickupNear) {
+    const { msgPickupFormatHint } = await import("../lib/wa-ux.js");
+    await sendText(customerKey, msgPickupFormatHint(`SKN-${String(pickupNear[1]).replace(/^SKN?-?/i, "")}`));
     return true;
   }
 
