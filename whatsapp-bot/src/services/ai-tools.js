@@ -4,6 +4,8 @@
  */
 import { searchProducts, getProductById, listBrowseProducts } from "./catalog.js";
 import { getOrder, getOrdersForCustomer, listAllOrders, extractOrderIdFromText, isSokoniOrderId } from "./orders.js";
+import { normalizeOrderId } from "../lib/order-id.js";
+import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
 import { checkoutMeta } from "./prepaid-checkout.js";
 import { normalizeShopperQuery, isShopperFillerOnly } from "./shopper-language.js";
@@ -22,7 +24,6 @@ import {
   PROMO_CODE,
   OFFER_PERCENT,
 } from "./trust-copy.js";
-import { findSupplierByPhone } from "./suppliers.js";
 import { getSellerEscrowLedger } from "./seller-onboard.js";
 import { getWithdrawableEntries } from "./seller-withdrawals.js";
 import {
@@ -39,6 +40,8 @@ export const TOOL_NAMES = [
   "track_order",
   "list_orders",
   "list_seller_orders",
+  "lookup_order_seller",
+  "list_seller_listings",
   "store_info",
   "open_return_case",
   "get_seller_onboarding",
@@ -90,6 +93,8 @@ export function isSellerShopOrdersIntent(text) {
   const raw = String(text || "").trim();
   const lower = raw.toLowerCase();
   if (!lower) return false;
+  // Asking who the seller IS on an order / dispute — NOT "my shop sales"
+  if (isOrderSellerLookupIntent(raw)) return false;
   // Bare @handle after bot asked for handle — treat as shop-orders follow-up
   if (/^@[\w][\w\s'.-]{1,40}$/i.test(raw)) return true;
   if (
@@ -99,10 +104,70 @@ export function isSellerShopOrdersIntent(text) {
   ) {
     return true;
   }
-  if (/\borders?\b/i.test(lower) && /\b(shop|store|sold|sales|seller)\b/i.test(lower)) {
+  // "orders" + shop/sales — but NOT "seller" alone (that matches "who is the seller for those orders")
+  if (/\borders?\b/i.test(lower) && /\b(shop|store|sold|sales)\b/i.test(lower)) {
     return true;
   }
   return false;
+}
+
+/** Boss/buyer: who sells this order / dispute seller metadata. */
+export function isOrderSellerLookupIntent(text) {
+  const lower = String(text || "").toLowerCase();
+  if (!lower.trim()) return false;
+  if (
+    /\b(who\s+(is|are|was|were)\s+(the\s+)?sellers?|which\s+sellers?|seller\s+(for|on|of)\s+(this|that|those|the|my)?\s*(order|dispute|skn)|sellers?\s+(name|handle|phone|contact|info|details)|who\s+sold|seller\s+on\s+the\s+dispute)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  if (/\b(seller|vendors?)\b/i.test(lower) && /\b(order|dispute|skn-|those|these)\b/i.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
+/** Seller catalog: active listings / my products. */
+export function isSellerListingsIntent(text) {
+  const lower = String(text || "").toLowerCase();
+  if (!lower.trim()) return false;
+  return /\b((active|live|my|current)\s+listings?|my\s+(products?|catalog|inventory|items)|show\s+(me\s+)?(my\s+)?(listings?|products?|catalog)|list\s+(my\s+)?(listings?|products?))\b/i.test(
+    lower
+  );
+}
+
+/** Extract all SKN/SK ids from free text (current message or history). */
+export function extractAllOrderIdsFromText(text) {
+  const re = /\b(SKN-\d+(?:-\d+)?|SK-\d+)\b/gi;
+  const found = [];
+  const seen = new Set();
+  let m;
+  const s = String(text || "");
+  while ((m = re.exec(s)) !== null) {
+    const id = normalizeOrderId(m[1]);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      found.push(id);
+    }
+  }
+  return found;
+}
+
+function recentOrderIdsFromHistory(history = [], limit = 6) {
+  const seen = new Set();
+  const out = [];
+  const rows = Array.isArray(history) ? [...history].reverse() : [];
+  for (const row of rows) {
+    const ids = extractAllOrderIdsFromText(row?.content || row?.text || "");
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
 }
 
 function isPaymentOrSiteInfoQuery(lower) {
@@ -479,16 +544,31 @@ function shouldBrowseList(text, lower, browseMatch) {
 /** Intent router — runs tools before LLM (works on free models without function-calling). */
 export async function runToolRouter(
   userMessage,
-  { phone = "", customerKey = "", specialist = "general", allowedTools = null } = {}
+  { phone = "", customerKey = "", specialist = "general", allowedTools = null, history = [] } = {}
 ) {
   const text = String(userMessage || "").trim();
   const lower = text.toLowerCase();
   const results = [];
   const allow = (name) => !allowedTools || allowedTools.includes(name);
 
-  const orderId = extractOrderId(text);
-  // Seller shop sales — phone → supplierId → real rows only (never buyer list_orders)
-  if (allow("list_seller_orders") && isSellerShopOrdersIntent(text)) {
+  const orderIdsInMsg = extractAllOrderIdsFromText(text);
+  const orderId = orderIdsInMsg[0] || extractOrderId(text);
+  const contextOrderIds =
+    orderIdsInMsg.length > 0 ? orderIdsInMsg : recentOrderIdsFromHistory(history, 6);
+
+  // Order → seller metadata (Boss/buyer/dispute) — NEVER list_seller_orders
+  if (allow("lookup_order_seller") && isOrderSellerLookupIntent(text)) {
+    results.push(
+      await executeTool(
+        "lookup_order_seller",
+        { orderIds: contextOrderIds },
+        { phone, customerKey, history }
+      )
+    );
+  } else if (allow("list_seller_listings") && isSellerListingsIntent(text)) {
+    results.push(await executeTool("list_seller_listings", {}, { phone, customerKey }));
+  } else if (allow("list_seller_orders") && isSellerShopOrdersIntent(text)) {
+    // Seller shop sales — phone → supplierId → real rows only (never buyer list_orders)
     results.push(await executeTool("list_seller_orders", {}, { phone, customerKey }));
   } else if (
     orderId ||
@@ -504,8 +584,9 @@ export async function runToolRouter(
   // Also: seller specialist + vague "orders" / "only this?" follow-ups when phone is a shop
   if (
     allow("list_seller_orders") &&
-    !results.some((r) => r.tool === "list_seller_orders") &&
+    !results.some((r) => r.tool === "list_seller_orders" || r.tool === "lookup_order_seller") &&
     specialist === "seller" &&
+    !isOrderSellerLookupIntent(text) &&
     /\b(orders?|sales|only this|that'?s all|ndio hizo)\b/i.test(lower)
   ) {
     results.push(await executeTool("list_seller_orders", {}, { phone, customerKey }));
@@ -805,6 +886,10 @@ export async function executeTool(name, args = {}, context = {}) {
         return toolListOrders(context);
       case "list_seller_orders":
         return toolListSellerOrders(context);
+      case "lookup_order_seller":
+        return await toolLookupOrderSeller(args, context);
+      case "list_seller_listings":
+        return await toolListSellerListings(context);
       case "store_info":
         return toolStoreInfo();
       case "open_return_case":
@@ -1134,6 +1219,269 @@ function toolListSellerOrders({ phone = "" } = {}) {
     orders: rows,
     shopHandle: displayHandle,
     supplierId: supplier.id,
+    message,
+    deterministic: true,
+  };
+}
+
+async function resolveSellerForOrder(order) {
+  if (!order) return null;
+  let o = order;
+  try {
+    const { ensureOrderSupplier } = await import("./communication-hub.js");
+    o = (await ensureOrderSupplier(order)) || order;
+  } catch {
+    /* ignore */
+  }
+  let supplier = o.supplierId ? getSupplier(o.supplierId) : null;
+  if (!supplier && o.sellerPhone) supplier = findSupplierByPhone(o.sellerPhone);
+  if (!supplier && o.productId) {
+    try {
+      const product = await getProductById(o.productId);
+      if (product?.supplierId) supplier = getSupplier(product.supplierId);
+      if (!supplier && product?.sellerPhone) supplier = findSupplierByPhone(product.sellerPhone);
+    } catch {
+      /* ignore */
+    }
+  }
+  const handle = String(
+    supplier?.shopHandle || supplier?.handle || o.shopHandle || o.sellerHandle || ""
+  )
+    .replace(/^@/, "")
+    .trim();
+  const phone =
+    supplier?.phone || supplier?.mpesaNumber || o.sellerPhone || productPhone(o) || null;
+  return {
+    supplierId: supplier?.id || o.supplierId || null,
+    handle: handle ? `@${handle}` : null,
+    businessName: supplier?.businessName || supplier?.shopName || o.sellerName || null,
+    phone: phone || null,
+    verified: Boolean(supplier?.isVerifiedStore || supplier?.isSellerVerified || supplier?.verifiedBadge),
+  };
+}
+
+function productPhone(_o) {
+  return null;
+}
+
+async function toolLookupOrderSeller(args = {}, context = {}) {
+  let ids = Array.isArray(args.orderIds) ? args.orderIds.map(normalizeOrderId).filter(Boolean) : [];
+  if (!ids.length && args.orderId) {
+    const one = normalizeOrderId(args.orderId);
+    if (one) ids = [one];
+  }
+  if (!ids.length) {
+    ids = extractAllOrderIdsFromText(args.text || "");
+  }
+  if (!ids.length && context.history) {
+    ids = recentOrderIdsFromHistory(context.history, 6);
+  }
+
+  if (!ids.length) {
+    return {
+      tool: "lookup_order_seller",
+      ok: false,
+      error: "missing_order_id",
+      count: 0,
+      orders: [],
+      message:
+        "I need an order id like *SKN-1011* to look up the seller. Paste the SKN / SK id (or ask again right after a message that lists those orders).",
+      deterministic: true,
+    };
+  }
+
+  const rows = [];
+  for (const id of ids.slice(0, 8)) {
+    let order = getOrder(id);
+    if (!order) {
+      rows.push({
+        id,
+        found: false,
+        productName: null,
+        status: null,
+        seller: null,
+        dispute: null,
+      });
+      continue;
+    }
+    const seller = await resolveSellerForOrder(order);
+    let dispute = null;
+    try {
+      const { getOpenDisputeForOrder } = await import("./disputes.js");
+      dispute = await getOpenDisputeForOrder(id);
+    } catch {
+      if (order.disputeId || order.disputeStatus) {
+        dispute = {
+          id: order.disputeId || null,
+          status: order.disputeStatus || "open",
+          reason: order.disputeReason || null,
+        };
+      }
+    }
+    rows.push({
+      id: order.id,
+      found: true,
+      productName: String(order.productName || order.title || "Item").slice(0, 80),
+      status: String(order.status || order.shipmentStatus || "—"),
+      seller,
+      dispute: dispute
+        ? {
+            id: dispute.id || dispute.disputeId || null,
+            status: dispute.status || "open",
+            reason: dispute.reason || dispute.buyerReason || null,
+          }
+        : null,
+    });
+  }
+
+  const found = rows.filter((r) => r.found);
+  if (!found.length) {
+    return {
+      tool: "lookup_order_seller",
+      ok: false,
+      error: "not_found",
+      count: 0,
+      orders: rows,
+      message: `No orders found for ${ids.join(", ")}. Double-check the SKN / SK id.`,
+      deterministic: true,
+    };
+  }
+
+  const lines = found.map((r) => {
+    const s = r.seller;
+    const sellerLabel = s?.handle
+      ? `${s.handle}${s.phone ? ` (${s.phone})` : ""}`
+      : s?.businessName || s?.phone || "Unknown seller (not linked on file)";
+    const disputeLine = r.dispute
+      ? `⚠️ Dispute: ${r.dispute.status}${r.dispute.reason ? ` — ${String(r.dispute.reason).slice(0, 80)}` : ""}`
+      : "✅ No active dispute on file";
+    return (
+      `📦 *${r.id}*\n` +
+      `• Item: ${r.productName}\n` +
+      `• Status: *${r.status}*\n` +
+      `• Seller: ${sellerLabel}\n` +
+      `• ${disputeLine}`
+    );
+  });
+
+  const missing = rows.filter((r) => !r.found).map((r) => r.id);
+  const message =
+    `Here is the seller info for ${found.length} order${found.length === 1 ? "" : "s"}:\n\n` +
+    `${lines.join("\n\n")}` +
+    (missing.length ? `\n\n_Not found: ${missing.join(", ")}_` : "");
+
+  return {
+    tool: "lookup_order_seller",
+    ok: true,
+    count: found.length,
+    orders: rows,
+    message,
+    deterministic: true,
+  };
+}
+
+async function toolListSellerListings({ phone = "" } = {}) {
+  if (!phone) {
+    return {
+      tool: "list_seller_listings",
+      ok: false,
+      error: "phone_required",
+      count: 0,
+      listings: [],
+      message: "Message Sokoni from the WhatsApp number linked to your shop to list active listings.",
+      deterministic: true,
+    };
+  }
+  const supplier = findSupplierByPhone(phone);
+  if (!supplier?.id) {
+    return {
+      tool: "list_seller_listings",
+      ok: false,
+      error: "not_a_seller",
+      count: 0,
+      listings: [],
+      message:
+        "❌ This WhatsApp number isn't linked to an active seller shop on Sokoni.\n\nOpen Seller Hub: sokonimall.com/suppliers/list.html",
+      deterministic: true,
+    };
+  }
+
+  const handle =
+    String(supplier.shopHandle || supplier.handle || supplier.businessName || "your shop")
+      .replace(/^@/, "")
+      .trim() || "your shop";
+  const displayHandle = `@${handle}`;
+
+  let live = [];
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const botRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const masterFile = path.join(botRoot, "data", "products.json");
+    const master = JSON.parse(await readFile(masterFile, "utf-8"));
+    const digits = String(phone || "").replace(/\D/g, "");
+    const sellerHandle = handle.toLowerCase();
+    live = (Array.isArray(master) ? master : []).filter((p) => {
+      if (p.supplierId && p.supplierId === supplier.id) return true;
+      const ph = String(p.shopHandle || p.sellerHandle || "")
+        .replace(/^@/, "")
+        .trim()
+        .toLowerCase();
+      if (ph && ph === sellerHandle) return true;
+      const sp = String(p.sellerPhone || "").replace(/\D/g, "");
+      if (digits && sp && (sp.endsWith(digits.slice(-9)) || digits.endsWith(sp.slice(-9)))) return true;
+      return false;
+    });
+  } catch (err) {
+    console.warn("[ai-tools] list_seller_listings master:", err.message);
+  }
+
+  const active = live
+    .filter((p) => p.inStock !== false && !p.isSold && String(p.status || "live").toLowerCase() !== "hidden")
+    .slice(0, 15)
+    .map((p) => ({
+      id: p.id,
+      name: p.name || p.title,
+      priceKes: Math.round(Number(p.priceKes || p.draft?.priceKes || 0) || 0),
+      stock:
+        p.stockQuantity != null
+          ? Math.max(0, Math.round(Number(p.stockQuantity) || 0))
+          : p.inStock === false
+            ? 0
+            : 1,
+    }));
+
+  if (!active.length) {
+    return {
+      tool: "list_seller_listings",
+      ok: true,
+      count: 0,
+      listings: [],
+      shopHandle: displayHandle,
+      message: `📦 *${displayHandle}* — You currently have *0 active listings* on Sokoni.\n\nAdd items in Seller Hub: sokonimall.com/suppliers/list.html`,
+      deterministic: true,
+    };
+  }
+
+  const lines = active.map(
+    (p, i) =>
+      `${i + 1}. *${p.name}*\n` +
+      `   • Price: KES ${Number(p.priceKes || 0).toLocaleString()}\n` +
+      `   • ID: \`${p.id}\`\n` +
+      `   • Stock: ${p.stock > 0 ? `In stock (${p.stock})` : "OUT OF STOCK"}`
+  );
+  const message =
+    `🛍️ *Active listings for ${displayHandle}* (${active.length}):\n\n` +
+    `${lines.join("\n\n")}\n\n` +
+    `Manage in Seller Hub → Listings.`;
+
+  return {
+    tool: "list_seller_listings",
+    ok: true,
+    count: active.length,
+    listings: active,
+    shopHandle: displayHandle,
     message,
     deterministic: true,
   };
@@ -1495,6 +1843,20 @@ export function formatToolResultsForPrompt(toolResults) {
         `TOOL list_seller_orders (AUTHORITATIVE):\n` +
         `count=${r.count ?? 0}\n` +
         (lines.join("\n") || "0 shop orders for this WhatsApp.")
+      );
+    }
+    if (r.tool === "lookup_order_seller") {
+      return (
+        `TOOL lookup_order_seller (AUTHORITATIVE — never invent sellers):\n` +
+        `ok=${r.ok} count=${r.count ?? 0}\n` +
+        `${r.message || r.error || ""}`
+      );
+    }
+    if (r.tool === "list_seller_listings") {
+      return (
+        `TOOL list_seller_listings (AUTHORITATIVE):\n` +
+        `ok=${r.ok} count=${r.count ?? 0} shop=${r.shopHandle || "—"}\n` +
+        `${r.message || ""}`
       );
     }
     if (r.tool === "open_return_case") {

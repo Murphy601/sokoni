@@ -86,6 +86,8 @@ export function isOverrideCommand(text) {
   if (/^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(t)) return true;
   if (/^\s*SYSTEM\s+(PAUSE|RESUME)\b/i.test(t)) return true;
   if (/^\s*OVERRIDE\s+TEST\s*$/i.test(t)) return true;
+  if (/^\s*LIST\s+(AVAILABLE\s+)?RIDERS?\b/i.test(t)) return true;
+  if (/^\s*LIST\s+(VERIFIED\s+)?SELLERS?\b/i.test(t)) return true;
   return false;
 }
 
@@ -196,6 +198,8 @@ export function normalizeMasterCommand(raw) {
   if (/^\s*SYSTEM\s+PAUSE\b/i.test(t)) return "SYSTEM PAUSE";
   if (/^\s*SYSTEM\s+RESUME\b/i.test(t)) return "SYSTEM RESUME";
   if (/^\s*OVERRIDE\s+TEST\s*$/i.test(t)) return "OVERRIDE_TEST";
+  if (/^\s*LIST\s+(AVAILABLE\s+)?RIDERS?\b/i.test(t)) return "LIST_RIDERS";
+  if (/^\s*LIST\s+(VERIFIED\s+)?SELLERS?\b/i.test(t)) return "LIST_SELLERS";
 
   if (/^\s*OVERRIDE\s*:/i.test(t)) {
     return t.replace(/^\s*OVERRIDE\s*:/i, "").trim();
@@ -280,6 +284,12 @@ export function softMapSpokenToMasterCommand(spoken) {
   if (/\b(brief(ing)?|morning\s+status|system\s+status|exec(utive)?\s+summary)\b/i.test(t)) {
     return "BRIEFING";
   }
+  if (/\b(list\s+(available\s+)?riders?|available\s+riders?|riders?\s+online)\b/i.test(t)) {
+    return "LIST RIDERS";
+  }
+  if (/\b(list\s+(verified\s+)?sellers?|verified\s+(stores?|sellers?)|verified\s+shops?)\b/i.test(t)) {
+    return "LIST VERIFIED SELLERS";
+  }
   if (/^override\s+test$/i.test(t)) return "OVERRIDE TEST";
   return null;
 }
@@ -304,6 +314,7 @@ function overrideHelp() {
     `• *SPLIT ESCROW SKN-#### 50 50*\n` +
     `• *PAUSE PAYOUTS @handle*\n\n` +
     `*Shops*\n` +
+    `• *LIST VERIFIED SELLERS*\n` +
     `• *VERIFY SHOP @handle* / *VERIFY STORE @handle* → 🔷 VERIFIED STORE\n` +
     `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
@@ -312,6 +323,7 @@ function overrideHelp() {
     `• *PENALIZE RIDER +254… 0.5* / *PENALIZE SELLER @handle 0.3*\n` +
     `• *HIDE ITEM product_id*\n\n` +
     `*Riders*\n` +
+    `• *LIST RIDERS* / *LIST AVAILABLE RIDERS*\n` +
     `• *REASSIGN RIDER SKN-#### +254…*\n` +
     `• *FORCE RETURN SKN-####*\n` +
     `• *UNBAN RIDER +254…*\n\n` +
@@ -453,6 +465,86 @@ export async function executeMasterAdminCommand(
     const { composeExecutiveBriefing } = await import("./exec-briefing.js");
     const text = await composeExecutiveBriefing();
     return { ok: true, action: "brief", reply: ack(text) };
+  }
+
+  if (/^LIST_RIDERS\b/i.test(cmd)) {
+    if (!staffCan("brief", staff)) return deny(staff, "brief");
+    try {
+      const { listRiders } = await import("./boda-fleet.js");
+      const out = await listRiders({ status: "VERIFIED", limit: 15 });
+      const available = (out.riders || []).filter((r) => r.fleetStatus === "AVAILABLE");
+      const show = available.length ? available : (out.riders || []).slice(0, 10);
+      if (!show.length) {
+        return {
+          ok: true,
+          action: "list_riders",
+          reply: ack("There are currently *0 riders* available / verified online."),
+        };
+      }
+      const lines = show.map((r, i) => {
+        const status =
+          r.fleetStatus === "AVAILABLE"
+            ? "🟢 Free"
+            : r.fleetStatus === "ON_DELIVERY"
+              ? `🔴 Busy (${r.activeOrderRef || "on job"})`
+              : r.fleetStatus || "—";
+        return (
+          `${i + 1}. *${r.fullName || r.name || "Rider"}* (${r.phone || "—"})\n` +
+          `   • Zone: ${r.operatingTown || r.zone || "—"}\n` +
+          `   • Status: ${status}`
+        );
+      });
+      const title = available.length
+        ? `🛵 *Available riders* (${available.length})`
+        : `🛵 *Verified riders* (${show.length} — none marked AVAILABLE right now)`;
+      return {
+        ok: true,
+        action: "list_riders",
+        reply: ack(`${title}:\n\n${lines.join("\n\n")}`),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        action: "list_riders",
+        reply: ack(`Could not load riders: ${err.message}`),
+      };
+    }
+  }
+
+  if (/^LIST_SELLERS\b/i.test(cmd)) {
+    if (!staffCan("brief", staff)) return deny(staff, "brief");
+    try {
+      const { listShopsForAdminReview } = await import("./suppliers.js");
+      const shops = listShopsForAdminReview({ status: "all" }).filter(
+        (s) => s.verifiedBadge || s.isSellerVerified
+      );
+      if (!shops.length) {
+        return {
+          ok: true,
+          action: "list_sellers",
+          reply: ack("No *🔷 VERIFIED STORE* shops in the database yet."),
+        };
+      }
+      const lines = shops.slice(0, 15).map((s, i) => {
+        const handle = String(s.shopHandle || s.businessName || s.id || "shop").replace(/^@/, "");
+        return (
+          `${i + 1}. *@${handle}* (${s.phone || "—"})\n` +
+          `   • Badge: 🔷 VERIFIED STORE\n` +
+          `   • Status: ${s.shopStatus || "live"}`
+        );
+      });
+      return {
+        ok: true,
+        action: "list_sellers",
+        reply: ack(`🔷 *Verified stores on Sokoni* (${shops.length}):\n\n${lines.join("\n\n")}`),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        action: "list_sellers",
+        reply: ack(`Could not load sellers: ${err.message}`),
+      };
+    }
   }
 
   const release = cmd.match(/^RELEASE\s+(SKN-[\w-]+|SK-[\w-]+)/i);

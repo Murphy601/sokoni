@@ -360,6 +360,12 @@ function offlineReply(toolResults, channel, userMessage = "") {
     if (r.tool === "list_seller_orders" && r.message) {
       return r.message;
     }
+    if (r.tool === "lookup_order_seller" && r.message) {
+      return r.message;
+    }
+    if (r.tool === "list_seller_listings" && r.message) {
+      return r.message;
+    }
     if (r.tool === "get_seller_payout" && (r.message || r.ok)) {
       return r.message || `Payout summary ready in Seller Hub.`;
     }
@@ -562,11 +568,15 @@ export async function runAgentTurn({
     /* ignore */
   }
 
+  const sessionEarly = channel === "whatsapp" ? getSession(sessionKey) : null;
+  const historyForTools = history || sessionEarly?.history || [];
+
   const graph = await runAgentGraph({
     text,
     phone,
     customerKey: sessionKey,
     isSellerSession: sellerByPhone || isSellerTopic(text),
+    history: historyForTools,
   });
   const { escalation, specialist, specialistHint, tools: toolResults, knowledge, knowledgeBlock, handoffSummary } =
     graph;
@@ -787,6 +797,52 @@ export async function runAgentTurn({
       tracking: trackingPayload,
       specialist,
       sellerShopOrders: true,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
+    };
+  }
+
+  // DETERMINISTIC order → seller lookup (Boss / dispute / follow-up "those orders")
+  const orderSellerResult = toolResults.find(
+    (r) => r.tool === "lookup_order_seller" && r.message && r.deterministic
+  );
+  if (orderSellerResult?.message) {
+    const reply = orderSellerResult.message;
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log(
+      `[ai-agent] order seller lookup (no LLM): count=${orderSellerResult.count ?? 0}`
+    );
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      specialist,
+      orderSellerLookup: true,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
+    };
+  }
+
+  // DETERMINISTIC seller active listings
+  const listingsResult = toolResults.find(
+    (r) => r.tool === "list_seller_listings" && r.message && r.deterministic
+  );
+  if (listingsResult?.message) {
+    const reply = listingsResult.message;
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log(
+      `[ai-agent] seller listings (no LLM): shop=${listingsResult.shopHandle || "—"} count=${
+        listingsResult.count ?? 0
+      }`
+    );
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      specialist,
+      sellerListings: true,
       graph: graph.graph,
       threadId: resolveThreadId(phone || sessionKey),
     };
