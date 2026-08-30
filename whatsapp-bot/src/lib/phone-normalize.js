@@ -1,6 +1,9 @@
 /**
- * Kenya WhatsApp phone normalization + hardwired Boss identity.
+ * Kenya WhatsApp phone normalization + hardwired founder Boss identity.
  * Meta / WAHA deliver international digits (2547…) — never rely on leading-0 alone.
+ *
+ * IMPORTANT: Only the founder hardwire (757764009) + optional BOSS_PHONES are "Boss".
+ * ADMIN_PHONES are staff — they must NOT get the Boss LLM salute or founder palette.
  */
 
 /** Last 9 digits of the founder Boss line (0757764009 / 254757764009). Always checked. */
@@ -40,24 +43,16 @@ export function nationalTail9(value) {
 }
 
 /**
- * Bulletproof Boss check — `.endsWith(last9)` only.
- * Ignores +, 254, 0, spaces. Hardwired founder line always included.
+ * Founder Boss only — hardwire tails + optional BOSS_PHONES.
+ * Does NOT include ADMIN_PHONES (staff ≠ Boss).
  */
-export function checkIfBoss(incomingPhone, configuredPhones = []) {
+export function checkIfBoss(incomingPhone, _configuredPhonesIgnored = []) {
   if (!incomingPhone) return false;
   const clean = digitsOnly(incomingPhone);
   if (!clean || clean.length < 9) return false;
 
   const tails = new Set(BOSS_HARDWIRE_TAILS);
-  for (const p of configuredPhones || []) {
-    const t = nationalTail9(p);
-    if (t.length === 9) tails.add(t);
-  }
   for (const p of String(process.env.BOSS_PHONES || "").split(",")) {
-    const t = nationalTail9(p);
-    if (t.length === 9) tails.add(t);
-  }
-  for (const p of String(process.env.ADMIN_PHONES || "").split(",")) {
     const t = nationalTail9(p);
     if (t.length === 9) tails.add(t);
   }
@@ -68,9 +63,16 @@ export function checkIfBoss(incomingPhone, configuredPhones = []) {
   return false;
 }
 
-/** @deprecated alias — use checkIfBoss */
+/** Alias — founder Boss only. */
+export function isFounderBossPhone(incomingPhone) {
+  return checkIfBoss(incomingPhone);
+}
+
+/** @deprecated alias — use checkIfBoss / isFounderBossPhone */
 export function isBossPhone(senderPhone, configuredPhones = []) {
-  return checkIfBoss(senderPhone, configuredPhones);
+  // Ignore configuredPhones for founder identity (kept for call-site compat).
+  void configuredPhones;
+  return checkIfBoss(senderPhone);
 }
 
 /**
@@ -105,13 +107,14 @@ export function expandKenyaPhoneAliases(value) {
 }
 
 /**
- * Build Boss / SUPER_ADMIN number set from ADMIN_PHONES (+ optional BOSS_PHONES).
+ * Build founder Boss number set (hardwire + BOSS_PHONES only).
+ * Ignores configuredPhones so ADMIN_PHONES never become founder identity.
  */
-export function buildBossNumberSet(configuredPhones = []) {
+export function buildBossNumberSet(_configuredPhonesIgnored = []) {
+  void _configuredPhonesIgnored;
   const raw = [
-    ...configuredPhones,
-    ...(String(process.env.BOSS_PHONES || "").split(",")),
     ...BOSS_HARDWIRE_TAILS.map((t) => `254${t}`),
+    ...(String(process.env.BOSS_PHONES || "").split(",")),
   ];
   const set = new Set();
   for (const p of raw) {

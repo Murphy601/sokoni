@@ -518,18 +518,18 @@ export async function runAgentTurn({
   }
 
   let adminSender = Boolean(isAdmin);
+  let founderBoss = false;
   let staff = null;
   if (channel === "whatsapp" && (phone || sessionKey)) {
     try {
-      const { isAdminSender, checkIfBoss } = await import("./admin.js");
+      const { isAdminSender } = await import("./admin.js");
       const { resolveStaffRole } = await import("./staff-roles.js");
-      const { checkIfBoss: bossDigits } = await import("../lib/phone-normalize.js");
+      const { checkIfBoss } = await import("../lib/phone-normalize.js");
       console.log("[ai-agent] Incoming Phone:", phone || "(empty)", "sessionKey:", sessionKey);
-      const hardBoss = bossDigits(phone || sessionKey);
-      if (!adminSender) adminSender = hardBoss || isAdminSender(sessionKey, phone);
+      founderBoss = checkIfBoss(phone || sessionKey);
+      const isStaffPhone = isAdminSender(sessionKey, phone);
       staff = await resolveStaffRole(phone || sessionKey);
-      if (staff) adminSender = true;
-      if (hardBoss && !staff) {
+      if (founderBoss && !staff) {
         staff = {
           phone: String(phone || "").replace(/\D/g, ""),
           role: "SUPER_ADMIN",
@@ -537,9 +537,12 @@ export async function runAgentTurn({
           source: "hardwire",
         };
       }
+      // Staff can skip shopper HITL / use tools — but Boss LLM persona is founder-only
+      adminSender = Boolean(isAdmin || founderBoss || isStaffPhone || staff);
       console.log(
-        "[ai-agent] IS_BOSS_ADMIN?:",
-        adminSender,
+        "[ai-agent] founderBoss?:",
+        founderBoss,
+        "staff?:",
         staff?.role || "none",
         staff?.source || ""
       );
@@ -609,7 +612,27 @@ export async function runAgentTurn({
     console.warn("[ai-agent] user context skipped:", err.message);
   }
 
-  // Admin freeform: intercept master verbs again (safety net if webhook missed)
+  // Zero-leak safety net: admin probes never reach the public LLM
+  if (channel === "whatsapp" && !adminSender) {
+    try {
+      const { looksLikeAdminProbe, PUBLIC_SHOP_REPLY } = await import("./boss-intercept.js");
+      if (looksLikeAdminProbe(text)) {
+        if (persist) pushMessage(sessionKey, "user", text);
+        if (persist) pushMessage(sessionKey, "assistant", PUBLIC_SHOP_REPLY);
+        return {
+          reply: PUBLIC_SHOP_REPLY,
+          tools: [],
+          adminCommand: false,
+          specialist,
+          graph: graph.graph,
+        };
+      }
+    } catch (err) {
+      console.warn("[ai-agent] public admin-probe gate:", err.message);
+    }
+  }
+
+  // Staff / Boss freeform: intercept master verbs again (safety net if webhook missed)
   if (adminSender && channel === "whatsapp") {
     try {
       const {
@@ -620,11 +643,21 @@ export async function runAgentTurn({
       const mapped =
         softMapSpokenToMasterCommand(text) || (isMasterCommand(text) ? text : null);
       if (mapped) {
+        if (!founderBoss && !staff) {
+          const { PUBLIC_SHOP_REPLY } = await import("./boss-intercept.js");
+          if (persist) pushMessage(sessionKey, "user", text);
+          if (persist) pushMessage(sessionKey, "assistant", PUBLIC_SHOP_REPLY);
+          return { reply: PUBLIC_SHOP_REPLY, tools: [], adminCommand: false, specialist, graph: graph.graph };
+        }
         const result = await executeMasterAdminCommand(mapped, {
           adminLabel: phone || sessionKey || "boss",
           actorPhone: phone || "",
+          requireStaff: true,
+          founderBoss,
+          source: "ai-agent.safety-net",
         });
-        const reply = result?.reply || "Yes, Boss.";
+        const reply =
+          result?.reply || (founderBoss ? "Yes, Boss." : "Done.");
         if (persist) pushMessage(sessionKey, "user", text);
         if (persist) pushMessage(sessionKey, "assistant", reply);
         return { reply, tools: [], adminCommand: true, specialist, graph: graph.graph };
@@ -752,7 +785,7 @@ export async function runAgentTurn({
     const messages = [
       {
         role: "system",
-        content: adminSender
+        content: founderBoss
           ? `CRITICAL EXCEPTION RULE: You are speaking directly to THE BOSS (+254757764009). DO NOT check any knowledge base. DO NOT say you lack details. DO NOT use public escrow refusals. Start EVERY reply with "Yes, Boss." or "Right away, Boss." After the salute, put a blank line, then short paragraphs (2–3 sentences max) separated by blank lines. Use • bullets for lists — never one wall of text. If they asked for a mutation, tell them the exact command (*FORCE RELEASE SKN-…*, *!help*) — the code interceptor executes mutations, not you.\n\n${buildGroundedSystemPrompt({
               channel,
               contextBlocks: [userContextBlock, toolBlock].filter(Boolean),
@@ -764,16 +797,18 @@ export async function runAgentTurn({
             })}`
           : buildGroundedSystemPrompt({
               channel,
-              contextBlocks: [
-                specialistForPrompt,
-                userContextBlock,
-                knowledgeForPrompt,
-                toolBlock,
-              ].filter(Boolean),
+              contextBlocks: adminSender
+                ? [userContextBlock, toolBlock].filter(Boolean)
+                : [
+                    specialistForPrompt,
+                    userContextBlock,
+                    knowledgeForPrompt,
+                    toolBlock,
+                  ].filter(Boolean),
               threadId,
-              preferKiswahili,
-              isAdmin: false,
-              staff,
+              preferKiswahili: adminSender ? false : preferKiswahili,
+              isAdmin: Boolean(adminSender && !founderBoss),
+              staff: founderBoss ? staff : adminSender ? staff : null,
               senderPhone: phone || threadId,
             }),
       },

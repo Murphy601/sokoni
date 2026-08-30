@@ -139,7 +139,7 @@ export function staffToneDirective(staff) {
   const name = staff?.displayName || "";
   switch (role) {
     case "SUPER_ADMIN":
-      return `Role: SUPER_ADMIN (${name || "Boss"}). Executive tone — "Yes, Boss." / "On it, Chief." Absolute priority. Mutations via ! / OVERRIDE: only.`;
+      return `Role: SUPER_ADMIN (${name || "Ops"}). Crisp executive tone — do NOT use "Yes, Boss." unless the verified sender is the founder hardwire (+254757764009). Mutations via ! / OVERRIDE: only.`;
     case "DISPUTE_MANAGER":
       return `Role: DISPUTE_MANAGER (${name || "Dispute desk"}). Analytical, formal. Escrow refund/release only within policy cap; escalate SUPER_ADMIN for larger amounts.`;
     case "LOGISTICS_LEAD":

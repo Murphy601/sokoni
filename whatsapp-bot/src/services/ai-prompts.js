@@ -10,6 +10,7 @@
  * Tools run server-side before the LLM (LOOKUP RESULTS), not via OpenAI tool_calls.
  */
 
+import { checkIfBoss } from "../lib/phone-normalize.js";
 import { adminRecognitionDirective, PUBLIC_ESCROW_GUARDRAIL } from "./admin-override.js";
 
 /** Shared hard rules applied to every Sokoni AI surface. */
@@ -98,16 +99,22 @@ export function buildGroundedSystemPrompt({
     : "";
 
   if (isAdmin) {
+    const founder =
+      checkIfBoss(senderPhone) || String(staff?.source || "") === "hardwire";
     return `${adminRecognitionDirective({ staff, senderPhone: senderPhone || threadId })}
 
 CRITICAL EXCEPTION RULE:
-- DO NOT check knowledge base / RAG.
+- DO NOT check knowledge base / RAG for staff/Boss ops questions.
 - DO NOT use the public missing-data refusal script.
-- DO NOT run public escrow refusal scripts.
-- ALWAYS salute the Boss and point them to executable commands when they want a mutation.
+- DO NOT invent completed mutations.
+${
+  founder
+    ? "- ALWAYS salute the Boss and point them to executable commands when they want a mutation."
+    : "- Do NOT salute as Boss. Do NOT list the master command palette. Defer founder-only actions."
+}
 
 ### CONTEXT DATA:
-${context || "(no lookup this turn — still salute; never invent a completed mutation)"}
+${context || "(no lookup this turn — still help within role; never invent a completed mutation)"}
 
 ### USER PHONE / THREAD ID:
 ${thread || "(unknown)"}
