@@ -8,6 +8,7 @@ import {
   pushDeltaToPool,
   purgePoolEntry,
   scoreFromPool,
+  buildAdminOverridePool,
   deriveBadgeTier,
   clampRating,
   RATING_DELTAS,
@@ -308,16 +309,14 @@ export async function setSellerRating({
   if (!row) return { ok: false, reason: "seller_not_found" };
   const before = Number(row.rating_score || INITIAL_RATING);
   const next = clampRating(rating);
-  // Absolute override: seed a single synthetic pool entry so rolling mean equals target
-  const pool = [
-    {
-      v: next,
-      kind: "admin_set",
-      at: new Date().toISOString(),
-      id: entryId("set"),
-    },
-  ];
-  const buyerCount = Math.max(Number(row.rating_count || 0), MIN_PUBLIC_REVIEWS);
+  // Absolute override: seed enough public star entries + admin_set so site leaves UNRATED
+  const pool = buildAdminOverridePool(next, { idPrefix: "set" });
+  const scored = scoreFromPool(pool);
+  const buyerCount = Math.max(
+    Number(row.rating_count || 0),
+    scored.buyerReviewCount,
+    MIN_PUBLIC_REVIEWS
+  );
   await query(
     `UPDATE users SET rating_score = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
       WHERE id = $1`,
@@ -332,7 +331,7 @@ export async function setSellerRating({
     reviewCount: buyerCount,
     reason,
     actorLabel,
-    poolEntryId: pool[0].id,
+    poolEntryId: pool[pool.length - 1]?.id,
   });
   const badge = await refreshSellerBadge(sellerUserId, { notifyPhone: row.phone });
   return {
@@ -340,7 +339,9 @@ export async function setSellerRating({
     rating: next,
     reviewCount: buyerCount,
     unrated: false,
+    displayLabel: next.toFixed(1),
     badgeTier: badge?.tier,
+    badges: badge?.badges,
   };
 }
 
@@ -472,10 +473,13 @@ export async function setRiderRating({
   if (!row) return { ok: false, reason: "rider_not_found" };
   const before = Number(row.rating || INITIAL_RATING);
   const next = clampRating(rating);
-  const pool = [
-    { v: next, kind: "admin_set", at: new Date().toISOString(), id: entryId("set") },
-  ];
-  const buyerCount = Math.max(Number(row.rating_count || 0), MIN_PUBLIC_REVIEWS);
+  const pool = buildAdminOverridePool(next, { idPrefix: "rset" });
+  const scored = scoreFromPool(pool);
+  const buyerCount = Math.max(
+    Number(row.rating_count || 0),
+    scored.buyerReviewCount,
+    MIN_PUBLIC_REVIEWS
+  );
   await query(
     `UPDATE riders SET rating = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
       WHERE id = $1`,
@@ -490,10 +494,16 @@ export async function setRiderRating({
     reviewCount: buyerCount,
     reason,
     actorLabel,
-    poolEntryId: pool[0].id,
+    poolEntryId: pool[pool.length - 1]?.id,
   });
   const badge = await refreshRiderBadge(riderId);
-  return { ok: true, rating: next, badgeTier: badge?.tier };
+  return {
+    ok: true,
+    rating: next,
+    reviewCount: buyerCount,
+    unrated: false,
+    badgeTier: badge?.tier,
+  };
 }
 
 /** Boss: remove one unfair pool entry and recalc. */
@@ -684,7 +694,21 @@ export async function getSellerRatingProfile(sellerUserId) {
     };
   }
   let scored = scoreFromPool(row.rating_pool);
-  if (scored.buyerReviewCount <= 0 && Number(row.rating_count || 0) <= 0) {
+  const denormCount = Number(row.rating_count || 0);
+  const denormScore = Number(row.rating_score || 0);
+
+  // Denormalized columns are written by the engine / Boss override — trust them for public UI
+  // so the site never stays UNRATED after a successful SET RATING (even with legacy admin_set pools).
+  if (denormCount >= MIN_PUBLIC_REVIEWS && denormScore > 0) {
+    scored = {
+      rating: clampRating(denormScore),
+      reviewCount: denormCount,
+      buyerReviewCount: denormCount,
+      unrated: false,
+      displayLabel: clampRating(denormScore).toFixed(2),
+      pool: scored.pool || [],
+    };
+  } else if (scored.buyerReviewCount <= 0 && denormCount <= 0) {
     const { rows } = await query(
       `SELECT COALESCE(AVG(rating), 0)::numeric(10,2) AS avg_rating,
               COUNT(*)::int AS total_reviews

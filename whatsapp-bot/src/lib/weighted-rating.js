@@ -68,11 +68,11 @@ export function normalizePool(raw) {
 /**
  * Mean of last N pool values (up to ROLLING_WINDOW).
  * Empty pool → INITIAL_RATING with unrated=true.
+ * Boss admin_set entries force a public score (site must not stay UNRATED after OVERRIDE).
  */
 export function scoreFromPool(poolInput) {
   const pool = normalizePool(poolInput);
   const window = pool.slice(-ROLLING_WINDOW);
-  const buyerStars = window.filter((e) => e.kind === "star").length;
   if (!window.length) {
     return {
       rating: INITIAL_RATING,
@@ -83,6 +83,25 @@ export function scoreFromPool(poolInput) {
       pool: [],
     };
   }
+
+  // Latest absolute Boss override wins for public display
+  const adminOverride = [...window].reverse().find((e) => e.kind === "admin_set");
+  if (adminOverride) {
+    const rating = clampRating(adminOverride.v);
+    const starCount = window.filter((e) => e.kind === "star").length;
+    const publicCount = Math.max(starCount, MIN_PUBLIC_REVIEWS);
+    return {
+      rating,
+      reviewCount: Math.max(window.length, MIN_PUBLIC_REVIEWS),
+      buyerReviewCount: publicCount,
+      unrated: false,
+      displayLabel: rating.toFixed(2),
+      pool: window,
+      adminOverride: true,
+    };
+  }
+
+  const buyerStars = window.filter((e) => e.kind === "star").length;
   const sum = window.reduce((acc, e) => acc + e.v, 0);
   const rating = clampRating(sum / window.length);
   const unrated = buyerStars < MIN_PUBLIC_REVIEWS;
@@ -94,6 +113,34 @@ export function scoreFromPool(poolInput) {
     displayLabel: unrated ? "UNRATED" : rating.toFixed(2),
     pool: window,
   };
+}
+
+/**
+ * Seed a public-visible pool for Boss SET / OVERRIDE RATING.
+ * Writes MIN_PUBLIC_REVIEWS star entries + one admin_set marker so site + badges unlock.
+ */
+export function buildAdminOverridePool(rating, { idPrefix = "set" } = {}) {
+  const v = clampRating(rating);
+  const at = new Date().toISOString();
+  const stamp = Date.now();
+  const pool = [];
+  for (let i = 0; i < MIN_PUBLIC_REVIEWS; i++) {
+    pool.push({
+      v,
+      kind: "star",
+      at,
+      id: `${idPrefix}_star_${stamp}_${i}`,
+      orderRef: "admin_override",
+    });
+  }
+  pool.push({
+    v,
+    kind: "admin_set",
+    at,
+    id: `${idPrefix}_admin_${stamp}`,
+    orderRef: "admin_override",
+  });
+  return pool;
 }
 
 /**

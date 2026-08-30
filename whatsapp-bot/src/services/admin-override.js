@@ -999,7 +999,8 @@ export async function executeMasterAdminCommand(
       action: "set_rating",
       reply: ack(
         result?.ok
-          ? `Seller *${target}* rating overridden to *${Number(result.rating).toFixed(2)}* · badge *${result.badgeTier || "newbie"}*.`
+          ? `Seller *${target}* rating overridden to *${Number(result.rating).toFixed(2)}* · badge *${result.badgeTier || "newbie"}*.\n` +
+            `Public on site now (★ score visible — left UNRATED grace). Hard-refresh the shop page if you still see the old label.`
           : `Could not set rating (${result?.reason || "error"}).`
       ),
     };
