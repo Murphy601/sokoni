@@ -158,6 +158,8 @@ server {
     listen 80;
     server_name bot.sokonimall.com;
 
+    # Seller video + boda rider apply multipart — default ~1m → "Failed to fetch".
+    # bash scripts/ensure-nginx-upload-limit.sh
     client_max_body_size 25m;
 
     location / {
