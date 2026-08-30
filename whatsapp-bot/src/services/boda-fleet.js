@@ -51,6 +51,75 @@ export function normalizeRiderPhone(raw) {
   return d.length >= 12 && d.length <= 15 ? d : "";
 }
 
+/**
+ * Resolve seller shop name / phone / pickup address for rider messages.
+ * Never leave riders with bare "Seller pickup" when Hub data exists.
+ */
+export function resolveSellerPickupDetails(order = {}, dispatchRow = {}) {
+  const fromOrder = {
+    shopName:
+      order.shopName ||
+      order.businessName ||
+      (order.shopHandle ? `@${String(order.shopHandle).replace(/^@/, "")}` : "") ||
+      "",
+    phone: order.sellerPhone || "",
+    address:
+      order.sellerLocation ||
+      order.pickupAddress ||
+      order.sellerAddress ||
+      order.sellerCity ||
+      "",
+  };
+
+  const pickupAddr =
+    String(dispatchRow.pickup_address || dispatchRow.pickupAddress || "").trim() ||
+    String(fromOrder.address || "").trim();
+  const sellerPhone =
+    normalizeRiderPhone(dispatchRow.seller_phone || fromOrder.phone) || fromOrder.phone;
+
+  return {
+    shopName: String(fromOrder.shopName || "Seller shop").slice(0, 120),
+    sellerPhone: String(sellerPhone || "—").slice(0, 20),
+    pickupAddr: String(pickupAddr || "Ask seller for exact pin on call").slice(0, 240),
+    supplier: null,
+  };
+}
+
+async function resolveSellerPickupDetailsAsync(order = {}, dispatchRow = {}) {
+  const base = resolveSellerPickupDetails(order, dispatchRow);
+  try {
+    const { getSupplier, findSupplierByPhone, getSupplierByHandle } = await import("./suppliers.js");
+    const sup =
+      (order.supplierId && getSupplier(order.supplierId)) ||
+      (order.shopHandle && getSupplierByHandle(order.shopHandle)) ||
+      findSupplierByPhone(order.sellerPhone || dispatchRow.seller_phone) ||
+      null;
+    if (!sup) return base;
+    const shopName =
+      sup.shopName ||
+      sup.businessName ||
+      (sup.shopHandle ? `@${String(sup.shopHandle).replace(/^@/, "")}` : "") ||
+      base.shopName;
+    const sellerPhone =
+      normalizeRiderPhone(sup.phone || sup.mpesaNumber) || base.sellerPhone;
+    const parts = [
+      sup.location,
+      sup.address,
+      sup.pickupAddress,
+      sup.city,
+      order.sellerLocation,
+      order.pickupAddress,
+      dispatchRow.pickup_address,
+    ]
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+    const pickupAddr = [...new Set(parts)].join(" · ").slice(0, 240) || base.pickupAddr;
+    return { shopName, sellerPhone: sellerPhone || "—", pickupAddr, supplier: sup };
+  } catch {
+    return base;
+  }
+}
+
 function hashOtp(code) {
   return createHash("sha256").update(String(code)).digest("hex");
 }
@@ -938,12 +1007,24 @@ export async function createPlatformBodaDispatch({
   }
 
   const town = normalizeBodaZone(zone) || zoneFromOrder(order);
-  const pickup =
+  const sellerDetails = await resolveSellerPickupDetailsAsync(order, {
+    pickup_address: pickupAddress,
+    seller_phone: sellerPhone,
+  });
+  const pickup = (
     String(pickupAddress || "").trim() ||
-    String(order.sellerLocation || order.pickupAddress || "Seller pickup").slice(0, 240);
+    String(sellerDetails.pickupAddr || "").trim() ||
+    String(order.sellerLocation || order.pickupAddress || "").trim() ||
+    "Ask seller for exact pin on call"
+  ).slice(0, 240);
   const drop =
     String(deliveryAddress || "").trim() ||
     String(order.location || order.dropOff || order.customerLocation || "Buyer drop-off").slice(0, 240);
+  const resolvedSellerPhone =
+    normalizeRiderPhone(sellerPhone) ||
+    normalizeRiderPhone(sellerDetails.sellerPhone) ||
+    normalizeRiderPhone(order.sellerPhone) ||
+    null;
   const defaultFee = 0; // never invent a mock fee (was Nairobi 350 / Thika 250)
   const fee = Math.max(
     0,
@@ -957,7 +1038,8 @@ export async function createPlatformBodaDispatch({
     console.warn(`[boda-fleet] refuse dispatch ${id} — missing shippingKes / deliveryFeeKes`);
     return {
       error: "missing_delivery_fee",
-      message: `Cannot dispatch *${id}* — no delivery fee on the order (seller must set Hub shipping rates).`,
+      message:
+        `Cannot dispatch *${id}* — no delivery fee on the order (seller must set Hub shipping rates).`,
     };
   }
 
@@ -1011,7 +1093,7 @@ export async function createPlatformBodaDispatch({
      RETURNING *`,
     [
       id,
-      sellerPhone ? normalizeRiderPhone(sellerPhone) : null,
+      resolvedSellerPhone,
       pickup,
       drop,
       fee,
@@ -1019,7 +1101,8 @@ export async function createPlatformBodaDispatch({
       riderIds,
       JSON.stringify({
         productName: order.productName || null,
-        sellerHandle: sellerHandle || null,
+        sellerHandle: sellerHandle || sellerDetails.shopName || null,
+        sellerShopName: sellerDetails.shopName || null,
         dropoffGeocoded: Boolean(dropCoords),
         pickupGeocoded: Boolean(pickupCoords),
         pinnedRiderName: primary.fullName,
@@ -1145,15 +1228,19 @@ export async function autoDispatchBodaForOrder(orderId) {
     console.warn("[boda-fleet] autoDispatch mode:", err.message);
   }
 
-  const { getSupplier } = await import("./suppliers.js");
-  const sup = order.supplierId ? getSupplier(order.supplierId) : null;
+  const { getSupplier, findSupplierByPhone } = await import("./suppliers.js");
+  const sup =
+    (order.supplierId && getSupplier(order.supplierId)) ||
+    findSupplierByPhone(order.sellerPhone) ||
+    null;
+  const details = await resolveSellerPickupDetailsAsync(order);
   return createPlatformBodaDispatch({
     orderId: id,
     zone: zoneFromOrder(order),
-    pickupAddress: sup?.location || order.sellerLocation || "",
+    pickupAddress: details.pickupAddr || sup?.location || order.sellerLocation || "",
     deliveryAddress: order.location || order.dropOff || "",
     deliveryFeeKes: order.shippingKes || 0,
-    sellerPhone: sup?.phone || null,
+    sellerPhone: details.sellerPhone !== "—" ? details.sellerPhone : sup?.phone || null,
     sellerHandle: sup?.shopHandle || null,
     dropoffLat: order.buyerLat,
     dropoffLng: order.buyerLng,
@@ -1860,20 +1947,38 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
   } = await import("../lib/wa-ux.js");
   const plate = rider.motorbikePlate || "—";
 
-  let shopName = fresh?.shopHandle || "Seller shop";
-  let sellerContact = updated.seller_phone || "—";
-  try {
-    const { getSupplier, findSupplierByPhone } = await import("./suppliers.js");
-    const sup =
-      (fresh?.supplierId && getSupplier(fresh.supplierId)) ||
-      findSupplierByPhone(updated.seller_phone) ||
-      null;
-    if (sup?.shopName) shopName = sup.shopName;
-    else if (sup?.shopHandle) shopName = `@${String(sup.shopHandle).replace(/^@/, "")}`;
-    if (sup?.phone) sellerContact = normalizeRiderPhone(sup.phone) || sup.phone;
-    else if (updated.seller_phone) sellerContact = normalizeRiderPhone(updated.seller_phone);
-  } catch {
-    /* ignore */
+  const sellerDetails = await resolveSellerPickupDetailsAsync(fresh, updated);
+  const shopName = sellerDetails.shopName;
+  const sellerContact = sellerDetails.sellerPhone;
+  const pickupAddr =
+    sellerDetails.pickupAddr && sellerDetails.pickupAddr !== "Ask seller for exact pin on call"
+      ? sellerDetails.pickupAddr
+      : updated.pickup_address || sellerDetails.pickupAddr;
+
+  // Persist enriched pickup details onto the dispatch for later messages.
+  if (
+    pickupAddr &&
+    (pickupAddr !== updated.pickup_address ||
+      (sellerContact && sellerContact !== "—" && sellerContact !== updated.seller_phone))
+  ) {
+    try {
+      await query(
+        `UPDATE delivery_dispatches SET
+           pickup_address = COALESCE(NULLIF($2, ''), pickup_address),
+           seller_phone = COALESCE(NULLIF($3, ''), seller_phone),
+           updated_at = NOW(),
+           meta = COALESCE(meta, '{}'::jsonb) || $4::jsonb
+         WHERE id = $1`,
+        [
+          updated.id,
+          pickupAddr,
+          sellerContact !== "—" ? sellerContact : null,
+          JSON.stringify({ sellerShopName: shopName, pickupEnrichedAt: new Date().toISOString() }),
+        ]
+      );
+    } catch (err) {
+      console.warn("[boda-fleet] enrich pickup on accept:", err.message);
+    }
   }
 
   const sellerMsg = msgSellerRiderAssigned({
@@ -1881,7 +1986,7 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
     riderName: rider.fullName,
     riderPhone: rider.phone,
     plate,
-    pickupAddr: updated.pickup_address,
+    pickupAddr,
     pickupOtp,
   });
   const buyerMsg = msgBuyerRiderAssigned({
@@ -1893,14 +1998,14 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
   const riderMsg = msgRiderPickupStep({
     orderId: id,
     shopName,
-    pickupAddr: updated.pickup_address,
+    pickupAddr,
     sellerPhone: sellerContact,
     feeKes: Number(updated.delivery_fee_kes || 0),
     lateMins: LATE_PICKUP_MINUTES,
   });
 
-  const sellerTo = updated.seller_phone
-    ? `${normalizeRiderPhone(updated.seller_phone)}@c.us`
+  const sellerTo = (sellerContact && sellerContact !== "—" ? sellerContact : updated.seller_phone)
+    ? `${normalizeRiderPhone(sellerContact !== "—" ? sellerContact : updated.seller_phone)}@c.us`
     : null;
   const buyerTo = fresh?.customerKey || null;
 

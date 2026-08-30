@@ -12,7 +12,6 @@ import { isDbEnabled, query } from "../db/pool.js";
 import {
   getCounty,
   getTierMeta,
-  platformDefaultFeeForCounty,
 } from "./kenya-locations.js";
 
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
@@ -374,7 +373,7 @@ export function resolveVendorShippingFee({
   }
 
   let fee = 0;
-  let methodUsed = "PLATFORM_DEFAULT";
+  let methodUsed = "UNPRICED";
 
   if (profile.shippingType === "FLAT_RATE") {
     const isLocal =
@@ -387,16 +386,46 @@ export function resolveVendorShippingFee({
   } else if (profile.shippingType === "TIERED" || profile.shippingType === "CUSTOM_ZONES") {
     const keyRate = `tier${county.tier}RateKes`;
     const custom = profile[keyRate];
-    if (custom != null && custom !== "") {
+    if (custom != null && custom !== "" && Number(custom) > 0) {
       fee = Math.round(Number(custom) || 0);
       methodUsed = `TIER_${county.tier}_CUSTOM`;
     } else {
-      fee = platformDefaultFeeForCounty(county.name);
-      methodUsed = `TIER_${county.tier}_PLATFORM`;
+      // Never invent platform defaults (was Tier-2 KES 350) — force Hub config.
+      return {
+        shippingFee: 0,
+        methodUsed: "TIER_RATE_MISSING",
+        estimatedHours: null,
+        unsupported: true,
+        county: county.name,
+        town: buyerTown || null,
+        tier: county.tier,
+        message: `Seller has not set a Tier ${county.tier} delivery fee for ${county.name}.`,
+      };
     }
   } else {
-    fee = platformDefaultFeeForCounty(county.name);
-    methodUsed = `TIER_${county.tier}_PLATFORM`;
+    return {
+      shippingFee: 0,
+      methodUsed: "SHIPPING_TYPE_UNSUPPORTED",
+      estimatedHours: null,
+      unsupported: true,
+      county: county.name,
+      town: buyerTown || null,
+      tier: county.tier,
+      message: "Seller shipping type needs Hub configuration.",
+    };
+  }
+
+  if (fee <= 0) {
+    return {
+      shippingFee: 0,
+      methodUsed: "ZERO_RATE",
+      estimatedHours: null,
+      unsupported: true,
+      county: county.name,
+      town: buyerTown || null,
+      tier: county.tier,
+      message: `Seller delivery fee for ${county.name} is not set.`,
+    };
   }
 
   const tierMeta = getTierMeta(county.tier);
