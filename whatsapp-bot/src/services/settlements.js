@@ -61,12 +61,17 @@ function isLockedPayoutStatus(status) {
   return status === "disbursing" || status === "withdraw_queued";
 }
 
+function isQuarantinedStatus(status) {
+  return status === "quarantined";
+}
+
 function isOpenSettlementStatus(status) {
   return (
     status === "owed" ||
     status === "disbursing" ||
     status === "withdraw_queued" ||
     status === "scheduled" ||
+    status === "quarantined" ||
     isFailedPayoutStatus(status)
   );
 }
@@ -386,6 +391,12 @@ export async function initiateSettlementB2C(orderId, { force = false } = {}) {
   if (!entry) return { error: "not_found", message: `No settlement for ${orderId}` };
   if (entry.status === "paid") return { skipped: true, message: "Already paid." };
   if (entry.status === "cancelled") return { error: "cancelled", message: "Settlement cancelled." };
+  if (entry.status === "quarantined" && !force) {
+    return {
+      error: "quarantined",
+      message: "Payout is QUARANTINED — Boss must *RELEASE PAYOUT* before B2C.",
+    };
+  }
   if (entry.status === "scheduled" && !force) {
     return { error: "still_held", message: "Still in escrow hold — wait until owed, or use force." };
   }
@@ -394,6 +405,24 @@ export async function initiateSettlementB2C(orderId, { force = false } = {}) {
   }
 
   const supplier = getSupplier(entry.supplierId);
+  try {
+    const { isSellerBlockedForB2C } = await import("./b2c-interceptor.js");
+    if (!force && isSellerBlockedForB2C(supplier)) {
+      const q = quarantineOneSettlement(entry, {
+        reason: `Pre-flight block: shop ${supplier?.shopStatus || "restricted"}`,
+        action: "PREFLIGHT",
+      });
+      persist();
+      return {
+        error: "account_restricted",
+        message: "Seller account paused/suspended — B2C aborted and payout quarantined.",
+        entry: q,
+      };
+    }
+  } catch (err) {
+    console.warn("[settlements] B2C preflight:", err.message);
+  }
+
   const mpesaPhone =
     entry.mpesaPhone || supplier?.mpesaNumber || supplier?.phone || entry.supplierPhone;
   if (!mpesaPhone) {
@@ -499,6 +528,8 @@ export function applyB2CResult(parsed) {
     entry.status = "paid";
     entry.paidAt = Date.now();
     entry.mpesaReceipt = parsed.receipt || entry.mpesaReceipt || null;
+    const wasHold = Boolean(entry.b2c?.quarantineOnFail);
+    if (entry.b2c) entry.b2c.quarantineOnFail = false;
     persist();
     try {
       updateOrderMeta(entry.orderId, {
@@ -510,8 +541,36 @@ export function applyB2CResult(parsed) {
     } catch {
       /* ignore */
     }
+    if (wasHold) {
+      import("./b2c-interceptor.js")
+        .then(({ alertBossB2CIntercept }) =>
+          alertBossB2CIntercept(
+            `⚠️ *B2C completed during account hold*\n\n` +
+              `Order *${entry.orderId}* paid KES ${(entry.payoutAmountKes || 0).toLocaleString()} ` +
+              `while seller was restricted (payload already at Safaricom).\n` +
+              `Receipt: ${parsed.receipt || "—"}. Funds left platform — review disputes.`
+          )
+        )
+        .catch(() => {});
+    }
     console.log("[settlements] B2C paid", entry.orderId, parsed.receipt);
     return { success: true, entry };
+  }
+
+  // Fail path — quarantine if admin flagged in-flight hold
+  if (entry.b2c?.quarantineOnFail) {
+    quarantineOneSettlement(entry, {
+      reason: parsed.resultDesc || "B2C failed during admin hold",
+      action: "CALLBACK_FAIL",
+    });
+    persist();
+    try {
+      updateOrderMeta(entry.orderId, { payoutStatus: "quarantined" });
+    } catch {
+      /* ignore */
+    }
+    console.warn("[settlements] B2C failed → quarantined", entry.orderId, parsed.resultDesc);
+    return { success: false, quarantined: true, entry, resultDesc: parsed.resultDesc };
   }
 
   entry.status = "b2c_failed";
@@ -523,6 +582,97 @@ export function applyB2CResult(parsed) {
   }
   console.warn("[settlements] B2C failed", entry.orderId, parsed.resultDesc);
   return { success: false, entry, resultDesc: parsed.resultDesc };
+}
+
+function quarantineOneSettlement(entry, { reason = "", action = "PAUSE" } = {}) {
+  if (!entry || entry.status === "paid" || entry.status === "cancelled") return entry;
+  if (entry.status === "disbursing") {
+    entry.b2c = {
+      ...(entry.b2c || {}),
+      quarantineOnFail: true,
+      adminHoldAt: Date.now(),
+      adminHoldAction: action,
+      adminHoldReason: String(reason || "").slice(0, 280),
+    };
+    return entry;
+  }
+  if (!entry.prevStatusBeforeQuarantine) {
+    entry.prevStatusBeforeQuarantine = entry.status;
+  }
+  entry.status = "quarantined";
+  entry.quarantinedAt = Date.now();
+  entry.quarantineReason = String(reason || action).slice(0, 280);
+  entry.quarantineAction = action;
+  return entry;
+}
+
+/** Quarantine all open seller settlements (not paid). In-flight → quarantineOnFail. */
+export function quarantineSellerSettlements(supplierId, { reason = "", action = "PAUSE" } = {}) {
+  load();
+  const sid = String(supplierId || "").trim();
+  let quarantined = 0;
+  let awaitingCallback = 0;
+  let amountKes = 0;
+  for (const entry of store.entries) {
+    if (entry.supplierId !== sid) continue;
+    if (entry.status === "paid" || entry.status === "cancelled") continue;
+    if (entry.status === "quarantined") continue;
+    if (entry.status === "disbursing") {
+      quarantineOneSettlement(entry, { reason, action });
+      awaitingCallback += 1;
+      continue;
+    }
+    if (
+      entry.status === "owed" ||
+      entry.status === "scheduled" ||
+      entry.status === "withdraw_queued" ||
+      isFailedPayoutStatus(entry.status)
+    ) {
+      amountKes += Number(entry.payoutAmountKes) || 0;
+      quarantineOneSettlement(entry, { reason, action });
+      quarantined += 1;
+      try {
+        updateOrderMeta(entry.orderId, { payoutStatus: "quarantined" });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  if (quarantined || awaitingCallback) persist();
+  return { quarantined, awaitingCallback, amountKes };
+}
+
+export function listQuarantinedSettlements(supplierId) {
+  load();
+  const sid = String(supplierId || "").trim();
+  return store.entries.filter((e) => e.supplierId === sid && e.status === "quarantined");
+}
+
+export function releaseQuarantinedSettlements(supplierId, { note = "" } = {}) {
+  load();
+  const sid = String(supplierId || "").trim();
+  let count = 0;
+  let amountKes = 0;
+  for (const entry of store.entries) {
+    if (entry.supplierId !== sid || entry.status !== "quarantined") continue;
+    const prev = entry.prevStatusBeforeQuarantine || "owed";
+    entry.status = isFailedPayoutStatus(prev) || prev === "owed" || prev === "scheduled" ? "owed" : "owed";
+    amountKes += Number(entry.payoutAmountKes) || 0;
+    entry.releasedFromQuarantineAt = Date.now();
+    entry.releaseNote = String(note || "").slice(0, 280);
+    delete entry.quarantineReason;
+    delete entry.quarantineAction;
+    delete entry.prevStatusBeforeQuarantine;
+    if (entry.b2c) entry.b2c.quarantineOnFail = false;
+    count += 1;
+    try {
+      updateOrderMeta(entry.orderId, { payoutStatus: "owed" });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (count) persist();
+  return { count, amountKes };
 }
 
 export function isWithdrawableSettlementStatus(status) {
@@ -852,6 +1002,20 @@ export async function disburseOwedPayoutsViaB2C({ includeFailed = false, limit =
 
   let accepted = 0;
   for (const entry of candidates) {
+    try {
+      const { isSellerBlockedForB2C } = await import("./b2c-interceptor.js");
+      const supplier = getSupplier(entry.supplierId);
+      if (isSellerBlockedForB2C(supplier)) {
+        quarantineOneSettlement(entry, {
+          reason: "Auto-disburse skipped — account restricted",
+          action: "AUTO_SKIP",
+        });
+        persist();
+        continue;
+      }
+    } catch {
+      /* fail-soft */
+    }
     const out = await initiateSettlementB2C(entry.orderId);
     if (out.success) accepted += 1;
   }
@@ -906,21 +1070,26 @@ export function getSettlementSummary() {
   const disbursing = store.entries.filter((e) => e.status === "disbursing");
   const queued = store.entries.filter((e) => e.status === "withdraw_queued");
   const failed = store.entries.filter((e) => isFailedPayoutStatus(e.status));
+  const quarantined = store.entries.filter((e) => e.status === "quarantined");
   const totalOwed = owed.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   const totalScheduled = scheduled.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   const totalQueued = queued.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
+  const totalQuarantined = quarantined.reduce((s, e) => s + (e.payoutAmountKes || 0), 0);
   return {
     count: owed.length,
     scheduledCount: scheduled.length,
     disbursingCount: disbursing.length,
     queuedCount: queued.length,
     failedCount: failed.length,
+    quarantinedCount: quarantined.length,
     totalOwedKes: totalOwed,
     totalScheduledKes: totalScheduled,
     totalQueuedKes: totalQueued,
+    totalQuarantinedKes: totalQuarantined,
     entries: owed,
     disbursing,
     queued,
     failed,
+    quarantined,
   };
 }
