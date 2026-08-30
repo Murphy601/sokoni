@@ -220,6 +220,23 @@ router.post("/shops/:id/restore", async (req, res) => {
   res.json({ ok: true, ...out, shop: getSupplier(req.params.id) });
 });
 
+/** Permanent wipe — seller can re-register from scratch. Requires confirm: true */
+router.post("/shops/:id/delete", async (req, res) => {
+  if (!req.body?.confirm) {
+    return res.status(400).json({
+      error: "confirm_required",
+      message: "Send { confirm: true } to permanently delete this seller.",
+    });
+  }
+  const { purgeSellerAccount } = await import("../services/purge-account.js");
+  const out = await purgeSellerAccount(req.params.id, {
+    confirm: true,
+    adminLabel: "Admin panel",
+  });
+  if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
+  res.json({ ok: true, ...out });
+});
+
 router.get("/payouts", (_req, res) => {
   res.json(getSettlementSummary());
 });
