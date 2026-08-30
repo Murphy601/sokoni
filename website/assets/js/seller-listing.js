@@ -2568,9 +2568,56 @@ function showSellerProfile(profile, opts = {}) {
   fillShopEditFormFromSeller(profile);
   void hydrateShopEditFormFromSocial();
   void loadSellerActivity();
+  applySellerAdminEnforcement(profile);
   // Login / onboard land on Overview; listing AI must not yank sellers off the wizard.
   if (!opts.preserveView) {
     showSellerView("overview");
+  }
+}
+
+function applySellerAdminEnforcement(profile) {
+  const banner = el("seller-admin-status-banner");
+  const st = String(profile?.shopStatus || "live").toLowerCase();
+  const payoutHold = Boolean(profile?.payoutHold) || !profile?.canWithdraw;
+  const catalogLocked = Boolean(profile?.catalogLocked) || st === "paused" || st === "deactivated";
+
+  if (banner) {
+    if (st === "paused") {
+      banner.classList.remove("hidden");
+      banner.className =
+        "mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100";
+      banner.textContent =
+        "⚠️ Your store activity has been temporarily paused by Administration. Auto-replies and new order acceptances are disabled.";
+    } else if (st === "deactivated" || st === "under_review") {
+      banner.classList.remove("hidden");
+      banner.className =
+        "mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100";
+      banner.textContent =
+        "🛑 Your account has been suspended due to platform policy violations. Contact support.";
+    } else {
+      banner.classList.add("hidden");
+      banner.textContent = "";
+    }
+  }
+
+  const createBtn = el("hub-create-drop-btn");
+  if (createBtn) {
+    createBtn.disabled = catalogLocked;
+    createBtn.classList.toggle("opacity-40", catalogLocked);
+    createBtn.classList.toggle("pointer-events-none", catalogLocked);
+    createBtn.title = catalogLocked
+      ? "Listings locked while your store is paused or suspended"
+      : "List a new item";
+  }
+
+  const withdrawBtn = el("withdraw-request-btn");
+  if (withdrawBtn) {
+    const lockWithdraw = payoutHold || catalogLocked || st !== "live";
+    withdrawBtn.disabled = lockWithdraw;
+    withdrawBtn.classList.toggle("opacity-40", lockWithdraw);
+    withdrawBtn.title = lockWithdraw
+      ? "M-Pesa withdrawals are locked until Administration restores your shop"
+      : "";
   }
 }
 
@@ -3029,6 +3076,18 @@ async function tryRestoreSession() {
       handleSessionExpired(parsed.data, { force: true });
       return false;
     }
+    if (parsed.data?.error === "account_suspended") {
+      clearSession();
+      el("listing-wizard")?.classList.add("hidden");
+      el("onboard-panel")?.classList.remove("hidden");
+      el("sell-intro")?.classList.remove("hidden");
+      setOnboardStatus(
+        parsed.data?.message ||
+          "🛑 Your account has been suspended due to platform policy violations. Contact support.",
+        true
+      );
+      return true;
+    }
     if (parsed.ok && parsed.data?.seller) {
       showSellerProfile(parsed.data.seller);
       return true;
@@ -3207,6 +3266,17 @@ async function routeAfterVerify(phoneNorm, verifyData) {
     if (profileParsed.ok && profileParsed.data?.seller) {
       showSellerProfile(profileParsed.data.seller);
       setOnboardStatus("");
+      return;
+    }
+    if (profileParsed.data?.error === "account_suspended") {
+      clearSession();
+      el("listing-wizard")?.classList.add("hidden");
+      el("onboard-panel")?.classList.remove("hidden");
+      setOnboardStatus(
+        profileParsed.data?.message ||
+          "🛑 Your account has been suspended due to platform policy violations. Contact support.",
+        true
+      );
       return;
     }
     if (profileParsed.data?.needsSetup || profileParsed.status === 404) {
@@ -6568,11 +6638,24 @@ async function loadWithdrawPanel() {
 }
 
 async function requestWithdrawal() {
+  const statusEl = el("withdraw-status");
+  const btn = el("withdraw-request-btn");
+  if (
+    sellerProfile?.catalogLocked ||
+    sellerProfile?.payoutHold ||
+    sellerProfile?.canWithdraw === false ||
+    String(sellerProfile?.shopStatus || "live").toLowerCase() !== "live"
+  ) {
+    if (statusEl) {
+      statusEl.textContent =
+        "M-Pesa withdrawals are locked while your store is paused or suspended by Administration.";
+      statusEl.classList.add("text-red-600", "dark:text-red-400");
+    }
+    return;
+  }
   const phone = apiPhone();
   if (!phone) return;
 
-  const statusEl = el("withdraw-status");
-  const btn = el("withdraw-request-btn");
   btn.disabled = true;
   statusEl.textContent = "Submitting withdrawal request…";
   statusEl.classList.remove("text-red-600", "dark:text-red-400");

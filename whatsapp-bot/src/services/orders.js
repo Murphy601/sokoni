@@ -5,6 +5,7 @@ import { isPrepaidOnly } from "./prepaid-checkout.js";
 import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
 import { assertPurchaseQty, findVariant } from "./product-availability.js";
 import { assertOrderTransition, canCancelOrder } from "../lib/status-transitions.js";
+import { assertSupplierCanSell } from "./enforce-account.js";
 export {
   normalizeOrderId,
   extractOrderIdFromText,
@@ -187,6 +188,13 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     const err = new Error(stockGate.message || "Out of stock");
     err.code = stockGate.error || "insufficient_stock";
     err.onHand = stockGate.onHand;
+    throw err;
+  }
+  const sellGate = assertSupplierCanSell(product?.supplierId);
+  if (!sellGate.ok) {
+    const err = new Error(sellGate.message || "This store is currently unavailable.");
+    err.code = sellGate.error || "shop_unavailable";
+    err.shopStatus = sellGate.shopStatus;
     throw err;
   }
   // Keep store.seq advancing for other ID families (DR-/WD-); order ids are SKN-.

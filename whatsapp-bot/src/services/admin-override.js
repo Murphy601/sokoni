@@ -71,8 +71,10 @@ export function isOverrideCommand(text) {
   if (/^\s*REFUND\s+BUYER\b/i.test(t)) return true;
   if (/^\s*SPLIT\s+ESCROW\b/i.test(t)) return true;
   if (/^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
+  if (/^\s*PAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
+  if (/^\s*UNPAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
   if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
-  if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
+  if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
   if (/^\s*(SET|OVERRIDE)\s+RATINGS?\b/i.test(t)) return true;
   if (/^\s*PURGE\s+RATING\b/i.test(t)) return true;
@@ -80,7 +82,7 @@ export function isOverrideCommand(text) {
   if (/^\s*HIDE\s+ITEM\b/i.test(t)) return true;
   if (/^\s*REASSIGN\s+RIDER\b/i.test(t)) return true;
   if (/^\s*FORCE\s+RETURN\b/i.test(t)) return true;
-  if (/^\s*UNBAN\s+RIDER\b/i.test(t)) return true;
+  if (/^\s*UNBAN\s+(RIDER|SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*CLEAR\s+SESSION\b/i.test(t)) return true;
   if (/^\s*SET\s+MODE\b/i.test(t)) return true;
   if (/^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(t)) return true;
@@ -122,10 +124,47 @@ export function normalizeMasterCommand(raw) {
     if (parsed?.handle) return `PAUSE_PAYOUTS ${parsed.handle}`;
   }
 
+  const pauseSeller = t.match(/^PAUSE\s+(?:SELLER|SHOP)\s+(.+)$/i);
+  if (pauseSeller) {
+    const handle = stripHandleAt(pauseSeller[1]);
+    if (handle) return `PAUSE_SELLER ${handle}`;
+  }
+
+  const unpauseSeller = t.match(/^UNPAUSE\s+(?:SELLER|SHOP)\s+(.+)$/i);
+  if (unpauseSeller) {
+    const handle = stripHandleAt(unpauseSeller[1]);
+    if (handle) return `UNPAUSE_SELLER ${handle}`;
+  }
+
+  const unbanSeller = t.match(/^UNBAN\s+(?:SELLER|SHOP)\s+(.+)$/i);
+  if (unbanSeller) {
+    const handle = stripHandleAt(unbanSeller[1]);
+    if (handle) return `UNBAN_SELLER ${handle}`;
+  }
+
+  const pauseRider = t.match(/^PAUSE\s+RIDER\s+(.+)$/i);
+  if (pauseRider) return `PAUSE_RIDER ${pauseRider[1].trim()}`;
+
+  const unpauseRider = t.match(/^UNPAUSE\s+RIDER\s+(.+)$/i);
+  if (unpauseRider) return `UNPAUSE_RIDER ${unpauseRider[1].trim()}`;
+
+  const suspendRider = t.match(/^SUSPEND\s+RIDER\s+(.+)$/i);
+  if (suspendRider) return `SUSPEND_RIDER ${suspendRider[1].trim()}`;
+
   const verifyShop = t.match(/^VERIFY\s+(?:SHOP|STORE)\s+(.+)$/i);
   if (verifyShop) {
     const handle = stripHandleAt(verifyShop[1]);
     if (handle) return `VERIFY_SHOP ${handle}`;
+  }
+
+  const suspendSeller = t.match(/^SUSPEND\s+SELLER\s+(.+)$/i);
+  if (suspendSeller) {
+    const rest = suspendSeller[1].trim();
+    const atHandle = rest.match(/^(@[^@]+?)(?:\s{2,}|\s+[-–—]\s+|\s+)(.+)$/);
+    if (atHandle && !/\s/.test(stripHandleAt(atHandle[1]))) {
+      return `SUSPEND_SELLER ${stripHandleAt(atHandle[1])} ${atHandle[2]}`.trim();
+    }
+    return `SUSPEND_SELLER ${stripHandleAt(rest)}`;
   }
 
   const suspendShop = t.match(/^SUSPEND\s+SHOP\s+(.+)$/i);
@@ -230,6 +269,20 @@ export function normalizeMasterCommand(raw) {
         return `UNBAN ${rest}`.trim();
       case "unban-rider":
         return `UNBAN RIDER ${rest}`.trim();
+      case "pause-seller":
+        return `PAUSE_SELLER ${rest}`.trim();
+      case "unpause-seller":
+        return `UNPAUSE_SELLER ${rest}`.trim();
+      case "suspend-seller":
+        return `SUSPEND_SELLER ${rest}`.trim();
+      case "unban-seller":
+        return `UNBAN_SELLER ${rest}`.trim();
+      case "pause-rider":
+        return `PAUSE_RIDER ${rest}`.trim();
+      case "unpause-rider":
+        return `UNPAUSE_RIDER ${rest}`.trim();
+      case "suspend-rider":
+        return `SUSPEND_RIDER ${rest}`.trim();
       case "agent-mode":
       case "agent_mode":
         return `AGENT ${rest}`.trim();
@@ -316,7 +369,9 @@ function overrideHelp() {
     `*Shops*\n` +
     `• *LIST VERIFIED SELLERS*\n` +
     `• *VERIFY SHOP @handle* / *VERIFY STORE @handle* → 🔷 VERIFIED STORE\n` +
-    `• *SUSPEND SHOP @handle reason*\n` +
+    `• *PAUSE SELLER @handle* — banner + hide listings + lock payouts\n` +
+    `• *UNPAUSE SELLER @handle* / *UNBAN SELLER @handle* — restore live\n` +
+    `• *SUSPEND SELLER @handle* / *SUSPEND SHOP @handle reason* — hard lock\n` +
     `• *SET COMMISSION @handle 3*\n` +
     `• *SET RATING @handle 4.8* / *SET RATINGS @Adiv's thrift 4.8* / *OVERRIDE RATING …*\n` +
     `• *PURGE RATING SELLER userId poolEntryId*\n` +
@@ -324,9 +379,10 @@ function overrideHelp() {
     `• *HIDE ITEM product_id*\n\n` +
     `*Riders*\n` +
     `• *LIST RIDERS* / *LIST AVAILABLE RIDERS*\n` +
+    `• *PAUSE RIDER +254…* / *UNPAUSE RIDER +254…*\n` +
+    `• *SUSPEND RIDER +254…* / *UNBAN RIDER +254…*\n` +
     `• *REASSIGN RIDER SKN-#### +254…*\n` +
-    `• *FORCE RETURN SKN-####*\n` +
-    `• *UNBAN RIDER +254…*\n\n` +
+    `• *FORCE RETURN SKN-####*\n\n` +
     `*Ops*\n` +
     `• *STATUS* / *BRIEFING*\n` +
     `• *SYSTEM PAUSE* / *SYSTEM RESUME*\n` +
@@ -644,31 +700,106 @@ export async function executeMasterAdminCommand(
   const unbanRider = cmd.match(/^UNBAN\s+RIDER\s+(.+)$/i);
   if (unbanRider) {
     if (!staffCan("unban_rider", staff)) return deny(staff, "unban_rider");
-    const found = await findRiderByPhone(unbanRider[1]);
-    if (found.error) {
-      return {
-        ok: false,
-        action: "unban_rider",
-        reply: ack(`Rider unlock failed: ${found.message || found.error}`),
-      };
-    }
-    const updated = await setRiderVerificationStatus(found.rider.id, "VERIFIED", {
+    const { enforceRiderAction } = await import("./enforce-account.js");
+    const out = await enforceRiderAction(unbanRider[1], "UNBAN", {
       reason: "Boss OVERRIDE: UNBAN RIDER",
+      adminLabel,
     });
-    if (updated?.error) {
+    await logBossAction({
+      action: "UNBAN_RIDER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "rider",
+      targetId: out.riderId || unbanRider[1],
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+    });
+    if (!out.ok) {
       return {
         ok: false,
         action: "unban_rider",
-        reply: ack(`Rider unlock failed: ${updated.message || updated.error}`),
+        reply: ack(`Rider unlock failed: ${out.message || out.error}`),
       };
     }
     return {
       ok: true,
       action: "unban_rider",
-      reply: ack(
-        `Rider *${found.rider.fullName || found.rider.phone}* unlocked → *VERIFIED* immediately.`
-      ),
+      reply: ack(out.message),
     };
+  }
+
+  const pauseRiderCmd = cmd.match(/^PAUSE_RIDER\s+(.+)$/i);
+  if (pauseRiderCmd) {
+    if (!staffCan("unban_rider", staff)) return deny(staff, "pause_rider");
+    const { enforceRiderAction } = await import("./enforce-account.js");
+    const out = await enforceRiderAction(pauseRiderCmd[1], "PAUSE", {
+      reason: "Boss PAUSE RIDER",
+      adminLabel,
+    });
+    await logBossAction({
+      action: "PAUSE_RIDER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "rider",
+      targetId: out.riderId || pauseRiderCmd[1],
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+    });
+    if (!out.ok) {
+      return { ok: false, action: "pause_rider", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "pause_rider", reply: ack(out.message) };
+  }
+
+  const unpauseRiderCmd = cmd.match(/^UNPAUSE_RIDER\s+(.+)$/i);
+  if (unpauseRiderCmd) {
+    if (!staffCan("unban_rider", staff)) return deny(staff, "unpause_rider");
+    const { enforceRiderAction } = await import("./enforce-account.js");
+    const out = await enforceRiderAction(unpauseRiderCmd[1], "UNPAUSE", {
+      reason: "Boss UNPAUSE RIDER",
+      adminLabel,
+    });
+    await logBossAction({
+      action: "UNPAUSE_RIDER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "rider",
+      targetId: out.riderId || unpauseRiderCmd[1],
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+    });
+    if (!out.ok) {
+      return { ok: false, action: "unpause_rider", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "unpause_rider", reply: ack(out.message) };
+  }
+
+  const suspendRiderCmd = cmd.match(/^SUSPEND_RIDER\s+(.+)$/i);
+  if (suspendRiderCmd) {
+    if (!staffCan("unban_rider", staff)) return deny(staff, "suspend_rider");
+    const { enforceRiderAction } = await import("./enforce-account.js");
+    const out = await enforceRiderAction(suspendRiderCmd[1], "SUSPEND", {
+      reason: "Boss SUSPEND RIDER",
+      adminLabel,
+    });
+    await logBossAction({
+      action: "SUSPEND_RIDER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "rider",
+      targetId: out.riderId || suspendRiderCmd[1],
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+      metadata: { unassigned: out.unassigned, heldWithPackage: out.heldWithPackage },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "suspend_rider", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "suspend_rider", reply: ack(out.message) };
   }
 
   const ban = cmd.match(/^BAN\s+(.+)$/i);
@@ -925,13 +1056,93 @@ export async function executeMasterAdminCommand(
     };
   }
 
+  const pauseSellerCmd = cmd.match(/^PAUSE_SELLER\s+(.+)$/i);
+  if (pauseSellerCmd) {
+    const { enforceSellerAction } = await import("./enforce-account.js");
+    const handle = stripHandleAt(pauseSellerCmd[1]);
+    const out = await enforceSellerAction(handle, "PAUSE", {
+      reason: "Boss PAUSE SELLER",
+      adminLabel,
+    });
+    await logBossAction({
+      action: "PAUSE_SELLER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: out.supplierId || handle,
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+      metadata: { handle: out.handle || handle },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "pause_seller", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "pause_seller", reply: ack(out.message) };
+  }
+
+  const unpauseSellerCmd = cmd.match(/^(?:UNPAUSE_SELLER|UNBAN_SELLER)\s+(.+)$/i);
+  if (unpauseSellerCmd) {
+    const { enforceSellerAction } = await import("./enforce-account.js");
+    const handle = stripHandleAt(unpauseSellerCmd[1]);
+    const verb = /^UNBAN_SELLER/i.test(cmd) ? "UNBAN" : "UNPAUSE";
+    const out = await enforceSellerAction(handle, verb, {
+      reason: `Boss ${verb} SELLER`,
+      adminLabel,
+    });
+    await logBossAction({
+      action: verb === "UNBAN" ? "UNBAN_SELLER" : "UNPAUSE_SELLER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: out.supplierId || handle,
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+      metadata: { handle: out.handle || handle },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "restore_seller", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "restore_seller", reply: ack(out.message) };
+  }
+
+  const suspendSellerCmd = cmd.match(/^SUSPEND_SELLER\s+(\S+)(?:\s+(.*))?$/i);
+  const suspendSellerCmdMulti = cmd.match(/^SUSPEND_SELLER\s+(.+)$/i);
+  if (suspendSellerCmdMulti) {
+    const { enforceSellerAction } = await import("./enforce-account.js");
+    let handle;
+    let note = "Suspended by Boss";
+    const rest = suspendSellerCmdMulti[1].trim();
+    if (suspendSellerCmd && !/[\s']/.test(suspendSellerCmd[1])) {
+      handle = stripHandleAt(suspendSellerCmd[1]);
+      note = String(suspendSellerCmd[2] || "Suspended by Boss").trim() || "Suspended by Boss";
+    } else {
+      handle = stripHandleAt(rest);
+    }
+    const out = await enforceSellerAction(handle, "SUSPEND", { reason: note, adminLabel });
+    await logBossAction({
+      action: "SUSPEND_SELLER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: out.supplierId || handle,
+      source,
+      success: Boolean(out.ok),
+      message: note,
+      metadata: { handle: out.handle || handle },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "suspend_seller", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "suspend_seller", reply: ack(out.message) };
+  }
+
   const suspendShopCmd = cmd.match(/^SUSPEND_SHOP\s+(\S+)(?:\s+(.*))?$/i);
   // Prefer greedy handle when spaces present (normalized as full remainder without score)
   const suspendShopCmdMulti = cmd.match(/^SUSPEND_SHOP\s+(.+)$/i);
   if (suspendShopCmdMulti) {
-    const { getSupplierByHandle } = await import("./suppliers.js");
-    const { freezeShop } = await import("./shops-desk.js");
-    const { hideListingsForSupplier } = await import("./seller-listings.js");
+    const { enforceSellerAction } = await import("./enforce-account.js");
     let handle;
     let note = "Suspended by Boss";
     const rest = suspendShopCmdMulti[1].trim();
@@ -942,32 +1153,25 @@ export async function executeMasterAdminCommand(
     } else {
       handle = stripHandleAt(rest);
     }
-    const shop = getSupplierByHandle(handle);
-    if (!shop) {
-      return { ok: false, action: "suspend_shop", reply: ack(`Shop *${handle}* not found.`) };
-    }
-    const result = freezeShop(shop.id, { note });
+    const out = await enforceSellerAction(handle, "SUSPEND", { reason: note, adminLabel });
     await logBossAction({
       action: "SUSPEND_SHOP",
       actorPhone: phone || null,
       actorLabel: String(adminLabel).slice(0, 80),
       targetType: "shop",
-      targetId: shop.id || handle,
+      targetId: out.supplierId || handle,
       source,
-      success: !result?.error,
+      success: Boolean(out.ok),
       message: note,
-      metadata: { handle: shop.shopHandle || handle },
+      metadata: { handle: out.handle || handle },
     });
-    if (result?.error) {
-      return { ok: false, action: "suspend_shop", reply: ack(result.message || result.error) };
+    if (!out.ok) {
+      return { ok: false, action: "suspend_shop", reply: ack(out.message || out.error) };
     }
-    await hideListingsForSupplier(shop.id, { reason: note });
     return {
       ok: true,
       action: "suspend_shop",
-      reply: ack(
-        `Shop *${shop.shopHandle || handle}* frozen. Listings hidden. New orders blocked. Note: ${note}`
-      ),
+      reply: ack(out.message),
     };
   }
 

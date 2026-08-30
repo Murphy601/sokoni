@@ -64,7 +64,24 @@ export function requireSeller(phone) {
 export async function requireAuthenticatedSeller(phone, sessionToken) {
   const session = await validateSellerSession(phone, sessionToken);
   if (session.error) return session;
-  return requireSeller(phone);
+  const check = requireSeller(phone);
+  if (check.error) return check;
+  const st = String(check.supplier.shopStatus || "live").toLowerCase();
+  if (st === "deactivated") {
+    try {
+      const { revokeSellerSession } = await import("./seller-verification.js");
+      await revokeSellerSession(phone);
+    } catch {
+      /* ignore */
+    }
+    return {
+      error: "account_suspended",
+      shopStatus: "deactivated",
+      message:
+        "Your account has been suspended due to platform policy violations. Contact support.",
+    };
+  }
+  return check;
 }
 
 /** New and returning sellers must verify WhatsApp OTP before every sign-in. */
@@ -151,6 +168,8 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
 
 function sanitizeSeller(s) {
   if (!s) return null;
+  const shopStatus = String(s.shopStatus || "live").toLowerCase();
+  const payoutHold = Boolean(s.payoutHold) || shopStatus === "paused" || shopStatus === "deactivated" || shopStatus === "under_review";
   return {
     id: s.id,
     businessName: s.businessName,
@@ -173,6 +192,12 @@ function sanitizeSeller(s) {
     city: s.city || "",
     promoBanner: s.promoBanner || "",
     offerNote: s.offerNote || "",
+    shopStatus,
+    payoutHold,
+    canWithdraw: !payoutHold && shopStatus === "live",
+    shopStatusNote: s.shopStatusNote || null,
+    catalogLocked: shopStatus !== "live",
+    accountBlocked: shopStatus === "deactivated",
   };
 }
 
@@ -183,6 +208,21 @@ export async function getSellerProfile(phone, sessionToken) {
   const check = requireSeller(phone);
   if (check.error) {
     return { needsSetup: true, error: check.error, message: check.message };
+  }
+  const st = String(check.supplier.shopStatus || "live").toLowerCase();
+  if (st === "deactivated") {
+    try {
+      const { revokeSellerSession } = await import("./seller-verification.js");
+      await revokeSellerSession(phone);
+    } catch {
+      /* ignore */
+    }
+    return {
+      error: "account_suspended",
+      shopStatus: "deactivated",
+      message:
+        "Your account has been suspended due to platform policy violations. Contact support.",
+    };
   }
   return { seller: sanitizeSeller(check.supplier) };
 }
@@ -482,10 +522,25 @@ export async function getSellerEscrowLedgerByPhone(phone, sessionToken) {
   return { ledger: getSellerEscrowLedger(check.supplier.id), seller: sanitizeSeller(check.supplier) };
 }
 
+function assertSellerCanMutateCatalog(supplier) {
+  const st = String(supplier?.shopStatus || "live").toLowerCase();
+  if (st === "live") return { ok: true };
+  return {
+    error: "shop_unavailable",
+    shopStatus: st,
+    message:
+      st === "paused"
+        ? "Your store is paused by Administration — listing edits are disabled."
+        : "Your store is unavailable — listing edits are disabled.",
+  };
+}
+
 /** Bump listing to top of feed without re-uploading photos. */
 export async function refreshSellerListing({ phone, productId, sessionToken }) {
   const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
+  const lock = assertSellerCanMutateCatalog(check.supplier);
+  if (!lock.ok) return lock;
 
   const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
   let updated = null;
@@ -556,6 +611,8 @@ export async function refreshSellerListing({ phone, productId, sessionToken }) {
 export async function updateSellerListingPrice({ phone, productId, sellerNetKes, sessionToken }) {
   const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
+  const lock = assertSellerCanMutateCatalog(check.supplier);
+  if (!lock.ok) return lock;
 
   const nextNet = Math.round(Number(sellerNetKes));
   if (!Number.isFinite(nextNet) || nextNet < 50) {
