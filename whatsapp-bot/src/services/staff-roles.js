@@ -110,6 +110,9 @@ export function staffCan(action, staff, ctx = {}) {
 
   switch (String(action || "").toLowerCase()) {
     case "brief":
+      // Escrow / dispute metrics — SUPER_ADMIN (ADMIN_PHONES / founder) only.
+      // SUPPORT_AGENT and other desk roles must not pull executive briefs on WhatsApp.
+      return role === "SUPER_ADMIN";
     case "help":
       return true;
     case "agent_mode":
