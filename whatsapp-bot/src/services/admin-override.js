@@ -68,7 +68,9 @@ export function isOverrideCommand(text) {
   if (/^\s*![a-z][\w-]*/i.test(t)) return true;
   if (/^\s*FORCE_PAYOUT\b/i.test(t)) return true;
   if (/^\s*FORCE\s+RELEASE\b/i.test(t)) return true;
+  if (/^\s*RELEASE\s+PAYOUT\b/i.test(t)) return true;
   if (/^\s*REFUND\s+BUYER\b/i.test(t)) return true;
+  if (/^\s*REFUND\s+DISPUTE\b/i.test(t)) return true;
   if (/^\s*SPLIT\s+ESCROW\b/i.test(t)) return true;
   if (/^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
   if (/^\s*PAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
@@ -112,8 +114,14 @@ export function normalizeMasterCommand(raw) {
   const forceRelease = t.match(/^FORCE\s+RELEASE\s+(SKN-[\w-]+|SK-[\w-]+)/i);
   if (forceRelease) return `RELEASE ${forceRelease[1].toUpperCase()}`;
 
+  const releasePayout = t.match(/^RELEASE\s+PAYOUT\s+(.+)$/i);
+  if (releasePayout) return `RELEASE_PAYOUT ${releasePayout[1].trim()}`;
+
   const refundBuyer = t.match(/^REFUND\s+BUYER\s+(SKN-[\w-]+|SK-[\w-]+)/i);
   if (refundBuyer) return `REFUND ${refundBuyer[1].toUpperCase()}`;
+
+  const refundDispute = t.match(/^REFUND\s+DISPUTE\s+(SKN-[\w-]+|SK-[\w-]+)/i);
+  if (refundDispute) return `REFUND ${refundDispute[1].toUpperCase()}`;
 
   const split = t.match(/^SPLIT\s+ESCROW\s+(SKN-[\w-]+|SK-[\w-]+)\s+(\d{1,3})\s+(\d{1,3})/i);
   if (split) return `SPLIT ${split[1].toUpperCase()} ${split[2]} ${split[3]}`;
@@ -363,9 +371,10 @@ function overrideHelp() {
     `⚡ *Master command palette* (${title} line — code interceptor, zero LLM)\n\n` +
     `*Escrow*\n` +
     `• *FORCE RELEASE SKN-####*\n` +
-    `• *REFUND BUYER SKN-####*\n` +
+    `• *REFUND BUYER SKN-####* / *REFUND DISPUTE SKN-####*\n` +
     `• *SPLIT ESCROW SKN-#### 50 50*\n` +
-    `• *PAUSE PAYOUTS @handle*\n\n` +
+    `• *PAUSE PAYOUTS @handle*\n` +
+    `• *RELEASE PAYOUT +254…* — unblock quarantined B2C (manual retry)\n\n` +
     `*Shops*\n` +
     `• *LIST VERIFIED SELLERS*\n` +
     `• *VERIFY SHOP @handle* / *VERIFY STORE @handle* → 🔷 VERIFIED STORE\n` +
@@ -923,7 +932,7 @@ export async function executeMasterAdminCommand(
     const orderId = normalizeOrderId(refund[1]);
     if (!staffCan("release", staff)) return deny(staff, "refund");
     const result = refundEscrowOrder(orderId, {
-      reason: "Boss REFUND BUYER",
+      reason: "Boss REFUND BUYER / REFUND DISPUTE",
       adminLabel: String(adminLabel).slice(0, 80),
     });
     await logBossAction({
@@ -952,6 +961,31 @@ export async function executeMasterAdminCommand(
           `${result.message || "Complete M-Pesa reverse outside the bot if needed."}`
       ),
     };
+  }
+
+  // RELEASE PAYOUT +254… — unblock quarantined B2C (no auto Daraja)
+  const releasePayoutCmd = cmd.match(/^RELEASE_PAYOUT\s+(.+)$/i);
+  if (releasePayoutCmd) {
+    if (String(staff.role || "").toUpperCase() !== "SUPER_ADMIN" && !staffCan("release", staff)) {
+      return deny(staff, "release_payout");
+    }
+    const { releaseQuarantinedPayoutsForPhone } = await import("./b2c-interceptor.js");
+    const out = await releaseQuarantinedPayoutsForPhone(releasePayoutCmd[1], { adminLabel });
+    await logBossAction({
+      action: "RELEASE_PAYOUT",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "payout",
+      targetId: releasePayoutCmd[1],
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+      metadata: { amountKes: out.amountKes, count: out.count },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "release_payout", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "release_payout", reply: ack(out.message) };
   }
 
   // SPLIT ESCROW buyer% seller%

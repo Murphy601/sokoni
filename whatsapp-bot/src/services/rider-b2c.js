@@ -181,14 +181,15 @@ export async function processRiderB2CPayouts({
   }
 
   const { rows } = await query(
-    `SELECT r.id AS rider_id, r.full_name, r.phone,
+    `SELECT r.id AS rider_id, r.full_name, r.phone, r.verification_status, r.suspend_reason,
             SUM(COALESCE(p.net_amount_paid, p.amount))::numeric AS total_amount
        FROM rider_payouts p
        JOIN riders r ON p.rider_id = r.id
       WHERE p.status = 'CLEARED'
         AND r.verification_status = 'VERIFIED'
+        AND COALESCE(r.suspend_reason, '') NOT LIKE 'ADMIN_PAUSE:%'
         AND COALESCE(r.mpesa_name_match_status, 'UNKNOWN') <> 'MISMATCH'
-      GROUP BY r.id, r.full_name, r.phone
+      GROUP BY r.id, r.full_name, r.phone, r.verification_status, r.suspend_reason
      HAVING SUM(COALESCE(p.net_amount_paid, p.amount)) >= $1
       ORDER BY SUM(COALESCE(p.net_amount_paid, p.amount)) DESC
       LIMIT $2`,
@@ -254,6 +255,28 @@ export async function processRiderB2CPayouts({
     amountToPay = running;
     const phone = normalizePhone(row.phone);
     if (!phone) continue;
+
+    try {
+      const { isRiderBlockedForB2C } = await import("./b2c-interceptor.js");
+      if (
+        isRiderBlockedForB2C({
+          verification_status: row.verification_status,
+          suspend_reason: row.suspend_reason,
+        })
+      ) {
+        await query(
+          `UPDATE rider_payouts SET
+             status = 'QUARANTINED',
+             payout_hold_reason = $2,
+             retry_after = NULL
+           WHERE id = ANY($1::bigint[]) AND status = 'CLEARED'`,
+          [pickIds, "ADMIN_QUARANTINE: preflight — rider restricted"]
+        );
+        continue;
+      }
+    } catch (err) {
+      console.warn("[rider-b2c] preflight:", err.message);
+    }
 
     const originator = `skrboda${row.rider_id}-${Date.now().toString(36).slice(-6)}`.slice(0, 36);
 
@@ -346,6 +369,19 @@ export async function applyRiderB2CResult(parsed) {
 
   if (parsed.success) {
     const receipt = parsed.receipt || parsed.transactionId || null;
+    const holdSnap = await query(
+      `SELECT DISTINCT payout_hold_reason FROM rider_payouts
+        WHERE status = 'PROCESSING'
+          AND (
+            ($1::text IS NOT NULL AND b2c_conversation_id = $1)
+            OR ($2::text IS NOT NULL AND b2c_originator_id = $2)
+          )`,
+      [conversationId, originator]
+    );
+    const wasHold = holdSnap.rows.some((r) =>
+      String(r.payout_hold_reason || "").startsWith("AWAITING_CALLBACK_QUARANTINE:")
+    );
+
     await query(
       `UPDATE rider_payouts SET
          status = 'PAID',
@@ -361,6 +397,19 @@ export async function applyRiderB2CResult(parsed) {
          )`,
       [conversationId, originator, receipt]
     );
+
+    if (wasHold) {
+      try {
+        const { alertBossB2CIntercept } = await import("./b2c-interceptor.js");
+        await alertBossB2CIntercept(
+          `⚠️ *Rider B2C completed during account hold*\n\n` +
+            `Conversation ${conversationId || originator} paid while rider was restricted.\n` +
+            `Receipt: ${receipt || "—"}. Funds left platform — review disputes.`
+        );
+      } catch {
+        /* ignore */
+      }
+    }
 
     for (const row of rows) {
       try {
@@ -411,6 +460,38 @@ export async function applyRiderB2CResult(parsed) {
 
   const reason = parsed.resultDesc || (parsed.timeout ? "B2C queue timeout" : "b2c_failed");
   for (const row of rows) {
+    // If admin flagged in-flight quarantine, freeze instead of auto-retry
+    const holdCheck = await query(
+      `SELECT payout_hold_reason FROM rider_payouts
+        WHERE rider_id = $1 AND status = 'PROCESSING'
+          AND (
+            ($2::text IS NOT NULL AND b2c_conversation_id = $2)
+            OR ($3::text IS NOT NULL AND b2c_originator_id = $3)
+          )
+        LIMIT 1`,
+      [row.rider_id, conversationId, originator]
+    );
+    const hold = String(holdCheck.rows[0]?.payout_hold_reason || "");
+    if (hold.startsWith("AWAITING_CALLBACK_QUARANTINE:") || hold.startsWith("ADMIN_QUARANTINE:")) {
+      await query(
+        `UPDATE rider_payouts SET
+           status = 'QUARANTINED',
+           payout_hold_reason = $4,
+           retry_after = NULL
+         WHERE rider_id = $1 AND status = 'PROCESSING'
+           AND (
+             ($2::text IS NOT NULL AND b2c_conversation_id = $2)
+             OR ($3::text IS NOT NULL AND b2c_originator_id = $3)
+           )`,
+        [
+          row.rider_id,
+          conversationId,
+          originator,
+          `ADMIN_QUARANTINE: ${reason}`.slice(0, 400),
+        ]
+      );
+      continue;
+    }
     await markPendingRetry({
       riderId: row.rider_id,
       conversationId,

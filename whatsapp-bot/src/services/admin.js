@@ -291,7 +291,9 @@ export async function shouldRouteIncomingAsAdmin(body, parsed) {
     /^\s*![a-z][\w-]*/i.test(text) ||
     /^\s*FORCE_PAYOUT\b/i.test(text) ||
     /^\s*FORCE\s+RELEASE\b/i.test(text) ||
+    /^\s*RELEASE\s+PAYOUT\b/i.test(text) ||
     /^\s*REFUND\s+BUYER\b/i.test(text) ||
+    /^\s*REFUND\s+DISPUTE\b/i.test(text) ||
     /^\s*SPLIT\s+ESCROW\b/i.test(text) ||
     /^\s*PAUSE\s+PAYOUTS?\b/i.test(text) ||
     /^\s*PAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
