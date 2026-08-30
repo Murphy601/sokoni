@@ -94,6 +94,7 @@ export function isOverrideCommand(text) {
   if (/^\s*OVERRIDE\s+TEST\s*$/i.test(t)) return true;
   if (/^\s*LIST\s+(AVAILABLE\s+)?RIDERS?\b/i.test(t)) return true;
   if (/^\s*LIST\s+(VERIFIED\s+)?SELLERS?\b/i.test(t)) return true;
+  if (/^\s*BROADCAST\s+(SELLERS?|RIDERS?|BUYERS?|CUSTOMERS?)\b/i.test(t)) return true;
   return false;
 }
 
@@ -266,6 +267,17 @@ export function normalizeMasterCommand(raw) {
   if (/^\s*LIST\s+(AVAILABLE\s+)?RIDERS?\b/i.test(t)) return "LIST_RIDERS";
   if (/^\s*LIST\s+(VERIFIED\s+)?SELLERS?\b/i.test(t)) return "LIST_SELLERS";
 
+  const broadcastAud = t.match(
+    /^\s*BROADCAST\s+(SELLERS?|RIDERS?|BUYERS?|CUSTOMERS?)\s*[:\-–—]?\s*([\s\S]+)$/i
+  );
+  if (broadcastAud) {
+    const aud = String(broadcastAud[1] || "").toUpperCase();
+    const body = String(broadcastAud[2] || "").trim();
+    if (/^SELLER/i.test(aud)) return `BROADCAST_SELLERS ${body}`.trim();
+    if (/^RIDER/i.test(aud)) return `BROADCAST_RIDERS ${body}`.trim();
+    return `BROADCAST_BUYERS ${body}`.trim();
+  }
+
   if (/^\s*OVERRIDE\s*:/i.test(t)) {
     return t.replace(/^\s*OVERRIDE\s*:/i, "").trim();
   }
@@ -307,6 +319,16 @@ export function normalizeMasterCommand(raw) {
       case "activate-seller":
       case "activate-shop":
         return `UNPAUSE_SELLER ${rest}`.trim();
+      case "broadcast-sellers":
+      case "broadcast_sellers":
+        return `BROADCAST_SELLERS ${rest}`.trim();
+      case "broadcast-riders":
+      case "broadcast_riders":
+        return `BROADCAST_RIDERS ${rest}`.trim();
+      case "broadcast-buyers":
+      case "broadcast_buyers":
+      case "broadcast-customers":
+        return `BROADCAST_BUYERS ${rest}`.trim();
       case "unban-seller":
         return `UNBAN_SELLER ${rest}`.trim();
       case "pause-rider":
@@ -417,6 +439,10 @@ function overrideHelp() {
     `• *SUSPEND RIDER +254…* / *UNBAN RIDER +254…*\n` +
     `• *REASSIGN RIDER SKN-#### +254…*\n` +
     `• *FORCE RETURN SKN-####*\n\n` +
+    `*Broadcasts*\n` +
+    `• *BROADCAST SELLERS: …* → 🛍️ Notice to Sellers: …\n` +
+    `• *BROADCAST RIDERS: …* → 🛵 Rider Bonus: …\n` +
+    `• *BROADCAST BUYERS: …* → 🛒 Sokoni Deal: …\n\n` +
     `*Ops*\n` +
     `• *STATUS* / *BRIEFING*\n` +
     `• *SYSTEM PAUSE* / *SYSTEM RESUME*\n` +
@@ -635,6 +661,38 @@ export async function executeMasterAdminCommand(
         reply: ack(`Could not load sellers: ${err.message}`),
       };
     }
+  }
+
+  const broadcastCmd = cmd.match(/^BROADCAST_(SELLERS|RIDERS|BUYERS)\s+([\s\S]+)$/i);
+  if (broadcastCmd) {
+    // Mass WA is founder / SUPER_ADMIN only
+    if (!staffCan("system_pause", staff) && !isFounder) {
+      return deny(staff, "broadcast");
+    }
+    const audience = broadcastCmd[1];
+    const body = String(broadcastCmd[2] || "").trim();
+    const { runAudienceBroadcast } = await import("./audience-broadcast.js");
+    const out = await runAudienceBroadcast(audience, body);
+    await logBossAction({
+      action: `BROADCAST_${String(audience).toUpperCase()}`,
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "broadcast",
+      targetId: String(out.audience || audience).toLowerCase(),
+      source,
+      success: Boolean(out.ok),
+      message: body.slice(0, 280),
+      metadata: {
+        sent: out.sent || 0,
+        failed: out.failed || 0,
+        total: out.total || 0,
+        preview: String(out.preview || "").slice(0, 200),
+      },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "broadcast", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "broadcast", reply: ack(out.message) };
   }
 
   const release = cmd.match(/^RELEASE\s+(SKN-[\w-]+|SK-[\w-]+)/i);
