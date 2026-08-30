@@ -2,30 +2,9 @@
   "version": 1,
   "categories": [
     {
-      "id": "health-beauty",
-      "label": "Health & Beauty",
-      "emoji": "💄",
-      "subcategories": [
-        {
-          "id": "personal-care",
-          "label": "Personal Care"
-        },
-        {
-          "id": "mens-grooming",
-          "label": "Men's Grooming"
-        }
-      ]
-    },
-    {
-      "id": "home-office",
-      "label": "Home & Office",
-      "emoji": "🏠",
-      "subcategories": []
-    },
-    {
-      "id": "supermarket",
-      "label": "Supermarket",
-      "emoji": "🛒",
+      "id": "fashion",
+      "label": "Fashion",
+      "emoji": "👗",
       "subcategories": []
     }
   ]
