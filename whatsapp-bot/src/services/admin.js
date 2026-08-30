@@ -85,13 +85,12 @@ function phonesMatch(a, b) {
 
 function isAdminPhone(phone) {
   if (!phone) return false;
-  // Hardwired Boss last-9 always wins (even if ADMIN_PHONES env is wrong/empty).
-  if (checkIfBoss(phone, config.admin.phones || [])) return true;
+  // Founder Boss hardwire always wins.
+  if (checkIfBoss(phone)) return true;
   const list = [
     ...(config.admin.phones || []),
     ...(config.admin.matchAliases || []),
   ];
-  if (isBossPhone(phone, list)) return true;
   return list.some((p) => phonesMatch(phone, p));
 }
 
@@ -202,30 +201,16 @@ export function tryRegisterAdminFromMessage(chatId, phone = "", text = "") {
     registerAdminChatId(chatId, phone);
     return isAdminSender(chatId, phone);
   }
-  // Bootstrap @lid when hardwired Boss / single ADMIN_PHONES sends PING or a command.
+  // Bootstrap @lid ONLY for hardwired founder Boss — never map random @lid → ADMIN_PHONES[0]
   const looksBossProbe =
     /^\s*ping\s*$/i.test(String(text || "")) ||
     containsAdminCommand(text) ||
     /^\s*OVERRIDE\s*:/i.test((text || "").trim()) ||
-    /^admin\b/i.test((text || "").trim()) ||
-    /^orders?\b/i.test((text || "").trim());
-  if (chatId?.includes("@lid") && looksBossProbe) {
-    if (phone && checkIfBoss(phone)) {
-      registerAdminChatId(chatId, phone);
-      console.log("[admin] bootstrapped @lid for Boss phone", phone);
-      return true;
-    }
-    if (config.admin.phones.length === 1 && looksBossProbe) {
-      registerAdminChatId(chatId, config.admin.phones[0]);
-      console.log("[admin] bootstrapped @lid for", config.admin.phones[0]);
-      return true;
-    }
-    // PING from @lid with no phone yet — still map to hardwired Boss if only one hardwire
-    if (/^\s*ping\s*$/i.test(String(text || "")) && config.admin.phones[0]) {
-      registerAdminChatId(chatId, config.admin.phones[0]);
-      console.log("[admin] PING bootstrap @lid →", config.admin.phones[0]);
-      return true;
-    }
+    /^admin\b/i.test((text || "").trim());
+  if (chatId?.includes("@lid") && looksBossProbe && phone && checkIfBoss(phone)) {
+    registerAdminChatId(chatId, phone);
+    console.log("[admin] bootstrapped @lid for founder Boss phone", phone);
+    return true;
   }
   return isAdminSender(chatId, phone);
 }

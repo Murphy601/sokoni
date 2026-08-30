@@ -57,10 +57,18 @@ describe("executive AI OS", () => {
     assert.match(card, /\*3\* Split/);
   });
 
-  it("!help still returns palette including brief", async () => {
-    const r = await executeMasterAdminCommand("!help", { actorPhone: "254700000000" });
-    assert.equal(r.ok, true);
-    assert.match(r.reply, /brief/i);
+  it("!help for API token path returns palette; WhatsApp unknown phone does not", async () => {
+    const api = await executeMasterAdminCommand("!help", { actorPhone: "254700000000" });
+    assert.equal(api.ok, true);
+    assert.match(api.reply, /brief/i);
+
+    const wa = await executeMasterAdminCommand("!help", {
+      actorPhone: "254700000000",
+      source: "boss-intercept.whatsapp",
+      requireStaff: true,
+    });
+    assert.equal(wa.ok, false);
+    assert.doesNotMatch(wa.reply, /FORCE RELEASE/i);
   });
 
   it("shopper prompt keeps escrow guardrail; admin gets executive directive", () => {
