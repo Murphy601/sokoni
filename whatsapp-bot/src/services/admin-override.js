@@ -78,6 +78,7 @@ export function isOverrideCommand(text) {
   if (/^\s*DEACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*ACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*DELETE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
+  if (/^\s*SCRUB\s+ORPHANS?\b/i.test(t)) return true;
   if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
@@ -165,6 +166,8 @@ export function normalizeMasterCommand(raw) {
     const handle = stripHandleAt(rest.replace(/\bCONFIRM\b/gi, "").trim());
     if (handle) return `DELETE_SELLER ${handle}${confirm ? " CONFIRM" : ""}`.trim();
   }
+
+  if (/^SCRUB\s+ORPHANS?\b/i.test(t)) return "SCRUB_ORPHANS";
 
   const deleteRider = t.match(/^DELETE\s+RIDER\s+(.+)$/i);
   if (deleteRider) {
@@ -1362,6 +1365,37 @@ export async function executeMasterAdminCommand(
       return { ok: false, action: "delete_seller", reply: ack(out.message || out.error) };
     }
     return { ok: true, action: "delete_seller", reply: ack(out.message) };
+  }
+
+  if (/^SCRUB_ORPHANS\b/i.test(cmd)) {
+    if (!staffCan("system_pause", staff) && !isFounder) {
+      return deny(staff, "scrub_orphans");
+    }
+    const { scrubOrphanPeerProducts } = await import("./orphan-catalog-scrub.js");
+    const out = await scrubOrphanPeerProducts();
+    await logBossAction({
+      action: "SCRUB_ORPHANS",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "catalog",
+      targetId: "orphans",
+      source,
+      success: Boolean(out.ok),
+      message: out.ok
+        ? `Hid ${out.hidden} orphan peer product(s) (checked ${out.checked}).`
+        : out.error,
+      metadata: out,
+    });
+    if (!out.ok) {
+      return { ok: false, action: "scrub_orphans", reply: ack(out.error || "scrub failed") };
+    }
+    return {
+      ok: true,
+      action: "scrub_orphans",
+      reply: ack(
+        `Orphan scrub done. Hid *${out.hidden}* peer listing(s) with no live shop (checked ${out.checked}).`
+      ),
+    };
   }
 
   const suspendSellerCmd = cmd.match(/^SUSPEND_SELLER\s+(\S+)(?:\s+(.*))?$/i);

@@ -434,6 +434,13 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
       .then(() => import("./services/catalog.js"))
       .then(({ invalidateProductCache }) => invalidateProductCache())
       .catch((err) => console.warn("[sellers] default storefront ensure:", err.message));
+    // Hide peer products whose shops were hard-deleted (stop zombies on the grid).
+    import("./services/orphan-catalog-scrub.js")
+      .then(({ scrubOrphanPeerProducts }) => scrubOrphanPeerProducts())
+      .then((r) => {
+        if (r?.hidden) console.log(`✓ Orphan peer scrub: hid ${r.hidden} product(s)`);
+      })
+      .catch((err) => console.warn("[orphan-scrub] startup:", err.message));
   }
 });
 

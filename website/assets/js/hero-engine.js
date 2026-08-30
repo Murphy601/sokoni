@@ -443,13 +443,28 @@
       const res = await fetch(`${apiBase}?limit=200&offset=0`);
       if (res.ok) {
         const data = await res.json();
-        const list = Array.isArray(data.products) ? data.products : [];
-        if (list.length) return list;
+        // Empty API list is authoritative — do not resurrect peers from static JSON.
+        return Array.isArray(data.products) ? data.products : [];
       }
     } catch {
-      /* fall through to static */
+      /* fall through */
     }
-    return loadJson("data/products.json");
+    try {
+      const staticData = await loadJson("data/products.json");
+      const list = Array.isArray(staticData) ? staticData : staticData.products || [];
+      // Static fallback: platform rows only (never deleted peer shops).
+      return list.filter((p) => {
+        const h = String(p.shopHandle || p.sellerHandle || "")
+          .trim()
+          .replace(/^@+/, "")
+          .toLowerCase();
+        if (h && h !== "sokoni-store") return false;
+        if (p.isSold === true || p.inStock === false) return false;
+        return true;
+      });
+    } catch {
+      return [];
+    }
   }
 
   async function init() {

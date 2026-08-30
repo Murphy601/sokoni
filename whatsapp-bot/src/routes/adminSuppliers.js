@@ -237,6 +237,14 @@ router.post("/shops/:id/delete", async (req, res) => {
   res.json({ ok: true, ...out });
 });
 
+/** Hide DB products whose peer shop no longer exists (post-delete zombies). */
+router.post("/catalog/scrub-orphans", async (req, res) => {
+  const { scrubOrphanPeerProducts } = await import("../services/orphan-catalog-scrub.js");
+  const out = await scrubOrphanPeerProducts({ dryRun: Boolean(req.body?.dryRun) });
+  if (!out.ok) return res.status(400).json(out);
+  res.json(out);
+});
+
 router.get("/payouts", (_req, res) => {
   res.json(getSettlementSummary());
 });
