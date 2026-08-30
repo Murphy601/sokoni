@@ -1250,7 +1250,7 @@ async function resolveSellerForOrder(order) {
     .replace(/^@/, "")
     .trim();
   const phone =
-    supplier?.phone || supplier?.mpesaNumber || o.sellerPhone || productPhone(o) || null;
+    supplier?.phone || supplier?.mpesaNumber || o.sellerPhone || null;
   return {
     supplierId: supplier?.id || o.supplierId || null,
     handle: handle ? `@${handle}` : null,
@@ -1258,10 +1258,6 @@ async function resolveSellerForOrder(order) {
     phone: phone || null,
     verified: Boolean(supplier?.isVerifiedStore || supplier?.isSellerVerified || supplier?.verifiedBadge),
   };
-}
-
-function productPhone(_o) {
-  return null;
 }
 
 async function toolLookupOrderSeller(args = {}, context = {}) {
