@@ -388,8 +388,8 @@ fi
 
 # Seller own-video uploads need >1m bodies (default nginx was rejecting at ~1MB).
 if [ -x "$REPO/scripts/ensure-nginx-upload-limit.sh" ]; then
-  echo "==> Ensuring nginx client_max_body_size for seller videos..."
-  bash "$REPO/scripts/ensure-nginx-upload-limit.sh" || echo "WARN: nginx upload-limit script failed (chunked uploads still work)"
+  echo "==> Ensuring nginx client_max_body_size (seller videos + boda rider apply)..."
+  bash "$REPO/scripts/ensure-nginx-upload-limit.sh" || echo "WARN: nginx upload-limit script failed (chunked uploads / client compress still help)"
 fi
 
 echo ""

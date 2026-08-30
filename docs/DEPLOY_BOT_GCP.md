@@ -189,7 +189,9 @@ server {
     listen 80;
     server_name bot.sokonimall.com;
 
-    # Seller publish sends JSON with photo/video URLs; studio can take a while.
+    # Seller video + boda rider multipart docs (/api/riders/register).
+    # Below ~1m (nginx default) the browser shows "Failed to fetch" on 413.
+    # Also run: bash scripts/ensure-nginx-upload-limit.sh
     client_max_body_size 25m;
 
     location / {
