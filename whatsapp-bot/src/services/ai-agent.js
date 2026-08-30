@@ -366,6 +366,9 @@ function offlineReply(toolResults, channel, userMessage = "") {
     if (r.tool === "list_seller_listings" && r.message) {
       return r.message;
     }
+    if (r.tool === "get_order_label" && r.message) {
+      return r.message;
+    }
     if (r.tool === "get_seller_payout" && (r.message || r.ok)) {
       return r.message || `Payout summary ready in Seller Hub.`;
     }
@@ -746,6 +749,29 @@ export async function runAgentTurn({
       tracking: trackingPayload,
       howItWorksCard: true,
       specialist,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
+    };
+  }
+
+  // DETERMINISTIC printable QR / waybill — never let LLM invent /qr?order= broken links
+  const labelResult = toolResults.find(
+    (r) => r.tool === "get_order_label" && r.message && r.deterministic
+  );
+  if (labelResult?.message) {
+    const reply = labelResult.message;
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log(
+      `[ai-agent] order label QR (no LLM): order=${labelResult.orderId || "—"} ok=${Boolean(labelResult.ok)}`
+    );
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      specialist,
+      orderLabel: true,
+      printLabelUrl: labelResult.printLabelUrl || null,
       graph: graph.graph,
       threadId: resolveThreadId(phone || sessionKey),
     };
