@@ -427,6 +427,10 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startBodaDisputeWindowScheduler();
   startSellerShippingReminderScheduler();
   startRiderB2CScheduler();
+  console.log(
+    "✓ Dispatch UX: shipping-gate(fail-closed) · no platform fee invent · " +
+      "PICK UP before role-menu · ACCEPT=seller-only · pickup OTP→buyer+admin"
+  );
   // Ensure platform storefront has a social user id (Make an offer / inbox).
   if (isDbEnabled()) {
     import("./db/repositories/sellers.js")

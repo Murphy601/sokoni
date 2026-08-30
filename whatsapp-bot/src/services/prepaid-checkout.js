@@ -10,7 +10,6 @@ import {
   paystackReference,
 } from "./paystack-transfers.js";
 import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
-import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
 import { gateShippingBeforeStk } from "./shipping-gate.js";
 import { STK_TIMEOUT_MS } from "../lib/ops-edge-constants.js";
 
@@ -118,6 +117,7 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
   }
 
   // Hybrid logistics: require seller Hub shipping rates before any STK push.
+  // Fail CLOSED — never STK if the gate errors (that used to invent platform fees).
   let payOrder = order;
   try {
     const gated = await gateShippingBeforeStk(order);
@@ -134,15 +134,42 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
     }
     payOrder = gated.order || getOrder(order.id) || order;
   } catch (err) {
-    console.warn("[checkout] shipping gate skipped:", err?.message || err);
+    console.error("[checkout] shipping gate FAILED — blocking STK:", err?.message || err);
     try {
-      const ensured = await ensureHybridShippingBeforePayment(order);
-      if (ensured?.order) payOrder = ensured.order;
-      else payOrder = getOrder(order.id) || order;
+      const { cancelOrderMissingShipping } = await import("./shipping-gate.js");
+      await cancelOrderMissingShipping(order, { reason: "shipping_gate_error" });
     } catch (err2) {
-      console.warn("[checkout] hybrid shipping ensure skipped:", err2?.message || err2);
-      payOrder = getOrder(order.id) || order;
+      console.warn("[checkout] cancel after gate error:", err2?.message || err2);
     }
+    return {
+      ok: false,
+      method: "shipping_blocked",
+      cancelled: true,
+      error: "shipping_gate_error",
+      message:
+        "Order cancelled — we could not verify delivery rates for your area. No funds were deducted.",
+    };
+  }
+
+  // Belt-and-suspenders: delivery orders must have a positive shippingKes (or free-ship flag).
+  try {
+    const { inspectOrderShippingReadiness } = await import("./shipping-gate.js");
+    const ready = inspectOrderShippingReadiness(payOrder);
+    const ship = Math.round(Number(payOrder.shippingKes) || 0);
+    if (ready.needsShipping && ship <= 0 && !ready.profile?.isFreeShippingEnabled) {
+      const { cancelOrderMissingShipping } = await import("./shipping-gate.js");
+      await cancelOrderMissingShipping(payOrder, { reason: "zero_shipping_after_gate" });
+      return {
+        ok: false,
+        method: "shipping_blocked",
+        cancelled: true,
+        error: "missing_shipping_rates",
+        message:
+          "Order cancelled — seller has not set delivery rates for this area. No funds were deducted.",
+      };
+    }
+  } catch (err) {
+    console.warn("[checkout] post-gate shipping check:", err?.message || err);
   }
 
   const amountKes = orderBuyerTotal(payOrder);
