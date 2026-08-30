@@ -470,9 +470,9 @@ function renderShopHeader(payload) {
   const totalReviews = Number(stats.totalReviews || 0);
   const trustPayload = stats.trust || shop;
   const unrated =
-    Boolean(trustPayload.unrated) ||
-    trustPayload.displayLabel === "UNRATED" ||
-    totalReviews < 5;
+    trustPayload.unrated === true ||
+    (trustPayload.unrated !== false &&
+      (trustPayload.displayLabel === "UNRATED" || totalReviews < 5));
   const topSeller = el("shop-top-seller");
   if (topSeller) {
     const qualifies =

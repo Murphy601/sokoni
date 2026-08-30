@@ -6,6 +6,7 @@ import {
   scoreFromPool,
   purgePoolEntry,
   deriveBadgeTier,
+  buildAdminOverridePool,
   clampRating,
   RATING_DELTAS,
   BADGE_DEMOTION_FLOOR,
@@ -127,4 +128,22 @@ test("badge demotion below 4.5", () => {
   assert.ok(r.demotionNotice.includes("4.4"));
   assert.ok(r.demotionNotice.includes("Top Rated"));
   assert.equal(BADGE_DEMOTION_FLOOR, 4.5);
+});
+
+test("Boss admin_set-only pool is public (legacy override)", () => {
+  const scored = scoreFromPool([{ v: 4.8, kind: "admin_set", at: "2026-01-01" }]);
+  assert.equal(scored.unrated, false);
+  assert.equal(scored.rating, 4.8);
+  assert.ok(scored.buyerReviewCount >= MIN_PUBLIC_REVIEWS);
+  assert.equal(scored.displayLabel, "4.80");
+});
+
+test("buildAdminOverridePool unlocks public ★ score", () => {
+  const pool = buildAdminOverridePool(4.8);
+  const scored = scoreFromPool(pool);
+  assert.equal(scored.unrated, false);
+  assert.equal(scored.rating, 4.8);
+  assert.ok(scored.buyerReviewCount >= MIN_PUBLIC_REVIEWS);
+  assert.ok(pool.some((e) => e.kind === "admin_set"));
+  assert.ok(pool.filter((e) => e.kind === "star").length >= MIN_PUBLIC_REVIEWS);
 });
