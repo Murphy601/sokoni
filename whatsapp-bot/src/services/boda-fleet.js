@@ -396,8 +396,52 @@ export async function registerRiderApplication(input = {}) {
   };
 }
 
+/** Build WhatsApp copy for verification status changes (exported for tests). */
+export function riderVerificationNotifyText(rider, status, reason = "") {
+  const st = String(status || "").toUpperCase();
+  const name = String(rider?.fullName || "Rider").trim() || "Rider";
+  const plate = String(rider?.motorbikePlate || "your bike").trim() || "your bike";
+  const stage = String(rider?.stageLocation || rider?.operatingTown || "your stage").trim();
+  if (st === "VERIFIED") {
+    return (
+      `🟢 *Congratulations ${name}!* Your rider account for *${plate}* (${stage}) has been verified by Sokoni Ops.\n\n` +
+        `Reply *AVAILABLE* (or *ONLINE*) to start accepting delivery jobs.\n\n` +
+        `Commands:\n` +
+        `• *ACCEPT SKN-####* — claim a job offer\n` +
+        `• *DECLINE SKN-####* — skip; next rider gets pinged\n` +
+        `• *CANCEL JOB SKN-####* — drop after accept (−0.5 ★)\n` +
+        `• *SET ZONE NAIROBI* or *THIKA*\n` +
+        `• *OFFLINE* / *AVAILABLE*`
+    );
+  }
+  if (st === "REJECTED") {
+    return (
+      `❌ Your Sokoni boda application was not approved.` +
+      (reason ? `\nReason: ${reason}` : "") +
+      `\nYou can fix docs and re-apply at sokonimall.com/boda/apply`
+    );
+  }
+  if (st === "SUSPENDED") {
+    return (
+      `⚠️ Your Sokoni rider profile is *SUSPENDED*.` +
+      (reason ? `\n${reason}` : "") +
+      `\nDo not accept new jobs until ops clears you.`
+    );
+  }
+  return "";
+}
+
+/**
+ * Update rider verification_status. DB write always completes before WhatsApp.
+ * Notifications are fire-and-forget so a slow/failed WAHA call cannot hang the admin UI
+ * or look like Verify "did nothing".
+ */
 export async function setRiderVerificationStatus(riderId, status, { reason = "", silent = false } = {}) {
-  if (!isDbEnabled()) return { error: "database_not_configured" };
+  if (!isDbEnabled()) return { error: "database_not_configured", message: "Database is not configured." };
+  const id = Number(riderId);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { error: "invalid_id", message: "Missing or invalid rider id." };
+  }
   const st = String(status || "").toUpperCase();
   if (!["PENDING", "VERIFIED", "SUSPENDED", "REJECTED"].includes(st)) {
     return { error: "invalid_status", message: "Use PENDING, VERIFIED, SUSPENDED, or REJECTED." };
@@ -412,48 +456,27 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "",
        updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [Number(riderId), st, String(reason || "").slice(0, 400) || null]
+    [id, st, String(reason || "").slice(0, 400) || null]
   );
   if (!rows[0]) return { error: "not_found", message: "Rider not found." };
   const rider = mapRider(rows[0]);
 
-  if (silent) return rider;
+  if (silent) return { ok: true, rider };
 
-  try {
-    const { sendText } = await import("./whatsapp.js");
-    if (st === "VERIFIED") {
-      await sendText(
-        `${rider.phone}@c.us`,
-        `✅ *You're a verified Sokoni rider*\n` +
-          `Zone: *${rider.operatingTown}*\n` +
-          `You're marked AVAILABLE for jobs.\n\n` +
-          `Commands:\n` +
-          `• *ACCEPT SKN-####* — claim a job offer\n` +
-          `• *DECLINE SKN-####* — skip; next rider gets pinged\n` +
-          `• *CANCEL JOB SKN-####* — drop after accept (−0.5 ★)\n` +
-          `• *SET ZONE NAIROBI* or *THIKA*\n` +
-          `• *OFFLINE* / *AVAILABLE*`
-      );
-    } else if (st === "REJECTED") {
-      await sendText(
-        `${rider.phone}@c.us`,
-        `❌ Your Sokoni boda application was not approved.` +
-          (reason ? `\nReason: ${reason}` : "") +
-          `\nYou can fix docs and re-apply at sokonimall.com/boda/apply.html`
-      );
-    } else if (st === "SUSPENDED") {
-      await sendText(
-        `${rider.phone}@c.us`,
-        `⚠️ Your Sokoni rider profile is *SUSPENDED*.` +
-          (reason ? `\n${reason}` : "") +
-          `\nDo not accept new jobs until ops clears you.`
-      );
-    }
-  } catch (err) {
-    console.warn("[boda-fleet] verify notify skipped:", err.message);
+  const text = riderVerificationNotifyText(rider, st, reason);
+  if (text && rider.phone) {
+    // Non-blocking: admin Verify must succeed even when WAHA is down/slow.
+    Promise.resolve()
+      .then(async () => {
+        const { sendText } = await import("./whatsapp.js");
+        await sendText(rider.phone, text);
+      })
+      .catch((err) => {
+        console.warn("[boda-fleet] verify notify skipped:", err?.message || err);
+      });
   }
 
-  return { ok: true, rider };
+  return { ok: true, rider, notified: Boolean(text && rider.phone) };
 }
 
 

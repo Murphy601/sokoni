@@ -128,10 +128,29 @@
     let reason = "";
     if (status === "REJECTED" || status === "SUSPENDED") {
       reason = window.prompt(`Reason for ${status}?`) || "";
+      if (!reason && status === "REJECTED") {
+        setStatus("Reject cancelled — add a short reason.");
+        return;
+      }
     }
+    if (status === "VERIFIED") {
+      const ok = window.confirm(`Verify rider #${riderId}? They will get a WhatsApp and become AVAILABLE.`);
+      if (!ok) return;
+    }
+
+    const card = listEl
+      ? Array.from(listEl.querySelectorAll("[data-rider-id]")).find(
+          (node) => String(node.getAttribute("data-rider-id")) === String(riderId)
+        )
+      : null;
+    const buttons = card ? Array.from(card.querySelectorAll("[data-verify]")) : [];
+    buttons.forEach((b) => {
+      b.disabled = true;
+    });
+
     setStatus(`${status} #${riderId}…`);
     try {
-      const res = await fetch(`${API_BASE}/admin/boda/riders/${riderId}/verify`, {
+      const res = await fetch(`${API_BASE}/admin/boda/riders/${encodeURIComponent(riderId)}/verify`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -141,13 +160,39 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setStatus(data.message || data.error || `HTTP ${res.status}`);
+        const msg =
+          res.status === 403
+            ? "Admin token rejected — check the token and try again."
+            : data.message || data.error || `HTTP ${res.status}`;
+        setStatus(msg);
+        buttons.forEach((b) => {
+          b.disabled = false;
+        });
         return;
       }
-      setStatus(`Updated #${riderId} → ${data.rider?.verificationStatus || status}`);
+      const next = data.rider?.verificationStatus || status;
+      setStatus(
+        `Updated #${riderId} → ${next}` +
+          (status === "VERIFIED" ? " · WhatsApp notify queued" : "")
+      );
+      if (status === "VERIFIED" && card) {
+        card.remove();
+        const left = listEl?.querySelectorAll("[data-rider-id]")?.length || 0;
+        if (!left && listEl) {
+          listEl.innerHTML = `<p class="text-sm text-brand-purple/60">None pending — load VERIFIED or all to review the fleet.</p>`;
+        }
+        return;
+      }
       loadRiders(status === "VERIFIED" ? "PENDING" : undefined);
     } catch (err) {
-      setStatus(err.message || "Update failed");
+      setStatus(
+        /failed to fetch/i.test(String(err?.message || ""))
+          ? "Network error talking to bot.sokonimall.com — retry in a moment."
+          : err.message || "Update failed"
+      );
+      buttons.forEach((b) => {
+        b.disabled = false;
+      });
     }
   }
 

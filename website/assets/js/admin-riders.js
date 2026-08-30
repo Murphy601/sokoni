@@ -276,11 +276,13 @@
         return;
       }
       if (act === "verify") {
+        const ok = window.confirm(`Verify ${r.fullName || r.phone || id}? They get WhatsApp + AVAILABLE.`);
+        if (!ok) return;
         await postJson(`/riders/${encodeURIComponent(id)}/verify`, {
           status: "VERIFIED",
           reason: "Verified from fleet directory",
         });
-        setStatus(`Verified #${id}`);
+        setStatus(`Verified #${id} · WhatsApp notify queued`);
         await loadFleet();
         return;
       }

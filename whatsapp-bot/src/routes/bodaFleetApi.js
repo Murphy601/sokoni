@@ -81,12 +81,22 @@ adminBodaRouter.post("/riders", async (req, res) => {
 });
 
 adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
-  const result = await setRiderVerificationStatus(req.params.id, req.body?.status || "VERIFIED", {
-    reason: req.body?.reason || "",
-  });
-  if (result.error === "not_found") return res.status(404).json(result);
-  if (result.error) return res.status(400).json(result);
-  res.json(result);
+  try {
+    const result = await setRiderVerificationStatus(req.params.id, req.body?.status || "VERIFIED", {
+      reason: req.body?.reason || "",
+    });
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    if (result.error) return res.status(400).json(result);
+    // DB already updated; WhatsApp notify is async inside the service.
+    return res.json(result);
+  } catch (err) {
+    console.error("[admin/boda] verify failed:", err?.message || err);
+    return res.status(500).json({
+      error: "verify_failed",
+      message: err?.message || "Could not update rider status. Try again.",
+    });
+  }
 });
 
 /** POST /admin/boda/riders/:id/delete — permanent wipe; requires confirm: true */
