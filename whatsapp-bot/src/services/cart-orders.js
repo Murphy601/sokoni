@@ -65,7 +65,7 @@ export function computeCartLineFees(product, quantity = 1) {
   const sellerNetKes = sellerNetUnit * qty;
   const shippingKes = shippingUnit * qty;
   const fees = computeFeeBreakdown(sellerNetKes, shippingKes, {
-    freeShipping: Boolean(unit.freeShipping) || shippingKes === 0,
+    freeShipping: Boolean(unit.freeShipping) && shippingKes === 0,
     deliveryMethod,
   });
 

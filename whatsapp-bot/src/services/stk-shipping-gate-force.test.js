@@ -93,9 +93,43 @@ describe("STK shipping gate — force block missing rates", () => {
     assert.match(src, /No M-Pesa prompt will be sent/);
   });
 
-  it("prepaid-checkout still fails closed on gate throw", () => {
-    const src = readFileSync(path.join(__dirname, "prepaid-checkout.js"), "utf-8");
-    assert.match(src, /shipping gate FAILED — blocking STK/);
-    assert.match(src, /zero_shipping_after_gate/);
+  it("KES 61 on ~KES 55 item is platform 10% fee + zero shipping — not listing shipping", async () => {
+    const { computeFeeBreakdown } = await import("./shipping-tiers.js");
+    const fees = computeFeeBreakdown(55, 0, {
+      freeShipping: true,
+      deliveryMethod: "seller_express",
+    });
+    assert.equal(fees.platformFeeKes, 6);
+    assert.equal(fees.shippingKes, 0);
+    assert.equal(fees.buyerTotalKes, 61);
+  });
+
+  it("computeProductTotals ignores product.shippingKes listing field", async () => {
+    const { computeProductTotals } = await import("./shipping-tiers.js");
+    const totals = computeProductTotals({
+      sellerNetKes: 55,
+      priceKes: 61,
+      shippingKes: 6,
+      shippingFeeKes: 6,
+      deliveryMethod: "seller_express",
+    });
+    assert.equal(totals.shippingKes, 0);
+    assert.equal(totals.shippingSource, "pending_hub");
+  });
+
+  it("ensureHybridShippingBeforePayment fails closed without Hub profile", async () => {
+    const src = readFileSync(path.join(__dirname, "apply-order-shipping.js"), "utf-8");
+    assert.match(src, /reason: "no_profile"/);
+    assert.match(src, /ok: false, order, applied: false, reason: "no_profile"/);
+    assert.doesNotMatch(
+      src,
+      /leave totals, but don't block STK/
+    );
+  });
+
+  it("gate rejects listing shipping not from Hub", () => {
+    const src = readFileSync(path.join(__dirname, "shipping-gate.js"), "utf-8");
+    assert.match(src, /listing_shipping_not_hub/);
+    assert.match(src, /isHubPricedShipping/);
   });
 });

@@ -471,29 +471,32 @@ function totalsFromSellerNet(product, sellerNet) {
     };
   }
 
-  // Do not invent shipping from weight tiers — platform no longer calculates dispatch fees.
-  const shippingRaw = product.shippingKes ?? product.shippingFeeKes ?? 0;
-  const shippingKes = Math.max(0, Math.round(Number(shippingRaw) || 0));
+  // Do not invent shipping from weight tiers or product listing fields —
+  // regional fees come only from Seller Hub at checkout (quote / apply / gate).
+  const shippingKes = 0;
   const fees = computeFeeBreakdown(sellerNet, shippingKes, {
-    freeShipping: shippingKes === 0,
+    freeShipping: false,
     deliveryMethod,
   });
   const storedTotal = product.priceKes != null ? Math.round(Number(product.priceKes)) : null;
+  // Prefer stored buyer all-in when it matches item-only fees (listing has no Hub shipping yet).
+  const itemOnlyTotal =
+    storedTotal != null && Math.abs(storedTotal - fees.buyerTotalKes) <= 5
+      ? storedTotal
+      : fees.buyerTotalKes;
   return {
     itemKes: fees.itemKes,
-    shippingKes: fees.shippingKes,
-    totalKes:
-      storedTotal != null && Math.abs(storedTotal - fees.buyerTotalKes) <= 5
-        ? storedTotal
-        : fees.buyerTotalKes,
+    shippingKes: 0,
+    totalKes: itemOnlyTotal,
     platformFeeKes: fees.platformFeeKes,
     shippingCommissionKes: fees.shippingCommissionKes,
     transactionFeeKes: fees.transactionFeeKes,
     sellerNetKes: fees.sellerNetKes,
     sellerPayoutKes: fees.sellerPayoutKes,
-    freeShipping: fees.freeShipping,
+    freeShipping: false,
     deliveryMethod: fees.deliveryMethod,
     shippingRecipient: fees.shippingRecipient,
+    shippingSource: "pending_hub",
   };
 }
 
@@ -520,20 +523,21 @@ export function computeProductTotals(product = {}) {
       shippingRecipient: isSellerHandledDelivery(deliveryMethod) ? "seller" : "platform",
     };
   }
-  const shippingRaw = product.shippingKes ?? product.shippingFeeKes ?? 0;
+  const shippingRaw = 0;
   const fees = computeFeeBreakdownLegacy(itemKes, Math.max(0, Math.round(Number(shippingRaw) || 0)), {
-    freeShipping: !shippingRaw,
+    freeShipping: false,
   });
   return {
     itemKes: fees.itemKes,
-    shippingKes: fees.shippingKes,
+    shippingKes: 0,
     totalKes: fees.buyerTotalKes,
     platformFeeKes: fees.platformFeeKes,
     sellerNetKes: fees.sellerNetKes,
     sellerPayoutKes: fees.sellerNetKes,
-    freeShipping: fees.freeShipping,
+    freeShipping: false,
     deliveryMethod,
     shippingRecipient: isSellerHandledDelivery(deliveryMethod) ? "seller" : "platform",
+    shippingSource: "pending_hub",
   };
 }
 
