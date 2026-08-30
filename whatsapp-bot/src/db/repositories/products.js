@@ -13,6 +13,12 @@ const PRODUCT_SELECT = `
     su.shop_name AS seller_shop_name,
     su.avatar_url AS seller_avatar_url,
     su.is_seller_verified AS seller_user_verified,
+    su.rating_score AS seller_rating_score,
+    su.rating_count AS seller_rating_count,
+    su.badge_tier AS seller_badge_tier,
+    COALESCE(su.completed_orders, 0)::int AS seller_completed_orders,
+    COALESCE(su.dispute_count, 0)::int AS seller_dispute_count,
+    COALESCE(su.unresolved_disputes, 0)::int AS seller_unresolved_disputes,
     (
       SELECT COUNT(*)::int
         FROM products px

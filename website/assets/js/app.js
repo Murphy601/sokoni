@@ -747,12 +747,17 @@ function renderDepopCard(product) {
         <p class="depop-card-title">${name}</p>
         ${
           handle
-            ? `<p class="depop-card-seller">${
-                shopLink
-                  ? `<a href="${shopLink}" data-shop-link="1" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
-                  : escapeHtml(handle)
-              }</p>`
-            : ""
+            ? `<div class="depop-card-seller-row">
+                <p class="depop-card-seller">${
+                  shopLink
+                    ? `<a href="${shopLink}" data-shop-link="1" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
+                    : escapeHtml(handle)
+                }</p>
+                ${window.SokoniSellerTrust?.ratingHtml?.(product, { className: "seller-rating-line depop-card-rating" }) || ""}
+              </div>`
+            : window.SokoniSellerTrust?.ratingHtml?.(product, {
+                className: "seller-rating-line depop-card-rating",
+              }) || ""
         }
         ${window.SokoniSellerTrust?.badgesHtml?.(product, { max: 2, className: "seller-trust-badges depop-card-trust" }) || ""}
       </div>
@@ -761,8 +766,22 @@ function renderDepopCard(product) {
 
 function renderStoreCard(product) {
   const name = escapeHtml(product.name || "Product");
-  const rating = Number(product.rating) || 0;
-  const reviews = Number(product.reviews) || 0;
+  const trust = product.sellerTrust || {};
+  const ratingLine =
+    window.SokoniSellerTrust?.ratingHtml?.(product, {
+      className: "seller-rating-line text-xs text-brand-purple/55 mb-1",
+    }) ||
+    (() => {
+      const reviews = Number(trust.totalReviews ?? product.reviews) || 0;
+      const unrated = trust.unrated || reviews < 5;
+      if (unrated) {
+        return `<p class="text-xs text-brand-purple/50 mb-1">${
+          reviews > 0 ? `UNRATED · ${reviews} reviews` : "New store · UNRATED"
+        }</p>`;
+      }
+      const rating = Number(trust.avgRating ?? product.rating) || 0;
+      return `<p class="text-xs text-brand-purple/50 mb-1">★ ${rating.toFixed(1)} (${reviews.toLocaleString()} reviews)</p>`;
+    })();
   const handle = sellerHandle(product);
   const shopLink = sellerShopLink(product);
   return `
@@ -797,7 +816,17 @@ function renderStoreCard(product) {
             : ""
         }
       </div>
-      <p class="text-xs text-brand-purple/50 mb-4">⭐ ${rating} (${reviews.toLocaleString()} reviews)</p>
+      ${
+        handle
+          ? `<p class="text-xs text-brand-purple/55 mb-1">${
+              shopLink
+                ? `<a href="${shopLink}" data-shop-link="1" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
+                : escapeHtml(handle)
+            }</p>`
+          : ""
+      }
+      ${ratingLine}
+      ${window.SokoniSellerTrust?.badgesHtml?.(product, { max: 2, className: "seller-trust-badges mb-3" }) || ""}
       <div class="mt-auto flex flex-col gap-2">
         <a href="${orderLinkFor(product)}" target="_blank" rel="noopener"
            class="text-center bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
@@ -1379,6 +1408,11 @@ function mergeCatalogProducts(apiProducts, staticProducts) {
         shopHandle: staticHandle,
         sellerHandle: staticHandle,
         businessName: p.shopName || p.businessName || existing.businessName,
+        // Keep live weighted rating / badges from API — static JSON uses placeholder 4.5.
+        sellerTrust: existing.sellerTrust || p.sellerTrust,
+        rating: existing.sellerTrust ? existing.rating : p.rating ?? existing.rating,
+        reviews: existing.sellerTrust ? existing.reviews : p.reviews ?? existing.reviews,
+        isSellerVerified: existing.isSellerVerified || p.isSellerVerified,
       };
     }
     // Keep seller/preview clips when API/legacy_json omitted them.

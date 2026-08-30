@@ -394,6 +394,50 @@ body.has-depop-shell .depop-card-seller {
   margin-top: 0.25rem;
 }
 
+.depop-card-seller-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.1rem;
+}
+
+.seller-rating-line {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: rgba(27, 16, 53, 0.62);
+}
+
+.seller-rating-line--unrated {
+  font-weight: 500;
+  font-style: italic;
+  color: rgba(27, 16, 53, 0.45);
+}
+
+.seller-rating-stars {
+  color: #1b1035;
+}
+
+html.dark .seller-rating-line,
+body.has-depop-shell .seller-rating-line {
+  color: rgba(255, 248, 240, 0.7);
+}
+
+html.dark .seller-rating-line--unrated,
+body.has-depop-shell .seller-rating-line--unrated {
+  color: rgba(255, 248, 240, 0.45);
+}
+
+html.dark .seller-rating-stars,
+body.has-depop-shell .seller-rating-stars {
+  color: #fff8f0;
+}
+
+.depop-card-rating {
+  margin: 0;
+}
+
 .seller-trust-badge {
   display: inline-block;
   font-size: 0.625rem;

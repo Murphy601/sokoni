@@ -433,6 +433,22 @@
         <p class="product-sheet-dispatch text-xs font-semibold mt-1">Seller handles dispatch (direct delivery)</p>
         <h2 class="product-sheet-title">${escapeHtml(product.name)}</h2>
         ${
+          handle
+            ? `<div class="depop-card-seller-row product-sheet-seller-row">
+                <p class="depop-card-seller product-sheet-seller">${
+                  shopLink
+                    ? `<a href="${shopLink}" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
+                    : escapeHtml(handle)
+                }</p>
+                ${
+                  window.SokoniSellerTrust?.ratingHtml?.(product, {
+                    className: "seller-rating-line product-sheet-rating-inline",
+                  }) || ""
+                }
+              </div>`
+            : ""
+        }
+        ${
           window.SokoniSellerTrust?.badgesHtml?.(product, {
             max: 3,
             className: "seller-trust-badges product-sheet-trust",
@@ -452,16 +468,23 @@
             ? `<p class="product-sheet-desc">${escapeHtml(product.description)}</p>`
             : ""
         }
-        <p class="product-sheet-rating">${(() => {
-          const trust = product.sellerTrust || {};
-          const count = Number(trust.totalReviews ?? product.reviews) || 0;
-          const avg = Number(trust.avgRating ?? product.rating) || 0;
-          if (trust.unrated || trust.displayLabel === "UNRATED" || (count > 0 && count < 5)) {
-            return `UNRATED · ${count} review${count === 1 ? "" : "s"}`;
-          }
-          if (count > 0) return `★ ${avg.toFixed(1)} · ${count} review${count === 1 ? "" : "s"}`;
-          return "New seller · UNRATED";
-        })()}</p>
+        <div class="product-sheet-rating">${
+          window.SokoniSellerTrust?.ratingHtml?.(product, {
+            className: "seller-rating-line product-sheet-rating-inner",
+          }) ||
+          (() => {
+            const trust = product.sellerTrust || {};
+            const count = Number(trust.totalReviews ?? product.reviews) || 0;
+            const avg = Number(trust.avgRating ?? product.rating) || 0;
+            if (trust.unrated || trust.displayLabel === "UNRATED" || count < 5) {
+              return count > 0
+                ? `UNRATED · ${count} review${count === 1 ? "" : "s"}`
+                : "New store · UNRATED";
+            }
+            if (count > 0) return `★ ${avg.toFixed(1)} · ${count} review${count === 1 ? "" : "s"}`;
+            return "New store · UNRATED";
+          })()
+        }</div>
         <p class="product-sheet-escrow text-xs text-brand-purple/60 dark:text-white/60 mt-2">
           Protected by Sokoni escrow — full refund if the item does not match photos/description. Final sale unless misdescribed.
         </p>
