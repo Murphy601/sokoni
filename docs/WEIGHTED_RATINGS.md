@@ -1,42 +1,52 @@
-# Weighted ratings & badge tiers
+# Sokoni ratings, badges & growth controls
 
-Fair shop/rider scores use a **cumulative weighted average**, not “last review wins.”
+Fair scores use a **rolling window of the last 100 pool entries** (buyer stars + system penalties/bonuses). Old shocks fall off once 100 newer entries arrive.
 
-## Formula
+## Display formula
 
 ```
-newRating = (currentRating × totalReviews + newStars) / (totalReviews + 1)
+DisplayedRating = sum(last 100 pool entries) / count(up to 100)
 ```
 
-Bonuses/penalties adjust the score **without** changing review count:
+### Grace buffer (UNRATED)
 
-| Event | Delta |
-|-------|-------|
-| Dispute-free completion | +0.05 |
-| On-time rider delivery | +0.02 |
-| Buyer-won dispute | −0.5 |
-| Seller cancel (accepted order) | −0.3 |
-| Rider late pickup (>20 min) | −0.2 |
+- New profiles start at **5.0** internally.
+- Site shows **UNRATED** until **5 successful buyer star reviews**.
+- Example: fifty 5★ then one 1★ → **4.92** (not 3.0).
 
-## Channels
+## Automated deltas (pushed into the same pool)
 
-- WhatsApp: reply `1`–`5` or `RATE 5` / `RATE 5 SKN-####` after delivery
-- Web: `createOrderReview` updates the weighted pool + `order_reviews` history
-- Boss: `SET RATING @handle 4.8`, `PENALIZE RIDER +254… 0.5`, `PENALIZE SELLER @handle 0.3`
+| Event | Effect |
+|-------|--------|
+| Buyer rates 1–5 | Star entry |
+| Clean completion | +0.05 synthetic |
+| On-time rider | +0.02 synthetic |
+| Buyer-won dispute | −0.5 synthetic |
+| Seller cancel | −0.3 synthetic |
+| Rider late pickup (&gt;15 min) | −0.2 synthetic |
+
+Low scores (1–3) on WhatsApp open a short why-prompt (late / quality / rude / other).
 
 ## Badge ladder
 
-| Tier | Unlock |
-|------|--------|
-| Newbie | Default |
-| Verified | ≥10 completed, rating ≥4.0, ID verified |
-| Top Rated | ≥50 completed, rating ≥4.7, dispute rate &lt;2% |
-| Sokoni Legend | ≥200 completed, rating ≥4.9, zero unresolved disputes |
+| Tier | Unlock | Perks |
+|------|--------|-------|
+| Newbie | Default | 5% commission |
+| Verified | ≥10 orders, rating ≥**4.2**, ID verified | Blue check, catalog boost |
+| Top Rated | ≥50 orders, ≥4.7, dispute rate &lt;2% | 4% commission / priority dispatch |
+| Sokoni Legend | ≥200 orders, ≥4.9, 0 unresolved | Instant escrow, featured |
 
-Demotion: Top Rated / Legend paused if rating drops below **4.5** (WhatsApp alert).
+Demotion: Top Rated / Legend paused if score &lt; **4.5** (WhatsApp alert).
+
+## Channels
+
+- **Site:** product cards show `★ 4.8 (124 reviews)` or `UNRATED`
+- **WhatsApp:** `RATE 5` / `RATE 5 SKN-####` → receipt with updated shop score
+- **Boss WA:** `OVERRIDE RATING @handle 4.8`, `PURGE RATING SELLER userId poolEntryId`, `PENALIZE …`
+- **Admin desk:** Actions → *Rating log / purge unfair* (or `POST /admin/command/ratings/purge`)
 
 ## Schema
 
-`db/schema-phase33-weighted-ratings.sql` — `users.rating_*`, `riders.rating_count` / `badge_tier`, `rating_events` ledger.
+`db/schema-phase33-weighted-ratings.sql` — `rating_pool` JSONB, `rating_events` ledger.
 
-Run `npm run db:migrate` in `whatsapp-bot/` after deploy.
+Run `npm run db:migrate` after deploy.

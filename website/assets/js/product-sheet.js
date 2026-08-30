@@ -456,10 +456,11 @@
           const trust = product.sellerTrust || {};
           const count = Number(trust.totalReviews ?? product.reviews) || 0;
           const avg = Number(trust.avgRating ?? product.rating) || 0;
-          const sales = Number(trust.salesCount ?? product.sellerSalesCount) || 0;
+          if (trust.unrated || trust.displayLabel === "UNRATED" || (count > 0 && count < 5)) {
+            return `UNRATED · ${count} review${count === 1 ? "" : "s"}`;
+          }
           if (count > 0) return `★ ${avg.toFixed(1)} · ${count} review${count === 1 ? "" : "s"}`;
-          if (sales > 0) return `★ 5.0 · ${sales} completed sale${sales === 1 ? "" : "s"}`;
-          return "New seller";
+          return "New seller · UNRATED";
         })()}</p>
         <p class="product-sheet-escrow text-xs text-brand-purple/60 dark:text-white/60 mt-2">
           Protected by Sokoni escrow — full refund if the item does not match photos/description. Final sale unless misdescribed.

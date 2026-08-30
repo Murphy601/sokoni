@@ -1,6 +1,5 @@
 /**
- * Derived seller trust badges — weighted rating + volume tiers.
- * Rules: Newbie → Verified (≥10, ≥4.0, ID) → Top Rated (≥50, ≥4.7, dispute&lt;2%) → Legend (≥200, ≥4.9).
+ * Derived seller trust badges — rolling-window rating + volume tiers.
  */
 import { deriveBadgeTier, clampRating } from "./weighted-rating.js";
 
@@ -12,27 +11,26 @@ import { deriveBadgeTier, clampRating } from "./weighted-rating.js";
  *   avgDispatchHours?: number|null,
  *   avgRating?: number,
  *   totalReviews?: number,
+ *   unrated?: boolean,
  *   disputeCount?: number,
  *   unresolvedDisputes?: number,
  *   previousTier?: string,
  *   badgeTier?: string,
  * }} stats
- * @returns {{ id: string, label: string, icon: string }[]}
  */
 export function deriveSellerBadges(stats = {}) {
-  const completed =
-    Number(stats.completedOrders ?? stats.salesCount ?? 0) || 0;
+  const completed = Number(stats.completedOrders ?? stats.salesCount ?? 0) || 0;
   const rating = Number(stats.avgRating || 0);
   const derived = deriveBadgeTier({
     completedOrders: completed,
     rating,
+    unrated: Boolean(stats.unrated),
     isVerified: Boolean(stats.isSellerVerified),
     disputeCount: Number(stats.disputeCount || 0),
     unresolvedDisputes: Number(stats.unresolvedDisputes || 0),
     previousTier: stats.previousTier || stats.badgeTier || "",
   });
 
-  // Keep fast_dispatcher as an extra signal when dispatch hours known
   const badges = [...derived.badges];
   const dispatchH =
     stats.avgDispatchHours != null ? Number(stats.avgDispatchHours) : null;
@@ -45,16 +43,13 @@ export function deriveSellerBadges(stats = {}) {
       });
     }
   }
-
   return badges;
 }
 
-/**
- * Public payload for shop / product cards.
- */
 export function sellerTrustPayload(stats = {}) {
   const salesCount = Number(stats.salesCount ?? stats.completedOrders ?? 0);
   const totalReviews = Number(stats.totalReviews || 0);
+  const unrated = Boolean(stats.unrated) || totalReviews < 5;
   const avgRating = clampRating(Number(stats.avgRating || 0));
   const avgDispatchHours =
     stats.avgDispatchHours != null && Number.isFinite(Number(stats.avgDispatchHours))
@@ -68,6 +63,7 @@ export function sellerTrustPayload(stats = {}) {
     avgDispatchHours,
     avgRating,
     totalReviews,
+    unrated,
     disputeCount: stats.disputeCount,
     unresolvedDisputes: stats.unresolvedDisputes,
     previousTier: stats.badgeTier || stats.previousTier,
@@ -77,7 +73,9 @@ export function sellerTrustPayload(stats = {}) {
     isSellerVerified: Boolean(stats.isSellerVerified),
     salesCount,
     totalReviews,
-    avgRating: totalReviews > 0 || avgRating > 0 ? avgRating : 0,
+    unrated,
+    avgRating: unrated ? 0 : avgRating,
+    displayLabel: unrated ? "UNRATED" : avgRating.toFixed(1),
     avgDispatchHours,
     badgeTier: badges[0]?.id || "newbie",
     badges,

@@ -268,4 +268,65 @@ router.get("/admin-logs", async (req, res) => {
   }
 });
 
+/** GET /admin/command/ratings/:type/:id — event log for Purge Unfair Review */
+router.get("/ratings/:type/:id", async (req, res) => {
+  try {
+    const { listRatingEvents, getSellerRatingProfile, findSellerByHandle } = await import(
+      "../services/rating-engine.js"
+    );
+    let type = String(req.params.type || "").toLowerCase();
+    let id = Number(req.params.id);
+
+    if (type === "by-handle" || type === "handle") {
+      const handleId = await findSellerByHandle(req.params.id);
+      if (!handleId) {
+        return res.status(404).json({ error: "seller_not_found", message: "No user for that handle." });
+      }
+      type = "seller";
+      id = handleId;
+    } else if (type !== "rider") {
+      type = "seller";
+    }
+
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ error: "invalid_id" });
+    }
+    const { events } = await listRatingEvents({
+      subjectType: type,
+      subjectId: id,
+      limit: Number(req.query.limit) || 40,
+    });
+    let profile = null;
+    if (type === "seller") profile = await getSellerRatingProfile(id);
+    res.json({ subjectType: type, subjectId: id, profile, events });
+  } catch (err) {
+    res.status(500).json({ error: "ratings_list_failed", message: err.message });
+  }
+});
+
+/**
+ * POST /admin/command/ratings/purge
+ * Body: { subjectType, subjectId, poolEntryId } — Purge Unfair Review
+ */
+router.post("/ratings/purge", async (req, res) => {
+  try {
+    const { purgeRatingEntry } = await import("../services/rating-engine.js");
+    const subjectType = String(req.body?.subjectType || "seller").toLowerCase();
+    const subjectId = Number(req.body?.subjectId);
+    const poolEntryId = String(req.body?.poolEntryId || "").trim();
+    const result = await purgeRatingEntry({
+      subjectType,
+      subjectId,
+      poolEntryId,
+      actorLabel: String(req.body?.adminLabel || "admin-dashboard").slice(0, 80),
+    });
+    if (!result?.ok) {
+      return res.status(400).json({ error: result?.reason || "purge_failed" });
+    }
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: "purge_failed", message: err.message });
+  }
+});
+
 export default router;

@@ -1,59 +1,88 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  applyWeightedStar,
-  applyRatingDelta,
+  pushStarToPool,
+  pushDeltaToPool,
+  scoreFromPool,
+  purgePoolEntry,
   deriveBadgeTier,
   clampRating,
   RATING_DELTAS,
   BADGE_DEMOTION_FLOOR,
+  MIN_PUBLIC_REVIEWS,
+  ROLLING_WINDOW,
+  VERIFIED_MIN_RATING,
 } from "./weighted-rating.js";
 
-test("weighted star: first 5★ → 5.0", () => {
-  const r = applyWeightedStar(0, 0, 5);
-  assert.equal(r.rating, 5);
-  assert.equal(r.reviewCount, 1);
+test("empty pool is 5.0 UNRATED", () => {
+  const s = scoreFromPool([]);
+  assert.equal(s.rating, 5);
+  assert.equal(s.unrated, true);
+  assert.equal(s.displayLabel, "UNRATED");
 });
 
-test("weighted star: 5 then 1 → 3.0", () => {
-  const a = applyWeightedStar(0, 0, 5);
-  const b = applyWeightedStar(a.rating, a.reviewCount, 1);
-  assert.equal(b.rating, 3);
-  assert.equal(b.reviewCount, 2);
+test("50×5 then one 1★ → 4.92", () => {
+  let pool = [];
+  for (let i = 0; i < 50; i++) {
+    const r = pushStarToPool(pool, 5);
+    pool = r.pool;
+  }
+  const next = pushStarToPool(pool, 1);
+  assert.equal(next.rating, 4.92);
+  assert.equal(next.buyerReviewCount, 51);
+  assert.equal(next.unrated, false);
 });
 
-test("weighted star: blueprint sequence 5,1,5,4", () => {
-  let s = applyWeightedStar(0, 0, 5);
-  s = applyWeightedStar(s.rating, s.reviewCount, 1);
-  s = applyWeightedStar(s.rating, s.reviewCount, 5);
-  assert.equal(s.rating, 3.67); // 11/3
-  s = applyWeightedStar(s.rating, s.reviewCount, 4);
-  assert.equal(s.rating, 3.75); // 15/4
-  assert.equal(s.reviewCount, 4);
+test("UNRATED until 5 buyer stars", () => {
+  let pool = [];
+  for (let i = 0; i < MIN_PUBLIC_REVIEWS - 1; i++) {
+    pool = pushStarToPool(pool, 5).pool;
+  }
+  assert.equal(scoreFromPool(pool).unrated, true);
+  pool = pushStarToPool(pool, 5).pool;
+  assert.equal(scoreFromPool(pool).unrated, false);
 });
 
-test("first review ignores legacy default 5.0 when count is 0", () => {
-  const r = applyWeightedStar(5, 0, 1);
-  assert.equal(r.rating, 1);
-  assert.equal(r.reviewCount, 1);
+test("rolling window keeps last 100 only", () => {
+  let pool = [];
+  for (let i = 0; i < 120; i++) {
+    pool = pushStarToPool(pool, i < 20 ? 1 : 5).pool;
+  }
+  assert.equal(pool.length, ROLLING_WINDOW);
+  // First 20 ones dropped — remaining all 5s
+  assert.equal(scoreFromPool(pool).rating, 5);
 });
 
-test("delta penalties do not change review count", () => {
-  const r = applyRatingDelta(4.5, RATING_DELTAS.BUYER_WON_DISPUTE, 10);
-  assert.equal(r.rating, 4);
-  assert.equal(r.reviewCount, 10);
+test("penalty pushes synthetic entry into pool", () => {
+  let pool = [];
+  for (let i = 0; i < 10; i++) pool = pushStarToPool(pool, 5).pool;
+  const before = scoreFromPool(pool).rating;
+  const after = pushDeltaToPool(pool, RATING_DELTAS.BUYER_WON_DISPUTE);
+  assert.ok(after.rating < before);
+  assert.equal(after.pool.length, 11);
+});
+
+test("purge removes unfair entry and recalcs", () => {
+  let pool = pushStarToPool([], 5).pool;
+  pool = pushStarToPool(pool, 1, { id: "bad_1" }).pool;
+  const purged = purgePoolEntry(pool, "bad_1");
+  assert.equal(purged.rating, 5);
+  assert.equal(purged.buyerReviewCount, 1);
 });
 
 test("clampRating bounds", () => {
   assert.equal(clampRating(-1), 0);
   assert.equal(clampRating(9), 5);
-  assert.equal(clampRating(4.567), 4.57);
 });
 
-test("badge tiers: newbie → verified → top → legend", () => {
-  assert.equal(deriveBadgeTier({}).tier, "newbie");
+test("badge Verified needs ≥4.2", () => {
+  assert.equal(VERIFIED_MIN_RATING, 4.2);
   assert.equal(
-    deriveBadgeTier({ completedOrders: 10, rating: 4.0, isVerified: true }).tier,
+    deriveBadgeTier({ completedOrders: 10, rating: 4.1, isVerified: true }).tier,
+    "newbie"
+  );
+  assert.equal(
+    deriveBadgeTier({ completedOrders: 10, rating: 4.2, isVerified: true }).tier,
     "verified"
   );
   assert.equal(
@@ -76,7 +105,17 @@ test("badge tiers: newbie → verified → top → legend", () => {
   );
 });
 
-test("badge demotion below 4.5 pauses Top Rated", () => {
+test("UNRATED profile cannot unlock Verified via grace 5.0 alone", () => {
+  const r = deriveBadgeTier({
+    completedOrders: 10,
+    rating: 5,
+    unrated: true,
+    isVerified: true,
+  });
+  assert.equal(r.tier, "newbie");
+});
+
+test("badge demotion below 4.5", () => {
   const r = deriveBadgeTier({
     completedOrders: 60,
     rating: 4.4,
@@ -85,8 +124,7 @@ test("badge demotion below 4.5 pauses Top Rated", () => {
     previousTier: "top_rated",
   });
   assert.equal(r.demoted, true);
-  assert.ok(r.tier !== "top_rated");
-  assert.ok(r.demotionNotice);
   assert.ok(r.demotionNotice.includes("4.4"));
+  assert.ok(r.demotionNotice.includes("Top Rated"));
   assert.equal(BADGE_DEMOTION_FLOOR, 4.5);
 });

@@ -1640,6 +1640,7 @@ export async function getShopProfileByHandle({
             avgDispatchHours: sellerMetrics.avgDispatchHours,
             avgRating: reviewSummary.avgRating,
             totalReviews: reviewSummary.totalReviews,
+            unrated: reviewSummary.unrated,
             badgeTier: reviewSummary.badgeTier,
           }),
         },
@@ -1760,6 +1761,7 @@ export async function getShopProfileByHandle({
           avgDispatchHours: sellerMetrics.avgDispatchHours,
           avgRating: reviewSummary.avgRating,
           totalReviews: reviewSummary.totalReviews,
+          unrated: reviewSummary.unrated,
           badgeTier: reviewSummary.badgeTier,
         }),
       },
@@ -1990,13 +1992,14 @@ async function getReviewSummary(userId = null) {
   try {
     const { getSellerRatingProfile } = await import("../../services/rating-engine.js");
     const profile = await getSellerRatingProfile(userId);
-    if (profile && (profile.totalReviews > 0 || profile.avgRating > 0 || profile.completedOrders > 0)) {
+    if (profile && (profile.totalReviews > 0 || profile.avgRating > 0 || profile.completedOrders > 0 || profile.unrated)) {
       return {
         avgRating: profile.avgRating,
         totalReviews: profile.totalReviews,
         completedOrders: profile.completedOrders,
         badgeTier: profile.badgeTier,
-        disputeCount: undefined,
+        unrated: Boolean(profile.unrated),
+        displayLabel: profile.displayLabel,
       };
     }
   } catch {

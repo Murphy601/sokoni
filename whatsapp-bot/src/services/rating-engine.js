@@ -1,18 +1,26 @@
 /**
- * Rating engine — weighted stars, bonuses/penalties, badge refresh.
+ * Rating engine — rolling last-100 pool, bonuses/penalties, badge refresh, purge.
  * Keys: seller = users.id, rider = riders.id
  */
 import { query, isDbEnabled } from "../db/pool.js";
 import {
-  applyWeightedStar,
-  applyRatingDelta,
+  pushStarToPool,
+  pushDeltaToPool,
+  purgePoolEntry,
+  scoreFromPool,
   deriveBadgeTier,
   clampRating,
   RATING_DELTAS,
+  INITIAL_RATING,
+  MIN_PUBLIC_REVIEWS,
 } from "../lib/weighted-rating.js";
 
 function digitsOnly(v) {
   return String(v || "").replace(/\D/g, "");
+}
+
+function entryId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 async function logEvent(row) {
@@ -21,8 +29,8 @@ async function logEvent(row) {
     await query(
       `INSERT INTO rating_events
         (subject_type, subject_id, event_kind, stars, delta, rating_before, rating_after,
-         review_count, order_ref, reason, actor_label)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+         review_count, order_ref, reason, actor_label, pool_entry_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         row.subjectType,
         row.subjectId,
@@ -35,6 +43,7 @@ async function logEvent(row) {
         row.orderRef || null,
         row.reason || null,
         row.actorLabel || null,
+        row.poolEntryId || null,
       ]
     );
   } catch (err) {
@@ -47,7 +56,7 @@ async function loadSeller(userId) {
   if (!Number.isInteger(id) || id < 1) return null;
   const { rows } = await query(
     `SELECT id, handle, shop_name, is_seller_verified,
-            rating_score, rating_count, completed_orders,
+            rating_score, rating_count, rating_pool, completed_orders,
             dispute_count, unresolved_disputes, badge_tier, phone
        FROM users WHERE id = $1 LIMIT 1`,
     [id]
@@ -60,7 +69,7 @@ async function loadRider(riderId) {
   if (!Number.isInteger(id) || id < 1) return null;
   const { rows } = await query(
     `SELECT id, full_name, phone, verification_status, rating, rating_count,
-            completed_deliveries, badge_tier
+            rating_pool, completed_deliveries, badge_tier
        FROM riders WHERE id = $1 LIMIT 1`,
     [id]
   );
@@ -98,9 +107,11 @@ export async function findRiderByPhone(phoneRaw) {
 async function refreshSellerBadge(userId, { notifyPhone = null } = {}) {
   const row = await loadSeller(userId);
   if (!row) return null;
+  const scored = scoreFromPool(row.rating_pool);
   const derived = deriveBadgeTier({
     completedOrders: Number(row.completed_orders || 0),
-    rating: Number(row.rating_score || 0),
+    rating: scored.rating,
+    unrated: scored.unrated,
     isVerified: Boolean(row.is_seller_verified),
     disputeCount: Number(row.dispute_count || 0),
     unresolvedDisputes: Number(row.unresolved_disputes || 0),
@@ -122,16 +133,18 @@ async function refreshSellerBadge(userId, { notifyPhone = null } = {}) {
       console.warn("[rating-engine] demotion notify failed:", err.message);
     }
   }
-  return derived;
+  return { ...derived, unrated: scored.unrated, buyerReviewCount: scored.buyerReviewCount };
 }
 
 async function refreshRiderBadge(riderId) {
   const row = await loadRider(riderId);
   if (!row) return null;
+  const scored = scoreFromPool(row.rating_pool);
   const verified = String(row.verification_status || "").toUpperCase() === "VERIFIED";
   const derived = deriveBadgeTier({
     completedOrders: Number(row.completed_deliveries || 0),
-    rating: Number(row.rating || 0),
+    rating: scored.rating,
+    unrated: scored.unrated,
     isVerified: verified,
     disputeCount: 0,
     unresolvedDisputes: 0,
@@ -141,12 +154,9 @@ async function refreshRiderBadge(riderId) {
     Number(riderId),
     derived.tier,
   ]);
-  return derived;
+  return { ...derived, unrated: scored.unrated };
 }
 
-/**
- * Apply a 1–5 star review into the seller weighted pool.
- */
 export async function applySellerStarReview({
   sellerUserId,
   stars,
@@ -158,15 +168,15 @@ export async function applySellerStarReview({
   const row = await loadSeller(sellerUserId);
   if (!row) return { ok: false, reason: "seller_not_found" };
 
-  const before = Number(row.rating_score || 0);
-  const count = Number(row.rating_count || 0);
-  const next = applyWeightedStar(before, count, stars);
+  const before = Number(row.rating_score || INITIAL_RATING);
+  const id = entryId("star");
+  const next = pushStarToPool(row.rating_pool, stars, { id, orderRef });
 
   await query(
     `UPDATE users
-        SET rating_score = $2, rating_count = $3, updated_at = NOW()
+        SET rating_score = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
       WHERE id = $1`,
-    [Number(sellerUserId), next.rating, next.reviewCount]
+    [Number(sellerUserId), next.rating, next.buyerReviewCount, JSON.stringify(next.pool)]
   );
 
   await logEvent({
@@ -176,25 +186,27 @@ export async function applySellerStarReview({
     stars: Number(stars),
     ratingBefore: before,
     ratingAfter: next.rating,
-    reviewCount: next.reviewCount,
+    reviewCount: next.buyerReviewCount,
     orderRef,
     reason,
     actorLabel,
+    poolEntryId: id,
   });
 
   const badge = await refreshSellerBadge(sellerUserId, { notifyPhone: row.phone });
   return {
     ok: true,
     rating: next.rating,
-    reviewCount: next.reviewCount,
+    reviewCount: next.buyerReviewCount,
+    unrated: next.unrated,
+    displayLabel: next.displayLabel,
+    handle: row.handle ? `@${String(row.handle).replace(/^@/, "")}` : null,
     badgeTier: badge?.tier,
     badges: badge?.badges,
+    poolEntryId: id,
   };
 }
 
-/**
- * Additive delta for seller (bonus/penalty).
- */
 export async function applySellerDelta({
   sellerUserId,
   delta,
@@ -209,9 +221,9 @@ export async function applySellerDelta({
   const row = await loadSeller(sellerUserId);
   if (!row) return { ok: false, reason: "seller_not_found" };
 
-  const before = Number(row.rating_score || 0);
-  const count = Number(row.rating_count || 0);
-  const next = applyRatingDelta(before, delta, count);
+  const before = Number(row.rating_score || INITIAL_RATING);
+  const id = entryId("delta");
+  const next = pushDeltaToPool(row.rating_pool, delta, { id, orderRef });
 
   const completed = Number(row.completed_orders || 0) + (bumpCompleted ? 1 : 0);
   const disputes = Number(row.dispute_count || 0) + (bumpDispute ? 1 : 0);
@@ -222,12 +234,22 @@ export async function applySellerDelta({
   await query(
     `UPDATE users SET
         rating_score = $2,
-        completed_orders = $3,
-        dispute_count = $4,
-        unresolved_disputes = $5,
+        rating_count = $3,
+        rating_pool = $4::jsonb,
+        completed_orders = $5,
+        dispute_count = $6,
+        unresolved_disputes = $7,
         updated_at = NOW()
       WHERE id = $1`,
-    [Number(sellerUserId), next.rating, completed, disputes, unresolved]
+    [
+      Number(sellerUserId),
+      next.rating,
+      next.buyerReviewCount,
+      JSON.stringify(next.pool),
+      completed,
+      disputes,
+      unresolved,
+    ]
   );
 
   await logEvent({
@@ -237,46 +259,69 @@ export async function applySellerDelta({
     delta: Number(delta),
     ratingBefore: before,
     ratingAfter: next.rating,
-    reviewCount: count,
+    reviewCount: next.buyerReviewCount,
     orderRef,
     reason,
     actorLabel,
+    poolEntryId: id,
   });
 
   const badge = await refreshSellerBadge(sellerUserId, { notifyPhone: row.phone });
-  return { ok: true, rating: next.rating, reviewCount: count, badgeTier: badge?.tier, badges: badge?.badges };
+  return {
+    ok: true,
+    rating: next.rating,
+    reviewCount: next.buyerReviewCount,
+    unrated: next.unrated,
+    badgeTier: badge?.tier,
+    badges: badge?.badges,
+  };
 }
 
-/**
- * Absolute set (Boss override). Does not change review count unless provided.
- */
 export async function setSellerRating({
   sellerUserId,
   rating,
   actorLabel = "boss",
-  reason = "SET RATING",
+  reason = "OVERRIDE RATING",
 } = {}) {
   if (!isDbEnabled()) return { ok: false, reason: "no_db" };
   const row = await loadSeller(sellerUserId);
   if (!row) return { ok: false, reason: "seller_not_found" };
-  const before = Number(row.rating_score || 0);
+  const before = Number(row.rating_score || INITIAL_RATING);
   const next = clampRating(rating);
-  await query(`UPDATE users SET rating_score = $2, updated_at = NOW() WHERE id = $1`, [
-    Number(sellerUserId),
-    next,
-  ]);
+  // Absolute override: seed a single synthetic pool entry so rolling mean equals target
+  const pool = [
+    {
+      v: next,
+      kind: "admin_set",
+      at: new Date().toISOString(),
+      id: entryId("set"),
+    },
+  ];
+  const buyerCount = Math.max(Number(row.rating_count || 0), MIN_PUBLIC_REVIEWS);
+  await query(
+    `UPDATE users SET rating_score = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
+      WHERE id = $1`,
+    [Number(sellerUserId), next, buyerCount, JSON.stringify(pool)]
+  );
   await logEvent({
     subjectType: "seller",
     subjectId: Number(sellerUserId),
     eventKind: "admin_set",
     ratingBefore: before,
     ratingAfter: next,
-    reviewCount: Number(row.rating_count || 0),
+    reviewCount: buyerCount,
     reason,
     actorLabel,
+    poolEntryId: pool[0].id,
   });
   const badge = await refreshSellerBadge(sellerUserId, { notifyPhone: row.phone });
-  return { ok: true, rating: next, reviewCount: Number(row.rating_count || 0), badgeTier: badge?.tier };
+  return {
+    ok: true,
+    rating: next,
+    reviewCount: buyerCount,
+    unrated: false,
+    badgeTier: badge?.tier,
+  };
 }
 
 export async function applyRiderStarReview({
@@ -290,26 +335,25 @@ export async function applyRiderStarReview({
   const row = await loadRider(riderId);
   if (!row) return { ok: false, reason: "rider_not_found" };
 
-  const before = Number(row.rating || 0);
-  const count = Number(row.rating_count || 0);
-  const next = applyWeightedStar(before, count, stars);
-
-  const events = [];
-  events.push({
-    at: new Date().toISOString(),
-    stars: Number(stars),
-    reason: String(reason).slice(0, 120),
-    ratingAfter: next.rating,
-  });
+  const before = Number(row.rating || INITIAL_RATING);
+  const id = entryId("star");
+  const next = pushStarToPool(row.rating_pool, stars, { id, orderRef });
 
   await query(
     `UPDATE riders SET
         rating = $2,
         rating_count = $3,
-        rating_events = COALESCE(rating_events, '[]'::jsonb) || $4::jsonb,
+        rating_pool = $4::jsonb,
+        rating_events = COALESCE(rating_events, '[]'::jsonb) || $5::jsonb,
         updated_at = NOW()
       WHERE id = $1`,
-    [Number(riderId), next.rating, next.reviewCount, JSON.stringify(events)]
+    [
+      Number(riderId),
+      next.rating,
+      next.buyerReviewCount,
+      JSON.stringify(next.pool),
+      JSON.stringify([{ at: new Date().toISOString(), stars: Number(stars), ratingAfter: next.rating }]),
+    ]
   );
 
   await logEvent({
@@ -319,14 +363,21 @@ export async function applyRiderStarReview({
     stars: Number(stars),
     ratingBefore: before,
     ratingAfter: next.rating,
-    reviewCount: next.reviewCount,
+    reviewCount: next.buyerReviewCount,
     orderRef,
     reason,
     actorLabel,
+    poolEntryId: id,
   });
 
   const badge = await refreshRiderBadge(riderId);
-  return { ok: true, rating: next.rating, reviewCount: next.reviewCount, badgeTier: badge?.tier };
+  return {
+    ok: true,
+    rating: next.rating,
+    reviewCount: next.buyerReviewCount,
+    unrated: next.unrated,
+    badgeTier: badge?.tier,
+  };
 }
 
 export async function applyRiderDelta({
@@ -341,21 +392,25 @@ export async function applyRiderDelta({
   const row = await loadRider(riderId);
   if (!row) return { ok: false, reason: "rider_not_found" };
 
-  const before = Number(row.rating || 0);
-  const count = Number(row.rating_count || 0);
-  const next = applyRatingDelta(before, delta, count);
+  const before = Number(row.rating || INITIAL_RATING);
+  const id = entryId("delta");
+  const next = pushDeltaToPool(row.rating_pool, delta, { id, orderRef });
   const completed = Number(row.completed_deliveries || 0) + (bumpCompleted ? 1 : 0);
 
   await query(
     `UPDATE riders SET
         rating = $2,
-        completed_deliveries = $3,
-        rating_events = COALESCE(rating_events, '[]'::jsonb) || $4::jsonb,
+        rating_count = $3,
+        rating_pool = $4::jsonb,
+        completed_deliveries = $5,
+        rating_events = COALESCE(rating_events, '[]'::jsonb) || $6::jsonb,
         updated_at = NOW()
       WHERE id = $1`,
     [
       Number(riderId),
       next.rating,
+      next.buyerReviewCount,
+      JSON.stringify(next.pool),
       completed,
       JSON.stringify([
         {
@@ -375,46 +430,152 @@ export async function applyRiderDelta({
     delta: Number(delta),
     ratingBefore: before,
     ratingAfter: next.rating,
-    reviewCount: count,
+    reviewCount: next.buyerReviewCount,
     orderRef,
     reason,
     actorLabel,
+    poolEntryId: id,
   });
 
   const badge = await refreshRiderBadge(riderId);
-  return { ok: true, rating: next.rating, reviewCount: count, badgeTier: badge?.tier };
+  return { ok: true, rating: next.rating, reviewCount: next.buyerReviewCount, badgeTier: badge?.tier };
 }
 
 export async function setRiderRating({
   riderId,
   rating,
   actorLabel = "boss",
-  reason = "SET RATING",
+  reason = "OVERRIDE RATING",
 } = {}) {
   if (!isDbEnabled()) return { ok: false, reason: "no_db" };
   const row = await loadRider(riderId);
   if (!row) return { ok: false, reason: "rider_not_found" };
-  const before = Number(row.rating || 0);
+  const before = Number(row.rating || INITIAL_RATING);
   const next = clampRating(rating);
-  await query(`UPDATE riders SET rating = $2, updated_at = NOW() WHERE id = $1`, [
-    Number(riderId),
-    next,
-  ]);
+  const pool = [
+    { v: next, kind: "admin_set", at: new Date().toISOString(), id: entryId("set") },
+  ];
+  const buyerCount = Math.max(Number(row.rating_count || 0), MIN_PUBLIC_REVIEWS);
+  await query(
+    `UPDATE riders SET rating = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
+      WHERE id = $1`,
+    [Number(riderId), next, buyerCount, JSON.stringify(pool)]
+  );
   await logEvent({
     subjectType: "rider",
     subjectId: Number(riderId),
     eventKind: "admin_set",
     ratingBefore: before,
     ratingAfter: next,
-    reviewCount: Number(row.rating_count || 0),
+    reviewCount: buyerCount,
     reason,
     actorLabel,
+    poolEntryId: pool[0].id,
   });
   const badge = await refreshRiderBadge(riderId);
   return { ok: true, rating: next, badgeTier: badge?.tier };
 }
 
-/** Dispute-free completion: +0.05 + completed_orders++ (replaces fake 5★ insert). */
+/** Boss: remove one unfair pool entry and recalc. */
+export async function purgeRatingEntry({
+  subjectType,
+  subjectId,
+  poolEntryId,
+  actorLabel = "boss",
+} = {}) {
+  if (!isDbEnabled()) return { ok: false, reason: "no_db" };
+  const type = subjectType === "rider" ? "rider" : "seller";
+  const id = Number(subjectId);
+  if (!Number.isInteger(id) || id < 1 || !poolEntryId) {
+    return { ok: false, reason: "invalid_args" };
+  }
+
+  if (type === "seller") {
+    const row = await loadSeller(id);
+    if (!row) return { ok: false, reason: "seller_not_found" };
+    const before = Number(row.rating_score || INITIAL_RATING);
+    const next = purgePoolEntry(row.rating_pool, poolEntryId);
+    await query(
+      `UPDATE users SET rating_score = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
+        WHERE id = $1`,
+      [id, next.rating, next.buyerReviewCount, JSON.stringify(next.pool)]
+    );
+    await query(
+      `UPDATE rating_events SET purged_at = NOW()
+        WHERE subject_type = 'seller' AND subject_id = $1 AND pool_entry_id = $2 AND purged_at IS NULL`,
+      [id, String(poolEntryId)]
+    );
+    await logEvent({
+      subjectType: "seller",
+      subjectId: id,
+      eventKind: "purge",
+      ratingBefore: before,
+      ratingAfter: next.rating,
+      reviewCount: next.buyerReviewCount,
+      reason: `purge:${poolEntryId}`,
+      actorLabel,
+      poolEntryId: String(poolEntryId),
+    });
+    const badge = await refreshSellerBadge(id, { notifyPhone: row.phone });
+    return { ok: true, rating: next.rating, unrated: next.unrated, badgeTier: badge?.tier };
+  }
+
+  const row = await loadRider(id);
+  if (!row) return { ok: false, reason: "rider_not_found" };
+  const before = Number(row.rating || INITIAL_RATING);
+  const next = purgePoolEntry(row.rating_pool, poolEntryId);
+  await query(
+    `UPDATE riders SET rating = $2, rating_count = $3, rating_pool = $4::jsonb, updated_at = NOW()
+      WHERE id = $1`,
+    [id, next.rating, next.buyerReviewCount, JSON.stringify(next.pool)]
+  );
+  await query(
+    `UPDATE rating_events SET purged_at = NOW()
+      WHERE subject_type = 'rider' AND subject_id = $1 AND pool_entry_id = $2 AND purged_at IS NULL`,
+    [id, String(poolEntryId)]
+  );
+  const badge = await refreshRiderBadge(id);
+  return {
+    ok: true,
+    rating: next.rating,
+    unrated: next.unrated,
+    badgeTier: badge?.tier,
+    before,
+  };
+}
+
+export async function listRatingEvents({ subjectType, subjectId, limit = 40 } = {}) {
+  if (!isDbEnabled()) return { events: [] };
+  const { rows } = await query(
+    `SELECT id, subject_type, subject_id, event_kind, stars, delta, rating_before, rating_after,
+            review_count, order_ref, reason, actor_label, pool_entry_id, purged_at, created_at
+       FROM rating_events
+      WHERE subject_type = $1 AND subject_id = $2
+      ORDER BY created_at DESC
+      LIMIT $3`,
+    [subjectType === "rider" ? "rider" : "seller", Number(subjectId), Math.min(100, Math.max(1, limit))]
+  );
+  return {
+    events: rows.map((r) => ({
+      id: Number(r.id),
+      subjectType: r.subject_type,
+      subjectId: Number(r.subject_id),
+      eventKind: r.event_kind,
+      stars: r.stars != null ? Number(r.stars) : null,
+      delta: r.delta != null ? Number(r.delta) : null,
+      ratingBefore: Number(r.rating_before),
+      ratingAfter: Number(r.rating_after),
+      reviewCount: Number(r.review_count || 0),
+      orderRef: r.order_ref,
+      reason: r.reason,
+      actorLabel: r.actor_label,
+      poolEntryId: r.pool_entry_id,
+      purged: Boolean(r.purged_at),
+      createdAt: r.created_at,
+    })),
+  };
+}
+
 export async function creditDisputeFreeCompletion(sellerUserId, orderRef = "") {
   if (!isDbEnabled()) return { ok: false, reason: "no_db" };
   const ref = String(orderRef || "").trim().toUpperCase();
@@ -423,7 +584,7 @@ export async function creditDisputeFreeCompletion(sellerUserId, orderRef = "") {
       `SELECT id FROM rating_events
         WHERE subject_type = 'seller' AND subject_id = $1
           AND order_ref = $2 AND event_kind = 'bonus'
-          AND reason = 'dispute_free_completion'
+          AND reason = 'dispute_free_completion' AND purged_at IS NULL
         LIMIT 1`,
       [Number(sellerUserId), ref]
     );
@@ -482,21 +643,28 @@ export async function penalizeRiderLate(riderId, orderRef = "") {
   });
 }
 
-/**
- * Public trust stats for seller cards — prefer weighted columns, fall back to AVG reviews.
- */
 export async function getSellerRatingProfile(sellerUserId) {
   if (!isDbEnabled() || !sellerUserId) {
-    return { avgRating: 0, totalReviews: 0, badgeTier: "newbie", completedOrders: 0 };
+    return {
+      avgRating: INITIAL_RATING,
+      totalReviews: 0,
+      unrated: true,
+      badgeTier: "newbie",
+      completedOrders: 0,
+    };
   }
   const row = await loadSeller(sellerUserId);
   if (!row) {
-    return { avgRating: 0, totalReviews: 0, badgeTier: "newbie", completedOrders: 0 };
+    return {
+      avgRating: INITIAL_RATING,
+      totalReviews: 0,
+      unrated: true,
+      badgeTier: "newbie",
+      completedOrders: 0,
+    };
   }
-  let avg = Number(row.rating_score || 0);
-  let count = Number(row.rating_count || 0);
-  if (count <= 0) {
-    // Fall back to order_reviews AVG until weighted pool is seeded
+  let scored = scoreFromPool(row.rating_pool);
+  if (scored.buyerReviewCount <= 0 && Number(row.rating_count || 0) <= 0) {
     const { rows } = await query(
       `SELECT COALESCE(AVG(rating), 0)::numeric(10,2) AS avg_rating,
               COUNT(*)::int AS total_reviews
@@ -504,20 +672,32 @@ export async function getSellerRatingProfile(sellerUserId) {
         WHERE seller_user_id = $1 AND direction = 'buyer_to_seller'`,
       [Number(sellerUserId)]
     );
-    avg = Number(rows[0]?.avg_rating || 0);
-    count = Number(rows[0]?.total_reviews || 0);
+    const avg = Number(rows[0]?.avg_rating || 0);
+    const count = Number(rows[0]?.total_reviews || 0);
+    if (count > 0) {
+      scored = {
+        rating: avg,
+        reviewCount: count,
+        buyerReviewCount: count,
+        unrated: count < MIN_PUBLIC_REVIEWS,
+        displayLabel: count < MIN_PUBLIC_REVIEWS ? "UNRATED" : avg.toFixed(2),
+      };
+    }
   }
   const derived = deriveBadgeTier({
     completedOrders: Number(row.completed_orders || 0),
-    rating: avg,
+    rating: scored.rating,
+    unrated: scored.unrated,
     isVerified: Boolean(row.is_seller_verified),
     disputeCount: Number(row.dispute_count || 0),
     unresolvedDisputes: Number(row.unresolved_disputes || 0),
     previousTier: row.badge_tier,
   });
   return {
-    avgRating: avg,
-    totalReviews: count,
+    avgRating: scored.rating,
+    totalReviews: scored.buyerReviewCount,
+    unrated: scored.unrated,
+    displayLabel: scored.displayLabel,
     badgeTier: derived.tier,
     completedOrders: Number(row.completed_orders || 0),
     badges: derived.badges,
@@ -525,4 +705,11 @@ export async function getSellerRatingProfile(sellerUserId) {
   };
 }
 
-export { RATING_DELTAS, deriveBadgeTier, clampRating };
+export {
+  RATING_DELTAS,
+  deriveBadgeTier,
+  clampRating,
+  scoreFromPool,
+  MIN_PUBLIC_REVIEWS,
+  INITIAL_RATING,
+};
