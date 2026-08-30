@@ -1,5 +1,6 @@
 /**
  * Growth loops: Sokoni Points, Seller Power Board, Pamoja pools, rider quest.
+ * Currently paused (Coming Soon) — flip GROWTH_FEATURES_LIVE when ready.
  */
 import { Router } from "express";
 import { getPointsBalance, redeemPoints } from "../services/sokoni-points.js";
@@ -16,9 +17,8 @@ import {
   hasBuyerSessionContext,
   resolveAuthenticatedBuyerSocialContext,
 } from "../services/buyer-social-auth.js";
-import {
-  resolveAuthenticatedSellerSocialContext,
-} from "../services/seller-social-auth.js";
+import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
+import { growthLive, GROWTH_COMING_SOON } from "../lib/growth-features.js";
 
 const router = Router();
 
@@ -50,20 +50,55 @@ async function resolveBuyerOrSeller(req) {
   return { error: "session_required", status: 401 };
 }
 
-router.get("/points/rates", (_req, res) => {
+function pausedPayload(extra = {}) {
+  return {
+    ...GROWTH_COMING_SOON,
+    live: false,
+    features: {
+      points: false,
+      powerBoard: false,
+      pamoja: false,
+      riderQuest: false,
+    },
+    ...extra,
+  };
+}
+
+router.get("/status", (_req, res) => {
   res.json({
     ok: true,
+    live: growthLive(),
+    comingSoon: !growthLive(),
+    message: growthLive()
+      ? "Growth features are live."
+      : "Coming soon — Points, Power Board & Pamoja are paused.",
+    features: {
+      points: growthLive(),
+      powerBoard: growthLive(),
+      pamoja: growthLive(),
+      riderQuest: growthLive(),
+    },
+  });
+});
+
+router.get("/points/rates", (_req, res) => {
+  if (!growthLive()) {
+    return res.json(pausedPayload({ earn: POINTS_EARN, redeem: null }));
+  }
+  res.json({
+    ok: true,
+    live: true,
     earn: POINTS_EARN,
     redeem: {
       threshold: POINTS_REDEEM_THRESHOLD,
       kesPerBlock: POINTS_REDEEM_KES,
       example: "1000 points ≈ KES 100 marketplace credit",
     },
-    note: "Earn rates are low but promising — stack points from orders, Pamoja fills, and badge level-ups.",
   });
 });
 
 router.get("/points/balance", async (req, res) => {
+  if (!growthLive()) return res.json(pausedPayload());
   try {
     const auth = await resolveBuyerOrSeller(req);
     if (auth.error || !auth.userId) {
@@ -84,6 +119,7 @@ router.get("/points/balance", async (req, res) => {
 });
 
 router.post("/points/redeem", async (req, res) => {
+  if (!growthLive()) return res.status(503).json(pausedPayload());
   try {
     const auth = await resolveBuyerOrSeller(req);
     if (auth.error || !auth.userId) {
@@ -99,6 +135,16 @@ router.post("/points/redeem", async (req, res) => {
 });
 
 router.get("/power-board/me", async (req, res) => {
+  if (!growthLive()) {
+    return res.json(
+      pausedPayload({
+        headline: "Seller Power Board",
+        nextHint: "Coming soon — badge progress & Sokoni Points are paused for now.",
+        progressPct: 0,
+        checklist: [],
+      })
+    );
+  }
   try {
     const seller = await resolveAuthenticatedSellerSocialContext(req);
     if (seller.error || !seller.sellerUserId) {
@@ -125,6 +171,7 @@ router.get("/power-board/me", async (req, res) => {
 });
 
 router.get("/power-board/:sellerId", async (req, res) => {
+  if (!growthLive()) return res.json(pausedPayload());
   try {
     const id = Number(req.params.sellerId);
     if (!Number.isInteger(id) || id < 1) {
@@ -147,6 +194,7 @@ router.get("/power-board/:sellerId", async (req, res) => {
 });
 
 router.post("/pamoja", async (req, res) => {
+  if (!growthLive()) return res.status(503).json(pausedPayload());
   try {
     const auth = await resolveBuyerOrSeller(req);
     if (auth.error || !auth.userId) {
@@ -160,7 +208,7 @@ router.post("/pamoja", async (req, res) => {
       discountPct: req.body?.discountPct,
       hoursOpen: req.body?.expiresHours || req.body?.hoursOpen || 2,
     });
-    if (out.error) return res.status(400).json({ ok: false, ...out });
+    if (out.error || out.comingSoon) return res.status(out.comingSoon ? 503 : 400).json({ ok: false, ...out });
     res.json(out);
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message || "pamoja_create_failed" });
@@ -168,6 +216,7 @@ router.post("/pamoja", async (req, res) => {
 });
 
 router.post("/pamoja/:code/join", async (req, res) => {
+  if (!growthLive()) return res.status(503).json(pausedPayload());
   try {
     const auth = await resolveBuyerOrSeller(req);
     if (auth.error || !auth.userId) {
@@ -178,7 +227,7 @@ router.post("/pamoja/:code/join", async (req, res) => {
       userId: auth.userId,
       phone: auth.phone || req.body?.phone || "",
     });
-    if (out.error) return res.status(400).json({ ok: false, ...out });
+    if (out.error || out.comingSoon) return res.status(out.comingSoon ? 503 : 400).json({ ok: false, ...out });
     res.json(out);
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message || "pamoja_join_failed" });
@@ -186,6 +235,7 @@ router.post("/pamoja/:code/join", async (req, res) => {
 });
 
 router.get("/pamoja/:code", async (req, res) => {
+  if (!growthLive()) return res.status(503).json(pausedPayload());
   try {
     const out = await getPamojaPool(req.params.code);
     if (out.error) return res.status(404).json({ ok: false, ...out });
@@ -196,6 +246,7 @@ router.get("/pamoja/:code", async (req, res) => {
 });
 
 router.get("/rider-quest/:riderId", async (req, res) => {
+  if (!growthLive()) return res.json(pausedPayload());
   try {
     const id = Number(req.params.riderId);
     if (!Number.isInteger(id) || id < 1) {

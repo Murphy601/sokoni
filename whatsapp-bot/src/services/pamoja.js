@@ -5,6 +5,7 @@
 import { query, isDbEnabled } from "../db/pool.js";
 import { awardPoints } from "./sokoni-points.js";
 import { POINTS_EARN } from "../lib/sokoni-points.js";
+import { growthLive, GROWTH_COMING_SOON } from "../lib/growth-features.js";
 
 function publicCode() {
   return `PJ${Date.now().toString(36).toUpperCase().slice(-6)}${Math.random()
@@ -27,6 +28,7 @@ export async function createPamojaPool({
   discountPct = 8,
   hoursOpen = 2,
 } = {}) {
+  if (!growthLive()) return { ...GROWTH_COMING_SOON };
   if (!isDbEnabled()) return { error: "database_not_configured" };
   const pid = String(productId || "").trim();
   if (!pid) return { error: "invalid", message: "Need a product id." };
@@ -84,6 +86,7 @@ export async function joinPamojaPool({
   phone = "",
   userId = null,
 } = {}) {
+  if (!growthLive()) return { ...GROWTH_COMING_SOON };
   if (!isDbEnabled()) return { error: "database_not_configured" };
   const clean = String(code || "").trim().toUpperCase();
   const key = memberKey(phone, userId);

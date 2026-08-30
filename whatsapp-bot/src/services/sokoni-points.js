@@ -8,6 +8,7 @@ import {
   POINTS_REDEEM_KES,
   redeemBlocks,
 } from "../lib/sokoni-points.js";
+import { growthLive, GROWTH_COMING_SOON } from "../lib/growth-features.js";
 
 const REASON_AMOUNTS = {
   buyer_order_complete: POINTS_EARN.BUYER_ORDER_COMPLETE,
@@ -60,6 +61,7 @@ export async function awardPoints({
   ref = "",
   meta = {},
 } = {}) {
+  if (!growthLive()) return { ...GROWTH_COMING_SOON, awarded: 0 };
   if (!isDbEnabled()) return { ok: false, reason: "no_db" };
   const type = normalizeSubject(subjectType);
   const id = Number(subjectId);
@@ -112,6 +114,7 @@ export async function awardPoints({
 
 /** Redeem whole blocks of 1000 pts → KES 100 credit notes (ledger only; Till applied by ops). */
 export async function redeemPoints({ subjectType, subjectId } = {}) {
+  if (!growthLive()) return { ...GROWTH_COMING_SOON };
   if (!isDbEnabled()) return { ok: false, reason: "no_db" };
   const type = normalizeSubject(subjectType);
   const id = Number(subjectId);

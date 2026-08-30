@@ -4,6 +4,7 @@
 import { query, isDbEnabled } from "../db/pool.js";
 import { awardPoints } from "./sokoni-points.js";
 import { POINTS_EARN, RIDER_DAILY_QUEST_TARGET } from "../lib/sokoni-points.js";
+import { growthLive, GROWTH_COMING_SOON } from "../lib/growth-features.js";
 
 function eatDate() {
   // Africa/Nairobi calendar day
@@ -41,6 +42,7 @@ export async function getRiderDailyQuest(riderId) {
  * Call after successful rider CONFIRM / delivery.
  */
 export async function recordRiderDeliveryForQuest(riderId, orderRef = "") {
+  if (!growthLive()) return { ...GROWTH_COMING_SOON };
   if (!isDbEnabled()) return { ok: false, reason: "no_db" };
   const id = Number(riderId);
   if (!Number.isInteger(id) || id < 1) return { ok: false, reason: "invalid" };
