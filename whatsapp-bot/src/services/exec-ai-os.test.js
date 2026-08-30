@@ -29,7 +29,9 @@ describe("executive AI OS", () => {
     assert.equal(staffCan("release", { role: "DISPUTE_MANAGER" }, { amountKes: 50000 }), false);
     assert.equal(staffCan("system_pause", { role: "SUPPORT_AGENT" }), false);
     assert.equal(staffCan("agent_mode", { role: "SUPPORT_AGENT" }), true);
-    assert.equal(staffCan("brief", { role: "LOGISTICS_LEAD" }), true);
+    assert.equal(staffCan("brief", { role: "SUPER_ADMIN" }), true);
+    assert.equal(staffCan("brief", { role: "LOGISTICS_LEAD" }), false);
+    assert.equal(staffCan("brief", { role: "SUPPORT_AGENT" }), false);
   });
 
   it("executive directive mentions role verification", () => {

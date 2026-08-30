@@ -468,7 +468,7 @@ export function adminHelpText() {
     `💸 *#payb2c SKN-1002-1* — send seller payout via M-Pesa B2C\n` +
     `✅ *#paid SKN-1002-1* — mark supplier paid (manual transfer)\n` +
     `✅ *#paid WD-2026-0004* — mark a queued withdrawal paid (all its orders)\n` +
-    `🖥️ *Command Center* — sokonimall.com/admin-command.html (escrow tank, disputes, hub stats)\n\n` +
+    `🖥️ *Command Center* — use the Admin OS on the Sokoni site (token required).\n\n` +
     `📣 *Customer comms & offers*\n` +
     `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
@@ -478,15 +478,10 @@ export function adminHelpText() {
     `✅ *#done SKN-1002-1* — end dispute/help takeover, resume bot\n` +
     `   _(alias: *#resolve SKN-1002-1* · or *#done* alone if only one open thread)_\n` +
     `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
-    `🖥️ Support ops desk — https://sokonimall.com/admin-support.html (inbox + all #commands)\n` +
-    `🏪 Seller listings — https://sokonimall.com/admin-seller-listings.html?token=...\n` +
-    `🏪 Sellers & Shops desk — https://sokonimall.com/admin-sellers-shops.html?token=...\n` +
-    `   · GET /admin/suppliers/shops-desk?q=&status=\n` +
-    `   · GET /admin/suppliers/shops/:id/items\n` +
-    `   · POST …/shops/:id/{freeze|verify|commission|payout-hold|handle|edit}\n` +
-    `   · GET /admin/suppliers/seller-listings/flagged?token=...\n` +
-    `   · POST …/seller-listings/:productId/takedown?token=…\n` +
-    `   · POST …/seller-listings/:productId/restore?token=…\n\n` +
+    `🖥️ Support ops desk — Admin OS Support (site login + token).\n` +
+    `🏪 Seller listings / Shops desk — Admin OS (token required).\n` +
+    `   · shops-desk, items, freeze/verify/commission via Admin API\n` +
+    `   · flagged listings takedown/restore via Admin API\n\n` +
     `🛠️ *Platform ops (Phase 9)*\n` +
     `• *#ops* — catalog pause/live, DB, flags\n` +
     `• *#catalog live* · *#catalog pause* · *#sync* · *#sync push*\n` +
@@ -1372,6 +1367,9 @@ export async function handleAdminIncoming({ customerKey, text, quotedText, phone
       const result = await executeMasterAdminCommand(mapped, {
         adminLabel: phone || customerKey || "boss",
         actorPhone: phone || "",
+        requireStaff: true,
+        founderBoss: checkIfBoss(phone || customerKey),
+        source: "admin.incoming.whatsapp",
       });
       if (result?.reply) await sendText(customerKey, result.reply);
       return true;

@@ -46,7 +46,7 @@ export function looksLikeAdminProbe(text) {
   if (/^\s*REASSIGN\s+RIDER\b/i.test(t)) return true;
   if (/^\s*CLEAR\s+SESSION\b/i.test(t)) return true;
   if (/^\s*SET\s+MODE\b/i.test(t)) return true;
-  if (/^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(t)) return true;
+  if (/^\s*(STATUS|BRIEFING|BRIEF|!BRIEF)\s*$/i.test(t)) return true;
   if (/^\s*OVERRIDE\s+TEST\s*$/i.test(t)) return true;
   if (/^\s*admin\b/i.test(t)) return true;
   if (/^\s*#help\b/i.test(t)) return true;
@@ -105,11 +105,24 @@ export async function tryBossIntercept(ctx = {}) {
 
   // ——— Non-staff probing admin surface → shopping stub (never LLM) ———
   if (!isStaff && looksLikeAdminProbe(text)) {
-    console.log(
-      "[boss-intercept] blocked non-staff admin probe from",
+    console.warn(
+      "[boss-intercept] SECURITY ALERT: unauthorized admin probe from",
       phone || customerKey,
       String(text).slice(0, 40)
     );
+    try {
+      const { writeAdminLog } = await import("./admin-logs.js");
+      await writeAdminLog({
+        action: "UNAUTHORIZED_ADMIN_PROBE",
+        actorPhone: String(phone || "").replace(/\D/g, "").slice(0, 20) || null,
+        actorLabel: String(customerKey || "").slice(0, 80),
+        source: "boss-intercept.whatsapp",
+        success: false,
+        message: String(text).slice(0, 200),
+      });
+    } catch {
+      /* ignore */
+    }
     return {
       handled: true,
       action: "admin_probe_blocked",

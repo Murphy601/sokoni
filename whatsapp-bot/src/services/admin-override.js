@@ -28,7 +28,7 @@ import {
   setCustomerMeta,
   getCustomerMeta,
 } from "./session.js";
-import { resolveStaffRole, staffCan, staffToneDirective } from "./staff-roles.js";
+import { resolveStaffRole, staffCan, staffToneDirective, isEnvSuperAdminPhone } from "./staff-roles.js";
 import { writeAdminLog } from "./admin-logs.js";
 import { checkIfBoss } from "../lib/phone-normalize.js";
 import { parseHandleAndOptionalScore, stripHandleAt } from "../lib/shop-handle.js";
@@ -601,10 +601,40 @@ export async function executeMasterAdminCommand(
   }
 
   if (/^BRIEF\b/i.test(cmd)) {
-    if (!staffCan("brief", staff)) return deny(staff, "brief");
+    // Hard gate: founder hardwire or ADMIN_PHONES SUPER_ADMIN only — never public WhatsApp.
+    const allowedBrief =
+      isFounder ||
+      staff?.source === "api" ||
+      (String(staff?.role || "").toUpperCase() === "SUPER_ADMIN" &&
+        (staff?.source === "hardwire" ||
+          staff?.source === "env" ||
+          staff?.source === "db" ||
+          isEnvSuperAdminPhone(phone)));
+    if (!allowedBrief || !staffCan("brief", staff)) {
+      console.warn("[admin-override] SECURITY: blocked BRIEF from", phone || adminLabel || "?");
+      try {
+        await writeAdminLog({
+          action: "UNAUTHORIZED_BRIEF",
+          actorPhone: phone || "",
+          actorLabel: String(adminLabel || "").slice(0, 80),
+          source: source || "master-command",
+          success: false,
+          message: String(rawCommand || "BRIEF").slice(0, 200),
+        });
+      } catch {
+        /* ignore */
+      }
+      return {
+        ok: false,
+        action: "unauthorized_brief",
+        reply: "Unauthorized.",
+      };
+    }
     const { composeExecutiveBriefing } = await import("./exec-briefing.js");
-    const text = await composeExecutiveBriefing();
-    return { ok: true, action: "brief", reply: ack(text) };
+    const text = await composeExecutiveBriefing({ forFounder: isFounder });
+    // Founder gets Yes, Boss salute; staff SUPER_ADMIN get plain brief (no portal URL).
+    const reply = isFounder ? ack(text) : text;
+    return { ok: true, action: "brief", reply };
   }
 
   if (/^LIST_RIDERS\b/i.test(cmd)) {

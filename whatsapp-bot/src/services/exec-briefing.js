@@ -33,8 +33,8 @@ async function countAvailableRiders() {
   }
 }
 
-/** Compose plain WhatsApp executive briefing text. */
-export async function composeExecutiveBriefing() {
+/** Compose plain WhatsApp executive briefing text (no admin portal URLs). */
+export async function composeExecutiveBriefing({ forFounder = false } = {}) {
   const title = BOSS_TITLE();
   const dash = await getPlatformCommandDashboard();
   const escrow = dash.escrow || {};
@@ -59,8 +59,9 @@ export async function composeExecutiveBriefing() {
       ? `• *Paused escrow:* ${totals.pausedCount} order(s).`
       : null,
     ``,
-    `_Portal:_ sokonimall.com/admin-command.html`,
-    `_Reply *!brief* anytime for a refresh._`,
+    forFounder
+      ? `_Reply *!brief* anytime for a refresh._`
+      : `_Ops brief — reply *!brief* for a refresh._`,
   ].filter(Boolean);
   return lines.join("\n");
 }
@@ -108,7 +109,7 @@ export async function maybeAlertHighValueEscrow(order) {
     `• *Amount:* KES ${Math.round(total).toLocaleString()} (threshold KES ${threshold.toLocaleString()})\n` +
     `• *Buyer:* ${order.phone || order.customerName || "—"}\n` +
     `• *Product:* ${order.productName || "—"}\n\n` +
-    `Funds held in escrow. Portal: sokonimall.com/admin-command.html`;
+    `Funds held in escrow. Review in the Command Center when ready.`;
 
   const admins = [
     ...new Set(

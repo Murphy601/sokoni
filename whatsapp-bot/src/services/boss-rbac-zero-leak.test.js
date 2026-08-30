@@ -111,4 +111,38 @@ describe("Boss RBAC zero-leak (step 1)", () => {
     assert.equal(r.action, "unauthorized");
     assert.doesNotMatch(r.reply, /FORCE RELEASE|palette|PAUSE SELLER/i);
   });
+
+  it("seller Brief/Status → shopping stub, never escrow metrics or portal URL", async () => {
+    for (const text of ["Brief", "Status", "BRIEFING", "!brief"]) {
+      const hit = await tryBossIntercept({ phone: SELLER, customerKey: SELLER, text });
+      assert.ok(hit?.handled, text);
+      assert.equal(hit.action, "admin_probe_blocked", text);
+      assert.equal(hit.reply, PUBLIC_SHOP_REPLY);
+      assert.doesNotMatch(hit.reply, /Escrow volume|admin-command|KES/i);
+    }
+  });
+
+  it("BRIEF from unknown phone via executeMaster is unauthorized", async () => {
+    const r = await executeMasterAdminCommand("BRIEF", {
+      actorPhone: SELLER,
+      source: "admin.incoming.whatsapp",
+      requireStaff: true,
+    });
+    assert.equal(r.ok, false);
+    assert.match(String(r.action), /unauthorized/i);
+    assert.doesNotMatch(r.reply || "", /Escrow volume|admin-command/i);
+  });
+
+  it("founder BRIEF has no admin portal URL", async () => {
+    const r = await executeMasterAdminCommand("BRIEF", {
+      actorPhone: BOSS,
+      source: "boss-intercept.whatsapp",
+      requireStaff: true,
+      founderBoss: true,
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.action, "brief");
+    assert.match(r.reply, /Escrow volume|Sokoni status/i);
+    assert.doesNotMatch(r.reply, /admin-command\.html/i);
+  });
 });
