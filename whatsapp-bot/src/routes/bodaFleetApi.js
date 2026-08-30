@@ -99,6 +99,7 @@ adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
     });
     if (result.error === "not_found") return res.status(404).json(result);
     if (result.error === "database_not_configured") return res.status(503).json(result);
+    if (result.error === "verify_failed") return res.status(500).json(result);
     if (result.error) return res.status(400).json(result);
     // DB already updated; WhatsApp notify is async inside the service.
     console.log(
