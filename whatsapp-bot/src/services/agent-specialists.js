@@ -52,7 +52,7 @@ export function routeSpecialist(text, { isSellerSession = false } = {}) {
 
   const clearSellerOps =
     isSellerSession ||
-    /\b(payout|withdraw|my shop|seller hub|register as (a )?seller|as a seller|vendor portal|stock units|my inventory|update (my )?stock|my listings|create (a )?listing|list (an? )?item|promo code|till|paybill|commission|platform fee|onboard(?:ing)?|shipping rate|delivery price|upcountry)\b/i.test(
+    /\b(payout|withdraw|my shop|seller hub|register as (a )?seller|as a seller|vendor portal|stock units|my inventory|update (my )?stock|my listings|create (a )?listing|list (an? )?item|promo code|till|paybill|commission|platform fee|onboard(?:ing)?|shipping rate|delivery price|upcountry|my sales|shop orders?|orders?\s+purchased\s+from\s+my|orders?\s+from\s+my\s+shop)\b/i.test(
       lower
     );
 
