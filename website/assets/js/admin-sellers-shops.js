@@ -222,6 +222,7 @@
               <div class="actions-menu" role="menu" data-menu-for="${escapeHtml(shop.id)}">
                 <button type="button" class="js-act" data-act="pause" data-id="${escapeHtml(shop.id)}">Pause shop (temporary hold)</button>
                 <button type="button" class="js-act act-danger" data-act="deactivate" data-id="${escapeHtml(shop.id)}">Deactivate shop (block login)</button>
+                <button type="button" class="js-act act-danger" data-act="delete" data-id="${escapeHtml(shop.id)}">Delete seller permanently</button>
                 <button type="button" class="js-act" data-act="restore" data-id="${escapeHtml(shop.id)}">Restore shop</button>
                 <button type="button" class="js-act" data-act="verify" data-id="${escapeHtml(shop.id)}">${shop.verifiedBadge ? "Remove verify badge" : "Verify shop badge"}</button>
                 <button type="button" class="js-act" data-act="commission" data-id="${escapeHtml(shop.id)}">Force commission tier</button>
@@ -401,6 +402,16 @@
         if (note == null) return;
         await postAction(`/shops/${encodeURIComponent(shopId)}/deactivate`, { note });
         setStatus(`Deactivated ${shop.shopHandle || shopId} — login blocked; seller notified`);
+      } else if (act === "delete") {
+        const typed = window.prompt(
+          `PERMANENTLY delete ${shop.shopHandle || shopId}? Type DELETE to confirm. This wipes their seller data so they can re-register fresh.`
+        );
+        if (String(typed || "").trim().toUpperCase() !== "DELETE") {
+          setStatus("Delete cancelled — type DELETE to confirm.", true);
+          return;
+        }
+        await postAction(`/shops/${encodeURIComponent(shopId)}/delete`, { confirm: true });
+        setStatus(`Deleted ${shop.shopHandle || shopId} permanently`);
       } else if (act === "restore") {
         await postAction(`/shops/${encodeURIComponent(shopId)}/restore`, {});
         setStatus(`Restored ${shop.shopHandle || shopId} — seller notified`);

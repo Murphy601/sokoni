@@ -155,6 +155,7 @@
                     ? `<button type="button" class="js-act" data-act="unban" data-id="${r.id}">✅ Unban rider</button>`
                     : `<button type="button" class="js-act act-danger" data-act="suspend" data-id="${r.id}">🛑 Suspend / ban</button>`
                 }
+                <button type="button" class="js-act act-danger" data-act="delete" data-id="${r.id}">🗑️ Delete permanently</button>
                 <button type="button" class="js-act" data-act="bonus" data-id="${r.id}">💸 Direct wallet payout</button>
                 ${
                   pending || r.verificationStatus === "REJECTED"
@@ -300,6 +301,19 @@
           reason: "Unbanned from fleet directory",
         });
         setStatus(`Unbanned #${id}`);
+        await loadFleet();
+        return;
+      }
+      if (act === "delete") {
+        const typed = window.prompt(
+          `PERMANENTLY delete rider ${r.fullName || r.phone || id}? Type DELETE to confirm. They can re-apply later from scratch.`
+        );
+        if (String(typed || "").trim().toUpperCase() !== "DELETE") {
+          setStatus("Delete cancelled — type DELETE to confirm.", true);
+          return;
+        }
+        await postJson(`/riders/${encodeURIComponent(id)}/delete`, { confirm: true });
+        setStatus(`Deleted rider #${id} permanently`);
         await loadFleet();
         return;
       }

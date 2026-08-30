@@ -89,6 +89,37 @@ adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
   res.json(result);
 });
 
+/** POST /admin/boda/riders/:id/delete — permanent wipe; requires confirm: true */
+adminBodaRouter.post("/riders/:id/delete", async (req, res) => {
+  if (!req.body?.confirm) {
+    return res.status(400).json({
+      error: "confirm_required",
+      message: "Send { confirm: true } to permanently delete this rider.",
+    });
+  }
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    if (!isDbEnabled()) {
+      return res.status(503).json({ error: "database_not_configured" });
+    }
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: "invalid_id" });
+    const { rows } = await query(`SELECT id, phone, full_name FROM riders WHERE id = $1 LIMIT 1`, [id]);
+    if (!rows[0]?.phone) {
+      return res.status(404).json({ error: "not_found", message: "Rider not found." });
+    }
+    const { purgeRiderAccount } = await import("../services/purge-account.js");
+    const out = await purgeRiderAccount(rows[0].phone, {
+      confirm: true,
+      adminLabel: "Admin panel",
+    });
+    if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
+    res.json({ ok: true, ...out });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** POST /admin/boda/riders/:id/bonus — fuel advance / bonus into CLEARED ledger */
 adminBodaRouter.post("/riders/:id/bonus", async (req, res) => {
   const { adminRiderBonusPayout } = await import("../services/boda-fleet.js");

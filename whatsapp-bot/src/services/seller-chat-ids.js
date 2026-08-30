@@ -115,3 +115,19 @@ export function listSellerChatIds() {
   load();
   return Object.fromEntries(chatToPhone);
 }
+
+/** Drop all chatId → phone links for a purged seller. */
+export function clearSellerChatIdsForPhone(phone) {
+  load();
+  const want = normalizePhone(phone);
+  if (!want) return { ok: true, removed: 0 };
+  let removed = 0;
+  for (const [chatId, p] of [...chatToPhone.entries()]) {
+    if (phonesMatch(p, want)) {
+      chatToPhone.delete(chatId);
+      removed += 1;
+    }
+  }
+  if (removed) persist();
+  return { ok: true, removed };
+}

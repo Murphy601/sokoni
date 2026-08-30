@@ -77,6 +77,7 @@ export function isOverrideCommand(text) {
   if (/^\s*UNPAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
   if (/^\s*DEACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*ACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
+  if (/^\s*DELETE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
   if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
@@ -155,6 +156,22 @@ export function normalizeMasterCommand(raw) {
   if (activateSeller) {
     const handle = stripHandleAt(activateSeller[1]);
     if (handle) return `UNPAUSE_SELLER ${handle}`;
+  }
+
+  const deleteSeller = t.match(/^DELETE\s+(?:SELLER|SHOP)\s+(.+)$/i);
+  if (deleteSeller) {
+    const rest = deleteSeller[1].trim();
+    const confirm = /\bCONFIRM\b/i.test(rest);
+    const handle = stripHandleAt(rest.replace(/\bCONFIRM\b/gi, "").trim());
+    if (handle) return `DELETE_SELLER ${handle}${confirm ? " CONFIRM" : ""}`.trim();
+  }
+
+  const deleteRider = t.match(/^DELETE\s+RIDER\s+(.+)$/i);
+  if (deleteRider) {
+    const rest = deleteRider[1].trim();
+    const confirm = /\bCONFIRM\b/i.test(rest);
+    const phone = rest.replace(/\bCONFIRM\b/gi, "").trim();
+    if (phone) return `DELETE_RIDER ${phone}${confirm ? " CONFIRM" : ""}`.trim();
   }
 
   const unpauseSeller = t.match(/^UNPAUSE\s+(?:SELLER|SHOP)\s+(.+)$/i);
@@ -319,6 +336,11 @@ export function normalizeMasterCommand(raw) {
       case "activate-seller":
       case "activate-shop":
         return `UNPAUSE_SELLER ${rest}`.trim();
+      case "delete-seller":
+      case "delete-shop":
+        return `DELETE_SELLER ${rest}`.trim();
+      case "delete-rider":
+        return `DELETE_RIDER ${rest}`.trim();
       case "broadcast-sellers":
       case "broadcast_sellers":
         return `BROADCAST_SELLERS ${rest}`.trim();
@@ -427,6 +449,7 @@ function overrideHelp() {
     `• *PAUSE SELLER @handle* — hide shop + listings; hub banner; lock payouts\n` +
     `• *UNPAUSE SELLER @handle* / *ACTIVATE SELLER @handle* / *UNBAN SELLER @handle*\n` +
     `• *DEACTIVATE SELLER @handle* / *SUSPEND SELLER @handle* — hard lock + login blocked\n` +
+    `• *DELETE SELLER @handle CONFIRM* — permanent wipe (re-register fresh)\n` +
     `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
     `• *SET RATING @handle 4.8* / *SET RATINGS @Adiv's thrift 4.8* / *OVERRIDE RATING …*\n` +
@@ -437,6 +460,7 @@ function overrideHelp() {
     `• *LIST RIDERS* / *LIST AVAILABLE RIDERS*\n` +
     `• *PAUSE RIDER +254…* / *UNPAUSE RIDER +254…*\n` +
     `• *SUSPEND RIDER +254…* / *UNBAN RIDER +254…*\n` +
+    `• *DELETE RIDER +254… CONFIRM* — permanent wipe (re-apply fresh)\n` +
     `• *REASSIGN RIDER SKN-#### +254…*\n` +
     `• *FORCE RETURN SKN-####*\n\n` +
     `*Broadcasts*\n` +
@@ -894,6 +918,33 @@ export async function executeMasterAdminCommand(
     return { ok: true, action: "suspend_rider", reply: ack(out.message) };
   }
 
+  const deleteRiderCmd = cmd.match(/^DELETE_RIDER\s+(.+)$/i);
+  if (deleteRiderCmd) {
+    if (!staffCan("system_pause", staff) && !isFounder) {
+      return deny(staff, "delete_rider");
+    }
+    const { purgeRiderAccount } = await import("./purge-account.js");
+    const rest = deleteRiderCmd[1].trim();
+    const confirm = /\bCONFIRM\b/i.test(rest);
+    const phoneTarget = rest.replace(/\bCONFIRM\b/gi, "").trim();
+    const out = await purgeRiderAccount(phoneTarget, { confirm, adminLabel });
+    await logBossAction({
+      action: "DELETE_RIDER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "rider",
+      targetId: out.riderId || phoneTarget,
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+      metadata: { stats: out.stats || null, confirm },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "delete_rider", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "delete_rider", reply: ack(out.message) };
+  }
+
   const ban = cmd.match(/^BAN\s+(.+)$/i);
   if (ban) {
     if (!staffCan("ban_user", staff)) return deny(staff, "ban_user");
@@ -1253,6 +1304,34 @@ export async function executeMasterAdminCommand(
       return { ok: false, action: "deactivate_seller", reply: ack(out.message || out.error) };
     }
     return { ok: true, action: "deactivate_seller", reply: ack(out.message) };
+  }
+
+  const deleteSellerCmd = cmd.match(/^DELETE_SELLER\s+(\S+)(?:\s+(CONFIRM))?\s*$/i);
+  const deleteSellerCmdLoose = cmd.match(/^DELETE_SELLER\s+(.+)$/i);
+  if (deleteSellerCmdLoose) {
+    if (!staffCan("system_pause", staff) && !isFounder) {
+      return deny(staff, "delete_seller");
+    }
+    const { purgeSellerAccount } = await import("./purge-account.js");
+    const rest = deleteSellerCmdLoose[1].trim();
+    const confirm = Boolean(deleteSellerCmd?.[2]) || /\bCONFIRM\b/i.test(rest);
+    const handle = stripHandleAt(rest.replace(/\bCONFIRM\b/gi, "").trim());
+    const out = await purgeSellerAccount(handle, { confirm, adminLabel });
+    await logBossAction({
+      action: "DELETE_SELLER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: handle,
+      source,
+      success: Boolean(out.ok),
+      message: out.message || out.error,
+      metadata: { stats: out.stats || null, confirm },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "delete_seller", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "delete_seller", reply: ack(out.message) };
   }
 
   const suspendSellerCmd = cmd.match(/^SUSPEND_SELLER\s+(\S+)(?:\s+(.*))?$/i);

@@ -735,3 +735,33 @@ export function patchSupplierAdmin(supplierId, patch = {}) {
   persistSuppliers();
   return { ok: true, supplier: s };
 }
+
+/** Permanently remove a supplier record (hard delete). */
+export function removeSupplierFromStore(supplierId) {
+  loadSuppliers();
+  const id = String(supplierId || "").trim();
+  if (!id || !supplierStore.suppliers[id]) {
+    return { ok: false, error: "not_found" };
+  }
+  delete supplierStore.suppliers[id];
+  persistSuppliers();
+  return { ok: true, id };
+}
+
+/** Remove seller applications matching a phone (frees re-apply). */
+export function removeApplicationsForPhone(phone) {
+  loadApps();
+  const target = normalizePhoneDigits(phone);
+  if (!target || target.length < 9) return { ok: true, removed: 0 };
+  const tail = target.slice(-9);
+  let removed = 0;
+  for (const [id, app] of Object.entries(appStore.applications || {})) {
+    const p = normalizePhoneDigits(app?.business?.phone || app?.phone || "");
+    if (p && (p === target || p.slice(-9) === tail)) {
+      delete appStore.applications[id];
+      removed += 1;
+    }
+  }
+  if (removed) persistApps();
+  return { ok: true, removed };
+}
