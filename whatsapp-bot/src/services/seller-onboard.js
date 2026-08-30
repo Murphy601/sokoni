@@ -69,17 +69,18 @@ export async function requireAuthenticatedSeller(phone, sessionToken) {
   const st = String(check.supplier.shopStatus || "live").toLowerCase();
   if (st === "deactivated") {
     try {
-      const { revokeSellerSession } = await import("./seller-verification.js");
+      const { revokeSellerSession, deactivatedLoginBlock } = await import("./seller-verification.js");
       await revokeSellerSession(phone);
+      return deactivatedLoginBlock();
     } catch {
-      /* ignore */
+      return {
+        error: "account_deactivated",
+        shopStatus: "deactivated",
+        supportEmail: "support@sokonimall.com",
+        message:
+          "Account deactivated. Contact support for more information.\n\nsupport@sokonimall.com",
+      };
     }
-    return {
-      error: "account_suspended",
-      shopStatus: "deactivated",
-      message:
-        "Your account has been suspended due to platform policy violations. Contact support.",
-    };
   }
   return check;
 }
@@ -212,17 +213,18 @@ export async function getSellerProfile(phone, sessionToken) {
   const st = String(check.supplier.shopStatus || "live").toLowerCase();
   if (st === "deactivated") {
     try {
-      const { revokeSellerSession } = await import("./seller-verification.js");
+      const { revokeSellerSession, deactivatedLoginBlock } = await import("./seller-verification.js");
       await revokeSellerSession(phone);
+      return deactivatedLoginBlock();
     } catch {
-      /* ignore */
+      return {
+        error: "account_deactivated",
+        shopStatus: "deactivated",
+        supportEmail: "support@sokonimall.com",
+        message:
+          "Account deactivated. Contact support for more information.\n\nsupport@sokonimall.com",
+      };
     }
-    return {
-      error: "account_suspended",
-      shopStatus: "deactivated",
-      message:
-        "Your account has been suspended due to platform policy violations. Contact support.",
-    };
   }
   return { seller: sanitizeSeller(check.supplier) };
 }

@@ -56,7 +56,7 @@ function sessionAuthStatus(result) {
   ) {
     return 401;
   }
-  if (result.error === "account_suspended") return 403;
+  if (result.error === "account_suspended" || result.error === "account_deactivated") return 403;
   if (result.error === "not_onboarded" || result.error === "not_approved") return 403;
   return 400;
 }
@@ -76,6 +76,9 @@ async function authedSeller(req, res) {
 router.post("/send-code", async (req, res) => {
   const { phone } = req.body || {};
   const result = await sendSellerVerificationCode(phone);
+  if (result.error === "account_deactivated" || result.error === "account_suspended") {
+    return res.status(403).json(result);
+  }
   if (result.error === "rate_limited") return res.status(429).json(result);
   if (result.error) return res.status(400).json(result);
   res.json(result);
@@ -85,6 +88,9 @@ router.post("/send-code", async (req, res) => {
 router.post("/verify-code", async (req, res) => {
   const { phone, code } = req.body || {};
   const result = await verifySellerCode(phone, code);
+  if (result.error === "account_deactivated" || result.error === "account_suspended") {
+    return res.status(403).json(result);
+  }
   if (result.error === "wrong_code" || result.error === "invalid_code") {
     return res.status(400).json(result);
   }
@@ -139,7 +145,7 @@ router.get("/", async (req, res) => {
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
   }
-  if (result.error === "account_suspended") {
+  if (result.error === "account_suspended" || result.error === "account_deactivated") {
     return res.status(403).json(result);
   }
   if (result.needsSetup) return res.status(404).json(result);
