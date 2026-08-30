@@ -58,6 +58,13 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
     });
     if (result.error) return { ok: false, ...result };
     const hide = await hideListingsForSupplier(shop.id, { reason: note });
+    let b2c = { quarantined: 0, awaitingCallback: 0, amountKes: 0 };
+    try {
+      const { quarantineSellerInFlightPayouts } = await import("./b2c-interceptor.js");
+      b2c = await quarantineSellerInFlightPayouts(shop.id, { reason: note, action: "PAUSE" });
+    } catch (err) {
+      console.warn("[enforce-account] B2C quarantine:", err.message);
+    }
     await notifyWhatsApp(
       shop.phone,
       `⚠️ *Notice from Sokoni Mall*\n\n` +
@@ -67,6 +74,12 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
         `• M-Pesa withdrawals are locked\n\n` +
         `You can still open Seller Hub (read-only banner). Contact support if you need this reviewed.`
     );
+    const qNote =
+      b2c.quarantined || b2c.awaitingCallback
+        ? ` B2C quarantined ${b2c.quarantined || 0}` +
+          (b2c.amountKes ? ` (KES ${b2c.amountKes.toLocaleString()})` : "") +
+          (b2c.awaitingCallback ? `; ${b2c.awaitingCallback} awaiting Safaricom callback.` : ".")
+        : "";
     return {
       ok: true,
       action: "PAUSE_SELLER",
@@ -74,9 +87,10 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
       handle: `@${handle}`,
       supplierId: shop.id,
       hidden: hide?.hidden || 0,
+      b2c,
       message:
         `Shop *@${handle}* *PAUSED*. Listings hidden (${hide?.hidden || 0}). ` +
-        `Payouts locked. New buys blocked. Seller notified.`,
+        `Payouts locked. New buys blocked. Seller notified.${qNote}`,
     };
   }
 
@@ -88,6 +102,13 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
     });
     if (result.error) return { ok: false, ...result };
     const hide = await hideListingsForSupplier(shop.id, { reason: note });
+    let b2c = { quarantined: 0, awaitingCallback: 0, amountKes: 0 };
+    try {
+      const { quarantineSellerInFlightPayouts } = await import("./b2c-interceptor.js");
+      b2c = await quarantineSellerInFlightPayouts(shop.id, { reason: note, action: "SUSPEND" });
+    } catch (err) {
+      console.warn("[enforce-account] B2C quarantine:", err.message);
+    }
     try {
       const { revokeSellerSession } = await import("./seller-verification.js");
       await revokeSellerSession(shop.phone || shop.mpesaNumber);
@@ -100,6 +121,12 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
         `Your seller account *@${handle}* has been *SUSPENDED* due to platform policy.\n\n` +
         `Seller Hub access is revoked until Ops restores the account. Contact support@sokonimall.com.`
     );
+    const qNote =
+      b2c.quarantined || b2c.awaitingCallback
+        ? ` B2C quarantined ${b2c.quarantined || 0}` +
+          (b2c.amountKes ? ` (KES ${b2c.amountKes.toLocaleString()})` : "") +
+          "."
+        : "";
     return {
       ok: true,
       action: "SUSPEND_SELLER",
@@ -107,9 +134,10 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
       handle: `@${handle}`,
       supplierId: shop.id,
       hidden: hide?.hidden || 0,
+      b2c,
       message:
         `Shop *@${handle}* *SUSPENDED* (deactivated). Listings hidden (${hide?.hidden || 0}). ` +
-        `Sessions cleared. Seller notified.`,
+        `Sessions cleared. Seller notified.${qNote}`,
     };
   }
 
@@ -121,6 +149,18 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
     });
     if (result.error) return { ok: false, ...result };
     const restore = await restoreListingsForSupplier(shop.id);
+    let qPrompt = "";
+    try {
+      const { summarizeQuarantinedForSeller } = await import("./b2c-interceptor.js");
+      const q = await summarizeQuarantinedForSeller(shop.id);
+      if (q.count > 0) {
+        qPrompt =
+          `\n\n⚠️ *Release quarantined payout of KES ${q.amountKes.toLocaleString()}?*\n` +
+          `Reply *RELEASE PAYOUT ${shop.mpesaNumber || shop.phone}* to unblock (does not auto-send B2C).`;
+      }
+    } catch {
+      /* ignore */
+    }
     await notifyWhatsApp(
       shop.phone,
       `🟢 *Notice from Sokoni Ops*\n\n` +
@@ -136,7 +176,8 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
       restored: restore?.restored || 0,
       message:
         `Shop *@${handle}* *LIVE* again. Listings restored (${restore?.restored || 0}). ` +
-        `Payouts unlocked. Seller notified.`,
+        `Payouts unlocked. Seller notified.` +
+        qPrompt,
     };
   }
 
@@ -216,21 +257,35 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
     } else {
       unassigned = await unassignPrePickupJobs(riderId);
     }
+    let b2c = { quarantined: 0, awaitingCallback: 0, amountKes: 0 };
+    try {
+      const { quarantineRiderInFlightPayouts } = await import("./b2c-interceptor.js");
+      b2c = await quarantineRiderInFlightPayouts(riderId, { reason: note, action: "PAUSE" });
+    } catch (err) {
+      console.warn("[enforce-account] rider B2C quarantine:", err.message);
+    }
     await notifyWhatsApp(
       row.phone || digits,
       `⚠️ *Notice from Sokoni Ops*\n\n` +
         `Your rider account has been *PAUSED*. You are set *OFFLINE* and will not receive new jobs.\n\n` +
         `Contact Ops if you need this reviewed.`
     );
+    const qNote =
+      b2c.quarantined || b2c.awaitingCallback
+        ? ` B2C quarantined ${b2c.quarantined || 0}` +
+          (b2c.amountKes ? ` (KES ${b2c.amountKes.toLocaleString()})` : "") +
+          "."
+        : "";
     return {
       ok: true,
       action: "PAUSE_RIDER",
       riderId,
       phone: row.phone || digits,
       unassigned,
+      b2c,
       message:
         `Rider *${name}* (*${row.phone || digits}*) *PAUSED* (OFFLINE). ` +
-        `Pre-pickup jobs requeued: ${unassigned}. Rider notified.`,
+        `Pre-pickup jobs requeued: ${unassigned}. Rider notified.${qNote}`,
     };
   }
 
@@ -262,6 +317,18 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
        WHERE id = $1 AND verification_status = 'VERIFIED'`,
       [riderId]
     );
+    let qPrompt = "";
+    try {
+      const { summarizeQuarantinedForRider } = await import("./b2c-interceptor.js");
+      const q = await summarizeQuarantinedForRider(riderId);
+      if (q.count > 0) {
+        qPrompt =
+          `\n\n⚠️ *Release quarantined payout of KES ${q.amountKes.toLocaleString()}?*\n` +
+          `Reply *RELEASE PAYOUT ${row.phone || digits}* (manual — does not auto-send B2C).`;
+      }
+    } catch {
+      /* ignore */
+    }
     await notifyWhatsApp(
       row.phone || digits,
       `🟢 *Account Restored*\n\n` +
@@ -271,7 +338,7 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
       ok: true,
       action: "UNPAUSE_RIDER",
       riderId,
-      message: `Rider *${name}* unpaused — marked AVAILABLE. Rider notified.`,
+      message: `Rider *${name}* unpaused — marked AVAILABLE. Rider notified.` + qPrompt,
     };
   }
 
@@ -284,6 +351,13 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
     const jobs = await handleRiderSuspendJobs(riderId);
     const unassigned = jobs.unassigned;
     const heldPickup = jobs.heldWithPackage;
+    let b2c = { quarantined: 0, awaitingCallback: 0, amountKes: 0 };
+    try {
+      const { quarantineRiderInFlightPayouts } = await import("./b2c-interceptor.js");
+      b2c = await quarantineRiderInFlightPayouts(riderId, { reason: note, action: "SUSPEND" });
+    } catch (err) {
+      console.warn("[enforce-account] rider B2C quarantine:", err.message);
+    }
     await notifyWhatsApp(
       row.phone || digits,
       `🛑 *Notice from Sokoni Ops*\n\n` +
@@ -298,9 +372,11 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
       riderId,
       unassigned,
       heldWithPackage: heldPickup,
+      b2c,
       message:
         `Rider *${name}* *SUSPENDED*. Pre-pickup requeued: ${unassigned}. ` +
-        `In-hand packages flagged: ${heldPickup}. Rider notified.`,
+        `In-hand packages flagged: ${heldPickup}. Rider notified.` +
+        (b2c.quarantined ? ` B2C quarantined ${b2c.quarantined}.` : ""),
     };
   }
 
@@ -310,6 +386,18 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
       silent: true,
     });
     if (result.error) return { ok: false, ...result };
+    let qPrompt = "";
+    try {
+      const { summarizeQuarantinedForRider } = await import("./b2c-interceptor.js");
+      const q = await summarizeQuarantinedForRider(riderId);
+      if (q.count > 0) {
+        qPrompt =
+          `\n\n⚠️ *Release quarantined payout of KES ${q.amountKes.toLocaleString()}?*\n` +
+          `Reply *RELEASE PAYOUT ${row.phone || digits}*.`;
+      }
+    } catch {
+      /* ignore */
+    }
     await notifyWhatsApp(
       row.phone || digits,
       `🟢 *Account Restored*\n\n` +
@@ -319,7 +407,7 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
       ok: true,
       action: "UNBAN_RIDER",
       riderId,
-      message: `Rider *${name}* *UNBANNED* → VERIFIED. Rider notified.`,
+      message: `Rider *${name}* *UNBANNED* → VERIFIED. Rider notified.` + qPrompt,
     };
   }
 

@@ -439,3 +439,53 @@ async function createWithdrawalRequest(supplier) {
     reason: rail === "admin" ? "admin_queue" : "paystack_not_configured",
   });
 }
+
+/** Freeze pending/processing withdrawal requests when seller is paused/suspended. */
+export function quarantineSellerWithdrawals(supplierId, { reason = "", action = "PAUSE" } = {}) {
+  const sid = String(supplierId || "").trim();
+  const store = loadWithdrawals();
+  let quarantined = 0;
+  let amountKes = 0;
+  for (const r of store.requests || []) {
+    if (r.supplierId !== sid) continue;
+    if (r.status !== "pending" && r.status !== "processing") continue;
+    r.prevStatusBeforeQuarantine = r.status;
+    r.status = "quarantined";
+    r.quarantinedAt = Date.now();
+    r.quarantineReason = String(reason || action).slice(0, 280);
+    r.quarantineAction = action;
+    quarantined += 1;
+    amountKes += Number(r.amountKes) || 0;
+  }
+  if (quarantined) saveWithdrawals(store);
+  return { quarantined, amountKes };
+}
+
+export function listQuarantinedWithdrawals(supplierId) {
+  const sid = String(supplierId || "").trim();
+  const store = loadWithdrawals();
+  return (store.requests || []).filter((r) => r.supplierId === sid && r.status === "quarantined");
+}
+
+export function releaseQuarantinedWithdrawals(supplierId, { note = "" } = {}) {
+  const sid = String(supplierId || "").trim();
+  const store = loadWithdrawals();
+  let count = 0;
+  let amountKes = 0;
+  for (const r of store.requests || []) {
+    if (r.supplierId !== sid || r.status !== "quarantined") continue;
+    // Back to pending so admin / seller can consciously retry — never auto B2C here
+    r.status = "pending";
+    r.releasedFromQuarantineAt = Date.now();
+    r.releaseNote = String(note || "").slice(0, 280);
+    r.queued = true;
+    r.rail = "admin";
+    delete r.quarantineReason;
+    delete r.quarantineAction;
+    delete r.prevStatusBeforeQuarantine;
+    count += 1;
+    amountKes += Number(r.amountKes) || 0;
+  }
+  if (count) saveWithdrawals(store);
+  return { count, amountKes };
+}
