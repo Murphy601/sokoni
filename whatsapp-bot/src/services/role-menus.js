@@ -37,8 +37,18 @@ export function isCustomerMenuIntent(text) {
   );
 }
 
+/** True when the message is a rider custody OTP command, not hub-apply intent. */
+export function isRiderPickupOtpCommand(text) {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  // PICKUP / PICK UP SKN-1015 5972 (hyphen optional, trailing junk ok)
+  return /^(?:pick\s*up|pickup)\s+skn-?\d{1,6}(?:-\d+)?(?:\s+\d{4})?\b/i.test(t);
+}
+
 export function isPickupMenuIntent(text) {
   const raw = String(text || "").trim();
+  // Must NOT steal rider "Pick up SKN-#### ####" → that caused false late-pickup penalties.
+  if (isRiderPickupOtpCommand(raw)) return false;
+
   const t = collapsePickupPhrase(raw).replace(/^#/, "");
   return (
     t === "pickup" ||
@@ -48,8 +58,9 @@ export function isPickupMenuIntent(text) {
     t === "pickup point menu" ||
     t === "become a pickup point" ||
     t === "apply pickup point" ||
-    /^pickup\b/.test(t) ||
     /^become a pickup\b/.test(t) ||
+    // Allow "pickup …" menu phrases, but never SKN / OTP custody commands.
+    (/^pickup\b/.test(t) && !/\bskn-?\d/i.test(t) && !/\b\d{4}\b/.test(t)) ||
     /^#(?:pickup|pickuppoint|pickup-point)\b/i.test(raw)
   );
 }
