@@ -65,13 +65,25 @@ export const adminBodaRouter = Router();
 adminBodaRouter.use(requireAdminToken);
 
 adminBodaRouter.get("/riders", async (req, res) => {
-  const result = await listRiders({
-    zone: req.query.zone,
-    status: req.query.status,
-    limit: req.query.limit,
-  });
-  if (result.error === "database_not_configured") return res.status(503).json(result);
-  res.json(result);
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    const result = await listRiders({
+      zone: req.query.zone,
+      status: req.query.status,
+      limit: req.query.limit,
+      q: req.query.q || req.query.phone || req.query.search,
+    });
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    if (result.error === "list_failed") return res.status(500).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error("[admin/boda] list riders failed:", err?.message || err);
+    return res.status(500).json({
+      error: "list_failed",
+      message: err?.message || "Could not list riders.",
+      riders: [],
+    });
+  }
 });
 
 adminBodaRouter.post("/riders", async (req, res) => {
@@ -89,6 +101,10 @@ adminBodaRouter.post("/riders/:id/verify", async (req, res) => {
     if (result.error === "database_not_configured") return res.status(503).json(result);
     if (result.error) return res.status(400).json(result);
     // DB already updated; WhatsApp notify is async inside the service.
+    console.log(
+      `[admin/boda] verify #${result.rider?.id} → ${result.rider?.verificationStatus} phone=${result.rider?.phone}`
+    );
+    res.setHeader("Cache-Control", "no-store");
     return res.json(result);
   } catch (err) {
     console.error("[admin/boda] verify failed:", err?.message || err);
