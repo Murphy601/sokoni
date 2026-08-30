@@ -56,6 +56,7 @@ function sessionAuthStatus(result) {
   ) {
     return 401;
   }
+  if (result.error === "account_suspended") return 403;
   if (result.error === "not_onboarded" || result.error === "not_approved") return 403;
   return 400;
 }
@@ -137,6 +138,9 @@ router.get("/", async (req, res) => {
   const result = await getSellerProfile(req.query.phone, sellerSessionFromReq(req));
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
+  }
+  if (result.error === "account_suspended") {
+    return res.status(403).json(result);
   }
   if (result.needsSetup) return res.status(404).json(result);
   if (result.error) return res.status(404).json(result);

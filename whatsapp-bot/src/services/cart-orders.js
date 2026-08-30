@@ -23,6 +23,7 @@ import {
   getOrder,
   allocateSknParentId,
 } from "./orders.js";
+import { assertSupplierCanSell } from "./enforce-account.js";
 
 export const CART_PARENT_KIND = "cart_parent";
 export const CART_CHILD_KIND = "cart_child";
@@ -148,6 +149,12 @@ export function createCartOrder({ customerKey, chatId, lines, details }) {
   lines.forEach((line, index) => {
     const product = line.product;
     if (!product) throw new Error(`missing_product_line_${index}`);
+    const sellGate = assertSupplierCanSell(product.supplierId);
+    if (!sellGate?.ok) {
+      const err = new Error(sellGate.message || "This store is currently unavailable.");
+      err.code = "shop_unavailable";
+      throw err;
+    }
     const fees = computeCartLineFees(product, line.quantity);
     feeLines.push(fees);
     const childId = `${parentId}-${index + 1}`;

@@ -217,6 +217,26 @@ router.post("/create", async (req, res) => {
     }
 
     const payload = { ...(req.body || {}), sellerId: auth.sellerId };
+    try {
+      const { findSupplierByPhone, getSupplier } = await import("../services/suppliers.js");
+      const { assertSupplierCanSell } = await import("../services/enforce-account.js");
+      const supplier =
+        (auth.phone && findSupplierByPhone(auth.phone)) ||
+        (auth.supplierId ? getSupplier(auth.supplierId) : null);
+      const sellGate = assertSupplierCanSell(supplier?.id || auth.supplierId);
+      if (!sellGate.ok) {
+        return res.status(403).json({
+          error: "shop_unavailable",
+          shopStatus: sellGate.shopStatus,
+          message:
+            sellGate.shopStatus === "paused"
+              ? "Your store is paused by Administration — new listings are disabled."
+              : sellGate.message || "This store is currently unavailable.",
+        });
+      }
+    } catch {
+      /* fail-soft */
+    }
     const result = await createProductListing(payload);
     if (result.error) {
       return res
@@ -400,6 +420,24 @@ router.get("/:id", async (req, res) => {
       (!product.inStock && req.query.includeHidden !== "true")
     ) {
       return res.status(404).json({ error: "not_found" });
+    }
+    try {
+      const { assertSupplierCanSell } = await import("../services/enforce-account.js");
+      const sellGate = assertSupplierCanSell(product.supplierId);
+      if (!sellGate.ok) {
+        return res.status(403).json({
+          error: "shop_unavailable",
+          shopStatus: sellGate.shopStatus,
+          message: sellGate.message || "Item Temporarily Unavailable",
+          product: {
+            ...toPublicProduct(product),
+            purchaseable: false,
+            temporarilyUnavailable: true,
+          },
+        });
+      }
+    } catch {
+      /* fail-soft */
     }
     res.json({ product: toPublicProduct(product) });
   } catch (err) {

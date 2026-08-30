@@ -396,7 +396,7 @@ export async function registerRiderApplication(input = {}) {
   };
 }
 
-export async function setRiderVerificationStatus(riderId, status, { reason = "" } = {}) {
+export async function setRiderVerificationStatus(riderId, status, { reason = "", silent = false } = {}) {
   if (!isDbEnabled()) return { error: "database_not_configured" };
   const st = String(status || "").toUpperCase();
   if (!["PENDING", "VERIFIED", "SUSPENDED", "REJECTED"].includes(st)) {
@@ -416,6 +416,8 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "" 
   );
   if (!rows[0]) return { error: "not_found", message: "Rider not found." };
   const rider = mapRider(rows[0]);
+
+  if (silent) return rider;
 
   try {
     const { sendText } = await import("./whatsapp.js");
@@ -1971,6 +1973,29 @@ export async function setRiderAvailability({ phone, customerKey = "", available 
   if (!isDbEnabled()) return { error: "database_not_configured" };
   const riderPhone = normalizeRiderPhone(phone) || normalizeRiderPhone(customerKey);
   if (!riderPhone) return { error: "invalid" };
+
+  if (available) {
+    const check = await query(
+      `SELECT verification_status, suspend_reason FROM riders WHERE phone = $1 LIMIT 1`,
+      [riderPhone]
+    );
+    const row = check.rows[0];
+    if (!row) return { error: "not_a_rider", message: "Verified rider profile required." };
+    if (String(row.verification_status || "").toUpperCase() === "SUSPENDED") {
+      return {
+        error: "suspended",
+        message: "🛑 Account Suspended due to platform policy violations.",
+      };
+    }
+    if (String(row.suspend_reason || "").startsWith("ADMIN_PAUSE:")) {
+      return {
+        error: "admin_paused",
+        message:
+          "⚠️ Your rider account is temporarily paused by Administration. Contact Ops.",
+      };
+    }
+  }
+
   const { rows } = await query(
     `UPDATE riders SET is_available = $2, updated_at = NOW()
       WHERE phone = $1 AND verification_status = 'VERIFIED'

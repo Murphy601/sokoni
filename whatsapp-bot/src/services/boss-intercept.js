@@ -25,8 +25,8 @@ export function looksLikeAdminProbe(text) {
   if (/^\s*FORCE(_|\s+)(RELEASE|PAYOUT|RETURN)\b/i.test(t)) return true;
   if (/^\s*REFUND\s+BUYER\b/i.test(t)) return true;
   if (/^\s*SPLIT\s+ESCROW\b/i.test(t)) return true;
-  if (/^\s*PAUSE\s+(SELLER|BUYER|BOT|PAYOUTS?|SHOP)\b/i.test(t)) return true;
-  if (/^\s*UNPAUSE\s+(SELLER|BUYER|SHOP)\b/i.test(t)) return true;
+  if (/^\s*PAUSE\s+(SELLER|BUYER|BOT|PAYOUTS?|SHOP|RIDER)\b/i.test(t)) return true;
+  if (/^\s*UNPAUSE\s+(SELLER|BUYER|SHOP|RIDER)\b/i.test(t)) return true;
   if (/^\s*MUTE\s+BUYER\b/i.test(t)) return true;
   if (/^\s*FREEZE\s+WALLET\b/i.test(t)) return true;
   if (/^\s*SYSTEM\s+(PAUSE|RESUME|LOCKDOWN)\b/i.test(t)) return true;
@@ -34,7 +34,7 @@ export function looksLikeAdminProbe(text) {
   if (/^\s*PURGE\s+RATING\b/i.test(t)) return true;
   if (/^\s*PENALIZE\b/i.test(t)) return true;
   if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
-  if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
+  if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
   if (/^\s*UNBAN\b/i.test(t)) return true;
   if (/^\s*REASSIGN\s+RIDER\b/i.test(t)) return true;

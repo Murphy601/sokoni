@@ -294,13 +294,15 @@ export async function shouldRouteIncomingAsAdmin(body, parsed) {
     /^\s*REFUND\s+BUYER\b/i.test(text) ||
     /^\s*SPLIT\s+ESCROW\b/i.test(text) ||
     /^\s*PAUSE\s+PAYOUTS?\b/i.test(text) ||
+    /^\s*PAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
+    /^\s*UNPAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
     /^\s*VERIFY\s+SHOP\b/i.test(text) ||
-    /^\s*SUSPEND\s+SHOP\b/i.test(text) ||
+    /^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(text) ||
     /^\s*SET\s+COMMISSION\b/i.test(text) ||
     /^\s*HIDE\s+ITEM\b/i.test(text) ||
     /^\s*REASSIGN\s+RIDER\b/i.test(text) ||
     /^\s*FORCE\s+RETURN\b/i.test(text) ||
-    /^\s*UNBAN\s+RIDER\b/i.test(text) ||
+    /^\s*UNBAN\s+(RIDER|SELLER|SHOP)\b/i.test(text) ||
     /^\s*CLEAR\s+SESSION\b/i.test(text) ||
     /^\s*SET\s+MODE\b/i.test(text) ||
     /^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(text) ||
