@@ -1,26 +1,30 @@
 /**
- * Cumulative weighted rating + Sokoni badge tiers.
- * NewRating = (current × count + newStars) / (count + 1)
- * Bonuses/penalties are additive deltas (review count unchanged).
+ * Rolling-window ratings (last 100) + Sokoni badge tiers.
+ *
+ * DisplayedRating = sum(last 100 pool entries) / count(up to 100)
+ *
+ * New profiles start at 5.0 but are UNRATED until MIN_PUBLIC_REVIEWS buyer stars.
+ * Penalties/bonuses push a synthetic value into the same pool so they dilute over time.
  */
 
 export const RATING_BOUNDS = { min: 0, max: 5 };
+export const ROLLING_WINDOW = 100;
+/** Hide numeric score on site until this many buyer star reviews. */
+export const MIN_PUBLIC_REVIEWS = 5;
+/** Default grace score before any pool entries. */
+export const INITIAL_RATING = 5;
 
 export const RATING_DELTAS = Object.freeze({
-  /** Dispute-free order completion (seller). */
   COMPLETION_BONUS: 0.05,
-  /** Rider arrived within delivery window. */
   ON_TIME_RIDER: 0.02,
-  /** Buyer-won dispute (seller). */
   BUYER_WON_DISPUTE: -0.5,
-  /** Seller cancelled an accepted order. */
   SELLER_CANCEL: -0.3,
-  /** Rider late pickup / no-show. */
   RIDER_LATE: -0.2,
 });
 
-/** Demote Top Rated / Legend when score falls below this. */
 export const BADGE_DEMOTION_FLOOR = 4.5;
+/** Verified merchant/rider minimum displayed rating. */
+export const VERIFIED_MIN_RATING = 4.2;
 
 /**
  * @param {number} value
@@ -33,44 +37,133 @@ export function clampRating(value) {
 }
 
 /**
- * Weighted average for a new 1–5 star review.
- * @param {number} currentRating
- * @param {number} totalReviews
- * @param {number} newStars 1–5
+ * Normalize a stored pool to [{ v, kind, at, id? }, ...] (newest last).
+ * @param {unknown} raw
+ * @returns {{ v: number, kind: string, at: string, id?: string, orderRef?: string }[]}
  */
-export function applyWeightedStar(currentRating, totalReviews, newStars) {
-  const stars = Number(newStars);
-  if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
-    throw new Error("newStars must be between 1 and 5");
+export function normalizePool(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    if (item == null) continue;
+    if (typeof item === "number" && Number.isFinite(item)) {
+      out.push({ v: clampRating(item), kind: "star", at: new Date(0).toISOString() });
+      continue;
+    }
+    if (typeof item === "object") {
+      const v = Number(item.v ?? item.value ?? item.stars);
+      if (!Number.isFinite(v)) continue;
+      out.push({
+        v: clampRating(v),
+        kind: String(item.kind || "star"),
+        at: String(item.at || new Date().toISOString()),
+        id: item.id ? String(item.id) : undefined,
+        orderRef: item.orderRef ? String(item.orderRef) : undefined,
+      });
+    }
   }
-  const count = Math.max(0, Math.floor(Number(totalReviews) || 0));
-  // First review always starts from 0 pool (ignore legacy default 5.0 with count 0).
-  const current = count === 0 ? 0 : Number(currentRating) || 0;
-  const next = (current * count + stars) / (count + 1);
+  return out.slice(-ROLLING_WINDOW);
+}
+
+/**
+ * Mean of last N pool values (up to ROLLING_WINDOW).
+ * Empty pool → INITIAL_RATING with unrated=true.
+ */
+export function scoreFromPool(poolInput) {
+  const pool = normalizePool(poolInput);
+  const window = pool.slice(-ROLLING_WINDOW);
+  const buyerStars = window.filter((e) => e.kind === "star").length;
+  if (!window.length) {
+    return {
+      rating: INITIAL_RATING,
+      reviewCount: 0,
+      buyerReviewCount: 0,
+      unrated: true,
+      displayLabel: "UNRATED",
+      pool: [],
+    };
+  }
+  const sum = window.reduce((acc, e) => acc + e.v, 0);
+  const rating = clampRating(sum / window.length);
+  const unrated = buyerStars < MIN_PUBLIC_REVIEWS;
   return {
-    rating: clampRating(next),
-    reviewCount: count + 1,
+    rating,
+    reviewCount: window.length,
+    buyerReviewCount: buyerStars,
+    unrated,
+    displayLabel: unrated ? "UNRATED" : rating.toFixed(2),
+    pool: window,
   };
 }
 
 /**
- * Additive bonus/penalty — does not change review count.
- * @param {number} currentRating
- * @param {number} delta
- * @param {number} [totalReviews]
+ * Push a buyer star (1–5) into the rolling pool.
  */
+export function pushStarToPool(poolInput, stars, meta = {}) {
+  const starsN = Number(stars);
+  if (!Number.isFinite(starsN) || starsN < 1 || starsN > 5) {
+    throw new Error("stars must be between 1 and 5");
+  }
+  const pool = normalizePool(poolInput);
+  pool.push({
+    v: clampRating(starsN),
+    kind: "star",
+    at: new Date().toISOString(),
+    id: meta.id || `s_${Date.now()}`,
+    orderRef: meta.orderRef,
+  });
+  const trimmed = pool.slice(-ROLLING_WINDOW);
+  return { ...scoreFromPool(trimmed), pool: trimmed };
+}
+
+/**
+ * Push a system penalty/bonus into the pool as a synthetic rating near current ± delta.
+ * Dilutes naturally once 100 newer entries arrive.
+ */
+export function pushDeltaToPool(poolInput, delta, meta = {}) {
+  const current = scoreFromPool(poolInput);
+  const synthetic = clampRating(current.rating + Number(delta || 0));
+  const pool = normalizePool(poolInput);
+  pool.push({
+    v: synthetic,
+    kind: Number(delta) >= 0 ? "bonus" : "penalty",
+    at: new Date().toISOString(),
+    id: meta.id || `d_${Date.now()}`,
+    orderRef: meta.orderRef,
+  });
+  const trimmed = pool.slice(-ROLLING_WINDOW);
+  return { ...scoreFromPool(trimmed), pool: trimmed };
+}
+
+/**
+ * Remove a pool entry by id and recalc (Boss purge unfair review).
+ */
+export function purgePoolEntry(poolInput, entryId) {
+  const id = String(entryId || "");
+  const pool = normalizePool(poolInput).filter((e) => e.id !== id);
+  return { ...scoreFromPool(pool), pool, purged: Boolean(id) };
+}
+
+/** @deprecated — use pushStarToPool; kept for transitional imports */
+export function applyWeightedStar(currentRating, totalReviews, newStars) {
+  const count = Math.max(0, Math.floor(Number(totalReviews) || 0));
+  const pool = [];
+  if (count > 0) {
+    const cur = Number(currentRating) || INITIAL_RATING;
+    for (let i = 0; i < Math.min(count, ROLLING_WINDOW); i++) pool.push(cur);
+  }
+  return pushStarToPool(pool, newStars);
+}
+
+/** @deprecated — use pushDeltaToPool */
 export function applyRatingDelta(currentRating, delta, totalReviews = 0) {
   const count = Math.max(0, Math.floor(Number(totalReviews) || 0));
-  const base = count === 0 && !(Number(currentRating) > 0) ? 0 : Number(currentRating) || 0;
-  return {
-    rating: clampRating(base + Number(delta || 0)),
-    reviewCount: count,
-  };
+  const pool = [];
+  const cur = count === 0 ? INITIAL_RATING : Number(currentRating) || INITIAL_RATING;
+  for (let i = 0; i < Math.min(count, ROLLING_WINDOW); i++) pool.push({ v: cur, kind: "star", at: "" });
+  return pushDeltaToPool(pool, delta);
 }
 
-/**
- * Dispute rate = disputes / completed orders (0 if no completions).
- */
 export function disputeRate(disputeCount, completedOrders) {
   const done = Math.max(0, Number(completedOrders) || 0);
   if (done <= 0) return 0;
@@ -78,15 +171,7 @@ export function disputeRate(disputeCount, completedOrders) {
 }
 
 /**
- * Badge tier ladder (sellers & riders share the same thresholds).
- * @param {{
- *   completedOrders?: number,
- *   rating?: number,
- *   isVerified?: boolean,
- *   disputeCount?: number,
- *   unresolvedDisputes?: number,
- *   previousTier?: string,
- * }} stats
+ * Badge tier ladder.
  */
 export function deriveBadgeTier(stats = {}) {
   const completed = Math.max(0, Number(stats.completedOrders) || 0);
@@ -95,22 +180,23 @@ export function deriveBadgeTier(stats = {}) {
   const disputes = Math.max(0, Number(stats.disputeCount) || 0);
   const unresolved = Math.max(0, Number(stats.unresolvedDisputes) || 0);
   const dRate = disputeRate(disputes, completed);
-  const previous = String(stats.previousTier || "").toLowerCase().trim();
-  const prev = previous;
+  const prev = String(stats.previousTier || "").toLowerCase().trim();
+  const unrated = Boolean(stats.unrated);
 
   /** @type {{ id: string, label: string, icon: string, privileges?: string }[]} */
   const badges = [];
   let tier = "newbie";
 
-  const legendOk =
-    completed >= 200 && rating >= 4.9 && unresolved === 0;
-  const topOk =
-    completed >= 50 && rating >= 4.7 && dRate < 0.02;
-  const verifiedOk = completed >= 10 && rating >= 4.0 && verified;
+  const effectiveRating = unrated ? 0 : rating;
 
-  // Demotion: Top Rated / Legend paused if score < 4.5
+  const legendOk = completed >= 200 && effectiveRating >= 4.9 && unresolved === 0;
+  const topOk = completed >= 50 && effectiveRating >= 4.7 && dRate < 0.02;
+  const verifiedOk =
+    completed >= 10 && effectiveRating >= VERIFIED_MIN_RATING && verified;
+
   const demoted =
     (prev === "top_rated" || prev === "legend" || prev === "power_seller") &&
+    !unrated &&
     rating < BADGE_DEMOTION_FLOOR;
 
   if (legendOk && !demoted) {
@@ -127,7 +213,7 @@ export function deriveBadgeTier(stats = {}) {
       id: "top_rated",
       label: `Top Rated ★ ${rating.toFixed(1)}`,
       icon: "rating",
-      privileges: "reduced_commission_priority_search",
+      privileges: "reduced_commission_4pct",
     });
   } else if (verifiedOk) {
     tier = "verified";
@@ -135,7 +221,7 @@ export function deriveBadgeTier(stats = {}) {
       id: "verified",
       label: "Verified",
       icon: "verified",
-      privileges: "verified_checkmark",
+      privileges: "verified_checkmark_rank_boost",
     });
   } else {
     tier = "newbie";
@@ -143,18 +229,11 @@ export function deriveBadgeTier(stats = {}) {
       id: "newbie",
       label: "Newbie",
       icon: "newbie",
-      privileges: "standard_commission",
+      privileges: "standard_commission_5pct",
     });
   }
 
-  // Always surface sold count when useful
-  if (completed >= 1 && tier !== "newbie") {
-    badges.push({
-      id: "sales",
-      label: `${completed.toLocaleString()} sold`,
-      icon: "sales",
-    });
-  } else if (completed >= 1 && !badges.some((b) => b.id === "sales")) {
+  if (completed >= 1 && !badges.some((b) => b.id === "sales")) {
     badges.push({
       id: "sales",
       label: `${completed.toLocaleString()} sold`,
@@ -164,9 +243,7 @@ export function deriveBadgeTier(stats = {}) {
 
   const demotionNotice =
     demoted && (prev === "top_rated" || prev === "power_seller" || prev === "legend")
-      ? `Alert: Your rating dropped to ${rating.toFixed(1)}. Your ${
-          prev === "legend" ? "Sokoni Legend" : "Power Seller"
-        } badge has been paused until your score reaches 4.7 again.`
+      ? `Alert: Your score dropped to ${rating.toFixed(1)}. Your Top Rated badge has been paused until your rating reaches 4.7 again.`
       : null;
 
   return {
@@ -175,12 +252,12 @@ export function deriveBadgeTier(stats = {}) {
     demoted: Boolean(demoted),
     demotionNotice,
     rating,
+    unrated,
     completedOrders: completed,
     disputeRate: Math.round(dRate * 10000) / 10000,
   };
 }
 
-/** @deprecated alias — prefer deriveBadgeTier */
 export function deriveTrustBadges(stats) {
   return deriveBadgeTier(stats).badges;
 }

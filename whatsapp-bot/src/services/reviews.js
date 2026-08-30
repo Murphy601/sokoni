@@ -106,6 +106,7 @@ async function applySellerStarsForOrder(order, stars, customerKey) {
       "../db/repositories/social.js"
     );
     const { findOrCreateBuyerUserByPhone } = await import("../db/repositories/users.js");
+    const { query } = await import("../db/pool.js");
     const sellerUserId = await ensureOrderSellerUserId(order);
     if (!sellerUserId) return null;
 
@@ -126,6 +127,26 @@ async function applySellerStarsForOrder(order, stars, customerKey) {
       buyerPhone: phone,
       direction: "buyer_to_seller",
     });
+    if (result?.success && result.review) {
+      try {
+        const { getSellerRatingProfile } = await import("./rating-engine.js");
+        const profile = await getSellerRatingProfile(sellerUserId);
+        const { rows } = await query(`SELECT handle FROM users WHERE id = $1 LIMIT 1`, [
+          sellerUserId,
+        ]);
+        result.review.handle = rows?.[0]?.handle
+          ? `@${String(rows[0].handle).replace(/^@/, "")}`
+          : null;
+        if (profile) {
+          result.review.weightedRating = profile.avgRating;
+          result.review.weightedCount = profile.totalReviews;
+          result.review.unrated = profile.unrated;
+          result.review.badgeTier = profile.badgeTier;
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
     return result;
   } catch (err) {
     console.warn("[reviews] seller star apply:", err.message);
@@ -264,20 +285,27 @@ export async function handleReviewReply(customerKey, text) {
 
     // Seller (or platform) stars
     const order = getOrder(pending.orderId);
-    let weightedNote = "";
+    let receipt = "";
+    let weighted = null;
     if (pending.rateSeller !== false && order) {
       const result = await applySellerStarsForOrder(order, stars, customerKey);
       if (result?.success && result.review?.weightedRating != null) {
-        weightedNote =
-          `\n\nShop score is now *${Number(result.review.weightedRating).toFixed(2)}* ★` +
-          (result.review.badgeTier ? ` · badge *${result.review.badgeTier}*` : "") +
+        weighted = result.review;
+        const handle =
+          result.review.handle ||
+          (order.sellerHandle ? `@${String(order.sellerHandle).replace(/^@/, "")}` : "this shop");
+        const label = result.review.unrated
+          ? "UNRATED (needs 5 reviews)"
+          : `${Number(result.review.weightedRating).toFixed(1)}`;
+        const count = result.review.weightedCount ?? result.review.totalReviews ?? "";
+        receipt =
+          `\n\nThank you! *${handle}*'s updated score is now ⭐ *${label}*` +
+          (count !== "" && !result.review.unrated ? ` (${count} reviews)` : "") +
           `.`;
       } else if (result?.error === "review_exists") {
-        weightedNote = `\n\n_You already rated this seller for ${order.id}._`;
+        receipt = `\n\n_You already rated this seller for ${order.id}._`;
       }
     }
-
-    setPendingReview(customerKey, { ...pending, step: "comment", stars, rateRider: false });
 
     addReview({
       orderId: pending.orderId,
@@ -288,11 +316,65 @@ export async function handleReviewReply(customerKey, text) {
       source: "whatsapp",
     });
 
+    // 1–3 stars → short why prompt (2 options)
+    if (stars <= 3) {
+      setPendingReview(customerKey, {
+        ...pending,
+        step: "low_feedback",
+        stars,
+        rateRider: false,
+        weighted,
+      });
+      await sendText(
+        customerKey,
+        `Thanks for the ${starsLabel(stars)}.${receipt}\n\n` +
+          `What went wrong? Reply with a number:\n` +
+          `*1* Late delivery\n` +
+          `*2* Bad quality / not as described\n` +
+          `*3* Rude service\n` +
+          `*4* Other — or type a short note\n\n` +
+          `_Or type *skip*._`
+      );
+      return true;
+    }
+
+    setPendingReview(customerKey, { ...pending, step: "comment", stars, rateRider: false });
+
     await sendText(
       customerKey,
-      `Thanks for the ${starsLabel(stars)} rating!${weightedNote}\n\n` +
+      `Thanks for the ${starsLabel(stars)} rating!${receipt}\n\n` +
         `Want to add a short comment? Reply with your thoughts, or type *skip*.\n\n` +
         `${siteUrlLine("Shop again on our website")}`
+    );
+    return true;
+  }
+
+  if (pending.step === "low_feedback") {
+    if (/^skip$/i.test(trimmed)) {
+      clearPendingReview(customerKey);
+      await sendText(customerKey, `Asante — noted.\n\n${siteUrlLine()}`);
+      return true;
+    }
+    const map = {
+      1: "Late delivery",
+      2: "Bad quality / not as described",
+      3: "Rude service",
+    };
+    const reason = map[trimmed] || trimmed.slice(0, 200);
+    const order = getOrder(pending.orderId);
+    addReview({
+      orderId: pending.orderId,
+      customerName: order?.customerName || "",
+      productName: pending.productName || order?.productName || "",
+      stars: pending.stars,
+      comment: reason,
+      source: "whatsapp-low-feedback",
+    });
+    clearPendingReview(customerKey);
+    await sendText(
+      customerKey,
+      `Got it — *${reason}*. We'll use this to coach the shop/rider.\n\n` +
+        `${reviewsUrlLine()}\n${siteUrlLine("Browse more deals")}`
     );
     return true;
   }

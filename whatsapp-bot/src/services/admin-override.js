@@ -73,6 +73,8 @@ export function isOverrideCommand(text) {
   if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
   if (/^\s*SET\s+RATING\b/i.test(t)) return true;
+  if (/^\s*OVERRIDE\s+RATING\b/i.test(t)) return true;
+  if (/^\s*PURGE\s+RATING\b/i.test(t)) return true;
   if (/^\s*PENALIZE\s+(RIDER|SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*HIDE\s+ITEM\b/i.test(t)) return true;
   if (/^\s*REASSIGN\s+RIDER\b/i.test(t)) return true;
@@ -123,8 +125,13 @@ export function normalizeMasterCommand(raw) {
   const setComm = t.match(/^SET\s+COMMISSION\s+(@?[\w.-]+)\s+(\d{1,2}(?:\.\d+)?)/i);
   if (setComm) return `SET_COMMISSION ${setComm[1]} ${setComm[2]}`;
 
-  const setRating = t.match(/^SET\s+RATING\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  const setRating = t.match(/^(?:SET|OVERRIDE)\s+RATING\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
   if (setRating) return `SET_RATING ${setRating[1]} ${setRating[2]}`;
+
+  const purgeRating = t.match(/^PURGE\s+RATING\s+(SELLER|RIDER)\s+(\d+)\s+(\S+)/i);
+  if (purgeRating) {
+    return `PURGE_RATING ${purgeRating[1].toUpperCase()} ${purgeRating[2]} ${purgeRating[3]}`;
+  }
 
   const penalize = t.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
   if (penalize) return `PENALIZE ${penalize[1].toUpperCase()} ${penalize[2]} ${penalize[3]}`;
@@ -264,7 +271,8 @@ function overrideHelp() {
     `• *VERIFY SHOP @handle*\n` +
     `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
-    `• *SET RATING @handle 4.8*\n` +
+    `• *SET RATING @handle 4.8* / *OVERRIDE RATING @handle 4.8*\n` +
+    `• *PURGE RATING SELLER userId poolEntryId*\n` +
     `• *PENALIZE RIDER +254… 0.5* / *PENALIZE SELLER @handle 0.3*\n` +
     `• *HIDE ITEM product_id*\n\n` +
     `*Riders*\n` +
@@ -876,8 +884,43 @@ export async function executeMasterAdminCommand(
       action: "set_rating",
       reply: ack(
         result?.ok
-          ? `Seller *${target}* rating set to *${Number(result.rating).toFixed(2)}* · ${result.reviewCount || 0} reviews · badge *${result.badgeTier || "newbie"}*.`
+          ? `Seller *${target}* rating overridden to *${Number(result.rating).toFixed(2)}* · badge *${result.badgeTier || "newbie"}*.`
           : `Could not set rating (${result?.reason || "error"}).`
+      ),
+    };
+  }
+
+  const purgeRatingCmd = cmd.match(/^PURGE_RATING\s+(SELLER|RIDER)\s+(\d+)\s+(\S+)/i);
+  if (purgeRatingCmd) {
+    const { purgeRatingEntry } = await import("./rating-engine.js");
+    const kind = purgeRatingCmd[1].toUpperCase() === "RIDER" ? "rider" : "seller";
+    const subjectId = Number(purgeRatingCmd[2]);
+    const poolEntryId = purgeRatingCmd[3];
+    const result = await purgeRatingEntry({
+      subjectType: kind,
+      subjectId,
+      poolEntryId,
+      actorLabel: String(adminLabel).slice(0, 80),
+    });
+    await logBossAction({
+      action: "PURGE_RATING",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: kind,
+      targetId: String(subjectId),
+      source,
+      success: Boolean(result?.ok),
+      metadata: { poolEntryId },
+    });
+    return {
+      ok: Boolean(result?.ok),
+      action: "purge_rating",
+      reply: ack(
+        result?.ok
+          ? `Purged unfair entry \`${poolEntryId}\`. New score *${Number(result.rating).toFixed(2)}*${
+              result.unrated ? " (UNRATED)" : ""
+            }.`
+          : `Purge failed (${result?.reason || "error"}).`
       ),
     };
   }

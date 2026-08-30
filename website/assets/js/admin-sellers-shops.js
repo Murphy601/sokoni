@@ -225,6 +225,7 @@
                 <button type="button" class="js-act" data-act="commission" data-id="${escapeHtml(shop.id)}">Force commission tier</button>
                 <button type="button" class="js-act" data-act="payout-hold" data-id="${escapeHtml(shop.id)}">${shop.payoutHold ? "Release payout hold" : "Manual escrow payout hold"}</button>
                 <button type="button" class="js-act" data-act="handle" data-id="${escapeHtml(shop.id)}">Override shop handle</button>
+                <button type="button" class="js-act" data-act="ratings" data-id="${escapeHtml(shop.id)}">Rating log / purge unfair</button>
                 <button type="button" class="js-act" data-act="edit" data-id="${escapeHtml(shop.id)}">Impersonate / edit shop</button>
                 <a href="admin-seller-listings.html">Flag / hide item → Listings</a>
               </div>
@@ -422,12 +423,84 @@
       } else if (act === "edit") {
         openEditModal(shopId);
         return;
+      } else if (act === "ratings") {
+        await openRatingsPurge(shopId);
+        return;
       } else {
         return;
       }
       await loadShops();
     } catch (err) {
       setStatus(err?.message || "Action failed", true);
+    }
+  }
+
+  async function openRatingsPurge(shopId) {
+    const shop = shopCache.get(shopId) || {};
+    let sellerUserId = Number(shop.sellerUserId || shop.userId || 0);
+    const CMD = `${API_BASE}/admin/command`;
+    const handle = String(shop.shopHandle || "").replace(/^@/, "");
+    setStatus("Loading rating log…");
+    try {
+      const url = sellerUserId
+        ? `${CMD}/ratings/seller/${sellerUserId}`
+        : `${CMD}/ratings/by-handle/${encodeURIComponent(handle)}`;
+      if (!sellerUserId && !handle) {
+        setStatus("Shop has no handle or seller user id for ratings.", true);
+        return;
+      }
+      const res = await fetch(url, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || "Could not load ratings");
+      sellerUserId = Number(data.subjectId || sellerUserId);
+      const events = Array.isArray(data.events)
+        ? data.events.filter((e) => !e.purged && e.poolEntryId)
+        : [];
+      if (!events.length) {
+        setStatus(
+          `No purgeable rating entries. Profile: ${
+            data.profile?.displayLabel || data.profile?.avgRating || "—"
+          }`
+        );
+        return;
+      }
+      const lines = events.slice(0, 12).map(
+        (e, i) =>
+          `${i + 1}. ${e.eventKind} ${e.stars != null ? e.stars + "★" : e.delta || ""} → ${Number(
+            e.ratingAfter
+          ).toFixed(2)} (${e.poolEntryId})`
+      );
+      const pick = window.prompt(
+        `Purge Unfair Review for ${shop.shopHandle || shopId}\nScore: ${
+          data.profile?.unrated ? "UNRATED" : data.profile?.avgRating
+        }\n\n${lines.join("\n")}\n\nEnter line number to purge (or cancel):`,
+        "1"
+      );
+      if (pick == null || pick === "") return;
+      const idx = Number(pick) - 1;
+      const entry = events[idx];
+      if (!entry?.poolEntryId) {
+        setStatus("Invalid selection", true);
+        return;
+      }
+      if (!window.confirm(`Purge ${entry.poolEntryId} (${entry.eventKind})?`)) return;
+      const purgeRes = await fetch(`${CMD}/ratings/purge`, {
+        method: "POST",
+        headers: adminHeaders(true),
+        body: JSON.stringify({
+          subjectType: "seller",
+          subjectId: sellerUserId,
+          poolEntryId: entry.poolEntryId,
+          adminLabel: "shops-desk",
+        }),
+      });
+      const purged = await purgeRes.json().catch(() => ({}));
+      if (!purgeRes.ok) throw new Error(purged.error || "Purge failed");
+      setStatus(
+        `Purged. New score ${purged.unrated ? "UNRATED" : Number(purged.rating).toFixed(2)}`
+      );
+    } catch (err) {
+      setStatus(err?.message || "Ratings purge failed", true);
     }
   }
 
