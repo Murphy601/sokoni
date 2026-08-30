@@ -5,6 +5,8 @@
 import {
   getSupplierByHandle,
   getSupplier,
+  findSupplierByPhone,
+  listSuppliers,
   setSellerShopStatus,
   isShopPubliclyVisible,
   sellerPayoutsHeld,
@@ -613,6 +615,101 @@ export function assertSupplierCanSell(supplierId) {
         ? "This store is temporarily unavailable."
         : "This store is currently unavailable.",
   };
+}
+
+/** Gate a catalog product by supplier id, shop handle, or seller phone. */
+export function assertProductShopVisible(product) {
+  if (!product) return { ok: true };
+  if (product.supplierId) {
+    const byId = assertSupplierCanSell(product.supplierId);
+    if (!byId.ok) return byId;
+  }
+  try {
+    const { getSupplierByHandle, findSupplierByPhone } = requireSuppliersLazy();
+    const handle = String(product.shopHandle || product.sellerHandle || "")
+      .trim()
+      .replace(/^@+/, "");
+    if (handle) {
+      const byHandle = getSupplierByHandle(handle);
+      if (byHandle && !isShopPubliclyVisible(byHandle)) {
+        const st = String(byHandle.shopStatus || "live").toLowerCase();
+        return {
+          ok: false,
+          error: "shop_unavailable",
+          shopStatus: st,
+          message:
+            st === "paused"
+              ? "This store is temporarily unavailable."
+              : "This store is currently unavailable.",
+        };
+      }
+    }
+    const phone = product.sellerPhone || product.phone;
+    if (phone) {
+      const byPhone = findSupplierByPhone(phone);
+      if (byPhone && !isShopPubliclyVisible(byPhone)) {
+        const st = String(byPhone.shopStatus || "live").toLowerCase();
+        return {
+          ok: false,
+          error: "shop_unavailable",
+          shopStatus: st,
+          message:
+            st === "paused"
+              ? "This store is temporarily unavailable."
+              : "This store is currently unavailable.",
+        };
+      }
+    }
+  } catch {
+    /* fail-soft */
+  }
+  return { ok: true };
+}
+
+function requireSuppliersLazy() {
+  return {
+    getSupplierByHandle,
+    findSupplierByPhone,
+  };
+}
+
+/** Build lookup sets for paused/deactivated shops (list/search filter). */
+export function blockedShopLookup() {
+  const ids = new Set();
+  const handles = new Set();
+  const phones = new Set();
+  try {
+    for (const s of listSuppliers() || []) {
+      if (isShopPubliclyVisible(s)) continue;
+      if (s.id) ids.add(String(s.id));
+      for (const raw of [s.shopHandle, s.businessName, s.shopName]) {
+        const h = String(raw || "")
+          .trim()
+          .replace(/^@+/, "")
+          .toLowerCase();
+        if (h) handles.add(h);
+      }
+      const d = String(s.phone || s.mpesaNumber || "").replace(/\D/g, "");
+      if (d.length >= 9) phones.add(d.slice(-9));
+    }
+  } catch {
+    /* ignore */
+  }
+  return { ids, handles, phones };
+}
+
+export function isProductFromBlockedShop(product, lookup = null) {
+  const blocked = lookup || blockedShopLookup();
+  if (!product) return false;
+  if (product.supplierId && blocked.ids.has(String(product.supplierId))) return true;
+  const handle = String(product.shopHandle || product.sellerHandle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  if (handle && blocked.handles.has(handle)) return true;
+  const d = String(product.sellerPhone || product.phone || "").replace(/\D/g, "");
+  if (d.length >= 9 && blocked.phones.has(d.slice(-9))) return true;
+  return false;
 }
 
 export { isShopPubliclyVisible, sellerPayoutsHeld };
