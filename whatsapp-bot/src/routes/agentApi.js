@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { runAgentTurn, agentMeta } from "../services/ai-agent.js";
-import { synthesizeNeuralSpeech, neuralTtsMeta } from "../services/neural-tts.js";
 
 const router = Router();
 const webSessions = new Map();
@@ -31,36 +30,6 @@ function pushWebHistory(sessionId, role, content) {
 
 router.get("/meta", (_req, res) => {
   res.json(agentMeta());
-});
-
-/**
- * POST /api/agent/speak — neural TTS for Ask Voice replies.
- * Returns audio/mpeg|wav when a provider is configured; otherwise JSON { fallback: "browser" }.
- * Never exposes API keys to the client.
- */
-router.post("/speak", async (req, res) => {
-  try {
-    const text = String(req.body?.text || "").trim();
-    if (!text) return res.status(400).json({ error: "missing_text" });
-
-    const meta = neuralTtsMeta();
-    if (!meta.configured) {
-      return res.json({ fallback: "browser", reason: "no_provider", tts: meta });
-    }
-
-    const audio = await synthesizeNeuralSpeech(text);
-    if (!audio?.buffer?.length) {
-      return res.json({ fallback: "browser", reason: "synth_failed", tts: meta });
-    }
-
-    res.setHeader("Content-Type", audio.contentType || "audio/mpeg");
-    res.setHeader("X-Sokoni-Tts-Provider", audio.provider || "unknown");
-    res.setHeader("Cache-Control", "no-store");
-    return res.send(audio.buffer);
-  } catch (err) {
-    console.error("[agent/speak]", err.message);
-    return res.json({ fallback: "browser", reason: "error", message: err.message });
-  }
 });
 
 /** POST /api/agent/chat — web (and API) discovery + tracking */

@@ -887,15 +887,6 @@ export function agentMeta() {
     endpoints: {
       chat: "/api/agent/chat",
       meta: "/api/agent/meta",
-      speak: "/api/agent/speak",
-    },
-    neuralTts: {
-      configured: Boolean(
-        config.neuralTts?.elevenLabs?.apiKey ||
-          config.neuralTts?.cartesia?.apiKey ||
-          config.neuralTts?.huggingface?.apiKey ||
-          config.neuralTts?.huggingface?.url
-      ),
     },
     configured: Boolean(
       config.groq?.apiKey || config.gemini?.apiKey || config.openai?.apiKey
