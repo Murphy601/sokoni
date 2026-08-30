@@ -9,6 +9,7 @@ import {
   listProductVariants,
   productStockOnHand,
 } from "./product-availability.js";
+import { msgSellerLowStock, sellerHubRestockUrl } from "../lib/wa-ux.js";
 
 const lastAlertAt = new Map();
 const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h per product
@@ -31,7 +32,7 @@ function variantSummary(product) {
     const label = [v.size, v.color].filter(Boolean).join("/") || v.id;
     return `· ${label}: ${v.stockQuantity}`;
   });
-  return lines.length ? `\n${lines.join("\n")}` : "";
+  return lines.length ? lines.join("\n") : "";
 }
 
 /**
@@ -56,11 +57,12 @@ export async function notifySellerLowStock(product, { reason = "stock_update" } 
     if (!chats.length) return { skipped: true, reason: "no_chat" };
 
     const name = product.name || product.id;
-    const hub = "https://sokonimall.com/suppliers/list.html";
-    const body =
-      onHand === 0
-        ? `📦 *Out of stock*\n*${name}* has *0* units left — buyers won't see it until you restock.\n\nUpdate units / size-colour variants in Seller Hub:\n${hub}\n_(${reason})_`
-        : `⚠️ *Low stock*\n*${name}* — only *${onHand}* unit${onHand === 1 ? "" : "s"} left (alert at ≤${LOW_STOCK_THRESHOLD}).${variantSummary(product)}\n\nRestock in Seller Hub:\n${hub}\n_(${reason})_`;
+    const body = msgSellerLowStock({
+      itemName: name,
+      remainingUnits: onHand,
+      restockUrl: sellerHubRestockUrl(),
+      variantLines: variantSummary(product),
+    });
 
     const { sendText } = await import("./whatsapp.js");
     for (const to of chats) {

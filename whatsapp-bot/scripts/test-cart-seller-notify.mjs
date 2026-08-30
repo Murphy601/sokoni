@@ -50,7 +50,8 @@ assert(cartMsg.includes("SKN-1002-1"), "cart msg has child tracking A");
 assert(cartMsg.includes("SKN-1002-2"), "cart msg has child tracking B");
 assert(cartMsg.includes("DISPATCH SKN-1002-1"), "cart msg DISPATCH A");
 assert(cartMsg.includes("DISPATCH SKN-1002-2"), "cart msg DISPATCH B");
-assert((cartMsg.match(/New Paid Cart Order/g) || []).length === 1, "exactly one cart header");
+assert(cartMsg.includes("label.html?order="), "cart msg includes printable QR links");
+assert((cartMsg.match(/NEW PAID CART/g) || []).length === 1, "exactly one cart header");
 
 // Grouping helper (mirrors escrow batching)
 function groupBySupplier(children) {
@@ -82,7 +83,9 @@ assert(groups.find((g) => g.length === 1)?.[0].supplierId === "sup-b", "seller B
 
 const msgs = groups.map((g) => msgSellerCartPaid(parent, g));
 assert(msgs.length === 2, "two WhatsApp bodies for two sellers");
-assert(msgs.every((m) => m.includes("Listing:")), "each body lists listing ids");
+assert(msgs.some((m) => m.includes("fa-tlom7-001")), "seller A body has listing A");
+assert(msgs.some((m) => m.includes("sm-tlom7-001")), "seller B body has listing B");
+assert(msgs.every((m) => m.includes("label.html?order=")), "each body has QR waybill link");
 
 if (failures.length) {
   console.error("FAIL:");
