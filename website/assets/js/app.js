@@ -1382,7 +1382,7 @@ function normalizeShopHandle(value) {
     .toLowerCase();
 }
 
-/** Merge API + static JSON so wrong/default DB ownership can't hide real shops. */
+/** Merge API + static JSON for metadata only — never resurrect API-hidden listings. */
 function mergeCatalogProducts(apiProducts, staticProducts) {
   const byId = new Map();
   for (const p of apiProducts || []) {
@@ -1392,10 +1392,10 @@ function mergeCatalogProducts(apiProducts, staticProducts) {
     if (!p?.id) continue;
     const id = String(p.id);
     const existing = byId.get(id);
-    if (!existing) {
-      byId.set(id, p);
-      continue;
-    }
+    // If the live API omitted this id (hidden / out of stock / shop paused), do not
+    // pull it back from Cloudflare static products.json.
+    if (!existing) continue;
+
     const apiHandle = normalizeShopHandle(existing.shopHandle || existing.sellerHandle);
     const staticHandle = normalizeShopHandle(p.shopHandle || p.sellerHandle);
     const apiIsDefault = !apiHandle || apiHandle === "sokoni-store";
@@ -1405,10 +1405,12 @@ function mergeCatalogProducts(apiProducts, staticProducts) {
       merged = {
         ...existing,
         ...p,
+        // Preserve live stock / visibility from API — static must not un-hide.
+        inStock: existing.inStock,
+        isSold: existing.isSold,
         shopHandle: staticHandle,
         sellerHandle: staticHandle,
         businessName: p.shopName || p.businessName || existing.businessName,
-        // Keep live weighted rating / badges from API — static JSON uses placeholder 4.5.
         sellerTrust: existing.sellerTrust || p.sellerTrust,
         rating: existing.sellerTrust ? existing.rating : p.rating ?? existing.rating,
         reviews: existing.sellerTrust ? existing.reviews : p.reviews ?? existing.reviews,
@@ -1425,15 +1427,17 @@ function mergeCatalogProducts(apiProducts, staticProducts) {
     } else if (!merged.videoKind && p.videoKind) {
       merged = { ...merged, videoKind: p.videoKind };
     }
-    // Prefer higher known stock from static when API omitted units.
+    // Prefer higher known stock from static only when API still lists the item as in stock.
     const apiQty = Number(merged.stockQuantity);
     const staticQty = Number(p.stockQuantity);
     if (
+      merged.inStock !== false &&
+      merged.isSold !== true &&
       Number.isFinite(staticQty) &&
       staticQty > 0 &&
       (!Number.isFinite(apiQty) || apiQty < staticQty)
     ) {
-      merged = { ...merged, stockQuantity: staticQty, inStock: true };
+      merged = { ...merged, stockQuantity: staticQty };
     }
     // Prefer compare-at / promo display fields from whichever side has a real drop.
     const existingCompare = Number(merged.compareAtPrice ?? merged.originalPriceKes) || 0;

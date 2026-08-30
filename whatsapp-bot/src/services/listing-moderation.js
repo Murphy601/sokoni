@@ -234,13 +234,30 @@ export async function takedownListing(productId, reason = "") {
 /** Hide all live listings for a supplier while the shop is under review. */
 export async function hideListingsForSupplier(supplierId, { reason = "Shop under Sokoni review", phone = "", handle = "" } = {}) {
   const sid = String(supplierId || "").trim();
+  const cleanHandle = String(handle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  const national = String(phone || "").replace(/\D/g, "").slice(-9);
   if (!sid && !phone && !handle) return { error: "missing_supplier", hidden: 0 };
   const master = await loadMaster();
   let hidden = 0;
+
+  const matchesSupplier = (p) => {
+    if (sid && String(p.supplierId || "") === sid) return true;
+    const ph = String(p.shopHandle || p.sellerHandle || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase();
+    if (cleanHandle && ph === cleanHandle) return true;
+    const sellerPhone = String(p.sellerPhone || p.phone || "").replace(/\D/g, "");
+    if (national.length >= 9 && sellerPhone.slice(-9) === national) return true;
+    return false;
+  };
+
   for (let i = 0; i < master.length; i++) {
     const p = master[i];
-    if (sid && String(p.supplierId || "") !== sid) continue;
-    if (!sid) continue;
+    if (!matchesSupplier(p)) continue;
     if (p.moderation?.status === "hidden" && p.inStock === false) continue;
     const flags = Array.isArray(p.moderation?.flags) ? [...p.moderation.flags] : [];
     if (!flags.includes("shop_review_hold")) flags.push("shop_review_hold");
@@ -338,6 +355,14 @@ export async function hideDbProductsForSeller({
     params.push(String(supplierId));
     clauses.push(`(legacy_json->>'supplierId') = $${params.length}`);
   }
+  if (cleanHandle) {
+    params.push(cleanHandle);
+    const hi = params.length;
+    clauses.push(`(
+      LOWER(REPLACE(COALESCE(legacy_json->>'shopHandle',''), '@', '')) = $${hi}
+      OR LOWER(REPLACE(COALESCE(legacy_json->>'sellerHandle',''), '@', '')) = $${hi}
+    )`);
+  }
   if (userIds.size) {
     params.push([...userIds]);
     clauses.push(`seller_user_id = ANY($${params.length}::int[])`);
@@ -376,14 +401,31 @@ export async function hideDbProductsForSeller({
 /** Restore listings that were only hidden for shop review (keeps policy takedowns). */
 export async function restoreListingsForSupplier(supplierId, { phone = "", handle = "" } = {}) {
   const sid = String(supplierId || "").trim();
+  const cleanHandle = String(handle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  const national = String(phone || "").replace(/\D/g, "").slice(-9);
   if (!sid && !phone && !handle) return { error: "missing_supplier", restored: 0 };
   const master = await loadMaster();
   const { assertCanRestock } = await import("./product-availability.js");
   let restored = 0;
+
+  const matchesSupplier = (p) => {
+    if (sid && String(p.supplierId || "") === sid) return true;
+    const ph = String(p.shopHandle || p.sellerHandle || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase();
+    if (cleanHandle && ph === cleanHandle) return true;
+    const sellerPhone = String(p.sellerPhone || p.phone || "").replace(/\D/g, "");
+    if (national.length >= 9 && sellerPhone.slice(-9) === national) return true;
+    return false;
+  };
+
   for (let i = 0; i < master.length; i++) {
     const p = master[i];
-    if (sid && String(p.supplierId || "") !== sid) continue;
-    if (!sid) continue;
+    if (!matchesSupplier(p)) continue;
     const flags = Array.isArray(p.moderation?.flags) ? p.moderation.flags : [];
     if (!flags.includes("shop_review_hold") && !p.moderation?.shopReviewHold) continue;
     // Keep hard policy hides (prohibited / admin_takedown) off the grid.
@@ -474,6 +516,14 @@ export async function restoreDbProductsForSeller({ supplierId = "", phone = "", 
   if (supplierId) {
     params.push(String(supplierId));
     clauses.push(`(legacy_json->>'supplierId') = $${params.length}`);
+  }
+  if (cleanHandle) {
+    params.push(cleanHandle);
+    const hi = params.length;
+    clauses.push(`(
+      LOWER(REPLACE(COALESCE(legacy_json->>'shopHandle',''), '@', '')) = $${hi}
+      OR LOWER(REPLACE(COALESCE(legacy_json->>'sellerHandle',''), '@', '')) = $${hi}
+    )`);
   }
   if (userIds.size) {
     params.push([...userIds]);

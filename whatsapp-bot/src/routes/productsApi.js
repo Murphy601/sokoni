@@ -393,12 +393,25 @@ router.get("/", async (req, res) => {
       searchProductsDb({ ...filters, limit, offset }),
       countSearchProductsDb(filters),
     ]);
+    let products = items.map(toPublicProduct);
+    // Defense-in-depth: drop paused/deactivated shops even if in_stock wasn't flipped yet.
+    try {
+      const { blockedShopLookup, isProductFromBlockedShop } = await import(
+        "../services/enforce-account.js"
+      );
+      const blocked = blockedShopLookup();
+      if (blocked.ids.size || blocked.handles.size || blocked.phones.size) {
+        products = products.filter((p) => !isProductFromBlockedShop(p, blocked));
+      }
+    } catch {
+      /* fail-soft */
+    }
     res.json({
       total,
-      count: items.length,
+      count: products.length,
       offset,
       limit,
-      products: items.map(toPublicProduct),
+      products,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -422,8 +435,8 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "not_found" });
     }
     try {
-      const { assertSupplierCanSell } = await import("../services/enforce-account.js");
-      const sellGate = assertSupplierCanSell(product.supplierId);
+      const { assertProductShopVisible } = await import("../services/enforce-account.js");
+      const sellGate = assertProductShopVisible(product);
       if (!sellGate.ok) {
         return res.status(403).json({
           error: "shop_unavailable",

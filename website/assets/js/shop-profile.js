@@ -1096,33 +1096,7 @@ async function loadShop(handle, { tab = state.listingsTab || "active", soft = fa
       return;
     }
 
-    // Fail-soft: if Postgres active listings are empty, show static catalog for this handle.
-    // Never do this when the API already marked the shop restricted.
-    if (state.listingsTab === "active") {
-      const apiProducts = Array.isArray(data.products) ? data.products : [];
-      if (!apiProducts.length) {
-        const fallback = await loadStaticShopProducts(clean);
-        if (fallback.length) {
-          data.products = fallback.map((p) => ({
-            ...p,
-            title: p.title || p.name,
-            shopHandle: clean,
-            sellerHandle: clean,
-          }));
-          data.pagination = {
-            ...(data.pagination || {}),
-            total: fallback.length,
-            limit: fallback.length,
-            offset: 0,
-          };
-          data.stats = {
-            ...(data.stats || {}),
-            listingsCount: fallback.length,
-          };
-        }
-      }
-    }
-
+    // Do not fall back to static products.json — it resurrects paused/deactivated shops.
     statusMessage("");
     applyViewerState(data);
     renderShopHeader(data);
