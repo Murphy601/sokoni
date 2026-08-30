@@ -456,6 +456,26 @@ export async function ensureSellerSocialProfile({
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number." };
   }
 
+  // Never promote an active rider into a seller via hub/catalog sync — that
+  // resurrected deleted shops when the same number re-registered as a rider.
+  try {
+    const national = digits.slice(-9);
+    const riderHit = await query(
+      `SELECT id FROM riders
+        WHERE regexp_replace(COALESCE(phone,''), '\\D', '', 'g') LIKE '%' || $1
+        LIMIT 1`,
+      [national]
+    );
+    if (riderHit.rows[0]) {
+      return {
+        error: "phone_is_rider",
+        message: "This number is registered as a rider. Seller profile was not created.",
+      };
+    }
+  } catch {
+    /* riders table may be missing in some envs */
+  }
+
   let cleanHandle = normalizeHandle(handle);
   if (!cleanHandle || cleanHandle.length < 2) {
     return { error: "invalid_handle", message: "Enter a valid shop handle." };

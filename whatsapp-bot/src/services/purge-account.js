@@ -131,6 +131,15 @@ export async function purgeSellerAccount(
         prodParams.push(sellerIds);
         prodClauses.push(`seller_id = ANY($${prodParams.length}::int[])`);
       }
+      // Always match by seller phone on listings — survives user-row wipe races.
+      if (nationalTail(phone).length >= 9) {
+        prodParams.push(nationalTail(phone));
+        const pi = prodParams.length;
+        prodClauses.push(`(
+          RIGHT(regexp_replace(COALESCE(legacy_json->>'sellerPhone',''), '\\D', '', 'g'), 9) = $${pi}
+          OR RIGHT(regexp_replace(COALESCE(legacy_json->>'phone',''), '\\D', '', 'g'), 9) = $${pi}
+        )`);
+      }
       if (prodClauses.length) {
         const { rows: delProducts } = await query(
           `DELETE FROM products

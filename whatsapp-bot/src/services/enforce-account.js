@@ -599,11 +599,72 @@ async function handleRiderSuspendJobs(riderId) {
   return { unassigned, heldWithPackage };
 }
 
-/** Hard gate for checkout — shop must be live. */
+function normalizeShopHandle(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+}
+
+/** Platform / default storefront listings — not peer seller shops. */
+export function isPlatformOwnedListing(product) {
+  if (!product) return true;
+  const handle = normalizeShopHandle(product.shopHandle || product.sellerHandle);
+  if (!handle || handle === "sokoni-store") {
+    // Peer supplier id always wins over missing handle.
+    if (product.supplierId && String(product.supplierId).startsWith("sup_")) return false;
+    return !product.sellerPhone;
+  }
+  return handle === "sokoni-store";
+}
+
+/** Resolve supplier for a product (id → handle → phone). */
+export function resolveProductSupplier(product) {
+  if (!product) return null;
+  try {
+    if (product.supplierId) {
+      const byId = getSupplier(product.supplierId);
+      if (byId) return byId;
+    }
+    const { getSupplierByHandle, findSupplierByPhone } = requireSuppliersLazy();
+    const handle = normalizeShopHandle(product.shopHandle || product.sellerHandle);
+    if (handle && handle !== "sokoni-store") {
+      const byHandle = getSupplierByHandle(handle);
+      if (byHandle) return byHandle;
+    }
+    const phone = product.sellerPhone || product.phone;
+    if (phone) {
+      const byPhone = findSupplierByPhone(phone);
+      if (byPhone) return byPhone;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
+ * Peer listings whose seller was hard-deleted (or never provisioned) must not
+ * stay on the public grid — otherwise DELETE SELLER leaves orphan products live.
+ */
+export function isProductFromMissingShop(product) {
+  if (!product || isPlatformOwnedListing(product)) return false;
+  return !resolveProductSupplier(product);
+}
+
+/** Hard gate for checkout — shop must be live. Missing supplier = blocked for peer ids. */
 export function assertSupplierCanSell(supplierId) {
   if (!supplierId) return { ok: true };
   const s = getSupplier(supplierId);
-  if (!s) return { ok: true };
+  if (!s) {
+    // Orphan after hard delete — do not allow sell / public show.
+    return {
+      ok: false,
+      error: "shop_unavailable",
+      shopStatus: "deleted",
+      message: "This store is currently unavailable.",
+    };
+  }
   if (isShopPubliclyVisible(s)) return { ok: true };
   const st = String(s.shopStatus || "live").toLowerCase();
   return {
@@ -620,48 +681,36 @@ export function assertSupplierCanSell(supplierId) {
 /** Gate a catalog product by supplier id, shop handle, or seller phone. */
 export function assertProductShopVisible(product) {
   if (!product) return { ok: true };
+
+  // Peer shop must still exist and be live (deleted sellers → hide orphans).
+  if (!isPlatformOwnedListing(product)) {
+    const supplier = resolveProductSupplier(product);
+    if (!supplier) {
+      return {
+        ok: false,
+        error: "shop_unavailable",
+        shopStatus: "deleted",
+        message: "This store is currently unavailable.",
+      };
+    }
+    if (!isShopPubliclyVisible(supplier)) {
+      const st = String(supplier.shopStatus || "live").toLowerCase();
+      return {
+        ok: false,
+        error: "shop_unavailable",
+        shopStatus: st,
+        message:
+          st === "paused"
+            ? "This store is temporarily unavailable."
+            : "This store is currently unavailable.",
+      };
+    }
+    return { ok: true };
+  }
+
   if (product.supplierId) {
     const byId = assertSupplierCanSell(product.supplierId);
     if (!byId.ok) return byId;
-  }
-  try {
-    const { getSupplierByHandle, findSupplierByPhone } = requireSuppliersLazy();
-    const handle = String(product.shopHandle || product.sellerHandle || "")
-      .trim()
-      .replace(/^@+/, "");
-    if (handle) {
-      const byHandle = getSupplierByHandle(handle);
-      if (byHandle && !isShopPubliclyVisible(byHandle)) {
-        const st = String(byHandle.shopStatus || "live").toLowerCase();
-        return {
-          ok: false,
-          error: "shop_unavailable",
-          shopStatus: st,
-          message:
-            st === "paused"
-              ? "This store is temporarily unavailable."
-              : "This store is currently unavailable.",
-        };
-      }
-    }
-    const phone = product.sellerPhone || product.phone;
-    if (phone) {
-      const byPhone = findSupplierByPhone(phone);
-      if (byPhone && !isShopPubliclyVisible(byPhone)) {
-        const st = String(byPhone.shopStatus || "live").toLowerCase();
-        return {
-          ok: false,
-          error: "shop_unavailable",
-          shopStatus: st,
-          message:
-            st === "paused"
-              ? "This store is temporarily unavailable."
-              : "This store is currently unavailable.",
-        };
-      }
-    }
-  } catch {
-    /* fail-soft */
   }
   return { ok: true };
 }
@@ -699,8 +748,10 @@ export function blockedShopLookup() {
 }
 
 export function isProductFromBlockedShop(product, lookup = null) {
-  const blocked = lookup || blockedShopLookup();
   if (!product) return false;
+  // Hard-deleted shops leave no supplier row — treat as blocked for public lists.
+  if (isProductFromMissingShop(product)) return true;
+  const blocked = lookup || blockedShopLookup();
   if (product.supplierId && blocked.ids.has(String(product.supplierId))) return true;
   const handle = String(product.shopHandle || product.sellerHandle || "")
     .trim()
