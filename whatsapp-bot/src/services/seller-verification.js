@@ -11,6 +11,30 @@ import { sendText, toChatId } from "./whatsapp.js";
 import { config } from "../config.js";
 import { findSupplierByPhone } from "./suppliers.js";
 
+const SUPPORT_EMAIL =
+  config.contact?.supportEmail || config.contact?.email || "support@sokonimall.com";
+
+/** Shared payload when shopStatus === deactivated — blocks OTP + hub login. */
+export function deactivatedLoginBlock() {
+  return {
+    error: "account_deactivated",
+    shopStatus: "deactivated",
+    supportEmail: SUPPORT_EMAIL,
+    message:
+      `Account deactivated. Contact support for more information.\n\n${SUPPORT_EMAIL}`,
+  };
+}
+
+function isSupplierDeactivated(phone) {
+  try {
+    const supplier = findSupplierByPhone(phone);
+    const st = String(supplier?.shopStatus || "live").toLowerCase();
+    return st === "deactivated";
+  } catch {
+    return false;
+  }
+}
+
 function normalizePhone(phone) {
   let d = String(phone || "").replace(/\D/g, "");
   if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
@@ -144,10 +168,16 @@ export async function validateSellerSession(phone, sessionToken) {
 export async function revokeSellerSession(phone) {
   await loadStore();
   const digits = normalizePhone(phone);
+  let changed = false;
   if (store.sessions?.[digits]) {
     delete store.sessions[digits];
-    await saveStore();
+    changed = true;
   }
+  if (store.pending?.[digits]) {
+    delete store.pending[digits];
+    changed = true;
+  }
+  if (changed) await saveStore();
   return { ok: true };
 }
 
@@ -159,6 +189,10 @@ export async function sendSellerVerificationCode(phone) {
   const digits = normalizePhone(phone);
   if (!isValidSignupPhone(digits)) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
+  }
+
+  if (isSupplierDeactivated(digits)) {
+    return deactivatedLoginBlock();
   }
 
   const now = Date.now();
@@ -235,6 +269,15 @@ export async function verifySellerCode(phone, codeInput) {
   if (!isValidSignupPhone(digits)) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number." };
   }
+
+  if (isSupplierDeactivated(digits)) {
+    if (store.pending?.[digits]) {
+      delete store.pending[digits];
+      await saveStore();
+    }
+    return deactivatedLoginBlock();
+  }
+
   if (code.length !== 6) {
     return { error: "invalid_code", message: "Enter the 6-digit code from WhatsApp." };
   }

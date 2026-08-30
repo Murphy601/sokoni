@@ -2592,8 +2592,10 @@ function applySellerAdminEnforcement(profile) {
       banner.classList.remove("hidden");
       banner.className =
         "mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100";
-      banner.textContent =
-        "🛑 Your account has been suspended due to platform policy violations. Contact support.";
+      banner.innerHTML =
+        st === "deactivated"
+          ? `Account deactivated. Contact support for more information.<br/><a class="underline" href="mailto:support@sokonimall.com">support@sokonimall.com</a>`
+          : "Your account is under review. Contact support if you need help.";
     } else {
       banner.classList.add("hidden");
       banner.textContent = "";
@@ -3076,16 +3078,8 @@ async function tryRestoreSession() {
       handleSessionExpired(parsed.data, { force: true });
       return false;
     }
-    if (parsed.data?.error === "account_suspended") {
-      clearSession();
-      el("listing-wizard")?.classList.add("hidden");
-      el("onboard-panel")?.classList.remove("hidden");
-      el("sell-intro")?.classList.remove("hidden");
-      setOnboardStatus(
-        parsed.data?.message ||
-          "🛑 Your account has been suspended due to platform policy violations. Contact support.",
-        true
-      );
+    if (parsed.data?.error === "account_suspended" || isAccountDeactivatedError(parsed.data)) {
+      showAccountDeactivated(parsed.data);
       return true;
     }
     if (parsed.ok && parsed.data?.seller) {
@@ -3186,6 +3180,51 @@ function setOnboardStatus(msg, isError = false) {
   node.classList.toggle("text-emerald-400", !isError && Boolean(msg));
 }
 
+function isAccountDeactivatedError(data) {
+  const err = String(data?.error || "").toLowerCase();
+  const st = String(data?.shopStatus || "").toLowerCase();
+  return (
+    err === "account_deactivated" ||
+    err === "account_suspended" ||
+    st === "deactivated"
+  );
+}
+
+function showAccountDeactivated(data = {}) {
+  clearSession();
+  el("listing-wizard")?.classList.add("hidden");
+  el("onboard-panel")?.classList.remove("hidden");
+  el("sell-intro")?.classList.remove("hidden");
+  el("onboard-verify-step")?.classList.remove("hidden");
+  el("onboard-details-step")?.classList.add("hidden");
+  el("verify-code-wrap")?.classList.add("hidden");
+  const sendBtn = el("send-code-btn");
+  if (sendBtn) sendBtn.disabled = false;
+
+  const email =
+    String(data?.supportEmail || "support@sokonimall.com").trim() || "support@sokonimall.com";
+  const box = el("account-deactivated-box");
+  const msgEl = el("account-deactivated-msg");
+  const mailEl = el("account-deactivated-email");
+  if (box) box.classList.remove("hidden");
+  if (msgEl) {
+    msgEl.textContent = "Contact support for more information.";
+  }
+  if (mailEl) {
+    mailEl.href = `mailto:${email}`;
+    mailEl.textContent = email;
+  }
+  setOnboardStatus(
+    data?.message ||
+      `Account deactivated. Contact support for more information.\n\n${email}`,
+    true
+  );
+}
+
+function hideAccountDeactivated() {
+  el("account-deactivated-box")?.classList.add("hidden");
+}
+
 function loadSessionFromStorage() {
   try {
     const raw =
@@ -3268,15 +3307,8 @@ async function routeAfterVerify(phoneNorm, verifyData) {
       setOnboardStatus("");
       return;
     }
-    if (profileParsed.data?.error === "account_suspended") {
-      clearSession();
-      el("listing-wizard")?.classList.add("hidden");
-      el("onboard-panel")?.classList.remove("hidden");
-      setOnboardStatus(
-        profileParsed.data?.message ||
-          "🛑 Your account has been suspended due to platform policy violations. Contact support.",
-        true
-      );
+    if (isAccountDeactivatedError(profileParsed.data)) {
+      showAccountDeactivated(profileParsed.data);
       return;
     }
     if (profileParsed.data?.needsSetup || profileParsed.status === 404) {
@@ -3319,6 +3351,7 @@ async function onSendCode() {
     return;
   }
   savePhone();
+  hideAccountDeactivated();
   setOnboardStatus("Sending code on WhatsApp…");
   el("send-code-btn").disabled = true;
 
@@ -3330,6 +3363,10 @@ async function onSendCode() {
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
+      if (isAccountDeactivatedError(parsed.data)) {
+        showAccountDeactivated(parsed.data);
+        return;
+      }
       setOnboardStatus(parsed.data?.message || parsed.message || "Could not send code.", true);
       if (parsed.data?.retryAfterSec) startResendCooldown(parsed.data.retryAfterSec);
       else el("send-code-btn").disabled = false;
@@ -3358,6 +3395,7 @@ async function onVerifyCode() {
     return;
   }
 
+  hideAccountDeactivated();
   setOnboardStatus("Checking code…");
   el("verify-code-btn").disabled = true;
 
@@ -3369,6 +3407,10 @@ async function onVerifyCode() {
     });
     const parsed = await parseApiResponse(res);
     if (!parsed.ok) {
+      if (isAccountDeactivatedError(parsed.data)) {
+        showAccountDeactivated(parsed.data);
+        return;
+      }
       setOnboardStatus(parsed.data?.message || parsed.message || "Wrong code.", true);
       return;
     }
