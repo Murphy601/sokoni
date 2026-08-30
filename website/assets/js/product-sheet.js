@@ -500,8 +500,8 @@
         <button type="button" id="product-sheet-share" class="product-sheet-ask">
           Share card
         </button>
-        <button type="button" id="product-sheet-pamoja" class="product-sheet-ask">
-          👥 Start Pamoja (group buy)
+        <button type="button" id="product-sheet-pamoja" class="product-sheet-ask" disabled aria-disabled="true" title="Coming soon">
+          👥 Pamoja group buy — Coming soon
         </button>
         ${offerAction}
         ${
@@ -515,50 +515,11 @@
       </div>`;
   }
 
-  async function startPamojaPool(product) {
-    const session = window.SokoniBuyerAuth?.readSession?.();
-    if (!session?.sessionToken || !session?.phone) {
-      const statusEl = document.getElementById("product-sheet-offer-status");
-      if (statusEl) {
-        statusEl.textContent = "Verify WhatsApp (Make an offer) first, then start a Pamoja pool.";
-        statusEl.dataset.state = "error";
-      }
-      document.getElementById("product-sheet-offer-toggle")?.click();
-      return;
-    }
-    try {
-      const res = await fetch(`${GROWTH_API_BASE}/pamoja`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: product.id,
-          phone: session.phone,
-          sessionToken: session.sessionToken,
-          targetSize: 3,
-          hoursOpen: 2,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.message || data?.error || "Could not start Pamoja");
-      }
-      const share = data.shareText || data.shareUrl || "";
-      if (navigator.share && data.shareUrl) {
-        try {
-          await navigator.share({ title: "Sokoni Pamoja", text: share, url: data.shareUrl });
-          return;
-        } catch {
-          /* fall through to WA */
-        }
-      }
-      const wa = `https://wa.me/?text=${encodeURIComponent(share)}`;
-      window.open(wa, "_blank", "noopener");
-    } catch (err) {
-      const statusEl = document.getElementById("product-sheet-offer-status");
-      if (statusEl) {
-        statusEl.textContent = err.message || "Pamoja failed — try again.";
-        statusEl.dataset.state = "error";
-      }
+  async function startPamojaPool(_product) {
+    const statusEl = document.getElementById("product-sheet-offer-status");
+    if (statusEl) {
+      statusEl.textContent = "Pamoja is coming soon — group buys are paused for now.";
+      statusEl.dataset.state = "info";
     }
   }
 
@@ -566,33 +527,7 @@
     const params = new URLSearchParams(window.location.search);
     const code = (params.get("pamoja") || "").trim();
     if (!code) return;
-    const session = window.SokoniBuyerAuth?.readSession?.();
-    if (!session?.sessionToken) {
-      // Soft prompt — leave code in URL for after verify
-      return;
-    }
-    try {
-      const res = await fetch(`${GROWTH_API_BASE}/pamoja/${encodeURIComponent(code)}/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: session.phone,
-          sessionToken: session.sessionToken,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (data?.ok && data.pool?.productId) {
-        window.SokoniProductSheet?.open?.({ id: data.pool.productId });
-      }
-      if (data?.ok) {
-        const msg = data.filled
-          ? `Pamoja filled! +pts coming — ~${data.pool?.discountPct || 8}% off when you checkout.`
-          : `Joined Pamoja ${code} · ${data.pool?.memberCount || "?"}/${data.pool?.targetSize || "?"} seats`;
-        console.info("[pamoja]", msg);
-      }
-    } catch (err) {
-      console.warn("[pamoja] join failed:", err.message);
-    }
+    console.info("[pamoja] Coming soon — join ignored for", code);
   }
 
   function loadImage(src) {

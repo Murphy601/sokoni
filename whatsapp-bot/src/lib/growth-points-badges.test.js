@@ -82,3 +82,9 @@ test("VERIFY STORE normalizes like VERIFY SHOP", () => {
   assert.equal(normalizeMasterCommand("VERIFY STORE @Adiv's thrift"), "VERIFY_SHOP Adiv's thrift");
   assert.equal(normalizeMasterCommand("verify shop @nairobi_kicks"), "VERIFY_SHOP nairobi_kicks");
 });
+
+test("growth features are paused (coming soon)", async () => {
+  const { growthLive, GROWTH_FEATURES_LIVE } = await import("./growth-features.js");
+  assert.equal(GROWTH_FEATURES_LIVE, false);
+  assert.equal(growthLive(), false);
+});

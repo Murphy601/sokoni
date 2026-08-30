@@ -4196,25 +4196,7 @@ function renderSellerHubOverview() {
   }
   if (el("hub-stat-escrow")) el("hub-stat-escrow").textContent = formatKes(escrow);
 
-  const goal = 20;
-  const progress = Math.min(goal, live);
-  const pct = Math.round((progress / goal) * 100);
-  if (el("hub-level-label")) el("hub-level-label").textContent = `${progress} / ${goal} live`;
-  if (el("hub-level-bar")) el("hub-level-bar").style.width = `${pct}%`;
-  if (el("hub-level-bar-wrap")) el("hub-level-bar-wrap").setAttribute("aria-valuenow", String(progress));
-
-  const checklist = el("hub-level-checklist");
-  if (checklist) {
-    const items = checklist.querySelectorAll("li");
-    items[0]?.classList.toggle("seller-hub-level-done", live >= goal);
-    items[1]?.classList.toggle(
-      "seller-hub-level-done",
-      activeFulfillment.length === 0 && hubCache.orders.some((o) => o.paid)
-    );
-    // Ratings: soft milestone when they have live listings (full ratings API later)
-    items[2]?.classList.toggle("seller-hub-level-done", live >= 5);
-  }
-
+  // Power Board / Points / Pamoja paused — Coming Soon (no live progress)
   void loadSellerPowerBoard();
 
   renderHubTrendingCarousel();
@@ -4223,46 +4205,15 @@ function renderSellerHubOverview() {
 }
 
 async function loadSellerPowerBoard() {
-  const phone = localStorage.getItem(PHONE_KEY) || "";
-  const sessionToken = localStorage.getItem(VERIFY_TOKEN_KEY) || "";
-  if (!phone || !sessionToken) return;
-  try {
-    const params = new URLSearchParams({ phone, sessionToken });
-    const res = await fetch(`${API_BASE}/api/growth/power-board/me?${params}`);
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.ok) return;
-
-    if (el("hub-level-headline")) el("hub-level-headline").textContent = data.headline || "Seller Power Board";
-    if (el("hub-level-hint")) el("hub-level-hint").textContent = data.nextHint || data.pointsNote || "";
-    if (el("hub-level-label")) {
-      el("hub-level-label").textContent = data.nextLabel
-        ? `${data.progressPct || 0}% → ${data.nextLabel}`
-        : `${data.currentLabel || "Ready"} · 100%`;
-    }
-    if (el("hub-level-points") && data.points) {
-      const bal = Number(data.points.balance || 0);
-      el("hub-level-points").textContent = `${bal} pts · 1000 ≈ KES 100`;
-    }
-    const pct = Math.min(100, Math.max(0, Number(data.progressPct) || 0));
-    if (el("hub-level-bar")) el("hub-level-bar").style.width = `${pct}%`;
-    if (el("hub-level-bar-wrap")) {
-      el("hub-level-bar-wrap").setAttribute("aria-valuemax", "100");
-      el("hub-level-bar-wrap").setAttribute("aria-valuenow", String(pct));
-    }
-    const checklist = el("hub-level-checklist");
-    if (checklist && Array.isArray(data.checklist) && data.checklist.length) {
-      checklist.innerHTML = data.checklist
-        .map(
-          (c) =>
-            `<li class="rounded-xl border border-zinc-900 px-3 py-2${
-              c.done ? " seller-hub-level-done" : ""
-            }">${escapeHtml(c.label)}${c.detail ? ` · ${escapeHtml(c.detail)}` : ""}</li>`
-        )
-        .join("");
-    }
-  } catch {
-    /* keep live-listing fallback */
+  // Growth loops paused — keep Coming Soon copy; do not drive live progress.
+  if (el("hub-level-headline")) el("hub-level-headline").textContent = "Coming soon";
+  if (el("hub-level-hint")) {
+    el("hub-level-hint").textContent =
+      "Badge progress, Sokoni Points & Pamoja are paused — no points earned yet.";
   }
+  if (el("hub-level-label")) el("hub-level-label").textContent = "Coming soon";
+  if (el("hub-level-points")) el("hub-level-points").textContent = "Points · Pamoja · Quests";
+  if (el("hub-level-bar")) el("hub-level-bar").style.width = "0%";
 }
 
 function bindSellerHubUi() {
