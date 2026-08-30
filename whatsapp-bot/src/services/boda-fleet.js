@@ -2876,6 +2876,12 @@ export async function verifyDeliveryOTP({
     await query(`UPDATE riders SET is_available = TRUE, updated_at = NOW() WHERE id = $1`, [
       dispatch.rider_id,
     ]);
+    try {
+      const { recordRiderDeliveryForQuest } = await import("./rider-daily-quest.js");
+      await recordRiderDeliveryForQuest(dispatch.rider_id, id);
+    } catch (err) {
+      console.warn("[boda-fleet] rider daily quest:", err.message);
+    }
   }
 
   try {

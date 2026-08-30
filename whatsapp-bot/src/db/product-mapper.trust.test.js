@@ -29,6 +29,8 @@ describe("catalog sellerTrust from weighted profile", () => {
     assert.equal(p.rating, 0);
     assert.equal(p.reviews, 3);
     assert.ok(p.sellerTrust.badges.some((b) => b.id === "newbie"));
+    assert.ok(p.sellerTrust.badges.some((b) => b.id === "verified_store"));
+    assert.equal(p.isVerifiedStore, true);
   });
 
   it("shows public stars after 5+ weighted reviews and Top Rated when earned", () => {

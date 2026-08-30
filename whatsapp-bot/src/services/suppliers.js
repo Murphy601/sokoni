@@ -660,10 +660,21 @@ export function patchSupplierAdmin(supplierId, patch = {}) {
   const s = supplierStore.suppliers[supplierId];
   if (!s) return { error: "not_found", message: "Seller not found." };
 
-  if (patch.verifiedBadge != null || patch.isSellerVerified != null) {
-    const v = Boolean(patch.verifiedBadge ?? patch.isSellerVerified);
+  if (
+    patch.verifiedBadge != null ||
+    patch.isSellerVerified != null ||
+    patch.isVerifiedStore != null ||
+    patch.is_verified_store != null
+  ) {
+    const v = Boolean(
+      patch.verifiedBadge ??
+        patch.isSellerVerified ??
+        patch.isVerifiedStore ??
+        patch.is_verified_store
+    );
     s.verifiedBadge = v;
     s.isSellerVerified = v;
+    s.isVerifiedStore = v;
     if (v && s.kycStatus !== "approved") s.kycStatus = "approved";
   }
 

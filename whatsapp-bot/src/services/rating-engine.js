@@ -129,6 +129,7 @@ async function refreshSellerBadge(userId, { notifyPhone = null } = {}) {
   const row = await loadSeller(userId);
   if (!row) return null;
   const scored = scoreFromPool(row.rating_pool);
+  const prevTier = String(row.badge_tier || "newbie").toLowerCase();
   const derived = deriveBadgeTier({
     completedOrders: Number(row.completed_orders || 0),
     rating: scored.rating,
@@ -142,6 +143,21 @@ async function refreshSellerBadge(userId, { notifyPhone = null } = {}) {
     Number(userId),
     derived.tier,
   ]);
+
+  const TIER_RANK = { newbie: 0, verified: 1, rising: 1, top_rated: 2, legend: 3 };
+  if ((TIER_RANK[derived.tier] || 0) > (TIER_RANK[prevTier] || 0)) {
+    try {
+      const { awardPoints } = await import("./sokoni-points.js");
+      await awardPoints({
+        subjectType: "seller",
+        subjectId: Number(userId),
+        reason: "seller_badge_level_up",
+        ref: `badge_${prevTier}_to_${derived.tier}_${userId}`,
+      });
+    } catch (err) {
+      console.warn("[rating-engine] badge level-up points:", err.message);
+    }
+  }
 
   if (derived.demotionNotice && notifyPhone) {
     try {
@@ -627,6 +643,21 @@ export async function creditDisputeFreeCompletion(sellerUserId, orderRef = "") {
     reason: "dispute_free_completion",
     actorLabel: "system",
     bumpCompleted: true,
+  }).then(async (result) => {
+    if (result?.ok && !result.skipped) {
+      try {
+        const { awardPoints } = await import("./sokoni-points.js");
+        await awardPoints({
+          subjectType: "seller",
+          subjectId: Number(sellerUserId),
+          reason: "seller_order_complete",
+          ref: ref ? `seller_order_${ref}` : `seller_order_${sellerUserId}_${Date.now()}`,
+        });
+      } catch (err) {
+        console.warn("[rating-engine] seller order points:", err.message);
+      }
+    }
+    return result;
   });
 }
 
@@ -744,8 +775,11 @@ export async function getSellerRatingProfile(sellerUserId) {
     displayLabel: scored.displayLabel,
     badgeTier: derived.tier,
     completedOrders: Number(row.completed_orders || 0),
+    disputeCount: Number(row.dispute_count || 0),
+    unresolvedDisputes: Number(row.unresolved_disputes || 0),
     badges: derived.badges,
     isSellerVerified: Boolean(row.is_seller_verified),
+    isVerifiedStore: Boolean(row.is_seller_verified),
   };
 }
 

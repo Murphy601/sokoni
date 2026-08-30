@@ -250,7 +250,8 @@ export function deriveBadgeTier(stats = {}) {
     tier = "legend";
     badges.push({
       id: "legend",
-      label: "Sokoni Legend",
+      label: "👑 Sokoni Legend",
+      emoji: "👑",
       icon: "legend",
       privileges: "instant_escrow_featured",
     });
@@ -258,7 +259,8 @@ export function deriveBadgeTier(stats = {}) {
     tier = "top_rated";
     badges.push({
       id: "top_rated",
-      label: `Top Rated ★ ${rating.toFixed(1)}`,
+      label: `🌟 Top Rated ★ ${rating.toFixed(1)}`,
+      emoji: "🌟",
       icon: "rating",
       privileges: "reduced_commission_4pct",
     });
@@ -266,7 +268,8 @@ export function deriveBadgeTier(stats = {}) {
     tier = "verified";
     badges.push({
       id: "verified",
-      label: "Verified",
+      label: "🛡️ Rising Merchant",
+      emoji: "🛡️",
       icon: "verified",
       privileges: "verified_checkmark_rank_boost",
     });
@@ -274,9 +277,21 @@ export function deriveBadgeTier(stats = {}) {
     tier = "newbie";
     badges.push({
       id: "newbie",
-      label: "Newbie",
+      label: "🐣 New Store",
+      emoji: "🐣",
       icon: "newbie",
       privileges: "standard_commission_5pct",
+    });
+  }
+
+  // Trust chip — independent of performance tier (newbies can still be VERIFIED STORE)
+  if (verified) {
+    badges.unshift({
+      id: "verified_store",
+      label: "🔷 VERIFIED STORE",
+      emoji: "🔷",
+      icon: "verified_store",
+      privileges: "id_verified_trust",
     });
   }
 
@@ -284,6 +299,7 @@ export function deriveBadgeTier(stats = {}) {
     badges.push({
       id: "sales",
       label: `${completed.toLocaleString()} sold`,
+      emoji: "📦",
       icon: "sales",
     });
   }

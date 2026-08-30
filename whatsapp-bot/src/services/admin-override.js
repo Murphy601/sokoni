@@ -71,7 +71,7 @@ export function isOverrideCommand(text) {
   if (/^\s*REFUND\s+BUYER\b/i.test(t)) return true;
   if (/^\s*SPLIT\s+ESCROW\b/i.test(t)) return true;
   if (/^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
-  if (/^\s*VERIFY\s+SHOP\b/i.test(t)) return true;
+  if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
   if (/^\s*(SET|OVERRIDE)\s+RATINGS?\b/i.test(t)) return true;
@@ -120,7 +120,7 @@ export function normalizeMasterCommand(raw) {
     if (parsed?.handle) return `PAUSE_PAYOUTS ${parsed.handle}`;
   }
 
-  const verifyShop = t.match(/^VERIFY\s+SHOP\s+(.+)$/i);
+  const verifyShop = t.match(/^VERIFY\s+(?:SHOP|STORE)\s+(.+)$/i);
   if (verifyShop) {
     const handle = stripHandleAt(verifyShop[1]);
     if (handle) return `VERIFY_SHOP ${handle}`;
@@ -304,7 +304,7 @@ function overrideHelp() {
     `• *SPLIT ESCROW SKN-#### 50 50*\n` +
     `• *PAUSE PAYOUTS @handle*\n\n` +
     `*Shops*\n` +
-    `• *VERIFY SHOP @handle*\n` +
+    `• *VERIFY SHOP @handle* / *VERIFY STORE @handle* → 🔷 VERIFIED STORE\n` +
     `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
     `• *SET RATING @handle 4.8* / *SET RATINGS @Adiv's thrift 4.8* / *OVERRIDE RATING …*\n` +
@@ -801,10 +801,35 @@ export async function executeMasterAdminCommand(
     if (result?.error) {
       return { ok: false, action: "verify_shop", reply: ack(result.message || result.error) };
     }
+    // Also flip users.is_seller_verified + sellers.is_verified_store when linked
+    try {
+      const { findSellerByHandle } = await import("./rating-engine.js");
+      const { query, isDbEnabled } = await import("../db/pool.js");
+      const uid = await findSellerByHandle(handle);
+      if (isDbEnabled() && uid) {
+        await query(
+          `UPDATE users SET is_seller_verified = TRUE, updated_at = NOW() WHERE id = $1`,
+          [uid]
+        );
+        await query(
+          `UPDATE sellers
+              SET is_verified_store = TRUE,
+                  is_verified = TRUE,
+                  updated_at = NOW()
+            WHERE user_id = $1`,
+          [uid]
+        );
+      }
+    } catch (err) {
+      console.warn("[admin-override] verify store user flag:", err.message);
+    }
     return {
       ok: true,
       action: "verify_shop",
-      reply: ack(`Verified badge ON for *${shop.shopHandle || handle}*.`),
+      reply: ack(
+        `*${shop.shopHandle || handle}* is now marked as a 🔷 *VERIFIED STORE* on the website.\n` +
+          `Even 🐣 New Store shops show the trust chip next to their handle.`
+      ),
     };
   }
 

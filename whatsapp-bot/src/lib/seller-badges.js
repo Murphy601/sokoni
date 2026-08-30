@@ -38,7 +38,8 @@ export function deriveSellerBadges(stats = {}) {
     if (!badges.some((b) => b.id === "fast_dispatcher")) {
       badges.splice(1, 0, {
         id: "fast_dispatcher",
-        label: "Fast dispatcher",
+        label: "⚡ Quick Shipper",
+        emoji: "⚡",
         icon: "fast",
       });
     }
@@ -55,9 +56,10 @@ export function sellerTrustPayload(stats = {}) {
     stats.avgDispatchHours != null && Number.isFinite(Number(stats.avgDispatchHours))
       ? Number(stats.avgDispatchHours)
       : null;
+  const isVerifiedStore = Boolean(stats.isSellerVerified || stats.isVerifiedStore);
 
   const badges = deriveSellerBadges({
-    isSellerVerified: stats.isSellerVerified,
+    isSellerVerified: isVerifiedStore,
     salesCount,
     completedOrders: salesCount,
     avgDispatchHours,
@@ -69,15 +71,21 @@ export function sellerTrustPayload(stats = {}) {
     previousTier: stats.badgeTier || stats.previousTier,
   });
 
+  // Performance tier chip (exclude trust / sales / fast for primary tier id)
+  const performance = badges.find((b) =>
+    ["legend", "top_rated", "verified", "newbie"].includes(b.id)
+  );
+
   return {
-    isSellerVerified: Boolean(stats.isSellerVerified),
+    isSellerVerified: isVerifiedStore,
+    isVerifiedStore,
     salesCount,
     totalReviews,
     unrated,
     avgRating: unrated ? 0 : avgRating,
     displayLabel: unrated ? "UNRATED" : avgRating.toFixed(1),
     avgDispatchHours,
-    badgeTier: badges[0]?.id || "newbie",
+    badgeTier: performance?.id || "newbie",
     badges,
   };
 }

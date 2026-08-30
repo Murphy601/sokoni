@@ -114,6 +114,26 @@ test("UNRATED profile cannot unlock Verified via grace 5.0 alone", () => {
     isVerified: true,
   });
   assert.equal(r.tier, "newbie");
+  assert.ok(r.badges.some((b) => b.id === "verified_store"));
+});
+
+test("verified store chip independent of newbie tier", () => {
+  const unverified = deriveBadgeTier({
+    completedOrders: 0,
+    rating: 5,
+    unrated: true,
+    isVerified: false,
+  });
+  assert.ok(!unverified.badges.some((b) => b.id === "verified_store"));
+  assert.ok(unverified.badges.some((b) => /🐣|New Store/.test(b.label)));
+
+  const verified = deriveBadgeTier({
+    completedOrders: 0,
+    rating: 5,
+    unrated: true,
+    isVerified: true,
+  });
+  assert.ok(verified.badges.some((b) => b.label.includes("VERIFIED STORE")));
 });
 
 test("badge demotion below 4.5", () => {
