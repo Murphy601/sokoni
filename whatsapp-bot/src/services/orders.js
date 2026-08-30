@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "no
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
-import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes } from "./shipping-tiers.js";
+import { computeProductTotals, orderBuyerTotal, resolveSellerPayoutKes, computeFeeBreakdown } from "./shipping-tiers.js";
 import { assertPurchaseQty, findVariant } from "./product-availability.js";
 import { assertOrderTransition, canCancelOrder } from "../lib/status-transitions.js";
 import { assertSupplierCanSell } from "./enforce-account.js";
@@ -202,7 +202,30 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
   const id = allocateSknParentId(store);
   const now = Date.now();
   const sourcePriceKes = product.sourcePriceKes != null ? Number(product.sourcePriceKes) : null;
-  const totals = totalsOverride || computeProductTotals(product);
+  // Listing product.shippingKes is NOT Hub regional pricing — never STK on it alone.
+  // Prepaid WA path passes totalsOverride from quoteShippingForPending (shippingSource: hub).
+  let totals = totalsOverride || computeProductTotals(product);
+  if (!totalsOverride) {
+    const sellerNet = Math.round(Number(totals.sellerNetKes ?? totals.itemKes) || 0);
+    const deliveryMethod0 = totals.deliveryMethod || product.deliveryMethod || "seller_express";
+    const fees = computeFeeBreakdown(sellerNet, 0, {
+      freeShipping: false,
+      deliveryMethod: deliveryMethod0,
+    });
+    totals = {
+      ...totals,
+      itemKes: fees.itemKes,
+      shippingKes: 0,
+      totalKes: fees.buyerTotalKes,
+      platformFeeKes: fees.platformFeeKes,
+      shippingCommissionKes: fees.shippingCommissionKes,
+      transactionFeeKes: fees.transactionFeeKes,
+      sellerNetKes: fees.sellerNetKes,
+      sellerPayoutKes: fees.sellerPayoutKes,
+      freeShipping: false,
+      shippingSource: "pending_hub",
+    };
+  }
   const priceKes = totals.itemKes;
   const shippingKes = totals.shippingKes;
   const totalKes = totals.totalKes;
@@ -214,6 +237,7 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
   const deliveryMethod = totals.deliveryMethod || product.deliveryMethod || "hub";
   const shippingRecipient =
     totals.shippingRecipient || product.shippingRecipient || (deliveryMethod === "hub" ? "platform" : "seller");
+  const shippingSource = totals.shippingSource || (totalsOverride ? "hub" : "pending_hub");
   const marginKes =
     sourcePriceKes != null && priceKes != null ? Math.max(0, priceKes - sourcePriceKes) : null;
 
@@ -244,6 +268,7 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     sellerPayoutKes,
     deliveryMethod,
     shippingRecipient,
+    shippingSource,
     sourcePriceKes,
     marginKes,
     offerId: offerKey,

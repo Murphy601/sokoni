@@ -168,6 +168,7 @@ export function quoteShippingForPending(pendingOrProduct, location) {
   return {
     ok: true,
     configured: true,
+    shippingSource: "hub",
     vendorKey,
     methodUsed,
     county: location.county,

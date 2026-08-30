@@ -111,8 +111,11 @@ const expressProduct = computeProductTotals({
   shippingKes: 250,
   deliveryMethod: "seller_express",
 });
-assert("product express total 2307", expressProduct.totalKes === 2307);
-assert("product express payout 2077", expressProduct.sellerPayoutKes === 2077);
+// Listing shippingKes is ignored — Hub matrix prices at checkout only.
+assert("product listing shipping ignored", expressProduct.shippingKes === 0);
+assert("product express total item-only 2057", expressProduct.totalKes === 2057);
+assert("product express payout item-only 1840", expressProduct.sellerPayoutKes === 1840);
+assert("product shippingSource pending_hub", expressProduct.shippingSource === "pending_hub");
 assert(
   "resolveSellerPayoutKes applies 5%",
   resolveSellerPayoutKes({

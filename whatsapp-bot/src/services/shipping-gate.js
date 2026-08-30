@@ -106,7 +106,12 @@ export async function cancelOrderMissingShipping(orderIn, { reason = "missing_sh
 }
 
 /**
- * Ensure shipping is configured + priced before STK.
+ * Ensure shipping is configured + priced from Seller Hub before STK.
+ * Never accept product-listing shippingKes / invented defaults as "configured".
+ *
+ * Note: STK amounts like KES 61 on a ~KES 55 item are usually sellerNet + 10%
+ * platform fee with shippingKes=0 — not a mysterious KES 6 shipping fallback.
+ *
  * @returns {{ ok: true, order } | { ok: false, cancelled?: boolean, error: string, message: string, order?: object }}
  */
 export async function gateShippingBeforeStk(orderIn) {
@@ -155,33 +160,65 @@ export async function gateShippingBeforeStk(orderIn) {
     }
   }
 
-  // Apply rates into totals when profile exists.
+  // Apply Hub rates into totals when profile exists.
   try {
     const ensured = await ensureHybridShippingBeforePayment(order);
     const next = ensured?.order || getOrder(order.id) || order;
+    const found = findConfiguredVendorProfile(vendorCandidates(next));
+    const freeOk = Boolean(found.profile?.isFreeShippingEnabled);
     const ship = Math.round(Number(next.shippingKes) || 0);
-    // Configured but still 0 with a county → treat as missing rate for that region.
-    if (
-      !isPickupOnly(next) &&
-      ship <= 0 &&
-      (next.deliveryCounty || next.location) &&
-      inspectOrderShippingReadiness(next).configured
-    ) {
-      // Allow free shipping when seller explicitly enabled it.
-      const found = findConfiguredVendorProfile(vendorCandidates(next));
-      if (!found.profile?.isFreeShippingEnabled) {
-        const cancelled = await cancelOrderMissingShipping(next, {
-          reason: "missing_rate_for_region",
-        });
-        return {
-          ok: false,
-          cancelled: true,
-          error: "missing_shipping_rates",
-          message: msgBuyerShippingCancel(next.id, next.productName || "item"),
-          order: cancelled.order,
-        };
+    const hubPriced = isHubPricedShipping(next);
+
+    // ensureHybrid now fail-closes on no_profile / county_unknown / apply_failed.
+    // Still allow when Hub quote already stamped shippingSource=hub with a positive fee,
+    // or seller explicitly enabled free shipping.
+    if (ensured && ensured.ok === false) {
+      if (freeOk && ship <= 0) {
+        return { ok: true, order: next, applied: false, freeShipping: true };
       }
+      if (hubPriced && ship > 0) {
+        return { ok: true, order: next, applied: false, fromQuote: true };
+      }
+      const cancelled = await cancelOrderMissingShipping(next, {
+        reason: ensured.reason || "shipping_ensure_failed",
+      });
+      return {
+        ok: false,
+        cancelled: true,
+        error: "missing_shipping_rates",
+        message: msgBuyerShippingCancel(next.id, next.productName || "item"),
+        order: cancelled.order,
+      };
     }
+
+    // Zero shipping without explicit free-ship → block (this is the KES 55+10%=61 path).
+    if (!isPickupOnly(next) && ship <= 0 && !freeOk) {
+      const cancelled = await cancelOrderMissingShipping(next, {
+        reason: "missing_rate_for_region",
+      });
+      return {
+        ok: false,
+        cancelled: true,
+        error: "missing_shipping_rates",
+        message: msgBuyerShippingCancel(next.id, next.productName || "item"),
+        order: cancelled.order,
+      };
+    }
+
+    // Positive shipping must come from Hub matrix — never product.listing shippingKes alone.
+    if (!isPickupOnly(next) && ship > 0 && !hubPriced && !freeOk) {
+      const cancelled = await cancelOrderMissingShipping(next, {
+        reason: "listing_shipping_not_hub",
+      });
+      return {
+        ok: false,
+        cancelled: true,
+        error: "missing_shipping_rates",
+        message: msgBuyerShippingCancel(next.id, next.productName || "item"),
+        order: cancelled.order,
+      };
+    }
+
     return { ok: true, order: next, applied: Boolean(ensured?.applied) };
   } catch (err) {
     console.error("[shipping-gate] ensure FAILED — blocking STK:", err.message);
@@ -196,4 +233,15 @@ export async function gateShippingBeforeStk(orderIn) {
       order: cancelled.order || getOrder(order.id) || order,
     };
   }
+}
+
+/** True when shippingKes was priced from Seller Hub (quote or apply), not product row. */
+function isHubPricedShipping(order) {
+  if (!order) return false;
+  if (order.shippingSource === "hub" || order.shippingSource === "vendor_hub") return true;
+  const meta = order.shippingCalcMeta || {};
+  if (meta.moneyApplied === true || meta.profilePresent === true) return true;
+  const method = String(meta.methodUsed || "");
+  if (!method || method === "NO_PROFILE" || /^PRODUCT/i.test(method)) return false;
+  return true;
 }

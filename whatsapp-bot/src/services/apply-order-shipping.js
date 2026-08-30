@@ -162,6 +162,7 @@ export async function applyShippingToOrder(orderId, location = {}) {
       // priceKes = item (seller-net); totalKes = buyer all-in for STK / orderBuyerTotal
       priceKes: fees.itemKes,
       totalKes: fees.buyerTotalKes,
+      shippingSource: "hub",
     });
   }
 
@@ -276,6 +277,7 @@ async function applyShippingToCartParent(orderId, location = {}) {
         sellerPayoutKes: fees.sellerPayoutKes,
         priceKes: fees.itemKes,
         totalKes: fees.sellerNetKes + fees.shippingKes + fees.platformFeeKes,
+        shippingSource: "hub",
       });
       shipSum += fees.shippingKes;
       itemSum += fees.itemKes;
@@ -370,7 +372,9 @@ async function applyShippingToCartParent(orderId, location = {}) {
 /**
  * Before Daraja STK / cashout: if the seller has a shipping profile, resolve
  * county from the order location and rewrite shippingKes + totalKes.
- * No-op when no profile (keeps seller-handled KES 0 behaviour).
+ *
+ * Fail-closed for delivery: missing Hub profile or unresolvable county must not
+ * silently leave listing/product shipping (or KES 0) on the order for STK.
  */
 export async function ensureHybridShippingBeforePayment(orderIn) {
   const order = orderIn?.id ? getOrder(orderIn.id) || orderIn : orderIn;
@@ -414,15 +418,14 @@ export async function ensureHybridShippingBeforePayment(orderIn) {
   }
 
   if (!vendors.length) {
-    return { ok: true, order, applied: false, reason: "no_profile" };
+    return { ok: false, order, applied: false, reason: "no_profile" };
   }
 
   if (!buyerCounty && !(order.buyerLat != null && order.buyerLng != null)) {
-    // Cannot price without a county — leave totals, but don't block STK.
     console.warn(
       `[shipping] order ${order.id}: seller has rates but county not found in "${order.location}"`
     );
-    return { ok: true, order, applied: false, reason: "county_unknown" };
+    return { ok: false, order, applied: false, reason: "county_unknown" };
   }
 
   const result = await applyShippingToOrder(order.id, {
@@ -438,7 +441,7 @@ export async function ensureHybridShippingBeforePayment(orderIn) {
 
   if (!result.ok) {
     console.warn(`[shipping] apply failed for ${order.id}:`, result.error, result.message);
-    return { ok: true, order: getOrder(order.id) || order, applied: false, result };
+    return { ok: false, order: getOrder(order.id) || order, applied: false, result, reason: result.error || "apply_failed" };
   }
 
   return { ok: true, order: getOrder(order.id), applied: true, result };

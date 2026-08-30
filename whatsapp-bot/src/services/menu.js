@@ -1359,6 +1359,7 @@ export async function confirmPrepaidOrder(to, parsed) {
       freeShipping: quote.freeShipping,
       deliveryMethod: "seller_express",
       shippingRecipient: "seller",
+      shippingSource: "hub",
     };
   } else if (pending.offerId && pending.totalKes != null) {
     // Negotiated offers may skip county quote; STK gate still runs below.
@@ -1383,6 +1384,7 @@ export async function confirmPrepaidOrder(to, parsed) {
       freeShipping: quote.freeShipping,
       deliveryMethod: "seller_express",
       shippingRecipient: "seller",
+      shippingSource: "hub",
     };
   } else {
     clearPendingOrder(to);
