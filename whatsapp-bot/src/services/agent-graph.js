@@ -33,6 +33,8 @@ export const SPECIALIST_TOOLS = {
     "get_seller_onboarding",
     "get_seller_payout",
     "list_seller_orders",
+    "list_seller_listings",
+    "lookup_order_seller",
     "get_shipping_rates",
     "browse_taxonomy",
     "update_inventory",
@@ -42,12 +44,13 @@ export const SPECIALIST_TOOLS = {
   dispute: [
     "track_order",
     "list_orders",
+    "lookup_order_seller",
     "open_return_case",
     "propose_goodwill",
     "store_info",
     "verify_payment_code",
   ],
-  logistics: ["track_order", "list_orders", "store_info", "get_shipping_rates", "dispatch_with_rider"],
+  logistics: ["track_order", "list_orders", "lookup_order_seller", "store_info", "get_shipping_rates", "dispatch_with_rider"],
   general: [...TOOL_NAMES],
 };
 
@@ -60,6 +63,7 @@ export async function runAgentGraph({
   phone = "",
   customerKey = "",
   isSellerSession = false,
+  history = [],
 } = {}) {
   const escalation = detectEscalation(text);
   const specialist = routeSpecialist(text, { isSellerSession });
@@ -70,6 +74,7 @@ export async function runAgentGraph({
     customerKey,
     specialist,
     allowedTools: allow,
+    history,
   });
   const tools = filterToolsForSpecialist
     ? filterToolsForSpecialist(rawTools, allow)

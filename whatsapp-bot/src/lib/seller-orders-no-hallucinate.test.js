@@ -17,6 +17,7 @@ test("isSellerShopOrdersIntent catches shop-sales phrasing", () => {
   assert.equal(isSellerShopOrdersIntent("@Adiv's Thrift"), true);
   assert.equal(isSellerShopOrdersIntent("where is my order"), false);
   assert.equal(isSellerShopOrdersIntent("nike sneakers under 3000"), false);
+  assert.equal(isSellerShopOrdersIntent("who is the seller for those orders"), false);
 });
 
 test("seller specialist allowlist includes list_seller_orders", () => {
