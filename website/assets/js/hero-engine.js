@@ -434,6 +434,24 @@
       ${p ? `<div class="wa-bubble wa-bubble-product">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" />` : ""}<p class="font-semibold">${esc(p.name)}</p><p>${formatKes(p.priceKes)} · prepaid</p></div>` : ""}`;
   }
 
+  async function loadCatalogForHero() {
+    const apiBase =
+      typeof location !== "undefined" && /localhost|127\.0\.0\.1/.test(location.hostname)
+        ? "http://localhost:3001/api/products"
+        : "https://bot.sokonimall.com/api/products";
+    try {
+      const res = await fetch(`${apiBase}?limit=200&offset=0`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data.products) ? data.products : [];
+        if (list.length) return list;
+      }
+    } catch {
+      /* fall through to static */
+    }
+    return loadJson("data/products.json");
+  }
+
   async function init() {
     const stage = $("hero-chat-stage");
     if (!stage) return;
@@ -443,13 +461,13 @@
     try {
       const [siteStoryData, productsData, heroData] = await Promise.all([
         loadJson("data/site-story.json"),
-        loadJson("data/products.json"),
+        loadCatalogForHero(),
         loadJson("data/hero-stories.json"),
       ]);
       siteStory = siteStoryData;
       stories = heroData.stories || [];
       storyDurationMs = heroData.storyDurationMs || STORY_MS_DEFAULT;
-      pickProducts(productsData);
+      pickProducts(Array.isArray(productsData) ? productsData : productsData.products || []);
       buildFilmstrip();
       renderTrustChips();
 
