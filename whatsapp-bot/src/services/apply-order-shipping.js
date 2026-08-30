@@ -148,7 +148,7 @@ export async function applyShippingToOrder(orderId, location = {}) {
       Number(order.sellerNetKes ?? order.sourcePriceKes ?? order.priceKes) || 0
     );
     const fees = computeFeeBreakdown(Math.max(0, sellerNet), shippingKes, {
-      freeShipping: shippingKes === 0,
+      freeShipping: shippingKes === 0 && Boolean(profile?.isFreeShippingEnabled),
       deliveryMethod: order.deliveryMethod || "seller_express",
     });
     Object.assign(patch, {
@@ -263,7 +263,7 @@ async function applyShippingToCartParent(orderId, location = {}) {
         Number(child.sellerNetKes ?? child.sourcePriceKes ?? child.priceKes) || 0
       );
       const fees = computeFeeBreakdown(Math.max(0, sellerNet), shippingKes, {
-        freeShipping: shippingKes === 0,
+        freeShipping: shippingKes === 0 && Boolean(found.profile?.isFreeShippingEnabled),
         deliveryMethod: child.deliveryMethod || "seller_express",
       });
       Object.assign(childPatch, {

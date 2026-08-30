@@ -184,7 +184,16 @@ export async function gateShippingBeforeStk(orderIn) {
     }
     return { ok: true, order: next, applied: Boolean(ensured?.applied) };
   } catch (err) {
-    console.warn("[shipping-gate] ensure failed:", err.message);
-    return { ok: true, order: getOrder(order.id) || order, applied: false };
+    console.error("[shipping-gate] ensure FAILED — blocking STK:", err.message);
+    const cancelled = await cancelOrderMissingShipping(order, {
+      reason: "shipping_ensure_error",
+    });
+    return {
+      ok: false,
+      cancelled: true,
+      error: "shipping_gate_error",
+      message: msgBuyerShippingCancel(order.id, order.productName || "item"),
+      order: cancelled.order || getOrder(order.id) || order,
+    };
   }
 }

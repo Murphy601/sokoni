@@ -96,33 +96,70 @@ export function quoteShippingForPending(pendingOrProduct, location) {
   ]);
   const configured = Boolean(profile);
 
+  // Strict: no Hub rates → do not pretend free shipping / do not continue to STK.
+  if (!configured) {
+    return {
+      ok: false,
+      error: "missing_shipping_rates",
+      configured: false,
+      vendorKey,
+      county: location.county,
+      town: location.town || "",
+      message:
+        `❌ *Can't checkout yet*\n\n` +
+        `This seller has not set delivery fees for *${location.county || "your area"}*.\n` +
+        `Order will not proceed and no M-Pesa prompt will be sent.\n\n` +
+        `Try another item, or type *cancel*.`,
+    };
+  }
+
   const sellerNet = Math.round(
     Number(pendingOrProduct.sellerNetKes ?? pendingOrProduct.priceKes) || 0
   );
 
-  let shippingFee = 0;
-  let methodUsed = "NO_PROFILE";
-  if (configured) {
-    const resolved = resolveVendorShippingFee({
+  const resolved = resolveVendorShippingFee({
+    vendorKey,
+    deliveryMethod: "COUNTY_DROPDOWN",
+    buyerCounty: location.county,
+    buyerTown: location.town || "",
+    profile,
+  });
+
+  if (resolved.unsupported) {
+    return {
+      ok: false,
+      error: "unsupported_route",
+      configured: true,
       vendorKey,
-      deliveryMethod: "COUNTY_DROPDOWN",
-      buyerCounty: location.county,
-      buyerTown: location.town || "",
-      profile,
-    });
-    shippingFee = Math.round(Number(resolved.shippingFee) || 0);
-    methodUsed = resolved.methodUsed || "TIER";
-    if (resolved.unsupported) {
-      return {
-        ok: false,
-        error: "unsupported_route",
-        message: resolved.message || "Seller can’t deliver there.",
-      };
-    }
+      county: location.county,
+      town: location.town || "",
+      message: resolved.message || "Seller can’t deliver there.",
+    };
   }
 
+  let shippingFee = Math.round(Number(resolved.shippingFee) || 0);
+  const methodUsed = resolved.methodUsed || "TIER";
+
+  // Explicit free shipping only when seller enabled it — never treat missing fee as free.
+  if (shippingFee <= 0 && !profile.isFreeShippingEnabled) {
+    return {
+      ok: false,
+      error: "missing_shipping_rates",
+      configured: true,
+      vendorKey,
+      county: location.county,
+      town: location.town || "",
+      message:
+        `❌ *Can't checkout yet*\n\n` +
+        `No delivery fee is set for *${location.county || "your area"}*.\n` +
+        `No M-Pesa prompt will be sent. Type *cancel* or try another location.`,
+    };
+  }
+
+  if (profile.isFreeShippingEnabled) shippingFee = 0;
+
   const fees = computeFeeBreakdown(Math.max(0, sellerNet), shippingFee, {
-    freeShipping: shippingFee === 0,
+    freeShipping: shippingFee === 0 && Boolean(profile.isFreeShippingEnabled),
     deliveryMethod: "seller_express",
   });
 
@@ -130,7 +167,7 @@ export function quoteShippingForPending(pendingOrProduct, location) {
 
   return {
     ok: true,
-    configured,
+    configured: true,
     vendorKey,
     methodUsed,
     county: location.county,
@@ -146,7 +183,7 @@ export function quoteShippingForPending(pendingOrProduct, location) {
     sellerPayoutKes: fees.sellerPayoutKes,
     totalKes: fees.buyerTotalKes,
     productDisplayKes: productPortion,
-    freeShipping: fees.freeShipping,
+    freeShipping: Boolean(profile.isFreeShippingEnabled) && fees.shippingKes === 0,
   };
 }
 

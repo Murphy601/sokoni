@@ -1206,6 +1206,26 @@ export async function confirmCartOrder(to, parsed) {
     console.warn("[cart] hybrid shipping ensure skipped:", err?.message || err);
   }
 
+  // Block STK before celebrating — missing Hub rates cancel the cart parent.
+  try {
+    const { gateShippingBeforeStk } = await import("./shipping-gate.js");
+    const gated = await gateShippingBeforeStk(parent);
+    if (!gated.ok) {
+      return true;
+    }
+    parent = gated.order || parent;
+    children = (parent.itemIds || []).map((id) => getOrder(id)).filter(Boolean);
+  } catch (err) {
+    console.error("[cart] shipping gate FAILED — blocking STK:", err?.message || err);
+    try {
+      const { cancelOrderMissingShipping } = await import("./shipping-gate.js");
+      await cancelOrderMissingShipping(parent, { reason: "shipping_gate_error" });
+    } catch (_) {
+      /* ignore */
+    }
+    return true;
+  }
+
   const childLines = children
     .map((c) => `• *${c.id}* — ${c.productName}`)
     .join("\n");
@@ -1252,8 +1272,6 @@ export async function confirmPrepaidOrder(to, parsed) {
     return true;
   }
 
-  clearPendingOrder(to);
-
   setCustomerMeta(to, { phone: details.phone.replace(/\D/g, "") });
 
   const meta = getCustomerMeta(to) || {};
@@ -1270,30 +1288,114 @@ export async function confirmPrepaidOrder(to, parsed) {
       }
     : pending;
 
-  const quote = pending.quote;
-  const totalsOverride = quote
-    ? {
-        itemKes: quote.itemKes,
-        shippingKes: quote.shippingKes,
-        totalKes: quote.totalKes,
-        platformFeeKes: quote.platformFeeKes,
-        shippingCommissionKes: quote.shippingCommissionKes ?? 0,
-        transactionFeeKes: quote.transactionFeeKes,
-        sellerNetKes: quote.sellerNetKes,
-        sellerPayoutKes: quote.sellerPayoutKes,
-        freeShipping: quote.freeShipping,
-        deliveryMethod: "seller_express",
-        shippingRecipient: "seller",
-      }
-    : pending.offerId && pending.totalKes != null
-      ? {
-          itemKes: pending.priceKes,
-          shippingKes: pending.shippingKes || 0,
-          totalKes: pending.totalKes,
-          platformFeeKes: pending.platformFeeKes,
-          sellerNetKes: pending.sellerNetKes,
+  // Strict re-quote at contact confirm — never create order / fire STK on stale or
+  // missing Hub rates (old path treated missing profile as free shipping → STK).
+  const county = details.deliveryCounty || pending.buyerCounty || "";
+  const town = details.deliveryTown || pending.buyerTown || "";
+  const quoteBase = {
+    ...pending,
+    shopHandle:
+      pending.shopHandle || catalogProduct?.shopHandle || catalogProduct?.sellerHandle,
+    sellerHandle: catalogProduct?.sellerHandle,
+    supplierId: pending.supplierId || catalogProduct?.supplierId,
+    sellerNetKes: pending.sellerNetKes ?? catalogProduct?.sellerNetKes ?? pending.priceKes,
+  };
+
+  let quote = null;
+  let totalsOverride = null;
+
+  if (county) {
+    quote = quoteShippingForPending(quoteBase, {
+      county,
+      town,
+      landmark: details.landmarkNote || pending.landmark || "",
+      tier: pending.tier,
+    });
+    if (!quote?.ok || !quote?.configured) {
+      clearPendingOrder(to);
+      const region = county || town || "your area";
+      await sendText(
+        to,
+        quote?.message ||
+          [
+            `❌ *ORDER NOT STARTED*`,
+            ``,
+            `We could not process checkout because shipping is not set for *${region}* yet.`,
+            ``,
+            `• Status: No order created.`,
+            `• Payment: No M-Pesa prompt will be sent.`,
+            ``,
+            `Reply *menu* to keep shopping.`,
+          ].join("\n")
+      );
+      try {
+        const { findSupplierByPhone, getSupplier } = await import("./suppliers.js");
+        const { msgSellerShippingCancel } = await import("../lib/wa-ux.js");
+        const sup =
+          (pending.supplierId && getSupplier(pending.supplierId)) ||
+          findSupplierByPhone(pending.sellerPhone) ||
+          null;
+        const sellerPhone = String(sup?.phone || pending.sellerPhone || "").replace(/\D/g, "");
+        if (sellerPhone.length >= 9) {
+          await sendText(
+            `${sellerPhone}@c.us`,
+            msgSellerShippingCancel("pending", pending.name || "item", region)
+          );
         }
-      : null;
+      } catch (err) {
+        console.warn("[order] seller shipping-block notify:", err?.message || err);
+      }
+      return true;
+    }
+    totalsOverride = {
+      itemKes: quote.itemKes,
+      shippingKes: quote.shippingKes,
+      totalKes: quote.totalKes,
+      platformFeeKes: quote.platformFeeKes,
+      shippingCommissionKes: quote.shippingCommissionKes ?? 0,
+      transactionFeeKes: quote.transactionFeeKes,
+      sellerNetKes: quote.sellerNetKes,
+      sellerPayoutKes: quote.sellerPayoutKes,
+      freeShipping: quote.freeShipping,
+      deliveryMethod: "seller_express",
+      shippingRecipient: "seller",
+    };
+  } else if (pending.offerId && pending.totalKes != null) {
+    // Negotiated offers may skip county quote; STK gate still runs below.
+    totalsOverride = {
+      itemKes: pending.priceKes,
+      shippingKes: pending.shippingKes || 0,
+      totalKes: pending.totalKes,
+      platformFeeKes: pending.platformFeeKes,
+      sellerNetKes: pending.sellerNetKes,
+    };
+  } else if (pending.quote?.ok && pending.quote?.configured) {
+    quote = pending.quote;
+    totalsOverride = {
+      itemKes: quote.itemKes,
+      shippingKes: quote.shippingKes,
+      totalKes: quote.totalKes,
+      platformFeeKes: quote.platformFeeKes,
+      shippingCommissionKes: quote.shippingCommissionKes ?? 0,
+      transactionFeeKes: quote.transactionFeeKes,
+      sellerNetKes: quote.sellerNetKes,
+      sellerPayoutKes: quote.sellerPayoutKes,
+      freeShipping: quote.freeShipping,
+      deliveryMethod: "seller_express",
+      shippingRecipient: "seller",
+    };
+  } else {
+    clearPendingOrder(to);
+    await sendText(
+      to,
+      `❌ *ORDER NOT STARTED*\n\n` +
+        `Delivery location is missing, so we cannot verify shipping rates.\n` +
+        `No M-Pesa prompt will be sent. Reply *menu* and order again.`
+    );
+    return true;
+  }
+
+  clearPendingOrder(to);
 
   let order = null;
   try {
@@ -1341,9 +1443,30 @@ export async function confirmPrepaidOrder(to, parsed) {
     }
   }
 
+  // Final gate before celebrating / STK — cancels unpaid order if rates still missing.
+  if (order) {
+    try {
+      const { gateShippingBeforeStk } = await import("./shipping-gate.js");
+      const gated = await gateShippingBeforeStk(order);
+      if (!gated.ok) {
+        return true;
+      }
+      order = gated.order || order;
+    } catch (err) {
+      console.error("[order] shipping gate before STK:", err?.message || err);
+      try {
+        const { cancelOrderMissingShipping } = await import("./shipping-gate.js");
+        await cancelOrderMissingShipping(order, { reason: "shipping_gate_error" });
+      } catch (_) {
+        /* ignore */
+      }
+      return true;
+    }
+  }
+
   const summary = buildOrderAdminSummary({
     customerKey: to,
-    pending,
+    pending: quote ? { ...pending, quote } : pending,
     details,
     order,
   });
@@ -1368,14 +1491,15 @@ export async function confirmPrepaidOrder(to, parsed) {
   }
 
   const orderRef = order?.id || "pending";
-  const total = order ? orderBuyerTotal(order) : pending.totalKes ?? pending.priceKes;
+  const total =
+    order ? orderBuyerTotal(order) : totalsOverride?.totalKes ?? pending.totalKes ?? pending.priceKes;
   await sendText(
     to,
     shortOrderPlacedMessage({
       orderId: orderRef,
       productName: pending.name,
       totalKes: total,
-      shippingKes: order?.shippingKes ?? pending.shippingKes ?? 0,
+      shippingKes: order?.shippingKes ?? totalsOverride?.shippingKes ?? pending.shippingKes ?? 0,
       county: pending.buyerCounty || details.deliveryCounty || "",
       phone: details.phone,
     })
