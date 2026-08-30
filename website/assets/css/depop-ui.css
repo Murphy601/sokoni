@@ -466,6 +466,19 @@ body.has-depop-shell .seller-trust-badge {
   background: rgba(37, 99, 235, 0.18);
 }
 
+.seller-trust-badge--verified_store {
+  background: rgba(37, 99, 235, 0.16);
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  color: #1a3a6b;
+}
+
+html.dark .seller-trust-badge--verified_store,
+body.has-depop-shell .seller-trust-badge--verified_store {
+  color: #c5d8ff;
+  border-color: rgba(197, 216, 255, 0.35);
+  background: rgba(37, 99, 235, 0.28);
+}
+
 .seller-trust-badge--newbie {
   background: rgba(27, 16, 53, 0.05);
 }

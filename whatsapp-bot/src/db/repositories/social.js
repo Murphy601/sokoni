@@ -3164,6 +3164,24 @@ export async function creditSellerSaleReview(order, { sellerUserId: forcedSeller
     if (!result?.ok) {
       return { skipped: true, reason: result?.reason || "rating_failed", sellerUserId };
     }
+    // Low-rate buyer points on completed sale (1000 pts ≈ KES 100)
+    try {
+      const buyerUid =
+        parseUserId(order.buyerUserId) ||
+        parseUserId(order.customerUserId) ||
+        null;
+      if (buyerUid && result?.ok && !result.skipped) {
+        const { awardPoints } = await import("../../services/sokoni-points.js");
+        await awardPoints({
+          subjectType: "buyer",
+          subjectId: buyerUid,
+          reason: "buyer_order_complete",
+          ref: `buyer_order_${orderRef}`,
+        });
+      }
+    } catch (ptsErr) {
+      console.warn("[social] buyer order points:", ptsErr.message);
+    }
     return {
       success: true,
       sellerUserId,

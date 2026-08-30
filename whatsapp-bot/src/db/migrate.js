@@ -30,6 +30,7 @@ const SCHEMA_PHASE30_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE31_PATH = path.join(__dirname, "..", "..", "db", "schema-phase31-staff-roles.sql");
 const SCHEMA_PHASE32_PATH = path.join(__dirname, "..", "..", "db", "schema-phase32-admin-logs.sql");
 const SCHEMA_PHASE33_PATH = path.join(__dirname, "..", "..", "db", "schema-phase33-weighted-ratings.sql");
+const SCHEMA_PHASE34_PATH = path.join(__dirname, "..", "..", "db", "schema-phase34-growth-points.sql");
 
 async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
@@ -83,6 +84,7 @@ export async function runMigrations() {
     ["phase31 staff roles RBAC", SCHEMA_PHASE31_PATH],
     ["phase32 admin_logs Boss overrides", SCHEMA_PHASE32_PATH],
     ["phase33 weighted ratings + badges", SCHEMA_PHASE33_PATH],
+    ["phase34 growth points + pamoja + rider quests", SCHEMA_PHASE34_PATH],
   ];
 
   for (const [label, filePath] of phases) {

@@ -8,6 +8,7 @@ const PRODUCT_SELECT = `
     s.slug AS seller_slug,
     s.user_id AS seller_table_user_id,
     s.is_verified AS seller_table_verified,
+    COALESCE(s.is_verified_store, s.is_verified, FALSE) AS seller_table_verified_store,
     su.id AS seller_user_join_id,
     su.handle AS seller_handle,
     su.shop_name AS seller_shop_name,

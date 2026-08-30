@@ -938,19 +938,22 @@
             <div id="hub-seller-level" class="rounded-2xl border border-zinc-900 p-4 space-y-3">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <p class="depop-label">Seller level</p>
-                  <h2 class="text-base font-bold mt-1 text-white">Path to Top Seller</h2>
-                  <p class="text-xs text-zinc-400 mt-1">20+ live fits · keep ratings high · dispatch within 48h</p>
+                  <p class="depop-label">Seller Power Board</p>
+                  <h2 id="hub-level-headline" class="text-base font-bold mt-1 text-white">Path to next badge</h2>
+                  <p id="hub-level-hint" class="text-xs text-zinc-400 mt-1">Complete orders · keep ★ strong · 🔷 VERIFIED STORE unlocks Rising Merchant</p>
                 </div>
-                <p id="hub-level-label" class="text-sm font-bold font-mono text-white">0 / 20 live</p>
+                <div class="text-right">
+                  <p id="hub-level-label" class="text-sm font-bold font-mono text-white">—</p>
+                  <p id="hub-level-points" class="text-[10px] text-zinc-500 mt-0.5">Sokoni Points · 1000 ≈ KES 100</p>
+                </div>
               </div>
-              <div class="h-2 rounded-full depop-hub-progress overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0" id="hub-level-bar-wrap">
+              <div class="h-2 rounded-full depop-hub-progress overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="hub-level-bar-wrap">
                 <div id="hub-level-bar" class="h-full rounded-full transition-all duration-500" style="width:0%"></div>
               </div>
               <ul id="hub-level-checklist" class="grid sm:grid-cols-3 gap-2 text-xs text-zinc-400">
-                <li class="rounded-xl border border-zinc-900 px-3 py-2">List 20+ live items</li>
-                <li class="rounded-xl border border-zinc-900 px-3 py-2">Dispatch orders within 48h</li>
+                <li class="rounded-xl border border-zinc-900 px-3 py-2">Complete more orders</li>
                 <li class="rounded-xl border border-zinc-900 px-3 py-2">Keep buyer ratings strong</li>
+                <li class="rounded-xl border border-zinc-900 px-3 py-2">🔷 VERIFIED STORE</li>
               </ul>
             </div>
           </section>

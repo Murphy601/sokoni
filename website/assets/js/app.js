@@ -1682,7 +1682,7 @@ async function renderProducts() {
   }
 }
 
-/** ?text= / ?q= pre-fill search; ?product= opens detail sheet (e.g. ?product=sk-0042). */
+/** ?text= / ?q= pre-fill search; ?product= opens detail sheet (e.g. ?product=sk-0042). ?pamoja= joins group-buy. */
 function applyDeepLinkFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const text = params.get("text") || params.get("q");
@@ -1691,12 +1691,18 @@ function applyDeepLinkFromUrl() {
     return;
   }
   const productId = params.get("product")?.trim();
-  if (!productId) return;
-  searchQuery = "";
-  activeCategory = "all";
-  activeSubcategory = null;
-  activeProductId = productId;
-  pendingProductSheetId = productId;
+  if (productId) {
+    searchQuery = "";
+    activeCategory = "all";
+    activeSubcategory = null;
+    activeProductId = productId;
+    pendingProductSheetId = productId;
+    return;
+  }
+  if (params.get("pamoja")?.trim()) {
+    // Product sheet joins the pool once buyer auth is ready
+    void window.SokoniProductSheet?.joinPamojaFromQuery?.();
+  }
 }
 
 window.SokoniApp = {

@@ -75,7 +75,12 @@ export function rowToCatalogProduct(row, imageUrls = []) {
       return Number.isInteger(n) && n > 0 ? n : undefined;
     })(),
     sellerAvatarUrl: row.seller_avatar_url ? String(row.seller_avatar_url) : undefined,
-    isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
+    isSellerVerified: Boolean(
+      row.seller_user_verified || row.seller_table_verified_store || row.seller_table_verified
+    ),
+    isVerifiedStore: Boolean(
+      row.seller_user_verified || row.seller_table_verified_store || row.seller_table_verified
+    ),
     sellerSalesCount:
       row.seller_sales_count != null ? Number(row.seller_sales_count) || 0 : undefined,
     sellerTrust: (() => {
@@ -92,8 +97,12 @@ export function rowToCatalogProduct(row, imageUrls = []) {
         Number(row.seller_sales_count || 0)
       );
       const unrated = totalReviews < 5;
+      const verifiedStore = Boolean(
+        row.seller_user_verified || row.seller_table_verified_store || row.seller_table_verified
+      );
       return sellerTrustPayload({
-        isSellerVerified: Boolean(row.seller_user_verified || row.seller_table_verified),
+        isSellerVerified: verifiedStore,
+        isVerifiedStore: verifiedStore,
         salesCount: completedOrders,
         completedOrders,
         avgDispatchHours: null,

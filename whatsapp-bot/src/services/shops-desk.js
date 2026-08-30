@@ -164,6 +164,7 @@ export function setShopVerifiedBadge(supplierId, verified = true) {
   return patchSupplierAdmin(supplierId, {
     verifiedBadge: Boolean(verified),
     isSellerVerified: Boolean(verified),
+    isVerifiedStore: Boolean(verified),
   });
 }
 

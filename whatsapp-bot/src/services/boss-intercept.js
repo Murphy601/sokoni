@@ -33,7 +33,7 @@ export function looksLikeAdminProbe(text) {
   if (/^\s*(SET|OVERRIDE)\s+RATINGS?\b/i.test(t)) return true;
   if (/^\s*PURGE\s+RATING\b/i.test(t)) return true;
   if (/^\s*PENALIZE\b/i.test(t)) return true;
-  if (/^\s*VERIFY\s+SHOP\b/i.test(t)) return true;
+  if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
   if (/^\s*UNBAN\b/i.test(t)) return true;
