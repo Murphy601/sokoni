@@ -61,17 +61,73 @@
       .join("")}</div>`;
   }
 
-  async function loadRiders(status) {
+  const countsEl = document.getElementById("boda-counts");
+  let lastFilter = "PENDING";
+
+  function setCounts(counts) {
+    if (!countsEl) return;
+    if (!counts) {
+      countsEl.textContent = "";
+      return;
+    }
+    countsEl.textContent = `Fleet totals — PENDING ${counts.PENDING || 0} · VERIFIED ${
+      counts.VERIFIED || 0
+    } · SUSPENDED ${counts.SUSPENDED || 0} · REJECTED ${counts.REJECTED || 0} · all ${
+      counts.total || 0
+    }`;
+  }
+
+  function markFilterButtons(active) {
+    const map = {
+      PENDING: "load-pending",
+      VERIFIED: "load-verified",
+      "": "load-all",
+    };
+    Object.entries(map).forEach(([key, id]) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      const on = key === active;
+      btn.classList.toggle("bg-brand-green", on);
+      btn.classList.toggle("text-brand-purple", on);
+      btn.classList.toggle("border", !on);
+      btn.classList.toggle("border-brand-purple/15", !on);
+    });
+  }
+
+  function actionButtons(r) {
+    const st = String(r.verificationStatus || "").toUpperCase();
+    if (st === "VERIFIED") {
+      return `<span class="inline-flex min-h-[40px] items-center px-3 rounded-full bg-brand-green/20 text-xs font-bold">VERIFIED</span>
+        <button type="button" data-verify="SUSPENDED" class="min-h-[40px] px-3 rounded-full border border-brand-purple/20 text-xs font-bold">Suspend</button>`;
+    }
+    if (st === "SUSPENDED") {
+      return `<button type="button" data-verify="VERIFIED" class="min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Unban / Verify</button>
+        <button type="button" data-verify="REJECTED" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-700 text-xs font-bold">Reject</button>`;
+    }
+    return `<button type="button" data-verify="VERIFIED" class="min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Verify</button>
+      <button type="button" data-verify="REJECTED" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-700 text-xs font-bold">Reject</button>
+      <button type="button" data-verify="SUSPENDED" class="min-h-[40px] px-3 rounded-full border border-brand-purple/20 text-xs font-bold">Suspend</button>`;
+  }
+
+  async function loadRiders(status, searchQ) {
     const t = token();
     if (!t) {
       setStatus("Enter admin token first.");
       return;
     }
+    lastFilter = status == null ? lastFilter : status;
+    markFilterButtons(status === undefined || status === null ? lastFilter : status);
     setStatus("Loading…");
-    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    params.set("limit", "200");
+    const qVal = searchQ != null ? String(searchQ).trim() : "";
+    if (qVal) params.set("q", qVal);
+    const qs = params.toString() ? `?${params}` : "";
     try {
-      const res = await fetch(`${API_BASE}/admin/boda/riders${q}`, {
+      const res = await fetch(`${API_BASE}/admin/boda/riders${qs}`, {
         headers: { "X-Admin-Token": t },
+        cache: "no-store",
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -79,10 +135,26 @@
         return;
       }
       const riders = data.riders || [];
-      setStatus(`${riders.length} rider${riders.length === 1 ? "" : "s"}`);
+      setCounts(data.counts);
+      const filterLabel = qVal
+        ? `search “${qVal}”`
+        : status
+          ? status
+          : "all statuses";
+      setStatus(
+        `${riders.length} rider${riders.length === 1 ? "" : "s"} (${filterLabel})` +
+          (data.counts
+            ? ` · DB VERIFIED ${data.counts.VERIFIED || 0} / PENDING ${data.counts.PENDING || 0}`
+            : "")
+      );
       if (!listEl) return;
       if (!riders.length) {
-        listEl.innerHTML = `<p class="text-sm text-brand-purple/60">None found.</p>`;
+        const c = data.counts || {};
+        listEl.innerHTML = `<p class="text-sm text-brand-purple/60">None in this view. Fleet DB: PENDING ${
+          c.PENDING || 0
+        }, VERIFIED ${c.VERIFIED || 0}, SUSPENDED ${c.SUSPENDED || 0}, REJECTED ${
+          c.REJECTED || 0
+        }. Try <strong>Load VERIFIED</strong>, <strong>Load all</strong>, or search by phone.</p>`;
         return;
       }
       listEl.innerHTML = riders
@@ -108,9 +180,7 @@
                 }
               </div>
               <div class="flex flex-wrap gap-2">
-                <button type="button" data-verify="VERIFIED" class="min-h-[40px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Verify</button>
-                <button type="button" data-verify="REJECTED" class="min-h-[40px] px-3 rounded-full border border-red-300 text-red-700 text-xs font-bold">Reject</button>
-                <button type="button" data-verify="SUSPENDED" class="min-h-[40px] px-3 rounded-full border border-brand-purple/20 text-xs font-bold">Suspend</button>
+                ${actionButtons(r)}
               </div>
             </div>
             ${docLinks(r.docs)}
@@ -157,6 +227,7 @@
           "X-Admin-Token": t,
         },
         body: JSON.stringify({ status, reason }),
+        cache: "no-store",
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -171,19 +242,16 @@
         return;
       }
       const next = data.rider?.verificationStatus || status;
+      const who = data.rider?.fullName || data.rider?.phone || `#${riderId}`;
       setStatus(
-        `Updated #${riderId} → ${next}` +
-          (status === "VERIFIED" ? " · WhatsApp notify queued" : "")
+        `Updated ${who} → ${next}` +
+          (status === "VERIFIED" ? " · WhatsApp notify queued · opening VERIFIED list…" : "")
       );
-      if (status === "VERIFIED" && card) {
-        card.remove();
-        const left = listEl?.querySelectorAll("[data-rider-id]")?.length || 0;
-        if (!left && listEl) {
-          listEl.innerHTML = `<p class="text-sm text-brand-purple/60">None pending — load VERIFIED or all to review the fleet.</p>`;
-        }
+      if (status === "VERIFIED") {
+        await loadRiders("VERIFIED");
         return;
       }
-      loadRiders(status === "VERIFIED" ? "PENDING" : undefined);
+      await loadRiders(status === "REJECTED" || status === "SUSPENDED" ? "" : lastFilter || "PENDING");
     } catch (err) {
       setStatus(
         /failed to fetch/i.test(String(err?.message || ""))
@@ -196,9 +264,21 @@
     }
   }
 
+  function runSearch() {
+    const q = document.getElementById("rider-search")?.value || "";
+    loadRiders("", q);
+  }
+
   document.getElementById("load-pending")?.addEventListener("click", () => loadRiders("PENDING"));
   document.getElementById("load-verified")?.addEventListener("click", () => loadRiders("VERIFIED"));
   document.getElementById("load-all")?.addEventListener("click", () => loadRiders(""));
+  document.getElementById("rider-search-btn")?.addEventListener("click", runSearch);
+  document.getElementById("rider-search")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      runSearch();
+    }
+  });
 
   listEl?.addEventListener("click", (ev) => {
     const btn = ev.target?.closest?.("[data-verify]");

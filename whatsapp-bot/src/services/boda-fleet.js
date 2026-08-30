@@ -480,11 +480,38 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "",
 }
 
 
-export async function listRiders({ zone = null, status = null, limit = 50 } = {}) {
+export async function listRiderStatusCounts() {
+  if (!isDbEnabled()) {
+    return { PENDING: 0, VERIFIED: 0, SUSPENDED: 0, REJECTED: 0, total: 0 };
+  }
+  try {
+    const { rows } = await query(
+      `SELECT UPPER(COALESCE(verification_status, 'PENDING')) AS st, COUNT(*)::int AS n
+         FROM riders
+        GROUP BY 1`
+    );
+    const counts = { PENDING: 0, VERIFIED: 0, SUSPENDED: 0, REJECTED: 0, total: 0 };
+    for (const row of rows) {
+      const key = String(row.st || "").toUpperCase();
+      const n = Number(row.n) || 0;
+      if (Object.prototype.hasOwnProperty.call(counts, key)) counts[key] = n;
+      counts.total += n;
+    }
+    return counts;
+  } catch (err) {
+    console.warn("[boda-fleet] listRiderStatusCounts:", err.message);
+    return { PENDING: 0, VERIFIED: 0, SUSPENDED: 0, REJECTED: 0, total: 0, error: err.message };
+  }
+}
+
+export async function listRiders({ zone = null, status = null, limit = 50, q = null } = {}) {
   if (!isDbEnabled()) return { riders: [], error: "database_not_configured" };
   const z = zone ? normalizeBodaZone(zone) : null;
-  const st = status ? String(status).toUpperCase() : null;
-  const lim = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const needle = String(q || "").trim().toLowerCase();
+  const phoneNeedle = needle.replace(/\D/g, "");
+  // Search ignores status filter so ops can find a rider after Verify.
+  const st = needle ? null : status ? String(status).toUpperCase() : null;
+  const lim = Math.min(Math.max(Number(limit) || (needle ? 200 : 50), 1), 200);
   let rows = [];
   try {
     const result = await query(
@@ -551,20 +578,29 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
       rows = result.rows;
     } catch (err2) {
       console.warn("[boda-fleet] listRiders basic fallback:", err2.message);
-      const result = await query(
-        `SELECT * FROM riders
-          WHERE ($1::text IS NULL OR operating_town = $1)
-            AND ($2::text IS NULL OR verification_status = $2)
-          ORDER BY created_at DESC
-          LIMIT $3`,
-        [z, st, lim]
-      );
-      rows = result.rows;
+      try {
+        const result = await query(
+          `SELECT * FROM riders
+            WHERE ($1::text IS NULL OR operating_town = $1)
+              AND ($2::text IS NULL OR verification_status = $2)
+            ORDER BY created_at DESC
+            LIMIT $3`,
+          [z, st, lim]
+        );
+        rows = result.rows;
+      } catch (err3) {
+        console.error("[boda-fleet] listRiders failed:", err3.message);
+        return {
+          riders: [],
+          error: "list_failed",
+          message: err3.message || "Could not list riders.",
+          counts: await listRiderStatusCounts(),
+        };
+      }
     }
   }
-  return {
-    ok: true,
-    riders: rows.map((row) => {
+
+  let riders = rows.map((row) => {
       const rider = mapRider(row);
       const onDelivery = Boolean(row.active_dispatch_status);
       let fleetStatus = "OFFLINE";
@@ -589,7 +625,28 @@ export async function listRiders({ zone = null, status = null, limit = 50 } = {}
         activeOrderRef: row.active_order_ref || null,
         activeDispatchId: row.active_dispatch_id != null ? Number(row.active_dispatch_id) : null,
       };
-    }),
+    });
+
+  if (needle) {
+    riders = riders.filter((r) => {
+      const blob = [r.fullName, r.phone, r.motorbikePlate, r.stageLocation, r.operatingTown, r.nationalId]
+        .join(" ")
+        .toLowerCase();
+      if (blob.includes(needle)) return true;
+      if (phoneNeedle.length >= 7) {
+        const digits = String(r.phone || "").replace(/\D/g, "");
+        return digits.includes(phoneNeedle) || phoneNeedle.includes(digits.slice(-9));
+      }
+      return false;
+    });
+  }
+
+  const counts = await listRiderStatusCounts();
+  return {
+    ok: true,
+    riders,
+    counts,
+    filter: { zone: z, status: st, q: needle || null, limit: lim },
   };
 }
 

@@ -66,6 +66,16 @@
         <button type="button" id="load-verified" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Load VERIFIED</button>
         <button type="button" id="load-all" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Load all</button>
       </div>
+      <div class="flex flex-wrap gap-2 items-end">
+        <label class="block text-sm font-medium flex-1 min-w-[12rem] max-w-md">
+          Find rider (phone / name / plate)
+          <input id="rider-search" type="search" autocomplete="off"
+                 class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+                 placeholder="2547… or Peter or KMGB" />
+        </label>
+        <button type="button" id="rider-search-btn" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Search</button>
+      </div>
+      <p id="boda-counts" class="text-xs font-semibold text-brand-purple/55" aria-live="polite"></p>
       <p id="boda-status" class="text-sm text-brand-purple/60" role="status"></p>
     </section>
     <div id="rider-list" class="space-y-4"></div>
