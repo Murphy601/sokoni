@@ -4,7 +4,7 @@
  *
  * Updating this block does NOT wipe system-prompt training — it only injects live state.
  */
-import { getOrdersForCustomer } from "./orders.js";
+import { getOrdersForCustomer, listAllOrders } from "./orders.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
 
 function digits(raw) {
@@ -31,16 +31,23 @@ export async function buildUserContextBlock({ phone = "", customerKey = "" } = {
   lines.push(`Phone: ${phoneDigits || "(unknown)"}`);
 
   let role = "buyer_or_guest";
+  let supplierId = null;
   try {
     const { findSupplierByPhone } = await import("./suppliers.js");
     const supplier = phoneDigits ? findSupplierByPhone(phoneDigits) : null;
     if (supplier?.id) {
       role = "seller";
+      supplierId = supplier.id;
+      const handle = String(supplier.shopHandle || supplier.handle || "").replace(/^@/, "");
       lines.push(
-        `Role: seller · shop=${supplier.shopName || supplier.name || "—"} · id=${supplier.id}`
+        `Role: seller · shop=${supplier.shopName || supplier.businessName || supplier.name || "—"} · ` +
+          `handle=${handle ? `@${handle}` : "—"} · id=${supplier.id}`
       );
       lines.push(
         "Seller money questions: use LOOKUP RESULTS from get_seller_payout when present; else tell them to reply *balance*."
+      );
+      lines.push(
+        "Seller shop orders: use LOOKUP RESULTS from list_seller_orders only. Never invent SKN/SK rows. Never ask for @handle — phone already identifies the shop."
       );
     }
   } catch {
@@ -70,16 +77,34 @@ export async function buildUserContextBlock({ phone = "", customerKey = "" } = {
 
   if (role === "buyer_or_guest") lines.push("Role: buyer_or_guest");
 
+  // Sellers: inject real shop sales (not buyer purchases on this phone)
+  if (supplierId) {
+    try {
+      const shopOrders = listAllOrders()
+        .filter((o) => o.supplierId === supplierId && o.kind !== "cart_parent")
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .slice(0, 8);
+      if (shopOrders.length) {
+        lines.push(`Shop sales (real DB rows for this WhatsApp · ${shopOrders.length} shown):`);
+        for (const o of shopOrders) lines.push(formatOrderLine(o));
+      } else {
+        lines.push("Shop sales: 0 orders through this shop (do not invent any).");
+      }
+    } catch {
+      lines.push("Shop sales: (unavailable)");
+    }
+  }
+
   try {
     const orders = getOrdersForCustomer(customerKey || phone, phoneDigits).slice(0, 5);
     if (orders.length) {
-      lines.push("Recent orders:");
+      lines.push("Buyer purchases on this WhatsApp:");
       for (const o of orders) lines.push(formatOrderLine(o));
-    } else {
+    } else if (!supplierId) {
       lines.push("Recent orders: (none on this WhatsApp)");
     }
   } catch {
-    lines.push("Recent orders: (unavailable)");
+    if (!supplierId) lines.push("Recent orders: (unavailable)");
   }
 
   lines.push(

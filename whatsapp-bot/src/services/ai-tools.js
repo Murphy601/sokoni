@@ -3,7 +3,7 @@
  * Used by WhatsApp Sokoni Plug and website Ask (POST /api/agent/chat).
  */
 import { searchProducts, getProductById, listBrowseProducts } from "./catalog.js";
-import { getOrder, getOrdersForCustomer, extractOrderIdFromText, isSokoniOrderId } from "./orders.js";
+import { getOrder, getOrdersForCustomer, listAllOrders, extractOrderIdFromText, isSokoniOrderId } from "./orders.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
 import { checkoutMeta } from "./prepaid-checkout.js";
 import { normalizeShopperQuery, isShopperFillerOnly } from "./shopper-language.js";
@@ -38,6 +38,7 @@ export const TOOL_NAMES = [
   "get_product",
   "track_order",
   "list_orders",
+  "list_seller_orders",
   "store_info",
   "open_return_case",
   "get_seller_onboarding",
@@ -82,6 +83,26 @@ function isTrackOnlyQuery(text, lower) {
     /\b(track|tracking|status|wapi order|order yangu)\b/i.test(lower) &&
     !/\b(buy|want|need|find|search|show|looking|nataka)\b/i.test(lower)
   );
+}
+
+/** Seller asking about shop sales / orders placed through their store (not buyer tracking). */
+export function isSellerShopOrdersIntent(text) {
+  const raw = String(text || "").trim();
+  const lower = raw.toLowerCase();
+  if (!lower) return false;
+  // Bare @handle after bot asked for handle — treat as shop-orders follow-up
+  if (/^@[\w][\w\s'.-]{1,40}$/i.test(raw)) return true;
+  if (
+    /\b((my|our)\s+(shop|store)\s+(orders?|sales)|shop\s+orders?|my\s+sales|orders?\s+(from|in|through|for)\s+(my|our)\s+(shop|store)|(?:orders?|sales)\s+purchased\s+from\s+my|(?:show|list|see)\s+(me\s+)?(my\s+)?(shop\s+)?(orders?|sales)|what\s+(have\s+i|did\s+i)\s+sell)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  if (/\borders?\b/i.test(lower) && /\b(shop|store|sold|sales|seller)\b/i.test(lower)) {
+    return true;
+  }
+  return false;
 }
 
 function isPaymentOrSiteInfoQuery(lower) {
@@ -466,12 +487,28 @@ export async function runToolRouter(
   const allow = (name) => !allowedTools || allowedTools.includes(name);
 
   const orderId = extractOrderId(text);
-  if (orderId || /\b(track|tracking|status|wapi order|order yangu|where is my (package|order|parcel))\b/i.test(lower)) {
+  // Seller shop sales — phone → supplierId → real rows only (never buyer list_orders)
+  if (allow("list_seller_orders") && isSellerShopOrdersIntent(text)) {
+    results.push(await executeTool("list_seller_orders", {}, { phone, customerKey }));
+  } else if (
+    orderId ||
+    /\b(track|tracking|status|wapi order|order yangu|where is my (package|order|parcel))\b/i.test(lower)
+  ) {
     if (orderId && allow("track_order")) {
       results.push(await executeTool("track_order", { orderId }, { phone, customerKey }));
     } else if ((phone || customerKey) && allow("list_orders")) {
       results.push(await executeTool("list_orders", {}, { phone, customerKey }));
     }
+  }
+
+  // Also: seller specialist + vague "orders" / "only this?" follow-ups when phone is a shop
+  if (
+    allow("list_seller_orders") &&
+    !results.some((r) => r.tool === "list_seller_orders") &&
+    specialist === "seller" &&
+    /\b(orders?|sales|only this|that'?s all|ndio hizo)\b/i.test(lower)
+  ) {
+    results.push(await executeTool("list_seller_orders", {}, { phone, customerKey }));
   }
 
   // Damaged / wrong item / refund → ALWAYS run dispute protocol (order id optional;
@@ -766,6 +803,8 @@ export async function executeTool(name, args = {}, context = {}) {
         return toolTrackOrder(args, context);
       case "list_orders":
         return toolListOrders(context);
+      case "list_seller_orders":
+        return toolListSellerOrders(context);
       case "store_info":
         return toolStoreInfo();
       case "open_return_case":
@@ -1001,6 +1040,105 @@ function toolListOrders({ phone = "", customerKey = "" } = {}) {
   };
 }
 
+/**
+ * Shop sales for the WhatsApp sender — DB/JSON rows only.
+ * Never invents IDs; empty shop → explicit 0 orders message.
+ */
+function toolListSellerOrders({ phone = "" } = {}) {
+  if (!phone) {
+    return {
+      tool: "list_seller_orders",
+      ok: false,
+      error: "phone_required",
+      count: 0,
+      orders: [],
+      message:
+        "I need your seller WhatsApp number on this chat to load shop orders. Message Sokoni from the phone linked to your shop.",
+      deterministic: true,
+    };
+  }
+
+  const supplier = findSupplierByPhone(phone);
+  if (!supplier?.id) {
+    return {
+      tool: "list_seller_orders",
+      ok: false,
+      error: "not_a_seller",
+      count: 0,
+      orders: [],
+      message:
+        "❌ This WhatsApp number isn't linked to an active seller shop on Sokoni.\n\nOpen Seller Hub to finish setup:\nsokonimall.com/suppliers/list.html",
+      deterministic: true,
+    };
+  }
+
+  const handle =
+    String(supplier.shopHandle || supplier.handle || supplier.businessName || supplier.shopName || "your shop")
+      .replace(/^@/, "")
+      .trim() || "your shop";
+  const displayHandle = handle.startsWith("@") ? handle : `@${handle}`;
+
+  const rows = listAllOrders()
+    .filter((o) => o.supplierId === supplier.id && o.kind !== "cart_parent")
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .slice(0, 10)
+    .map((o) => {
+      const amount = Math.round(
+        Number(o.totalKes || o.priceKes || o.sellerNetKes || 0) || 0
+      );
+      const paid =
+        o.customerPaymentStatus === "confirmed" ||
+        o.paymentStatus === "paid" ||
+        Boolean(o.paidAt);
+      let status = String(o.status || "pending");
+      if (o.status === "cancelled") status = "Cancelled";
+      else if (paid) status = String(o.shipmentStatus || o.bodaStatus || "Paid");
+      return {
+        id: o.id,
+        productName: String(o.productName || o.title || "Item").slice(0, 80),
+        amountKes: amount,
+        status,
+        paid,
+      };
+    });
+
+  if (!rows.length) {
+    const message =
+      `📦 *${displayHandle}* — You currently have *0 orders* placed through your shop.\n\n` +
+      `When buyers prepaid-checkout your listings, they will show here. Seller Hub → Orders also lists live sales.`;
+    return {
+      tool: "list_seller_orders",
+      ok: true,
+      count: 0,
+      orders: [],
+      shopHandle: displayHandle,
+      supplierId: supplier.id,
+      message,
+      deterministic: true,
+    };
+  }
+
+  const lines = rows.map(
+    (o) =>
+      `• *${o.id}*: ${o.productName} | KES ${Number(o.amountKes || 0).toLocaleString()} | *${o.status}*`
+  );
+  const message =
+    `📦 *Live orders for ${displayHandle}* (${rows.length}):\n\n` +
+    `${lines.join("\n")}\n\n` +
+    `These are the only shop orders on file for this WhatsApp. Reply with an order id for more detail.`;
+
+  return {
+    tool: "list_seller_orders",
+    ok: true,
+    count: rows.length,
+    orders: rows,
+    shopHandle: displayHandle,
+    supplierId: supplier.id,
+    message,
+    deterministic: true,
+  };
+}
+
 async function toolOpenReturnCase({ orderId, reason = "" } = {}, { phone = "", customerKey = "" } = {}) {
   const { openBuyerReturnCase } = await import("./communication-hub.js");
   const result = await openBuyerReturnCase({
@@ -1220,7 +1358,7 @@ function toolStoreInfo() {
     stockNote:
       "Multi-unit listings decrement on each sale and stay visible until stock hits zero. Unique 1-of-1 thrift locks sold after purchase.",
     pickupRiderNote:
-      "When a seller requests boda pickup, ask which order and the exact pickup location. Shop @handle is enough to identify them — do not list every pending order unless asked.",
+      "When a seller requests boda pickup, ask which order id (from list_seller_orders) and the exact pickup location. Identify the seller by WhatsApp phone — never invent a list of pending orders.",
     note:
       "100% prepaid upfront for local items. Funds held in escrow until delivery confirmed. Sellers dispatch via Sokoni Mashinani hubs (countrywide). Browse on sokonimall.com; checkout on WhatsApp.",
   };
@@ -1341,6 +1479,23 @@ export function formatToolResultsForPrompt(toolResults) {
         (o) => `${o.id} · ${o.productName} · ${o.shipmentStatus || o.status} · ${o.paid ? "paid" : "unpaid"}`
       );
       return `TOOL list_orders:\n${lines.join("\n") || "No orders found for this number."}`;
+    }
+    if (r.tool === "list_seller_orders") {
+      if (r.message) {
+        return (
+          `TOOL list_seller_orders (AUTHORITATIVE — copy facts only, never invent rows):\n` +
+          `ok=${r.ok} count=${r.count ?? 0} shop=${r.shopHandle || "—"}\n` +
+          `${r.message}`
+        );
+      }
+      const lines = (r.orders || []).map(
+        (o) => `${o.id} · ${o.productName} · KES ${o.amountKes} · ${o.status}`
+      );
+      return (
+        `TOOL list_seller_orders (AUTHORITATIVE):\n` +
+        `count=${r.count ?? 0}\n` +
+        (lines.join("\n") || "0 shop orders for this WhatsApp.")
+      );
     }
     if (r.tool === "open_return_case") {
       return (
