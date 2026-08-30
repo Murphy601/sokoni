@@ -11,6 +11,8 @@ describe("admin enforce cascade commands", () => {
     assert.equal(isOverrideCommand("PAUSE SELLER @nairobi_kicks"), true);
     assert.equal(isOverrideCommand("UNPAUSE SELLER @nairobi_kicks"), true);
     assert.equal(isOverrideCommand("SUSPEND SELLER @nairobi_kicks policy"), true);
+    assert.equal(isOverrideCommand("DEACTIVATE SELLER @nairobi_kicks"), true);
+    assert.equal(isOverrideCommand("ACTIVATE SELLER @nairobi_kicks"), true);
     assert.equal(isOverrideCommand("UNBAN SELLER @nairobi_kicks"), true);
     assert.equal(isOverrideCommand("PAUSE RIDER +254712345678"), true);
     assert.equal(isOverrideCommand("UNPAUSE RIDER 254712345678"), true);
@@ -21,7 +23,12 @@ describe("admin enforce cascade commands", () => {
   it("normalizes seller enforce verbs", () => {
     assert.equal(normalizeMasterCommand("PAUSE SELLER @nairobi_kicks"), "PAUSE_SELLER nairobi_kicks");
     assert.equal(normalizeMasterCommand("UNPAUSE SELLER @nairobi_kicks"), "UNPAUSE_SELLER nairobi_kicks");
+    assert.equal(normalizeMasterCommand("ACTIVATE SELLER @nairobi_kicks"), "UNPAUSE_SELLER nairobi_kicks");
     assert.equal(normalizeMasterCommand("UNBAN SELLER @nairobi_kicks"), "UNBAN_SELLER nairobi_kicks");
+    assert.equal(
+      normalizeMasterCommand("DEACTIVATE SELLER @nairobi_kicks policy"),
+      "DEACTIVATE_SELLER nairobi_kicks policy"
+    );
     assert.equal(
       normalizeMasterCommand("SUSPEND SELLER @nairobi_kicks fraud"),
       "SUSPEND_SELLER nairobi_kicks fraud"

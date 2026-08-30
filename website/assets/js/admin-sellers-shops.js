@@ -185,9 +185,10 @@
       shop.commissionPct != null
         ? `<span class="muted" style="display:block;margin-top:0.25rem;">${shop.commissionPct}% commission</span>`
         : "";
-    const primaryAction = shop.payoutHold
-      ? `<button type="button" class="js-act btn-green" data-act="payout-hold" data-id="${escapeHtml(shop.id)}">Release hold</button>`
-      : `<button type="button" class="js-act btn-red" data-act="freeze" data-id="${escapeHtml(shop.id)}">Suspend</button>`;
+    const primaryAction =
+      String(shop.shopStatus || "live").toLowerCase() === "live" && !shop.payoutHold
+        ? `<button type="button" class="js-act btn-red" data-act="deactivate" data-id="${escapeHtml(shop.id)}">Deactivate</button>`
+        : `<button type="button" class="js-act btn-green" data-act="restore" data-id="${escapeHtml(shop.id)}">Restore</button>`;
 
     return `
       <tr data-shop-id="${escapeHtml(shop.id)}">
@@ -219,7 +220,8 @@
             <div style="position:relative;display:inline-block;">
               <button type="button" class="js-actions-toggle btn-outline" data-id="${escapeHtml(shop.id)}" aria-haspopup="true">Actions ▾</button>
               <div class="actions-menu" role="menu" data-menu-for="${escapeHtml(shop.id)}">
-                <button type="button" class="js-act act-danger" data-act="freeze" data-id="${escapeHtml(shop.id)}">Freeze / suspend shop</button>
+                <button type="button" class="js-act" data-act="pause" data-id="${escapeHtml(shop.id)}">Pause shop (temporary hold)</button>
+                <button type="button" class="js-act act-danger" data-act="deactivate" data-id="${escapeHtml(shop.id)}">Deactivate shop (block login)</button>
                 <button type="button" class="js-act" data-act="restore" data-id="${escapeHtml(shop.id)}">Restore shop</button>
                 <button type="button" class="js-act" data-act="verify" data-id="${escapeHtml(shop.id)}">${shop.verifiedBadge ? "Remove verify badge" : "Verify shop badge"}</button>
                 <button type="button" class="js-act" data-act="commission" data-id="${escapeHtml(shop.id)}">Force commission tier</button>
@@ -383,14 +385,25 @@
     const shop = shopCache.get(shopId) || {};
     closeAllMenus();
     try {
-      if (act === "freeze") {
-        const note = window.prompt("Freeze note (shown on admin record):", "Frozen by Sokoni admin");
+      if (act === "freeze" || act === "pause") {
+        const note = window.prompt(
+          "Pause note (seller + Boss get WhatsApp notice):",
+          "Temporarily paused by Sokoni admin"
+        );
         if (note == null) return;
-        await postAction(`/shops/${encodeURIComponent(shopId)}/freeze`, { note });
-        setStatus(`Frozen ${shop.shopHandle || shopId}`);
+        await postAction(`/shops/${encodeURIComponent(shopId)}/pause`, { note });
+        setStatus(`Paused ${shop.shopHandle || shopId} — shop & listings hidden; seller notified`);
+      } else if (act === "deactivate") {
+        const note = window.prompt(
+          "Deactivate note (blocks seller login; shop unlisted):",
+          "Deactivated by Sokoni admin"
+        );
+        if (note == null) return;
+        await postAction(`/shops/${encodeURIComponent(shopId)}/deactivate`, { note });
+        setStatus(`Deactivated ${shop.shopHandle || shopId} — login blocked; seller notified`);
       } else if (act === "restore") {
         await postAction(`/shops/${encodeURIComponent(shopId)}/restore`, {});
-        setStatus(`Restored ${shop.shopHandle || shopId}`);
+        setStatus(`Restored ${shop.shopHandle || shopId} — seller notified`);
       } else if (act === "verify") {
         const next = !shop.verifiedBadge;
         await postAction(`/shops/${encodeURIComponent(shopId)}/verify`, { verified: next });

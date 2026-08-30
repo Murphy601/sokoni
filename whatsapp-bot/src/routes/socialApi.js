@@ -28,6 +28,7 @@ import {
   updateUserShopProfile,
 } from "../db/repositories/social.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
+import { isDbEnabled } from "../db/pool.js";
 import { updatePeerSellerProfile } from "../services/suppliers.js";
 import { uploadSellerShopAvatar } from "../services/seller-avatar.js";
 import {
@@ -495,15 +496,46 @@ async function resolveOptionalShopViewerUserId(req) {
 router.get("/shop/:handle", async (req, res) => {
   try {
     try {
-      const { getSupplierByHandle, isShopPubliclyVisible } = await import("../services/suppliers.js");
-      const supplier = getSupplierByHandle(req.params.handle);
+      const {
+        getSupplierByHandle,
+        findSupplierByPhone,
+        isShopPubliclyVisible,
+      } = await import("../services/suppliers.js");
+      let supplier = getSupplierByHandle(req.params.handle);
+      // Handle may live on users table only — resolve supplier via phone
+      if (!supplier && isDbEnabled()) {
+        try {
+          const clean = String(req.params.handle || "")
+            .trim()
+            .replace(/^@+/, "")
+            .toLowerCase();
+          const { query } = await import("../db/pool.js");
+          const { rows } = await query(
+            `SELECT phone FROM users
+              WHERE LOWER(REPLACE(handle, '@', '')) = $1
+              LIMIT 1`,
+            [clean]
+          );
+          if (rows[0]?.phone) supplier = findSupplierByPhone(rows[0].phone);
+        } catch {
+          /* ignore */
+        }
+      }
       if (supplier && !isShopPubliclyVisible(supplier)) {
+        const st = String(supplier.shopStatus || "under_review").toLowerCase();
+        if (st === "deactivated") {
+          return res.status(404).json({
+            error: "not_found",
+            shopStatus: "deactivated",
+            message: "This shop is no longer available.",
+          });
+        }
         return res.status(403).json({
-          error: "shop_under_review",
+          error: "shop_unavailable",
           message:
             supplier.shopStatusNote ||
-            "This shop is temporarily unavailable while Sokoni completes a review.",
-          shopStatus: supplier.shopStatus || "under_review",
+            "This store is currently unavailable.",
+          shopStatus: st,
         });
       }
     } catch {

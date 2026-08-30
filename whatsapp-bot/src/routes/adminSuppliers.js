@@ -9,6 +9,7 @@ import {
   reviewSellerKyc,
   setSellerShopStatus,
   listShopsForAdminReview,
+  getSupplier,
 } from "../services/suppliers.js";
 import {
   listShopsDesk,
@@ -17,7 +18,6 @@ import {
   setShopCommissionOverride,
   setShopPayoutHold,
   overrideShopHandle,
-  freezeShop,
   editShopProfile,
 } from "../services/shops-desk.js";
 import { getSettlementSummary, markPayoutPaid } from "../services/settlements.js";
@@ -25,8 +25,6 @@ import {
   listFlaggedListings,
   takedownListing,
   restoreListing,
-  hideListingsForSupplier,
-  restoreListingsForSupplier,
 } from "../services/seller-listings.js";
 import { requireAdminToken } from "../lib/admin-auth.js";
 import { normalizeOrderId } from "../lib/order-id.js";
@@ -140,13 +138,16 @@ router.post("/shops/:id/handle", (req, res) => {
   res.json({ ok: true, shop: result.supplier });
 });
 
-/** Freeze = pause new orders; existing escrow untouched; listings hidden. */
+/** Freeze = temporary pause; existing escrow untouched; listings + shop hidden. */
 router.post("/shops/:id/freeze", async (req, res) => {
   const note = req.body?.note || "Frozen by Sokoni admin";
-  const result = freezeShop(req.params.id, { note });
-  if (result.error) return res.status(result.error === "not_found" ? 404 : 400).json(result);
-  const listings = await hideListingsForSupplier(req.params.id, { reason: note });
-  res.json({ ok: true, shop: result.supplier, listings });
+  const { enforceSellerAction } = await import("../services/enforce-account.js");
+  const out = await enforceSellerAction(req.params.id, "PAUSE", {
+    reason: note,
+    adminLabel: "Admin panel",
+  });
+  if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
+  res.json({ ok: true, ...out, shop: getSupplier(req.params.id) });
 });
 
 router.post("/shops/:id/edit", (req, res) => {
@@ -170,10 +171,13 @@ router.get("/shops", (req, res) => {
 
 router.post("/shops/:id/pause", async (req, res) => {
   const note = req.body?.note || "Paused by Sokoni admin";
-  const result = setSellerShopStatus(req.params.id, { status: "paused", note, holdPayouts: true });
-  if (result.error) return res.status(result.error === "not_found" ? 404 : 400).json(result);
-  const listings = await hideListingsForSupplier(req.params.id, { reason: note });
-  res.json({ ok: true, shop: result.supplier, listings });
+  const { enforceSellerAction } = await import("../services/enforce-account.js");
+  const out = await enforceSellerAction(req.params.id, "PAUSE", {
+    reason: note,
+    adminLabel: "Admin panel",
+  });
+  if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
+  res.json({ ok: true, ...out, shop: getSupplier(req.params.id) });
 });
 
 router.post("/shops/:id/review", async (req, res) => {
@@ -184,32 +188,36 @@ router.post("/shops/:id/review", async (req, res) => {
     holdPayouts: true,
   });
   if (result.error) return res.status(result.error === "not_found" ? 404 : 400).json(result);
-  const listings = await hideListingsForSupplier(req.params.id, { reason: note });
+  const shop = getSupplier(req.params.id);
+  const { hideListingsForSupplier } = await import("../services/listing-moderation.js");
+  const listings = await hideListingsForSupplier(req.params.id, {
+    reason: note,
+    phone: shop?.phone || shop?.mpesaNumber || "",
+    handle: String(shop?.shopHandle || "").replace(/^@/, ""),
+  });
   res.json({ ok: true, shop: result.supplier, listings });
 });
 
 router.post("/shops/:id/deactivate", async (req, res) => {
   const note = req.body?.note || "Shop deactivated by Sokoni";
-  const result = setSellerShopStatus(req.params.id, {
-    status: "deactivated",
-    note,
-    holdPayouts: true,
+  const { enforceSellerAction } = await import("../services/enforce-account.js");
+  const out = await enforceSellerAction(req.params.id, "DEACTIVATE", {
+    reason: note,
+    adminLabel: "Admin panel",
   });
-  if (result.error) return res.status(result.error === "not_found" ? 404 : 400).json(result);
-  const listings = await hideListingsForSupplier(req.params.id, { reason: note });
-  res.json({ ok: true, shop: result.supplier, listings });
+  if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
+  res.json({ ok: true, ...out, shop: getSupplier(req.params.id) });
 });
 
 router.post("/shops/:id/restore", async (req, res) => {
   const note = req.body?.note || "Shop restored after review";
-  const result = setSellerShopStatus(req.params.id, {
-    status: "live",
-    note,
-    holdPayouts: false,
+  const { enforceSellerAction } = await import("../services/enforce-account.js");
+  const out = await enforceSellerAction(req.params.id, "RESTORE", {
+    reason: note,
+    adminLabel: "Admin panel",
   });
-  if (result.error) return res.status(result.error === "not_found" ? 404 : 400).json(result);
-  const listings = await restoreListingsForSupplier(req.params.id);
-  res.json({ ok: true, shop: result.supplier, listings });
+  if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
+  res.json({ ok: true, ...out, shop: getSupplier(req.params.id) });
 });
 
 router.get("/payouts", (_req, res) => {

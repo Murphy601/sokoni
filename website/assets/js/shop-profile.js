@@ -1075,11 +1075,29 @@ async function loadShop(handle, { tab = state.listingsTab || "active", soft = fa
     const res = await fetch(`${SHOP_API_BASE}/shop/${encodeURIComponent(clean)}?${query.toString()}`);
     const data = await res.json();
     if (!res.ok) {
-      statusMessage(data?.message || "Could not load that shop handle.", true);
+      state.currentShop = null;
+      const st = String(data?.shopStatus || "").toLowerCase();
+      const unavailable =
+        data?.error === "shop_unavailable" ||
+        data?.error === "shop_under_review" ||
+        st === "paused" ||
+        st === "under_review";
+      const gone = res.status === 404 || st === "deactivated" || data?.error === "not_found";
+      renderShopUnavailable({
+        handle: clean,
+        message: data?.message,
+        mode: gone ? "gone" : unavailable ? "paused" : "error",
+      });
+      statusMessage(
+        data?.message ||
+          (gone ? "This shop is no longer available." : "This store is currently unavailable."),
+        true
+      );
       return;
     }
 
     // Fail-soft: if Postgres active listings are empty, show static catalog for this handle.
+    // Never do this when the API already marked the shop restricted.
     if (state.listingsTab === "active") {
       const apiProducts = Array.isArray(data.products) ? data.products : [];
       if (!apiProducts.length) {
@@ -1113,6 +1131,41 @@ async function loadShop(handle, { tab = state.listingsTab || "active", soft = fa
   } catch {
     statusMessage("Could not reach Sokoni right now. Please try again.", true);
   }
+}
+
+function renderShopUnavailable({ handle, message, mode = "paused" } = {}) {
+  const nameEl = el("shop-name");
+  const handleEl = el("shop-handle-display");
+  const bioEl = el("shop-bio");
+  const grid = el("shop-products-grid");
+  const empty = el("shop-products-empty");
+  if (nameEl) {
+    nameEl.textContent =
+      mode === "gone" ? "Shop unavailable" : "Store temporarily unavailable";
+  }
+  if (handleEl) {
+    // Deactivated shops should not advertise the handle; paused can show it briefly.
+    handleEl.textContent = mode === "gone" ? "" : handle ? `@${handle}` : "";
+  }
+  if (bioEl) {
+    bioEl.textContent =
+      message ||
+      (mode === "gone"
+        ? "This shop is no longer listed on Sokoni."
+        : "This store is currently unavailable. Check back later or browse other shops.");
+  }
+  if (grid) grid.innerHTML = "";
+  if (empty) {
+    empty.classList.remove("hidden");
+    empty.textContent =
+      mode === "gone"
+        ? "This shop was deactivated by Sokoni."
+        : "Listings are hidden while this store is on hold.";
+  }
+  // Hide order / follow CTAs when present
+  el("shop-follow-btn")?.classList.add("hidden");
+  el("shop-message-btn")?.classList.add("hidden");
+  el("shop-wa-order")?.classList.add("hidden");
 }
 
 function refreshViewerAndShopActions() {
