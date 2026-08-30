@@ -22,6 +22,7 @@ export const SPECIALIST_TOOLS = {
     "browse_taxonomy",
     "get_product",
     "track_order",
+    "get_order_label",
     "list_orders",
     "store_info",
     "open_return_case",
@@ -36,6 +37,8 @@ export const SPECIALIST_TOOLS = {
     "list_seller_listings",
     "lookup_order_seller",
     "get_shipping_rates",
+    "get_order_label",
+    "track_order",
     "browse_taxonomy",
     "update_inventory",
     "dispatch_with_rider",
@@ -43,6 +46,7 @@ export const SPECIALIST_TOOLS = {
   ],
   dispute: [
     "track_order",
+    "get_order_label",
     "list_orders",
     "lookup_order_seller",
     "open_return_case",
@@ -50,7 +54,15 @@ export const SPECIALIST_TOOLS = {
     "store_info",
     "verify_payment_code",
   ],
-  logistics: ["track_order", "list_orders", "lookup_order_seller", "store_info", "get_shipping_rates", "dispatch_with_rider"],
+  logistics: [
+    "track_order",
+    "get_order_label",
+    "list_orders",
+    "lookup_order_seller",
+    "store_info",
+    "get_shipping_rates",
+    "dispatch_with_rider",
+  ],
   general: [...TOOL_NAMES],
 };
 

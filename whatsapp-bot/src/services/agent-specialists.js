@@ -43,7 +43,7 @@ export function routeSpecialist(text, { isSellerSession = false } = {}) {
     return "dispute";
   }
   if (
-    /\b(track|tracking|rider|courier|dispatch|shipment|delivery status|out for delivery|where is my (package|order|parcel))\b/i.test(
+    /\b(track|tracking|rider|courier|dispatch|shipment|delivery status|out for delivery|where is my (package|order|parcel)|qr(\s*code)?|waybill|print(able)?\s*label)\b/i.test(
       lower
     )
   ) {
@@ -83,7 +83,7 @@ const SPECIALIST_HINTS = {
   dispute:
     "SPECIALIST: Dispute Agent — for damaged/refund use open_return_case when an SKN order id is present. Hold payout; ask for photos. Never invent refunds. Legal/fraud → human.",
   logistics:
-    "SPECIALIST: Logistics — use track_order. Share rider/courier/ETA from tools only. Riders are Sokoni-pinned (no self-select). For custody actions instruct exact commands: ACCEPT / PICKUP SKN-#### #### / CONFIRM SKN-#### ####. Never invent OTPs.",
+    "SPECIALIST: Logistics — use track_order and get_order_label for printable QR (label.html only — never invent /qr URLs). Share rider/courier/ETA from tools only. Riders are Sokoni-pinned (no self-select). For custody actions instruct exact commands: ACCEPT / PICKUP SKN-#### #### / CONFIRM SKN-#### ####. Never invent OTPs.",
   general:
     "SPECIALIST: General concierge — short helpful answers; use store_info + catalog tools.",
 };

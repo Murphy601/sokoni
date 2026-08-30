@@ -31,6 +31,7 @@ import {
   vendorKeyCandidatesFromSeller,
 } from "./vendor-shipping.js";
 import { evaluateGoodwillVoucher } from "./agent-specialists.js";
+import { generateOrderPrintLabelUrl } from "../lib/order-qr-links.js";
 
 export const TOOL_NAMES = [
   "search_products",
@@ -38,6 +39,7 @@ export const TOOL_NAMES = [
   "browse_taxonomy",
   "get_product",
   "track_order",
+  "get_order_label",
   "list_orders",
   "list_seller_orders",
   "lookup_order_seller",
@@ -135,6 +137,31 @@ export function isSellerListingsIntent(text) {
   return /\b((active|live|my|current)\s+listings?|my\s+(products?|catalog|inventory|items)|show\s+(me\s+)?(my\s+)?(listings?|products?|catalog)|list\s+(my\s+)?(listings?|products?))\b/i.test(
     lower
   );
+}
+
+/** Seller/buyer asking for printable QR / waybill / drop-off label link. */
+export function isOrderLabelQrIntent(text, history = []) {
+  const raw = String(text || "").trim();
+  const lower = raw.toLowerCase();
+  if (!lower) return false;
+  if (
+    /\b(qr(\s*code)?|waybill|print(able)?\s*label|parcel\s*label|shipping\s*label|drop[- ]?off\s*label|label\s*link|print\s*(the\s+)?(qr|label|waybill))\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  // Follow-up: bare SKN after we asked for an order id for the QR/label
+  if (isSokoniOrderId(raw) || extractOrderId(raw)) {
+    const recent = (Array.isArray(history) ? history : [])
+      .slice(-8)
+      .map((m) => String(m?.content || m?.text || "").toLowerCase())
+      .join("\n");
+    if (/\bqr\b|waybill|print(able)?\s*label|label\.html|parcel\s*label/i.test(recent)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Extract all SKN/SK ids from free text (current message or history). */
@@ -556,8 +583,13 @@ export async function runToolRouter(
   const contextOrderIds =
     orderIdsInMsg.length > 0 ? orderIdsInMsg : recentOrderIdsFromHistory(history, 6);
 
-  // Order → seller metadata (Boss/buyer/dispute) — NEVER list_seller_orders
-  if (allow("lookup_order_seller") && isOrderSellerLookupIntent(text)) {
+  // Printable QR / waybill label — deterministic URL (never let LLM invent /qr?order=)
+  if (allow("get_order_label") && isOrderLabelQrIntent(text, history)) {
+    const labelOrderId = orderId || contextOrderIds[0] || null;
+    results.push(
+      await executeTool("get_order_label", { orderId: labelOrderId }, { phone, customerKey, history })
+    );
+  } else if (allow("lookup_order_seller") && isOrderSellerLookupIntent(text)) {
     results.push(
       await executeTool(
         "lookup_order_seller",
@@ -882,6 +914,8 @@ export async function executeTool(name, args = {}, context = {}) {
         return await toolGetProduct(args);
       case "track_order":
         return toolTrackOrder(args, context);
+      case "get_order_label":
+        return toolGetOrderLabel(args, context);
       case "list_orders":
         return toolListOrders(context);
       case "list_seller_orders":
@@ -1100,10 +1134,81 @@ function toolTrackOrder({ orderId }, { phone = "" } = {}) {
     }
   }
 
+  const tracking = buildPublicTrackingPayload(order);
   return {
     tool: "track_order",
     ok: true,
-    tracking: buildPublicTrackingPayload(order),
+    tracking: {
+      ...tracking,
+      printLabelUrl: generateOrderPrintLabelUrl(order.id),
+    },
+  };
+}
+
+function toolGetOrderLabel({ orderId } = {}, { phone = "", customerKey = "", history = [] } = {}) {
+  let id = normalizeOrderId(orderId) || "";
+  if (!id) {
+    id = recentOrderIdsFromHistory(history, 3)[0] || "";
+  }
+  if (!id) {
+    const recent = getOrdersForCustomer(customerKey, phone).slice(0, 3);
+    if (recent.length === 1) id = recent[0].id;
+    else if (recent.length > 1) {
+      return {
+        tool: "get_order_label",
+        ok: false,
+        needsOrderId: true,
+        deterministic: true,
+        message:
+          `🖨️ Which order do you need the printable QR for?\n\n` +
+          recent.map((o) => `• *${o.id}* — ${o.productName || "item"}`).join("\n") +
+          `\n\nReply with the order ID (e.g. *SKN-1020*).`,
+      };
+    } else {
+      return {
+        tool: "get_order_label",
+        ok: false,
+        needsOrderId: true,
+        deterministic: true,
+        message:
+          `🖨️ Send the order ID for the printable QR waybill (e.g. *SKN-1020*).\n` +
+          `Or type *track* to see your recent orders.`,
+      };
+    }
+  }
+
+  const order = getOrder(id);
+  if (!order) {
+    return {
+      tool: "get_order_label",
+      ok: false,
+      error: "not_found",
+      orderId: id,
+      deterministic: true,
+      message: `I couldn't find *${id}* in my records. Double-check the order ID or type *track*.`,
+    };
+  }
+
+  const url = generateOrderPrintLabelUrl(order.id);
+  // URL on its own line — never wrap in *asterisks* (WhatsApp breaks bold mid-URL).
+  const message = [
+    `🖨️ *PRINTABLE QR WAYBILL* [${order.id}]`,
+    "",
+    `Item: *${order.productName || "Order"}*`,
+    "",
+    "Open this link (tap to print / show QR):",
+    url,
+    "",
+    `Attach the printed QR to the parcel, or write *${order.id}* clearly on the box.`,
+  ].join("\n");
+
+  return {
+    tool: "get_order_label",
+    ok: true,
+    orderId: order.id,
+    printLabelUrl: url,
+    deterministic: true,
+    message,
   };
 }
 
@@ -1809,6 +1914,7 @@ export function formatToolResultsForPrompt(toolResults) {
         `Product: ${t.productName}\n` +
         `Payment: ${t.paymentLine}\n` +
         `Shipment: ${t.shipmentStatusLabel}\n` +
+        (t.printLabelUrl ? `PrintableQR: ${t.printLabelUrl}\n` : "") +
         (t.courier ? `Courier: ${t.courier}\n` : "") +
         (t.riderName || t.riderPhone
           ? `Rider: ${t.riderName || "—"} ${t.riderPhone || ""}\n`
@@ -1816,6 +1922,19 @@ export function formatToolResultsForPrompt(toolResults) {
         (t.etaNote ? `ETA: ${t.etaNote}\n` : "") +
         (t.dropOffHub ? `Hub: ${t.dropOffHub}\n` : "") +
         `Timeline: ${steps || t.orderStatusLabel}`
+      );
+    }
+    if (r.tool === "get_order_label") {
+      if (r.printLabelUrl) {
+        return (
+          `TOOL get_order_label (AUTHORITATIVE — paste this URL on its own line, NO asterisks around the URL):\n` +
+          `orderId: ${r.orderId}\n` +
+          `printLabelUrl: ${r.printLabelUrl}`
+        );
+      }
+      return (
+        `TOOL get_order_label: ${r.message || r.error || "needs order id"}\n` +
+        `Do NOT invent /qr?order= links.`
       );
     }
     if (r.tool === "list_orders" && r.orders) {

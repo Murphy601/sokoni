@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Redirecting to printable QR…</title>
+<meta name="robots" content="noindex" />
+<script>
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var order = (params.get("order") || "").trim();
+    // Heal broken AI links that split SKN-#### across query fragments
+    if (!/^SKN?/i.test(order) && params.get("order")) {
+      order = String(params.get("order") || "");
+    }
+    var dest = "label.html";
+    if (order) dest += "?order=" + encodeURIComponent(order.replace(/\s+/g, "").toUpperCase());
+    window.location.replace(dest);
+  })();
+</script>
+</head>
+<body>
+  <p>Opening printable QR waybill… <a id="fallback" href="label.html">Tap here if you are not redirected</a>.</p>
+  <script>
+    var a = document.getElementById("fallback");
+    var params = new URLSearchParams(window.location.search);
+    var order = (params.get("order") || "").trim();
+    if (order && a) a.href = "label.html?order=" + encodeURIComponent(order.replace(/\s+/g, "").toUpperCase());
+  </script>
+</body>
+</html>

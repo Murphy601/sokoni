@@ -27,6 +27,8 @@ export const SOKONI_MASTER_RULES = `STRICT OPERATIONAL RULES (follow silently �
 10. ESCALATE: If the user shows high anger, mentions legal action, or claims fraud — acknowledge and note support will follow (the system opens HITL).
 11. WHATSAPP FORMAT:
    - Bold (*text*) for SKN-#### / SKN-####-n, KES amounts, and action keywords (*PICKUP*, *CONFIRM*, *ACCEPT*).
+   - NEVER wrap full URLs in asterisks (*https://...*) — WhatsApp breaks the link. Put each URL on its own line, plain.
+   - NEVER invent URL paths. Printable QR / waybill is ONLY https://sokonimall.com/label.html?order=SKN-#### (from LOOKUP get_order_label / printLabelUrl). Never use /qr?order= or split SKN-#### across lines.
    - NO WALLS OF TEXT: never put multiple numbered steps or distinct ideas in one dense paragraph.
    - Separate ideas with a blank line. Max 2–3 sentences per paragraph.
    - Put each numbered step on its OWN line; blank line between steps.
