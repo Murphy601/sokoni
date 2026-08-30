@@ -21,6 +21,12 @@ import {
 import { findSupplierByPhone, getSupplier, listSuppliers } from "./suppliers.js";
 import { advanceShipmentStatus, getEffectiveShipmentStatus } from "./shipments.js";
 import { formatLandmarkLine } from "../lib/landmark-hubs.js";
+import { dedupeLocationLine } from "../lib/order-qr-links.js";
+import {
+  msgSellerNewPaidOrder,
+  msgBuyerPaymentConfirmed,
+  generateOrderPrintLabelUrl,
+} from "../lib/wa-ux.js";
 import { setHumanHandoff, clearHumanHandoff, getCustomerMeta } from "./session.js";
 import {
   registerSellerChatId,
@@ -322,8 +328,8 @@ export function lifecycleLabel(order) {
 
 export function dropOffLine(order) {
   const landmark = formatLandmarkLine(order);
-  if (landmark) return landmark;
-  return String(order?.location || "").trim() || "your drop-off point";
+  const raw = landmark || String(order?.location || "").trim() || "your drop-off point";
+  return dedupeLocationLine(raw) || raw;
 }
 
 function appendSupportThread(orderId, entry) {
@@ -545,33 +551,15 @@ export function msgSellerPaid(order) {
     order.requiresRider === true ||
     order.deliveryMode === "sokoni_boda";
 
-  if (localRider) {
-    return (
-      `🎉 *New Paid Order on Sokoni!*\n` +
-      `Order: *${order.id}*\n` +
-      (listingId ? `Listing: *${listingId}*\n` : "") +
-      `Item: *${order.productName || "Order"}*\n` +
-      `Location: *${dropOffLine(order)}*\n` +
-      (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
-      `\n🛵 *Sokoni assigns the rider* — prepare the parcel.\n` +
-      `A verified rider will arrive. Hand over *only* after the *Pickup OTP*.\n` +
-      `You do not pick or pin riders.\n\n` +
-      `Problem? Reply: HELP ${order.id}`
-    );
-  }
-
-  return (
-    `🎉 *New Paid Order on Sokoni!*\n` +
-    `Order: *${order.id}*\n` +
-    (listingId ? `Listing: *${listingId}*\n` : "") +
-    `Item: *${order.productName || "Order"}*\n` +
-    `Location: *${dropOffLine(order)}*\n` +
-    (payout != null ? `Your payout after delivery: *KES ${Number(payout).toLocaleString()}*\n` : "") +
-    `\nPlease pack the item. Once handed to the buyer/courier, reply:\n` +
-    `*DISPATCH ${order.id}*\n` +
-    `(Upcountry: *WAYBILL ${order.id} Courier TRACKING*)\n\n` +
-    `Problem? Reply: HELP ${order.id}`
-  );
+  return msgSellerNewPaidOrder({
+    orderId: order.id,
+    itemName: order.productName || "Order",
+    listingId,
+    location: dropOffLine(order),
+    payoutKes: payout,
+    localRider,
+    qrCodeUrl: generateOrderPrintLabelUrl(order.id),
+  });
 }
 
 /**
@@ -588,56 +576,64 @@ export function msgSellerCartPaid(parent, children = []) {
     .map((c, i) => {
       const payout = c.sellerPayoutKes ?? c.sellerNetKes;
       const listingId = c.productId || c.supplierSku || "—";
+      const printUrl = generateOrderPrintLabelUrl(c.id);
       return (
         `${i + 1}. *${c.productName || "Item"}*\n` +
-        `   Listing: *${listingId}*\n` +
-        `   Tracking: *${c.id}*\n` +
-        (payout != null ? `   Your payout: *KES ${Number(payout).toLocaleString()}*\n` : "") +
+        `   • Listing: *${listingId}*\n` +
+        `   • Tracking: *${c.id}*\n` +
+        (payout != null ? `   • Payout: *KES ${Number(payout).toLocaleString()}*\n` : "") +
+        `   🖨️ ${printUrl}\n` +
         `   When sent → *DISPATCH ${c.id}*`
       );
     })
     .join("\n\n");
 
   return (
-    `🎉 *New Paid Cart Order on Sokoni!*\n` +
-    `Cart: *${parentId}*\n` +
+    `🎉 *NEW PAID CART* [${parentId}]\n\n` +
     `Your items (${list.length}):\n\n` +
     `${lines}\n\n` +
-    `Location: *${dropOffLine(list[0])}*\n\n` +
-    `Pack each item. Reply *DISPATCH* with that item's tracking ID when you hand it over.\n` +
-    `Problem? Reply: HELP <tracking id>`
+    `• *Drop-off area:* ${dropOffLine(list[0])}\n\n` +
+    `Pack each item. Attach the QR waybill (or write the tracking ID on the box).`
   );
 }
 
 export function msgBuyerPaid(order) {
-  return (
-    `✅ *Payment Confirmed for Order ${order.id}!*\n\n` +
-    `Your payment is safely held in Sokoni Escrow.\n` +
-    `The seller is preparing delivery to *${dropOffLine(order)}*.\n\n` +
-    `*What happens next*\n` +
-    `1. Seller sends the item → you get a dispatch update\n` +
-    `2. When you receive & inspect it, reply:\n*YES ${order.id}*\n\n` +
-    `Problem? Reply: HELP ${order.id}\n` +
-    `Track: *${order.id}* or *track*`
-  );
+  const total =
+    order.totalKes ??
+    order.buyerTotalKes ??
+    (order.priceKes != null
+      ? Number(order.priceKes) + Number(order.shippingKes || 0) + Number(order.transactionFeeKes || 0)
+      : null);
+  return msgBuyerPaymentConfirmed({
+    orderId: order.id,
+    itemName: order.productName || "Item",
+    totalKes: total,
+    location: dropOffLine(order),
+  });
 }
 
 export function msgBuyerDispatched(order) {
   const tracking =
     order.courierTrackingRef || order.courierName
-      ? `\nCourier: *${order.courierName || "—"}*\nTracking: *${order.courierTrackingRef || "—"}*\n`
-      : "";
+      ? [
+          ["Courier", order.courierName || "—"],
+          ["Tracking", order.courierTrackingRef || "—"],
+        ]
+      : [];
   const hours = Number(order.autoReleaseHours) || (order.fulfillmentMode === "SELLER_COURIER" ? 48 : 24);
-  return (
-    `📦 *Item Dispatched!*\n` +
-    `Order *${order.id}* is en route to *${dropOffLine(order)}*.` +
-    tracking +
-    `\nOnce received and inspected, reply:\n` +
-    `*YES ${order.id}*\n` +
-    `to release payment to the seller.\n\n` +
-    `⚠️ Wrong/damaged item? Do *not* reply YES — reply:\nHELP ${order.id}\n` +
-    `(Escrow auto-clears after ~${hours}h with no dispute.)`
-  );
+  return [
+    `📦 *ITEM DISPATCHED* [${order.id}]`,
+    "",
+    [
+      `• *Delivery to:* ${dropOffLine(order)}`,
+      ...tracking.map(([k, v]) => `• *${k}:* ${v}`),
+    ].join("\n"),
+    "",
+    `When received & inspected, reply: *YES ${order.id}*`,
+    "",
+    `Wrong/damaged? Do *not* reply YES — reply *HELP ${order.id}*`,
+    `(Escrow auto-clears after ~${hours}h with no dispute.)`,
+  ].join("\n");
 }
 
 export function msgSellerDispatchAck(order) {

@@ -2456,6 +2456,9 @@ export async function confirmPickupWithOtp({
         riderPhone,
         plate: riderPlate,
         sellerPhone: rows[0].seller_phone || "—",
+        buyerName,
+        buyerPhone: String(buyerPhone).replace(/\D/g, "") || buyerPhone,
+        escrowKes: order?.totalKes ?? order?.buyerTotalKes ?? null,
       }),
     });
   } catch (err) {

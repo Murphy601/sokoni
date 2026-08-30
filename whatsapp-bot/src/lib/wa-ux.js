@@ -1,7 +1,15 @@
 /**
  * Sokoni WhatsApp UX — unified message builders.
- * Layout: emoji + BOLD STATUS [OrderId] → • Key: Value bullets → CTA in *code* form.
+ * Layout: emoji + BOLD STATUS [OrderId] → • Key: Value bullets → short CTA.
+ * No filler walls of text; locations must be pre-deduped by callers.
  */
+import {
+  generateOrderPrintLabelUrl,
+  generateRiderScanUrl,
+  sellerHubRestockUrl,
+  dedupeLocationLine,
+} from "./order-qr-links.js";
+
 export function waHeader(emoji, status, orderId = "") {
   const id = orderId ? ` [${String(orderId).toUpperCase()}]` : "";
   return `${emoji} *${String(status || "").toUpperCase()}*${id}`;
@@ -18,19 +26,20 @@ export function waCta(command) {
   return `Reply: *${command}*`;
 }
 
+export { dedupeLocationLine, generateOrderPrintLabelUrl, generateRiderScanUrl, sellerHubRestockUrl };
+
 /** Buyer — order cancelled: seller missing shipping rates. */
 export function msgBuyerShippingCancel(orderId, itemName) {
   return [
     waHeader("❌", "ORDER CANCELLED", orderId),
     "",
-    `We couldn't process your request for *"${itemName || "this item"}"*.`,
-    "",
     waBullets([
+      ["Item", itemName || "this item"],
       ["Reason", "Seller has not set delivery rates for your area"],
-      ["Refund status", "No funds deducted"],
+      ["Payment", "No funds deducted"],
     ]),
     "",
-    "We apologize for the inconvenience. Reply *menu* to keep shopping.",
+    "Reply *menu* to keep shopping.",
   ].join("\n");
 }
 
@@ -39,14 +48,13 @@ export function msgSellerShippingCancel(orderId, itemName, region) {
   return [
     waHeader("🚨", "ORDER CANCELLED", orderId),
     "",
-    `An order for *"${itemName || "your item"}"* was automatically cancelled.`,
-    "",
     waBullets([
-      ["Reason", `Missing shipping fees${region ? ` for *${region}*` : ""}`],
+      ["Item", itemName || "your item"],
+      ["Reason", `Missing shipping fees${region ? ` for *${dedupeLocationLine(region)}*` : ""}`],
       ["Impact", "Lost sale — STK was never sent"],
     ]),
     "",
-    "👉 Open your Seller Hub → *Hub Drop-off & Shipping* and set fees for all regions.",
+    "👉 Seller Hub → *Hub Drop-off & Shipping* — set fees for all regions.",
   ].join("\n");
 }
 
@@ -55,18 +63,75 @@ export function msgSellerShippingReminder() {
   return [
     waHeader("🟡", "ACTION REQUIRED", ""),
     "",
-    "*Set your shipping rates!*",
+    "Set your shipping rates or buyer checkouts will be *cancelled* automatically.",
     "",
-    "Orders will be *automatically cancelled* if buyers check out before you configure delivery fees.",
-    "",
-    "*How to set rates (4 steps):*",
-    "1️⃣ Log in at sokonimall.com/suppliers/list.html (or Seller Hub)",
-    "2️⃣ Open the *Hub Drop-off & Shipping* tab",
-    "3️⃣ Select delivery *regions & locations*",
-    "4️⃣ Enter the fixed fee per area and tap *Save* 💾",
-    "",
-    "Configure this now so you don't lose orders.",
+    waBullets([
+      ["1", "Open sokonimall.com/suppliers/list.html"],
+      ["2", "Hub Drop-off & Shipping tab"],
+      ["3", "Select regions & enter fees"],
+      ["4", "Save"],
+    ]),
   ].join("\n");
+}
+
+/** Seller — new paid order (+ printable QR waybill). */
+export function msgSellerNewPaidOrder({
+  orderId,
+  itemName,
+  listingId,
+  location,
+  payoutKes,
+  localRider = false,
+  qrCodeUrl,
+}) {
+  const loc = dedupeLocationLine(location) || "—";
+  const printUrl = qrCodeUrl || generateOrderPrintLabelUrl(orderId);
+  const lines = [
+    waHeader("🎉", "NEW PAID ORDER", orderId),
+    "",
+    waBullets([
+      ["Item", listingId ? `${itemName || "Item"} (${listingId})` : itemName || "Item"],
+      ["Drop-off area", loc],
+      [
+        "Your payout",
+        payoutKes != null && Number.isFinite(Number(payoutKes))
+          ? `KES ${Number(payoutKes).toLocaleString()}`
+          : null,
+      ],
+    ]),
+    "",
+    "🖨️ *PRINTABLE QR WAYBILL:*",
+    printUrl,
+    "",
+    `⚠️ Package the item and attach the printed QR (or write *${String(orderId || "").toUpperCase()}* on the box).`,
+  ];
+  if (localRider) {
+    lines.push("", "Sokoni assigns the rider. Hand over *only* after verifying the pickup code at your door.");
+  } else {
+    lines.push("", waCta(`DISPATCH ${orderId}`), `(Upcountry: *WAYBILL ${orderId} Courier TRACKING*)`);
+  }
+  lines.push("", `Need help? Reply *HELP ${orderId}*`);
+  return lines.join("\n");
+}
+
+/** Seller — low / zero stock. */
+export function msgSellerLowStock({ itemName, remainingUnits, restockUrl, variantLines = "" }) {
+  const left = Math.max(0, Math.round(Number(remainingUnits) || 0));
+  const title = left === 0 ? "OUT OF STOCK" : "LOW STOCK ALERT";
+  return [
+    waHeader("⚠️", title, ""),
+    "",
+    waBullets([
+      ["Item", itemName || "Item"],
+      ["Remaining", `${left} unit${left === 1 ? "" : "s"}`],
+    ]),
+    variantLines ? `\n${variantLines}` : "",
+    "",
+    "👉 Restock on Seller Hub:",
+    restockUrl || sellerHubRestockUrl(),
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
 }
 
 /** Rider — new job offer. */
@@ -76,20 +141,19 @@ export function msgRiderJobOffer({ orderId, pickup, dropoff, feeKes, offerLabel 
     offerLabel ? `\n${offerLabel}` : "",
     "",
     waBullets([
-      ["Pickup", pickup || "—"],
-      ["Drop-off", dropoff || "—"],
-      ["Earning", feeKes > 0 ? `KES ${Number(feeKes).toLocaleString()}` : "—"],
+      ["Pickup", dedupeLocationLine(pickup) || "—"],
+      ["Drop-off", dedupeLocationLine(dropoff) || "—"],
+      ["Delivery fee", feeKes > 0 ? `KES ${Number(feeKes).toLocaleString()}` : "—"],
     ]),
     "",
-    "⏱️ Claim within *45 seconds*.",
-    waCta(`ACCEPT ${orderId}`),
-    `Busy? *DECLINE ${orderId}*`,
+    "⏱️ Reply *ACCEPT " + String(orderId).toUpperCase() + "* within *45 seconds*.",
+    `Busy? *DECLINE ${String(orderId).toUpperCase()}*`,
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-/** Rider — after ACCEPT: seller pickup only (no buyer details). */
+/** Rider — after ACCEPT: seller pickup only (no buyer details) + scan link. */
 export function msgRiderPickupStep({
   orderId,
   shopName,
@@ -97,20 +161,25 @@ export function msgRiderPickupStep({
   sellerPhone,
   feeKes,
   lateMins = 15,
+  scanUrl,
 }) {
+  const scan = scanUrl || generateRiderScanUrl(orderId);
   return [
     waHeader("🟢", "JOB CONFIRMED", orderId),
     "",
     "*STEP 1: PROCEED TO SELLER*",
     waBullets([
-      ["Shop", shopName || "Seller shop"],
-      ["Location", pickupAddr || "—"],
+      ["Shop name", shopName || "Seller shop"],
+      ["Address", dedupeLocationLine(pickupAddr) || "—"],
       ["Seller contact", sellerPhone || "—"],
-      ["Earning", feeKes > 0 ? `KES ${Number(feeKes).toLocaleString()} (held)` : "—"],
+      ["Delivery fee", feeKes > 0 ? `KES ${Number(feeKes).toLocaleString()} (held)` : "—"],
     ]),
     "",
-    `🔐 Ask the seller for the *Pickup Code* at the shop.`,
-    `⏱ Enter it within *${lateMins} minutes* or the job is released.`,
+    "📷 *SCAN PARCEL QR:*",
+    scan,
+    "",
+    `🔐 Or request the 4-digit *Pickup Code* from the seller.`,
+    `⏱ Enter within *${lateMins} minutes* or the job is released.`,
     "",
     waCta(`PICKUP ${orderId} <CODE>`),
   ].join("\n");
@@ -121,32 +190,32 @@ export function msgBuyerRiderAssigned({ orderId, riderName, riderPhone, plate })
   return [
     waHeader("🛵", "RIDER ASSIGNED", orderId),
     "",
-    "A vetted Sokoni rider is heading to the seller to collect your parcel.",
+    "A vetted rider is collecting your parcel from the seller.",
     "",
     waBullets([
       ["Rider", riderName || "—"],
       ["Phone", riderPhone || "—"],
-      ["Plate", plate || "—"],
+      ["Vehicle", plate || "—"],
     ]),
     "",
-    "You'll get another alert when the package is *out for delivery*.",
+    "You'll get another alert when it is *out for delivery*.",
   ].join("\n");
 }
 
 /** Seller — rider assigned + pickup OTP. */
 export function msgSellerRiderAssigned({ orderId, riderName, riderPhone, plate, pickupAddr, pickupOtp }) {
   return [
-    waHeader("🟢", "BODA ASSIGNED", orderId),
+    waHeader("🟢", "RIDER ASSIGNED", orderId),
     "",
     waBullets([
       ["Rider", riderName || "—"],
       ["Phone", riderPhone || "—"],
-      ["Plate", plate || "—"],
-      ["Handoff at", pickupAddr || "your shop"],
+      ["Vehicle", plate || "—"],
+      ["Handoff at", dedupeLocationLine(pickupAddr) || "your shop"],
     ]),
     "",
-    `📦 *PICKUP CODE (speak at handoff only):* *${pickupOtp}*`,
-    "Do not share this code on chat — say it when the rider is at your door.",
+    `🔐 *YOUR PICKUP CODE:* *${pickupOtp}*`,
+    "_(Hand over the parcel ONLY after verifying this code with the rider at your door)._",
   ].join("\n");
 }
 
@@ -158,48 +227,79 @@ export function msgRiderDeliveryStep({ orderId, buyerName, dropoffAddr, buyerPho
     "*STEP 2: DELIVER TO BUYER*",
     waBullets([
       ["Customer", buyerName || "Buyer"],
-      ["Drop-off", dropoffAddr || "—"],
-      ["Contact", buyerPhone || "—"],
+      ["Drop-off address", dedupeLocationLine(dropoffAddr) || "—"],
+      ["Buyer contact", buyerPhone || "—"],
       ["Fee held", feeKes > 0 ? `KES ${Number(feeKes).toLocaleString()}` : "—"],
     ]),
     "",
-    "🔐 At the door: share *live WhatsApp location*, then ask for the delivery OTP.",
+    "🔐 Request the *Delivery Code* from the buyer at the door.",
     waCta(`CONFIRM ${orderId} <CODE>`),
-    "(3 wrong tries locks your account)",
+  ].join("\n");
+}
+
+/** Buyer — payment confirmed. */
+export function msgBuyerPaymentConfirmed({ orderId, itemName, totalKes, location }) {
+  return [
+    waHeader("✅", "PAYMENT CONFIRMED", orderId),
+    "",
+    waBullets([
+      ["Item", itemName || "Item"],
+      [
+        "Total paid",
+        totalKes != null && Number.isFinite(Number(totalKes))
+          ? `KES ${Number(totalKes).toLocaleString()}`
+          : null,
+      ],
+      ["Delivery to", dedupeLocationLine(location) || "—"],
+    ]),
+    "",
+    "📦 What happens next: we assign a vetted rider (or the seller ships) to move your package.",
   ].join("\n");
 }
 
 /** Buyer — out for delivery after pickup. */
 export function msgBuyerOutForDelivery({ orderId, riderName, riderPhone, plate, deliveryOtp }) {
   return [
-    waHeader("🛵", "OUT FOR DELIVERY", orderId),
-    "",
-    "Your parcel has left the seller and is on the way.",
+    waHeader("🛵", "ORDER OUT FOR DELIVERY", orderId),
     "",
     waBullets([
       ["Rider", riderName || "—"],
       ["Phone", riderPhone || "—"],
-      ["Plate", plate || "—"],
-      ["Delivery OTP", deliveryOtp ? `*${deliveryOtp}*` : "(sent separately)"],
+      ["Vehicle", plate || "—"],
+      ["Delivery code", deliveryOtp ? `*${deliveryOtp}*` : "(sent separately)"],
     ]),
     "",
-    "📞 *Please stay near your phone.*",
-    "Give the 4-digit code to this rider *only after* you receive and check the package.",
+    "Share this 4-digit code with the rider *only when they deliver* your parcel. Stay near your phone.",
   ].join("\n");
 }
 
 /** Admin — package handed to rider. */
-export function msgAdminPickupHandover({ orderId, riderName, riderPhone, plate, sellerPhone }) {
+export function msgAdminPickupHandover({
+  orderId,
+  riderName,
+  riderPhone,
+  plate,
+  sellerPhone,
+  sellerName,
+  buyerName,
+  buyerPhone,
+  escrowKes,
+}) {
   return [
     waHeader("📦", "DISPATCH AUDIT", orderId),
     "",
-    "Package handed to rider — status *IN_TRANSIT*.",
-    "",
     waBullets([
-      ["Rider", riderName || "—"],
-      ["Rider phone", riderPhone || "—"],
-      ["Plate", plate || "—"],
-      ["Seller phone", sellerPhone || "—"],
+      ["Status", "IN_TRANSIT"],
+      ["Seller", sellerName ? `${sellerName} (${sellerPhone || "—"})` : sellerPhone || "—"],
+      ["Rider", riderName ? `${riderName} (${riderPhone || "—"})` : riderPhone || "—"],
+      ["Vehicle", plate || "—"],
+      ["Buyer", buyerName ? `${buyerName} (${buyerPhone || "—"})` : buyerPhone || "—"],
+      [
+        "Escrow held",
+        escrowKes != null && Number.isFinite(Number(escrowKes))
+          ? `KES ${Number(escrowKes).toLocaleString()}`
+          : null,
+      ],
     ]),
   ].join("\n");
 }
@@ -212,6 +312,6 @@ export function msgPickupFormatHint(orderIdHint = "SKN-XXXX") {
     "Use this exact pattern:",
     waCta(`PICKUP ${orderIdHint} 1234`),
     "",
-    "Example: *PICKUP SKN-1015 5972*",
+    `Example: *PICKUP SKN-1015 5972*`,
   ].join("\n");
 }
