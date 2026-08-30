@@ -145,7 +145,7 @@ router.get("/", async (req, res) => {
   if (result.error === "session_required" || result.error === "session_invalid" || result.error === "session_expired") {
     return res.status(401).json(result);
   }
-  if (result.error === "account_suspended") {
+  if (result.error === "account_suspended" || result.error === "account_deactivated") {
     return res.status(403).json(result);
   }
   if (result.needsSetup) return res.status(404).json(result);
