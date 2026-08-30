@@ -566,7 +566,7 @@
     const params = new URLSearchParams(window.location.search);
     const code = (params.get("pamoja") || "").trim();
     if (!code) return;
-    const session = window.SokoniBuyerAuth?.getSession?.();
+    const session = window.SokoniBuyerAuth?.readSession?.();
     if (!session?.sessionToken) {
       // Soft prompt — leave code in URL for after verify
       return;
