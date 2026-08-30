@@ -446,18 +446,32 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "",
   if (!["PENDING", "VERIFIED", "SUSPENDED", "REJECTED"].includes(st)) {
     return { error: "invalid_status", message: "Use PENDING, VERIFIED, SUSPENDED, or REJECTED." };
   }
-  const { rows } = await query(
-    `UPDATE riders SET
-       verification_status = $2,
-       is_available = CASE WHEN $2 = 'VERIFIED' THEN TRUE ELSE FALSE END,
-       suspend_reason = CASE WHEN $2 = 'SUSPENDED' THEN $3 ELSE NULL END,
-       suspended_at = CASE WHEN $2 = 'SUSPENDED' THEN NOW() ELSE NULL END,
-       suspended_order_ref = CASE WHEN $2 = 'SUSPENDED' THEN suspended_order_ref ELSE NULL END,
-       updated_at = NOW()
-     WHERE id = $1
-     RETURNING *`,
-    [id, st, String(reason || "").slice(0, 400) || null]
-  );
+  // Avoid PG "inconsistent types deduced for parameter $2" — never reuse the same
+  // placeholder both as varchar assign and in CASE text compares.
+  const isVerified = st === "VERIFIED";
+  const isSuspended = st === "SUSPENDED";
+  const suspendReason = isSuspended ? String(reason || "").slice(0, 400) || null : null;
+  let rows;
+  try {
+    ({ rows } = await query(
+      `UPDATE riders SET
+         verification_status = $2::varchar(20),
+         is_available = $3::boolean,
+         suspend_reason = $4,
+         suspended_at = CASE WHEN $5::boolean THEN NOW() ELSE NULL END,
+         suspended_order_ref = CASE WHEN $5::boolean THEN suspended_order_ref ELSE NULL END,
+         updated_at = NOW()
+       WHERE id = $1::int
+       RETURNING *`,
+      [id, st, isVerified, suspendReason, isSuspended]
+    ));
+  } catch (err) {
+    console.error("[boda-fleet] setRiderVerificationStatus:", err?.message || err);
+    return {
+      error: "verify_failed",
+      message: err?.message || "Could not update rider status.",
+    };
+  }
   if (!rows[0]) return { error: "not_found", message: "Rider not found." };
   const rider = mapRider(rows[0]);
 
@@ -545,8 +559,8 @@ export async function listRiders({ zone = null, status = null, limit = 50, q = n
               )
               AND p.paid_at IS NULL
          ) ledger ON TRUE
-        WHERE ($1::text IS NULL OR r.operating_town = $1)
-          AND ($2::text IS NULL OR r.verification_status = $2)
+        WHERE ($1::text IS NULL OR r.operating_town = $1::text)
+          AND ($2::text IS NULL OR r.verification_status = $2::text)
         ORDER BY r.created_at DESC
         LIMIT $3`,
       [z, st, lim]
@@ -569,8 +583,8 @@ export async function listRiders({ zone = null, status = null, limit = 50, q = n
               ORDER BY dd.id DESC
               LIMIT 1
            ) d ON TRUE
-          WHERE ($1::text IS NULL OR r.operating_town = $1)
-            AND ($2::text IS NULL OR r.verification_status = $2)
+          WHERE ($1::text IS NULL OR r.operating_town = $1::text)
+            AND ($2::text IS NULL OR r.verification_status = $2::text)
           ORDER BY r.created_at DESC
           LIMIT $3`,
         [z, st, lim]
@@ -581,8 +595,8 @@ export async function listRiders({ zone = null, status = null, limit = 50, q = n
       try {
         const result = await query(
           `SELECT * FROM riders
-            WHERE ($1::text IS NULL OR operating_town = $1)
-              AND ($2::text IS NULL OR verification_status = $2)
+            WHERE ($1::text IS NULL OR operating_town = $1::text)
+              AND ($2::text IS NULL OR verification_status = $2::text)
             ORDER BY created_at DESC
             LIMIT $3`,
           [z, st, lim]
