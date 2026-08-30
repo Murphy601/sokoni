@@ -554,11 +554,19 @@ export async function runAgentTurn({
     }
   }
 
+  let sellerByPhone = false;
+  try {
+    const { findSupplierByPhone } = await import("./suppliers.js");
+    sellerByPhone = Boolean(phone && findSupplierByPhone(phone)?.id);
+  } catch {
+    /* ignore */
+  }
+
   const graph = await runAgentGraph({
     text,
     phone,
     customerKey: sessionKey,
-    isSellerSession: isSellerTopic(text),
+    isSellerSession: sellerByPhone || isSellerTopic(text),
   });
   const { escalation, specialist, specialistHint, tools: toolResults, knowledge, knowledgeBlock, handoffSummary } =
     graph;
