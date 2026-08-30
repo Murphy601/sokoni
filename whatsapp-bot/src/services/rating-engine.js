@@ -78,16 +78,36 @@ async function loadRider(riderId) {
 
 export async function findSellerByHandle(handleRaw) {
   if (!isDbEnabled()) return null;
-  const handle = String(handleRaw || "")
-    .trim()
-    .replace(/^@/, "")
-    .toLowerCase();
-  if (!handle) return null;
-  const { rows } = await query(
-    `SELECT id FROM users WHERE LOWER(handle) = $1 LIMIT 1`,
-    [handle]
-  );
-  return rows[0]?.id != null ? Number(rows[0].id) : null;
+  const { shopHandleLookupKeys } = await import("../lib/shop-handle.js");
+  const keys = shopHandleLookupKeys(handleRaw);
+  if (!keys.length) return null;
+
+  // Prefer exact LOWER(handle) hits across slug variants (adiv_thrift, adiv-thrift, …)
+  for (const key of keys) {
+    const { rows } = await query(
+      `SELECT id FROM users
+        WHERE LOWER(REGEXP_REPLACE(COALESCE(handle, ''), '^@+', '')) = $1
+           OR LOWER(REGEXP_REPLACE(COALESCE(shop_name, ''), '^@+', '')) = $1
+           OR LOWER(REGEXP_REPLACE(COALESCE(display_name, ''), '^@+', '')) = $1
+        LIMIT 1`,
+      [key]
+    );
+    if (rows[0]?.id != null) return Number(rows[0].id);
+  }
+
+  // Last resort: strip non-alphanumerics so "Adiv's thrift" ≈ "adivthrift" ≈ "adiv_thrift"
+  const compact = keys.find((k) => /^[a-z0-9]+$/.test(k)) || keys[0].replace(/[^a-z0-9]/g, "");
+  if (compact.length >= 3) {
+    const { rows } = await query(
+      `SELECT id FROM users
+        WHERE REGEXP_REPLACE(LOWER(COALESCE(handle, '')), '[^a-z0-9]', '', 'g') = $1
+           OR REGEXP_REPLACE(LOWER(COALESCE(shop_name, '')), '[^a-z0-9]', '', 'g') = $1
+        LIMIT 1`,
+      [compact]
+    );
+    if (rows[0]?.id != null) return Number(rows[0].id);
+  }
+  return null;
 }
 
 export async function findRiderByPhone(phoneRaw) {

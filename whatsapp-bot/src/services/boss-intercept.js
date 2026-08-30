@@ -30,7 +30,7 @@ export function looksLikeAdminProbe(text) {
   if (/^\s*MUTE\s+BUYER\b/i.test(t)) return true;
   if (/^\s*FREEZE\s+WALLET\b/i.test(t)) return true;
   if (/^\s*SYSTEM\s+(PAUSE|RESUME|LOCKDOWN)\b/i.test(t)) return true;
-  if (/^\s*(SET|OVERRIDE)\s+RATING\b/i.test(t)) return true;
+  if (/^\s*(SET|OVERRIDE)\s+RATINGS?\b/i.test(t)) return true;
   if (/^\s*PURGE\s+RATING\b/i.test(t)) return true;
   if (/^\s*PENALIZE\b/i.test(t)) return true;
   if (/^\s*VERIFY\s+SHOP\b/i.test(t)) return true;
