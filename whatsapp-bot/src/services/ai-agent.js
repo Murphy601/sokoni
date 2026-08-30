@@ -357,6 +357,9 @@ function offlineReply(toolResults, channel, userMessage = "") {
     if (r.tool === "open_return_case" && r.message) {
       return r.message;
     }
+    if (r.tool === "list_seller_orders" && r.message) {
+      return r.message;
+    }
     if (r.tool === "get_seller_payout" && (r.message || r.ok)) {
       return r.message || `Payout summary ready in Seller Hub.`;
     }
@@ -757,6 +760,30 @@ export async function runAgentTurn({
     };
   }
 
+  // DETERMINISTIC seller shop orders — never let the LLM invent SK-#### / fake items
+  const sellerOrdersResult = toolResults.find(
+    (r) => r.tool === "list_seller_orders" && r.message && r.deterministic
+  );
+  if (sellerOrdersResult?.message) {
+    const reply = sellerOrdersResult.message;
+    if (persist && channel === "whatsapp") pushMessage(sessionKey, "assistant", reply);
+    console.log(
+      `[ai-agent] seller shop orders (no LLM): shop=${sellerOrdersResult.shopHandle || "—"} count=${
+        sellerOrdersResult.count ?? 0
+      }`
+    );
+    return {
+      reply,
+      tools: toolResults,
+      products: [],
+      tracking: trackingPayload,
+      specialist,
+      sellerShopOrders: true,
+      graph: graph.graph,
+      threadId: resolveThreadId(phone || sessionKey),
+    };
+  }
+
   const products =
     toolResults.find((r) => r.tool === "browse_products" && r.products?.length)?.products ||
     toolResults.find((r) => r.tool === "search_products" && r.products?.length)?.products ||
@@ -905,6 +932,7 @@ export function agentMeta() {
       "get_product",
       "track_order",
       "list_orders",
+      "list_seller_orders",
       "store_info",
       "open_return_case",
       "get_seller_onboarding",

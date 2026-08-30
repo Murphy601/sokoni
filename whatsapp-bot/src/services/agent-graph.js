@@ -32,6 +32,7 @@ export const SPECIALIST_TOOLS = {
     "store_info",
     "get_seller_onboarding",
     "get_seller_payout",
+    "list_seller_orders",
     "get_shipping_rates",
     "browse_taxonomy",
     "update_inventory",

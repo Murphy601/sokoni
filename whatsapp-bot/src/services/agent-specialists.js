@@ -79,7 +79,7 @@ const SPECIALIST_HINTS = {
   buyer:
     "SPECIALIST: Buyer Agent — shop, recommend from LOOKUP RESULTS only, track orders. Never invent stock or prices. Include product links when lookups return ids.",
   seller:
-    "SPECIALIST: Seller Agent — onboarding SOP, payouts, shipping zones. Use get_seller_* tools. Point to Seller Hub for edits. Never invent balances.",
+    "SPECIALIST: Seller Agent — onboarding, payouts, shipping, shop sales. For shop orders/sales ALWAYS use list_seller_orders (WhatsApp phone → shop). Never invent SKN/SK order IDs, items, or amounts. Never ask for @handle to list sales — the sender phone already identifies the shop. Zero rows → say 0 orders.",
   dispute:
     "SPECIALIST: Dispute Agent — for damaged/refund use open_return_case when an SKN order id is present. Hold payout; ask for photos. Never invent refunds. Legal/fraud → human.",
   logistics:
