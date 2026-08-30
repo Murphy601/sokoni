@@ -413,13 +413,23 @@ body.has-depop-shell .seller-trust-badge {
 
 .seller-trust-badge--fast_dispatcher,
 .seller-trust-badge--top_rated,
-.seller-trust-badge--top_seller {
+.seller-trust-badge--top_seller,
+.seller-trust-badge--legend {
   background: rgba(27, 16, 53, 0.08);
+}
+
+.seller-trust-badge--verified {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.seller-trust-badge--newbie {
+  background: rgba(27, 16, 53, 0.05);
 }
 
 html.dark .seller-trust-badge--fast_dispatcher,
 html.dark .seller-trust-badge--top_rated,
-html.dark .seller-trust-badge--top_seller {
+html.dark .seller-trust-badge--top_seller,
+html.dark .seller-trust-badge--legend {
   background: rgba(255, 248, 240, 0.12);
 }
 

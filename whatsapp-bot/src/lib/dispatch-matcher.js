@@ -11,7 +11,7 @@ export const OFFER_TIMEOUT_MS = 45 * 1000;
 export const LATE_PICKUP_PENALTY = 0.2;
 export const CANCEL_JOB_PENALTY = 0.5;
 /** Minutes after ACCEPT without seller Pickup OTP before auto-unassign + re-offer. */
-export const LATE_PICKUP_MINUTES = 10;
+export const LATE_PICKUP_MINUTES = 20;
 
 /**
  * @param {{ rating?: number, distanceM?: number|null, acceptanceRate?: number }} r

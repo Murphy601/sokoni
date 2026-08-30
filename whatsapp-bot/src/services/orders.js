@@ -537,6 +537,19 @@ export function updateOrderStatus(id, statusInput, opts = {}) {
   order.updatedAt = Date.now();
   persist();
 
+  // Seller-initiated cancel only (explicit flag — not buyer/dispute refunds)
+  if (status === "cancelled" && fromStatus !== "cancelled" && opts.sellerCancel) {
+    import("./rating-engine.js")
+      .then(async ({ penalizeSellerCancel }) => {
+        const { ensureOrderSellerUserId } = await import("../db/repositories/social.js");
+        const sellerUserId = await ensureOrderSellerUserId(order);
+        if (sellerUserId) {
+          await penalizeSellerCancel(sellerUserId, String(order.id).toUpperCase());
+        }
+      })
+      .catch((err) => console.warn("[orders] seller cancel rating skipped:", err?.message || err));
+  }
+
   import("./audit-log.js")
     .then(({ writeAuditLog }) =>
       writeAuditLog({
@@ -546,7 +559,7 @@ export function updateOrderStatus(id, statusInput, opts = {}) {
         fromStatus,
         toStatus: status,
         source,
-        metadata: { force: Boolean(force) },
+        metadata: { force: Boolean(force), sellerCancel: Boolean(opts.sellerCancel) },
       })
     )
     .catch(() => {});

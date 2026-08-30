@@ -39,8 +39,8 @@ describe("dispatch-matcher", () => {
     assert.equal(ranked[ranked.length - 1].tier, "TIER2");
   });
 
-  it("pickup SLA is 10 minutes with −0.2 late penalty", () => {
-    assert.equal(LATE_PICKUP_MINUTES, 10);
+  it("pickup SLA is 20 minutes with −0.2 late penalty", () => {
+    assert.equal(LATE_PICKUP_MINUTES, 20);
     assert.equal(LATE_PICKUP_PENALTY, 0.2);
   });
 });
