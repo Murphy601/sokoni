@@ -300,6 +300,7 @@ export async function shouldRouteIncomingAsAdmin(body, parsed) {
     /^\s*UNPAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
     /^\s*DEACTIVATE\s+(SELLER|SHOP)\b/i.test(text) ||
     /^\s*ACTIVATE\s+(SELLER|SHOP)\b/i.test(text) ||
+    /^\s*BROADCAST\s+(SELLERS?|RIDERS?|BUYERS?|CUSTOMERS?)\b/i.test(text) ||
     /^\s*VERIFY\s+SHOP\b/i.test(text) ||
     /^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(text) ||
     /^\s*SET\s+COMMISSION\b/i.test(text) ||
