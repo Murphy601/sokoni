@@ -4,6 +4,8 @@ import {
   blockedShopLookup,
   isProductFromBlockedShop,
   assertProductShopVisible,
+  isProductFromMissingShop,
+  isPlatformOwnedListing,
 } from "./enforce-account.js";
 
 describe("storefront hide helpers", () => {
@@ -23,11 +25,31 @@ describe("storefront hide helpers", () => {
     assert.equal(isProductFromBlockedShop({ supplierId: "sup_1" }, lookup), true);
     assert.equal(isProductFromBlockedShop({ shopHandle: "@nairobi_kicks" }, lookup), true);
     assert.equal(isProductFromBlockedShop({ sellerPhone: "254712345678" }, lookup), true);
-    assert.equal(isProductFromBlockedShop({ supplierId: "other", shopHandle: "ok" }, lookup), false);
+    assert.equal(
+      isProductFromBlockedShop({ supplierId: "other", shopHandle: "ok-shop-xyz" }, lookup),
+      // Peer handle with no live supplier → orphan → blocked
+      true
+    );
   });
 
-  it("assertProductShopVisible allows products with no supplier link", () => {
-    const gate = assertProductShopVisible({ id: "prod_x", title: "Tee" });
+  it("platform listings without supplier stay visible", () => {
+    assert.equal(isPlatformOwnedListing({ id: "p1", shopHandle: "sokoni-store" }), true);
+    assert.equal(isPlatformOwnedListing({ id: "p2" }), true);
+    const gate = assertProductShopVisible({ id: "prod_x", title: "Tee", shopHandle: "sokoni-store" });
     assert.equal(gate.ok, true);
+  });
+
+  it("peer listings with missing supplier are orphans", () => {
+    const orphan = {
+      id: "prod_orphan",
+      shopHandle: "deleted_shop_xyz_never",
+      sellerPhone: "254700000099",
+      supplierId: "sup_gone_forever",
+    };
+    assert.equal(isProductFromMissingShop(orphan), true);
+    const gate = assertProductShopVisible(orphan);
+    assert.equal(gate.ok, false);
+    assert.equal(gate.shopStatus, "deleted");
+    assert.equal(isProductFromBlockedShop(orphan, { ids: new Set(), handles: new Set(), phones: new Set() }), true);
   });
 });

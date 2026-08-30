@@ -489,15 +489,11 @@ const UPSERT_CATALOG_SQL = `
     shipping_kes = EXCLUDED.shipping_kes,
     price_usd = EXCLUDED.price_usd,
     source_price_kes = EXCLUDED.source_price_kes,
-    original_price_kes = EXCLUDED.original_price_kes,
-    -- Prefer authoritative catalog upsert: restock/clear sold when master says live stock.
-    -- Keep sticky sold only when the incoming row is also sold/out (race-safe for paid sales).
-    is_sold = CASE
-      WHEN EXCLUDED.in_stock = TRUE AND COALESCE(EXCLUDED.stock_quantity, 0) > 0 THEN EXCLUDED.is_sold
-      ELSE (products.is_sold OR EXCLUDED.is_sold)
-    END,
+    original_price_kes = COALESCE(EXCLUDED.original_price_kes, products.original_price_kes),
+    -- Never clear sold / never restock a sold row via JSON upsert races.
+    -- Explicit restock uses updateProductInventory + clearSoldSku, not catalog sync.
+    is_sold = products.is_sold OR EXCLUDED.is_sold,
     in_stock = CASE
-      WHEN EXCLUDED.in_stock = TRUE AND COALESCE(EXCLUDED.stock_quantity, 0) > 0 THEN TRUE
       WHEN products.is_sold OR EXCLUDED.is_sold THEN FALSE
       ELSE EXCLUDED.in_stock
     END,
@@ -512,6 +508,8 @@ const UPSERT_CATALOG_SQL = `
 /**
  * Resolve the Postgres seller row for a master-catalog product.
  * Never silently attribute peer-seller listings to the default Sokoni store.
+ * Never CREATE users/sellers from catalog sync — that resurrected purged shops
+ * when a phone was reused as a rider and leftover products re-synced.
  */
 async function resolveCatalogSeller(catalogProduct) {
   const handle = String(catalogProduct.shopHandle || catalogProduct.sellerHandle || "")
@@ -524,62 +522,62 @@ async function resolveCatalogSeller(catalogProduct) {
 
   if (handle && handle !== "sokoni-store") {
     try {
-      const { ensureSellerSocialProfile } = await import("./users.js");
-      if (catalogProduct.sellerPhone) {
-        const ensured = await ensureSellerSocialProfile({
-          phone: catalogProduct.sellerPhone,
-          handle,
-          shopName: catalogProduct.source || handle,
-          location: catalogProduct.location || null,
-        });
-        if (!ensured.error) {
-          sellerId = ensured.seller?.id || null;
-          sellerUserId =
-            ensured.user?.id != null && Number.isInteger(Number(ensured.user.id))
-              ? Number(ensured.user.id)
-              : null;
-        } else {
-          console.warn(
-            "[products] ensureSellerSocialProfile failed:",
-            ensured.error,
-            ensured.message || "",
-            handle
-          );
+      // Prefer an existing live supplier — refuse to provision zombies.
+      let liveSupplier = null;
+      try {
+        const { getSupplierByHandle, findSupplierByPhone, getSupplier } = await import(
+          "../../services/suppliers.js"
+        );
+        if (catalogProduct.supplierId) liveSupplier = getSupplier(catalogProduct.supplierId);
+        if (!liveSupplier && handle) liveSupplier = getSupplierByHandle(handle);
+        if (!liveSupplier && catalogProduct.sellerPhone) {
+          liveSupplier = findSupplierByPhone(catalogProduct.sellerPhone);
         }
+      } catch {
+        /* ignore */
       }
 
-      if (!sellerId) {
+      if (!liveSupplier) {
+        // Peer listing with no supplier.json row — keep prior owner if any, else default.
+                // Do NOT call ensureSellerSocialProfile — recreates deleted sellers / hijacks rider phones.
+        console.warn(
+          "[products] upsert skip seller provision — no live supplier for",
+          catalogProduct.id,
+          "handle=",
+          handle
+        );
+      } else {
         const existing = await getSellerBySlug(handle);
         if (existing) {
           sellerId = existing.id;
           sellerUserId =
             existing.user_id != null && Number.isInteger(Number(existing.user_id))
               ? Number(existing.user_id)
-              : sellerUserId;
+              : null;
         }
-      }
 
-      if (!sellerId || !sellerUserId) {
-        const { rows } = await query(
-          `SELECT id, handle FROM users
-            WHERE LOWER(REPLACE(handle, '@', '')) = $1
-            LIMIT 1`,
-          [handle]
-        );
-        const user = rows[0];
-        const uid =
-          user?.id != null && Number.isInteger(Number(user.id)) ? Number(user.id) : null;
-        if (uid) {
-          sellerUserId = sellerUserId || uid;
-          const { ensureSellerLinkedToUser } = await import("./sellers.js");
-          const linked = await ensureSellerLinkedToUser({
-            userId: uid,
-            slug: handle,
-            businessName: catalogProduct.source || handle,
-            city: catalogProduct.location || null,
-          });
-          if (!linked.error && linked.seller?.id) {
-            sellerId = linked.seller.id;
+        if (!sellerId || !sellerUserId) {
+          const { rows } = await query(
+            `SELECT id, handle FROM users
+              WHERE LOWER(REPLACE(COALESCE(handle,''), '@', '')) = $1
+              LIMIT 1`,
+            [handle]
+          );
+          const user = rows[0];
+          const uid =
+            user?.id != null && Number.isInteger(Number(user.id)) ? Number(user.id) : null;
+          if (uid) {
+            sellerUserId = sellerUserId || uid;
+            const { ensureSellerLinkedToUser } = await import("./sellers.js");
+            const linked = await ensureSellerLinkedToUser({
+              userId: uid,
+              slug: handle,
+              businessName: catalogProduct.source || handle,
+              city: catalogProduct.location || null,
+            });
+            if (!linked.error && linked.seller?.id) {
+              sellerId = linked.seller.id;
+            }
           }
         }
       }
@@ -651,28 +649,22 @@ export async function upsertCatalogProduct(catalogProduct) {
 
   const { sellerId, sellerUserId } = await resolveCatalogSeller(catalogProduct);
 
-  // Preserve permanent sold tombstones from the sold-skus registry / master flags.
-  // If master says the SKU is live with stock, allow restock (clears sticky DB sold).
+  // Preserve permanent sold tombstones from the sold-skus registry / DB / master flags.
+  // Never clear sold because stale master JSON still says "in stock" — that resurrected
+  // bought items (and dropped sale prices) after catalog sync / hide-restore cycles.
   let productForUpsert = catalogProduct;
   try {
-    const {
-      preserveSoldState,
-      isSkuSold,
-      isProductSold,
-      isProductAvailable,
-      productStockOnHand,
-    } = await import("../../services/product-availability.js");
-    const masterLive =
-      isProductAvailable(catalogProduct) && productStockOnHand(catalogProduct) > 0;
+    const { preserveSoldState, isSkuSold, isProductSold } = await import(
+      "../../services/product-availability.js"
+    );
+    const { rows: existingRows } = await query(
+      `SELECT is_sold, in_stock, tracking_code, legacy_json FROM products WHERE id = $1`,
+      [catalogProduct.id]
+    );
+    const existing = existingRows[0];
     const registrySold = await isSkuSold(catalogProduct.id);
     const masterSold = isProductSold(catalogProduct);
-
-    if (!masterLive && (registrySold || masterSold)) {
-      const { rows: existingRows } = await query(
-        `SELECT is_sold, in_stock, tracking_code, legacy_json FROM products WHERE id = $1`,
-        [catalogProduct.id]
-      );
-      const existing = existingRows[0];
+    if (existing?.is_sold || registrySold || masterSold) {
       const legacy =
         existing?.legacy_json && typeof existing.legacy_json === "object"
           ? existing.legacy_json
@@ -687,13 +679,36 @@ export async function upsertCatalogProduct(catalogProduct) {
         },
         catalogProduct
       );
-    } else if (masterLive && registrySold) {
-      // Seller restocked in master but registry still tombstoned — clear registry.
-      const { clearSoldSku } = await import("../../services/product-availability.js");
-      await clearSoldSku(catalogProduct.id);
     }
   } catch (err) {
     console.warn("[products] sold-preserve on upsert skipped:", err.message);
+  }
+
+  // Preserve sale / compare-at metadata when incoming master omits it (stale wipe).
+  try {
+    const { rows: priceRows } = await query(
+      `SELECT original_price_kes, compare_at_price, legacy_json FROM products WHERE id = $1`,
+      [catalogProduct.id]
+    );
+    const prev = priceRows[0];
+    if (prev) {
+      const prevLegacy =
+        prev.legacy_json && typeof prev.legacy_json === "object" ? prev.legacy_json : {};
+      const incomingCompare =
+        Number(productForUpsert.compareAtPrice ?? productForUpsert.originalPriceKes) || 0;
+      const dbCompare =
+        Number(prev.compare_at_price ?? prev.original_price_kes ?? prevLegacy.compareAtPrice) || 0;
+      if (!incomingCompare && dbCompare > 0) {
+        productForUpsert = {
+          ...productForUpsert,
+          compareAtPrice: dbCompare,
+          originalPriceKes: dbCompare,
+          promo: productForUpsert.promo || prevLegacy.promo || undefined,
+        };
+      }
+    }
+  } catch {
+    /* compare_at_price column may be absent */
   }
 
   const row = jsonToDbProduct(productForUpsert, sellerId);
@@ -743,12 +758,12 @@ export async function upsertCatalogProduct(catalogProduct) {
     row.legacy_json,
   ]);
 
-  // Keep compare_at_price in sync with original_price_kes (phase17). Fail-soft if column missing.
+  // Keep compare_at_price in sync with original_price_kes (phase17). Never wipe with null.
   try {
-    await query(`UPDATE products SET compare_at_price = $2 WHERE id = $1`, [
-      row.id,
-      row.original_price_kes,
-    ]);
+    await query(
+      `UPDATE products SET compare_at_price = COALESCE($2, compare_at_price) WHERE id = $1`,
+      [row.id, row.original_price_kes]
+    );
   } catch (err) {
     if (!String(err.message || "").includes("compare_at_price")) {
       console.warn("[products] compare_at_price sync skipped:", err.message);

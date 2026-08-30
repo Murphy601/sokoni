@@ -394,15 +394,13 @@ router.get("/", async (req, res) => {
       countSearchProductsDb(filters),
     ]);
     let products = items.map(toPublicProduct);
-    // Defense-in-depth: drop paused/deactivated shops even if in_stock wasn't flipped yet.
+    // Defense-in-depth: drop paused/deactivated/deleted shops even if in_stock wasn't flipped yet.
     try {
       const { blockedShopLookup, isProductFromBlockedShop } = await import(
         "../services/enforce-account.js"
       );
       const blocked = blockedShopLookup();
-      if (blocked.ids.size || blocked.handles.size || blocked.phones.size) {
-        products = products.filter((p) => !isProductFromBlockedShop(p, blocked));
-      }
+      products = products.filter((p) => !isProductFromBlockedShop(p, blocked));
     } catch {
       /* fail-soft */
     }
