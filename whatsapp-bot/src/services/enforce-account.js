@@ -20,17 +20,63 @@ function digitsOnly(raw) {
 
 async function notifyWhatsApp(phone, text) {
   const digits = digitsOnly(phone);
-  if (!digits || digits.length < 9) return;
+  if (!digits || digits.length < 9) return { ok: false, error: "no_phone" };
   try {
-    const { sendText } = await import("./whatsapp.js");
-    await sendText(`${digits}@c.us`, text);
+    const { sendTextReliable } = await import("./whatsapp.js");
+    await sendTextReliable(`${digits}@c.us`, text, { label: "enforce-account" });
+    return { ok: true, phone: digits };
   } catch (err) {
     console.warn("[enforce-account] notify:", err.message);
+    try {
+      const { sendText } = await import("./whatsapp.js");
+      await sendText(`${digits}@c.us`, text);
+      return { ok: true, phone: digits, soft: true };
+    } catch (err2) {
+      console.warn("[enforce-account] notify fallback:", err2.message);
+      return { ok: false, error: err2.message };
+    }
   }
 }
 
+async function notifyBoss(text) {
+  try {
+    const { config } = await import("../config.js");
+    const phones = [
+      ...(config.admin?.phones || []),
+      config.admin?.primary,
+      config.contact?.founderPhone,
+    ].filter(Boolean);
+    const seen = new Set();
+    for (const p of phones) {
+      const d = digitsOnly(p);
+      if (!d || d.length < 9 || seen.has(d.slice(-9))) continue;
+      seen.add(d.slice(-9));
+      await notifyWhatsApp(d, text);
+    }
+  } catch (err) {
+    console.warn("[enforce-account] boss notify:", err.message);
+  }
+}
+
+async function hideShopCatalog(shop, note) {
+  const handle = String(shop.shopHandle || "").replace(/^@/, "");
+  return hideListingsForSupplier(shop.id, {
+    reason: note,
+    phone: shop.phone || shop.mpesaNumber || "",
+    handle,
+  });
+}
+
+async function restoreShopCatalog(shop) {
+  const handle = String(shop.shopHandle || "").replace(/^@/, "");
+  return restoreListingsForSupplier(shop.id, {
+    phone: shop.phone || shop.mpesaNumber || "",
+    handle,
+  });
+}
+
 /**
- * @param {"PAUSE"|"SUSPEND"|"UNPAUSE"|"UNBAN"} action
+ * @param {"PAUSE"|"SUSPEND"|"DEACTIVATE"|"UNPAUSE"|"UNBAN"|"RESTORE"} action
  */
 export async function enforceSellerAction(handleOrId, action, { reason = "", adminLabel = "Boss" } = {}) {
   const act = String(action || "").toUpperCase().trim();
@@ -45,10 +91,20 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
     shop = getSupplier(handleOrId);
   }
   if (!shop?.id) {
+    // Try phone lookup for panel IDs / numbers
+    try {
+      const { findSupplierByPhone } = await import("./suppliers.js");
+      shop = findSupplierByPhone(handleOrId);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!shop?.id) {
     return { ok: false, error: "not_found", message: `Shop *${handleOrId}* not found.` };
   }
 
   const handle = String(shop.shopHandle || shop.businessName || shop.id).replace(/^@/, "");
+  const sellerPhone = shop.phone || shop.mpesaNumber;
 
   if (act === "PAUSE") {
     const result = setSellerShopStatus(shop.id, {
@@ -57,7 +113,7 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
       holdPayouts: true,
     });
     if (result.error) return { ok: false, ...result };
-    const hide = await hideListingsForSupplier(shop.id, { reason: note });
+    const hide = await hideShopCatalog(shop, note);
     let b2c = { quarantined: 0, awaitingCallback: 0, amountKes: 0 };
     try {
       const { quarantineSellerInFlightPayouts } = await import("./b2c-interceptor.js");
@@ -65,14 +121,19 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
     } catch (err) {
       console.warn("[enforce-account] B2C quarantine:", err.message);
     }
-    await notifyWhatsApp(
-      shop.phone,
+    const sellerMsg =
       `⚠️ *Notice from Sokoni Mall*\n\n` +
-        `Your store *@${handle}* has been temporarily *PAUSED* by Administration.\n\n` +
-        `• Listings are hidden from search\n` +
-        `• New orders are blocked\n` +
-        `• M-Pesa withdrawals are locked\n\n` +
-        `You can still open Seller Hub (read-only banner). Contact support if you need this reviewed.`
+      `Your store *@${handle}* has been temporarily *PAUSED* by Administration.\n\n` +
+      `• Shop page & listings are hidden from buyers\n` +
+      `• New orders are blocked\n` +
+      `• M-Pesa withdrawals are locked\n\n` +
+      `You can still open Seller Hub (read-only banner). Contact support if you need this reviewed.`;
+    const notified = await notifyWhatsApp(sellerPhone, sellerMsg);
+    await notifyBoss(
+      `⚠️ *Shop PAUSED*\n*@${handle}* · ${sellerPhone || "no phone"}\n` +
+        `Listings hidden: ${hide?.hidden || 0}\n` +
+        `Seller WA notify: ${notified.ok ? "sent" : "FAILED"}\n` +
+        `_By ${adminLabel}_`
     );
     const qNote =
       b2c.quarantined || b2c.awaitingCallback
@@ -87,39 +148,52 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
       handle: `@${handle}`,
       supplierId: shop.id,
       hidden: hide?.hidden || 0,
+      notified: Boolean(notified.ok),
       b2c,
       message:
-        `Shop *@${handle}* *PAUSED*. Listings hidden (${hide?.hidden || 0}). ` +
-        `Payouts locked. New buys blocked. Seller notified.${qNote}`,
+        `Shop *@${handle}* *PAUSED*. Listings/shop hidden (${hide?.hidden || 0}). ` +
+        `Payouts locked. Seller ${notified.ok ? "notified" : "notify FAILED"}.${qNote}`,
     };
   }
 
-  if (act === "SUSPEND") {
+  if (act === "SUSPEND" || act === "DEACTIVATE") {
     const result = setSellerShopStatus(shop.id, {
       status: "deactivated",
       note,
       holdPayouts: true,
     });
     if (result.error) return { ok: false, ...result };
-    const hide = await hideListingsForSupplier(shop.id, { reason: note });
+    const hide = await hideShopCatalog(shop, note);
     let b2c = { quarantined: 0, awaitingCallback: 0, amountKes: 0 };
     try {
       const { quarantineSellerInFlightPayouts } = await import("./b2c-interceptor.js");
-      b2c = await quarantineSellerInFlightPayouts(shop.id, { reason: note, action: "SUSPEND" });
+      b2c = await quarantineSellerInFlightPayouts(shop.id, {
+        reason: note,
+        action: act === "DEACTIVATE" ? "DEACTIVATE" : "SUSPEND",
+      });
     } catch (err) {
       console.warn("[enforce-account] B2C quarantine:", err.message);
     }
     try {
       const { revokeSellerSession } = await import("./seller-verification.js");
-      await revokeSellerSession(shop.phone || shop.mpesaNumber);
+      await revokeSellerSession(sellerPhone);
     } catch {
       /* optional session kill */
     }
-    await notifyWhatsApp(
-      shop.phone,
+    const hardLabel = act === "DEACTIVATE" ? "DEACTIVATED" : "SUSPENDED";
+    const sellerMsg =
       `🛑 *Notice from Sokoni Mall*\n\n` +
-        `Your seller account *@${handle}* has been *SUSPENDED* due to platform policy.\n\n` +
-        `Seller Hub access is revoked until Ops restores the account. Contact support@sokonimall.com.`
+      `Your seller account *@${handle}* has been *${hardLabel}* due to platform policy.\n\n` +
+      `• Shop page is unlisted (not found)\n` +
+      `• All listings are hidden\n` +
+      `• Seller Hub login is blocked\n\n` +
+      `Contact support@sokonimall.com if you need a review.`;
+    const notified = await notifyWhatsApp(sellerPhone, sellerMsg);
+    await notifyBoss(
+      `🛑 *Shop ${hardLabel}*\n*@${handle}* · ${sellerPhone || "no phone"}\n` +
+        `Listings hidden: ${hide?.hidden || 0}\n` +
+        `Seller WA notify: ${notified.ok ? "sent" : "FAILED"}\n` +
+        `_By ${adminLabel}_ · ${note}`
     );
     const qNote =
       b2c.quarantined || b2c.awaitingCallback
@@ -129,26 +203,27 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
         : "";
     return {
       ok: true,
-      action: "SUSPEND_SELLER",
+      action: act === "DEACTIVATE" ? "DEACTIVATE_SELLER" : "SUSPEND_SELLER",
       shopStatus: "deactivated",
       handle: `@${handle}`,
       supplierId: shop.id,
       hidden: hide?.hidden || 0,
+      notified: Boolean(notified.ok),
       b2c,
       message:
-        `Shop *@${handle}* *SUSPENDED* (deactivated). Listings hidden (${hide?.hidden || 0}). ` +
-        `Sessions cleared. Seller notified.${qNote}`,
+        `Shop *@${handle}* *${hardLabel}*. Listings/shop unlisted (${hide?.hidden || 0}). ` +
+        `Sessions cleared. Seller ${notified.ok ? "notified" : "notify FAILED"}.${qNote}`,
     };
   }
 
-  if (act === "UNPAUSE" || act === "UNBAN" || act === "RESTORE") {
+  if (act === "UNPAUSE" || act === "UNBAN" || act === "RESTORE" || act === "ACTIVATE") {
     const result = setSellerShopStatus(shop.id, {
       status: "live",
       note: note || "Restored by Admin",
       holdPayouts: false,
     });
     if (result.error) return { ok: false, ...result };
-    const restore = await restoreListingsForSupplier(shop.id);
+    const restore = await restoreShopCatalog(shop);
     let qPrompt = "";
     try {
       const { summarizeQuarantinedForSeller } = await import("./b2c-interceptor.js");
@@ -161,11 +236,17 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
     } catch {
       /* ignore */
     }
-    await notifyWhatsApp(
-      shop.phone,
+    const sellerMsg =
       `🟢 *Notice from Sokoni Ops*\n\n` +
-        `Your seller account *@${handle}* has been *FULLY RESTORED*.\n\n` +
-        `Listings are live again. You can accept orders and withdraw cleared escrow.`
+      `Your seller account *@${handle}* has been *FULLY RESTORED*.\n\n` +
+      `Listings and shop page are live again. You can accept orders and withdraw cleared escrow.`;
+    const notified = await notifyWhatsApp(sellerPhone, sellerMsg);
+    await notifyBoss(
+      `🟢 *Shop RESTORED*\n*@${handle}* · ${sellerPhone || "no phone"}\n` +
+        `Listings restored: ${restore?.restored || 0}\n` +
+        `Seller WA notify: ${notified.ok ? "sent" : "FAILED"}\n` +
+        `_By ${adminLabel}_` +
+        (qPrompt ? `\n${qPrompt.replace(/\*/g, "")}` : "")
     );
     return {
       ok: true,
@@ -174,9 +255,10 @@ export async function enforceSellerAction(handleOrId, action, { reason = "", adm
       handle: `@${handle}`,
       supplierId: shop.id,
       restored: restore?.restored || 0,
+      notified: Boolean(notified.ok),
       message:
         `Shop *@${handle}* *LIVE* again. Listings restored (${restore?.restored || 0}). ` +
-        `Payouts unlocked. Seller notified.` +
+        `Seller ${notified.ok ? "notified" : "notify FAILED"}.` +
         qPrompt,
     };
   }
@@ -264,11 +346,16 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
     } catch (err) {
       console.warn("[enforce-account] rider B2C quarantine:", err.message);
     }
-    await notifyWhatsApp(
+    const notified = await notifyWhatsApp(
       row.phone || digits,
       `⚠️ *Notice from Sokoni Ops*\n\n` +
         `Your rider account has been *PAUSED*. You are set *OFFLINE* and will not receive new jobs.\n\n` +
         `Contact Ops if you need this reviewed.`
+    );
+    await notifyBoss(
+      `⚠️ *Rider PAUSED*\n*${name}* · ${row.phone || digits}\n` +
+        `Jobs requeued: ${unassigned}\n` +
+        `Rider WA: ${notified.ok ? "sent" : "FAILED"}\n_By ${adminLabel}_`
     );
     const qNote =
       b2c.quarantined || b2c.awaitingCallback
@@ -283,9 +370,10 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
       phone: row.phone || digits,
       unassigned,
       b2c,
+      notified: Boolean(notified.ok),
       message:
         `Rider *${name}* (*${row.phone || digits}*) *PAUSED* (OFFLINE). ` +
-        `Pre-pickup jobs requeued: ${unassigned}. Rider notified.${qNote}`,
+        `Pre-pickup jobs requeued: ${unassigned}. Rider ${notified.ok ? "notified" : "notify FAILED"}.${qNote}`,
     };
   }
 
@@ -329,16 +417,23 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
     } catch {
       /* ignore */
     }
-    await notifyWhatsApp(
+    const notified = await notifyWhatsApp(
       row.phone || digits,
       `🟢 *Account Restored*\n\n` +
         `Your rider profile is active again. Reply *AVAILABLE* (or stay online) to receive delivery jobs.`
+    );
+    await notifyBoss(
+      `🟢 *Rider UNPAUSED*\n*${name}* · ${row.phone || digits}\n` +
+        `Rider WA: ${notified.ok ? "sent" : "FAILED"}\n_By ${adminLabel}_`
     );
     return {
       ok: true,
       action: "UNPAUSE_RIDER",
       riderId,
-      message: `Rider *${name}* unpaused — marked AVAILABLE. Rider notified.` + qPrompt,
+      notified: Boolean(notified.ok),
+      message:
+        `Rider *${name}* unpaused — marked AVAILABLE. Rider ${notified.ok ? "notified" : "notify FAILED"}.` +
+        qPrompt,
     };
   }
 
@@ -358,13 +453,18 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
     } catch (err) {
       console.warn("[enforce-account] rider B2C quarantine:", err.message);
     }
-    await notifyWhatsApp(
+    const notified = await notifyWhatsApp(
       row.phone || digits,
       `🛑 *Notice from Sokoni Ops*\n\n` +
         `Your Rider account has been *SUSPENDED*. Active unpicked jobs were returned to the pool.\n` +
         (heldPickup
           ? `\n⚠️ You still hold ${heldPickup} package(s) — Ops will contact you. Do not abandon the parcel.`
           : "")
+    );
+    await notifyBoss(
+      `🛑 *Rider SUSPENDED*\n*${name}* · ${row.phone || digits}\n` +
+        `Requeued: ${unassigned} · In-hand: ${heldPickup}\n` +
+        `Rider WA: ${notified.ok ? "sent" : "FAILED"}\n_By ${adminLabel}_`
     );
     return {
       ok: true,
@@ -373,9 +473,10 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
       unassigned,
       heldWithPackage: heldPickup,
       b2c,
+      notified: Boolean(notified.ok),
       message:
         `Rider *${name}* *SUSPENDED*. Pre-pickup requeued: ${unassigned}. ` +
-        `In-hand packages flagged: ${heldPickup}. Rider notified.` +
+        `In-hand packages flagged: ${heldPickup}. Rider ${notified.ok ? "notified" : "notify FAILED"}.` +
         (b2c.quarantined ? ` B2C quarantined ${b2c.quarantined}.` : ""),
     };
   }
@@ -398,16 +499,23 @@ export async function enforceRiderAction(phoneRaw, action, { reason = "", adminL
     } catch {
       /* ignore */
     }
-    await notifyWhatsApp(
+    const notified = await notifyWhatsApp(
       row.phone || digits,
       `🟢 *Account Restored*\n\n` +
         `Your rider profile (+${digits}) is now *ACTIVE*. Switch to *ONLINE* / *AVAILABLE* to receive delivery jobs.`
+    );
+    await notifyBoss(
+      `🟢 *Rider UNBANNED*\n*${name}* · ${row.phone || digits}\n` +
+        `Rider WA: ${notified.ok ? "sent" : "FAILED"}\n_By ${adminLabel}_`
     );
     return {
       ok: true,
       action: "UNBAN_RIDER",
       riderId,
-      message: `Rider *${name}* *UNBANNED* → VERIFIED. Rider notified.` + qPrompt,
+      notified: Boolean(notified.ok),
+      message:
+        `Rider *${name}* *UNBANNED* → VERIFIED. Rider ${notified.ok ? "notified" : "notify FAILED"}.` +
+        qPrompt,
     };
   }
 

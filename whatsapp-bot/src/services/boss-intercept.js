@@ -29,6 +29,8 @@ export function looksLikeAdminProbe(text) {
   if (/^\s*SPLIT\s+ESCROW\b/i.test(t)) return true;
   if (/^\s*PAUSE\s+(SELLER|BUYER|BOT|PAYOUTS?|SHOP|RIDER)\b/i.test(t)) return true;
   if (/^\s*UNPAUSE\s+(SELLER|BUYER|SHOP|RIDER)\b/i.test(t)) return true;
+  if (/^\s*DEACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
+  if (/^\s*ACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*MUTE\s+BUYER\b/i.test(t)) return true;
   if (/^\s*FREEZE\s+WALLET\b/i.test(t)) return true;
   if (/^\s*SYSTEM\s+(PAUSE|RESUME|LOCKDOWN)\b/i.test(t)) return true;

@@ -232,14 +232,15 @@ export async function takedownListing(productId, reason = "") {
 }
 
 /** Hide all live listings for a supplier while the shop is under review. */
-export async function hideListingsForSupplier(supplierId, { reason = "Shop under Sokoni review" } = {}) {
+export async function hideListingsForSupplier(supplierId, { reason = "Shop under Sokoni review", phone = "", handle = "" } = {}) {
   const sid = String(supplierId || "").trim();
-  if (!sid) return { error: "missing_supplier", hidden: 0 };
+  if (!sid && !phone && !handle) return { error: "missing_supplier", hidden: 0 };
   const master = await loadMaster();
   let hidden = 0;
   for (let i = 0; i < master.length; i++) {
     const p = master[i];
-    if (String(p.supplierId || "") !== sid) continue;
+    if (sid && String(p.supplierId || "") !== sid) continue;
+    if (!sid) continue;
     if (p.moderation?.status === "hidden" && p.inStock === false) continue;
     const flags = Array.isArray(p.moderation?.flags) ? [...p.moderation.flags] : [];
     if (!flags.includes("shop_review_hold")) flags.push("shop_review_hold");
@@ -265,19 +266,124 @@ export async function hideListingsForSupplier(supplierId, { reason = "Shop under
     }
   }
   if (hidden) await saveMaster(master);
-  return { ok: true, hidden };
+
+  // Also hide Postgres storefront products (seller_user_id / seller_id / legacy supplierId)
+  let dbHidden = 0;
+  try {
+    dbHidden = await hideDbProductsForSeller({ supplierId: sid, phone, handle, reason });
+  } catch (err) {
+    console.warn("[listing-moderation] hideDbProducts:", err.message);
+  }
+
+  try {
+    invalidateProductCache();
+  } catch {
+    /* ignore */
+  }
+
+  return { ok: true, hidden: hidden + dbHidden, jsonHidden: hidden, dbHidden };
+}
+
+/**
+ * Force-hide active DB products for a seller so homepage / shop / search go blank.
+ */
+export async function hideDbProductsForSeller({
+  supplierId = "",
+  phone = "",
+  handle = "",
+  reason = "Shop under Sokoni review",
+} = {}) {
+  const { isDbEnabled, query } = await import("../db/pool.js");
+  if (!isDbEnabled()) return 0;
+
+  const digits = String(phone || "").replace(/\D/g, "");
+  const national = digits.slice(-9);
+  const cleanHandle = String(handle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+
+  const userIds = new Set();
+  const sellerIds = new Set();
+
+  if (national.length >= 9) {
+    const { rows } = await query(
+      `SELECT id FROM users
+        WHERE regexp_replace(COALESCE(phone,''), '\\D', '', 'g') LIKE '%' || $1
+        LIMIT 20`,
+      [national]
+    );
+    for (const r of rows) userIds.add(Number(r.id));
+  }
+  if (cleanHandle) {
+    const { rows } = await query(
+      `SELECT id FROM users
+        WHERE LOWER(REPLACE(handle, '@', '')) = $1
+        LIMIT 5`,
+      [cleanHandle]
+    );
+    for (const r of rows) userIds.add(Number(r.id));
+  }
+  if (userIds.size) {
+    const { rows } = await query(
+      `SELECT id FROM sellers WHERE user_id = ANY($1::int[])`,
+      [[...userIds]]
+    );
+    for (const r of rows) sellerIds.add(Number(r.id));
+  }
+
+  const clauses = [];
+  const params = [];
+  if (supplierId) {
+    params.push(String(supplierId));
+    clauses.push(`(legacy_json->>'supplierId') = $${params.length}`);
+  }
+  if (userIds.size) {
+    params.push([...userIds]);
+    clauses.push(`seller_user_id = ANY($${params.length}::int[])`);
+  }
+  if (sellerIds.size) {
+    params.push([...sellerIds]);
+    clauses.push(`seller_id = ANY($${params.length}::int[])`);
+  }
+  if (!clauses.length) return 0;
+
+  params.push(String(reason || "").slice(0, 280));
+  const reasonParam = `$${params.length}`;
+
+  const { rows: updated } = await query(
+    `UPDATE products SET
+       in_stock = FALSE,
+       updated_at = NOW(),
+       legacy_json = COALESCE(legacy_json, '{}'::jsonb) || jsonb_build_object(
+         'moderation', jsonb_build_object(
+           'status', 'hidden',
+           'shopReviewHold', true,
+           'reason', ${reasonParam}::text,
+           'hiddenAt', (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+         ),
+         'inStock', false
+       )
+     WHERE in_stock = TRUE
+       AND is_sold = FALSE
+       AND (${clauses.join(" OR ")})
+     RETURNING id`,
+    params
+  );
+  return updated.length;
 }
 
 /** Restore listings that were only hidden for shop review (keeps policy takedowns). */
-export async function restoreListingsForSupplier(supplierId) {
+export async function restoreListingsForSupplier(supplierId, { phone = "", handle = "" } = {}) {
   const sid = String(supplierId || "").trim();
-  if (!sid) return { error: "missing_supplier", restored: 0 };
+  if (!sid && !phone && !handle) return { error: "missing_supplier", restored: 0 };
   const master = await loadMaster();
   const { assertCanRestock } = await import("./product-availability.js");
   let restored = 0;
   for (let i = 0; i < master.length; i++) {
     const p = master[i];
-    if (String(p.supplierId || "") !== sid) continue;
+    if (sid && String(p.supplierId || "") !== sid) continue;
+    if (!sid) continue;
     const flags = Array.isArray(p.moderation?.flags) ? p.moderation.flags : [];
     if (!flags.includes("shop_review_hold") && !p.moderation?.shopReviewHold) continue;
     // Keep hard policy hides (prohibited / admin_takedown) off the grid.
@@ -306,7 +412,112 @@ export async function restoreListingsForSupplier(supplierId) {
     }
   }
   if (restored) await saveMaster(master);
-  return { ok: true, restored };
+
+  let dbRestored = 0;
+  try {
+    dbRestored = await restoreDbProductsForSeller({ supplierId: sid, phone, handle });
+  } catch (err) {
+    console.warn("[listing-moderation] restoreDbProducts:", err.message);
+  }
+
+  try {
+    invalidateProductCache();
+  } catch {
+    /* ignore */
+  }
+
+  return { ok: true, restored: restored + dbRestored, jsonRestored: restored, dbRestored };
+}
+
+export async function restoreDbProductsForSeller({ supplierId = "", phone = "", handle = "" } = {}) {
+  const { isDbEnabled, query } = await import("../db/pool.js");
+  if (!isDbEnabled()) return 0;
+
+  const digits = String(phone || "").replace(/\D/g, "");
+  const national = digits.slice(-9);
+  const cleanHandle = String(handle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+
+  const userIds = new Set();
+  const sellerIds = new Set();
+
+  if (national.length >= 9) {
+    const { rows } = await query(
+      `SELECT id FROM users
+        WHERE regexp_replace(COALESCE(phone,''), '\\D', '', 'g') LIKE '%' || $1
+        LIMIT 20`,
+      [national]
+    );
+    for (const r of rows) userIds.add(Number(r.id));
+  }
+  if (cleanHandle) {
+    const { rows } = await query(
+      `SELECT id FROM users
+        WHERE LOWER(REPLACE(handle, '@', '')) = $1
+        LIMIT 5`,
+      [cleanHandle]
+    );
+    for (const r of rows) userIds.add(Number(r.id));
+  }
+  if (userIds.size) {
+    const { rows } = await query(
+      `SELECT id FROM sellers WHERE user_id = ANY($1::int[])`,
+      [[...userIds]]
+    );
+    for (const r of rows) sellerIds.add(Number(r.id));
+  }
+
+  const clauses = [];
+  const params = [];
+  if (supplierId) {
+    params.push(String(supplierId));
+    clauses.push(`(legacy_json->>'supplierId') = $${params.length}`);
+  }
+  if (userIds.size) {
+    params.push([...userIds]);
+    clauses.push(`seller_user_id = ANY($${params.length}::int[])`);
+  }
+  if (sellerIds.size) {
+    params.push([...sellerIds]);
+    clauses.push(`seller_id = ANY($${params.length}::int[])`);
+  }
+  if (!clauses.length) return 0;
+
+  // Only restock items we hid for shop review (not sold / not hard takedown)
+  const { rows: updated } = await query(
+    `UPDATE products SET
+       in_stock = TRUE,
+       updated_at = NOW(),
+       legacy_json = COALESCE(legacy_json, '{}'::jsonb)
+         || jsonb_build_object('inStock', true)
+         || jsonb_build_object(
+              'moderation',
+              (COALESCE(legacy_json->'moderation', '{}'::jsonb)
+                - 'shopReviewHold'
+                - 'hiddenAt')
+                || jsonb_build_object(
+                     'status', 'live',
+                     'shopReviewHold', false,
+                     'restoredAt', (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+                   )
+            )
+     WHERE in_stock = FALSE
+       AND is_sold = FALSE
+       AND (
+         (legacy_json->'moderation'->>'shopReviewHold') IN ('true', 't', '1')
+         OR COALESCE(legacy_json->'moderation'->'flags', '[]'::jsonb) ? 'shop_review_hold'
+       )
+       AND NOT (
+         COALESCE(legacy_json->'moderation'->'flags', '[]'::jsonb) ? 'admin_takedown'
+         OR COALESCE(legacy_json->'moderation'->'flags', '[]'::jsonb) ? 'prohibited_item'
+       )
+       AND (${clauses.join(" OR ")})
+     RETURNING id`,
+    params
+  );
+  return updated.length;
 }
 
 /** Run moderation after instant publish; hide + notify if flagged. */

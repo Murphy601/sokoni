@@ -75,6 +75,8 @@ export function isOverrideCommand(text) {
   if (/^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
   if (/^\s*PAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
   if (/^\s*UNPAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(t)) return true;
+  if (/^\s*DEACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
+  if (/^\s*ACTIVATE\s+(SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*VERIFY\s+(SHOP|STORE)\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
@@ -136,6 +138,22 @@ export function normalizeMasterCommand(raw) {
   if (pauseSeller) {
     const handle = stripHandleAt(pauseSeller[1]);
     if (handle) return `PAUSE_SELLER ${handle}`;
+  }
+
+  const deactivateSeller = t.match(/^DEACTIVATE\s+(?:SELLER|SHOP)\s+(.+)$/i);
+  if (deactivateSeller) {
+    const rest = deactivateSeller[1].trim();
+    const atHandle = rest.match(/^(@[^@]+?)(?:\s{2,}|\s+[-–—]\s+|\s+)(.+)$/);
+    if (atHandle && !/\s/.test(stripHandleAt(atHandle[1]))) {
+      return `DEACTIVATE_SELLER ${stripHandleAt(atHandle[1])} ${atHandle[2]}`.trim();
+    }
+    return `DEACTIVATE_SELLER ${stripHandleAt(rest)}`;
+  }
+
+  const activateSeller = t.match(/^ACTIVATE\s+(?:SELLER|SHOP)\s+(.+)$/i);
+  if (activateSeller) {
+    const handle = stripHandleAt(activateSeller[1]);
+    if (handle) return `UNPAUSE_SELLER ${handle}`;
   }
 
   const unpauseSeller = t.match(/^UNPAUSE\s+(?:SELLER|SHOP)\s+(.+)$/i);
@@ -283,6 +301,12 @@ export function normalizeMasterCommand(raw) {
         return `UNPAUSE_SELLER ${rest}`.trim();
       case "suspend-seller":
         return `SUSPEND_SELLER ${rest}`.trim();
+      case "deactivate-seller":
+      case "deactivate-shop":
+        return `DEACTIVATE_SELLER ${rest}`.trim();
+      case "activate-seller":
+      case "activate-shop":
+        return `UNPAUSE_SELLER ${rest}`.trim();
       case "unban-seller":
         return `UNBAN_SELLER ${rest}`.trim();
       case "pause-rider":
@@ -378,9 +402,10 @@ function overrideHelp() {
     `*Shops*\n` +
     `• *LIST VERIFIED SELLERS*\n` +
     `• *VERIFY SHOP @handle* / *VERIFY STORE @handle* → 🔷 VERIFIED STORE\n` +
-    `• *PAUSE SELLER @handle* — banner + hide listings + lock payouts\n` +
-    `• *UNPAUSE SELLER @handle* / *UNBAN SELLER @handle* — restore live\n` +
-    `• *SUSPEND SELLER @handle* / *SUSPEND SHOP @handle reason* — hard lock\n` +
+    `• *PAUSE SELLER @handle* — hide shop + listings; hub banner; lock payouts\n` +
+    `• *UNPAUSE SELLER @handle* / *ACTIVATE SELLER @handle* / *UNBAN SELLER @handle*\n` +
+    `• *DEACTIVATE SELLER @handle* / *SUSPEND SELLER @handle* — hard lock + login blocked\n` +
+    `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
     `• *SET RATING @handle 4.8* / *SET RATINGS @Adiv's thrift 4.8* / *OVERRIDE RATING …*\n` +
     `• *PURGE RATING SELLER userId poolEntryId*\n` +
@@ -1139,6 +1164,37 @@ export async function executeMasterAdminCommand(
       return { ok: false, action: "restore_seller", reply: ack(out.message || out.error) };
     }
     return { ok: true, action: "restore_seller", reply: ack(out.message) };
+  }
+
+  const deactivateSellerCmd = cmd.match(/^DEACTIVATE_SELLER\s+(\S+)(?:\s+(.*))?$/i);
+  const deactivateSellerCmdMulti = cmd.match(/^DEACTIVATE_SELLER\s+(.+)$/i);
+  if (deactivateSellerCmdMulti) {
+    const { enforceSellerAction } = await import("./enforce-account.js");
+    let handle;
+    let note = "Deactivated by Boss";
+    const rest = deactivateSellerCmdMulti[1].trim();
+    if (deactivateSellerCmd && !/[\s']/.test(deactivateSellerCmd[1])) {
+      handle = stripHandleAt(deactivateSellerCmd[1]);
+      note = String(deactivateSellerCmd[2] || "Deactivated by Boss").trim() || "Deactivated by Boss";
+    } else {
+      handle = stripHandleAt(rest);
+    }
+    const out = await enforceSellerAction(handle, "DEACTIVATE", { reason: note, adminLabel });
+    await logBossAction({
+      action: "DEACTIVATE_SELLER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "shop",
+      targetId: out.supplierId || handle,
+      source,
+      success: Boolean(out.ok),
+      message: note,
+      metadata: { handle: out.handle || handle, notified: out.notified },
+    });
+    if (!out.ok) {
+      return { ok: false, action: "deactivate_seller", reply: ack(out.message || out.error) };
+    }
+    return { ok: true, action: "deactivate_seller", reply: ack(out.message) };
   }
 
   const suspendSellerCmd = cmd.match(/^SUSPEND_SELLER\s+(\S+)(?:\s+(.*))?$/i);
