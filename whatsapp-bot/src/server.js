@@ -425,6 +425,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startOrderCommunicationScheduler();
   startFeedScheduler();
   startBodaDisputeWindowScheduler();
+  startSellerShippingReminderScheduler();
   startRiderB2CScheduler();
   // Ensure platform storefront has a social user id (Make an offer / inbox).
   if (isDbEnabled()) {
@@ -463,6 +464,19 @@ function startBodaDisputeWindowScheduler() {
   tick();
   setInterval(tick, 2 * 60 * 1000);
   console.log("✓ Boda HOLD_ESCROW + no-show + STK expire scheduler enabled (every 2 min)");
+}
+
+/** Nudge sellers missing Hub shipping rates every 2 hours. */
+function startSellerShippingReminderScheduler() {
+  const tick = () => {
+    import("./services/shipping-reminders.js")
+      .then(({ processSellerShippingReminders }) => processSellerShippingReminders())
+      .catch((err) => console.warn("[shipping-remind] tick:", err.message));
+  };
+  // First run after 3 minutes so boot is not blocked; then every 2 hours.
+  setTimeout(tick, 3 * 60 * 1000);
+  setInterval(tick, 2 * 60 * 60 * 1000);
+  console.log("✓ Seller shipping-rate reminder scheduler enabled (every 2 hours)");
 }
 
 /** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */

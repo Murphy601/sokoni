@@ -570,6 +570,14 @@ async function sendPrepaidCheckoutSafe(to, order) {
       return;
     }
 
+    // Shipping gate already WhatsApp'd buyer + seller and cancelled the order.
+    if (result.method === "shipping_blocked" || result.cancelled) {
+      if (result.message && !result.cancelled) {
+        await sendText(to, result.message);
+      }
+      return;
+    }
+
     await sendText(
       to,
       shortStkFailPrompt(updated.id, total, checkoutUrlForOrder(updated.id))

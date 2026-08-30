@@ -546,6 +546,10 @@ export async function handleIncomingMessage(
       return sendText(customerKey, formatPrepaidCheckoutPrompt(order));
     }
     const result = await initiateMpesaCheckout(order, { phone: order.phone || phone });
+    if (result.method === "shipping_blocked" || result.cancelled) {
+      // Buyer already notified by shipping-gate cancel messages.
+      return;
+    }
     const prompt = formatPrepaidCheckoutPrompt(getOrder(order.id) || order);
     if (result.ok) return sendText(customerKey, prompt);
     return sendText(
