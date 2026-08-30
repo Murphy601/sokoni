@@ -538,14 +538,15 @@ async function resolveCatalogSeller(catalogProduct) {
       }
 
       if (!liveSupplier) {
-        // Peer listing with no supplier.json row — keep prior owner if any, else default.
-                // Do NOT call ensureSellerSocialProfile — recreates deleted sellers / hijacks rider phones.
+        // Peer listing with no supplier.json row — do NOT remap to sokoni-store
+        // (that resurrects deleted shops on the public grid).
         console.warn(
-          "[products] upsert skip seller provision — no live supplier for",
+          "[products] upsert orphan peer — hide, no default seller for",
           catalogProduct.id,
           "handle=",
           handle
         );
+        return { sellerId: null, sellerUserId: null, handle, orphanPeer: true };
       } else {
         const existing = await getSellerBySlug(handle);
         if (existing) {
@@ -647,7 +648,35 @@ async function resolveCatalogSeller(catalogProduct) {
 export async function upsertCatalogProduct(catalogProduct) {
   if (!isDbEnabled()) return null;
 
-  const { sellerId, sellerUserId } = await resolveCatalogSeller(catalogProduct);
+  const resolved = await resolveCatalogSeller(catalogProduct);
+  const { sellerId, sellerUserId, orphanPeer } = resolved;
+
+  // Deleted / missing peer shop: force off the public grid — never attach to sokoni-store.
+  if (orphanPeer) {
+    const id = String(catalogProduct.id || "").trim();
+    if (id) {
+      try {
+        await query(
+          `UPDATE products SET
+             in_stock = FALSE,
+             updated_at = NOW(),
+             legacy_json = COALESCE(legacy_json, '{}'::jsonb) || jsonb_build_object(
+               'inStock', false,
+               'moderation', jsonb_build_object(
+                 'status', 'hidden',
+                 'reason', 'orphan_peer_no_supplier',
+                 'hiddenAt', (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               )
+             )
+           WHERE id = $1`,
+          [id]
+        );
+      } catch (err) {
+        console.warn("[products] orphan hide failed:", err.message);
+      }
+    }
+    return null;
+  }
 
   // Preserve permanent sold tombstones from the sold-skus registry / DB / master flags.
   // Never clear sold because stale master JSON still says "in stock" — that resurrected

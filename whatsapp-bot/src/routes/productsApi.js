@@ -393,19 +393,20 @@ router.get("/", async (req, res) => {
       searchProductsDb({ ...filters, limit, offset }),
       countSearchProductsDb(filters),
     ]);
-    let products = items.map(toPublicProduct);
-    // Defense-in-depth: drop paused/deactivated/deleted shops even if in_stock wasn't flipped yet.
+    // Filter on full DB shape (supplierId / sellerPhone) BEFORE stripping to public.
+    let visible = items;
     try {
       const { blockedShopLookup, isProductFromBlockedShop } = await import(
         "../services/enforce-account.js"
       );
       const blocked = blockedShopLookup();
-      products = products.filter((p) => !isProductFromBlockedShop(p, blocked));
+      visible = items.filter((p) => !isProductFromBlockedShop(p, blocked));
     } catch {
       /* fail-soft */
     }
+    const products = visible.map(toPublicProduct);
     res.json({
-      total,
+      total: Math.max(0, total - (items.length - visible.length)),
       count: products.length,
       offset,
       limit,

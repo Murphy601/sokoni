@@ -255,6 +255,14 @@ export async function purgeSellerAccount(
     /* ignore */
   }
 
+  try {
+    const { scrubOrphanPeerProducts } = await import("./orphan-catalog-scrub.js");
+    const scrub = await scrubOrphanPeerProducts();
+    stats.orphansHidden = scrub.hidden || 0;
+  } catch (err) {
+    console.warn("[purge-account] orphan scrub:", err.message);
+  }
+
   if (notify && phone) {
     await notifyWhatsApp(
       phone,
@@ -287,26 +295,35 @@ async function removeJsonListingsForSeller({ supplierId, phone, handle }) {
     const { fileURLToPath } = await import("node:url");
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const MASTER = path.join(__dirname, "..", "data", "products.json");
-    if (!existsSync(MASTER)) return 0;
-    const raw = JSON.parse(await readFile(MASTER, "utf-8"));
-    const list = Array.isArray(raw) ? raw : raw.products || [];
-    const sid = String(supplierId || "");
-    const cleanHandle = normalizeHandle(handle);
-    const national = nationalTail(phone);
-    const next = list.filter((p) => {
-      if (sid && String(p.supplierId || "") === sid) return false;
-      const ph = normalizeHandle(p.shopHandle || p.sellerHandle);
-      if (cleanHandle && ph === cleanHandle) return false;
-      const sp = String(p.sellerPhone || p.phone || "").replace(/\D/g, "");
-      if (national.length >= 9 && sp.slice(-9) === national) return false;
-      return true;
-    });
-    const removed = list.length - next.length;
-    if (removed) {
-      if (Array.isArray(raw)) await writeFile(MASTER, JSON.stringify(next, null, 2) + "\n");
-      else await writeFile(MASTER, JSON.stringify({ ...raw, products: next }, null, 2) + "\n");
+    // Also scrub the Cloudflare static catalog so deleted peers cannot resurrect on API miss.
+    const WEBSITE = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
+
+    async function scrubFile(filePath) {
+      if (!existsSync(filePath)) return 0;
+      const raw = JSON.parse(await readFile(filePath, "utf-8"));
+      const list = Array.isArray(raw) ? raw : raw.products || [];
+      const sid = String(supplierId || "");
+      const cleanHandle = normalizeHandle(handle);
+      const national = nationalTail(phone);
+      const next = list.filter((p) => {
+        if (sid && String(p.supplierId || "") === sid) return false;
+        const ph = normalizeHandle(p.shopHandle || p.sellerHandle);
+        if (cleanHandle && ph === cleanHandle) return false;
+        const sp = String(p.sellerPhone || p.phone || "").replace(/\D/g, "");
+        if (national.length >= 9 && sp.slice(-9) === national) return false;
+        return true;
+      });
+      const removed = list.length - next.length;
+      if (removed) {
+        if (Array.isArray(raw)) await writeFile(filePath, JSON.stringify(next, null, 2) + "\n");
+        else await writeFile(filePath, JSON.stringify({ ...raw, products: next }, null, 2) + "\n");
+      }
+      return removed;
     }
-    return removed;
+
+    const a = await scrubFile(MASTER);
+    const b = await scrubFile(WEBSITE);
+    return a + b;
   } catch (err) {
     console.warn("[purge-account] json listings:", err.message);
     return 0;

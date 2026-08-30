@@ -40,6 +40,15 @@ async function loadProducts() {
       const rows = await listProductsFromDb({ inStockOnly: true });
       cachedProducts = await applySoldLocks(rows);
       cachedProducts = cachedProducts.filter((p) => isProductAvailable(p));
+      try {
+        const { blockedShopLookup, isProductFromBlockedShop } = await import(
+          "./enforce-account.js"
+        );
+        const blocked = blockedShopLookup();
+        cachedProducts = cachedProducts.filter((p) => !isProductFromBlockedShop(p, blocked));
+      } catch {
+        /* fail-soft */
+      }
       cachedAtMs = now;
       return cachedProducts;
     } catch (err) {
@@ -54,6 +63,17 @@ async function loadProducts() {
   cachedProducts = Array.isArray(cachedProducts)
     ? cachedProducts.filter((p) => isProductAvailable(p))
     : cachedProducts;
+  if (Array.isArray(cachedProducts)) {
+    try {
+      const { blockedShopLookup, isProductFromBlockedShop } = await import(
+        "./enforce-account.js"
+      );
+      const blocked = blockedShopLookup();
+      cachedProducts = cachedProducts.filter((p) => !isProductFromBlockedShop(p, blocked));
+    } catch {
+      /* fail-soft */
+    }
+  }
   cachedAtMs = now;
   return cachedProducts;
 }

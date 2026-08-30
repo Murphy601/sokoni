@@ -24,7 +24,7 @@ describe("catalog upsert sold sticky", () => {
     const body = SRC.slice(resolveStart, resolveEnd);
     assert.doesNotMatch(body, /await import\("\.\/users\.js"\)/);
     assert.doesNotMatch(body, /ensureSellerSocialProfile\s*\(/);
-    assert.match(body, /no live supplier/);
+    assert.match(body, /orphanPeer:\s*true/);
   });
 
   it("preserves compare_at_price instead of wiping with null", () => {

@@ -538,6 +538,18 @@ router.get("/shop/:handle", async (req, res) => {
           shopStatus: st,
         });
       }
+      // Hard-deleted supplier: do not fall through to users/sellers ghost profile.
+      const cleanHandle = String(req.params.handle || "")
+        .trim()
+        .replace(/^@+/, "")
+        .toLowerCase();
+      if (!supplier && cleanHandle && cleanHandle !== "sokoni-store") {
+        return res.status(404).json({
+          error: "not_found",
+          shopStatus: "deleted",
+          message: "This shop is no longer available.",
+        });
+      }
     } catch {
       /* fail-soft — shop still loads if supplier store unavailable */
     }

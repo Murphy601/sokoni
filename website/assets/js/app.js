@@ -1492,7 +1492,23 @@ async function loadProducts() {
   if (apiOk && fromApi.length) {
     return mergeCatalogProducts(fromApi, fromStatic);
   }
-  return fromStatic;
+  // API succeeded but returned nothing (all orphans filtered / empty catalog) —
+  // never resurrect deleted peer shops from Cloudflare static products.json.
+  if (apiOk) {
+    return [];
+  }
+  // API down: only allow platform-owned static rows (no peer shopHandles).
+  return (fromStatic || []).filter((p) => {
+    const h = String(p.shopHandle || p.sellerHandle || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase();
+    if (h && h !== "sokoni-store") return false;
+    if (p.isSold === true || p.inStock === false) return false;
+    const sid = String(p.supplierId || "");
+    if (/^(sup[_-]|seller[_-])/i.test(sid)) return false;
+    return true;
+  });
 }
 
 async function loadStoreMeta() {

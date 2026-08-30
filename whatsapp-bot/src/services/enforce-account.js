@@ -610,12 +610,14 @@ function normalizeShopHandle(raw) {
 export function isPlatformOwnedListing(product) {
   if (!product) return true;
   const handle = normalizeShopHandle(product.shopHandle || product.sellerHandle);
-  if (!handle || handle === "sokoni-store") {
-    // Peer supplier id always wins over missing handle.
-    if (product.supplierId && String(product.supplierId).startsWith("sup_")) return false;
-    return !product.sellerPhone;
-  }
-  return handle === "sokoni-store";
+  // Explicit peer handle → never platform.
+  if (handle && handle !== "sokoni-store") return false;
+  const sid = String(product.supplierId || "").trim();
+  // Peer supplier ids survive purge remaps that wipe the handle.
+  if (sid && /^(sup[_-]|seller[_-])/i.test(sid)) return false;
+  const phone = String(product.sellerPhone || "").replace(/\D/g, "");
+  if (phone.length >= 9) return false;
+  return true;
 }
 
 /** Resolve supplier for a product (id → handle → phone). */
