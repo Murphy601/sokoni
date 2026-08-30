@@ -1636,9 +1636,11 @@ export async function getShopProfileByHandle({
           trust: sellerTrustPayload({
             isSellerVerified: Boolean(user.is_seller_verified || linkedSeller?.is_verified),
             salesCount: sellerMetrics.salesCount,
+            completedOrders: reviewSummary.completedOrders || sellerMetrics.salesCount,
             avgDispatchHours: sellerMetrics.avgDispatchHours,
             avgRating: reviewSummary.avgRating,
             totalReviews: reviewSummary.totalReviews,
+            badgeTier: reviewSummary.badgeTier,
           }),
         },
         tab: listingTab,
@@ -1754,9 +1756,11 @@ export async function getShopProfileByHandle({
         trust: sellerTrustPayload({
           isSellerVerified: Boolean(sellerUser?.is_seller_verified || seller.is_verified),
           salesCount: sellerMetrics.salesCount,
+          completedOrders: reviewSummary.completedOrders || sellerMetrics.salesCount,
           avgDispatchHours: sellerMetrics.avgDispatchHours,
           avgRating: reviewSummary.avgRating,
           totalReviews: reviewSummary.totalReviews,
+          badgeTier: reviewSummary.badgeTier,
         }),
       },
       tab: listingTab,
@@ -1982,7 +1986,22 @@ async function getFollowCounts(userId = null) {
 }
 
 async function getReviewSummary(userId = null) {
-  if (!userId) return { avgRating: 0, totalReviews: 0 };
+  if (!userId) return { avgRating: 0, totalReviews: 0, completedOrders: 0, badgeTier: "newbie" };
+  try {
+    const { getSellerRatingProfile } = await import("../../services/rating-engine.js");
+    const profile = await getSellerRatingProfile(userId);
+    if (profile && (profile.totalReviews > 0 || profile.avgRating > 0 || profile.completedOrders > 0)) {
+      return {
+        avgRating: profile.avgRating,
+        totalReviews: profile.totalReviews,
+        completedOrders: profile.completedOrders,
+        badgeTier: profile.badgeTier,
+        disputeCount: undefined,
+      };
+    }
+  } catch {
+    /* fall through to AVG */
+  }
   const { rows } = await query(
     `SELECT
        COALESCE(AVG(rating), 0)::numeric(10,2) AS avg_rating,
@@ -1995,6 +2014,8 @@ async function getReviewSummary(userId = null) {
   return {
     avgRating: Number(rows[0]?.avg_rating || 0),
     totalReviews: Number(rows[0]?.total_reviews || 0),
+    completedOrders: 0,
+    badgeTier: "newbie",
   };
 }
 
@@ -3066,6 +3087,28 @@ export async function createOrderReview({
     ...mapReviewRow(inserted.rows[0]),
     orderTrackingCode: orderRef,
   };
+
+  // Weighted profile update (does not replace AVG of discrete rows for history)
+  if (dir === "buyer_to_seller") {
+    try {
+      const { applySellerStarReview } = await import("../../services/rating-engine.js");
+      const weighted = await applySellerStarReview({
+        sellerUserId: sellerId,
+        stars: score,
+        orderRef,
+        reason: "order_review",
+        actorLabel: `buyer:${buyerId}`,
+      });
+      if (weighted?.ok) {
+        review.weightedRating = weighted.rating;
+        review.weightedCount = weighted.reviewCount;
+        review.badgeTier = weighted.badgeTier;
+      }
+    } catch (err) {
+      console.warn("[social] weighted seller rating failed:", err.message);
+    }
+  }
+
   return { success: true, review };
 }
 
@@ -3084,8 +3127,9 @@ async function ensureAutomaticSaleBuyerId() {
 }
 
 /**
- * +1 seller shop rating on every completed sale (YES / auto-release / sold).
- * Uses a 5★ "Completed sale" review so shops show ★ 5.0 (N) instead of "No reviews yet".
+ * Dispute-free completion credit: +0.05 weighted bonus + completed_orders++.
+ * No longer inserts a fake 5★ "Completed sale" row (that inflated AVG).
+ * Real buyer stars still go through createOrderReview / RATE.
  */
 export async function creditSellerSaleReview(order, { sellerUserId: forcedSellerUserId = null } = {}) {
   if (!isDbEnabled() || !order?.id) {
@@ -3093,9 +3137,6 @@ export async function creditSellerSaleReview(order, { sellerUserId: forcedSeller
   }
 
   const orderRef = String(order.id).toUpperCase();
-  if (await reviewAlreadyExists({ orderRef, direction: "buyer_to_seller" })) {
-    return { skipped: true, reason: "exists" };
-  }
 
   let sellerUserId = parseUserId(forcedSellerUserId) || (await resolveSellerUserIdForJsonOrder(order));
   if (!sellerUserId && forcedSellerUserId) {
@@ -3105,7 +3146,6 @@ export async function creditSellerSaleReview(order, { sellerUserId: forcedSeller
     return { skipped: true, reason: "no_seller_user" };
   }
 
-  // Stick seller onto the order for future review / DISPATCH paths.
   if (!order.sellerUserId) {
     try {
       const { updateOrderMeta } = await import("../../services/orders.js");
@@ -3115,34 +3155,19 @@ export async function creditSellerSaleReview(order, { sellerUserId: forcedSeller
     }
   }
 
-  let buyerUserId = await resolveBuyerUserIdForJsonOrder(order);
-  if (!buyerUserId) {
-    const phone = String(order.phone || order.mpesaPhone || "").replace(/\D/g, "");
-    if (phone) {
-      try {
-        const { findOrCreateBuyerUserByPhone } = await import("./users.js");
-        const created = await findOrCreateBuyerUserByPhone(phone);
-        if (created?.ok && created.user?.id) buyerUserId = Number(created.user.id);
-      } catch {
-        /* fall through to system buyer */
-      }
-    }
-  }
-  if (!buyerUserId) {
-    buyerUserId = await ensureAutomaticSaleBuyerId();
-  }
-  if (!buyerUserId || buyerUserId === sellerUserId) {
-    return { skipped: true, reason: "no_buyer" };
-  }
-
   try {
-    const inserted = await query(
-      `INSERT INTO order_reviews (order_id, order_ref, seller_user_id, buyer_user_id, rating, comment, direction)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id`,
-      [null, orderRef, sellerUserId, buyerUserId, 5, "Completed sale", "buyer_to_seller"]
-    );
-    return { success: true, reviewId: Number(inserted.rows[0]?.id) || null, sellerUserId };
+    const { creditDisputeFreeCompletion } = await import("../../services/rating-engine.js");
+    const result = await creditDisputeFreeCompletion(sellerUserId, orderRef);
+    if (!result?.ok) {
+      return { skipped: true, reason: result?.reason || "rating_failed", sellerUserId };
+    }
+    return {
+      success: true,
+      sellerUserId,
+      rating: result.rating,
+      bonus: 0.05,
+      badgeTier: result.badgeTier,
+    };
   } catch (err) {
     console.warn("[social] creditSellerSaleReview failed:", err.message);
     return { skipped: true, reason: "insert_failed", error: err.message };
@@ -3221,10 +3246,10 @@ export async function backfillSellerSaleReviews({ sellerUserId = null, sellerId 
   return { credited };
 }
 
-/** Load review summary, backfilling sale credits when sales outpace reviews. */
+/** Load review summary, backfilling completion bonuses when sales outpace credits. */
 async function loadShopReviewStats({ sellerUserId = null, sellerId = null, salesCount = 0 } = {}) {
   let reviewSummary = await getReviewSummary(sellerUserId);
-  if (Number(salesCount || 0) > Number(reviewSummary.totalReviews || 0)) {
+  if (Number(salesCount || 0) > Number(reviewSummary.completedOrders || reviewSummary.totalReviews || 0)) {
     try {
       await backfillSellerSaleReviews({ sellerUserId, sellerId });
       reviewSummary = await getReviewSummary(sellerUserId);
@@ -3232,15 +3257,13 @@ async function loadShopReviewStats({ sellerUserId = null, sellerId = null, sales
       console.warn("[social] sale-rating backfill:", err.message);
     }
   }
-  // Last-resort display credit if DB still empty but shop has sales (e.g. offline DB write).
-  if (Number(salesCount || 0) > 0 && Number(reviewSummary.totalReviews || 0) === 0) {
-    return {
-      avgRating: 5,
-      totalReviews: Number(salesCount),
-      synthetic: true,
-    };
-  }
-  return { ...reviewSummary, synthetic: false };
+  return {
+    avgRating: Number(reviewSummary.avgRating || 0),
+    totalReviews: Number(reviewSummary.totalReviews || 0),
+    completedOrders: Number(reviewSummary.completedOrders || salesCount || 0),
+    badgeTier: reviewSummary.badgeTier || "newbie",
+    synthetic: false,
+  };
 }
 
 /**

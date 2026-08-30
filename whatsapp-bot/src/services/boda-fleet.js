@@ -1393,6 +1393,22 @@ export async function applyBuyerRiderRating(orderId, stars) {
 
   const { rows: rrows } = await query(`SELECT rating FROM riders WHERE id = $1 LIMIT 1`, [riderId]);
   if (!rrows[0]) return { ok: false };
+  try {
+    const { applyRiderStarReview } = await import("./rating-engine.js");
+    const result = await applyRiderStarReview({
+      riderId,
+      stars: rating,
+      orderRef: id,
+      reason: `buyer_stars:${id}`,
+      actorLabel: "buyer",
+    });
+    if (result?.ok) {
+      return { ok: true, riderId, rating: result.rating, stars: rating };
+    }
+  } catch (err) {
+    console.warn("[boda] weighted rider rating failed:", err.message);
+  }
+  // Legacy EMA fallback if rating_count column missing
   const prev = Number(rrows[0].rating || 5);
   const next = clampRiderRating(prev * 0.7 + rating * 0.3);
   const delta = Math.round((next - prev) * 10) / 10;

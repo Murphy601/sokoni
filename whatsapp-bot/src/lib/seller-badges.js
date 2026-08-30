@@ -1,49 +1,49 @@
 /**
- * Derived seller trust badges (Feature 3).
- * Verified = WhatsApp OTP / seller flag (not full KYC yet).
+ * Derived seller trust badges — weighted rating + volume tiers.
+ * Rules: Newbie → Verified (≥10, ≥4.0, ID) → Top Rated (≥50, ≥4.7, dispute&lt;2%) → Legend (≥200, ≥4.9).
  */
+import { deriveBadgeTier, clampRating } from "./weighted-rating.js";
 
 /**
  * @param {{
  *   isSellerVerified?: boolean,
  *   salesCount?: number,
+ *   completedOrders?: number,
  *   avgDispatchHours?: number|null,
  *   avgRating?: number,
  *   totalReviews?: number,
+ *   disputeCount?: number,
+ *   unresolvedDisputes?: number,
+ *   previousTier?: string,
+ *   badgeTier?: string,
  * }} stats
  * @returns {{ id: string, label: string, icon: string }[]}
  */
 export function deriveSellerBadges(stats = {}) {
-  const badges = [];
-  const sales = Number(stats.salesCount || 0);
-  const reviews = Number(stats.totalReviews || 0);
+  const completed =
+    Number(stats.completedOrders ?? stats.salesCount ?? 0) || 0;
   const rating = Number(stats.avgRating || 0);
-  const dispatchH = stats.avgDispatchHours != null ? Number(stats.avgDispatchHours) : null;
+  const derived = deriveBadgeTier({
+    completedOrders: completed,
+    rating,
+    isVerified: Boolean(stats.isSellerVerified),
+    disputeCount: Number(stats.disputeCount || 0),
+    unresolvedDisputes: Number(stats.unresolvedDisputes || 0),
+    previousTier: stats.previousTier || stats.badgeTier || "",
+  });
 
-  if (stats.isSellerVerified) {
-    badges.push({ id: "verified", label: "Verified seller", icon: "verified" });
-  }
-
-  if (Number.isFinite(dispatchH) && dispatchH > 0 && dispatchH <= 4 && sales >= 3) {
-    badges.push({ id: "fast_dispatcher", label: "Fast dispatcher", icon: "fast" });
-  }
-
-  if (rating >= 4.5 && reviews >= 5) {
-    badges.push({
-      id: "top_rated",
-      label: `★ ${rating.toFixed(1)} (${reviews} reviews)`,
-      icon: "rating",
-    });
-  } else if (rating >= 4.8 && reviews >= 20) {
-    badges.push({ id: "top_seller", label: "Top seller", icon: "top" });
-  }
-
-  if (sales >= 1) {
-    badges.push({
-      id: "sales",
-      label: `${sales.toLocaleString()} sold`,
-      icon: "sales",
-    });
+  // Keep fast_dispatcher as an extra signal when dispatch hours known
+  const badges = [...derived.badges];
+  const dispatchH =
+    stats.avgDispatchHours != null ? Number(stats.avgDispatchHours) : null;
+  if (Number.isFinite(dispatchH) && dispatchH > 0 && dispatchH <= 4 && completed >= 3) {
+    if (!badges.some((b) => b.id === "fast_dispatcher")) {
+      badges.splice(1, 0, {
+        id: "fast_dispatcher",
+        label: "Fast dispatcher",
+        icon: "fast",
+      });
+    }
   }
 
   return badges;
@@ -53,26 +53,33 @@ export function deriveSellerBadges(stats = {}) {
  * Public payload for shop / product cards.
  */
 export function sellerTrustPayload(stats = {}) {
-  const salesCount = Number(stats.salesCount || 0);
+  const salesCount = Number(stats.salesCount ?? stats.completedOrders ?? 0);
   const totalReviews = Number(stats.totalReviews || 0);
-  const avgRating = Number(stats.avgRating || 0);
+  const avgRating = clampRating(Number(stats.avgRating || 0));
   const avgDispatchHours =
     stats.avgDispatchHours != null && Number.isFinite(Number(stats.avgDispatchHours))
       ? Number(stats.avgDispatchHours)
       : null;
 
+  const badges = deriveSellerBadges({
+    isSellerVerified: stats.isSellerVerified,
+    salesCount,
+    completedOrders: salesCount,
+    avgDispatchHours,
+    avgRating,
+    totalReviews,
+    disputeCount: stats.disputeCount,
+    unresolvedDisputes: stats.unresolvedDisputes,
+    previousTier: stats.badgeTier || stats.previousTier,
+  });
+
   return {
     isSellerVerified: Boolean(stats.isSellerVerified),
     salesCount,
     totalReviews,
-    avgRating: totalReviews > 0 ? avgRating : 0,
+    avgRating: totalReviews > 0 || avgRating > 0 ? avgRating : 0,
     avgDispatchHours,
-    badges: deriveSellerBadges({
-      isSellerVerified: stats.isSellerVerified,
-      salesCount,
-      avgDispatchHours,
-      avgRating,
-      totalReviews,
-    }),
+    badgeTier: badges[0]?.id || "newbie",
+    badges,
   };
 }

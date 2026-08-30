@@ -623,6 +623,17 @@ export async function resolveDispute({
       } catch {
         /* ignore */
       }
+      try {
+        const { ensureOrderSellerUserId } = await import("../db/repositories/social.js");
+        const { penalizeBuyerWonDispute } = await import("./rating-engine.js");
+        const forPenalty = getOrder(order.id) || order;
+        const sellerUserId = await ensureOrderSellerUserId(forPenalty);
+        if (sellerUserId) {
+          await penalizeBuyerWonDispute(sellerUserId, String(order.id).toUpperCase());
+        }
+      } catch (err) {
+        console.warn("[disputes] seller rating penalty skipped:", err?.message || err);
+      }
     } else {
       const eligibleAt = order.payoutEligibleAt || Date.now();
       updateOrderMeta(order.id, {

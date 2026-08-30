@@ -44,7 +44,7 @@ import { config } from "../config.js";
 import { normalizeKenyaPhone } from "../lib/phone-normalize.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
-import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
+import { siteUrlLine } from "../services/reviews.js";
 import { handleProductRouter, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
 import { getPendingOrder, getPendingCart, clearPendingOrder, clearPendingCart } from "../services/session.js";
@@ -521,7 +521,11 @@ export async function handleIncomingMessage(
 
   if (await tryRoleMenu(customerKey, text, { phone })) return;
 
-  if (await handleReviewReply(customerKey, text)) return;
+  {
+    const { handleRateCommand, handleReviewReply } = await import("../services/reviews.js");
+    if (await handleRateCommand(customerKey, text, { phone })) return;
+    if (await handleReviewReply(customerKey, text)) return;
+  }
 
   if (/^(pay|retry|stk|lipa)\b/i.test(normalized)) {
     const { findAwaitingPaymentOrderForCustomer, getOrder } = await import("../services/orders.js");

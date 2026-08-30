@@ -72,6 +72,8 @@ export function isOverrideCommand(text) {
   if (/^\s*VERIFY\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
+  if (/^\s*SET\s+RATING\b/i.test(t)) return true;
+  if (/^\s*PENALIZE\s+(RIDER|SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*HIDE\s+ITEM\b/i.test(t)) return true;
   if (/^\s*REASSIGN\s+RIDER\b/i.test(t)) return true;
   if (/^\s*FORCE\s+RETURN\b/i.test(t)) return true;
@@ -120,6 +122,12 @@ export function normalizeMasterCommand(raw) {
 
   const setComm = t.match(/^SET\s+COMMISSION\s+(@?[\w.-]+)\s+(\d{1,2}(?:\.\d+)?)/i);
   if (setComm) return `SET_COMMISSION ${setComm[1]} ${setComm[2]}`;
+
+  const setRating = t.match(/^SET\s+RATING\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  if (setRating) return `SET_RATING ${setRating[1]} ${setRating[2]}`;
+
+  const penalize = t.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  if (penalize) return `PENALIZE ${penalize[1].toUpperCase()} ${penalize[2]} ${penalize[3]}`;
 
   const hideItem = t.match(/^HIDE\s+ITEM\s+(\S+)/i);
   if (hideItem) return `HIDE_ITEM ${hideItem[1]}`;
@@ -256,6 +264,8 @@ function overrideHelp() {
     `• *VERIFY SHOP @handle*\n` +
     `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
+    `• *SET RATING @handle 4.8*\n` +
+    `• *PENALIZE RIDER +254… 0.5* / *PENALIZE SELLER @handle 0.3*\n` +
     `• *HIDE ITEM product_id*\n\n` +
     `*Riders*\n` +
     `• *REASSIGN RIDER SKN-#### +254…*\n` +
@@ -801,6 +811,140 @@ export async function executeMasterAdminCommand(
       ok: true,
       action: "set_commission",
       reply: ack(`Commission for *${shop.shopHandle || handle}* forced to *${pct}%*.`),
+    };
+  }
+
+  const setRatingCmd = cmd.match(/^SET_RATING\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  if (setRatingCmd) {
+    const target = setRatingCmd[1];
+    const score = Number(setRatingCmd[2]);
+    if (!Number.isFinite(score) || score < 0 || score > 5) {
+      return { ok: false, action: "set_rating", reply: ack("Rating must be 0–5.") };
+    }
+    const {
+      findSellerByHandle,
+      findRiderByPhone,
+      setSellerRating,
+      setRiderRating,
+    } = await import("./rating-engine.js");
+    const digits = digitsOnly(target);
+    if (digits.length >= 9 || /^\+?\d/.test(target)) {
+      const riderId = await findRiderByPhone(target);
+      if (!riderId) {
+        return { ok: false, action: "set_rating", reply: ack(`No rider for *${target}*.`) };
+      }
+      const result = await setRiderRating({
+        riderId,
+        rating: score,
+        actorLabel: String(adminLabel).slice(0, 80),
+      });
+      return {
+        ok: Boolean(result?.ok),
+        action: "set_rating",
+        reply: ack(
+          result?.ok
+            ? `Rider rating set to *${Number(result.rating).toFixed(2)}* (badge: ${result.badgeTier || "—"}).`
+            : `Could not set rider rating (${result?.reason || "error"}).`
+        ),
+      };
+    }
+    const sellerId = await findSellerByHandle(target);
+    if (!sellerId) {
+      return {
+        ok: false,
+        action: "set_rating",
+        reply: ack(`No seller handle *${target}*. Use *@handle* or a rider phone.`),
+      };
+    }
+    const result = await setSellerRating({
+      sellerUserId: sellerId,
+      rating: score,
+      actorLabel: String(adminLabel).slice(0, 80),
+    });
+    await logBossAction({
+      action: "SET_RATING",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "seller",
+      targetId: String(sellerId),
+      source,
+      success: Boolean(result?.ok),
+      metadata: { handle: target, rating: score },
+    });
+    return {
+      ok: Boolean(result?.ok),
+      action: "set_rating",
+      reply: ack(
+        result?.ok
+          ? `Seller *${target}* rating set to *${Number(result.rating).toFixed(2)}* · ${result.reviewCount || 0} reviews · badge *${result.badgeTier || "newbie"}*.`
+          : `Could not set rating (${result?.reason || "error"}).`
+      ),
+    };
+  }
+
+  const penalizeCmd = cmd.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  if (penalizeCmd) {
+    const kind = penalizeCmd[1].toUpperCase();
+    const target = penalizeCmd[2];
+    const amount = Math.abs(Number(penalizeCmd[3]));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 5) {
+      return { ok: false, action: "penalize", reply: ack("Penalty must be 0.01–5.0 stars.") };
+    }
+    const {
+      findSellerByHandle,
+      findRiderByPhone,
+      applySellerDelta,
+      applyRiderDelta,
+    } = await import("./rating-engine.js");
+    if (kind === "RIDER") {
+      const riderId = await findRiderByPhone(target);
+      if (!riderId) {
+        return { ok: false, action: "penalize", reply: ack(`No rider for *${target}*.`) };
+      }
+      const result = await applyRiderDelta({
+        riderId,
+        delta: -amount,
+        reason: "boss_penalize",
+        actorLabel: String(adminLabel).slice(0, 80),
+      });
+      return {
+        ok: Boolean(result?.ok),
+        action: "penalize",
+        reply: ack(
+          result?.ok
+            ? `Penalized rider *${target}* by −${amount.toFixed(2)} ★ → *${Number(result.rating).toFixed(2)}*.`
+            : `Penalty failed (${result?.reason || "error"}).`
+        ),
+      };
+    }
+    const sellerId = await findSellerByHandle(target);
+    if (!sellerId) {
+      return { ok: false, action: "penalize", reply: ack(`No seller *${target}*.`) };
+    }
+    const result = await applySellerDelta({
+      sellerUserId: sellerId,
+      delta: -amount,
+      reason: "boss_penalize",
+      actorLabel: String(adminLabel).slice(0, 80),
+    });
+    await logBossAction({
+      action: "PENALIZE_SELLER",
+      actorPhone: phone || null,
+      actorLabel: String(adminLabel).slice(0, 80),
+      targetType: "seller",
+      targetId: String(sellerId),
+      source,
+      success: Boolean(result?.ok),
+      metadata: { handle: target, delta: -amount },
+    });
+    return {
+      ok: Boolean(result?.ok),
+      action: "penalize",
+      reply: ack(
+        result?.ok
+          ? `Penalized *${target}* by −${amount.toFixed(2)} ★ → *${Number(result.rating).toFixed(2)}*.`
+          : `Penalty failed (${result?.reason || "error"}).`
+      ),
     };
   }
 
