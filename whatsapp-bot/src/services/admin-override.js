@@ -31,6 +31,7 @@ import {
 import { resolveStaffRole, staffCan, staffToneDirective } from "./staff-roles.js";
 import { writeAdminLog } from "./admin-logs.js";
 import { checkIfBoss } from "../lib/phone-normalize.js";
+import { parseHandleAndOptionalScore, stripHandleAt } from "../lib/shop-handle.js";
 
 const BOSS_TITLE = () =>
   String(process.env.ADMIN_BOSS_TITLE || config.contact?.founderName || "Boss")
@@ -73,8 +74,7 @@ export function isOverrideCommand(text) {
   if (/^\s*VERIFY\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SUSPEND\s+SHOP\b/i.test(t)) return true;
   if (/^\s*SET\s+COMMISSION\b/i.test(t)) return true;
-  if (/^\s*SET\s+RATING\b/i.test(t)) return true;
-  if (/^\s*OVERRIDE\s+RATING\b/i.test(t)) return true;
+  if (/^\s*(SET|OVERRIDE)\s+RATINGS?\b/i.test(t)) return true;
   if (/^\s*PURGE\s+RATING\b/i.test(t)) return true;
   if (/^\s*PENALIZE\s+(RIDER|SELLER|SHOP)\b/i.test(t)) return true;
   if (/^\s*HIDE\s+ITEM\b/i.test(t)) return true;
@@ -114,28 +114,63 @@ export function normalizeMasterCommand(raw) {
   const split = t.match(/^SPLIT\s+ESCROW\s+(SKN-[\w-]+|SK-[\w-]+)\s+(\d{1,3})\s+(\d{1,3})/i);
   if (split) return `SPLIT ${split[1].toUpperCase()} ${split[2]} ${split[3]}`;
 
-  const pausePay = t.match(/^PAUSE\s+PAYOUTS?\s+(@?[\w.-]+)/i);
-  if (pausePay) return `PAUSE_PAYOUTS ${pausePay[1]}`;
+  const pausePay = t.match(/^PAUSE\s+PAYOUTS?\s+(.+)$/i);
+  if (pausePay) {
+    const parsed = parseHandleAndOptionalScore(pausePay[1]);
+    if (parsed?.handle) return `PAUSE_PAYOUTS ${parsed.handle}`;
+  }
 
-  const verifyShop = t.match(/^VERIFY\s+SHOP\s+(@?[\w.-]+)/i);
-  if (verifyShop) return `VERIFY_SHOP ${verifyShop[1]}`;
+  const verifyShop = t.match(/^VERIFY\s+SHOP\s+(.+)$/i);
+  if (verifyShop) {
+    const handle = stripHandleAt(verifyShop[1]);
+    if (handle) return `VERIFY_SHOP ${handle}`;
+  }
 
-  const suspendShop = t.match(/^SUSPEND\s+SHOP\s+(@?[\w.-]+)\s*(.*)$/i);
-  if (suspendShop) return `SUSPEND_SHOP ${suspendShop[1]} ${suspendShop[2] || ""}`.trim();
+  const suspendShop = t.match(/^SUSPEND\s+SHOP\s+(.+)$/i);
+  if (suspendShop) {
+    // Prefer "@…" handle spanning spaces; trailing reason after a second @-less clause is rare —
+    // treat full remainder as handle when it contains spaces/apostrophe (shop name).
+    const rest = suspendShop[1].trim();
+    const atHandle = rest.match(/^(@[^@]+?)(?:\s{2,}|\s+[-–—]\s+|\s+)(.+)$/);
+    if (atHandle && /['\s]/.test(atHandle[1]) === false && !/\s/.test(stripHandleAt(atHandle[1]))) {
+      // Classic: SUSPEND SHOP @slug reason words
+      return `SUSPEND_SHOP ${stripHandleAt(atHandle[1])} ${atHandle[2]}`.trim();
+    }
+    // Multi-word shop name / slug — whole rest is the handle (default reason applied later)
+    return `SUSPEND_SHOP ${stripHandleAt(rest)}`;
+  }
 
-  const setComm = t.match(/^SET\s+COMMISSION\s+(@?[\w.-]+)\s+(\d{1,2}(?:\.\d+)?)/i);
-  if (setComm) return `SET_COMMISSION ${setComm[1]} ${setComm[2]}`;
+  const setComm = t.match(/^SET\s+COMMISSION\s+(.+)$/i);
+  if (setComm) {
+    const parsed = parseHandleAndOptionalScore(setComm[1], { requireScore: true });
+    if (parsed?.handle != null && parsed.score != null) {
+      return `SET_COMMISSION ${parsed.handle} ${parsed.score}`;
+    }
+  }
 
-  const setRating = t.match(/^(?:SET|OVERRIDE)\s+RATING\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
-  if (setRating) return `SET_RATING ${setRating[1]} ${setRating[2]}`;
+  const setRating = t.match(/^(?:SET|OVERRIDE)\s+RATINGS?\s+(.+)$/i);
+  if (setRating) {
+    const parsed = parseHandleAndOptionalScore(setRating[1], { requireScore: true });
+    if (parsed?.handle && parsed.score != null) {
+      return `SET_RATING ${parsed.handle} ${parsed.score}`;
+    }
+    // Matched verb but missing score — keep as SET_RATING so executor can prompt (not LLM search)
+    const soft = parseHandleAndOptionalScore(setRating[1]);
+    if (soft?.handle) return `SET_RATING ${soft.handle}`;
+  }
 
   const purgeRating = t.match(/^PURGE\s+RATING\s+(SELLER|RIDER)\s+(\d+)\s+(\S+)/i);
   if (purgeRating) {
     return `PURGE_RATING ${purgeRating[1].toUpperCase()} ${purgeRating[2]} ${purgeRating[3]}`;
   }
 
-  const penalize = t.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
-  if (penalize) return `PENALIZE ${penalize[1].toUpperCase()} ${penalize[2]} ${penalize[3]}`;
+  const penalize = t.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(.+)$/i);
+  if (penalize) {
+    const parsed = parseHandleAndOptionalScore(penalize[2], { requireScore: true });
+    if (parsed?.handle && parsed.score != null) {
+      return `PENALIZE ${penalize[1].toUpperCase()} ${parsed.handle} ${parsed.score}`;
+    }
+  }
 
   const hideItem = t.match(/^HIDE\s+ITEM\s+(\S+)/i);
   if (hideItem) return `HIDE_ITEM ${hideItem[1]}`;
@@ -272,7 +307,7 @@ function overrideHelp() {
     `• *VERIFY SHOP @handle*\n` +
     `• *SUSPEND SHOP @handle reason*\n` +
     `• *SET COMMISSION @handle 3*\n` +
-    `• *SET RATING @handle 4.8* / *OVERRIDE RATING @handle 4.8*\n` +
+    `• *SET RATING @handle 4.8* / *SET RATINGS @Adiv's thrift 4.8* / *OVERRIDE RATING …*\n` +
     `• *PURGE RATING SELLER userId poolEntryId*\n` +
     `• *PENALIZE RIDER +254… 0.5* / *PENALIZE SELLER @handle 0.3*\n` +
     `• *HIDE ITEM product_id*\n\n` +
@@ -752,12 +787,12 @@ export async function executeMasterAdminCommand(
     };
   }
 
-  // Shop verbs
-  const verifyShopCmd = cmd.match(/^VERIFY_SHOP\s+(@?[\w.-]+)/i);
+  // Shop verbs — handles may include spaces / apostrophes (e.g. "Adiv's thrift")
+  const verifyShopCmd = cmd.match(/^VERIFY_SHOP\s+(.+)$/i);
   if (verifyShopCmd) {
     const { getSupplierByHandle } = await import("./suppliers.js");
     const { setShopVerifiedBadge } = await import("./shops-desk.js");
-    const handle = verifyShopCmd[1];
+    const handle = stripHandleAt(verifyShopCmd[1]);
     const shop = getSupplierByHandle(handle);
     if (!shop) {
       return { ok: false, action: "verify_shop", reply: ack(`Shop *${handle}* not found.`) };
@@ -773,13 +808,23 @@ export async function executeMasterAdminCommand(
     };
   }
 
-  const suspendShopCmd = cmd.match(/^SUSPEND_SHOP\s+(@?[\w.-]+)\s*(.*)$/i);
-  if (suspendShopCmd) {
+  const suspendShopCmd = cmd.match(/^SUSPEND_SHOP\s+(\S+)(?:\s+(.*))?$/i);
+  // Prefer greedy handle when spaces present (normalized as full remainder without score)
+  const suspendShopCmdMulti = cmd.match(/^SUSPEND_SHOP\s+(.+)$/i);
+  if (suspendShopCmdMulti) {
     const { getSupplierByHandle } = await import("./suppliers.js");
     const { freezeShop } = await import("./shops-desk.js");
     const { hideListingsForSupplier } = await import("./seller-listings.js");
-    const handle = suspendShopCmd[1];
-    const note = String(suspendShopCmd[2] || "Suspended by Boss").trim() || "Suspended by Boss";
+    let handle;
+    let note = "Suspended by Boss";
+    const rest = suspendShopCmdMulti[1].trim();
+    // If classic single-token handle + reason: SUSPEND_SHOP slug reason words
+    if (suspendShopCmd && !/[\s']/.test(suspendShopCmd[1])) {
+      handle = stripHandleAt(suspendShopCmd[1]);
+      note = String(suspendShopCmd[2] || "Suspended by Boss").trim() || "Suspended by Boss";
+    } else {
+      handle = stripHandleAt(rest);
+    }
     const shop = getSupplierByHandle(handle);
     if (!shop) {
       return { ok: false, action: "suspend_shop", reply: ack(`Shop *${handle}* not found.`) };
@@ -809,11 +854,11 @@ export async function executeMasterAdminCommand(
     };
   }
 
-  const pausePayoutsCmd = cmd.match(/^PAUSE_PAYOUTS\s+(@?[\w.-]+)/i);
+  const pausePayoutsCmd = cmd.match(/^PAUSE_PAYOUTS\s+(.+)$/i);
   if (pausePayoutsCmd) {
     const { getSupplierByHandle } = await import("./suppliers.js");
     const { setShopPayoutHold } = await import("./shops-desk.js");
-    const handle = pausePayoutsCmd[1];
+    const handle = stripHandleAt(pausePayoutsCmd[1]);
     const shop = getSupplierByHandle(handle);
     if (!shop) {
       return { ok: false, action: "pause_payouts", reply: ack(`Shop *${handle}* not found.`) };
@@ -839,12 +884,20 @@ export async function executeMasterAdminCommand(
     };
   }
 
-  const setCommCmd = cmd.match(/^SET_COMMISSION\s+(@?[\w.-]+)\s+(\d{1,2}(?:\.\d+)?)/i);
+  const setCommCmd = cmd.match(/^SET_COMMISSION\s+(.+)$/i);
   if (setCommCmd) {
     const { getSupplierByHandle } = await import("./suppliers.js");
     const { setShopCommissionOverride } = await import("./shops-desk.js");
-    const handle = setCommCmd[1];
-    const pct = Number(setCommCmd[2]);
+    const parsed = parseHandleAndOptionalScore(setCommCmd[1], { requireScore: true });
+    if (!parsed?.handle || parsed.score == null) {
+      return {
+        ok: false,
+        action: "set_commission",
+        reply: ack("Usage: *SET COMMISSION @handle 3*"),
+      };
+    }
+    const handle = parsed.handle;
+    const pct = Number(parsed.score);
     const shop = getSupplierByHandle(handle);
     if (!shop) {
       return { ok: false, action: "set_commission", reply: ack(`Shop *${handle}* not found.`) };
@@ -860,11 +913,21 @@ export async function executeMasterAdminCommand(
     };
   }
 
-  const setRatingCmd = cmd.match(/^SET_RATING\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  const setRatingCmd = cmd.match(/^SET_RATING\s+(.+)$/i);
   if (setRatingCmd) {
-    const target = setRatingCmd[1];
-    const score = Number(setRatingCmd[2]);
-    if (!Number.isFinite(score) || score < 0 || score > 5) {
+    const parsed = parseHandleAndOptionalScore(setRatingCmd[1]);
+    const target = parsed?.handle || stripHandleAt(setRatingCmd[1]);
+    const score = parsed?.score;
+    if (score == null || !Number.isFinite(score)) {
+      return {
+        ok: false,
+        action: "set_rating",
+        reply: ack(
+          `Missing score. Send *SET RATING @${target || "handle"} 4.8* (0–5). Multi-word shops OK: *SET RATING @Adiv's thrift 4.8*`
+        ),
+      };
+    }
+    if (score < 0 || score > 5) {
       return { ok: false, action: "set_rating", reply: ack("Rating must be 0–5.") };
     }
     const {
@@ -896,10 +959,24 @@ export async function executeMasterAdminCommand(
     }
     const sellerId = await findSellerByHandle(target);
     if (!sellerId) {
+      // Also try supplier JSON handle → then fail clearly (never fall through to catalog search)
+      const { getSupplierByHandle } = await import("./suppliers.js");
+      const shop = getSupplierByHandle(target);
+      if (!shop) {
+        return {
+          ok: false,
+          action: "set_rating",
+          reply: ack(
+            `No seller handle *${target}*. Try the slug (e.g. *@adiv_thrift*) or exact shop name.`
+          ),
+        };
+      }
       return {
         ok: false,
         action: "set_rating",
-        reply: ack(`No seller handle *${target}*. Use *@handle* or a rider phone.`),
+        reply: ack(
+          `Shop *${shop.shopHandle || target}* is on the supplier list but has no linked user profile for ratings yet.`
+        ),
       };
     }
     const result = await setSellerRating({
@@ -963,11 +1040,19 @@ export async function executeMasterAdminCommand(
     };
   }
 
-  const penalizeCmd = cmd.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(@?[\w.+-]+)\s+(\d(?:\.\d+)?)/i);
+  const penalizeCmd = cmd.match(/^PENALIZE\s+(RIDER|SELLER|SHOP)\s+(.+)$/i);
   if (penalizeCmd) {
     const kind = penalizeCmd[1].toUpperCase();
-    const target = penalizeCmd[2];
-    const amount = Math.abs(Number(penalizeCmd[3]));
+    const parsed = parseHandleAndOptionalScore(penalizeCmd[2], { requireScore: true });
+    if (!parsed?.handle || parsed.score == null) {
+      return {
+        ok: false,
+        action: "penalize",
+        reply: ack("Usage: *PENALIZE SELLER @handle 0.3* or *PENALIZE RIDER +254… 0.5*"),
+      };
+    }
+    const target = parsed.handle;
+    const amount = Math.abs(Number(parsed.score));
     if (!Number.isFinite(amount) || amount <= 0 || amount > 5) {
       return { ok: false, action: "penalize", reply: ack("Penalty must be 0.01–5.0 stars.") };
     }

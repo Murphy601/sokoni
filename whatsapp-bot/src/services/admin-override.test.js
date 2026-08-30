@@ -18,11 +18,16 @@ describe("admin multi-layer obedience", () => {
     assert.equal(isOverrideCommand("FORCE RELEASE SKN-8820"), true);
     assert.equal(isOverrideCommand("REFUND BUYER SKN-1049"), true);
     assert.equal(isOverrideCommand("VERIFY SHOP @nairobi_kicks"), true);
+    assert.equal(isOverrideCommand("Set ratings @Adiv's thrift 4.8"), true);
     assert.equal(isOverrideCommand("OVERRIDE TEST"), true);
     assert.equal(normalizeMasterCommand("FORCE RELEASE SKN-8820"), "RELEASE SKN-8820");
     assert.equal(normalizeMasterCommand("REFUND BUYER SKN-1049"), "REFUND SKN-1049");
     assert.equal(normalizeMasterCommand("BRIEFING"), "BRIEF");
     assert.equal(normalizeMasterCommand("OVERRIDE TEST"), "OVERRIDE_TEST");
+    assert.equal(
+      normalizeMasterCommand("Verify shop @Adiv's thrift"),
+      "VERIFY_SHOP Adiv's thrift"
+    );
   });
 
   it("detects OVERRIDE: and bang short-codes", () => {

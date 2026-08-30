@@ -4,6 +4,7 @@ import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { computeRetailPrice } from "./pricing.js";
 import { bindSellerWhatsAppChat } from "./seller-chat-ids.js";
+import { shopHandleLookupKeys, shopHandlesMatch } from "../lib/shop-handle.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
@@ -553,18 +554,16 @@ const SHOP_STATUSES = new Set(["live", "paused", "under_review", "deactivated"])
 
 export function getSupplierByHandle(handle) {
   loadSuppliers();
-  const h = String(handle || "")
-    .trim()
-    .replace(/^@+/, "")
-    .toLowerCase();
-  if (!h) return null;
+  const keys = shopHandleLookupKeys(handle);
+  if (!keys.length) return null;
+  const keySet = new Set(keys);
   return (
     Object.values(supplierStore.suppliers || {}).find((s) => {
-      const sh = String(s.shopHandle || "")
-        .trim()
-        .replace(/^@+/, "")
-        .toLowerCase();
-      return sh && sh === h;
+      const candidates = [s.shopHandle, s.businessName, s.shopName, s.id];
+      return candidates.some((c) => {
+        if (!c) return false;
+        return shopHandleLookupKeys(c).some((k) => keySet.has(k)) || shopHandlesMatch(c, handle);
+      });
     }) || null
   );
 }
