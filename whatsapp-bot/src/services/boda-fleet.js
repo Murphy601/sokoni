@@ -1333,8 +1333,11 @@ export async function processBodaOfferTimeouts({ limit = 25 } = {}) {
 }
 
 /**
- * Late pickup SLA: ACCEPTED > 10 min without Pickup OTP → −0.2 stars,
+ * Late pickup SLA: ACCEPTED > LATE_PICKUP_MINUTES without Pickup OTP → −0.2 stars,
  * unassign rider, reset to UNASSIGNED, re-offer next ranked riders.
+ *
+ * SAFETY: never penalize if pickup already verified (status moved, picked_up_at set,
+ * custody IN_TRANSIT, or delivery OTP issued). Orphan timers / race ticks must no-op.
  */
 export async function applyLatePickupPenalties({ limit = 40 } = {}) {
   if (!isDbEnabled()) return { penalized: 0, reopened: 0 };
@@ -1353,6 +1356,9 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
         AND accepted_at IS NOT NULL
         AND accepted_at < NOW() - ($1::int * INTERVAL '1 minute')
         AND picked_up_at IS NULL
+        AND COALESCE(custody_status, '') NOT IN ('IN_TRANSIT', 'DELIVERED')
+        AND delivery_otp_hash IS NULL
+        AND COALESCE(meta->>'pickupVerified', '') <> 'true'
       ORDER BY accepted_at ASC
       LIMIT $2`,
     [LATE_PICKUP_MINUTES, Math.min(Math.max(Number(limit) || 40, 1), 100)]
@@ -1370,12 +1376,16 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
           [stub.id]
         );
         const row = locked[0];
+        // Re-check under lock — pickup may have completed between SELECT and FOR UPDATE.
         if (
           !row ||
           row.status !== "ACCEPTED" ||
           !row.rider_id ||
           row.picked_up_at ||
-          row.late_pickup_penalized
+          row.late_pickup_penalized ||
+          row.delivery_otp_hash ||
+          String(row.custody_status || "") === "IN_TRANSIT" ||
+          String(row.meta?.pickupVerified || "") === "true"
         ) {
           return null;
         }
@@ -1392,7 +1402,7 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
           .filter((n) => n && n !== riderId);
 
         const expires = new Date(Date.now() + OFFER_TIMEOUT_MS);
-        await client.query(
+        const upd = await client.query(
           `UPDATE delivery_dispatches SET
              rider_id = NULL,
              status = 'REQUESTED',
@@ -1408,7 +1418,12 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
              late_pickup_penalized = TRUE,
              updated_at = NOW(),
              meta = COALESCE(meta, '{}'::jsonb) || $4::jsonb
-           WHERE id = $1`,
+           WHERE id = $1
+             AND status = 'ACCEPTED'
+             AND picked_up_at IS NULL
+             AND COALESCE(late_pickup_penalized, FALSE) = FALSE
+             AND delivery_otp_hash IS NULL
+           RETURNING id`,
           [
             row.id,
             expires.toISOString(),
@@ -1420,6 +1435,9 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
             }),
           ]
         );
+        // Pickup won the race — abort penalty.
+        if (!upd.rows[0]) return null;
+
         await client.query(
           `UPDATE riders SET is_available = TRUE, updated_at = NOW() WHERE id = $1`,
           [riderId]
@@ -1451,9 +1469,10 @@ export async function applyLatePickupPenalties({ limit = 40 } = {}) {
         if (phone) {
           await sendText(
             `${phone}@c.us`,
-            `⏱️ *Pickup timed out* for *${expired.orderRef}*\n` +
-              `You did not enter the seller Pickup OTP within ${LATE_PICKUP_MINUTES} minutes.\n` +
-              `Job released (−${LATE_PICKUP_PENALTY} ★). Stay AVAILABLE for the next offer.`
+            `⏱️ *PICKUP TIMED OUT* [${expired.orderRef}]\n\n` +
+              `• **Reason:** Seller Pickup OTP not entered within ${LATE_PICKUP_MINUTES} minutes.\n` +
+              `• **Impact:** Job released (−${LATE_PICKUP_PENALTY} ★).\n\n` +
+              `Stay *AVAILABLE* for the next offer.`
           );
         }
       } catch (err) {
@@ -2160,7 +2179,10 @@ export async function confirmPickupWithOtp({
        FROM delivery_dispatches d
        JOIN riders r ON r.id = d.rider_id
       WHERE UPPER(d.order_ref) = UPPER($1)
-        AND r.phone = $2
+        AND (
+          r.phone = $2
+          OR RIGHT(regexp_replace(COALESCE(r.phone,''), '\\D', '', 'g'), 9) = RIGHT($2, 9)
+        )
         AND d.status IN ('ACCEPTED', 'PICKED_UP')
       ORDER BY d.id DESC
       LIMIT 1`,
@@ -2191,6 +2213,8 @@ export async function confirmPickupWithOtp({
   }
 
   const deliveryOtp = String(randomInt(1000, 9999));
+  // Atomic: only transition ACCEPTED → OTP_SENT if still awaiting pickup.
+  // Cancels late-pickup eligibility (picked_up_at set + status left ACCEPTED).
   const { rows } = await query(
     `UPDATE delivery_dispatches SET
        status = 'OTP_SENT',
@@ -2204,6 +2228,8 @@ export async function confirmPickupWithOtp({
        updated_at = NOW(),
        meta = COALESCE(meta, '{}'::jsonb) || $3::jsonb
      WHERE id = $1
+       AND status IN ('ACCEPTED', 'PICKED_UP')
+       AND (picked_up_at IS NULL OR custody_status IS DISTINCT FROM 'IN_TRANSIT')
      RETURNING *`,
     [
       dispatch.id,
@@ -2214,6 +2240,25 @@ export async function confirmPickupWithOtp({
       }),
     ]
   );
+
+  if (!rows[0]) {
+    // Race: late-pickup expire or duplicate OTP — re-read
+    const { rows: again } = await query(
+      `SELECT status, custody_status, picked_up_at FROM delivery_dispatches WHERE id = $1`,
+      [dispatch.id]
+    );
+    const cur = again[0];
+    if (cur?.picked_up_at || cur?.custody_status === "IN_TRANSIT" || cur?.status === "OTP_SENT") {
+      return {
+        error: "already_picked",
+        message: `⚠️ Order *${id}* is already in transit. Proceed to the buyer — use *CONFIRM ${id} ####*.`,
+      };
+    }
+    return {
+      error: "job_released",
+      message: `⚠️ Order *${id}* is no longer pending pickup (status: ${cur?.status || "unknown"}).`,
+    };
+  }
 
   const order = getOrder(id);
   const { sendText } = await import("./whatsapp.js");
@@ -3803,14 +3848,16 @@ export async function tryHandleBodaFleetMessage(customerKey, text, { phone = "",
   }
 
   // Rider: PICKUP / PICK UP SKN-#### 1234 (seller OTP → custody transfer)
-  // Normalize "Pick up SkN-1015 5972" style messages.
-  const pickupNormalized = trimmed.replace(/\s+/g, " ");
+  // Normalize "Pick up SkN-1015 5972" / "pickup skn1015 5972" style messages.
+  const pickupNormalized = trimmed.replace(/\s+/g, " ").trim();
   const pickupCmd = pickupNormalized.match(
     /^(?:PICK\s*UP|PICKUP)\s+(SKN?-?\d{1,6}(?:-\d+)?)\s+(\d{4})\b/i
   );
   if (pickupCmd) {
+    let orderRaw = String(pickupCmd[1] || "").toUpperCase();
+    if (/^SKN\d/.test(orderRaw)) orderRaw = orderRaw.replace(/^SKN/, "SKN-");
     const result = await confirmPickupWithOtp({
-      orderId: pickupCmd[1],
+      orderId: orderRaw,
       code: pickupCmd[2],
       phone,
       customerKey,

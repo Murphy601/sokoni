@@ -519,6 +519,17 @@ export async function handleIncomingMessage(
     }
   }
 
+  // Sokoni boda fleet: ACCEPT / PICKUP / CONFIRM — must beat role menus
+  // ("Pick up SKN-…" used to match pickup-point apply via /^pickup\b/).
+  {
+    try {
+      const { tryHandleBodaFleetMessage } = await import("../services/boda-fleet.js");
+      if (await tryHandleBodaFleetMessage(customerKey, text, { phone, location })) return;
+    } catch (err) {
+      console.warn("[webhook] boda fleet skipped:", err.message);
+    }
+  }
+
   if (await tryRoleMenu(customerKey, text, { phone })) return;
 
   {
@@ -625,16 +636,6 @@ export async function handleIncomingMessage(
       if (await tryHandlePartialRefundMessage(customerKey, text, { phone })) return;
     } catch (err) {
       console.warn("[webhook] partial refund skipped:", err.message);
-    }
-  }
-
-  // Sokoni boda fleet: ACCEPT / PICKED / CONFIRM / DELIVERED / CODE + rider GPS pin.
-  {
-    try {
-      const { tryHandleBodaFleetMessage } = await import("../services/boda-fleet.js");
-      if (await tryHandleBodaFleetMessage(customerKey, text, { phone, location })) return;
-    } catch (err) {
-      console.warn("[webhook] boda fleet skipped:", err.message);
     }
   }
 
