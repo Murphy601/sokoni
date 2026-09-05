@@ -8,6 +8,9 @@ import {
   shouldSkipTtsForText,
   toSpeechScript,
   STATIC_VOICE_MESSAGES,
+  resolvePremadeVoice,
+  ELEVENLABS_PREMADE_VOICES,
+  DEFAULT_ELEVENLABS_VOICE_ID,
 } from "./voice-text-first.js";
 import { getTextHash, generateVoiceNote, AUDIO_CACHE_DIR } from "../services/elevenlabs-tts.js";
 import { withVoiceReply, recordVoiceReplyText, isVoiceReplyTurn, flushVoiceReply } from "../services/voice-reply.js";
@@ -43,6 +46,16 @@ describe("text-first voice routing", () => {
 
   it("has static greeting lines for pre-cache", () => {
     assert.ok(STATIC_VOICE_MESSAGES.length >= 3);
+  });
+
+  it("maps premade names and IDs; library IDs fall back to Rachel", () => {
+    assert.equal(Object.keys(ELEVENLABS_PREMADE_VOICES).length, 7);
+    assert.equal(resolvePremadeVoice("", "adam").id, ELEVENLABS_PREMADE_VOICES.adam.id);
+    assert.equal(resolvePremadeVoice("EXAVITQu4vr4xnSDxMaL", "").slug, "bella");
+    const lib = resolvePremadeVoice("tnSpp4vdxKPjI9w0GnoV", "");
+    assert.equal(lib.fallback, true);
+    assert.equal(lib.id, DEFAULT_ELEVENLABS_VOICE_ID);
+    assert.equal(lib.slug, "rachel");
   });
 });
 

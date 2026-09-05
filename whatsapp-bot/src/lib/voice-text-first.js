@@ -4,11 +4,88 @@
  * Incoming voice note, or an explicit "send voice / tuma sauti" ask → TTS.
  */
 
-/** Default Rachel stock voice (Voice Library) — override with ELEVENLABS_VOICE_ID. */
-export const DEFAULT_ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+/**
+ * Free-tier API voices — ElevenLabs premade only.
+ * Voice Library / community IDs (e.g. Hope) return HTTP 402 on free plans.
+ */
+export const ELEVENLABS_PREMADE_VOICES = {
+  rachel: {
+    id: "21m00Tcm4TlvDq8ikWAM",
+    label: "Rachel",
+    note: "Professional, warm female — default shop assistant",
+  },
+  adam: {
+    id: "pNInz6obpgDQGcFmaJgB",
+    label: "Adam",
+    note: "Deep, clear male — system announcements",
+  },
+  antoni: {
+    id: "ErXwobaYiN019PkySvjV",
+    label: "Antoni",
+    note: "Conversational young male",
+  },
+  bella: {
+    id: "EXAVITQu4vr4xnSDxMaL",
+    label: "Bella",
+    note: "Soft, friendly female",
+  },
+  josh: {
+    id: "TxGEqnHWrfWFTfGW9XjX",
+    label: "Josh",
+    note: "Natural, casual young male",
+  },
+  elli: {
+    id: "MF3mGyEYCl7XYWbV9V6O",
+    label: "Elli",
+    note: "Soft-spoken female",
+  },
+  domini: {
+    id: "AZnzlk1XvdvUeBnXmlld",
+    label: "Domini",
+    note: "Strong, direct female",
+  },
+};
+
+export const DEFAULT_ELEVENLABS_VOICE_SLUG = "rachel";
+export const DEFAULT_ELEVENLABS_VOICE_ID = ELEVENLABS_PREMADE_VOICES.rachel.id;
 export const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_flash_v2_5";
 export const DEFAULT_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128";
 export const DEFAULT_TTS_MAX_CHARS = 800;
+
+const PREMADE_BY_ID = new Map(
+  Object.entries(ELEVENLABS_PREMADE_VOICES).map(([slug, v]) => [v.id, { slug, ...v }])
+);
+
+/**
+ * Map ELEVENLABS_VOICE name or ELEVENLABS_VOICE_ID to a free premade voice.
+ * Unknown / Voice Library IDs fall back to Rachel (avoids 402 on free tier).
+ */
+export function resolvePremadeVoice(rawId = "", rawName = "") {
+  const name = String(rawName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+  if (name && ELEVENLABS_PREMADE_VOICES[name]) {
+    return { slug: name, ...ELEVENLABS_PREMADE_VOICES[name], fallback: false };
+  }
+  const id = String(rawId || "").trim();
+  if (id && PREMADE_BY_ID.has(id)) {
+    return { ...PREMADE_BY_ID.get(id), fallback: false };
+  }
+  if (id) {
+    return {
+      slug: DEFAULT_ELEVENLABS_VOICE_SLUG,
+      ...ELEVENLABS_PREMADE_VOICES.rachel,
+      fallback: true,
+      rejectedId: id,
+    };
+  }
+  return {
+    slug: DEFAULT_ELEVENLABS_VOICE_SLUG,
+    ...ELEVENLABS_PREMADE_VOICES.rachel,
+    fallback: false,
+  };
+}
 
 const EXPLICIT_AUDIO_RE =
   /\b(voice\s*note|voice\s*reply|send\s+(?:me\s+)?(?:a\s+)?voice|in\s+voice|as\s+(?:a\s+)?(?:voice|audio)|send\s+audio|audio\s+reply|speak\s+(?:it|this|that|the\s+reply)|read\s+(?:it|this|aloud)|record\s+(?:it|this|a\s+reply)|tuma\s+sauti|note\s+ya\s+sauti|sauti\s+note|sema\s+kwa\s+sauti|niongelee|niongelea)\b/i;

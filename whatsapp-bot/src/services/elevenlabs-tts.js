@@ -13,7 +13,7 @@ import { config } from "../config.js";
 import {
   DEFAULT_ELEVENLABS_MODEL_ID,
   DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
-  DEFAULT_ELEVENLABS_VOICE_ID,
+  resolvePremadeVoice,
 } from "../lib/voice-text-first.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,9 +24,14 @@ export function elevenLabsSettings() {
   const el = config.elevenlabs || {};
   const apiKey = String(el.apiKey || "").trim();
   const enabled = el.enabled !== false;
+  const voice = resolvePremadeVoice(el.voiceId, el.voiceName);
   return {
     apiKey,
-    voiceId: String(el.voiceId || "").trim() || DEFAULT_ELEVENLABS_VOICE_ID,
+    voiceId: voice.id,
+    voiceName: voice.slug,
+    voiceLabel: voice.label,
+    voiceFallback: Boolean(voice.fallback),
+    rejectedVoiceId: voice.rejectedId || null,
     modelId: String(el.modelId || "").trim() || DEFAULT_ELEVENLABS_MODEL_ID,
     outputFormat: String(el.outputFormat || "").trim() || DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
     enabled,
@@ -45,6 +50,9 @@ export function elevenLabsHealth() {
     ttsEnabled: s.enabled,
     keyPresent: Boolean(s.apiKey),
     voiceIdSet: Boolean(s.voiceId),
+    voice: s.voiceName,
+    voiceLabel: s.voiceLabel,
+    voiceFallback: s.voiceFallback,
     model: s.modelId,
     outputFormat: s.outputFormat,
     cacheDir: AUDIO_CACHE_DIR,
@@ -86,8 +94,15 @@ export async function generateVoiceNote(text, opts = {}) {
     console.log("[elevenlabs] skip API — no ELEVENLABS_API_KEY (text-only)");
     return null;
   }
+  if (s.voiceFallback && s.rejectedVoiceId) {
+    console.warn(
+      `[elevenlabs] Voice Library id ${s.rejectedVoiceId} is not free-tier API — using premade ${s.voiceLabel} (${s.voiceId})`
+    );
+  }
 
-  console.log(`[API CALL] Requesting ElevenLabs audio for: '${spoken.slice(0, 30)}...'`);
+  console.log(
+    `[API CALL] Requesting ElevenLabs ${s.voiceLabel} audio for: '${spoken.slice(0, 30)}...'`
+  );
   try {
     const fetchAudio = opts.fetchAudio || defaultFetchAudio;
     const buffer = await fetchAudio({
@@ -104,7 +119,15 @@ export async function generateVoiceNote(text, opts = {}) {
     await writeFile(cachedFilepath, buffer);
     return cachedFilepath;
   } catch (err) {
-    console.error("[ERROR] ElevenLabs Generation Failed:", err.message);
+    const detail = err.response?.data;
+    let extra = "";
+    if (detail) {
+      extra =
+        typeof detail === "object"
+          ? ` ${JSON.stringify(detail).slice(0, 400)}`
+          : ` ${String(detail).slice(0, 400)}`;
+    }
+    console.error("[ERROR] ElevenLabs Generation Failed:", err.message + extra);
     return null;
   }
 }

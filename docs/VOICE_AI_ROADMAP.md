@@ -19,16 +19,18 @@ On the bot VM (`whatsapp-bot/.env`):
 
 ```bash
 ELEVENLABS_API_KEY="…"
-ELEVENLABS_VOICE_ID="21m00Tcm4TlvDq8ikWAM"   # Voice Library (Rachel default)
-# ELEVENLABS_MODEL_ID=eleven_flash_v2_5
+ELEVENLABS_VOICE=rachel
+# Free premade only: rachel | adam | antoni | bella | josh | elli | domini
+# Voice Library IDs (community voices) return HTTP 402 on the free plan.
 ```
+
+Do **not** `source` the whole `.env` (unquoted values with spaces break bash). Read a single key with `grep`.
 
 Then:
 
 ```bash
-cd whatsapp-bot
+cd ~/sokoni/whatsapp-bot
 npm run tts:precache    # greetings / support lines → data/audio-cache/
-bash ../scripts/deploy-bot.sh
 ```
 
 WAHA `convert: true` turns the MP3 into a WhatsApp PTT. ffmpeg on the bot VM is **not** required. `GET /health` → `elevenlabs.configured`.
