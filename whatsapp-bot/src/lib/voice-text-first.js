@@ -25,9 +25,9 @@ export const ELEVENLABS_PREMADE_VOICES = {
     note: "Conversational young male",
   },
   bella: {
-    id: "EXAVITQu4vr4xnSDxMaL",
+    id: "hpp4J3VqNfWAUOO0d1Us",
     label: "Bella",
-    note: "Soft, friendly female",
+    note: "Account Bella — free-tier My Voices",
   },
   josh: {
     id: "TxGEqnHWrfWFTfGW9XjX",
@@ -55,22 +55,30 @@ export const DEFAULT_TTS_MAX_CHARS = 800;
 const PREMADE_BY_ID = new Map(
   Object.entries(ELEVENLABS_PREMADE_VOICES).map(([slug, v]) => [v.id, { slug, ...v }])
 );
+/** Extra IDs that resolve to a slug (classic premade Bella still maps here). */
+PREMADE_BY_ID.set("EXAVITQu4vr4xnSDxMaL", {
+  slug: "bella",
+  ...ELEVENLABS_PREMADE_VOICES.bella,
+});
 
 /**
- * Map ELEVENLABS_VOICE name or ELEVENLABS_VOICE_ID to a free premade voice.
- * Unknown / Voice Library IDs fall back to Rachel (avoids 402 on free tier).
+ * Prefer an explicit voice ID when it is a known premade / account voice.
+ * Name (ELEVENLABS_VOICE=bella) is used when the ID is empty or unknown.
+ * Unknown library IDs fall back to Rachel.
  */
 export function resolvePremadeVoice(rawId = "", rawName = "") {
+  const id = String(rawId || "").trim();
   const name = String(rawName || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z]/g, "");
+
+  if (id && PREMADE_BY_ID.has(id)) {
+    const hit = PREMADE_BY_ID.get(id);
+    return { ...hit, id: hit.id, fallback: false };
+  }
   if (name && ELEVENLABS_PREMADE_VOICES[name]) {
     return { slug: name, ...ELEVENLABS_PREMADE_VOICES[name], fallback: false };
-  }
-  const id = String(rawId || "").trim();
-  if (id && PREMADE_BY_ID.has(id)) {
-    return { ...PREMADE_BY_ID.get(id), fallback: false };
   }
   if (id) {
     return {

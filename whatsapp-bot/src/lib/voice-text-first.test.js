@@ -51,6 +51,9 @@ describe("text-first voice routing", () => {
   it("maps premade names and IDs; library IDs fall back to Rachel", () => {
     assert.equal(Object.keys(ELEVENLABS_PREMADE_VOICES).length, 7);
     assert.equal(resolvePremadeVoice("", "adam").id, ELEVENLABS_PREMADE_VOICES.adam.id);
+    assert.equal(resolvePremadeVoice("hpp4J3VqNfWAUOO0d1Us", "").slug, "bella");
+    assert.equal(resolvePremadeVoice("hpp4J3VqNfWAUOO0d1Us", "rachel").id, "hpp4J3VqNfWAUOO0d1Us");
+    assert.equal(resolvePremadeVoice("", "bella").id, "hpp4J3VqNfWAUOO0d1Us");
     assert.equal(resolvePremadeVoice("EXAVITQu4vr4xnSDxMaL", "").slug, "bella");
     const lib = resolvePremadeVoice("tnSpp4vdxKPjI9w0GnoV", "");
     assert.equal(lib.fallback, true);
