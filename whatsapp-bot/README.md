@@ -61,6 +61,8 @@ Reply with `1`, `2`, etc. for menu choices (not buttons).
 | `GEMINI_VISION_MODEL` | Gemini vision model (default: `gemini-2.5-flash`) |
 | `CLOUDINARY_*` / `HUGGINGFACE_API_KEY` / `PHOTOROOM_API_KEY` | Optional cloud background cleanup (see `docs/MEDIA_STUDIO_PLAN.md`) |
 | `CATALOG_AUTO_PUSH` | `true` to git-push catalog rebuild after publish |
+| `ELEVENLABS_API_KEY` | Optional TTS for WhatsApp voice-note replies (VM only; text-first) |
+| `ELEVENLABS_VOICE_ID` | Voice Library id (default Rachel `21m00Tcm4TlvDq8ikWAM`) |
 
 ### AI model choice (English / Kiswahili / Sheng)
 

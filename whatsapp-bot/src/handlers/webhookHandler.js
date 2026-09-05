@@ -13,6 +13,8 @@ import {
   tryNumberedMenuReply,
 } from "../services/menu.js";
 import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend, resolveWahaLidToPhone, extractWahaProductMessage } from "../services/whatsapp.js";
+import { withVoiceReply, flushVoiceReply } from "../services/voice-reply.js";
+import { looksLikeVoiceNoteMime, isExplicitAudioRequest } from "../lib/voice-text-first.js";
 import { runAiAgent } from "../services/ai.js";
 import {
   getMenuState,
@@ -76,8 +78,7 @@ function looksLikeBuyerProductPhoto(mediaMimetype, text = "") {
 }
 
 function looksLikeVoiceNote(mediaMimetype) {
-  const mime = String(mediaMimetype || "").toLowerCase();
-  return mime.startsWith("audio/") || mime.includes("ogg") || mime.includes("ptt");
+  return looksLikeVoiceNoteMime(mediaMimetype);
 }
 
 function extractQuotedText(payload) {
@@ -1116,17 +1117,35 @@ export async function handleWahaWebhook(body) {
 
   if (!parsed.text && !parsed.hasMedia && !parsed.location) return;
 
-  return handleIncomingMessage(parsed.customerKey, parsed.text || "", {
-    quotedText: parsed.quotedText,
-    combinedText: parsed.combinedText || parsed.text || "",
-    displayName: parsed.displayName,
-    phone: parsed.phone,
-    chatId: parsed.chatId,
-    hasMedia: parsed.hasMedia,
-    mediaUrl: parsed.mediaUrl,
-    mediaMimetype: parsed.mediaMimetype,
-    messageId: parsed.messageId,
-    wahaSession: parsed.session,
-    location: parsed.location || null,
+  const runTurn = () =>
+    handleIncomingMessage(parsed.customerKey, parsed.text || "", {
+      quotedText: parsed.quotedText,
+      combinedText: parsed.combinedText || parsed.text || "",
+      displayName: parsed.displayName,
+      phone: parsed.phone,
+      chatId: parsed.chatId,
+      hasMedia: parsed.hasMedia,
+      mediaUrl: parsed.mediaUrl,
+      mediaMimetype: parsed.mediaMimetype,
+      messageId: parsed.messageId,
+      wahaSession: parsed.session,
+      location: parsed.location || null,
+    });
+
+  const incomingVoiceNote = parsed.hasMedia && looksLikeVoiceNoteMime(parsed.mediaMimetype);
+  const wantsVoice =
+    incomingVoiceNote ||
+    isExplicitAudioRequest(parsed.text) ||
+    isExplicitAudioRequest(parsed.combinedText);
+  if (!wantsVoice || isAdminSender(parsed.customerKey, parsed.phone)) {
+    return runTurn();
+  }
+
+  return withVoiceReply(true, async () => {
+    try {
+      return await runTurn();
+    } finally {
+      await flushVoiceReply(parsed.customerKey);
+    }
   });
 }
