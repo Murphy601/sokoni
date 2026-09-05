@@ -48,6 +48,7 @@ import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
 import { masMeta } from "./services/mas/index.js";
+import { elevenLabsHealth } from "./services/elevenlabs-tts.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 import {
   corsAllowlist,
@@ -264,6 +265,7 @@ app.get("/health", async (_req, res) => {
     paystackConfigured: Boolean(checkout.paystackConfigured),
     paystackOnly: checkout.paystackOnly !== false,
     b2c: b2cMeta(),
+    elevenlabs: elevenLabsHealth(),
   });
 });
 

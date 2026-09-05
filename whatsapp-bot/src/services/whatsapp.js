@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import axios from "axios";
 import { config } from "../config.js";
+import { recordVoiceReplyText } from "./voice-reply.js";
 import {
   catalogImageUrlCandidates,
   readCatalogImageBase64,
@@ -623,6 +626,7 @@ export async function sendText(to, text) {
     capture.replies.push(body);
     return { captured: true, chatId: dest };
   }
+  recordVoiceReplyText(body);
   // Hot path: single attempt only. Never route normal chat through multi-JID
   // retries — those can stack 30s WAHA timeouts and freeze the whole bot.
   try {
@@ -636,6 +640,62 @@ export async function sendText(to, text) {
   } catch (err) {
     console.error("[whatsapp] sendText failed:", dest, err.message);
     throw err;
+  }
+}
+
+function voiceFilePayload(filepath, data) {
+  const filename = path.basename(filepath);
+  const ext = path.extname(filename).toLowerCase();
+  const mimetype =
+    ext === ".ogg" || ext === ".oga" || ext === ".opus"
+      ? "audio/ogg; codecs=opus"
+      : "audio/mpeg";
+  return {
+    data: Buffer.from(data).toString("base64"),
+    mimetype,
+    filename,
+  };
+}
+
+/**
+ * Send a cached MP3 (or ogg) as a WhatsApp voice note.
+ * WAHA `convert: true` turns MP3 into PTT — no ffmpeg required on the bot VM.
+ */
+export async function sendVoiceNote(to, filepath) {
+  const dest = toChatId(to);
+  if (!dest) {
+    console.error("[whatsapp] sendVoiceNote aborted — empty chatId from", to);
+    throw new Error("empty_chat_id");
+  }
+  const data = await readFile(filepath);
+  const file = voiceFilePayload(filepath, data);
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file,
+    convert: true,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVoice", {
+      chatId: dest,
+      filename: file.filename,
+      bytes: data.length,
+    });
+    return { dryRun: true, chatId: dest, filepath };
+  }
+  try {
+    const resp = await callWaha("/api/sendVoice", body, { timeoutMs: 45000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVoice failed, trying sendFile:", err.message);
+    const resp = await callWaha(
+      "/api/sendFile",
+      { ...body, caption: "" },
+      { timeoutMs: 45000 }
+    );
+    rememberSend(resp, dest);
+    return resp;
   }
 }
 

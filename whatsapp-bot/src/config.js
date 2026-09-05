@@ -317,6 +317,22 @@ export const config = {
     }
     return { phones: unique, matchAliases, primary: alertPhone };
   })(),
+  /**
+   * ElevenLabs TTS (WhatsApp voice notes). Text-first: no API call unless the
+   * shopper sent a voice note or explicitly asked for audio. Keys stay on the VM.
+   */
+  elevenlabs: (() => {
+    const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
+    return {
+      apiKey: trim(process.env.ELEVENLABS_API_KEY),
+      /** Premade slug: rachel | adam | antoni | bella | josh | elli | domini */
+      voiceName: trim(process.env.ELEVENLABS_VOICE),
+      voiceId: trim(process.env.ELEVENLABS_VOICE_ID),
+      modelId: trim(process.env.ELEVENLABS_MODEL_ID) || "eleven_flash_v2_5",
+      outputFormat: trim(process.env.ELEVENLABS_OUTPUT_FORMAT) || "mp3_44100_128",
+      enabled: !/^(0|false|no|off)$/i.test(trim(process.env.ELEVENLABS_TTS) || "true"),
+    };
+  })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
   /** Bot HTTPS base — serves /catalog-images for WhatsApp (immediate after admin upload). */
