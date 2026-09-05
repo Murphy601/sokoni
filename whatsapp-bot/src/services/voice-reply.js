@@ -30,16 +30,19 @@ export async function flushVoiceReply(to) {
   s.flushed = true;
 
   if (!isElevenLabsTtsReady()) {
+    console.warn("[voice-reply] skip: ElevenLabs not configured");
     return { skipped: true, reason: "not_configured" };
   }
 
   const spoken = toSpeechScript(s.texts.join("\n\n"));
   if (!spoken || spoken.length < 8) {
+    console.warn("[voice-reply] skip: empty spoken script");
     return { skipped: true, reason: "empty" };
   }
 
   const filepath = await generateVoiceNote(spoken);
   if (!filepath) {
+    console.warn("[voice-reply] skip: tts_failed");
     return { skipped: true, reason: "tts_failed" };
   }
 

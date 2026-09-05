@@ -141,12 +141,20 @@ function extractAlbumId(payload) {
 function extractMedia(payload) {
   const media = payload?.media || payload?._data?.media || null;
   const mediaError = media?.error || payload?._data?.media?.error || null;
+  const type = String(
+    payload?.type || payload?._data?.type || payload?._data?.message?.type || ""
+  ).toLowerCase();
+  const rawMime = String(media?.mimetype || media?.mimeType || "");
+  const typeLooksVoice = /\b(ptt|audio|voice|ogg)\b/.test(type) || type.includes("ptt");
+  const mediaMimetype = rawMime || (typeLooksVoice ? "audio/ogg" : "image/jpeg");
+  const isVoiceNote = typeLooksVoice || looksLikeVoiceNoteMime(mediaMimetype);
   return {
-    hasMedia: Boolean(payload?.hasMedia && (media?.url || payload?.id)),
+    hasMedia: Boolean((payload?.hasMedia || isVoiceNote) && (media?.url || payload?.id)),
     mediaUrl: media?.url || null,
-    mediaMimetype: media?.mimetype || media?.mimeType || "image/jpeg",
+    mediaMimetype,
     mediaFilename: media?.filename || null,
     mediaError,
+    isVoiceNote,
   };
 }
 
@@ -1132,12 +1140,14 @@ export async function handleWahaWebhook(body) {
       location: parsed.location || null,
     });
 
-  const incomingVoiceNote = parsed.hasMedia && looksLikeVoiceNoteMime(parsed.mediaMimetype);
+  const incomingVoiceNote =
+    parsed.isVoiceNote ||
+    (parsed.hasMedia && looksLikeVoiceNoteMime(parsed.mediaMimetype));
   const wantsVoice =
     incomingVoiceNote ||
     isExplicitAudioRequest(parsed.text) ||
     isExplicitAudioRequest(parsed.combinedText);
-  if (!wantsVoice || isAdminSender(parsed.customerKey, parsed.phone)) {
+  if (!wantsVoice) {
     return runTurn();
   }
 
@@ -1145,7 +1155,8 @@ export async function handleWahaWebhook(body) {
     try {
       return await runTurn();
     } finally {
-      await flushVoiceReply(parsed.customerKey);
+      const result = await flushVoiceReply(parsed.customerKey);
+      console.log("[voice-reply]", result?.ok ? "sent" : `skip:${result?.reason || "unknown"}`);
     }
   });
 }
