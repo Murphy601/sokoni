@@ -100,6 +100,136 @@ html.dark .legal-prose li,
   opacity: 1;
 }
 
+/* BRS registration trust — zinc/white only (not WhatsApp green) */
+.sokoni-brs-badge {
+  max-width: 80rem;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.sokoni-brs-badge p {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: #a1a1aa;
+}
+
+.sokoni-brs-badge strong {
+  color: #e4e4e7;
+  font-weight: 600;
+}
+
+.sokoni-brs-badge__note {
+  margin-top: 0.35rem;
+  font-style: italic;
+  color: #71717a;
+}
+
+.sokoni-brs-badge a {
+  color: #a1a1aa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-style: normal;
+}
+
+.sokoni-brs-badge a:hover {
+  color: #ffffff;
+}
+
+.footer-legal .sokoni-brs-badge {
+  max-width: 36rem;
+  margin: 1.25rem auto 0;
+  text-align: center;
+}
+
+.auth-footer-rich .sokoni-brs-badge {
+  max-width: 64rem;
+  margin: 0 auto 1.25rem;
+}
+
+.sokoni-brs-record {
+  scroll-margin-top: 5.5rem;
+  margin-top: 2.5rem;
+  padding: 1.25rem 1.25rem 1.5rem;
+  border: 1px solid #27272a;
+  border-radius: 1rem;
+  background: #111111;
+}
+
+.sokoni-brs-record > p {
+  margin: 0;
+}
+
+.sokoni-brs-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 0;
+}
+
+.sokoni-brs-table th,
+.sokoni-brs-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #27272a;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.sokoni-brs-table th {
+  width: 42%;
+  color: #a1a1aa;
+  font-weight: 600;
+  padding-right: 1rem;
+}
+
+.sokoni-brs-table td {
+  color: #e4e4e7;
+  font-weight: 500;
+}
+
+.sokoni-brs-table tr:last-child th,
+.sokoni-brs-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.sokoni-brs-verify {
+  margin-top: 1.25rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid #27272a;
+}
+
+.sokoni-brs-verify h3 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 0.5rem;
+}
+
+.sokoni-brs-verify p {
+  margin: 0;
+}
+
+@media (max-width: 639px) {
+  .sokoni-brs-table,
+  .sokoni-brs-table tbody,
+  .sokoni-brs-table tr,
+  .sokoni-brs-table th,
+  .sokoni-brs-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .sokoni-brs-table th {
+    padding-bottom: 0.15rem;
+    border-bottom: 0;
+  }
+
+  .sokoni-brs-table td {
+    padding-top: 0.15rem;
+  }
+}
+
 /* ============================================================
    DARK MODE
    Centralised overrides so we theme the whole site without
