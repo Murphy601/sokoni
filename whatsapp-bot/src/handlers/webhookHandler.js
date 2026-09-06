@@ -13,6 +13,8 @@ import {
   tryNumberedMenuReply,
 } from "../services/menu.js";
 import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend, resolveWahaLidToPhone, extractWahaProductMessage } from "../services/whatsapp.js";
+import { withVoiceReply, flushVoiceReply } from "../services/voice-reply.js";
+import { looksLikeVoiceNoteMime, isExplicitAudioRequest } from "../lib/voice-text-first.js";
 import { runAiAgent } from "../services/ai.js";
 import {
   getMenuState,
@@ -76,8 +78,7 @@ function looksLikeBuyerProductPhoto(mediaMimetype, text = "") {
 }
 
 function looksLikeVoiceNote(mediaMimetype) {
-  const mime = String(mediaMimetype || "").toLowerCase();
-  return mime.startsWith("audio/") || mime.includes("ogg") || mime.includes("ptt");
+  return looksLikeVoiceNoteMime(mediaMimetype);
 }
 
 function extractQuotedText(payload) {
@@ -140,12 +141,20 @@ function extractAlbumId(payload) {
 function extractMedia(payload) {
   const media = payload?.media || payload?._data?.media || null;
   const mediaError = media?.error || payload?._data?.media?.error || null;
+  const type = String(
+    payload?.type || payload?._data?.type || payload?._data?.message?.type || ""
+  ).toLowerCase();
+  const rawMime = String(media?.mimetype || media?.mimeType || "");
+  const typeLooksVoice = /\b(ptt|audio|voice|ogg)\b/.test(type) || type.includes("ptt");
+  const mediaMimetype = rawMime || (typeLooksVoice ? "audio/ogg" : "image/jpeg");
+  const isVoiceNote = typeLooksVoice || looksLikeVoiceNoteMime(mediaMimetype);
   return {
-    hasMedia: Boolean(payload?.hasMedia && (media?.url || payload?.id)),
+    hasMedia: Boolean((payload?.hasMedia || isVoiceNote) && (media?.url || payload?.id)),
     mediaUrl: media?.url || null,
-    mediaMimetype: media?.mimetype || media?.mimeType || "image/jpeg",
+    mediaMimetype,
     mediaFilename: media?.filename || null,
     mediaError,
+    isVoiceNote,
   };
 }
 
@@ -1116,17 +1125,38 @@ export async function handleWahaWebhook(body) {
 
   if (!parsed.text && !parsed.hasMedia && !parsed.location) return;
 
-  return handleIncomingMessage(parsed.customerKey, parsed.text || "", {
-    quotedText: parsed.quotedText,
-    combinedText: parsed.combinedText || parsed.text || "",
-    displayName: parsed.displayName,
-    phone: parsed.phone,
-    chatId: parsed.chatId,
-    hasMedia: parsed.hasMedia,
-    mediaUrl: parsed.mediaUrl,
-    mediaMimetype: parsed.mediaMimetype,
-    messageId: parsed.messageId,
-    wahaSession: parsed.session,
-    location: parsed.location || null,
+  const runTurn = () =>
+    handleIncomingMessage(parsed.customerKey, parsed.text || "", {
+      quotedText: parsed.quotedText,
+      combinedText: parsed.combinedText || parsed.text || "",
+      displayName: parsed.displayName,
+      phone: parsed.phone,
+      chatId: parsed.chatId,
+      hasMedia: parsed.hasMedia,
+      mediaUrl: parsed.mediaUrl,
+      mediaMimetype: parsed.mediaMimetype,
+      messageId: parsed.messageId,
+      wahaSession: parsed.session,
+      location: parsed.location || null,
+    });
+
+  const incomingVoiceNote =
+    parsed.isVoiceNote ||
+    (parsed.hasMedia && looksLikeVoiceNoteMime(parsed.mediaMimetype));
+  const wantsVoice =
+    incomingVoiceNote ||
+    isExplicitAudioRequest(parsed.text) ||
+    isExplicitAudioRequest(parsed.combinedText);
+  if (!wantsVoice) {
+    return runTurn();
+  }
+
+  return withVoiceReply(true, async () => {
+    try {
+      return await runTurn();
+    } finally {
+      const result = await flushVoiceReply(parsed.customerKey);
+      console.log("[voice-reply]", result?.ok ? "sent" : `skip:${result?.reason || "unknown"}`);
+    }
   });
 }

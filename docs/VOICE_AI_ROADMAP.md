@@ -7,8 +7,35 @@ Interactive spoken help on WhatsApp + the storefront — phased so we never ship
 | Surface | Capability |
 |---------|------------|
 | WhatsApp voice notes | Whisper STT via OpenRouter (`commerce-ops` / webhook) → same AI + Boss interceptor path |
+| ElevenLabs TTS (text-first) | Voice note in, or explicit “send voice” / “tuma sauti” → `eleven_flash_v2_5` MP3 with local `data/audio-cache/` |
 | `ask.html` + `/api/agent/chat` | Text Ask Plug (web full page) |
 | LLM router | Groq → OpenRouter (+ optional Gemini / NVIDIA for MAS / vision) |
+
+### ElevenLabs (WhatsApp out) — keys on the VM only
+
+Text is the default. Incoming **text** never spends ElevenLabs characters. Incoming **voice notes** (after Whisper) get a spoken reply once `ELEVENLABS_API_KEY` is set. Shoppers can also type *send voice* / *tuma sauti*.
+
+On the bot VM (`whatsapp-bot/.env`):
+
+```bash
+ELEVENLABS_API_KEY="…"
+ELEVENLABS_VOICE=rachel
+# Free premade only: rachel | adam | antoni | bella | josh | elli | domini
+# Voice Library IDs (community voices) return HTTP 402 on the free plan.
+```
+
+Do **not** `source` the whole `.env` (unquoted values with spaces break bash). Read a single key with `grep`.
+
+Then:
+
+```bash
+cd ~/sokoni/whatsapp-bot
+npm run tts:precache    # greetings / support lines → data/audio-cache/
+```
+
+WAHA `convert: true` turns the MP3 into a WhatsApp PTT. ffmpeg on the bot VM is **not** required. `GET /health` → `elevenlabs.configured`.
+
+Set `ELEVENLABS_TTS=false` to keep STT but disable spoken replies.
 
 ## Removed — floating Ask FAB / browser mic / neural TTS widget
 
