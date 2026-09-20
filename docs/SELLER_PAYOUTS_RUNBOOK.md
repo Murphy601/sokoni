@@ -116,3 +116,6 @@ the only recovery path for payout state. Confirm it is actually installed:
 ```bash
 crontab -l | grep backup-bot-data
 ```
+
+Off-site target defaults to a private git repo — free, no payment method. See
+`docs/BACKUP_SETUP.md`.
