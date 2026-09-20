@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync, statSync } from "node:fs";
+import { writeJsonAtomic } from "../lib/atomic-json.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { isPrepaidOnly } from "./prepaid-checkout.js";
@@ -113,7 +114,7 @@ function load() {
 function persist() {
   try {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-    writeFileSync(ORDERS_FILE, JSON.stringify(store, null, 2));
+    writeJsonAtomic(ORDERS_FILE, store);
     loadedMtimeMs = fileMtimeMs(ORDERS_FILE);
   } catch (err) {
     console.error("[orders] failed to persist store:", err.message);

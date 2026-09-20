@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeJsonAtomic } from "../lib/atomic-json.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
@@ -34,11 +35,11 @@ function load() {
 function persist() {
   try {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-    writeFileSync(REVIEWS_FILE, JSON.stringify(store, null, 2));
+    writeJsonAtomic(REVIEWS_FILE, store);
     try {
       const webDir = path.dirname(WEBSITE_REVIEWS_FILE);
       if (!existsSync(webDir)) mkdirSync(webDir, { recursive: true });
-      writeFileSync(WEBSITE_REVIEWS_FILE, JSON.stringify(store, null, 2));
+      writeJsonAtomic(WEBSITE_REVIEWS_FILE, store);
     } catch (err) {
       console.warn("[reviews] could not sync website copy:", err.message);
     }
