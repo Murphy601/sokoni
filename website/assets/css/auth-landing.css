@@ -15,14 +15,28 @@
 }
 
 /* ── Header + search ── */
+/* Scrolls away on phones. The header wraps to three rows there -- logo+search,
+   account buttons, category nav -- and measured 221px against an 812px
+   viewport, so a quarter of the screen sat pinned and floating over the
+   content being scrolled. From 800px up it collapses to one compact row
+   (117px of 900px) where pinning is worth the space.
+   The blur only exists to soften content passing underneath, so it goes with
+   the pinning -- backdrop-filter on a full-width bar is expensive on
+   mid-range Android for no benefit when nothing passes under it. */
 .auth-landing-header {
-  position: sticky;
-  top: 0;
+  position: static;
   z-index: 60;
   background: rgba(12, 12, 12, 0.94);
   border-bottom: 1px solid #1f1f1f;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+}
+
+@media (min-width: 800px) {
+  .auth-landing-header {
+    position: sticky;
+    top: 0;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
 }
 
 .auth-header-row {
