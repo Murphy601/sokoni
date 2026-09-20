@@ -45,33 +45,44 @@ describe("SCRUB ORPHANS command", () => {
   });
 });
 
-describe("static catalogs scrubbed of zombie peers", () => {
-  it("website products.json has no peer shops", () => {
-    const website = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
-    const raw = JSON.parse(readFileSync(website, "utf8"));
-    const list = Array.isArray(raw) ? raw : raw.products || [];
-    for (const p of list) {
-      const h = String(p.shopHandle || p.sellerHandle || "")
-        .replace(/^@/, "")
-        .toLowerCase();
-      assert.notEqual(h, "adiv_thrift");
-      assert.notEqual(h, "beauty_shop");
-      if (h && h !== "sokoni-store") {
-        assert.fail(`unexpected peer in website catalog: ${h}`);
-      }
-    }
-  });
+describe("static catalogs carry no zombie rows", () => {
+  // The original guard denylisted shop handles (adiv_thrift / beauty_shop) and
+  // allowed only sokoni-store. That can only pass while the catalog is empty --
+  // peer sellers listing is the whole product. It went red the moment a real
+  // beauty_shop listing was published 8 minutes after the scrub.
+  //
+  // The invariant worth guarding is what actually broke: sold-out and
+  // out-of-stock rows resurfacing on the storefront after a purge.
+  const CATALOGS = {
+    "website/data/products.json": path.join(
+      __dirname, "..", "..", "..", "website", "data", "products.json"
+    ),
+    "whatsapp-bot/src/data/products.json": path.join(__dirname, "..", "data", "products.json"),
+  };
 
-  it("bot master products.json has no adiv_thrift / beauty_shop", () => {
-    const master = path.join(__dirname, "..", "data", "products.json");
-    const raw = JSON.parse(readFileSync(master, "utf8"));
-    const list = Array.isArray(raw) ? raw : raw.products || [];
-    for (const p of list) {
-      const h = String(p.shopHandle || p.sellerHandle || "")
-        .replace(/^@/, "")
-        .toLowerCase();
-      assert.notEqual(h, "adiv_thrift");
-      assert.notEqual(h, "beauty_shop");
-    }
-  });
+  function load(file) {
+    const raw = JSON.parse(readFileSync(file, "utf8"));
+    return Array.isArray(raw) ? raw : raw.products || [];
+  }
+
+  for (const [label, file] of Object.entries(CATALOGS)) {
+    it(`${label} has no sold or out-of-stock rows`, () => {
+      for (const p of load(file)) {
+        assert.notEqual(p.isSold, true, `${p.id} is sold but still published`);
+        assert.notEqual(p.inStock, false, `${p.id} is out of stock but still published`);
+        assert.notEqual(
+          Number(p.stockQuantity),
+          0,
+          `${p.id} has 0 units but is still published`
+        );
+      }
+    });
+
+    it(`${label} rows all name a shop`, () => {
+      for (const p of load(file)) {
+        const handle = String(p.shopHandle || p.sellerHandle || "").replace(/^@/, "").trim();
+        assert.ok(handle, `${p.id} has no shopHandle -- cannot be traced to a live shop`);
+      }
+    });
+  }
 });
