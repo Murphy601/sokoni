@@ -9,18 +9,28 @@
 # Snapshots carry order records and buyer dispute photos, so the archive is
 # encrypted before it leaves the box and the plaintext tar is shredded.
 #
-# Install on the VM:
-#   sudo -e /etc/sokoni-backup.env     # see BACKUP ENV below, chmod 600
+# Install on the VM (user crontab, so the env file must be readable by that
+# user -- keep it in $HOME, not /etc, or cron cannot source it):
+#   nano ~/.sokoni-backup.env && chmod 600 ~/.sokoni-backup.env
 #   crontab -e
-#   15 2 * * * set -a; . /etc/sokoni-backup.env; set +a; /bin/bash $HOME/sokoni/scripts/backup-bot-data.sh >> $HOME/sokoni-backups/backup.log 2>&1
+#   15 2 * * * set -a; . $HOME/.sokoni-backup.env; set +a; /bin/bash $HOME/sokoni/scripts/backup-bot-data.sh >> $HOME/sokoni-backups/backup.log 2>&1
 #
-# BACKUP ENV (/etc/sokoni-backup.env, root-owned, chmod 600):
+# BACKUP ENV (~/.sokoni-backup.env, owned by the cron user, chmod 600):
 #   SOKONI_BACKUP_PASSPHRASE=<long random>     # required for encryption + upload
-#   SOKONI_BACKUP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
-#   SOKONI_BACKUP_S3_BUCKET=sokoni-backups
-#   SOKONI_BACKUP_S3_ACCESS_KEY=...
-#   SOKONI_BACKUP_S3_SECRET_KEY=...
+#
+#   # Target A — private git repo. Free, no payment method, no new install.
+#   SOKONI_BACKUP_GIT_REMOTE=git@github.com:<you>/sokoni-backups.git
+#   SOKONI_BACKUP_GIT_KEY=/home/<user>/.ssh/sokoni_backup_ed25519
+#   # SOKONI_BACKUP_GIT_KEEP=14
+#
+#   # Target B — S3-compatible (R2/S3/B2). Needs a card on the provider.
+#   # SOKONI_BACKUP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+#   # SOKONI_BACKUP_S3_BUCKET=sokoni-backups
+#   # SOKONI_BACKUP_S3_ACCESS_KEY=...
+#   # SOKONI_BACKUP_S3_SECRET_KEY=...
 #   # SOKONI_BACKUP_S3_REGION=auto            # R2 wants "auto"; S3 wants a real region
+#
+#   # SOKONI_BACKUP_TARGET=git|s3|none        # default: auto-detect from the above
 #   # SOKONI_BACKUP_KEEP_DAYS=14
 #
 # Restore:
@@ -105,16 +115,47 @@ SIZE="$(du -h "$ARCHIVE" | cut -f1)"
 log "wrote $ARCHIVE ($SIZE)"
 
 # Off-site. Only ships encrypted archives — never push plaintext order data.
+#
+# Two targets. git is the default because it is free with no payment method:
+# R2/B2/GCS all want a card or a wider VM scope first. Set
+# SOKONI_BACKUP_TARGET to force one.
 if [ "$ARCHIVE" != "${ARCHIVE%.enc}" ]; then
-  if node "$REPO_ROOT/scripts/lib/s3-put.mjs" "$ARCHIVE" "$(basename "$ARCHIVE")"; then
-    log "off-site copy OK"
-  else
-    code=$?
-    if [ "$code" -eq 3 ]; then
-      log "WARN: off-site upload skipped — S3/R2 env not configured (local copy only)"
+  target="${SOKONI_BACKUP_TARGET:-auto}"
+  if [ "$target" = "auto" ]; then
+    if [ -n "${SOKONI_BACKUP_GIT_REMOTE:-}" ]; then
+      target="git"
+    elif [ -n "${SOKONI_BACKUP_S3_ENDPOINT:-}" ]; then
+      target="s3"
     else
-      log "WARN: off-site upload failed (exit $code) — local copy retained, will retry next run"
+      target="none"
     fi
+  fi
+
+  case "$target" in
+    git)
+      bash "$REPO_ROOT/scripts/lib/git-backup-push.sh" "$ARCHIVE"
+      code=$?
+      ;;
+    s3)
+      node "$REPO_ROOT/scripts/lib/s3-put.mjs" "$ARCHIVE" "$(basename "$ARCHIVE")"
+      code=$?
+      ;;
+    none)
+      code=3
+      ;;
+    *)
+      log "WARN: unknown SOKONI_BACKUP_TARGET='$target' (expected git, s3 or none)"
+      code=3
+      ;;
+  esac
+
+  if [ "$code" -eq 0 ]; then
+    log "off-site copy OK ($target)"
+  elif [ "$code" -eq 3 ]; then
+    log "WARN: off-site upload skipped — no target configured (local copy only)"
+    log "      set SOKONI_BACKUP_GIT_REMOTE (free) or SOKONI_BACKUP_S3_* in ~/.sokoni-backup.env"
+  else
+    log "WARN: off-site upload failed (exit $code) — local copy retained, will retry next run"
   fi
 else
   log "WARN: no off-site upload (archive is not encrypted)"
