@@ -1,6 +1,6 @@
 ---
 name: Sokoni
-description: Kenya's WhatsApp marketplace — warm, direct, pay on delivery.
+description: Kenya's WhatsApp marketplace — warm, direct, prepaid M-Pesa escrow.
 colors:
   primary: "#25D366"
   on-primary: "#1B1035"
@@ -85,7 +85,7 @@ components:
     backgroundColor: "{colors.surface-elevated}"
     rounded: "{rounded.xl}"
     padding: 16px 20px
-  badge-cod:
+  badge-escrow:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
     typography: "{typography.caption}"
@@ -127,7 +127,7 @@ The reference is a **countrywide Kenyan market on WhatsApp**: direct, warm, hone
 
 - Headlines: short, spoken phrases — not slogan stacks of adjectives.
 - Body: line-height ≥ 1.6; never wall-of-text feature grids.
-- Avoid ALL-CAPS except tiny badges (e.g. PAY ON DELIVERY).
+- Avoid ALL-CAPS except tiny badges (e.g. PREPAID ESCROW).
 
 ## Layout
 
@@ -144,26 +144,26 @@ The reference is a **countrywide Kenyan market on WhatsApp**: direct, warm, hone
 
 ## Shapes
 
-- **Pills** (`rounded-full`): all primary and secondary buttons, COD badges.
+- **Pills** (`rounded-full`): all primary and secondary buttons, escrow badges.
 - **xl rounded** (`rounded-2xl` / `1.5rem`): product cards, review form, search input.
 - **Chat bubbles:** `rounded-2xl` with one square corner (WhatsApp convention).
 
 ## Components
 
 ### button-whatsapp
-Green fill, dark purple label, pill shape. Labels are verbs people say: "Start on WhatsApp", "Order — pay on delivery", "Ask Sokoni". Icon 💬 optional, not required on every instance.
+Green fill, dark purple label, pill shape. Labels are verbs people say: "Start on WhatsApp", "Order — prepaid escrow", "Ask Sokoni". Icon 💬 optional, not required on every instance.
 
 ### button-secondary
 Outline or ghost on cream/purple bands. Never competes visually with WhatsApp CTA on the same row.
 
 ### card-product
-White card, COD badge top-left, image, title (2-line clamp), price in bold KES, rating line, primary order link + secondary "Ask about it" text link.
+White card, escrow badge top-left, image, title (2-line clamp), price in bold KES, rating line, primary order link + secondary "Ask about it" text link.
 
 ### input-search
 Large touch target, placeholder examples in plain language ("camera phone chini ya 15k"). Focus ring green.
 
-### badge-cod
-Small pill: "Pay on delivery" — always visible on store items.
+### badge-escrow
+Small pill: "Prepaid escrow" — always visible on store items.
 
 ### Chat preview blocks
 Use exact WhatsApp background and bubble colours from tokens. Copy must sound like real messages (Sheng/English mix OK).
@@ -171,7 +171,7 @@ Use exact WhatsApp background and bubble colours from tokens. Copy must sound li
 ## Do's and Don'ts
 
 **Do**
-- Write like a helpful person texting back — "Sawa", "Karibu", "pay when it arrives".
+- Write like a helpful person texting back — "Sawa", "Karibu", "your money is safe until you confirm".
 - Hero headline: "Shop while texting a trusted local AI agent assistant." Phone column: "Your Market, On WhatsApp."
 - Mention **countrywide** delivery and **pickup partners** where relevant — not one city.
 - Discuss payment as M-Pesa STK escrow only — never publish till numbers or till account names on the storefront.

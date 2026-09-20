@@ -492,7 +492,7 @@ export async function findProductFromMessage(text, { allProducts = false } = {})
 function isMenuBoilerplate(text) {
   const t = String(text || "").toLowerCase();
   return (
-    /what next|reply with the number|pick your size|pick an item|do you mean|type \*menu\*|pay on delivery\)\s*$/i.test(
+    /what next|reply with the number|pick your size|pick an item|do you mean|type \*menu\*|(?:pay on delivery|prepaid escrow)\)\s*$/i.test(
       t
     ) ||
     /^🛒 order|^🤖 ask|^⬅️? main menu/i.test(t.trim()) ||

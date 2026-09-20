@@ -17,11 +17,11 @@ Read the full concept first: [`docs/CONCEPT.md`](docs/CONCEPT.md)
 | [`docs/WHATSAPP_FLOWS.md`](docs/WHATSAPP_FLOWS.md) | The full menu tree and user-journey diagrams for the WhatsApp bot. |
 | [`docs/AI_AGENT_PROMPT.md`](docs/AI_AGENT_PROMPT.md) | The system prompt + example transcripts that power the AI shopping agent. |
 | [`docs/CATALOG_SYNC.md`](docs/CATALOG_SYNC.md) | The automated daily price/availability sync (Amazon + AliExpress APIs, opt-in structured-data for the rest) and what's automatable vs manual. |
-| [`docs/STORE.md`](docs/STORE.md) | The Sokoni Store / pay-on-delivery model, Jumia-style category tree, how to add products from one file, and **automatic product images**. |
+| [`docs/STORE.md`](docs/STORE.md) | The Sokoni Store / prepaid M-Pesa escrow model, Jumia-style category tree, how to add products from one file, and **automatic product images**. |
 | [`docs/GO_LIVE_WAHA.md`](docs/GO_LIVE_WAHA.md) | **Step-by-step go-live** with WAHA + free hosting (Oracle VM + Cloudflare Pages). |
 | `scripts/sync/` | The catalog sync script + provider modules, run daily by a GitHub Action. |
 | `website/` | A working, dependency-free storefront (HTML/Tailwind/JS) that showcases categories & deals and drives visitors to WhatsApp. |
-| `whatsapp-bot/` | Node.js/Express bot via **WAHA**: numbered text menus + OpenRouter AI + pay-on-delivery orders. |
+| `whatsapp-bot/` | Node.js/Express bot via **WAHA**: numbered text menus + OpenRouter AI + prepaid escrow orders. |
 
 ## How the pieces connect
 

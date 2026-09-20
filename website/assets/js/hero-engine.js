@@ -177,7 +177,7 @@
       `<div class="hero-filmstrip-img-wrap"><img src="${esc(p.imageUrl)}" alt="${name}" loading="lazy" decoding="async" /></div>` +
       `<div class="hero-filmstrip-caption"><strong>${name}</strong>` +
       (trail ? `<span class="hero-filmstrip-trail">${esc(trail)}</span>` : "") +
-      `<span class="hero-filmstrip-price">${price} · Pay on delivery</span></div></div>`;
+      `<span class="hero-filmstrip-price">${price} · Prepaid escrow</span></div></div>`;
     requestAnimationFrame(() => slide.classList.add("is-active"));
   }
 
@@ -255,7 +255,7 @@
         `${bar}` +
         (p?.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" class="w-full h-16 object-contain rounded-lg mb-2 bg-white/50" />` : "") +
         `<p class="font-bold">${esc(p?.name || ctx.productName)}</p>` +
-        `<p class="text-brand-green font-bold">${ctx.price} · Pay on delivery</p>` +
+        `<p class="text-brand-green font-bold">${ctx.price} · Prepaid escrow</p>` +
         `<p class="mt-1 rounded-full bg-brand-green/20 text-center py-1 font-bold">💬 Ask on WhatsApp</p>`;
       return;
     }
@@ -378,7 +378,7 @@
         : `<p class="text-xs text-brand-purple/40 text-center py-4">Photo coming soon</p>`;
       const name = esc(p?.name || ctx.productName);
       const price = formatKes(p?.priceKes);
-      return `<div class="wa-bubble wa-bubble-product">${img}<p class="font-semibold">${name}</p><p class="text-brand-purple/60 text-xs">${price} · Pay on delivery 💵</p></div>`;
+      return `<div class="wa-bubble wa-bubble-product">${img}<p class="font-semibold">${name}</p><p class="text-brand-purple/60 text-xs">${price} · Prepaid escrow 💵</p></div>`;
     }
 
     if (frame.kind === "menu" && frame.lines) {

@@ -15,7 +15,7 @@ export function computeMargin(supplierPriceKes, retailPriceKes = null) {
   return Math.max(0, retail - cost);
 }
 
-/** Round up to nearest KES 50 for clean COD totals. */
+/** Round up to nearest KES 50 for clean checkout totals. */
 export function roundRetail(amount) {
   const n = Math.max(0, Number(amount) || 0);
   return Math.ceil(n / 50) * 50;

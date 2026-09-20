@@ -115,7 +115,7 @@ async function handleReplaceOrCancel(customerKey, action, { phone = "", displayN
     });
     await sendText(
       customerKey,
-      `✅ Request closed for order *${order.id}*. You owe nothing on pay-on-delivery.\n\nType *menu* to shop again. 🙏`
+      `✅ Order *${order.id}* cancelled. Your payment never reached the seller — our team is processing your M-Pesa refund from escrow.\n\nType *menu* to shop again. 🙏`
     );
     await alertAdminIssueAction({
       customerKey,

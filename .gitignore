@@ -16,3 +16,8 @@ waha-qr*.png
 # Local Daraja certs / encrypted credentials (download on VM)
 whatsapp-bot/certs/*.cer
 whatsapp-bot/certs/*.pem
+
+# Buyer dispute evidence must never enter the public asset tree.
+# Runtime writes go to whatsapp-bot/data/dispute-evidence (already ignored);
+# this catches anything the VM catalog auto-commit tries to sweep up.
+website/assets/images/products/dispute_ev_*

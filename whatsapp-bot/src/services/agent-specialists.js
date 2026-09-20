@@ -93,6 +93,8 @@ export function specialistSystemHint(lane) {
 }
 
 const KNOWLEDGE_FILES = [
+  "escrow-policy.md",
+  "payments.md",
   "returns-policy.md",
   "seller-payouts.md",
   "buyer-trust.md",
@@ -105,10 +107,10 @@ const KNOWLEDGE_FILES = [
 
 /** Prefer docs by specialist lane. */
 const LANE_DOCS = {
-  seller: ["seller-onboarding.md", "seller-payouts.md", "shipping-sop.md", "vendor-terms.md"],
-  dispute: ["returns-policy.md", "buyer-trust.md", "rider-delivery.md"],
-  logistics: ["rider-delivery.md", "shipping-sop.md", "buyer-trust.md"],
-  buyer: ["buyer-trust.md", "returns-policy.md", "shipping-sop.md"],
+  seller: ["seller-onboarding.md", "seller-payouts.md", "shipping-sop.md", "vendor-terms.md", "escrow-policy.md"],
+  dispute: ["escrow-policy.md", "returns-policy.md", "buyer-trust.md", "rider-delivery.md"],
+  logistics: ["rider-delivery.md", "shipping-sop.md", "buyer-trust.md", "escrow-policy.md"],
+  buyer: ["payments.md", "escrow-policy.md", "buyer-trust.md", "returns-policy.md", "shipping-sop.md"],
   general: KNOWLEDGE_FILES,
 };
 
@@ -158,7 +160,15 @@ function guessCategory(docId) {
     return "seller_policy";
   }
   if (id.includes("rider") || id.includes("ship")) return "shipping";
-  if (id.includes("return") || id.includes("buyer") || id.includes("trust")) return "buyer_policy";
+  if (
+    id.includes("return") ||
+    id.includes("buyer") ||
+    id.includes("trust") ||
+    id.includes("escrow") ||
+    id.includes("payment")
+  ) {
+    return "buyer_policy";
+  }
   return "general";
 }
 

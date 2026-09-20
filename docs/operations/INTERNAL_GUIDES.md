@@ -4,12 +4,15 @@ Staff, rider, and admin reference templates. Customer-facing copy lives in `what
 
 ## Rider delivery protocol
 
-1. **Digital only** — Never collect cash or personal M-Pesa from customers. Customer pays Buy Goods Till **4775847** (David Thuku Muiruri) only.
-2. **Inspect before payment** — Hand package to customer; allow unpack and verification before pointing to Buy Goods Till on delivery slip.
-3. **Order ID** — Every paid order has an **SKN-####** (or older **SK-####**). Quote it on every handoff.
-4. **No side deals** — Do not accept personal Till or Send Money for Sokoni orders.
-5. **Verify payment** — Customer replies *paid* on WhatsApp or shows M-Pesa SMS. Do not leave until admin confirms or customer shows valid receipt.
-6. **Rejections** — If damaged/wrong item, pack safely and return. Customer owes nothing for COD; prepaid disputes go through escrow / admin.
+Every Sokoni order is **already paid** before it reaches a rider. Riders collect nothing at the door.
+
+1. **Collect no money, ever** — Do not take cash, do not take M-Pesa, do not share a till. The buyer paid at checkout and the funds sit in Sokoni escrow. A rider asking for money is grounds for suspension.
+2. **Order ID** — Every paid order has an **SKN-####** (or older **SK-####**). Quote it on every handoff.
+3. **Pickup** — Take custody only after the seller gives you the 4-digit Pickup OTP: reply *PICKUP SKN-#### ####*.
+4. **Let the buyer inspect** — Hand over the parcel and give the buyer time to open and check it before you ask for their code.
+5. **Delivery** — The buyer gives you their 4-digit Delivery OTP: reply *CONFIRM SKN-#### ####*. That code is what releases escrow — never ask for it before the buyer has the goods in hand.
+6. **No side deals** — Never accept a personal Till or Send Money for a Sokoni order, even if the buyer offers.
+7. **Rejections** — If the item is damaged or wrong, do not take the delivery code. Pack it safely, return it, and the buyer opens a dispute; escrow refunds them from the held funds.
 
 ## Admin M-Pesa verification (Till 3439153)
 

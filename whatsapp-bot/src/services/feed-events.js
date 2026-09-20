@@ -1,7 +1,8 @@
 /**
  * Phase 8 — Feed event logging (views, saves, clicks, purchases).
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeJsonAtomic } from "../lib/atomic-json.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -29,7 +30,7 @@ function load() {
 function persist() {
   try {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-    writeFileSync(EVENTS_FILE, JSON.stringify(store, null, 2));
+    writeJsonAtomic(EVENTS_FILE, store);
   } catch (err) {
     console.error("[feed-events] persist failed:", err.message);
   }
