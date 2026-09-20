@@ -5,12 +5,10 @@ name: Tests
 # 8 minutes after a scrub landed, and main sat red for a week because nothing ran
 # the suite. This job is what makes that visible.
 
-# Runs per commit rather than per PR: every branch here is same-repo
-# (cursor/*, fix/*), so a push check covers the PR head too, and a
-# force-push that GitHub does not report as a PR synchronize still
-# gets tested.
 on:
   push:
+    branches: [main]
+  pull_request:
   workflow_dispatch: {}
 
 concurrency:
