@@ -31,7 +31,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate: the VM auto-commits catalog changes straight to main, and on
+  # 2026-08-30 one of those shipped a regression that sat on main for a week.
+  # Deploy does not start until the suite is green on this exact commit.
+  test:
+    name: tests must pass before deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: whatsapp-bot/package-lock.json
+
+      - name: Install
+        working-directory: whatsapp-bot
+        run: npm ci --omit=dev
+
+      - name: Unit tests
+        working-directory: whatsapp-bot
+        # Explicit paths: `node --test <glob>` only expands on Node >= 22.
+        run: |
+          set -euo pipefail
+          files="$(find src -name '*.test.js' | sort)"
+          if [ -z "$files" ]; then
+            echo "no test files found under src/" >&2
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          node --test $files
+
+      - name: Module import smoke
+        run: node scripts/verify-bot-import.mjs
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
