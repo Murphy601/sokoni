@@ -167,3 +167,28 @@ test("buildAdminOverridePool unlocks public ★ score", () => {
   assert.ok(pool.some((e) => e.kind === "admin_set"));
   assert.ok(pool.filter((e) => e.kind === "star").length >= MIN_PUBLIC_REVIEWS);
 });
+
+test("power seller chip appears at 50 completed sales regardless of rating", () => {
+  const r = deriveBadgeTier({ completedOrders: 50, rating: 4.1, isVerified: false });
+  assert.ok(
+    r.badges.some((b) => b.id === "power_seller"),
+    "volume chip is not gated on rating"
+  );
+});
+
+test("power seller chip does not appear below the threshold", () => {
+  const r = deriveBadgeTier({ completedOrders: 49, rating: 5 });
+  assert.equal(r.badges.some((b) => b.id === "power_seller"), false);
+});
+
+test("power seller chip is additive - existing tiers unchanged", () => {
+  const top = deriveBadgeTier({ completedOrders: 60, rating: 4.8, isVerified: true });
+  assert.equal(top.tier, "top_rated", "tier logic must not shift");
+  assert.ok(top.badges.some((b) => b.id === "top_rated"));
+  assert.ok(top.badges.some((b) => b.id === "power_seller"));
+});
+
+test("power seller chip appears only once", () => {
+  const r = deriveBadgeTier({ completedOrders: 500, rating: 4.95, isVerified: true });
+  assert.equal(r.badges.filter((b) => b.id === "power_seller").length, 1);
+});

@@ -847,17 +847,25 @@ function productCard(product, shop) {
   const likes = Number(product.likesCount || 0);
   const liked = Boolean(product.liked) || state.likedProductIds.has(String(product.id));
   const sold = Boolean(product.isSold) || state.listingsTab === "sold";
+  // Pinned items already sort first; the chip explains why they are up there.
+  const pinned = Boolean(product.isPinned) && !sold;
 
   return `
     <article class="product-card bg-white dark:bg-brand-purpleLight/45 rounded-2xl border border-black/5 dark:border-white/10 p-4 flex flex-col ${
       sold ? "opacity-90" : ""
-    }">
+    }"${pinned ? ' data-pinned="1"' : ""}>
       <div class="relative mb-3 rounded-xl overflow-hidden bg-brand-cream dark:bg-brand-purple/20 aspect-square">
         <span class="absolute top-2 left-2 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">${
           sold ? "Sold" : "Prepaid"
         }</span>
+        ${
+          pinned
+            ? `<span class="absolute top-2 right-2 z-10 bg-brand-purple/90 text-white text-[10px] font-bold px-2 py-1 rounded-full">📌 Featured</span>`
+            : ""
+        }
         ${image}
       </div>
+      <div class="product-demand" data-demand-for="${escapeHtml(String(product.id || ""))}"></div>
       <h3 class="font-semibold text-sm line-clamp-2">${title}</h3>
       <p class="text-xs text-brand-purple/55 dark:text-white/65 mt-1">${condition} · Size ${size}</p>
       ${

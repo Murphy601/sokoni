@@ -1,4 +1,4 @@
-import { isDbEnabled, query } from "../pool.js";
+import { isDbEnabled, query, withTransaction } from "../pool.js";
 import {
   computeOfferFeeBreakdown,
   serializeOfferBreakdown,
@@ -1803,6 +1803,8 @@ function mapStorefrontProductRow(row) {
     isSecondhand: Boolean(row.is_secondhand),
     isSold: Boolean(row.is_sold),
     likesCount: Number(row.likes_count || 0),
+    pinRank: row.pin_rank != null ? Number(row.pin_rank) : null,
+    isPinned: row.pin_rank != null,
     createdAt: row.created_at,
   };
 }
@@ -1861,6 +1863,7 @@ async function listStorefrontProducts({
        p.is_secondhand,
        p.is_sold,
        p.created_at,
+       p.pin_rank,
        COALESCE(
          (SELECT pi.url FROM product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC LIMIT 1),
          p.primary_image_url
@@ -1873,7 +1876,7 @@ async function listStorefrontProducts({
        GROUP BY product_id
      ) pl ON pl.product_id = p.id
      WHERE ${whereStatus}
-     ORDER BY p.created_at DESC
+     ORDER BY p.pin_rank ASC NULLS LAST, p.created_at DESC
      LIMIT ${listLimitParam}
      OFFSET ${listOffsetParam}`,
     listParams
@@ -3585,4 +3588,122 @@ export async function listBuyerReviews({ buyerUserId, limit = 20, offset = 0 } =
     avgRating: summary.avgRating,
     totalReviews: summary.totalReviews,
   };
+}
+
+
+/* -------------------------------------------------------------------------
+ * Seller-pinned shop items (phase 35)
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Current pins for a shop, ordered by slot.
+ * @param {number} sellerUserId
+ * @returns {Promise<{ productId: string, rank: number, title: string|null }[]>}
+ */
+export async function listShopPins(sellerUserId) {
+  const uid = parseUserId(sellerUserId);
+  if (!isDbEnabled() || !uid) return [];
+  const { rows } = await query(
+    `SELECT id AS product_id, pin_rank, title
+       FROM products
+      WHERE seller_user_id = $1 AND pin_rank IS NOT NULL
+      ORDER BY pin_rank ASC`,
+    [uid]
+  );
+  return (rows || []).map((r) => ({
+    productId: String(r.product_id),
+    rank: Number(r.pin_rank),
+    title: r.title || null,
+  }));
+}
+
+/**
+ * Pin a listing to a slot. Applies any swap/eviction the slot logic asked for,
+ * in one transaction so the partial unique index never sees a duplicate.
+ *
+ * @param {{ sellerUserId: number, productId: string, rank?: number|null }} input
+ */
+export async function pinShopProduct({ sellerUserId, productId, rank = null } = {}) {
+  const uid = parseUserId(sellerUserId);
+  const id = String(productId || "").trim();
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  if (!uid || !id) return { error: "missing_product" };
+
+  const { rows: owned } = await query(
+    `SELECT id, is_sold, in_stock, stock_quantity
+       FROM products
+      WHERE id = $1 AND seller_user_id = $2
+      LIMIT 1`,
+    [id, uid]
+  );
+  if (!owned?.length) return { error: "not_your_listing", message: "That listing is not in your shop." };
+
+  const { isPinnable, resolvePinSlot } = await import("../../lib/shop-pins.js");
+  const pinnable = isPinnable({
+    isSold: owned[0].is_sold,
+    inStock: owned[0].in_stock,
+    stockQuantity: owned[0].stock_quantity,
+  });
+  if (!pinnable.ok) return pinnable;
+
+  const current = await listShopPins(uid);
+  const slot = resolvePinSlot({ currentPins: current, productId: id, requestedRank: rank });
+  if (!slot.ok) return slot;
+
+  await withTransaction(async (client) => {
+    // Park the target first so a swap cannot trip the unique index mid-flight.
+    await client.query(
+      `UPDATE products SET pin_rank = NULL, updated_at = NOW()
+        WHERE id = $1 AND seller_user_id = $2`,
+      [id, uid]
+    );
+    for (const mv of slot.moves) {
+      await client.query(
+        `UPDATE products
+            SET pin_rank = $3, pinned_at = CASE WHEN $3 IS NULL THEN NULL ELSE NOW() END,
+                updated_at = NOW()
+          WHERE id = $1 AND seller_user_id = $2`,
+        [mv.productId, uid, mv.rank > 0 ? mv.rank : null]
+      );
+    }
+    await client.query(
+      `UPDATE products SET pin_rank = $3, pinned_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND seller_user_id = $2`,
+      [id, uid, slot.rank]
+    );
+  });
+
+  return { ok: true, rank: slot.rank, pins: await listShopPins(uid) };
+}
+
+/**
+ * Unpin a listing and close the gap so the shelf has no hole.
+ * @param {{ sellerUserId: number, productId: string }} input
+ */
+export async function unpinShopProduct({ sellerUserId, productId } = {}) {
+  const uid = parseUserId(sellerUserId);
+  const id = String(productId || "").trim();
+  if (!isDbEnabled()) return { error: "database_not_configured" };
+  if (!uid || !id) return { error: "missing_product" };
+
+  const { compactPins } = await import("../../lib/shop-pins.js");
+  const remaining = (await listShopPins(uid)).filter((p) => p.productId !== id);
+  const compacted = compactPins(remaining);
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE products SET pin_rank = NULL, pinned_at = NULL, updated_at = NOW()
+        WHERE seller_user_id = $1 AND pin_rank IS NOT NULL`,
+      [uid]
+    );
+    for (const pin of compacted) {
+      await client.query(
+        `UPDATE products SET pin_rank = $3, pinned_at = NOW(), updated_at = NOW()
+          WHERE id = $1 AND seller_user_id = $2`,
+        [pin.productId, uid, pin.rank]
+      );
+    }
+  });
+
+  return { ok: true, pins: await listShopPins(uid) };
 }

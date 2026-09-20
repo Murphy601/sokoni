@@ -1113,3 +1113,35 @@ body.has-depop-shell .product-sheet-offer-input {
   border-color: var(--depop-border, #27272a);
   color: var(--depop-ink, #fff);
 }
+
+/* Demand / urgency chips on product cards (data-demand-for slots). */
+.product-demand:empty {
+  display: none;
+}
+
+.product-demand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0.5rem 0 0.125rem;
+}
+
+.demand-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  background: rgba(255, 35, 0, 0.1);
+  color: #ff5a33;
+  border: 1px solid rgba(255, 35, 0, 0.22);
+}
+
+.demand-tag--saves {
+  background: rgba(37, 211, 102, 0.1);
+  color: #34d399;
+  border-color: rgba(37, 211, 102, 0.24);
+}
