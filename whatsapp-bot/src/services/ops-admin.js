@@ -238,7 +238,7 @@ export async function alertAdminIssueAction({ customerKey, orderId, action, disp
         `Customer: ${displayName || "—"} · ${phone || customerKey}\n\n` +
         (action === "REPLACE"
           ? "Dispatch correct item and update order."
-          : "Close request — customer owes nothing on COD.")
+          : "Order cancelled by buyer — refund their escrow to M-Pesa.")
     );
   } catch {
     /* ignore */

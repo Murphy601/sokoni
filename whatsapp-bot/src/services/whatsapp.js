@@ -862,7 +862,7 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
   if (product.fulfillment === "store") {
     const caption =
       `*${product.name}*\n` +
-      `KES ${product.priceKes.toLocaleString()}  ·  💵 Pay on delivery\n` +
+      `KES ${product.priceKes.toLocaleString()}  ·  🛡️ Prepaid — escrow until you confirm\n` +
       `⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews)`;
 
     const sent = await sendProductImage(to, product, caption);
@@ -873,14 +873,14 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
     if (!setActions) return;
 
     const options = [
-      { id: `order_${product.id}`, label: "🛒 Order (pay on delivery)" },
+      { id: `order_${product.id}`, label: "🛒 Order (prepaid escrow)" },
       { id: `ask_ai_${product.id}`, label: "🤖 Ask about it" },
       { id: "menu_main", label: "⬅ Main menu" },
     ];
     setMenuState(to, { type: "product", productId: product.id, options });
     return sendText(
       to,
-      `What next?\n\n1. 🛒 Order (pay on delivery)\n2. 🤖 Ask about it\n3. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
+      `What next?\n\n1. 🛒 Order (prepaid escrow)\n2. 🤖 Ask about it\n3. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
     );
   }
 

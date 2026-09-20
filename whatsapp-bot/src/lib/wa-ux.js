@@ -237,10 +237,31 @@ export function msgRiderDeliveryStep({ orderId, buyerName, dropoffAddr, buyerPho
   ].join("\n");
 }
 
-/** Buyer — payment confirmed. */
-export function msgBuyerPaymentConfirmed({ orderId, itemName, totalKes, location }) {
+/**
+ * Buyer — payment confirmed + escrow reassurance.
+ * inspectionHours: 24 local rider, 48 upcountry courier (order.autoReleaseHours).
+ */
+export function msgBuyerPaymentConfirmed({
+  orderId,
+  itemName,
+  totalKes,
+  location,
+  buyerName = "",
+  inspectionHours = 24,
+  localRider = true,
+}) {
+  const hours = Math.max(1, Math.round(Number(inspectionHours) || 24));
+  const id = String(orderId || "").toUpperCase();
+  const greeting = String(buyerName || "").trim()
+    ? `Hi *${String(buyerName).trim()}* — your payment is in.`
+    : "Your payment is in.";
+  const handover = localRider
+    ? "Inspect your item, then share the 4-digit delivery code with the rider."
+    : `Inspect your item, then reply *YES ${id}* to confirm receipt.`;
   return [
-    waHeader("✅", "PAYMENT CONFIRMED", orderId),
+    waHeader("🎉", "ORDER CONFIRMED & SECURED", orderId),
+    "",
+    greeting,
     "",
     waBullets([
       ["Item", itemName || "Item"],
@@ -253,7 +274,20 @@ export function msgBuyerPaymentConfirmed({ orderId, itemName, totalKes, location
       ["Delivery to", dedupeLocationLine(location) || "—"],
     ]),
     "",
-    "📦 What happens next: we assign a vetted rider (or the seller ships) to move your package.",
+    "🛡️ *YOUR PAYMENT IS IN SOKONI ESCROW*",
+    "Your money is held by Sokoni Mall and has *not* been released to the seller.",
+    "",
+    "📦 *What happens next*",
+    "1️⃣ The seller packs your parcel for dispatch.",
+    "",
+    "2️⃣ A vetted rider (or seller courier) brings it to you.",
+    "",
+    `3️⃣ ${handover}`,
+    "",
+    "🔒 *Buyer protection*",
+    `Damaged, wrong, or fake? Tell us in this chat within *${hours} hours* of delivery for a full M-Pesa refund.`,
+    "",
+    waCta(`STATUS ${id}`),
   ].join("\n");
 }
 

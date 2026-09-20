@@ -49,6 +49,13 @@ jobs:
       - name: Module import smoke
         run: node scripts/verify-bot-import.mjs
 
+  copy-audit:
+    name: no cash-on-delivery offers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/audit-cod-copy.sh
+
   static-data:
     name: catalog JSON validity
     runs-on: ubuntu-latest

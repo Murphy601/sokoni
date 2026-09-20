@@ -390,6 +390,18 @@ body.has-depop-shell .depop-marketing-extra {
     linear-gradient(90deg, rgba(9, 9, 11, 0.94) 0%, rgba(9, 9, 11, 0.7) 45%, rgba(9, 9, 11, 0.38) 100%);
 }
 
+.depop-hero-bleed--protection .depop-hero-bleed-veil {
+  background:
+    radial-gradient(ellipse 62% 72% at 82% 32%, rgba(37, 211, 102, 0.20), transparent 55%),
+    linear-gradient(90deg, rgba(9, 9, 11, 0.95) 0%, rgba(9, 9, 11, 0.72) 46%, rgba(9, 9, 11, 0.36) 100%);
+}
+
+.depop-hero-bleed--refund .depop-hero-bleed-veil {
+  background:
+    radial-gradient(ellipse 60% 70% at 84% 36%, rgba(52, 211, 153, 0.16), transparent 52%),
+    linear-gradient(90deg, rgba(9, 9, 11, 0.94) 0%, rgba(9, 9, 11, 0.71) 47%, rgba(9, 9, 11, 0.36) 100%);
+}
+
 .depop-hero-bleed--circular .depop-hero-bleed-veil {
   background:
     radial-gradient(ellipse 70% 70% at 88% 40%, rgba(16, 185, 129, 0.16), transparent 55%),
