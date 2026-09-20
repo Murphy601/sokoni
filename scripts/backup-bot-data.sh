@@ -81,11 +81,24 @@ if ! tar -tzf "$PLAIN" >/dev/null 2>&1; then
 fi
 
 # Confirm the money files made it in.
-for want in data/orders.json data/settlements.json data/withdrawals.json; do
-  if [ -f "$REPO_ROOT/whatsapp-bot/$want" ] && ! tar -tzf "$PLAIN" | grep -qx "$want"; then
-    log "WARN: $want exists on disk but is missing from the archive"
-  fi
-done
+#
+# List once into a file rather than piping tar into `grep -q` per name.
+# grep -q exits on first match, tar takes SIGPIPE, and under `set -o pipefail`
+# the pipeline reports failure -- so every present file was reported missing
+# on any archive big enough that tar was still writing. It also ran tar once
+# per name for no reason.
+MANIFEST="$(mktemp "${TMPDIR:-/tmp}/sokoni-manifest.XXXXXX")"
+if tar -tzf "$PLAIN" > "$MANIFEST" 2>/dev/null; then
+  for want in data/orders.json data/settlements.json data/withdrawals.json; do
+    if [ -f "$REPO_ROOT/whatsapp-bot/$want" ] && ! grep -qxF "$want" "$MANIFEST"; then
+      log "WARN: $want exists on disk but is missing from the archive"
+    fi
+  done
+  log "archive holds $(wc -l < "$MANIFEST") entries"
+else
+  log "WARN: could not list the archive to verify contents"
+fi
+rm -f "$MANIFEST"
 
 ARCHIVE="$PLAIN"
 
