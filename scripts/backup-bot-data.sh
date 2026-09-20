@@ -9,12 +9,13 @@
 # Snapshots carry order records and buyer dispute photos, so the archive is
 # encrypted before it leaves the box and the plaintext tar is shredded.
 #
-# Install on the VM:
-#   sudo -e /etc/sokoni-backup.env     # see BACKUP ENV below, chmod 600
+# Install on the VM (user crontab, so the env file must be readable by that
+# user -- keep it in $HOME, not /etc, or cron cannot source it):
+#   nano ~/.sokoni-backup.env && chmod 600 ~/.sokoni-backup.env
 #   crontab -e
-#   15 2 * * * set -a; . /etc/sokoni-backup.env; set +a; /bin/bash $HOME/sokoni/scripts/backup-bot-data.sh >> $HOME/sokoni-backups/backup.log 2>&1
+#   15 2 * * * set -a; . $HOME/.sokoni-backup.env; set +a; /bin/bash $HOME/sokoni/scripts/backup-bot-data.sh >> $HOME/sokoni-backups/backup.log 2>&1
 #
-# BACKUP ENV (/etc/sokoni-backup.env, root-owned, chmod 600):
+# BACKUP ENV (~/.sokoni-backup.env, owned by the cron user, chmod 600):
 #   SOKONI_BACKUP_PASSPHRASE=<long random>     # required for encryption + upload
 #   SOKONI_BACKUP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
 #   SOKONI_BACKUP_S3_BUCKET=sokoni-backups
