@@ -84,3 +84,129 @@ export function getFeedEventStats() {
   }
   return { total: store.events.length, last24h: recent.length, byType };
 }
+
+/* -------------------------------------------------------------------------
+ * Demand signals (urgency tags on product cards)
+ *
+ * Derived from the events already logged above -- no new storage, no schema.
+ * Counts DISTINCT sessions, not raw hits, so one buyer refreshing five times
+ * is one viewer. A signal only surfaces once it clears a floor, because
+ * "1 person viewed this" reads as dead stock rather than demand.
+ * ---------------------------------------------------------------------- */
+
+/** Minimum distinct sessions before a viewer count is worth showing. */
+export const DEMAND_MIN_VIEWERS = 3;
+/** Minimum saves before the saved tag is worth showing. */
+export const DEMAND_MIN_SAVES = 2;
+const DEMAND_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Demand for one product over a trailing window.
+ *
+ * @param {string} productId
+ * @param {{ windowMs?: number, now?: number }} [opts]
+ * @returns {{ productId: string, viewers: number, saves: number, windowMs: number }}
+ */
+export function getProductDemand(productId, { windowMs = DEMAND_WINDOW_MS, now = Date.now() } = {}) {
+  const id = String(productId || "").trim();
+  const win = Math.max(60_000, Number(windowMs) || DEMAND_WINDOW_MS);
+  if (!id) return { productId: "", viewers: 0, saves: 0, windowMs: win };
+  const batch = getProductDemandBatch([id], { windowMs: win, now });
+  const hit = batch[id] || { viewers: 0, saves: 0 };
+  return { productId: id, viewers: hit.viewers, saves: hit.saves, windowMs: win };
+}
+
+/**
+ * Demand for many products in a single pass over the log.
+ *
+ * @param {string[]} productIds
+ * @param {{ windowMs?: number, now?: number }} [opts]
+ * @returns {Record<string, { viewers: number, saves: number }>}
+ */
+export function getProductDemandBatch(productIds = [], { windowMs = DEMAND_WINDOW_MS, now = Date.now() } = {}) {
+  const wanted = (Array.isArray(productIds) ? productIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+  /** @type {Record<string, { viewers: number, saves: number }>} */
+  const out = {};
+  if (!wanted.length) return out;
+  load();
+
+  const win = Math.max(60_000, Number(windowMs) || DEMAND_WINDOW_MS);
+  const since = now - win;
+  /**
+   * v      distinct viewer sessions
+   * s      sessions whose newest save/unsave was a save
+   * settled sessions whose save state is already decided
+   * av/as/au anonymous (no sessionId) view / save / unsave counts
+   * @type {Map<string, { v: Set<string>, s: Set<string>, settled: Set<string>, av: number, as: number, au: number }>}
+   */
+  const acc = new Map();
+  for (const id of wanted) {
+    if (!acc.has(id)) {
+      acc.set(id, { v: new Set(), s: new Set(), settled: new Set(), av: 0, as: 0, au: 0 });
+    }
+  }
+
+  for (const e of store.events) {
+    // store.events is newest-first, so the first out-of-window entry ends it.
+    if (e.at < since) break;
+    const bucket = e.productId ? acc.get(e.productId) : null;
+    if (!bucket) continue;
+
+    if (e.type === "view" || e.type === "click") {
+      if (e.sessionId) bucket.v.add(e.sessionId);
+      else bucket.av += 1;
+      continue;
+    }
+
+    if (e.type !== "save" && e.type !== "unsave") continue;
+
+    if (!e.sessionId) {
+      // Cannot attribute an anonymous unsave to an anonymous save; net the counts.
+      if (e.type === "save") bucket.as += 1;
+      else bucket.au += 1;
+      continue;
+    }
+    // Newest-first: the first save/unsave seen for a session is its current
+    // state. Anything older for that session is already superseded.
+    if (bucket.settled.has(e.sessionId)) continue;
+    bucket.settled.add(e.sessionId);
+    if (e.type === "save") bucket.s.add(e.sessionId);
+  }
+
+  for (const [id, b] of acc) {
+    out[id] = {
+      viewers: b.v.size + b.av,
+      saves: b.s.size + Math.max(0, b.as - b.au),
+    };
+  }
+  return out;
+}
+
+/**
+ * Buyer-facing urgency tags, or [] when the numbers are too thin to mean anything.
+ *
+ * @param {{ viewers?: number, saves?: number }} demand
+ * @returns {{ id: string, emoji: string, label: string }[]}
+ */
+export function demandTags(demand = {}) {
+  const viewers = Math.max(0, Math.round(Number(demand.viewers) || 0));
+  const saves = Math.max(0, Math.round(Number(demand.saves) || 0));
+  const tags = [];
+  if (viewers >= DEMAND_MIN_VIEWERS) {
+    tags.push({
+      id: "viewers",
+      emoji: "👀",
+      label: `${viewers} buyers viewed this in the last hour`,
+    });
+  }
+  if (saves >= DEMAND_MIN_SAVES) {
+    tags.push({
+      id: "saves",
+      emoji: "🔥",
+      label: `${saves} people have this saved`,
+    });
+  }
+  return tags;
+}

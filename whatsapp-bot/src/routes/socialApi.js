@@ -200,6 +200,73 @@ router.get("/users/:userId/following", async (req, res) => {
   }
 });
 
+/** GET /api/social/shop/pins — seller's pinned shelf (max 3) */
+router.get("/shop/pins", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+    }
+    const { listShopPins } = await import("../db/repositories/social.js");
+    const { MAX_SHOP_PINS } = await import("../lib/shop-pins.js");
+    const pins = await listShopPins(auth.sellerUserId);
+    res.json({ pins, max: MAX_SHOP_PINS, remaining: Math.max(0, MAX_SHOP_PINS - pins.length) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/shop/pins — pin a listing to the top of the shop grid */
+router.post("/shop/pins", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+    }
+    const { pinShopProduct } = await import("../db/repositories/social.js");
+    const result = await pinShopProduct({
+      sellerUserId: auth.sellerUserId,
+      productId: req.body?.productId,
+      rank: req.body?.rank ?? null,
+    });
+    if (result.error) {
+      const status =
+        result.error === "not_your_listing"
+          ? 403
+          : result.error === "database_not_configured"
+            ? 503
+            : 400;
+      return res.status(status).json({ error: result.error, message: result.message });
+    }
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /api/social/shop/pins/:productId — unpin and close the gap */
+router.delete("/shop/pins/:productId", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (auth.error) {
+      return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+    }
+    const { unpinShopProduct } = await import("../db/repositories/social.js");
+    const result = await unpinShopProduct({
+      sellerUserId: auth.sellerUserId,
+      productId: req.params.productId,
+    });
+    if (result.error) {
+      return res
+        .status(result.error === "database_not_configured" ? 503 : 400)
+        .json({ error: result.error, message: result.message });
+    }
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** POST /api/social/shop/avatar — optional shop profile photo upload */
 router.post("/shop/avatar", async (req, res) => {
   try {

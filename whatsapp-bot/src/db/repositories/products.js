@@ -870,6 +870,8 @@ export async function markProductSold(productId, orderId) {
   await query(
     `UPDATE products
      SET in_stock = false, is_sold = true, stock_quantity = 0,
+         -- a sold item must drop off the seller's pinned shelf (phase 35)
+         pin_rank = NULL, pinned_at = NULL,
          tracking_code = COALESCE(tracking_code, $2), updated_at = NOW()
      WHERE id = $1`,
     [productId, orderId ? String(orderId) : null]
@@ -891,6 +893,9 @@ export async function updateProductInventory(
      SET stock_quantity = $2,
          in_stock = $3,
          is_sold = $4,
+         -- keep the pinned shelf free of anything that cannot be bought
+         pin_rank = CASE WHEN $3::boolean THEN pin_rank ELSE NULL END,
+         pinned_at = CASE WHEN $3::boolean THEN pinned_at ELSE NULL END,
          tracking_code = CASE
            WHEN $4::boolean THEN COALESCE(tracking_code, $5)
            ELSE tracking_code

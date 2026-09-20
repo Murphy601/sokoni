@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { logFeedEvent, getFeedEventStats } from "../services/feed-events.js";
+import {
+  logFeedEvent,
+  getFeedEventStats,
+  getProductDemandBatch,
+  demandTags,
+} from "../services/feed-events.js";
 import {
   buildHomeFeed,
   buildFollowingFeed,
@@ -51,6 +56,34 @@ router.post("/refresh", async (_req, res) => {
     }});
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/feed/demand?ids=a,b,c
+ * Urgency signals for product cards. Public and read-only -- it exposes counts,
+ * never session ids. Capped at 60 ids so a grid cannot walk the whole catalog.
+ */
+router.get("/demand", (req, res) => {
+  try {
+    const ids = String(req.query.ids || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 60);
+    if (!ids.length) return res.json({ demand: {} });
+
+    const raw = getProductDemandBatch(ids);
+    const demand = {};
+    for (const [id, d] of Object.entries(raw)) {
+      const tags = demandTags(d);
+      // Only ship rows that actually have something to say.
+      if (tags.length) demand[id] = { ...d, tags };
+    }
+    res.json({ demand });
+  } catch (err) {
+    console.warn("[feed/demand]", err.message);
+    res.status(500).json({ error: "demand_failed" });
   }
 });
 

@@ -220,6 +220,9 @@ export function disputeRate(disputeCount, completedOrders) {
 /**
  * Badge tier ladder.
  */
+/** Completed escrow sales before the volume chip shows. */
+export const POWER_SELLER_MIN_SALES = 50;
+
 export function deriveBadgeTier(stats = {}) {
   const completed = Math.max(0, Number(stats.completedOrders) || 0);
   const rating = clampRating(stats.rating || 0);
@@ -292,6 +295,17 @@ export function deriveBadgeTier(stats = {}) {
       emoji: "🔷",
       icon: "verified_store",
       privileges: "id_verified_trust",
+    });
+  }
+
+  // Volume chip, independent of rating: 50 completed escrow sales is worth
+  // showing even for a seller who has not cleared the Top Rated bar.
+  if (completed >= POWER_SELLER_MIN_SALES && !badges.some((b) => b.id === "power_seller")) {
+    badges.push({
+      id: "power_seller",
+      label: "🛍️ Power Seller",
+      emoji: "🛍️",
+      icon: "power_seller",
     });
   }
 
