@@ -131,9 +131,9 @@
     });
   }
 
-  function startEditorialBanner() {
-    const slides = Array.from(document.querySelectorAll("#auth-edit-slides > li"));
-    const dotsMount = document.getElementById("auth-edit-dots");
+  function startEditorialBanner(slidesId = "auth-edit-slides", dotsId = "auth-edit-dots", intervalMs = 5200) {
+    const slides = Array.from(document.querySelectorAll(`#${slidesId} > li`));
+    const dotsMount = document.getElementById(dotsId);
     if (slides.length < 2) return;
     let i = 0;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -157,7 +157,7 @@
     }
 
     if (reduce) return;
-    window.setInterval(() => show((i + 1) % slides.length), 5200);
+    window.setInterval(() => show((i + 1) % slides.length), intervalMs);
   }
 
   function askBubble(text, role) {
@@ -274,6 +274,9 @@
   bindSearchToSignup();
   bindImageFallbacks();
   startEditorialBanner();
+  // Buyer-protection banner — the escrow pitch the gated homepage never shows
+  // logged-out visitors. Slightly slower so the copy is readable.
+  startEditorialBanner("auth-trust-slides", "auth-trust-dots", 6500);
   openFromQuery();
 
   window.SokoniAuthLanding = { openModal, closeModal };
