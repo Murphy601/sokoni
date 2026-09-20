@@ -309,6 +309,28 @@ app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStati
   );
 }
 
+/** Buyer dispute evidence (gitignored data/dispute-evidence — never the public asset tree). */
+{
+  const disputeEvidenceDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "data",
+    "dispute-evidence"
+  );
+  app.use(
+    "/assets/dispute-evidence",
+    express.static(disputeEvidenceDir, {
+      fallthrough: true,
+      maxAge: "1d",
+      setHeaders(res) {
+        res.setHeader("Cache-Control", "private, max-age=86400");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+      },
+    })
+  );
+}
+
 app.use("/api/", apiLimiter);
 /** OTP only — do NOT throttle session-authed Seller Hub routes (ledger/orders/shipping). */
 app.use("/api/seller/onboard/send-code", authLimiter);

@@ -2,7 +2,8 @@
  * Seller M-Pesa withdrawal requests (Ready balance → payout number).
  * Rail: Paystack Transfers (default). Daraja B2C only if PAYSTACK_ONLY=false.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeJsonAtomic } from "../lib/atomic-json.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
@@ -26,7 +27,7 @@ function loadWithdrawals() {
 function saveWithdrawals(store) {
   const dir = path.dirname(WITHDRAWALS_FILE);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(WITHDRAWALS_FILE, JSON.stringify(store, null, 2) + "\n", "utf-8");
+  writeJsonAtomic(WITHDRAWALS_FILE, store);
 }
 
 function loadSettlements() {

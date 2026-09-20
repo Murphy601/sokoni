@@ -14,7 +14,6 @@ import { fileURLToPath } from "node:url";
 import { extractOrderIdFromText, getOrder, getOrdersForCustomer } from "./orders.js";
 import { openBuyerReturnCase } from "./communication-hub.js";
 import { getCustomerMeta, setCustomerMeta, getHumanHandoff } from "./session.js";
-import { CATALOG_IMAGES_DIR } from "../lib/catalog-images.js";
 import { config } from "../config.js";
 
 const COMPLAINT_RE =
@@ -24,6 +23,12 @@ const AWAITING_TTL_MS = 48 * 60 * 60 * 1000;
 
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
 const DISPUTE_SESSION_FILE = path.join(DATA_DIR, "dispute-evidence-sessions.json");
+/**
+ * Buyer evidence photos. Must stay under data/ (gitignored): the VM auto-commits
+ * website/assets/** on catalog publish, which previously pushed buyers' dispute
+ * photos into the public repo.
+ */
+export const DISPUTE_EVIDENCE_DIR = path.join(DATA_DIR, "dispute-evidence");
 
 /** @type {Record<string, { orderId?: string|null, disputeId?: number|null, at: number, phone?: string }>} */
 let diskSessions = {};
@@ -298,13 +303,13 @@ function extFromMime(mimetype = "") {
 }
 
 async function hostEvidenceBuffer(buffer, { orderId = "unknown", mimetype = "image/jpeg" } = {}) {
-  await mkdir(CATALOG_IMAGES_DIR, { recursive: true });
+  await mkdir(DISPUTE_EVIDENCE_DIR, { recursive: true });
   const safeOrder = String(orderId || "unknown").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
   const file = `dispute_ev_${safeOrder}_${Date.now().toString(36)}.${extFromMime(mimetype)}`;
-  await writeFile(path.join(CATALOG_IMAGES_DIR, file), buffer);
+  await writeFile(path.join(DISPUTE_EVIDENCE_DIR, file), buffer);
   const base = String(config.botPublicUrl || "").replace(/\/$/, "");
   if (!base) return null;
-  return `${base}/catalog-images/${encodeURIComponent(file)}`;
+  return `${base}/assets/dispute-evidence/${encodeURIComponent(file)}`;
 }
 
 async function ensurePayoutFrozen(orderId) {
