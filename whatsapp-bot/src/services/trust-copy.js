@@ -69,7 +69,7 @@ export function paymentTrustDisclosure() {
     `Pay via *M-Pesa STK push* on WhatsApp or the website (PIN on your phone).\n\n` +
     `📞 Questions? WhatsApp ${formatPhoneDisplay()} anytime.\n` +
     `✅ *Verify:* call or WhatsApp us before paying to confirm your SKN-#### (or older SK-####) order number.\n` +
-    `_No pay-on-delivery. No COD. Never pay riders or personal numbers._`
+    `_No cash on delivery — every order is prepaid into escrow. Never pay riders or personal numbers._`
   );
 }
 
@@ -268,7 +268,8 @@ export function damagedReturnMessage({ orderId, productName, reason = "damaged /
     `Order Update: Return for *${orderId}* 🔄📦\n\n` +
     `Habari — we heard *${productName}* did not meet expectations (${reason}).\n` +
     `We're sorry and investigating with our supplier.\n\n` +
-    `🛡️ Pay-on-delivery means you owe nothing. Hand the package back to the rider free of charge.\n\n` +
+    `🛡️ Your payment is still in Sokoni escrow — the seller has not been paid. ` +
+    `Hand the package back to the rider at no cost; we refund to M-Pesa if the claim holds.\n\n` +
     `Reply *REPLACE* for a corrected item, or *CANCEL* to close the request.`
   );
 }
@@ -289,7 +290,8 @@ export function wrongOrderApologyMessage({
     `1️⃣ Keep the package sealed if you can\n` +
     `2️⃣ Reply *REPLACE* — we'll send the correct item\n` +
     `   OR reply *CANCEL* — we'll close it, no charge\n\n` +
-    `🛡️ Pay-on-delivery: you owe nothing for the wrong item. Hand it back to the rider at no extra cost.\n\n` +
+    `🛡️ Your money is still held in Sokoni escrow — nothing has gone to the seller. ` +
+    `Hand the wrong item back to the rider at no extra cost.\n\n` +
     `As a sorry: use code *${PROMO_CODE}* for ${OFFER_PERCENT}% off your next order.\n` +
     `Reply here or type *Human* if you need us faster. Asante for your patience. 🙏`
   );
@@ -336,7 +338,7 @@ export function referralProgramMessage({ referralCode = "" }) {
   const site = config.publicSiteUrl || "https://sokonimall.com";
   return (
     `Share Sokoni & Save! 🎁🇰🇪\n\n` +
-    `Invite friends to shop risk-free on Pay-on-Delivery:\n` +
+    `Invite friends to shop risk-free on M-Pesa escrow:\n` +
     `1️⃣ Share: ${site}?ref=${code}\n` +
     `2️⃣ Friends get *${OFFER_PERCENT}% off* their first local order (code *${PROMO_CODE}*)\n` +
     `3️⃣ You earn *${OFFER_PERCENT}% credit* on your next order when they complete prepaid checkout\n\n` +
@@ -375,7 +377,7 @@ export function giftWrapMessage() {
     `Yes — we can ship surprises countrywide with gift wrapping (KES 250 add-on).\n` +
     `Includes wrapping, ribbon, and a custom greeting card. Pricing hidden from recipient.\n\n` +
     `🛡️ Surprise orders paid by sender: complete M-Pesa STK before dispatch.\n` +
-    `Recipient-paid surprises use standard Pay-on-Delivery.\n\n` +
+    `The recipient never pays anything at the door — the sender covers it upfront.\n\n` +
     `Reply *WRAP* and your card message below! 👇`
   );
 }

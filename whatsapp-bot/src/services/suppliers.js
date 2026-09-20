@@ -291,7 +291,7 @@ export async function approveApplication(applicationId, { retailOverrides = {} }
       tags: [],
       scope: "local",
       fulfillment: "store",
-      payment: "cod",
+      payment: "prepaid",
       inStock: draft.inStock !== false,
       imageStatus: draft.imageStatus,
       ...(draft.description ? { description: draft.description } : {}),

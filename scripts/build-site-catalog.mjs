@@ -60,7 +60,7 @@ const CATEGORY_EMOJI = {
 function toPublic(product) {
   const emoji = product.emoji || CATEGORY_EMOJI[product.category] || "🛍️";
 
-  // Store items: pay-on-delivery. Never expose cost price or supplier.
+  // Store items: prepaid escrow. Never expose cost price or supplier.
   if (product.fulfillment === "store") {
     const totals = computeProductTotals(product);
     const promoFields = publicPromoFields(product, { totalKes: totals.totalKes });
@@ -197,7 +197,7 @@ async function main() {
   const store = storeItems.length;
   const intl = publicItems.filter((p) => p.scope === "international").length;
   console.log(
-    `Built ${OUTPUT}\n  store (pay-on-delivery): ${store}\n  international: ${intl}\n  total: ${publicItems.length}`
+    `Built ${OUTPUT}\n  store (prepaid escrow): ${store}\n  international: ${intl}\n  total: ${publicItems.length}`
   );
 }
 

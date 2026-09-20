@@ -604,11 +604,15 @@ export function msgBuyerPaid(order) {
     (order.priceKes != null
       ? Number(order.priceKes) + Number(order.shippingKes || 0) + Number(order.transactionFeeKes || 0)
       : null);
+  const localRider = order.fulfillmentMode !== "SELLER_COURIER" && order.requiresRider !== false;
   return msgBuyerPaymentConfirmed({
     orderId: order.id,
     itemName: order.productName || "Item",
     totalKes: total,
     location: dropOffLine(order),
+    buyerName: order.customerName || "",
+    inspectionHours: Number(order.autoReleaseHours) || (localRider ? 24 : 48),
+    localRider,
   });
 }
 

@@ -18,7 +18,7 @@
         {
           "at": 2500,
           "side": "in",
-          "text": "Habari! Welcome to *Sokoni Mall AI* 🤖🇰🇪\nType *menu* to browse — pay on delivery only."
+          "text": "Habari! Welcome to *Sokoni Mall AI* 🤖🇰🇪\nType *menu* to browse — prepaid M-Pesa escrow on every order."
         },
         {
           "at": 5500,
@@ -75,7 +75,7 @@
         {
           "at": 27500,
           "side": "in",
-          "text": "🛒 *Order {{productName}}*\n\nSend *name, location & phone* in one message (pay on delivery)."
+          "text": "🛒 *Order {{productName}}*\n\nSend *name, location & phone* in one message to place a prepaid order."
         },
         {
           "at": 30500,
@@ -85,7 +85,7 @@
         {
           "at": 33000,
           "side": "in",
-          "text": "Order Confirmed! 🎉\n*{{orderId}}*\n\n🛍️ {{productName}}\n💰 {{price}} — pay on delivery\n📍 Jane — Westlands\n\nPay via M-Pesa STK before dispatch — escrow until delivery."
+          "text": "Order Confirmed! 🎉\n*{{orderId}}*\n\n🛍️ {{productName}}\n💰 {{price}} — paid into escrow\n📍 Jane — Westlands\n\nPay via M-Pesa STK before dispatch — escrow until delivery."
         },
         {
           "at": 37000,
@@ -157,7 +157,7 @@
         {
           "at": 10000,
           "side": "in",
-          "text": "What next?\n\n1. 🛒 Order (pay on delivery)\n2. 🤖 Ask about it\n3. ⬅ Main menu"
+          "text": "What next?\n\n1. 🛒 Order (prepaid escrow)\n2. 🤖 Ask about it\n3. ⬅ Main menu"
         },
         {
           "at": 14000,
@@ -187,7 +187,7 @@
         {
           "at": 28000,
           "side": "in",
-          "text": "Share Sokoni with friends — pay-on-delivery, zero deposits.\nYou both benefit when they complete prepaid checkout."
+          "text": "Share Sokoni with friends — M-Pesa escrow, zero risk.\nYou both benefit when they complete prepaid checkout."
         },
         {
           "at": 32000,
@@ -202,7 +202,7 @@
         {
           "at": 40000,
           "side": "in",
-          "text": "🛒 Send *name, location & phone* to place your order (COD)."
+          "text": "🛒 Send *name, location & phone* to place your prepaid order."
         },
         {
           "at": 44000,
@@ -258,7 +258,7 @@
         {
           "at": 7500,
           "side": "in",
-          "text": "🌍 *Shop International*\n\n1. Trending picks\n2. Tell me what you need\n\n_No pay-on-delivery for overseas items._"
+          "text": "🌍 *Shop International*\n\n1. Trending picks\n2. Tell me what you need\n\n_Overseas items are not stocked — local Sokoni catalog only._"
         },
         {
           "at": 11000,
@@ -294,7 +294,7 @@
         {
           "at": 34000,
           "side": "in",
-          "text": "Local store items = pay on delivery.\nInternational = partner checkout only."
+          "text": "Local store items = prepaid M-Pesa escrow.\nInternational = partner checkout only."
         },
         {
           "at": 40000,
@@ -309,7 +309,7 @@
         {
           "at": 44000,
           "side": "in",
-          "text": "Back to *local* pay-on-delivery catalog 🇰🇪"
+          "text": "Back to the *local* Sokoni catalog 🇰🇪"
         },
         {
           "at": 48000,
@@ -507,7 +507,7 @@
         {
           "at": 38000,
           "side": "in",
-          "text": "Scroll real deals — prices match WhatsApp. 💵 Pay on delivery on every item."
+          "text": "Scroll real deals — prices match WhatsApp. 🛡️ Escrow protection on every item."
         },
         {
           "at": 42000,
@@ -524,7 +524,7 @@
         {
           "at": 50000,
           "side": "out",
-          "text": "Hi Sokoni, I'm looking for \"camera phone chini ya 15k\" — pay on delivery."
+          "text": "Hi Sokoni, I'm looking for \"camera phone chini ya 15k\" — prepaid escrow."
         },
         {
           "at": 53000,

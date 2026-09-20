@@ -101,9 +101,31 @@ describe("wa-ux templates", () => {
       itemName: "Cap",
       totalKes: 310,
       location: "Westlands Stage, Nairobi",
+      buyerName: "Jane",
+      inspectionHours: 24,
+      localRider: true,
     });
-    assert.match(paid, /PAYMENT CONFIRMED/);
+    assert.match(paid, /ORDER CONFIRMED & SECURED/);
     assert.match(paid, /310/);
+    assert.match(paid, /Jane/);
+    assert.match(paid, /SOKONI ESCROW/);
+    assert.match(paid, /has \*not\* been released to the seller/);
+    assert.match(paid, /within \*24 hours\*/);
+    assert.match(paid, /delivery code with the rider/);
+    assert.match(paid, /STATUS SKN-1020/);
+    // Never offer cash at the door.
+    assert.doesNotMatch(paid, /cash on delivery|pay on delivery/i);
+
+    const upcountry = msgBuyerPaymentConfirmed({
+      orderId: "SKN-1021",
+      itemName: "Kiondo",
+      totalKes: 1850,
+      location: "Nyeri Town",
+      inspectionHours: 48,
+      localRider: false,
+    });
+    assert.match(upcountry, /within \*48 hours\*/);
+    assert.match(upcountry, /YES SKN-1021/);
 
     const b = msgBuyerOutForDelivery({
       orderId: "SKN-1015",

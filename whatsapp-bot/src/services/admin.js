@@ -348,7 +348,7 @@ function isAdminRelayAttempt(text) {
 
 const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
-    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Payment secured in Sokoni escrow — nothing more to pay on delivery. Asante! 🙏`,
+    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Payment secured in Sokoni escrow — nothing to pay at the door. Asante! 🙏`,
   packed: (o) =>
     o.deliveryMode === "pickup_point" && o.pickupPointName
       ? `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready at pickup partner *${o.pickupPointName}*. We'll send the shop address in the next message 📍`

@@ -670,7 +670,10 @@ export async function handleIncomingMessage(
     /^track\b/i.test(normalized) ||
     normalized === "track order" ||
     normalized === "my order" ||
-    normalized === "my orders"
+    normalized === "my orders" ||
+    // Payment receipt tells buyers to reply "Status" — keep that promise.
+    normalized === "status" ||
+    normalized === "order status"
   ) {
     console.log("[track] request from", customerKey, phone || "(no phone)");
     const { sendTrackOrderMenu } = await import("../services/menu.js");

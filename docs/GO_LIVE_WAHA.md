@@ -250,8 +250,8 @@ For HTTPS, put **nginx + Let's Encrypt** in front (recommended before real custo
 1. Customer opens **https://wa.me/254117422428** (website links already use this number).
 2. They type **menu** or **hi**.
 3. Bot sends numbered options — they reply **1**, **2**, etc.
-4. On a product, reply **1** to order (pay on delivery), **2** to ask AI.
-5. New COD orders are forwarded to **254117422428** on WhatsApp automatically.
+4. On a product, reply **1** to order (prepaid escrow), **2** to ask AI.
+5. New paid orders are forwarded to **254117422428** on WhatsApp automatically.
 
 ---
 
@@ -266,7 +266,7 @@ Main menu
   5 How Sokoni Works
 
 After each product:
-  1 Order (pay on delivery)
+  1 Order (prepaid escrow)
   2 Ask about it
   3 Main menu
 ```

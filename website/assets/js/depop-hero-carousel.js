@@ -9,8 +9,53 @@
   const FARM_IMG = "assets/images/marketing/sokoni-mashinani-farm.jpg";
   const ARTISAN_IMG = "assets/images/marketing/sokoni-local-artisan.jpg";
   const COURIER_IMG = "assets/images/marketing/sokoni-county-courier.jpg";
+  const ESCROW_IMG = "assets/images/marketing/escrow-mpesa-security.jpg";
+  const TRUST_IMG = "assets/images/marketing/trust-exchange-nairobi.jpg";
+  const INSPECT_IMG = "assets/images/marketing/inspect-before-pay.jpg";
 
   const SLIDES = [
+    {
+      id: "escrow-guarantee",
+      tag: "Buyer protection",
+      badge: "Zero-risk escrow",
+      headline: "Shop safely on Sokoni — 100% buyer protection.",
+      subtext:
+        "Your payment is held securely in Sokoni escrow until you inspect and accept your delivery.",
+      primaryCtaText: "Learn how escrow works",
+      primaryCtaLink: "faq.html#escrow",
+      secondaryCtaText: "Browse shop",
+      secondaryCtaLink: "#deals",
+      bleedClass: "depop-hero-bleed--escrow",
+      image: ESCROW_IMG,
+    },
+    {
+      id: "safer-than-cash",
+      tag: "Why prepaid",
+      badge: "M-Pesa STK push",
+      headline: "Safer than cash on delivery.",
+      subtext:
+        "Pay by automated M-Pesa STK push. Sellers are only paid after your package is delivered and verified.",
+      primaryCtaText: "Shop verified sellers",
+      primaryCtaLink: "#deals",
+      secondaryCtaText: "How escrow works",
+      secondaryCtaLink: "faq.html#escrow",
+      bleedClass: "depop-hero-bleed--protection",
+      image: TRUST_IMG,
+    },
+    {
+      id: "inspect-refund",
+      tag: "Inspect on arrival",
+      badge: "Guaranteed refund",
+      headline: "Not what you ordered? Guaranteed refund.",
+      subtext:
+        "Inspect your parcel when it arrives. Wrong or damaged? Report it on WhatsApp within 24 hours for a full M-Pesa refund.",
+      primaryCtaText: "Start shopping",
+      primaryCtaLink: "#deals",
+      secondaryCtaText: "Track an order",
+      secondaryCtaLink: "track.html",
+      bleedClass: "depop-hero-bleed--refund",
+      image: INSPECT_IMG,
+    },
     {
       id: "buyers",
       tag: "For buyers & collectors",
@@ -94,20 +139,6 @@
       secondaryCtaLink: "#how-it-works",
       bleedClass: "depop-hero-bleed--courier",
       image: COURIER_IMG,
-    },
-    {
-      id: "escrow",
-      tag: "Prepaid escrow",
-      badge: "Guaranteed until delivery",
-      headline: "Shop with peace of mind.",
-      subtext:
-        "Your M-Pesa stays in Sokoni escrow until you receive the order from the seller. Track every order with SKN-####.",
-      primaryCtaText: "How escrow works",
-      primaryCtaLink: "faq.html",
-      secondaryCtaText: "Track an order",
-      secondaryCtaLink: "track.html",
-      bleedClass: "depop-hero-bleed--escrow",
-      image: DISPATCH_IMG,
     },
     {
       id: "circular",
