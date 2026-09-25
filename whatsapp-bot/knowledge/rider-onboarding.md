@@ -2,8 +2,13 @@
 
 Riders apply **on the website**, not by messaging support. There is a real form.
 
-## Apply
-https://sokonimall.com/boda/apply.html
+## Two ways to apply — both end in the same ops queue
+
+**On WhatsApp (offer this first).** Reply *RIDER APPLY* and Sokoni walks through
+every field in chat, with ID, licence and stage letter sent as ordinary photos.
+Most riders have WhatsApp and no data bundle for a web form.
+
+**On the web.** https://sokonimall.com/boda/apply.html
 
 ## What the form asks for
 Required:

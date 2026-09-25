@@ -59,6 +59,12 @@ import {
   isInPickupOnboarding,
   tryPickupContinueFromRef,
 } from "../services/pickup-point-onboarding.js";
+import {
+  handleRiderOnboarding,
+  isInRiderOnboarding,
+  isRiderApplyCommand,
+  startRiderOnboarding,
+} from "../services/rider-onboarding.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -423,6 +429,26 @@ export async function handleIncomingMessage(
   if (isInPickupOnboarding(customerKey)) {
     const handled = await handlePickupOnboarding(customerKey, text, { phone });
     if (handled) return;
+  }
+
+  // Rider application in progress — consumes text AND document photos, so it
+  // must run before the buyer photo/catalog paths steal the media.
+  if (isInRiderOnboarding(customerKey)) {
+    const handled = await handleRiderOnboarding(customerKey, text, {
+      phone,
+      hasMedia,
+      mediaUrl,
+      mediaMimetype,
+      messageId,
+      chatId,
+      session: wahaSession,
+    });
+    if (handled) return;
+  }
+
+  if (isRiderApplyCommand(text)) {
+    await startRiderOnboarding(customerKey, { phone });
+    return;
   }
 
   if (isInSupplierOnboarding(customerKey)) {

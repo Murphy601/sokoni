@@ -1681,15 +1681,18 @@ function toolRiderOnboarding() {
     tool: "get_rider_onboarding",
     ok: true,
     steps: [
-      `Open the rider application form → ${site}/boda/apply.html`,
+      "Reply *RIDER APPLY* here to complete the whole application on WhatsApp (photos sent as chat images)",
+      `Or use the web form → ${site}/boda/apply.html`,
       "Fill in: full name, WhatsApp/M-Pesa phone, National ID number, operating town (Nairobi or Thika), base stage, motorbike plate",
       "Upload: National ID (front), valid Class A driving licence, stage chairman recommendation letter",
       "Optional but speeds up vetting: ID back, logbook, Good Conduct (DCI), NTSA badge",
       "Submit — Sokoni ops reviews the documents and replies on WhatsApp",
     ],
     applyUrl: `${site}/boda/apply.html`,
+    whatsappCommand: "RIDER APPLY",
     zones: ["NAIROBI", "THIKA"],
-    note: "Review is usually within 24 hours. Riders are auto-assigned jobs after approval — they do not pick from a list.",
+    note:
+      "Riders can finish the whole application here on WhatsApp by replying RIDER APPLY — same form, same ops queue, photos sent as chat images. Offer that first; many riders have no data for the website. Review is usually within 24 hours. Riders are auto-assigned jobs after approval — they do not pick from a list.",
   };
 }
 
@@ -2052,7 +2055,7 @@ export function formatToolResultsForPrompt(toolResults) {
       return (
         `TOOL get_rider_onboarding:\n` +
         (r.steps || []).map((s, i) => `${i + 1}. ${s}`).join("\n") +
-        `\nApply: ${r.applyUrl}\nZones: ${(r.zones || []).join(", ")}\n${r.note || ""}`
+        `\nApply on WhatsApp: reply ${r.whatsappCommand}\nOr online: ${r.applyUrl}\nZones: ${(r.zones || []).join(", ")}\n${r.note || ""}`
       );
     }
     if (r.tool === "get_seller_payout") {
