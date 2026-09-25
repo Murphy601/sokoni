@@ -19,6 +19,9 @@ import {
 import {
   evaluateFulfillmentMode,
 } from "../lib/geo-zones.js";
+import { priceLocalDelivery } from "../lib/rider-distance-fee.js";
+import { resolveMetroCoords } from "../lib/metro-coords.js";
+import { haversineMeters } from "./boda-fleet.js";
 
 const CART_PARENT_KIND = "cart_parent";
 
@@ -110,6 +113,7 @@ export async function applyShippingToOrder(orderId, location = {}) {
   if (location.landmarkNote) patch.landmarkNote = String(location.landmarkNote).slice(0, 280);
 
   // Auto fulfillment route: local boda OTP vs seller courier / waybill
+  let riderQuote = null;
   try {
     const buyerCounty =
       location.buyerCounty ||
@@ -128,9 +132,22 @@ export async function applyShippingToOrder(orderId, location = {}) {
       sellerLocationText: String(sellerLoc || ""),
       buyerLocationText: locationLine || order.location || "",
     });
+    if (fulfillment.requiresRider) {
+      // A rider is doing this one, so the platform prices it by distance and
+      // the seller's flat rate does not apply. Same number the rider is paid
+      // from at dispatch, so escrow balances.
+      riderQuote = priceLocalDelivery(
+        resolveMetroCoords(sellerLoc || fulfillment.sellerCounty),
+        location.buyerCoordinates ||
+          resolveMetroCoords(location.buyerTown || buyerCounty || locationLine),
+        haversineMeters
+      );
+    }
     Object.assign(patch, {
       fulfillmentMode: fulfillment.mode,
       requiresRider: fulfillment.requiresRider,
+      riderFeeBasis: riderQuote?.basis || null,
+      riderDistanceKm: riderQuote?.roadKm ?? null,
       sellerCounty: fulfillment.sellerCounty || null,
       buyerCountyResolved: fulfillment.buyerCounty || null,
       fulfillmentDescription: fulfillment.description,
@@ -141,9 +158,13 @@ export async function applyShippingToOrder(orderId, location = {}) {
     console.warn("[apply-shipping] fulfillment mode:", err.message);
   }
 
-  // Only rewrite money fields when the seller explicitly saved shipping rates.
-  if (configured) {
-    const shippingKes = Math.round(Number(line.shippingFee) || 0);
+  // Only rewrite money fields when the seller explicitly saved shipping rates
+  // -- except on rider orders, which the platform always prices. Without this
+  // an unconfigured seller meant KES 0 shipping and an unpaid rider.
+  if (configured || riderQuote) {
+    const shippingKes = riderQuote
+      ? riderQuote.feeKes
+      : Math.round(Number(line.shippingFee) || 0);
     const sellerNet = Math.round(
       Number(order.sellerNetKes ?? order.sourcePriceKes ?? order.priceKes) || 0
     );
@@ -162,7 +183,7 @@ export async function applyShippingToOrder(orderId, location = {}) {
       // priceKes = item (seller-net); totalKes = buyer all-in for STK / orderBuyerTotal
       priceKes: fees.itemKes,
       totalKes: fees.buyerTotalKes,
-      shippingSource: "hub",
+      shippingSource: riderQuote ? "rider_distance" : "hub",
     });
   }
 
