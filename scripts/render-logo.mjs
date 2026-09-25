@@ -16,8 +16,8 @@ const jobs = [
   ["logo.svg", "logo-512.png", 512, 512],
   ["logo-icon-dark.svg", "logo-icon-dark.png", 512, 512],
   ["logo-icon-light.svg", "logo-icon-light.png", 512, 512],
-  ["logo-lockup-light.svg", "logo-lockup-light.png", 990, 288],
-  ["logo-lockup-dark.svg", "logo-lockup-dark.png", 990, 288],
+  ["logo-lockup-light.svg", "logo-lockup-light.png", 1086, 288],
+  ["logo-lockup-dark.svg", "logo-lockup-dark.png", 1086, 288],
   ["logo-og.svg", "logo-og.png", 1200, 630],
 ];
 

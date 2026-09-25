@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sokoni">
-  <title>Sokoni</title>
-  <defs><mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><path d="M166 312 L226 372 L346 252" fill="none" stroke="#000" stroke-width="46" stroke-linecap="butt" stroke-linejoin="miter"/></mask></defs>
-  <path d="M176 180 C176 88 336 88 336 180" fill="none" stroke="currentColor" stroke-width="34" stroke-linecap="butt"/>
-  <path d="M106 180 H406 L384 424 C382 440 370 452 354 452 H158 C142 452 130 440 128 424 Z" fill="currentColor" mask="url(#cut)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sokoni Mall">
+  <title>Sokoni Mall</title>
+  <defs><mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+    <rect width="512" height="512" fill="#fff"/>
+    <path d="M328 212 C328 180 192 176 192 234 C192 264 236 270 264 278 C298 288 332 298 332 332 C332 390 192 392 192 350" fill="none" stroke="#000" stroke-width="36" stroke-linecap="round"/>
+  </mask></defs>
+  <path d="M198 216 C196 130 258 70 306 94 C344 113 346 164 318 174 C304 179 290 171 288 158" fill="none" stroke="currentColor" stroke-width="26" stroke-linecap="round"/>
+  <path d="M120 210 H392 L424 420 C426 432 417 442 405 442 H107 C95 442 86 432 88 420 Z" fill="currentColor" mask="url(#cut)"/>
 </svg>
