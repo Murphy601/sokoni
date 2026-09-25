@@ -47,6 +47,7 @@ export const TOOL_NAMES = [
   "store_info",
   "open_return_case",
   "get_seller_onboarding",
+  "get_rider_onboarding",
   "get_seller_payout",
   "get_shipping_rates",
   "propose_goodwill",
@@ -276,6 +277,25 @@ export function isGuideIntent(text) {
 }
 
 /** Seller-side marketplace topics (listing, payouts, hubs). */
+/**
+ * Wants to BECOME a rider (recruitment), not an active rider running a job.
+ * Active-rider commands (ACCEPT / PICKUP / CONFIRM) are handled before the LLM,
+ * so this only has to catch recruitment intent.
+ */
+export function isRiderOnboardingIntent(text) {
+  const t = String(text || "").toLowerCase();
+  // Someone already working a delivery is not applying.
+  if (/\b(accept|pickup|pick up|confirm|decline|no_show|verify_return)\s+skn-/i.test(t)) return false;
+  const role = /\b(rider|boda|bodaboda|boda boda|courier|dispatch rider|delivery (guy|person|man|partner))\b/i;
+  const joining =
+    /\b(become|join|apply|application|applying|sign ?up|register|recruit|onboard|how (do|can) i|i want to|i would like to|i'd like to|interested in|nataka|naomba)\b/i;
+  if (role.test(t) && joining.test(t)) return true;
+  // Phrasings that name the intent without the role word beside it.
+  if (/\b(deliver|delivering|ride|riding)\s+for\s+sokoni\b/i.test(t)) return true;
+  if (/\brider (program|programme|application|signup|sign ?up|onboarding)\b/i.test(t)) return true;
+  return false;
+}
+
 export function isSellerTopic(text) {
   const lower = String(text || "").toLowerCase();
   // Buyer asking to see merchandise — not Seller Hub ops
@@ -759,11 +779,21 @@ export async function runToolRouter(
     );
   }
 
+  if (allow("get_rider_onboarding") && isRiderOnboardingIntent(text)) {
+    results.push(await executeTool("get_rider_onboarding", {}, { phone }));
+  }
+
+  // Broadened: the old pattern required "how do i sell" / "become a seller" and
+  // missed "I want to sell on Sokoni", "apply to be a seller", "join as a vendor".
   if (
     allow("get_seller_onboarding") &&
-    /\b(register as|how (do|to) (i )?sell|become a seller|onboard|link (my )?m-?pesa|till|paybill|seller setup)\b/i.test(
+    (/\b(register as|how (do|to) (i )?sell|become a (seller|vendor)|onboard|link (my )?m-?pesa|till|paybill|seller setup)\b/i.test(
       lower
-    )
+    ) ||
+      (/\b(seller|vendor|sell)\b/i.test(lower) &&
+        /\b(become|join|apply|application|sign ?up|register|start|how (do|can) i|i want to|i would like to|i'd like to|interested in)\b/i.test(
+          lower
+        )))
   ) {
     results.push(await executeTool("get_seller_onboarding", {}, { phone }));
   }
@@ -930,6 +960,8 @@ export async function executeTool(name, args = {}, context = {}) {
         return await toolOpenReturnCase(args, context);
       case "get_seller_onboarding":
         return toolSellerOnboarding();
+      case "get_rider_onboarding":
+        return toolRiderOnboarding();
       case "get_seller_payout":
         return toolSellerPayout(context);
       case "get_shipping_rates":
@@ -1633,6 +1665,34 @@ function toolSellerOnboarding() {
   };
 }
 
+/**
+ * How to apply as a delivery rider.
+ *
+ * This exists because the AI had nothing: the only rider grounding was
+ * "onboarding is manual, ops registers trusted riders", which is stale --
+ * boda/apply.html and registerRiderApplication have been live since PR #316.
+ * With no URL to offer, the model fell back to "message our support WhatsApp"
+ * and the only number it knew was its own, so applicants were told to message
+ * the number they were already messaging.
+ */
+function toolRiderOnboarding() {
+  const site = "https://sokonimall.com";
+  return {
+    tool: "get_rider_onboarding",
+    ok: true,
+    steps: [
+      `Open the rider application form → ${site}/boda/apply.html`,
+      "Fill in: full name, WhatsApp/M-Pesa phone, National ID number, operating town (Nairobi or Thika), base stage, motorbike plate",
+      "Upload: National ID (front), valid Class A driving licence, stage chairman recommendation letter",
+      "Optional but speeds up vetting: ID back, logbook, Good Conduct (DCI), NTSA badge",
+      "Submit — Sokoni ops reviews the documents and replies on WhatsApp",
+    ],
+    applyUrl: `${site}/boda/apply.html`,
+    zones: ["NAIROBI", "THIKA"],
+    note: "Review is usually within 24 hours. Riders are auto-assigned jobs after approval — they do not pick from a list.",
+  };
+}
+
 function toolSellerPayout({ phone = "" } = {}) {
   if (!phone) {
     return {
@@ -1986,6 +2046,13 @@ export function formatToolResultsForPrompt(toolResults) {
         `TOOL get_seller_onboarding:\n` +
         (r.steps || []).map((s, i) => `${i + 1}. ${s}`).join("\n") +
         `\nHub: ${r.sellerHub}\n${r.note || ""}`
+      );
+    }
+    if (r.tool === "get_rider_onboarding" && r.ok) {
+      return (
+        `TOOL get_rider_onboarding:\n` +
+        (r.steps || []).map((s, i) => `${i + 1}. ${s}`).join("\n") +
+        `\nApply: ${r.applyUrl}\nZones: ${(r.zones || []).join(", ")}\n${r.note || ""}`
       );
     }
     if (r.tool === "get_seller_payout") {
