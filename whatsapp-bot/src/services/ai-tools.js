@@ -1653,15 +1653,18 @@ function toolSellerOnboarding() {
     tool: "get_seller_onboarding",
     ok: true,
     steps: [
-      "Open Seller Hub → sokonimall.com/suppliers/list.html",
-      "Verify WhatsApp (Send code → enter 6-digit code)",
+      "Reply *SELL* here to set your shop up on WhatsApp — no form, no code to type",
+      "Or open Seller Hub → sokonimall.com/suppliers/list.html",
+      "On the web only: verify WhatsApp (Send code → enter 6-digit code)",
       "Create shop name + optional @handle",
       "Settings → Payouts: add M-Pesa number and/or Buy Goods Till / Paybill",
       "Optional: add National ID for vetting (list without it)",
       "List items; set stock; item promos via % Set promo on each listing",
     ],
     sellerHub: `${site}/suppliers/list.html`,
-    note: "Approval for verification usually within a few hours on business days.",
+    whatsappCommand: "SELL",
+    note:
+      "Sellers can create the shop right here by replying SELL — the WhatsApp number is already proven, so it skips the OTP the web signup needs. Offer that first. Listings, pricing and shipping are then set in the Hub. Verification approval usually within a few hours on business days.",
   };
 }
 
@@ -2048,7 +2051,7 @@ export function formatToolResultsForPrompt(toolResults) {
       return (
         `TOOL get_seller_onboarding:\n` +
         (r.steps || []).map((s, i) => `${i + 1}. ${s}`).join("\n") +
-        `\nHub: ${r.sellerHub}\n${r.note || ""}`
+        `\nSet up on WhatsApp: reply ${r.whatsappCommand}\nOr Hub: ${r.sellerHub}\n${r.note || ""}`
       );
     }
     if (r.tool === "get_rider_onboarding" && r.ok) {

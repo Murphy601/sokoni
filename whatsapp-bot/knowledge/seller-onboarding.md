@@ -1,6 +1,12 @@
 # Seller onboarding (SOP)
 
 ## Register as a seller
+
+**On WhatsApp (offer this first).** Reply *SELL* and Sokoni creates the shop in
+chat: shop name, handle, payout M-Pesa number, optional National ID. No OTP is
+needed — messaging from the number already proves it.
+
+**On the web.**
 1. Open Seller Hub: https://sokonimall.com/suppliers/list.html
 2. Enter your WhatsApp number → Send code → enter the 6-digit code from Sokoni.
 3. Create your shop name + optional @handle.
