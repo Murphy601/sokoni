@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { isSellerApplyCommand } from "./seller-onboarding.js";
 import {
   RIDER_STEPS,
   RIDER_STEP_COUNT,
@@ -12,17 +13,54 @@ import {
 } from "./rider-onboarding.js";
 
 describe("RIDER APPLY entry command", () => {
-  for (const t of ["RIDER APPLY", "rider apply", "  Rider Apply  ", "boda apply", "apply rider"]) {
+  for (const t of [
+    "RIDER APPLY",
+    "rider apply",
+    "  Rider Apply  ",
+    "boda apply",
+    "apply rider",
+    // The single words applicants actually send. "ride" is the label on the
+    // site's Buy/Sell/Ride toggle and used to fall straight through to the AI.
+    "ride",
+    "RIDE",
+    "rider",
+    "boda",
+    "bodaboda",
+    "boda boda",
+    "rider signup",
+    "rider sign up",
+    "apply as a rider",
+    "become a rider",
+    "start riding",
+    "ride for sokoni",
+    "deliver for sokoni",
+  ]) {
     it(`starts the flow: "${t}"`, () => assert.equal(isRiderApplyCommand(t), true));
   }
+
   for (const t of [
+    // Free text stays with the AI, which points at the flow.
     "how do i become a rider",
     "rider apply online please tell me more",
+    // Must not swallow the fleet commands a working rider sends.
     "ACCEPT SKN-1042",
+    "DECLINE SKN-1042",
+    "AVAILABLE",
+    "OFFLINE",
+    "SET ZONE THIKA",
+    "CONFIRM SKN-1042 7391",
+    // Buyers asking after their delivery.
+    "where is my rider",
+    "has the rider left yet",
     "",
   ]) {
     it(`does not start the flow: "${t}"`, () => assert.equal(isRiderApplyCommand(t), false));
   }
+
+  it("matches the seller trigger's breadth on the bare role word", () => {
+    // The asymmetry that broke this: "sell" worked, "ride" did not.
+    assert.equal(isRiderApplyCommand("ride"), isSellerApplyCommand("sell"));
+  });
 });
 
 describe("town choice", () => {
