@@ -114,9 +114,15 @@ export function isInRiderOnboarding(customerKey) {
   return Boolean(getFlow(customerKey)?.step);
 }
 
-/** Text that starts the chat flow rather than sending someone to the website. */
+/**
+ * Text that starts the chat flow rather than sending someone to the website.
+ * Kept as wide as the seller trigger: a bare "ride"/"rider"/"boda" has to work,
+ * because that is the word on the site's Buy/Sell/Ride toggle and it is what
+ * applicants actually type. Anchored, so "where is my rider" still reaches the
+ * order-tracking path.
+ */
 export function isRiderApplyCommand(text) {
-  return /^\s*(rider\s*apply|apply\s*rider|rider\s*application\s*here|boda\s*apply)\s*$/i.test(
+  return /^\s*(ride|rider|boda|bodaboda|boda\s*boda|(rider|boda)\s*(apply|application|signup|sign\s*up|menu)|apply\s*(as\s*(a\s*)?)?(rider|boda)|become\s*a\s*(rider|boda)|start\s*riding|ride\s*for\s*sokoni|deliver\s*for\s*sokoni|rider\s*application\s*here)\s*$/i.test(
     String(text || "")
   );
 }
@@ -239,7 +245,52 @@ function nextStep(step) {
   return STEP_ORDER[i + 1] || RIDER_STEPS.CONFIRM;
 }
 
+/**
+ * Status reply for someone who already has a rider row, so a verified rider
+ * typing "ride" gets their standing instead of 14 steps ending in a rejection.
+ * Returns null when the phone is new, or on any lookup failure -- a database
+ * hiccup must not block a genuine applicant.
+ */
+async function existingRiderReply(phone) {
+  if (!phone) return null;
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    if (!isDbEnabled()) return null;
+    const r = await query(
+      `SELECT verification_status FROM riders WHERE phone = $1 LIMIT 1`,
+      [phone]
+    );
+    const status = r.rows[0]?.verification_status;
+    if (!status) return null;
+    if (status === "VERIFIED")
+      return (
+        `✅ You're already a verified Sokoni rider.
+
+` +
+        `Reply *AVAILABLE* to go online, *OFFLINE* to stop receiving jobs.`
+      );
+    if (status === "PENDING")
+      return (
+        `⏳ Your rider application is already in and under review.
+
+` +
+        `Ops usually decide within 24 hours — you'll get a message here either way.`
+      );
+    if (status === "SUSPENDED")
+      return `⛔ This rider profile is suspended. Contact Sokoni support before re-applying.`;
+    return null; // REJECTED and anything else: let them apply again
+  } catch (err) {
+    console.warn("[rider-onboarding] status lookup skipped:", err.message);
+    return null;
+  }
+}
+
 export async function startRiderOnboarding(customerKey, { phone = "" } = {}) {
+  const already = await existingRiderReply(phone);
+  if (already) {
+    await sendText(customerKey, already);
+    return true;
+  }
   const draft = freshDraft(phone);
   setFlow(customerKey, { step: RIDER_STEPS.PHONE, draft });
   await sendText(
