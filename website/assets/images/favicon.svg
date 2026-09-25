@@ -1,21 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sokoni">
   <title>Sokoni</title>
   <defs>
-    <linearGradient id="g" x1="18%" y1="0%" x2="82%" y2="100%">
-      <stop offset="0%" stop-color="#5BFFA3"/>
-      <stop offset="45%" stop-color="#25D366"/>
-      <stop offset="100%" stop-color="#12984A"/>
-    </linearGradient>
+    <linearGradient id="bag" x1="12%" y1="0%" x2="88%" y2="100%"><stop offset="0%" stop-color="#34E385"/><stop offset="100%" stop-color="#13A455"/></linearGradient>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><path d="M166 312 L226 372 L346 252" fill="none" stroke="#000" stroke-width="56" stroke-linecap="butt" stroke-linejoin="miter"/></mask>
   </defs>
-  <!-- Simplified for 32px: no top-light, heavier handle, larger check. -->
   <rect width="64" height="64" rx="15" fill="#0B1F18"/>
-  <path d="M24 25 C24 16 40 16 40 25"
-        fill="none" stroke="#FFE9A8" stroke-width="5" stroke-linecap="round"/>
-  <path fill="url(#g)"
-        d="M17 24 H47 C50 24 52 26.5 51.5 29.5 L47.5 49.5
-           C46.8 54 42 56 32 56 C22 56 17.2 54 16.5 49.5
-           L12.5 29.5 C12 26.5 14 24 17 24 Z"/>
-  <path d="M23 38.5 L29.5 45 L42 32.5"
-        fill="none" stroke="#FFF8F0" stroke-width="6.5"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(-4.6 -6.6) scale(0.1429)">
+    <path d="M176 180 C176 88 336 88 336 180" fill="none" stroke="#D4A13C" stroke-width="46" stroke-linecap="butt"/>
+    <g mask="url(#cut)"><path d="M106 180 H406 L384 424 C382 440 370 452 354 452 H158 C142 452 130 440 128 424 Z" fill="url(#bag)"/><path d="M336 180 H406 L384 424 C382 440 370 452 354 452 H349 Z" fill="#06341C" opacity="0.17"/></g>
+  </g>
 </svg>
