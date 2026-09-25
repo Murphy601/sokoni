@@ -100,6 +100,7 @@ const KNOWLEDGE_FILES = [
   "buyer-trust.md",
   "vendor-terms.md",
   "seller-onboarding.md",
+  "rider-onboarding.md",
   "shipping-sop.md",
   "rider-delivery.md",
   "ai-architecture.md",
@@ -109,7 +110,7 @@ const KNOWLEDGE_FILES = [
 const LANE_DOCS = {
   seller: ["seller-onboarding.md", "seller-payouts.md", "shipping-sop.md", "vendor-terms.md", "escrow-policy.md"],
   dispute: ["escrow-policy.md", "returns-policy.md", "buyer-trust.md", "rider-delivery.md"],
-  logistics: ["rider-delivery.md", "shipping-sop.md", "buyer-trust.md", "escrow-policy.md"],
+  logistics: ["rider-delivery.md", "rider-onboarding.md", "shipping-sop.md", "buyer-trust.md", "escrow-policy.md"],
   buyer: ["payments.md", "escrow-policy.md", "buyer-trust.md", "returns-policy.md", "shipping-sop.md"],
   general: KNOWLEDGE_FILES,
 };

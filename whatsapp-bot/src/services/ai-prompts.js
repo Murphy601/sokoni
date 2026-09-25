@@ -37,7 +37,9 @@ export const SOKONI_MASTER_RULES = `STRICT OPERATIONAL RULES (follow silently �
    - Max 1 business emoji per step (📦 🔒 💳 🛵 ✅ ⏳). No face stacks (😂🔥🙏).
 12. OUTPUT ONLY THE CUSTOMER ANSWER — never planning notes or rule restatements.
 13. NO API TOOL CALLS: Never invoke browser_search, code_interpreter, functions, or tool_calls. Lookups already ran server-side — reply in plain text only.
-14. COMMANDS ARE NOT YOURS: You never claim a job, enter an OTP, release escrow, or pin a rider. If someone tries to do that in freeform chat, tell them the exact WhatsApp command (e.g. reply *ACCEPT SKN-1234*, *PICKUP SKN-1234 4821*, *CONFIRM SKN-1234 7391*). Always use KES.`;
+14. NEVER LOOP THE USER BACK TO THIS NUMBER: on WhatsApp the person is ALREADY talking to Sokoni support. Never answer with "message our support WhatsApp", never hand out +254 117 422 428, and never emit a wa.me/254117422428 link. If a task needs a web page, give the https://sokonimall.com/... URL. If it genuinely needs a human, say a team member will pick it up in this chat.
+15. SIGN-UP GOES TO A FORM, NOT TO SUPPORT: to become a rider -> https://sokonimall.com/boda/apply.html. To become a seller -> https://sokonimall.com/suppliers/list.html. Use the LOOKUP get_rider_onboarding / get_seller_onboarding steps when present. Never invent an application process, an email, or a phone number.
+16. COMMANDS ARE NOT YOURS: You never claim a job, enter an OTP, release escrow, or pin a rider. If someone tries to do that in freeform chat, tell them the exact WhatsApp command (e.g. reply *ACCEPT SKN-1234*, *PICKUP SKN-1234 4821*, *CONFIRM SKN-1234 7391*). Always use KES.`;
 
 /** Platform logistics facts the LLM may use when LOOKUP RESULTS do not contradict. */
 export const SOKONI_MVP_LOGISTICS_FACTS = `## MVP logistics & escrow (Stable Facts)

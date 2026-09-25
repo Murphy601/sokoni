@@ -15,5 +15,7 @@ Sokoni pins riders automatically after prepaid escrow on local-rider orders. Rid
 - Currency is always **KES**.
 
 ## Launch ops facts
-- Rider onboarding for MVP is **manual** (ops registers trusted riders).
+- Riders apply themselves at **https://sokonimall.com/boda/apply.html** (ops then vets the
+  documents). Details in `rider-onboarding.md`. Never tell an applicant to message
+  Sokoni support to apply — they are already messaging Sokoni.
 - Location: riders share WhatsApp **Live Location** when online; no separate GPS app required for MVP answers.
