@@ -1,18 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sokoni">
   <title>Sokoni</title>
   <defs>
-    <linearGradient id="w" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#E8C090"/>
-      <stop offset="100%" stop-color="#C49458"/>
-    </linearGradient>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4AE880"/>
-      <stop offset="100%" stop-color="#1FA855"/>
+    <linearGradient id="g" x1="18%" y1="0%" x2="82%" y2="100%">
+      <stop offset="0%" stop-color="#5BFFA3"/>
+      <stop offset="45%" stop-color="#25D366"/>
+      <stop offset="100%" stop-color="#12984A"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#1B1035"/>
-  <path fill="url(#g)" d="M16 20 C16 12, 48 12, 48 20 L44 20 C44 14, 20 14, 20 20 Z"/>
-  <path fill="url(#w)" d="M14 22 L50 22 L46 52 C44 58 38 60 32 60 C26 60 20 58 18 52 L10 22 Z"/>
-  <rect x="12" y="24" width="40" height="5" rx="1" fill="url(#g)"/>
-  <rect x="14" y="36" width="36" height="4" rx="1" fill="url(#g)" opacity="0.85"/>
+  <!-- Simplified for 32px: no top-light, heavier handle, larger check. -->
+  <rect width="64" height="64" rx="15" fill="#0B1F18"/>
+  <path d="M24 25 C24 16 40 16 40 25"
+        fill="none" stroke="#FFE9A8" stroke-width="5" stroke-linecap="round"/>
+  <path fill="url(#g)"
+        d="M17 24 H47 C50 24 52 26.5 51.5 29.5 L47.5 49.5
+           C46.8 54 42 56 32 56 C22 56 17.2 54 16.5 49.5
+           L12.5 29.5 C12 26.5 14 24 17 24 Z"/>
+  <path d="M23 38.5 L29.5 45 L42 32.5"
+        fill="none" stroke="#FFF8F0" stroke-width="6.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

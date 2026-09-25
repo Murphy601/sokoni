@@ -8,6 +8,8 @@ const img = (p) => resolve(root, "website/assets/images", p);
 
 const jobs = [
   ["logo-avatar.svg", "sokoni-whatsapp-profile.png", 640, 640],
+  // 1024 for platforms that want a high-res profile picture (IG, TikTok, X)
+  ["logo-avatar.svg", "sokoni-profile-1024.png", 1024, 1024],
   ["logo-avatar.svg", "logo-apple-touch.png", 180, 180],
   ["favicon.svg", "favicon-32.png", 32, 32],
   ["favicon.svg", "favicon-180.png", 180, 180],

@@ -1,24 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" role="img" aria-label="Sokoni">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 96" role="img" aria-label="Sokoni">
   <title>Sokoni</title>
   <defs>
-    <linearGradient id="b" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#34e07a"/>
-      <stop offset="50%" stop-color="#25D366"/>
-      <stop offset="100%" stop-color="#128C47"/>
+    <linearGradient id="bag" x1="18%" y1="0%" x2="82%" y2="100%">
+      <stop offset="0%" stop-color="#5BFFA3"/>
+      <stop offset="45%" stop-color="#25D366"/>
+      <stop offset="100%" stop-color="#12984A"/>
     </linearGradient>
-    <linearGradient id="g" x1="0%" y1="50%" x2="100%" y2="50%">
-      <stop offset="0%" stop-color="#c8922a"/>
-      <stop offset="50%" stop-color="#f5d78e"/>
-      <stop offset="100%" stop-color="#b07a18"/>
+    <linearGradient id="grip" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#E8B84B"/>
+      <stop offset="50%" stop-color="#FFE9A8"/>
+      <stop offset="100%" stop-color="#D9A431"/>
     </linearGradient>
   </defs>
-  <!-- Mini 3D basket icon -->
-  <g transform="translate(4 6) scale(0.125)">
-    <path fill="none" stroke="url(#b)" stroke-width="22" stroke-linecap="round"
-          d="M156 198 C156 118, 356 118, 356 198"/>
-    <path fill="url(#b)" d="M128 210 L384 210 C404 210 404 230 L368 400 C360 430 340 448 256 448 C172 448 152 430 144 400 L108 230 C108 210 128 210 Z"/>
-    <path fill="none" stroke="url(#g)" stroke-width="10" d="M118 218 C118 200 138 192 256 192 C374 192 394 200 394 218"/>
+  
+  <g transform="translate(6 8) scale(0.156)">
+    <path d="M186 186 C186 104 326 104 326 186"
+          fill="none" stroke="url(#grip)" stroke-width="30" stroke-linecap="round"/>
+    <path fill="url(#bag)"
+          d="M118 180 H394 C414 180 428 197 425 217 L394 400
+             C388 434 358 452 256 452 C154 452 124 434 118 400
+             L87 217 C84 197 98 180 118 180 Z"/>
+    <path d="M182 300 L231 349 L330 250"
+          fill="none" stroke="#FFF8F0" stroke-width="42"
+          stroke-linecap="round" stroke-linejoin="round"/>
   </g>
-  <text x="72" y="52" font-family="Georgia, 'Times New Roman', serif"
-        font-size="36" font-weight="700" letter-spacing="-0.5" fill="currentColor">Sokoni</text>
+  <text x="92" y="64" font-family="Georgia, 'Times New Roman', serif"
+        font-size="46" font-weight="700" letter-spacing="1" fill="#1B1035">SOKONI</text>
+  <circle cx="309" cy="58" r="6" fill="#25D366"/>
 </svg>

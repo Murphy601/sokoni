@@ -88,6 +88,28 @@ body.has-depop-shell .depop-marketing-extra {
   text-decoration: none;
   flex-shrink: 0;
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* Brand mark ahead of the wordmark. Done as ::before so it reaches every
+   header at once -- the hand-written ones and the header shell-chrome.js
+   injects -- without editing markup on every page. */
+.depop-logo::before {
+  content: "";
+  width: 1.55em;
+  height: 1.55em;
+  flex-shrink: 0;
+  background: url("../images/logo-mark.svg") center / contain no-repeat;
+}
+
+@media (max-width: 330px) {
+  /* Only the narrowest phones drop the mark; 375px (standard iPhone) keeps it,
+     and the header has no horizontal overflow there. */
+  .depop-logo::before {
+    display: none;
+  }
 }
 
 .depop-logo span,
