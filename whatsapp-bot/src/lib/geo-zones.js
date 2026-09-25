@@ -1,3 +1,5 @@
+import { resolveMetroCoords } from "./metro-coords.js";
+
 /**
  * Kenya geographic fulfillment routing — local boda OTP vs seller-managed courier.
  */
@@ -66,6 +68,11 @@ export function isLocalRiderZone(countyKey, townKey = "") {
   const c = normalizeCountyKey(countyKey);
   const t = normalizeTownKey(townKey);
   if (LOCAL_METRO_TOWNS.has(t)) return true;
+  // Anything the delivery-pricing table knows is by definition somewhere a
+  // rider serves. Without this, suburbs missing from LOCAL_METRO_TOWNS
+  // (Buruburu, Donholm, Pipeline, Kayole...) fell through to courier
+  // whenever the county was not supplied.
+  if (resolveMetroCoords(townKey)) return true;
   if (c === "NAIROBI" || c === "KIAMBU") return true;
   if (c === "MACHAKOS" && (LOCAL_METRO_TOWNS.has(t) || !t)) return true;
   return false;
