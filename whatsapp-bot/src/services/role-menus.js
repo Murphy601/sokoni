@@ -4,7 +4,8 @@ import { setMenuState } from "./session.js";
 import { requireAdminSender } from "./admin.js";
 import { attachSellerWhatsAppChat, findSupplierByPhone } from "./suppliers.js";
 import { sendWelcome, formatNumberedMenu } from "./menu.js";
-import { startSupplierOnboarding } from "./supplier-onboarding.js";
+// Supplier-programme onboarding retired with the P2P pivot — see seller-onboarding.js
+import { startSellerOnboarding } from "./seller-onboarding.js";
 import { startPickupOnboarding } from "./pickup-point-onboarding.js";
 import { OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
 import { formatSellerWalletReply } from "./seller-wallet.js";
@@ -210,7 +211,7 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
 
   switch (actionId) {
     case "vendor_start_apply":
-      return startSupplierOnboarding(customerKey, { phone });
+      return startSellerOnboarding(customerKey, { phone });
     case "vendor_status":
       await sendText(
         customerKey,

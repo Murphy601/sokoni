@@ -274,8 +274,8 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
       t
     )
   ) {
-    const { startSupplierOnboarding } = await import("./supplier-onboarding.js");
-    return startSupplierOnboarding(customerKey, { phone });
+    const { startSellerOnboarding } = await import("./seller-onboarding.js");
+    return startSellerOnboarding(customerKey, { phone });
   }
 
   if (/^#(?:giftwrap|gift-wrap)\b/i.test(String(text || "").trim()) || /\b(gift\s*wrap|zawadi)\b/i.test(t)) {

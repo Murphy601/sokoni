@@ -65,6 +65,12 @@ import {
   isRiderApplyCommand,
   startRiderOnboarding,
 } from "../services/rider-onboarding.js";
+import {
+  handleSellerOnboarding,
+  isInSellerOnboarding,
+  isSellerApplyCommand,
+  startSellerOnboarding,
+} from "../services/seller-onboarding.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -448,6 +454,17 @@ export async function handleIncomingMessage(
 
   if (isRiderApplyCommand(text)) {
     await startRiderOnboarding(customerKey, { phone });
+    return;
+  }
+
+  // Seller signup in chat (replaces the supplier-programme flow).
+  if (isInSellerOnboarding(customerKey)) {
+    const handled = await handleSellerOnboarding(customerKey, text, { phone });
+    if (handled) return;
+  }
+
+  if (isSellerApplyCommand(text)) {
+    await startSellerOnboarding(customerKey, { phone });
     return;
   }
 
