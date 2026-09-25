@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
+import { isSubmitWord } from "../lib/confirm-words.js";
 import { sendText, downloadWahaMedia } from "./whatsapp.js";
 import { getCustomerMeta, setCustomerMeta, clearMenuState } from "./session.js";
 
@@ -239,6 +240,22 @@ export function summaryText(draft = {}) {
   );
 }
 
+/** Fields registerRiderApplication rejects on, named as the applicant saw them. */
+export function missingRequired(draft = {}) {
+  const need = [
+    ["phone", "phone number"],
+    ["fullName", "full name"],
+    ["nationalId", "National ID number"],
+    ["operatingTown", "town"],
+    ["stageLocation", "stage"],
+    ["motorbikePlate", "number plate"],
+    ["nationalIdFrontUrl", "National ID photo"],
+    ["licenseUrl", "licence photo"],
+    ["stageLetterUrl", "stage chairman letter"],
+  ];
+  return need.filter(([k]) => !String(draft[k] || "").trim()).map(([, label]) => label);
+}
+
 /** Advance, skipping nothing — order is fixed so progress is honest. */
 function nextStep(step) {
   const i = STEP_ORDER.indexOf(step);
@@ -264,16 +281,12 @@ async function existingRiderReply(phone) {
     if (!status) return null;
     if (status === "VERIFIED")
       return (
-        `✅ You're already a verified Sokoni rider.
-
-` +
+        `✅ You're already a verified Sokoni rider.\n\n` +
         `Reply *AVAILABLE* to go online, *OFFLINE* to stop receiving jobs.`
       );
     if (status === "PENDING")
       return (
-        `⏳ Your rider application is already in and under review.
-
-` +
+        `⏳ Your rider application is already in and under review.\n\n` +
         `Ops usually decide within 24 hours — you'll get a message here either way.`
       );
     if (status === "SUSPENDED")
@@ -503,12 +516,42 @@ export async function handleRiderOnboarding(
       return true;
     }
     case RIDER_STEPS.CONFIRM: {
-      if (!/^\s*submit\s*$/i.test(t)) {
-        await sendText(customerKey, summaryText(draft));
+      if (!isSubmitWord(t)) {
+        // Re-printing the summary alone reads as "nothing happened", so name
+        // the word that actually sends it.
+        await sendText(
+          customerKey,
+          `Reply *submit* to send this to Sokoni ops, *restart* to redo it, or *cancel* to stop.\n\n` +
+            summaryText(draft)
+        );
         return true;
       }
-      const { registerRiderApplication } = await import("./boda-fleet.js");
-      const result = await registerRiderApplication({ ...draft });
+      const missing = missingRequired(draft);
+      if (missing.length) {
+        await sendText(
+          customerKey,
+          `Can't send yet - still missing: ${missing.join(", ")}.\n\nReply *restart* to redo the application.`
+        );
+        return true;
+      }
+      let result;
+      try {
+        const { registerRiderApplication } = await import("./boda-fleet.js");
+        result = await registerRiderApplication({ ...draft });
+      } catch (err) {
+        // This used to throw past the handler: the applicant got the generic
+        // "something went wrong" and 14 steps of answers were stranded.
+        console.error(
+          `[rider-onboarding] submit threw for ${draft.phone || customerKey}:`,
+          err?.code || "",
+          err?.message
+        );
+        await sendText(
+          customerKey,
+          `Couldn't reach Sokoni ops just now - your answers are saved.\n\nReply *submit* to try again, or apply online:\n${config.publicSiteUrl || "https://sokonimall.com"}/boda/apply.html`
+        );
+        return true;
+      }
       if (result?.error) {
         await sendText(
           customerKey,

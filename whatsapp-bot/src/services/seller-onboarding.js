@@ -15,6 +15,7 @@
  * messaging from it, so this flow skips the OTP step the web signup needs.
  */
 import { config } from "../config.js";
+import { isSubmitWord } from "../lib/confirm-words.js";
 import { sendText } from "./whatsapp.js";
 import { getCustomerMeta, setCustomerMeta, clearMenuState } from "./session.js";
 import { onboardSeller, normalizePhone, isValidMpesaNumber } from "./seller-onboard.js";
@@ -246,17 +247,31 @@ export async function handleSellerOnboarding(customerKey, text, { phone = "" } =
       return true;
     }
     case SELLER_STEPS.CONFIRM: {
-      if (!/^\s*confirm\s*$/i.test(t)) {
-        await sendText(customerKey, summaryText(draft));
+      if (!isSubmitWord(t)) {
+        await sendText(
+          customerKey,
+          `Reply *confirm* to create your shop, *restart* to redo it, or *cancel* to stop.\n\n` +
+            summaryText(draft)
+        );
         return true;
       }
-      const result = onboardSeller({
-        phone: draft.phone,
-        shopName: draft.shopName,
-        shopHandle: draft.shopHandle,
-        mpesaNumber: draft.mpesaNumber,
-        nationalId: draft.nationalId || undefined,
-      });
+      let result;
+      try {
+        result = onboardSeller({
+          phone: draft.phone,
+          shopName: draft.shopName,
+          shopHandle: draft.shopHandle,
+          mpesaNumber: draft.mpesaNumber,
+          nationalId: draft.nationalId || undefined,
+        });
+      } catch (err) {
+        console.error(`[seller-onboarding] submit threw for ${draft.phone || customerKey}:`, err?.message);
+        await sendText(
+          customerKey,
+          `Couldn't create the shop just now - your answers are saved.\n\nReply *confirm* to try again, or use the Hub:\n${config.publicSiteUrl || "https://sokonimall.com"}/suppliers/list.html`
+        );
+        return true;
+      }
       if (result?.error) {
         await sendText(
           customerKey,
