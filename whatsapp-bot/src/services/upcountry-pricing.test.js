@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { evaluateFulfillmentMode } from "../lib/geo-zones.js";
 import { quoteRiderLeg } from "./apply-order-shipping.js";
+import { BASE_FEE_KES } from "../lib/rider-distance-fee.js";
 
 /**
  * Distance pricing is for boda deliveries only. Upcountry orders go by
@@ -62,7 +63,7 @@ describe("distance pricing only touches rider deliveries", () => {
   it("does quote one for metro deliveries", () => {
     for (const [s, bc, bt] of local) {
       const q = quoteRiderLeg({ sellerCity: s }, { buyerCounty: bc, buyerTown: bt });
-      assert.ok(q && q.feeKes >= 350, `${s} -> ${bt}, ${bc} produced no rider fee`);
+      assert.ok(q && q.feeKes >= BASE_FEE_KES, `${s} -> ${bt}, ${bc} produced no rider fee`);
     }
   });
 });

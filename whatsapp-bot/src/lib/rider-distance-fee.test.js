@@ -16,10 +16,10 @@ import { RIDER_SINGLE_FEE_MANUAL_KES, RIDER_B2C_MIN_FLOOR_KES } from "./rider-b2
 describe("the agreed tariff", () => {
   // Straight-line km -> fee, the numbers signed off on.
   const agreed = [
-    [3, 350],
-    [8, 490],
-    [15, 710],
-    [30, 1200],
+    [3, 400],
+    [8, 540],
+    [15, 760],
+    [30, 1250],
   ];
   for (const [straight, expected] of agreed) {
     it(`${straight} km costs KES ${expected}`, () => {
@@ -41,7 +41,16 @@ describe("floor and ceiling", () => {
     }
   });
 
-  it("stays under the manual-approval line at every distance", () => {
+  it("sits exactly on the auto-clear boundary, not over it", () => {
+    // needsApproval is `fee > RIDER_SINGLE_FEE_MANUAL_KES`, so 1500 clears
+    // automatically and 1501 would not. The cap is deliberately on the line;
+    // this pins it there so a later raise cannot quietly send every long
+    // delivery to an ops queue.
+    assert.equal(MAX_FEE_KES, RIDER_SINGLE_FEE_MANUAL_KES);
+    assert.equal(MAX_FEE_KES > RIDER_SINGLE_FEE_MANUAL_KES, false);
+  });
+
+  it("stays at or under the manual-approval line at every distance", () => {
     // A fee over this drops the payout into NEEDS_APPROVAL and makes ops
     // clear it by hand. No delivery should ever do that on distance alone.
     for (let km = 0; km <= 500; km += 0.5) {
@@ -55,7 +64,7 @@ describe("floor and ceiling", () => {
       split.netRiderPayout >= RIDER_B2C_MIN_FLOOR_KES,
       `rider nets ${split.netRiderPayout}, floor is ${RIDER_B2C_MIN_FLOOR_KES}`
     );
-    assert.equal(split.netRiderPayout, 300);
+    assert.equal(split.netRiderPayout, 345);
   });
 });
 
@@ -125,7 +134,7 @@ describe("pricing a real delivery", () => {
   });
 
   it("describes the fee for a buyer", () => {
-    assert.match(describeFee(priceLocalDelivery(cbd, thika, haversineMeters)), /KES 1,200 delivery/);
+    assert.match(describeFee(priceLocalDelivery(cbd, thika, haversineMeters)), new RegExp(`KES ${MAX_FEE_KES.toLocaleString()} delivery`));
     assert.match(describeFee(priceLocalDelivery(null, null, haversineMeters)), /minimum — no map pin/);
   });
 });

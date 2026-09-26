@@ -9,18 +9,23 @@
  * from at dispatch, so escrow always balances. Never price this at dispatch.
  */
 
-/** Charged on every local delivery, however short. */
-export const BASE_FEE_KES = 350;
+/**
+ * Charged on every local delivery, however short. Raised from 350 to 400
+ * on fuel costs -- a rider does not break even on a short run below this.
+ */
+export const BASE_FEE_KES = 400;
 /** Road kilometres covered by the base fee. */
 export const INCLUDED_KM = 5;
 /** Charged per road kilometre past INCLUDED_KM. */
 export const PER_KM_KES = 25;
 /**
- * Ceiling. Sits under RIDER_SINGLE_FEE_MANUAL_KES (1500) on purpose: a fee
- * above that drops the payout into NEEDS_APPROVAL and makes ops clear it by
- * hand, which must not happen just because a delivery was long.
+ * Ceiling. Sits exactly on RIDER_SINGLE_FEE_MANUAL_KES, which is safe because
+ * that check is a strict greater-than: a fee of 1500 clears automatically, and
+ * 1501 would drop the payout into NEEDS_APPROVAL for ops to clear by hand. So
+ * this is the highest the tariff can go without creating manual work, and the
+ * test below holds it there.
  */
-export const MAX_FEE_KES = 1200;
+export const MAX_FEE_KES = 1500;
 /**
  * Straight-line to road distance. Haversine cuts through buildings; Nairobi
  * road distance runs roughly a third longer, and the rider covers the road.
