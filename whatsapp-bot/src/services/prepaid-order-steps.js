@@ -6,6 +6,7 @@
 import { getCounty, inferCountyFromText, listTownsForCounty } from "./kenya-locations.js";
 import { normalizeKenyanPhone } from "./delivery-details.js";
 import { computeFeeBreakdown } from "./shipping-tiers.js";
+import { quoteRiderLeg } from "./apply-order-shipping.js";
 import {
   findConfiguredVendorProfile,
   normalizeVendorKey,
@@ -138,7 +139,7 @@ export function quoteShippingForPending(pendingOrProduct, location) {
   }
 
   let shippingFee = Math.round(Number(resolved.shippingFee) || 0);
-  const methodUsed = resolved.methodUsed || "TIER";
+  let methodUsed = resolved.methodUsed || "TIER";
 
   // Explicit free shipping only when seller enabled it — never treat missing fee as free.
   if (shippingFee <= 0 && !profile.isFreeShippingEnabled) {
@@ -157,6 +158,30 @@ export function quoteShippingForPending(pendingOrProduct, location) {
   }
 
   if (profile.isFreeShippingEnabled) shippingFee = 0;
+
+  // This is the number the buyer agrees to, and it is set before any order row
+  // exists -- applyShippingToOrder never runs on the WhatsApp path, so a rider
+  // fee decided there would never be seen. Every guard above still applies:
+  // this replaces a configured seller's rate, it does not bypass the checks.
+  // Free shipping is left alone; the seller promised it to the buyer, and
+  // funding the rider on those orders is a separate call.
+  const riderQuote = profile.isFreeShippingEnabled
+    ? null
+    : quoteRiderLeg(
+        {
+          shopHandle: pendingOrProduct.shopHandle || pendingOrProduct.sellerHandle,
+          sellerPhone: pendingOrProduct.sellerPhone,
+          sellerCity: pendingOrProduct.sellerCity,
+          sellerLocation: pendingOrProduct.sellerLocation,
+          pickupAddress: pendingOrProduct.pickupAddress,
+        },
+        { buyerCounty: location.county, buyerTown: location.town || "" },
+        profile
+      );
+  if (riderQuote) {
+    shippingFee = riderQuote.feeKes;
+    methodUsed = `RIDER_${riderQuote.basis}`;
+  }
 
   const fees = computeFeeBreakdown(Math.max(0, sellerNet), shippingFee, {
     freeShipping: shippingFee === 0 && Boolean(profile.isFreeShippingEnabled),
