@@ -37,6 +37,48 @@ const CART_PARENT_KIND = "cart_parent";
  * @param {Record<string, unknown>} order
  * @returns {string}
  */
+/**
+ * Distance fee for one order line, or null when no rider is involved.
+ *
+ * Shared by the single-order and cart paths so a cart leg and the same item
+ * bought alone are never priced differently.
+ *
+ * @param {Record<string, unknown>} orderLine
+ * @param {{buyerCoordinates?:{lat:number,lng:number}, buyerCounty?:string, buyerTown?:string}} location
+ * @param {Record<string, unknown>|null} profile
+ * @returns {{feeKes:number, basis:string, roadKm:number|null}|null}
+ */
+export function quoteRiderLeg(orderLine = {}, location = {}, profile = null) {
+  try {
+    const sellerLoc =
+      resolveSellerOrigin(orderLine) ||
+      (Array.isArray(profile?.localCounties) ? profile.localCounties[0] : "") ||
+      "";
+    const buyerCounty = location.buyerCounty || orderLine.deliveryCounty || "";
+    const buyerTown = location.buyerTown || orderLine.deliveryTown || "";
+    const fulfillment = evaluateFulfillmentMode({
+      sellerCounty: sellerLoc,
+      buyerCounty,
+      buyerTown,
+      sellerLocationText: String(sellerLoc || ""),
+      buyerLocationText: [buyerTown, buyerCounty].filter(Boolean).join(" · "),
+    });
+    if (!fulfillment.requiresRider) return null;
+    // Deliberately not fulfillment.sellerCounty: it defaults to NAIROBI when
+    // the seller's location is unknown, and pricing a guess as though it were
+    // the CBD invents a distance. Unknown origin means the minimum.
+    return priceLocalDelivery(
+      sellerLoc ? resolveMetroCoords(sellerLoc) : null,
+      location.buyerCoordinates || resolveMetroCoords(buyerTown || buyerCounty),
+      haversineMeters
+    );
+  } catch (err) {
+    console.warn("[apply-shipping] rider leg quote skipped:", err.message);
+    return null;
+  }
+}
+
+
 export function resolveSellerOrigin(order = {}) {
   const direct = [
     order.pickupAddress,
@@ -173,17 +215,13 @@ export async function applyShippingToOrder(orderId, location = {}) {
       sellerLocationText: String(sellerLoc || ""),
       buyerLocationText: locationLine || order.location || "",
     });
-    if (fulfillment.requiresRider) {
-      // A rider is doing this one, so the platform prices it by distance and
-      // the seller's flat rate does not apply. Same number the rider is paid
-      // from at dispatch, so escrow balances.
-      riderQuote = priceLocalDelivery(
-        resolveMetroCoords(sellerLoc || fulfillment.sellerCounty),
-        location.buyerCoordinates ||
-          resolveMetroCoords(location.buyerTown || buyerCounty || locationLine),
-        haversineMeters
-      );
-    }
+    // One implementation for both paths, so a cart leg and the same item
+    // bought alone can never be priced differently.
+    riderQuote = quoteRiderLeg(
+      order,
+      { ...location, buyerCounty, buyerTown: location.buyerTown || order.deliveryTown || "" },
+      profile
+    );
     Object.assign(patch, {
       fulfillmentMode: fulfillment.mode,
       requiresRider: fulfillment.requiresRider,
@@ -203,6 +241,11 @@ export async function applyShippingToOrder(orderId, location = {}) {
   // -- except on rider orders, which the platform always prices. Without this
   // an unconfigured seller meant KES 0 shipping and an unpaid rider.
   if (configured || riderQuote) {
+    // shippingCalcMeta was built before riderQuote existed. Leaving it false
+    // makes ensureHybridShippingBeforePayment re-run and the STK gate treat a
+    // priced rider order as "rates still missing".
+    patch.shippingCalcMeta.moneyApplied = true;
+    patch.shippingCalcMeta.riderFeeBasis = riderQuote?.basis || null;
     const shippingKes = riderQuote
       ? riderQuote.feeKes
       : Math.round(Number(line.shippingFee) || 0);
@@ -307,6 +350,8 @@ async function applyShippingToCartParent(orderId, location = {}) {
       normalizeVendorKey(child.shopHandle || child.supplierId || child.sellerId || "unknown");
     const configured = isConfiguredShippingProfile(found.profile);
     const line = feeByVendor.get(vendorId) || { shippingFee: 0, methodUsed: "NO_PROFILE" };
+    // Carts route per seller, so each line is priced on its own pickup point.
+    const childQuote = quoteRiderLeg(child, location, found.profile);
     /** @type {Record<string, unknown>} */
     const childPatch = {
       deliveryCounty: location.buyerCounty || child.deliveryCounty || null,
@@ -315,13 +360,16 @@ async function applyShippingToCartParent(orderId, location = {}) {
         methodUsed: line.methodUsed,
         shippingFee: line.shippingFee,
         profilePresent: configured,
-        moneyApplied: configured,
+        moneyApplied: configured || Boolean(childQuote),
+        riderFeeBasis: childQuote?.basis || null,
         at: new Date().toISOString(),
       },
     };
-    if (configured) {
+    if (configured || childQuote) {
       anyProfile = true;
-      const shippingKes = Math.round(Number(line.shippingFee) || 0);
+      const shippingKes = childQuote
+        ? childQuote.feeKes
+        : Math.round(Number(line.shippingFee) || 0);
       const sellerNet = Math.round(
         Number(child.sellerNetKes ?? child.sourcePriceKes ?? child.priceKes) || 0
       );
