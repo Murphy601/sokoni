@@ -1,9 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { evaluateFulfillmentMode } from "../lib/geo-zones.js";
-
-const SRC = readFileSync(new URL("./apply-order-shipping.js", import.meta.url), "utf8");
+import { quoteRiderLeg } from "./apply-order-shipping.js";
 
 /**
  * Distance pricing is for boda deliveries only. Upcountry orders go by
@@ -50,17 +48,21 @@ describe("distance pricing only touches rider deliveries", () => {
     });
   }
 
-  it("only overrides the fee when a rider is involved", () => {
-    // The override is gated on riderQuote, which is only set under
-    // fulfillment.requiresRider. If that gate is ever removed, upcountry
-    // sellers silently lose control of their own pricing.
-    assert.match(SRC, /if \(fulfillment\.requiresRider\) \{/);
-    assert.match(SRC, /riderQuote\s*\?\s*riderQuote\.feeKes\s*:\s*Math\.round\(Number\(line\.shippingFee\)/);
+  it("quotes nothing to override with, upcountry", () => {
+    // Behavioural rather than a source-text match: quoteRiderLeg is the one
+    // place a distance fee can come from, so a null here is the guarantee
+    // that the seller's own rate survives. An earlier version of this test
+    // asserted the shape of the source and broke on a refactor that changed
+    // nothing about the behaviour.
+    for (const [s, bc, bt] of upcountry) {
+      assert.equal(quoteRiderLeg({ sellerCity: s }, { buyerCounty: bc, buyerTown: bt }), null, `${bc}`);
+    }
   });
 
-  it("leaves the seller's configured tiers as the source for everything else", () => {
-    // Non-rider orders still require a configured profile before any money
-    // is rewritten -- unchanged behaviour.
-    assert.match(SRC, /if \(configured \|\| riderQuote\) \{/);
+  it("does quote one for metro deliveries", () => {
+    for (const [s, bc, bt] of local) {
+      const q = quoteRiderLeg({ sellerCity: s }, { buyerCounty: bc, buyerTown: bt });
+      assert.ok(q && q.feeKes >= 350, `${s} -> ${bt}, ${bc} produced no rider fee`);
+    }
   });
 });
