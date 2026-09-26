@@ -45,7 +45,7 @@
     "fulfillment": "store",
     "payment": "prepaid",
     "inStock": true,
-    "stockQuantity": 2,
+    "stockQuantity": 1,
     "imageUrl": "https://res.cloudinary.com/rztynxme/image/upload/v1787987410/sokoni-studio/cutout_1787987388_33ad4e51.jpg",
     "images": [
       "https://res.cloudinary.com/rztynxme/image/upload/v1787987410/sokoni-studio/cutout_1787987388_33ad4e51.jpg"
