@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { quoteShippingForPending } from "./prepaid-order-steps.js";
+import { BASE_FEE_KES, MAX_FEE_KES } from "../lib/rider-distance-fee.js";
 import { upsertVendorShippingProfile, normalizeVendorKey } from "./vendor-shipping.js";
 
 // The fee override replaces a configured seller's rate; it does not bypass the
@@ -32,7 +33,7 @@ describe("rider fee on the WhatsApp quote", () => {
   it("charges the minimum for a short metro hop", () => {
     const q = quote("Nairobi", "Kilimani");
     assert.equal(q.ok, true, q.error);
-    assert.equal(q.shippingKes, 350);
+    assert.equal(q.shippingKes, BASE_FEE_KES);
   });
 
   it("charges more the further it goes", () => {
@@ -40,7 +41,7 @@ describe("rider fee on the WhatsApp quote", () => {
     const mid = quote("Nairobi", "Karen").shippingKes;
     const far = quote("Machakos", "Kitengela").shippingKes;
     assert.ok(near < mid && mid < far, `${near} / ${mid} / ${far} is not increasing`);
-    assert.ok(far <= 1200, `${far} exceeds the cap`);
+    assert.ok(far <= MAX_FEE_KES, `${far} exceeds the cap`);
   });
 
   it("labels the quote so the source of the fee is visible", () => {
@@ -72,14 +73,14 @@ describe("rider fee on the WhatsApp quote", () => {
       { county: "Nairobi", town: "Karen", tier: 1 }
     );
     assert.equal(q.ok, true, q.error);
-    assert.equal(q.shippingKes, 350);
+    assert.equal(q.shippingKes, BASE_FEE_KES);
   });
 
   it("never returns free delivery on a rider leg", () => {
     // Free shipping cannot apply here: the fee is what pays the rider.
     for (const town of ["Kilimani", "Karen", "Thika"]) {
       const q = quote("Nairobi", town);
-      assert.ok(q.shippingKes >= 350, `${town} came back at ${q.shippingKes}`);
+      assert.ok(q.shippingKes >= BASE_FEE_KES, `${town} came back at ${q.shippingKes}`);
     }
   });
 });
