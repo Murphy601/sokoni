@@ -1048,9 +1048,17 @@ export async function handleOrderBusMessage(customerKey, text, { phone = "" } = 
     return true;
   }
 
-  const helpMatch = trimmed.match(new RegExp(`^(HELP|PROBLEM|CANCEL)\\b(?:\\s+${ORDER_ID_CAPTURE})?`, "i"));
-  if (helpMatch) {
-    const id = helpMatch[2] ? orderIdOrEmpty(helpMatch[2]) : extractOrderIdFromText(trimmed) || "";
+  const helpMatch = trimmed.match(new RegExp(`^(HELP|PROBLEM)\\b(?:\\s+${ORDER_ID_CAPTURE})?`, "i"));
+  // CANCEL only escalates when it names an order. A bare "cancel" is what a
+  // buyer types to abandon a checkout, and this branch runs ahead of every
+  // other handler -- so it was picking up an unrelated order, freezing its
+  // escrow, silencing the bot for both parties, and paging an admin.
+  const cancelMatch = helpMatch
+    ? null
+    : trimmed.match(new RegExp(`^CANCEL\\s+${ORDER_ID_CAPTURE}\\b`, "i"));
+  if (helpMatch || cancelMatch) {
+    const captured = helpMatch ? helpMatch[2] : cancelMatch[1];
+    const id = captured ? orderIdOrEmpty(captured) : extractOrderIdFromText(trimmed) || "";
     await flowHelp(customerKey, phone, id, trimmed);
     return true;
   }

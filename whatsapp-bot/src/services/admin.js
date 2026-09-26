@@ -1089,6 +1089,33 @@ function listOpenTakeOverOrders(limit = 20) {
  */
 async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } = {}) {
   const raw = String(rest || "").trim();
+
+  // "#done all" — clear every open takeover at once. Needed when a bad
+  // escalation silenced several chats and resolving them one id at a time
+  // means the bot stays down in the meantime.
+  if (/^all$/i.test(raw)) {
+    const open = listOpenTakeOverOrders(100);
+    if (!open.length) return sendText(adminChatId, "No open support/dispute takeovers.");
+    const { resolveAdminTakeOver } = await import("./communication-hub.js");
+    const done = [];
+    const failed = [];
+    for (const o of open) {
+      try {
+        const r = await resolveAdminTakeOver(o.id, { note: `resolved via #${via} all` });
+        (r?.error ? failed : done).push(o.id);
+      } catch (err) {
+        failed.push(o.id);
+        console.warn(`[admin] #done all could not resolve ${o.id}:`, err.message);
+      }
+    }
+    return sendText(
+      adminChatId,
+      `✅ Resumed ${done.length} chat${done.length === 1 ? "" : "s"}.` +
+        (done.length ? `\n${done.map((id) => `• ${id}`).join("\n")}` : "") +
+        (failed.length ? `\n\n⚠️ Still stuck: ${failed.join(", ")}` : "")
+    );
+  }
+
   let orderId = extractOrderIdFromText(raw);
   if (!orderId && !raw) {
     const open = listOpenTakeOverOrders();
@@ -1098,6 +1125,7 @@ async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } =
       return sendText(adminChatId, "No open support/dispute takeovers. Usage: *#done SKN-1002-1* (or older *#done SK-1042*)");
     } else {
       const lines = open.slice(0, 10).map((o) => `• *#done ${o.id}* — ${o.productName || "order"}`);
+      lines.push("", "Or *#done all* to resume every one of them.");
       return sendText(
         adminChatId,
         `Several takeovers are open — pick one:\n${lines.join("\n")}` +
