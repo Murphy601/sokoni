@@ -7,6 +7,7 @@
  */
 
 import { getOrder, updateOrderMeta } from "./orders.js";
+import { getSupplierByHandle, findSupplierByPhone } from "./suppliers.js";
 import { calculateShipping } from "./calculate-shipping.js";
 import { computeFeeBreakdown, orderBuyerTotal } from "./shipping-tiers.js";
 import { mpesaTransactionFeeKes } from "./mpesa-transaction-fees.js";
@@ -24,6 +25,44 @@ import { resolveMetroCoords } from "../lib/metro-coords.js";
 import { haversineMeters } from "./boda-fleet.js";
 
 const CART_PARENT_KIND = "cart_parent";
+
+
+/**
+ * Where the rider collects from, as free text for the pricing lookup.
+ *
+ * Checked in order of precision: an explicit pickup address on the order,
+ * then the seller's registered city. Returns "" when nothing is known, which
+ * prices the delivery at the minimum rather than guessing at a distance.
+ *
+ * @param {Record<string, unknown>} order
+ * @returns {string}
+ */
+export function resolveSellerOrigin(order = {}) {
+  const direct = [
+    order.pickupAddress,
+    order.sellerLocation,
+    order.sellerAddress,
+    order.sellerCity,
+  ].find((v) => String(v || "").trim());
+  if (direct) return String(direct).trim();
+
+  try {
+    const handle = String(order.shopHandle || "").replace(/^@/, "").trim();
+    const seller =
+      (handle && getSupplierByHandle(handle)) ||
+      (order.sellerPhone && findSupplierByPhone(order.sellerPhone)) ||
+      null;
+    const city = String(seller?.city || "").trim();
+    if (city) return city;
+    // deliveryAreas is a seller-authored list of places they serve; the first
+    // entry is a reasonable stand-in for where they are based.
+    const areas = seller?.deliveryAreas;
+    if (Array.isArray(areas) && areas.length) return String(areas[0] || "").trim();
+  } catch (err) {
+    console.warn("[apply-shipping] seller origin lookup skipped:", err.message);
+  }
+  return "";
+}
 
 /**
  * @param {string} orderId
@@ -120,9 +159,11 @@ export async function applyShippingToOrder(orderId, location = {}) {
       order.deliveryCounty ||
       inferCountyFromText(locationLine || order.location || "")?.county ||
       "";
-    const sellerLoc =
-      profile?.shopLocation ||
-      profile?.baseCounty ||
+    // shopLocation and baseCounty are not fields on a shipping profile -- both
+    // reads were always undefined, which left sellerLoc empty and priced every
+    // rider delivery at the bare minimum. The seller's own record carries a
+    // city; use that first and keep the profile reads as a last resort.
+    const sellerLoc = resolveSellerOrigin(order) ||
       (Array.isArray(profile?.localCounties) ? profile.localCounties[0] : "") ||
       "";
     const fulfillment = evaluateFulfillmentMode({
