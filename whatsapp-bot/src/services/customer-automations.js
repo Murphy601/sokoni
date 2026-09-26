@@ -1,7 +1,10 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
 import { getOrdersForCustomer, getOrder, updateOrderStatus, extractOrderIdFromText } from "./orders.js";
-import { getCustomerMeta, setCustomerMeta } from "./session.js";
+import { getCustomerMeta, setCustomerMeta,
+  getPendingOrder,
+  getPendingCart,
+} from "./session.js";
 import { alertAdminIssueAction } from "./ops-admin.js";
 import {
   welcomeBackMessage,
@@ -156,11 +159,23 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
   const t = normalize(text);
   if (!t) return false;
 
-  if (/^(replace|correct)$/i.test(t)) {
+  // A checkout in progress owns these words. wrongOrderIssueId is sticky, so
+  // without this a buyer who once reported a wrong order has every later
+  // "cancel" hijacked: it cancels some earlier order, promises an M-Pesa
+  // refund for money that was never taken, and pulls in an admin -- while the
+  // order they were actually trying to abandon is still sitting in checkout.
+  const midCheckout = Boolean(getPendingOrder(customerKey) || getPendingCart(customerKey));
+
+  if (!midCheckout && /^(replace|correct)$/i.test(t)) {
     return handleReplaceOrCancel(customerKey, "REPLACE", { phone, displayName });
   }
 
-  if (/^cancel$/i.test(t) && (getCustomerMeta(customerKey)?.awaitingWrongOrderFix || getCustomerMeta(customerKey)?.wrongOrderIssueId)) {
+  if (
+    !midCheckout &&
+    /^cancel$/i.test(t) &&
+    (getCustomerMeta(customerKey)?.awaitingWrongOrderFix ||
+      getCustomerMeta(customerKey)?.wrongOrderIssueId)
+  ) {
     return handleReplaceOrCancel(customerKey, "CANCEL", { phone, displayName });
   }
 
