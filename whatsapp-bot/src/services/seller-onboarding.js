@@ -131,7 +131,7 @@ export function promptFor(step, draft = {}) {
         `Where do riders collect from?\n\n` +
         `${pinReason("seller")}\n\n` +
         `${PIN_HOW_TO}\n\n` +
-        `Reply *skip* to set it later in the Seller Hub.`
+        `Your delivery prices are measured from here, so it cannot be left out.`
       );
     case SELLER_STEPS.NATIONAL_ID:
       return (
@@ -155,7 +155,7 @@ export function summaryText(draft = {}) {
       line("Shop name", draft.shopName),
       line("Handle", draft.shopHandle ? `@${draft.shopHandle}` : ""),
       line("Payout M-Pesa", draft.mpesaNumber),
-      line("Pickup pin", draft.pickupLat ? "set" : "not set"),
+      line("Pickup pin", draft.pickupLat ? "set" : "MISSING"),
       line("National ID", draft.nationalId ? "provided" : "skipped"),
     ].join("\n") +
     `\n\nReply *confirm* to create your shop, *restart* to start again, or *cancel* to stop.`
@@ -254,8 +254,16 @@ export async function handleSellerOnboarding(customerKey, text, { phone = "", lo
         return true;
       }
       if (isSkip(t)) {
-        save({}, SELLER_STEPS.NATIONAL_ID);
-        await ask(SELLER_STEPS.NATIONAL_ID);
+        // Required: with no collection point every delivery from this shop
+        // prices at the flat minimum whatever the distance. Not a dead end
+        // though -- the Hub has a map for anyone whose phone will not share.
+        await sendText(
+          customerKey,
+          `This one is needed — your delivery prices are measured from it.\n\n` +
+            `${PIN_HOW_TO}\n\n` +
+            `If your phone won't share a location, finish on the Hub instead:\n` +
+            `${config.publicSiteUrl || "https://sokonimall.com"}/suppliers/list.html`
+        );
         return true;
       }
       if (location) {

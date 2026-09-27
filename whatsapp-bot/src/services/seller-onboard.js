@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
+import { normalizePin } from "../lib/location-pin.js";
 import { getOrder } from "./orders.js";
 import { orderBuyerTotal, resolveSellerPayoutKes, computeFeeBreakdown } from "./shipping-tiers.js";
 import { shipmentStatusLabel } from "./shipments.js";
@@ -158,6 +159,23 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
   }
   if (!isValidMpesaNumber(mpesaNumber)) {
     return { error: "invalid_mpesa", message: "Enter a valid M-Pesa number (07xx or 2547xx)." };
+  }
+
+  // A shop with no collection point cannot be priced: every delivery from it
+  // would fall back to the flat minimum whatever the distance. Enforced here
+  // rather than only in the browser, so no client can skip it.
+  //
+  // New shops only. Sellers who signed up before pins existed keep working and
+  // are prompted separately -- locking them out of their own hub would be a
+  // far worse outcome than a missing pin.
+  const pin = normalizePin({ lat: pickupLat, lng: pickupLng });
+  const alreadyASeller = Boolean(findSupplierByPhone(normalizedPhone));
+  if (!pin && !alreadyASeller) {
+    return {
+      error: "pickup_pin_required",
+      message:
+        "Set where riders collect from. Tap “Use my current location”, or pick it on the map.",
+    };
   }
 
   const result = createPeerSeller({

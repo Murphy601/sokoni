@@ -21,7 +21,13 @@ describe("sellers are asked for a pickup pin", () => {
     const p = sellerPrompt(SELLER_STEPS.PICKUP_PIN, {});
     assert.match(p, /riders collect/i);
     assert.match(p, /Attach/i);
-    assert.match(p, /skip/i, "must be skippable — a pin cannot block signup");
+  });
+
+  it("is required, with a real alternative rather than a dead end", () => {
+    const branch = SELLER.slice(SELLER.indexOf("case SELLER_STEPS.PICKUP_PIN: {"));
+    const body = branch.slice(0, 1600);
+    assert.doesNotMatch(sellerPrompt(SELLER_STEPS.PICKUP_PIN, {}), /\*skip\*/i, "still offers skip");
+    assert.match(body, /suppliers\/list\.html/, "no route out for a phone that will not share");
   });
 
   it("accepts the pin from a location message, not typed text", () => {

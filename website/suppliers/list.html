@@ -36,6 +36,12 @@
 <link rel="stylesheet" href="../assets/css/depop-sell.css?v=hub-promo-modal-2" />
 <link rel="stylesheet" href="../assets/css/inbox-disputes.css" />
 <link rel="stylesheet" href="../assets/css/depop-surfaces.css?v=hub-command-1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    .sell-pin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+    .sell-pin-btn { padding: 8px 14px; border-radius: 999px; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: .875rem; cursor: pointer; }
+    .sell-pin-map { height: 240px; border-radius: 12px; margin: 8px 0; }
+  </style>
 </head>
 <body class="sell-depop-page depop-surface-page font-sans antialiased text-white min-h-screen">
   <header class="sell-page-header border-b border-zinc-900 bg-black/95 backdrop-blur sticky top-0 z-50">
@@ -121,6 +127,19 @@
           <input id="onboard-mpesa" type="tel" required placeholder="07xx or 2547xx" class="sell-form-input" inputmode="tel" />
           <span class="sell-tag-hint">Where we send your money after a sale is delivered. Can be the same as WhatsApp.</span>
         </label>
+        <div class="block text-sm font-medium" data-pin-field data-lat-input="#onboard-pickup-lat" data-lng-input="#onboard-pickup-lng">
+          Where do riders collect from? *
+          <input type="hidden" id="onboard-pickup-lat" />
+          <input type="hidden" id="onboard-pickup-lng" />
+          <div class="sell-pin-actions">
+            <button type="button" class="sell-pin-btn" data-pin-use>Use my current location</button>
+            <button type="button" class="sell-pin-btn" data-pin-open-map>Pick on a map</button>
+            <button type="button" class="sell-pin-btn" data-pin-clear hidden>Clear pin</button>
+          </div>
+          <div class="sell-pin-map" data-pin-map hidden></div>
+          <span class="sell-tag-hint" data-pin-status>No pin set.</span>
+          <span class="sell-tag-hint">This sets your delivery prices and it is where riders come to collect. Put it on your actual shop or stall.</span>
+        </div>
         <label class="block text-sm font-medium">
           National ID <span class="font-normal text-brand-purple/50 dark:text-white/50">(optional)</span>
           <input id="onboard-national-id" type="text" placeholder="ID number" class="sell-form-input" />
@@ -1401,5 +1420,7 @@
 
   <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
   <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <script src="../assets/js/location-pin-field.js" defer></script>
 </body>
 </html>

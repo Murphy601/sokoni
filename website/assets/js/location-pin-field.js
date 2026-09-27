@@ -81,14 +81,24 @@
       map.on("click", function (e) {
         set(e.latlng.lat, e.latlng.lng);
       });
-      // The container is revealed in the same tick the map is built, so its
-      // size is not final yet. One call leaves the tiles covering only part of
-      // the box; re-measure as layout settles.
+      // The field can sit inside a section that is still display:none -- the
+      // seller form is hidden until the phone is verified -- so the container
+      // may have no size at all when the map is built. Fixed timers cannot
+      // know when that changes; watch the box instead and re-measure the
+      // moment it gets one.
+      var settle = function () {
+        map.invalidateSize();
+      };
       [0, 150, 400].forEach(function (ms) {
-        setTimeout(function () {
-          map.invalidateSize();
-        }, ms);
+        setTimeout(settle, ms);
       });
+      if (window.ResizeObserver) {
+        var ro = new ResizeObserver(function (entries) {
+          var box = entries[0] && entries[0].contentRect;
+          if (box && box.width > 0 && box.height > 0) settle();
+        });
+        ro.observe(mapEl);
+      }
     }
 
     if (useBtn) {
