@@ -15,6 +15,7 @@
  * messaging from it, so this flow skips the OTP step the web signup needs.
  */
 import { config } from "../config.js";
+import { normalizePin, PIN_HOW_TO, pinReason } from "../lib/location-pin.js";
 import { isSubmitWord } from "../lib/confirm-words.js";
 import { sendText } from "./whatsapp.js";
 import { getCustomerMeta, setCustomerMeta, clearMenuState } from "./session.js";
@@ -24,6 +25,7 @@ export const SELLER_STEPS = {
   SHOP_NAME: "shop_name",
   HANDLE: "handle",
   MPESA: "mpesa",
+  PICKUP_PIN: "pickup_pin",
   NATIONAL_ID: "national_id",
   CONFIRM: "confirm",
 };
@@ -32,6 +34,7 @@ const STEP_ORDER = [
   SELLER_STEPS.SHOP_NAME,
   SELLER_STEPS.HANDLE,
   SELLER_STEPS.MPESA,
+  SELLER_STEPS.PICKUP_PIN,
   SELLER_STEPS.NATIONAL_ID,
   SELLER_STEPS.CONFIRM,
 ];
@@ -73,6 +76,8 @@ function freshDraft(phone = "") {
     shopHandle: "",
     mpesaNumber: "",
     nationalId: "",
+    pickupLat: null,
+    pickupLng: null,
   };
 }
 
@@ -120,6 +125,14 @@ export function promptFor(step, draft = {}) {
         `Which *M-Pesa number* should your payouts go to?\n\n` +
         (draft.phone ? `Reply *yes* to use *${draft.phone}*, or send a different number.` : `Send the number.`)
       );
+    case SELLER_STEPS.PICKUP_PIN:
+      return (
+        head +
+        `Where do riders collect from?\n\n` +
+        `${pinReason("seller")}\n\n` +
+        `${PIN_HOW_TO}\n\n` +
+        `Reply *skip* to set it later in the Seller Hub.`
+      );
     case SELLER_STEPS.NATIONAL_ID:
       return (
         head +
@@ -142,6 +155,7 @@ export function summaryText(draft = {}) {
       line("Shop name", draft.shopName),
       line("Handle", draft.shopHandle ? `@${draft.shopHandle}` : ""),
       line("Payout M-Pesa", draft.mpesaNumber),
+      line("Pickup pin", draft.pickupLat ? "set" : "not set"),
       line("National ID", draft.nationalId ? "provided" : "skipped"),
     ].join("\n") +
     `\n\nReply *confirm* to create your shop, *restart* to start again, or *cancel* to stop.`
@@ -171,7 +185,7 @@ export async function startSellerOnboarding(customerKey, { phone = "" } = {}) {
  * Handle one inbound message while a seller signup is open.
  * @returns {Promise<boolean>} true when the message was consumed
  */
-export async function handleSellerOnboarding(customerKey, text, { phone = "" } = {}) {
+export async function handleSellerOnboarding(customerKey, text, { phone = "", location = null } = {}) {
   const flow = getFlow(customerKey);
   if (!flow?.step) return false;
 
@@ -231,6 +245,32 @@ export async function handleSellerOnboarding(customerKey, text, { phone = "" } =
       await ask(SELLER_STEPS.NATIONAL_ID);
       return true;
     }
+    case SELLER_STEPS.PICKUP_PIN: {
+      const pin = normalizePin(location);
+      if (pin) {
+        save({ pickupLat: pin.lat, pickupLng: pin.lng }, SELLER_STEPS.NATIONAL_ID);
+        await sendText(customerKey, `📍 Pickup pin saved.`);
+        await ask(SELLER_STEPS.NATIONAL_ID);
+        return true;
+      }
+      if (isSkip(t)) {
+        save({}, SELLER_STEPS.NATIONAL_ID);
+        await ask(SELLER_STEPS.NATIONAL_ID);
+        return true;
+      }
+      if (location) {
+        // A pin arrived but it is not a usable Kenyan coordinate -- 0,0 from a
+        // device with no fix, or lat/lng swapped. Saying "invalid" would be
+        // baffling, so say what to do instead.
+        await sendText(
+          customerKey,
+          `That pin didn't come through with a real position.\n\nMake sure location is on, then send it again — or reply *skip*.`
+        );
+        return true;
+      }
+      await sendText(customerKey, `Send a pin, or reply *skip*.\n\n${PIN_HOW_TO}`);
+      return true;
+    }
     case SELLER_STEPS.NATIONAL_ID: {
       if (isSkip(t)) {
         save({ nationalId: "" }, SELLER_STEPS.CONFIRM);
@@ -263,6 +303,8 @@ export async function handleSellerOnboarding(customerKey, text, { phone = "" } =
           shopHandle: draft.shopHandle,
           mpesaNumber: draft.mpesaNumber,
           nationalId: draft.nationalId || undefined,
+          pickupLat: draft.pickupLat,
+          pickupLng: draft.pickupLng,
         });
       } catch (err) {
         console.error(`[seller-onboarding] submit threw for ${draft.phone || customerKey}:`, err?.message);

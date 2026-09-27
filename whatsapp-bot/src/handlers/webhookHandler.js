@@ -290,7 +290,7 @@ function isProductMenuChoice(text) {
   return /^[123]$/.test(String(text || "").trim());
 }
 
-async function handleActiveProductMenu(customerKey, text) {
+async function handleActiveProductMenu(customerKey, text, { location = null } = {}) {
   const menuState = getMenuState(customerKey);
   if (menuState?.type !== "product" || !menuState.productId) return false;
 
@@ -302,7 +302,7 @@ async function handleActiveProductMenu(customerKey, text) {
       String(pending.step || "")
     )
   ) {
-    return tryHandlePendingOrder(customerKey, text);
+    return tryHandlePendingOrder(customerKey, text, { location });
   }
 
   const choice = parseNumericChoice(text);
@@ -448,6 +448,7 @@ export async function handleIncomingMessage(
       messageId,
       chatId,
       session: wahaSession,
+      location,
     });
     if (handled) return;
   }
@@ -459,7 +460,7 @@ export async function handleIncomingMessage(
 
   // Seller signup in chat (replaces the supplier-programme flow).
   if (isInSellerOnboarding(customerKey)) {
-    const handled = await handleSellerOnboarding(customerKey, text, { phone });
+    const handled = await handleSellerOnboarding(customerKey, text, { phone, location });
     if (handled) return;
   }
 
@@ -908,7 +909,7 @@ export async function handleIncomingMessage(
 
   // Cart or single-item checkout awaiting delivery details — before AI
   if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
-    const pendingHandledEarly = await tryHandlePendingOrder(customerKey, combinedText);
+    const pendingHandledEarly = await tryHandlePendingOrder(customerKey, combinedText, { location });
     if (pendingHandledEarly) return;
   }
 
@@ -935,7 +936,7 @@ export async function handleIncomingMessage(
       ["location", "confirm_fees", "contact", "awaiting_delivery_location", "awaiting_customer_details"].includes(
         String(pendingCheckout.step || "")
       );
-    if (!checkoutBusy && (await handleActiveProductMenu(customerKey, text))) return;
+    if (!checkoutBusy && (await handleActiveProductMenu(customerKey, text, { location }))) return;
   }
 
   if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
@@ -964,7 +965,7 @@ export async function handleIncomingMessage(
     }
   }
 
-  const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
+  const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText, { location });
   if (pendingHandled) return;
 
   if (
@@ -1002,7 +1003,7 @@ export async function handleIncomingMessage(
   const menuState = getMenuState(customerKey);
 
   if (menuState?.type === "product" && isProductMenuChoice(text)) {
-    return handleActiveProductMenu(customerKey, text);
+    return handleActiveProductMenu(customerKey, text, { location });
   }
 
   const choice = parseNumericChoice(text);
@@ -1061,7 +1062,7 @@ export async function handleIncomingMessage(
 
   // Never let AI invent till / product-picker replies during cart checkout
   if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
-    const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText);
+    const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText, { location });
     if (pendingAgain) return;
   }
 

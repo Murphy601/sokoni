@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { normalizePin } from "../lib/location-pin.js";
 import { sendText, sendProductCard, sendProductImage } from "./whatsapp.js";
 import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, listBrowseProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
 import { buildBrowseSubmenus, priceTierMaxKes } from "./browse-menu.js";
@@ -877,7 +878,7 @@ export async function startPrepaidOrder(to, productId, { offerId = null, totalsO
 }
 
 /** Handle messages while customer is mid-order (before confirm). */
-export async function tryHandlePendingOrder(to, text) {
+export async function tryHandlePendingOrder(to, text, { location = null } = {}) {
   const raw = String(text || "");
   const lower = raw.trim().toLowerCase();
 
@@ -920,6 +921,25 @@ export async function tryHandlePendingOrder(to, text) {
   const step = pending.step || ORDER_STEPS.LOCATION;
 
   if (step === ORDER_STEPS.LOCATION) {
+    // A dropped pin is the best answer this step can get: it prices the
+    // delivery exactly and it is what the rider's CONFIRM geofence checks
+    // against. Without one the drop-off has to be geocoded from typed text,
+    // which is what leaves "drop-off GPS not on file" at the door.
+    const droppedPin = normalizePin(location);
+    if (droppedPin) {
+      setPendingOrder(to, { ...pending, buyerLat: droppedPin.lat, buyerLng: droppedPin.lng });
+      pending.buyerLat = droppedPin.lat;
+      pending.buyerLng = droppedPin.lng;
+      if (!pending.buyerCounty) {
+        await sendText(
+          to,
+          `📍 Pin saved — the rider will use it to find you.\n\n` +
+            `Now send: *County, Town, delivery spot*\n_e.g. Kiambu, Ruiru, Quickmart gate_`
+        );
+        return true;
+      }
+    }
+
     const loc = parseLocationStep(text);
     if (!loc) {
       await sendText(
@@ -937,7 +957,10 @@ export async function tryHandlePendingOrder(to, text) {
       supplierId: pending.supplierId || catalogProduct?.supplierId,
       sellerNetKes: pending.sellerNetKes ?? catalogProduct?.sellerNetKes ?? pending.priceKes,
     };
-    const quote = quoteShippingForPending(quoteBase, loc);
+    const quote = quoteShippingForPending(quoteBase, {
+      ...loc,
+      buyerCoordinates: normalizePin({ lat: pending.buyerLat, lng: pending.buyerLng }),
+    });
     if (!quote.ok) {
       await sendText(to, `${quote.message || "Can't deliver there."}\nTry another county, or *cancel*.`);
       return true;
@@ -950,6 +973,8 @@ export async function tryHandlePendingOrder(to, text) {
       buyerCounty: loc.county,
       buyerTown: loc.town,
       landmark: loc.landmark,
+      buyerLat: pending.buyerLat ?? null,
+      buyerLng: pending.buyerLng ?? null,
       quote,
       shippingKes: quote.shippingKes,
       totalKes: quote.totalKes,

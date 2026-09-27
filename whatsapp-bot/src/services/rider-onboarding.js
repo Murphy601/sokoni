@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
+import { normalizePin, PIN_HOW_TO, pinReason } from "../lib/location-pin.js";
 import { isSubmitWord } from "../lib/confirm-words.js";
 import { sendText, downloadWahaMedia } from "./whatsapp.js";
 import { getCustomerMeta, setCustomerMeta, clearMenuState } from "./session.js";
@@ -84,6 +85,8 @@ function freshDraft(phone = "") {
     nationalId: "",
     operatingTown: "",
     stageLocation: "",
+    stageLat: null,
+    stageLng: null,
     motorbikePlate: "",
     guarantorName: "",
     guarantorPhone: "",
@@ -185,7 +188,11 @@ export function promptFor(step, draft = {}) {
     case RIDER_STEPS.TOWN:
       return head + `Where will you ride?\n\n*1* Nairobi\n*2* Thika\n\n_Reply 1 or 2._`;
     case RIDER_STEPS.STAGE:
-      return head + `Your *base stage* or area — for example: Kenyatta Market stage, Nairobi.`;
+      return (
+        head +
+        `Your *base stage* or area — for example: Kenyatta Market stage, Nairobi.\n\n` +
+        `Then drop a pin on it. ${pinReason("rider")}\n\n${PIN_HOW_TO}`
+      );
     case RIDER_STEPS.PLATE:
       return head + `Your *motorbike registration plate* — for example: KMGB 123X.`;
     case RIDER_STEPS.GUARANTOR_NAME:
@@ -324,7 +331,7 @@ export async function startRiderOnboarding(customerKey, { phone = "" } = {}) {
 export async function handleRiderOnboarding(
   customerKey,
   text,
-  { phone = "", hasMedia = false, mediaUrl, mediaMimetype, messageId, chatId, session } = {}
+  { phone = "", hasMedia = false, mediaUrl, mediaMimetype, messageId, chatId, session, location = null } = {}
 ) {
   const flow = getFlow(customerKey);
   if (!flow?.step) return false;
@@ -484,12 +491,46 @@ export async function handleRiderOnboarding(
       return true;
     }
     case RIDER_STEPS.STAGE: {
+      // Name first, then a pin on it. The pin decides which jobs reach this
+      // rider, so it is worth a second message rather than folding into one.
+      const stagePin = normalizePin(location);
+      if (stagePin) {
+        if (!draft.stageLocation) {
+          await sendText(customerKey, `Got the pin. Now send the stage *name* too.`);
+          save({ stageLat: stagePin.lat, stageLng: stagePin.lng }, RIDER_STEPS.STAGE);
+          return true;
+        }
+        save({ stageLat: stagePin.lat, stageLng: stagePin.lng }, RIDER_STEPS.PLATE);
+        await sendText(customerKey, `📍 Stage pin saved.`);
+        await ask(RIDER_STEPS.PLATE);
+        return true;
+      }
+      if (location) {
+        await sendText(
+          customerKey,
+          `That pin didn't come through with a real position.\n\nTurn location on and send it again.`
+        );
+        return true;
+      }
+      if (draft.stageLocation && isSkip(t)) {
+        save({}, RIDER_STEPS.PLATE);
+        await ask(RIDER_STEPS.PLATE);
+        return true;
+      }
       if (t.length < 3) {
         await sendText(customerKey, `Send your stage or area, for example: Kenyatta Market stage.`);
         return true;
       }
-      save({ stageLocation: t.slice(0, 120) }, RIDER_STEPS.PLATE);
-      await ask(RIDER_STEPS.PLATE);
+      if (draft.stageLat) {
+        save({ stageLocation: t.slice(0, 120) }, RIDER_STEPS.PLATE);
+        await ask(RIDER_STEPS.PLATE);
+        return true;
+      }
+      save({ stageLocation: t.slice(0, 120) }, RIDER_STEPS.STAGE);
+      await sendText(
+        customerKey,
+        `Now drop a pin on *${t.slice(0, 60)}*.\n\n${PIN_HOW_TO}\n\nReply *skip* if you cannot.`
+      );
       return true;
     }
     case RIDER_STEPS.PLATE: {

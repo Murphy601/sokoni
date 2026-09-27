@@ -94,6 +94,8 @@ export async function onboardSellerAsync(payload) {
     mpesaNumber,
     nationalId,
     kraPin,
+    pickupLat,
+    pickupLng,
     sessionToken,
     verificationToken,
   } = payload || {};
@@ -101,7 +103,16 @@ export async function onboardSellerAsync(payload) {
   const session = await validateSellerSession(phone, token);
   if (session.error) return session;
 
-  const result = onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin });
+  const result = onboardSeller({
+    phone,
+    shopName,
+    shopHandle,
+    mpesaNumber,
+    nationalId,
+    kraPin,
+    pickupLat,
+    pickupLng,
+  });
   if (result.error) return result;
 
   // Provision Postgres users + sellers so activity / public shop / PATCH profile work.
@@ -137,7 +148,7 @@ export async function onboardSellerAsync(payload) {
   return result;
 }
 
-export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin }) {
+export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin, pickupLat, pickupLng }) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone || normalizedPhone.length < 12) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
@@ -156,6 +167,8 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     mpesaNumber: normalizePhone(mpesaNumber),
     nationalId,
     kraPin,
+    pickupLat,
+    pickupLng,
     whatsappChatId: `${normalizedPhone}@c.us`,
   });
 

@@ -22,6 +22,7 @@ import {
 } from "../lib/geo-zones.js";
 import { priceLocalDelivery } from "../lib/rider-distance-fee.js";
 import { resolveMetroCoords } from "../lib/metro-coords.js";
+import { normalizePin } from "../lib/location-pin.js";
 import { haversineMeters } from "./boda-fleet.js";
 
 const CART_PARENT_KIND = "cart_parent";
@@ -38,6 +39,27 @@ const CART_PARENT_KIND = "cart_parent";
  * @returns {string}
  */
 /**
+ * The seller's pickup pin, if they set one during signup.
+ * @param {Record<string, unknown>} orderLine
+ * @returns {{lat:number,lng:number}|null}
+ */
+export function resolveSellerPin(orderLine = {}) {
+  const direct = normalizePin({ lat: orderLine.pickupLat, lng: orderLine.pickupLng });
+  if (direct) return direct;
+  try {
+    const handle = String(orderLine.shopHandle || "").replace(/^@/, "").trim();
+    const seller =
+      (handle && getSupplierByHandle(handle)) ||
+      (orderLine.sellerPhone && findSupplierByPhone(orderLine.sellerPhone)) ||
+      null;
+    return normalizePin({ lat: seller?.pickupLat, lng: seller?.pickupLng });
+  } catch (err) {
+    console.warn("[apply-shipping] seller pin lookup skipped:", err.message);
+    return null;
+  }
+}
+
+/**
  * Distance fee for one order line, or null when no rider is involved.
  *
  * Shared by the single-order and cart paths so a cart leg and the same item
@@ -50,6 +72,9 @@ const CART_PARENT_KIND = "cart_parent";
  */
 export function quoteRiderLeg(orderLine = {}, location = {}, profile = null) {
   try {
+    // An actual pin beats any amount of address text: resolveSellerOrigin can
+    // only reach a locality centre, a pin is the shop door.
+    const sellerPin = resolveSellerPin(orderLine);
     const sellerLoc =
       resolveSellerOrigin(orderLine) ||
       (Array.isArray(profile?.localCounties) ? profile.localCounties[0] : "") ||
@@ -68,7 +93,7 @@ export function quoteRiderLeg(orderLine = {}, location = {}, profile = null) {
     // the seller's location is unknown, and pricing a guess as though it were
     // the CBD invents a distance. Unknown origin means the minimum.
     return priceLocalDelivery(
-      sellerLoc ? resolveMetroCoords(sellerLoc) : null,
+      sellerPin || (sellerLoc ? resolveMetroCoords(sellerLoc) : null),
       location.buyerCoordinates || resolveMetroCoords(buyerTown || buyerCounty),
       haversineMeters
     );
