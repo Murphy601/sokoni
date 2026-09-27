@@ -1435,6 +1435,12 @@ export async function confirmPrepaidOrder(to, parsed) {
         deliveryType: details.deliveryType || "other",
         landmarkTown: details.deliveryTown || pending.buyerTown || null,
         landmarkInstructions: details.landmarkNote || pending.landmark || null,
+        // The pin the buyer dropped. Priced the delivery already; it also has
+        // to reach the dispatch row, because it is what the rider's CONFIRM
+        // geofence checks against. Dropping it here is what leaves
+        // "Drop-off GPS is not on file" at the door.
+        buyerLat: pending.buyerLat ?? null,
+        buyerLng: pending.buyerLng ?? null,
       },
       offerId: pending.offerId || null,
       totalsOverride,

@@ -1,4 +1,5 @@
 import { readFileSync, mkdirSync, existsSync, statSync } from "node:fs";
+import { normalizePin } from "../lib/location-pin.js";
 import { writeJsonAtomic } from "../lib/atomic-json.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -308,6 +309,14 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
     landmarkSpot: details.landmarkSpot || null,
     landmarkInstructions: details.landmarkInstructions || details.landmarkNote || null,
     landmarkId: details.landmarkId || null,
+    /**
+     * The buyer's dropped pin. dispatchWithRider reads it to set
+     * delivery_dispatches.dropoff_lat/lng, which is the only thing the
+     * rider's CONFIRM geofence can check against. Without it the drop-off
+     * has to be geocoded from the typed address, which regularly fails.
+     */
+    buyerLat: normalizePin({ lat: details.buyerLat, lng: details.buyerLng })?.lat ?? null,
+    buyerLng: normalizePin({ lat: details.buyerLat, lng: details.buyerLng })?.lng ?? null,
     status: prepaid ? "awaiting_payment" : "received",
     paymentModel: prepaid ? "prepaid" : "cod",
     escrowStatus: prepaid ? "pending" : null,
