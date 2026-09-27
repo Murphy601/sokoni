@@ -1,22 +1,4 @@
 {
   "version": 1,
-  "categories": [
-    {
-      "id": "health-beauty",
-      "label": "Health & Beauty",
-      "emoji": "💄",
-      "subcategories": [
-        {
-          "id": "mens-grooming",
-          "label": "Men's Grooming"
-        }
-      ]
-    },
-    {
-      "id": "fashion",
-      "label": "Fashion",
-      "emoji": "👗",
-      "subcategories": []
-    }
-  ]
+  "categories": []
 }
