@@ -135,6 +135,8 @@ router.post("/register", (req, res) => {
         nationalId: body.nationalId,
         operatingTown: body.operatingTown,
         stageLocation: body.stageLocation,
+        stageLat: body.stageLat,
+        stageLng: body.stageLng,
         motorbikePlate: body.motorbikePlate,
         guarantorName: body.guarantorName,
         guarantorPhone: body.guarantorPhone,

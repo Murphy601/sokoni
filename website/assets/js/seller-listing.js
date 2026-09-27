@@ -3445,6 +3445,8 @@ async function onOnboard() {
   let shopHandle = el("onboard-shop-handle")?.value.trim().replace(/^@/, "");
   const mpesaNumber = el("onboard-mpesa")?.value.trim();
   const nationalId = el("onboard-national-id")?.value.trim();
+  const pickupLat = el("onboard-pickup-lat")?.value.trim();
+  const pickupLng = el("onboard-pickup-lng")?.value.trim();
 
   if (!phone) {
     setOnboardStatus("Enter your WhatsApp number.", true);
@@ -3456,6 +3458,17 @@ async function onOnboard() {
   }
   if (!mpesaNumber) {
     setOnboardStatus("Enter your M-Pesa payout number.", true);
+    return;
+  }
+  // Required: without a collection point there is nothing to measure a
+  // delivery from, so every order from this shop would price at the flat
+  // minimum whatever the distance.
+  if (!pickupLat || !pickupLng) {
+    setOnboardStatus(
+      "Set your pickup location — tap “Use my current location” or pick it on the map.",
+      true
+    );
+    document.querySelector("[data-pin-field]")?.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
   if (!phoneVerified || !verificationToken) {
@@ -3478,6 +3491,8 @@ async function onOnboard() {
           shopHandle: shopHandle || undefined,
           mpesaNumber: normalizePhoneInput(mpesaNumber),
           nationalId: nationalId || undefined,
+          pickupLat: Number(pickupLat),
+          pickupLng: Number(pickupLng),
         })
       ),
     });

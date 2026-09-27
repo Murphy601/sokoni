@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
+import { normalizePin } from "../lib/location-pin.js";
 import { getOrder } from "./orders.js";
 import { orderBuyerTotal, resolveSellerPayoutKes, computeFeeBreakdown } from "./shipping-tiers.js";
 import { shipmentStatusLabel } from "./shipments.js";
@@ -94,6 +95,8 @@ export async function onboardSellerAsync(payload) {
     mpesaNumber,
     nationalId,
     kraPin,
+    pickupLat,
+    pickupLng,
     sessionToken,
     verificationToken,
   } = payload || {};
@@ -101,7 +104,16 @@ export async function onboardSellerAsync(payload) {
   const session = await validateSellerSession(phone, token);
   if (session.error) return session;
 
-  const result = onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin });
+  const result = onboardSeller({
+    phone,
+    shopName,
+    shopHandle,
+    mpesaNumber,
+    nationalId,
+    kraPin,
+    pickupLat,
+    pickupLng,
+  });
   if (result.error) return result;
 
   // Provision Postgres users + sellers so activity / public shop / PATCH profile work.
@@ -137,7 +149,7 @@ export async function onboardSellerAsync(payload) {
   return result;
 }
 
-export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin }) {
+export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin, pickupLat, pickupLng }) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone || normalizedPhone.length < 12) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
@@ -149,6 +161,23 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     return { error: "invalid_mpesa", message: "Enter a valid M-Pesa number (07xx or 2547xx)." };
   }
 
+  // A shop with no collection point cannot be priced: every delivery from it
+  // would fall back to the flat minimum whatever the distance. Enforced here
+  // rather than only in the browser, so no client can skip it.
+  //
+  // New shops only. Sellers who signed up before pins existed keep working and
+  // are prompted separately -- locking them out of their own hub would be a
+  // far worse outcome than a missing pin.
+  const pin = normalizePin({ lat: pickupLat, lng: pickupLng });
+  const alreadyASeller = Boolean(findSupplierByPhone(normalizedPhone));
+  if (!pin && !alreadyASeller) {
+    return {
+      error: "pickup_pin_required",
+      message:
+        "Set where riders collect from. Tap “Use my current location”, or pick it on the map.",
+    };
+  }
+
   const result = createPeerSeller({
     phone: normalizedPhone,
     shopName: String(shopName).trim(),
@@ -156,6 +185,8 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     mpesaNumber: normalizePhone(mpesaNumber),
     nationalId,
     kraPin,
+    pickupLat,
+    pickupLng,
     whatsappChatId: `${normalizedPhone}@c.us`,
   });
 

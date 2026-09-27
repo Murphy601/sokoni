@@ -187,6 +187,8 @@ function mapRider(row) {
     licenseClass: row.license_class || null,
     guarantorName: row.guarantor_name || null,
     guarantorPhone: row.guarantor_phone || null,
+    stageLat: row.stage_lat ?? null,
+    stageLng: row.stage_lng ?? null,
     verificationStatus: row.verification_status,
     isAvailable: Boolean(row.is_available),
     rating: row.rating != null ? Number(row.rating) : 5,
@@ -265,9 +267,11 @@ export async function upsertRiderProfile(input = {}) {
        license_class, guarantor_name, guarantor_phone,
        national_id_front_url, national_id_back_url, license_url, logbook_url,
        good_conduct_url, ntsa_badge_url, stage_letter_url,
+       stage_lat, stage_lng, stage_pin_at,
        verification_status, is_available, updated_at
      ) VALUES (
        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+       $18,$19, CASE WHEN $18 IS NULL THEN NULL ELSE NOW() END,
        COALESCE($17, 'PENDING'), TRUE, NOW()
      )
      ON CONFLICT (phone) DO UPDATE SET
@@ -286,6 +290,9 @@ export async function upsertRiderProfile(input = {}) {
        good_conduct_url = COALESCE(EXCLUDED.good_conduct_url, riders.good_conduct_url),
        ntsa_badge_url = COALESCE(EXCLUDED.ntsa_badge_url, riders.ntsa_badge_url),
        stage_letter_url = COALESCE(EXCLUDED.stage_letter_url, riders.stage_letter_url),
+       stage_lat = COALESCE(EXCLUDED.stage_lat, riders.stage_lat),
+       stage_lng = COALESCE(EXCLUDED.stage_lng, riders.stage_lng),
+       stage_pin_at = COALESCE(EXCLUDED.stage_pin_at, riders.stage_pin_at),
        updated_at = NOW()
      RETURNING *`,
     [
@@ -306,6 +313,8 @@ export async function upsertRiderProfile(input = {}) {
       input.ntsaBadgeUrl || null,
       input.stageLetterUrl || null,
       input.verificationStatus || null,
+      normalizePin({ lat: input.stageLat, lng: input.stageLng })?.lat ?? null,
+      normalizePin({ lat: input.stageLat, lng: input.stageLng })?.lng ?? null,
     ]
   );
   return { ok: true, rider: mapRider(rows[0]) };
@@ -332,6 +341,7 @@ export async function registerRiderApplication(input = {}) {
     .trim()
     .slice(0, 32);
   const stageLocation = String(input.stageLocation || "").trim().slice(0, 120);
+  const stagePin = normalizePin({ lat: input.stageLat, lng: input.stageLng });
   const guarantorName = String(input.guarantorName || "").trim().slice(0, 120) || null;
   const guarantorPhone = normalizeRiderPhone(input.guarantorPhone) || null;
 
@@ -392,6 +402,8 @@ export async function registerRiderApplication(input = {}) {
       goodConductUrl,
       ntsaBadgeUrl,
       stageLetterUrl,
+      stageLat: stagePin?.lat ?? null,
+      stageLng: stagePin?.lng ?? null,
       verificationStatus: "PENDING",
     });
   } catch (err) {
@@ -418,6 +430,9 @@ export async function registerRiderApplication(input = {}) {
        ntsa_badge_url = COALESCE($8, ntsa_badge_url),
        guarantor_name = COALESCE($9, guarantor_name),
        guarantor_phone = COALESCE($10, guarantor_phone),
+       stage_lat = COALESCE($11, stage_lat),
+       stage_lng = COALESCE($12, stage_lng),
+       stage_pin_at = CASE WHEN $11 IS NULL THEN stage_pin_at ELSE NOW() END,
        updated_at = NOW()
      WHERE id = $1`,
     [
@@ -431,6 +446,8 @@ export async function registerRiderApplication(input = {}) {
       ntsaBadgeUrl,
       guarantorName,
       guarantorPhone,
+      stagePin?.lat ?? null,
+      stagePin?.lng ?? null,
     ]
   );
 
@@ -829,7 +846,10 @@ async function rankRidersNearPickup(zone, pickupCoords) {
 
   const withDist = [];
   for (const r of riders) {
-    let coords = parseCoordPair(r.lastLat, r.lastLng);
+    // Live position first, then the stage pin they set at signup, and only
+    // then geocode the stage name -- a network call per rider per dispatch,
+    // which a pin makes unnecessary.
+    let coords = parseCoordPair(r.lastLat, r.lastLng) || parseCoordPair(r.stageLat, r.stageLng);
     if (!coords && r.stageLocation) {
       coords = await geocodeKenyaAddress(`${r.stageLocation}, ${r.operatingTown}, Kenya`);
     }

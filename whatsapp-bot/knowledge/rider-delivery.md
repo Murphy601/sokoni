@@ -19,3 +19,24 @@ Sokoni pins riders automatically after prepaid escrow on local-rider orders. Rid
   documents). Details in `rider-onboarding.md`. Never tell an applicant to message
   Sokoni support to apply — they are already messaging Sokoni.
 - Location: riders share WhatsApp **Live Location** when online; no separate GPS app required for MVP answers.
+
+## Why CONFIRM asks for a location
+
+Completing a delivery needs two separate proofs, and the fee is not released
+without both:
+
+1. The buyer's 4-digit OTP — proves the rider is with the buyer.
+2. A fresh GPS pin within **200m** of the drop-off — proves the rider is at
+   the address.
+
+The OTP alone is not enough: a code can be read out over the phone, so a
+delivery could be marked done from the stage. The GPS closes that. Every
+attempt is recorded with the distance, which is the evidence if the delivery
+is later disputed.
+
+If a rider gets "Drop-off GPS is not on file", that is not their fault and
+sharing their location again will not fix it — the *buyer's* pin is missing
+from that order. Tell them Sokoni ops has to set it, and raise it.
+
+Earnings and payout questions: see `rider-earnings.md`. Riders do not request
+withdrawals.

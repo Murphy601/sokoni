@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { normalizePin } from "../lib/location-pin.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
@@ -350,6 +351,8 @@ export function createPeerSeller({
   mpesaNumber,
   nationalId = "",
   kraPin = "",
+  pickupLat = null,
+  pickupLng = null,
   whatsappChatId = null,
 } = {}) {
   loadSuppliers();
@@ -368,6 +371,16 @@ export function createPeerSeller({
     if (shopHandle) existing.shopHandle = shopHandle;
     if (nationalId) existing.nationalId = nationalId;
     if (kraPin) existing.kraPin = String(kraPin).trim().toUpperCase();
+    // Only overwrite an existing pin with a real one -- re-running signup
+    // without sending a pin must not wipe the shop's collection point.
+    {
+      const pin = normalizePin({ lat: pickupLat, lng: pickupLng });
+      if (pin) {
+        existing.pickupLat = pin.lat;
+        existing.pickupLng = pin.lng;
+        existing.pickupPinAt = Date.now();
+      }
+    }
     // Existing live sellers stay approved — no re-friction.
     if (!existing.kycStatus) existing.kycStatus = "approved";
     existing.isSellerVerified = true;
@@ -392,6 +405,9 @@ export function createPeerSeller({
     mpesaNumber: normalizePhoneDigits(mpesaNumber),
     nationalId: String(nationalId || "").trim() || null,
     kraPin: String(kraPin || "").trim().toUpperCase() || null,
+    pickupLat: normalizePin({ lat: pickupLat, lng: pickupLng })?.lat ?? null,
+    pickupLng: normalizePin({ lat: pickupLat, lng: pickupLng })?.lng ?? null,
+    pickupPinAt: normalizePin({ lat: pickupLat, lng: pickupLng }) ? Date.now() : null,
     // Soft KYC: can list immediately; admin queue reviews ID/KRA. Hard gate is opt-in via env.
     kycStatus: hasKyc ? "pending" : "pending",
     isSellerVerified: false,

@@ -10,6 +10,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../assets/css/boda-depop.css?v=proof-4x5" />
+  <style>
+    .boda-pin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+    .boda-pin-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    .boda-pin-map { height: 220px; border-radius: 10px; margin-top: 8px; }
+    .boda-pin-status { font-size: .85rem; opacity: .8; margin: 4px 0 0; }
+    .boda-pin-status[data-tone="ok"] { opacity: 1; }
+  </style>
 </head>
 <body class="boda-depop">
   <header class="boda-nav">
@@ -68,6 +75,18 @@
           <label class="boda-field">Base stage / location *
             <input id="stageLocation" name="stageLocation" required placeholder="e.g. Westlands Stage" />
           </label>
+        </div>
+        <div class="boda-field" data-pin-field data-lat-input="#stageLat" data-lng-input="#stageLng">
+          <span>Pin your stage <small>(optional, but jobs go to the nearest riders first)</small></span>
+          <input type="hidden" id="stageLat" name="stageLat" />
+          <input type="hidden" id="stageLng" name="stageLng" />
+          <div class="boda-pin-actions">
+            <button type="button" class="boda-pin-btn" data-pin-use>Use my current location</button>
+            <button type="button" class="boda-pin-btn" data-pin-open-map>Pick on a map</button>
+            <button type="button" class="boda-pin-btn boda-pin-clear" data-pin-clear hidden>Clear pin</button>
+          </div>
+          <div class="boda-pin-map" data-pin-map hidden></div>
+          <p class="boda-pin-status" data-pin-status>No pin set. You can add one later.</p>
         </div>
         <label class="boda-field">Motorbike registration plate *
           <input id="motorbikePlate" name="motorbikePlate" required class="uppercase" placeholder="KMCR 123X" style="text-transform:uppercase" />
@@ -131,5 +150,8 @@
   </footer>
 
   <script src="../assets/js/boda-rider-apply.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <script src="../assets/js/location-pin-field.js" defer></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 ## Register as a seller
 
 **On WhatsApp (offer this first).** Reply *SELL* and Sokoni creates the shop in
-chat: shop name, handle, payout M-Pesa number, optional National ID. No OTP is
+chat: shop name, handle, payout M-Pesa number, **pickup pin (required)**, optional National ID. No OTP is
 needed — messaging from the number already proves it.
 
 **On the web.**
@@ -27,3 +27,18 @@ needed — messaging from the number already proves it.
 1. Seller Hub → Shipping Rates / zones.
 2. Set Nairobi/local vs upcountry Kenya rates (e.g. KES 300 local, KES 500 upcountry).
 3. Buyers see your rates at checkout from their location.
+
+## Pickup pin — required
+
+Signup asks where riders collect from, on the site and in chat, and a shop
+cannot be created without it. It is one end of every delivery price from that
+shop, so there is nothing to measure without it.
+
+On WhatsApp: Attach, Location, "Send your current location", standing at the
+shop. On the site: "Use my current location" or tap a map.
+
+A seller whose phone will not share can finish on the Hub map instead. Do not
+tell them to skip it — there is no skip.
+
+Sellers from before this still work, but their deliveries all price at the
+KES 400 minimum until they add one. See `location-pins.md`.

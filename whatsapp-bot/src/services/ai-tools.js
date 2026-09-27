@@ -3,6 +3,12 @@
  * Used by WhatsApp Sokoni Plug and website Ask (POST /api/agent/chat).
  */
 import { searchProducts, getProductById, listBrowseProducts } from "./catalog.js";
+import {
+  BASE_FEE_KES,
+  INCLUDED_KM,
+  PER_KM_KES,
+  MAX_FEE_KES,
+} from "../lib/rider-distance-fee.js";
 import { getOrder, getOrdersForCustomer, listAllOrders, extractOrderIdFromText, isSokoniOrderId } from "./orders.js";
 import { normalizeOrderId } from "../lib/order-id.js";
 import { findSupplierByPhone, getSupplier } from "./suppliers.js";
@@ -1741,11 +1747,23 @@ function toolShippingRates({ phone = "" } = {}) {
   const guide = {
     tool: "get_shipping_rates",
     ok: true,
+    // Seller rates are upcountry-only now. Quoting "Nairobi = KES 300" here
+    // was telling sellers they control a price the platform sets.
+    scope: "Your rates apply to upcountry orders only.",
+    localRiderPricing: {
+      setBy: "Sokoni",
+      baseKes: BASE_FEE_KES,
+      includedKm: INCLUDED_KM,
+      perKmKes: PER_KM_KES,
+      maxKes: MAX_FEE_KES,
+      note: `Deliveries inside the Nairobi metro are priced on distance: KES ${BASE_FEE_KES} covers the first ${INCLUDED_KM} km, then KES ${PER_KM_KES}/km, up to KES ${MAX_FEE_KES}. Measured from the seller's pickup pin to the buyer's. A seller cannot change this and it does not use their zones.`,
+      neverQuote:
+        "Never work out the fee for a specific order in chat — it depends on the distance between two pins. Say how it is calculated and that checkout shows the exact figure.",
+    },
     howToSet: [
       "Seller Hub → Shipping Rates → Add Zone",
-      "Example: Nairobi / local = KES 300",
-      "Example: Upcountry Kenya = KES 500",
-      "Save — buyers see rates at checkout by location",
+      "Zones cover upcountry counties — e.g. Coast, Nyanza, Rift Valley",
+      "Save — buyers see these at checkout for orders outside the metro",
     ],
     sellerHub: "https://sokonimall.com/suppliers/list.html",
   };

@@ -175,7 +175,11 @@ export function quoteShippingForPending(pendingOrProduct, location) {
           sellerLocation: pendingOrProduct.sellerLocation,
           pickupAddress: pendingOrProduct.pickupAddress,
         },
-        { buyerCounty: location.county, buyerTown: location.town || "" },
+        {
+          buyerCounty: location.county,
+          buyerTown: location.town || "",
+          buyerCoordinates: location.buyerCoordinates || null,
+        },
         profile
       );
   if (riderQuote) {

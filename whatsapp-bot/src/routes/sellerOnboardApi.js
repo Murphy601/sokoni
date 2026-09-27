@@ -114,6 +114,8 @@ router.post("/", async (req, res) => {
     mpesaNumber,
     nationalId,
     kraPin,
+    pickupLat,
+    pickupLng,
     sessionToken,
     verificationToken,
   } = req.body || {};
@@ -124,6 +126,8 @@ router.post("/", async (req, res) => {
     mpesaNumber,
     nationalId,
     kraPin,
+    pickupLat,
+    pickupLng,
     sessionToken: sessionToken || verificationToken || sellerSessionFromReq(req),
   });
   if (result.error === "not_verified" || result.error === "verification_expired") {

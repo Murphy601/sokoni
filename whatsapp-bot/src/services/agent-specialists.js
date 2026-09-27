@@ -103,15 +103,18 @@ const KNOWLEDGE_FILES = [
   "rider-onboarding.md",
   "shipping-sop.md",
   "rider-delivery.md",
+  "delivery-pricing.md",
+  "rider-earnings.md",
+  "location-pins.md",
   "ai-architecture.md",
 ];
 
 /** Prefer docs by specialist lane. */
 const LANE_DOCS = {
-  seller: ["seller-onboarding.md", "seller-payouts.md", "shipping-sop.md", "vendor-terms.md", "escrow-policy.md"],
+  seller: ["seller-onboarding.md", "delivery-pricing.md", "location-pins.md", "seller-payouts.md", "shipping-sop.md", "vendor-terms.md", "escrow-policy.md"],
   dispute: ["escrow-policy.md", "returns-policy.md", "buyer-trust.md", "rider-delivery.md"],
-  logistics: ["rider-delivery.md", "rider-onboarding.md", "shipping-sop.md", "buyer-trust.md", "escrow-policy.md"],
-  buyer: ["payments.md", "escrow-policy.md", "buyer-trust.md", "returns-policy.md", "shipping-sop.md"],
+  logistics: ["rider-delivery.md", "rider-earnings.md", "rider-onboarding.md", "location-pins.md", "delivery-pricing.md", "shipping-sop.md", "buyer-trust.md", "escrow-policy.md"],
+  buyer: ["payments.md", "escrow-policy.md", "buyer-trust.md", "returns-policy.md", "shipping-sop.md", "delivery-pricing.md", "location-pins.md"],
   general: KNOWLEDGE_FILES,
 };
 
