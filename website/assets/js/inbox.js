@@ -333,6 +333,7 @@ function beginChatIfReady() {
   setStatus("");
   enableChatComposer();
   wireIcebreakers();
+  wireMic();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -509,6 +510,135 @@ const ICEBREAKERS = [
   "Where do you dispatch from?",
   "Do you have more photos?",
 ];
+
+/* ---- Voice recording ---------------------------------------------------- */
+
+const MAX_RECORD_MS = 30_000;
+let recorder = null;
+let recorderStream = null;
+let recordStartedAt = 0;
+let recordTimer = null;
+
+/** Containers worth asking for, best first. Safari refuses webm. */
+function pickRecordingMime() {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const type of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"]) {
+    if (MediaRecorder.isTypeSupported?.(type)) return type;
+  }
+  return null;
+}
+
+function setRecordingUi(on, label) {
+  const btn = el("chat-mic-btn");
+  if (!btn) return;
+  btn.classList.toggle("is-recording", Boolean(on));
+  btn.setAttribute("aria-pressed", on ? "true" : "false");
+  btn.title = label || (on ? "Stop and send" : "Record a voice note");
+}
+
+/** Always release the microphone. A live mic indicator nobody asked for is
+ *  alarming, and on a phone it keeps the radio awake. */
+function releaseMic() {
+  try {
+    recorderStream?.getTracks().forEach((t) => t.stop());
+  } catch {
+    /* already gone */
+  }
+  recorderStream = null;
+  recorder = null;
+  clearTimeout(recordTimer);
+  recordTimer = null;
+  setRecordingUi(false);
+}
+
+async function startRecording() {
+  if (recorder) return;
+  const mime = pickRecordingMime();
+  if (!mime || !navigator.mediaDevices?.getUserMedia) {
+    setStatus("This browser can't record audio. Type instead.", true);
+    return;
+  }
+  try {
+    recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    // Denied, or no microphone. Not an error worth a stack trace.
+    setStatus("Microphone blocked. Allow it in your browser to send a voice note.", true);
+    return;
+  }
+
+  const chunks = [];
+  recorder = new MediaRecorder(recorderStream, { mimeType: mime });
+  recordStartedAt = Date.now();
+  recorder.addEventListener("dataavailable", (e) => {
+    if (e.data?.size) chunks.push(e.data);
+  });
+  recorder.addEventListener("stop", () => {
+    const durationMs = Date.now() - recordStartedAt;
+    const blob = new Blob(chunks, { type: mime });
+    releaseMic();
+    // Under a second is a misfire, not a message.
+    if (blob.size > 0 && durationMs >= 1000) void uploadVoiceNote(blob, mime, durationMs);
+    else setStatus("");
+  });
+
+  recorder.start();
+  setRecordingUi(true, "Stop and send");
+  setStatus("Recording… tap again to send.");
+  // Hard stop, so a forgotten recording cannot run into a rejected upload.
+  recordTimer = setTimeout(() => stopRecording(), MAX_RECORD_MS);
+}
+
+function stopRecording() {
+  if (!recorder) return;
+  try {
+    recorder.stop();
+  } catch {
+    releaseMic();
+  }
+}
+
+async function uploadVoiceNote(blob, mime, durationMs) {
+  if (!state.viewerId || !state.peerId) return;
+  setStatus("Sending voice note…");
+  try {
+    const form = new FormData();
+    form.append("audio", blob, `voice.${mime.includes("mp4") ? "m4a" : "webm"}`);
+    form.append("senderUserId", String(state.viewerId));
+    form.append("receiverUserId", String(state.peerId));
+    form.append("durationMs", String(Math.round(durationMs)));
+    for (const [k, v] of Object.entries(withAuthBody({}) || {})) {
+      if (v != null) form.append(k, String(v));
+    }
+
+    const res = await fetch(`${SOCIAL_API}/chat/voice`, { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data?.message || "Couldn't send that voice note.", true);
+      return;
+    }
+    setStatus("");
+    await loadThread();
+  } catch (err) {
+    setStatus("Couldn't send that voice note.", true);
+    console.warn("[inbox] voice upload failed:", err);
+  }
+}
+
+function wireMic() {
+  const btn = el("chat-mic-btn");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  if (!pickRecordingMime()) {
+    btn.hidden = true;
+    return;
+  }
+  btn.addEventListener("click", () => {
+    if (recorder) stopRecording();
+    else void startRecording();
+  });
+  // Leaving the page mid-recording must not leave the mic open.
+  window.addEventListener("pagehide", releaseMic);
+}
 
 function renderIcebreakers(messages) {
   const slot = el("chat-icebreakers");
