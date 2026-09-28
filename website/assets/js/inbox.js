@@ -332,6 +332,7 @@ function beginChatIfReady() {
 
   setStatus("");
   enableChatComposer();
+  wireIcebreakers();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -489,6 +490,66 @@ function withAuthBody(payload) {
     return window.SokoniBuyerAuth.authFields(payload);
   }
   return payload;
+}
+
+/**
+ * Openers for an empty thread.
+ *
+ * An empty chat is intimidating and most buyers just close it. These are the
+ * four questions thrift buyers actually ask, in the order they ask them, so
+ * the first message costs a tap instead of a sentence.
+ *
+ * Deliberately not clever: no personalisation, no model call. They are
+ * suggestions a person could have typed, and they read that way to the seller
+ * because that is exactly what gets sent.
+ */
+const ICEBREAKERS = [
+  "Is the price negotiable?",
+  "Any flaws or stains?",
+  "Where do you dispatch from?",
+  "Do you have more photos?",
+];
+
+function renderIcebreakers(messages) {
+  const slot = el("chat-icebreakers");
+  if (!slot) return;
+
+  // Only on a truly empty thread. Once two people are talking, a row of
+  // canned questions is clutter.
+  const empty = !Array.isArray(messages) || messages.length === 0;
+  if (!empty || !state.viewerId || !state.peerId) {
+    slot.innerHTML = "";
+    slot.classList.add("hidden");
+    return;
+  }
+
+  slot.innerHTML = ICEBREAKERS.map(
+    (q) => `<button type="button" class="inbox-chip" data-chip="${escapeHtml(q)}">${escapeHtml(q)}</button>`
+  ).join("");
+  slot.classList.remove("hidden");
+}
+
+/**
+ * One listener on the container rather than one per chip, so re-rendering the
+ * row never leaves handlers behind.
+ */
+function wireIcebreakers() {
+  const slot = el("chat-icebreakers");
+  if (!slot || slot.dataset.wired === "1") return;
+  slot.dataset.wired = "1";
+  slot.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-chip]");
+    if (!btn) return;
+    const input = el("chat-input");
+    if (!input) return;
+    input.value = btn.dataset.chip || "";
+    // Hide immediately: the row is about to be wrong either way, and a chip
+    // that stays tappable invites a double send.
+    slot.classList.add("hidden");
+    const form = el("chat-form");
+    if (form?.requestSubmit) form.requestSubmit();
+    else void sendMessage();
+  });
 }
 
 function renderMessages(messages) {
@@ -674,6 +735,7 @@ async function loadThread() {
     }
     renderMessages(data.messages || []);
     renderLedger(data.pinned || []);
+    renderIcebreakers(data.messages || []);
     void loadOffers();
   } catch {
     setStatus("Could not load chat right now. Check your connection.", true);
