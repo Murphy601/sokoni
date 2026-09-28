@@ -1546,3 +1546,78 @@ body.sell-depop-page .sell-activity-pill--like {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ---- Reactions ---------------------------------------------------------- */
+
+.inbox-sound {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.inbox-sound[aria-pressed="false"] {
+  opacity: 0.55;
+}
+
+.inbox-reacts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: -2px;
+}
+
+.inbox-react {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: #131316;
+  color: #d4d4d8;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.inbox-react.is-mine {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.14);
+}
+
+/* Anchored to the bubble it belongs to, so it cannot drift on a long thread. */
+.inbox-react-picker {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 8;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #0b0b0b;
+  border: 1px solid #3f3f46;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+[data-msg-id] {
+  position: relative;
+}
+
+.inbox-react-opt {
+  border: 0;
+  background: none;
+  font-size: 17px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.inbox-react-opt:hover,
+.inbox-react-opt:focus-visible {
+  background: #27272a;
+}

@@ -336,6 +336,8 @@ function beginChatIfReady() {
   wireMic();
   wireBundle();
   wireBundleCards();
+  wireReactions();
+  wireSoundToggle();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -459,9 +461,10 @@ function messageBubble(msg) {
   return `
     <div class="flex flex-col ${wrapper} gap-1">
       <p class="text-[11px] text-zinc-500">${who}</p>
-      <div class="max-w-[85%] px-3 py-2 text-sm leading-relaxed ${bubble}">
+      <div class="max-w-[85%] px-3 py-2 text-sm leading-relaxed ${bubble}" data-msg-id="${escapeHtml(String(msg.id))}">
         ${escapeHtml(msg.content)}
       </div>
+      ${reactionRow(msg)}
       <p class="text-[10px] text-zinc-600 font-mono">${formatTime(msg.createdAt)}</p>
     </div>`;
 }
@@ -1035,6 +1038,200 @@ function wireScratchCards() {
   const wrap = el("chat-thread");
   if (!wrap) return;
   wrap.querySelectorAll("[data-scratch-foil]").forEach(armScratchFoil);
+}
+
+/* ---- Reactions ---------------------------------------------------------- */
+
+/** Must match ALLOWED_REACTIONS on the server. */
+const REACTIONS = ["🔥", "🤝", "👀", "❤️", "😂", "😭"];
+
+/**
+ * A short sound per reaction, generated rather than fetched.
+ *
+ * No audio files: a soundboard of downloads would cost bandwidth on every
+ * thread open and would be the heaviest thing on the page for a half-second
+ * of noise. These are a couple of oscillator notes through WebAudio, built on
+ * first use and never stored.
+ */
+const REACTION_TONES = {
+  "🔥": [660, 880],
+  "🤝": [440, 587],
+  "👀": [523, 523],
+  "❤️": [587, 784],
+  "😂": [784, 988, 784],
+  "😭": [392, 294],
+};
+
+let audioCtx = null;
+let soundOn = true;
+
+function readSoundPref() {
+  try {
+    soundOn = localStorage.getItem("sokoni:inbox:sound") !== "off";
+  } catch {
+    // Private windows and blocked storage both land here. Sound on is the
+    // friendlier default, and the toggle still works for this session.
+    soundOn = true;
+  }
+}
+
+function setSoundPref(on) {
+  soundOn = Boolean(on);
+  try {
+    localStorage.setItem("sokoni:inbox:sound", soundOn ? "on" : "off");
+  } catch {
+    /* not fatal */
+  }
+  const btn = el("chat-sound-btn");
+  if (btn) {
+    btn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+    btn.textContent = soundOn ? "🔈" : "🔇";
+    btn.title = soundOn ? "Sound on" : "Sound off";
+  }
+}
+
+/**
+ * Play the note for a reaction.
+ *
+ * Silent unless the tap came from a real gesture -- browsers block audio
+ * otherwise, and a console full of autoplay warnings helps nobody.
+ */
+function playReactionTone(emoji) {
+  if (!soundOn) return;
+  const notes = REACTION_TONES[emoji];
+  if (!notes) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = audioCtx || new Ctx();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    notes.forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const start = now + i * 0.085;
+      // Short, and faded at both ends: a square edge on a phone speaker
+      // clicks, which reads as a glitch rather than a sound effect.
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.16, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.14);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(start);
+      osc.stop(start + 0.16);
+    });
+  } catch {
+    /* audio is decoration; never let it break a tap */
+  }
+}
+
+/** The reactions already on a message, as chips under the bubble. */
+function reactionRow(msg) {
+  const list = Array.isArray(msg.reactions) ? msg.reactions : [];
+  if (!list.length) return "";
+  return `
+    <div class="inbox-reacts">
+      ${list
+        .map((r) => {
+          const mine = (r.userIds || []).includes(state.viewerId);
+          return `<button type="button" class="inbox-react ${mine ? "is-mine" : ""}"
+                    data-react-msg="${escapeHtml(String(msg.id))}"
+                    data-react-emoji="${escapeHtml(r.emoji)}"
+                    aria-pressed="${mine ? "true" : "false"}">${escapeHtml(r.emoji)} ${r.count}</button>`;
+        })
+        .join("")}
+    </div>`;
+}
+
+/** The picker, opened by double-tapping a bubble. */
+function reactionPicker(messageId) {
+  return `
+    <div class="inbox-react-picker" data-react-picker="${escapeHtml(String(messageId))}">
+      ${REACTIONS.map(
+        (e) =>
+          `<button type="button" class="inbox-react-opt" data-react-msg="${escapeHtml(String(messageId))}" data-react-emoji="${escapeHtml(e)}">${e}</button>`
+      ).join("")}
+    </div>`;
+}
+
+function closeReactionPicker() {
+  document.querySelectorAll("[data-react-picker]").forEach((n) => n.remove());
+}
+
+async function toggleReaction(messageId, emoji) {
+  playReactionTone(emoji);
+  closeReactionPicker();
+  try {
+    const res = await fetch(`${SOCIAL_API}/chat/react`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withAuthBody({ messageId: Number(messageId), userId: state.viewerId, emoji })),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setStatus(data?.message || "Couldn't react.", true);
+      return;
+    }
+    await loadThread();
+  } catch {
+    setStatus("Couldn't react.", true);
+  }
+}
+
+/**
+ * Double-tap to open the picker, one tap on a chip to toggle.
+ *
+ * dblclick covers the mouse; on touch it does not fire reliably, so two taps
+ * inside 300ms are counted by hand.
+ */
+function wireReactions() {
+  const wrap = el("chat-thread");
+  if (!wrap || wrap.dataset.reactWired === "1") return;
+  wrap.dataset.reactWired = "1";
+
+  let lastTap = 0;
+  let lastTarget = null;
+
+  const openPicker = (bubble) => {
+    const id = bubble?.dataset.msgId;
+    if (!id) return;
+    closeReactionPicker();
+    bubble.insertAdjacentHTML("beforeend", reactionPicker(id));
+  };
+
+  wrap.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-react-emoji]");
+    if (chip) {
+      void toggleReaction(chip.dataset.reactMsg, chip.dataset.reactEmoji);
+      return;
+    }
+    const bubble = event.target.closest("[data-msg-id]");
+    const now = Date.now();
+    if (bubble && bubble === lastTarget && now - lastTap < 300) {
+      lastTap = 0;
+      openPicker(bubble);
+      return;
+    }
+    lastTap = now;
+    lastTarget = bubble;
+    if (!bubble) closeReactionPicker();
+  });
+
+  wrap.addEventListener("dblclick", (event) => {
+    const bubble = event.target.closest("[data-msg-id]");
+    if (bubble) openPicker(bubble);
+  });
+}
+
+function wireSoundToggle() {
+  const btn = el("chat-sound-btn");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  readSoundPref();
+  setSoundPref(soundOn);
+  btn.addEventListener("click", () => setSoundPref(!soundOn));
 }
 
 function renderIcebreakers(messages) {
