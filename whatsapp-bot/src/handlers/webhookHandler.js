@@ -1066,6 +1066,18 @@ export async function handleIncomingMessage(
     if (pendingAgain) return;
   }
 
+  // Web inbox reply. Deliberately the last handler before the agent: every
+  // other flow has already declined this message, so routing it to a chat
+  // thread cannot steal an order, a rider command, or a menu tap. It only
+  // fires when we pinged this chat about a thread in the last few minutes,
+  // or when the sender used the explicit R prefix.
+  try {
+    const { tryHandleInboxReply } = await import("../services/inbox-bridge.js");
+    if (await tryHandleInboxReply(customerKey, combinedText, { phone })) return;
+  } catch (err) {
+    console.warn("[webhook] inbox reply skipped:", err.message);
+  }
+
   // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
   try {
     const agent = await runAiAgent(customerKey, combinedText, phone);
