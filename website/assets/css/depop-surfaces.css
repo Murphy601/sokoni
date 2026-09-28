@@ -1683,3 +1683,80 @@ body.sell-depop-page .sell-activity-pill--like {
     outline-offset: -2px;
   }
 }
+
+/* ---- Locked drops ------------------------------------------------------- */
+
+.inbox-drop {
+  max-width: 85%;
+  padding: 10px;
+  border-radius: 14px;
+  background: linear-gradient(140deg, #1e1b4b, #111827);
+  border: 1px solid #4c1d95;
+}
+
+.inbox-drop-mine {
+  margin-left: auto;
+  opacity: 0.9;
+}
+
+.inbox-drop-head {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.inbox-drop-art {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #27272a;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+}
+
+.inbox-drop-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Decoration, not protection: the URL is in the payload either way. What the
+     window actually gates is the item being public, which the server owns. */
+  filter: blur(14px) saturate(0.7);
+  transform: scale(1.08);
+  transition: filter 0.5s ease, transform 0.5s ease;
+}
+
+.inbox-drop.is-open .inbox-drop-art img {
+  filter: none;
+  transform: none;
+}
+
+.inbox-drop-lock {
+  position: absolute;
+  font-size: 26px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
+.inbox-drop.is-open .inbox-drop-lock {
+  display: none;
+}
+
+.inbox-drop-name {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ede9fe;
+}
+
+.inbox-drop-meta {
+  margin: 0;
+  font-size: 11px;
+  color: #a5b4fc;
+}
+
+.inbox-drop-meta [data-drop-timer] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+}

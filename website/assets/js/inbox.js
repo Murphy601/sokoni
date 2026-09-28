@@ -453,6 +453,7 @@ function messageBubble(msg) {
   if (msg.kind === "bundle") return bundleCard(msg);
   if (msg.kind === "scratch_card") return scratchCard(msg);
   if (msg.kind === "nudge") return nudgeCard(msg);
+  if (msg.kind === "locked_drop") return lockedDropCard(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -1313,6 +1314,82 @@ function wireNudge() {
   btn.addEventListener("click", () => void sendNudge());
 }
 
+/* ---- Locked drops ------------------------------------------------------- */
+
+function countdownLabel(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * A drop card: blurred until the window opens.
+ *
+ * The blur is decoration, not protection -- the photo is in the payload and
+ * anyone can read it. That is fine, because what the window actually gates is
+ * the item being public, which the server controls. A card that pretended the
+ * image was secret would be lying about something checkable.
+ */
+function lockedDropCard(msg) {
+  const p = msg.payload || {};
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const left = Math.max(0, Math.round((new Date(p.unlocksAt).getTime() - Date.now()) / 1000));
+  const open = left <= 0;
+
+  return `
+    <div class="inbox-drop ${open ? "is-open" : ""} ${mine ? "inbox-drop-mine" : ""}"
+         data-drop-unlocks="${escapeHtml(String(p.unlocksAt || ""))}">
+      <p class="inbox-drop-head">${mine ? "Drop sent" : open ? "Yours to buy" : "Early access"}</p>
+      <div class="inbox-drop-art">
+        ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy"/>` : ""}
+        ${open ? "" : `<span class="inbox-drop-lock">🔒</span>`}
+      </div>
+      <p class="inbox-drop-name">${escapeHtml(p.productTitle || "Item")}</p>
+      <p class="inbox-drop-meta">
+        ${p.priceKes ? formatKes(p.priceKes) : ""}
+        ${open ? "" : ` · unlocks in <span data-drop-timer>${countdownLabel(left)}</span>`}
+      </p>
+    </div>`;
+}
+
+/**
+ * One timer for every drop on screen.
+ *
+ * A setInterval per card would leave one running behind each thread reload;
+ * a single tick that reads the DOM cannot leak that way.
+ */
+let dropTimer = null;
+
+function wireDropTimers() {
+  if (dropTimer) clearInterval(dropTimer);
+  const tick = () => {
+    const cards = document.querySelectorAll("[data-drop-unlocks]");
+    if (!cards.length) {
+      clearInterval(dropTimer);
+      dropTimer = null;
+      return;
+    }
+    let anyOpened = false;
+    cards.forEach((card) => {
+      const left = Math.max(
+        0,
+        Math.round((new Date(card.dataset.dropUnlocks).getTime() - Date.now()) / 1000)
+      );
+      const label = card.querySelector("[data-drop-timer]");
+      if (label) label.textContent = countdownLabel(left);
+      if (left <= 0 && !card.classList.contains("is-open")) {
+        card.classList.add("is-open");
+        anyOpened = true;
+      }
+    });
+    // Redraw once when something opens, so the card switches to its unlocked
+    // wording rather than just losing the blur.
+    if (anyOpened) void loadThread();
+  };
+  dropTimer = setInterval(tick, 1000);
+  tick();
+}
+
 function renderIcebreakers(messages) {
   const slot = el("chat-icebreakers");
   if (!slot) return;
@@ -1373,6 +1450,7 @@ function renderMessages(messages) {
   wrap.innerHTML = list.filter((m) => !m.isPinned).map(messageBubble).join("");
   wrap.scrollTop = wrap.scrollHeight;
   wireScratchCards();
+  wireDropTimers();
 }
 
 function renderLedger(pinned) {

@@ -1,4 +1,8 @@
 import { Router } from "express";
+import {
+  sendLockedDrop,
+  eligibleDropRecipients,
+} from "../services/locked-drops.js";
 import { sendNudge } from "../services/inbox-nudge.js";
 import {
   sendScratchCard,
@@ -1678,6 +1682,46 @@ router.post("/chat/nudge", async (req, res) => {
     }
 
     const result = await sendNudge(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/drops/recipients — past buyers a drop may go to. */
+router.get("/drops/recipients", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (!auth.ok) {
+      return res.status(auth.status || 403).json({
+        error: auth.error || "seller_session_required",
+        message: auth.message || "Sign in as the seller.",
+      });
+    }
+    res.json({ recipients: await eligibleDropRecipients(auth.sellerUserId) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/drops — send early access to chosen past buyers. */
+router.post("/drops", async (req, res) => {
+  try {
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (!auth.ok) {
+      // Only a seller can drop their own item, so there is no buyer path.
+      return res.status(auth.status || 403).json({
+        error: auth.error || "seller_session_required",
+        message: auth.message || "Sign in as the seller.",
+      });
+    }
+    const result = await sendLockedDrop({ ...(req.body || {}), sellerUserId: auth.sellerUserId });
     if (result.error) {
       return res.status(socialErrorStatus(result.error)).json({
         error: result.error,
