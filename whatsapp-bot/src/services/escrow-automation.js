@@ -320,6 +320,18 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
     console.warn("[escrow] boda auto-dispatch skipped:", err.message);
   }
 
+  // Referee card + pinned ledger in the buyer/seller chat. Reached only on
+  // this path, which the already_paid guard above protects -- Safaricom
+  // retries its callback, and the card is the last thing that should look
+  // like it happened twice. Fire-and-forget: the payment is already applied
+  // and must not be held up by, or rolled back for, a chat card.
+  try {
+    const { postEscrowCard } = await import("./escrow-chat-cards.js");
+    void postEscrowCard(getOrder(order.id) || updated, "locked");
+  } catch (err) {
+    console.warn("[escrow] chat card skipped:", err.message);
+  }
+
   console.log(
     `[escrow] PAID ${order.id} receipt=${payment.mpesaReceiptNumber || "—"} auto-fulfillment started`
   );

@@ -1,5 +1,11 @@
 import { isDbEnabled, query, withTransaction } from "../pool.js";
 import {
+  MESSAGE_KINDS,
+  validatePayload,
+  isSystemKind,
+  fallbackText,
+} from "../../lib/message-kinds.js";
+import {
   computeOfferFeeBreakdown,
   serializeOfferBreakdown,
 } from "../../services/shipping-tiers.js";
@@ -2823,7 +2829,67 @@ export async function listOffers({ userId, role = "buyer", status, limit = 30, o
   return { offers: rows.map(mapOfferRow), count: rows.length, limit: safeLimit, offset: safeOffset };
 }
 
-export async function sendDirectMessage({ senderUserId, receiverUserId, content } = {}) {
+
+/** One shape for a message row, wherever it is read. */
+function mapMessageRow(row) {
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    senderUserId: Number(row.sender_user_id),
+    receiverUserId: Number(row.receiver_user_id),
+    content: row.content,
+    kind: row.kind || MESSAGE_KINDS.TEXT,
+    payload: row.payload && typeof row.payload === "object" ? row.payload : {},
+    isSystem: Boolean(row.is_system),
+    isPinned: Boolean(row.is_pinned),
+    expiresAt: row.expires_at || null,
+    isFlagged: Boolean(row.is_flagged),
+    moderationNote: row.moderation_note || null,
+    reactions: [],
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Attach reactions to a page of messages in one query rather than per row.
+ * Fails soft: a thread that renders without reactions is far better than a
+ * thread that does not render.
+ */
+async function attachReactions(messages) {
+  const ids = messages.map((m) => m.id).filter(Boolean);
+  if (!ids.length) return messages;
+  try {
+    const { rows } = await query(
+      `SELECT message_id, emoji, COUNT(*)::int AS count,
+              ARRAY_AGG(user_id ORDER BY created_at) AS user_ids
+         FROM message_reactions
+        WHERE message_id = ANY($1::bigint[])
+        GROUP BY message_id, emoji
+        ORDER BY emoji`,
+      [ids]
+    );
+    const byMessage = new Map();
+    for (const r of rows) {
+      const list = byMessage.get(Number(r.message_id)) || [];
+      list.push({ emoji: r.emoji, count: Number(r.count), userIds: (r.user_ids || []).map(Number) });
+      byMessage.set(Number(r.message_id), list);
+    }
+    for (const m of messages) m.reactions = byMessage.get(m.id) || [];
+  } catch (err) {
+    console.warn("[social] reactions skipped:", err.message);
+  }
+  return messages;
+}
+
+export async function sendDirectMessage({
+  senderUserId,
+  receiverUserId,
+  content,
+  kind = MESSAGE_KINDS.TEXT,
+  payload = {},
+  isSystem = false,
+  expiresAt = null,
+} = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
@@ -2832,11 +2898,24 @@ export async function sendDirectMessage({ senderUserId, receiverUserId, content 
   const receiverId = parseUserId(receiverUserId);
   const body = String(content || "").trim();
 
-  if (!senderId || !receiverId || !body) {
+  const messageKind = String(kind || MESSAGE_KINDS.TEXT);
+  const shape = validatePayload(messageKind, payload || {});
+  if (!shape.ok) return { error: shape.error, message: shape.message };
+
+  // A card may carry no prose of its own. Give it the fallback so the thread
+  // preview, an older client, and WhatsApp all have something to show.
+  const text = body || fallbackText(messageKind, payload || {});
+
+  if (!senderId || !receiverId || !text) {
     return {
       error: "invalid_message_payload",
       message: "senderUserId, receiverUserId, and content are required.",
     };
+  }
+  // Escrow and ledger cards state what the platform did. A person sending one
+  // could fake a payment, so only the system may.
+  if (isSystemKind(messageKind) && !isSystem) {
+    return { error: "system_kind_only", message: `${messageKind} can only be sent by Sokoni.` };
   }
   if (!(await userExists(senderId))) {
     return { error: "sender_not_found", message: "Sender user not found." };
@@ -2847,10 +2926,10 @@ export async function sendDirectMessage({ senderUserId, receiverUserId, content 
   if (senderId === receiverId) {
     return { error: "invalid_message_payload", message: "Cannot send a message to yourself." };
   }
-  if (body.length > 2000) {
+  if (text.length > 2000) {
     return { error: "message_too_long", message: "Message must be 2000 characters or less." };
   }
-  if (hasForbiddenMessage(body)) {
+  if (messageKind === MESSAGE_KINDS.TEXT && hasForbiddenMessage(text)) {
     return {
       error: "message_blocked",
       message:
@@ -2859,22 +2938,156 @@ export async function sendDirectMessage({ senderUserId, receiverUserId, content 
   }
 
   const { rows } = await query(
-    `INSERT INTO messages (sender_user_id, receiver_user_id, content, is_flagged)
-     VALUES ($1, $2, $3, FALSE)
-     RETURNING id, sender_user_id, receiver_user_id, content, created_at`,
-    [senderId, receiverId, body]
+    `INSERT INTO messages (sender_user_id, receiver_user_id, content, is_flagged, kind, payload, is_system, expires_at)
+     VALUES ($1, $2, $3, FALSE, $4, $5::jsonb, $6, $7)
+     RETURNING id, sender_user_id, receiver_user_id, content, kind, payload, is_system, expires_at, is_pinned, created_at`,
+    [
+      senderId,
+      receiverId,
+      text,
+      messageKind,
+      JSON.stringify(payload || {}),
+      Boolean(isSystem),
+      expiresAt ? new Date(expiresAt) : null,
+    ]
   );
-  const row = rows[0];
-  return {
-    success: true,
-    message: {
-      id: Number(row.id),
-      senderUserId: Number(row.sender_user_id),
-      receiverUserId: Number(row.receiver_user_id),
-      content: row.content,
-      createdAt: row.created_at,
-    },
-  };
+  return { success: true, message: mapMessageRow(rows[0]) };
+}
+
+/** Emoji the inbox offers. A fixed set, so nobody stores arbitrary strings. */
+export const ALLOWED_REACTIONS = Object.freeze(["🔥", "🤝", "👀", "❤️", "😂", "😭"]);
+
+/**
+ * Toggle one person's reaction on a message.
+ *
+ * Toggling rather than adding: a second tap of the same emoji removes it,
+ * which is what a double-tap UI implies. The primary key already stops a
+ * double count, so this only has to decide which way the tap went.
+ *
+ * @returns {Promise<{success:true, reacted:boolean, reactions:Array}|{error:string,message:string}>}
+ */
+export async function toggleMessageReaction({ messageId, userId, emoji } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const id = Number(messageId);
+  const uid = parseUserId(userId);
+  const e = String(emoji || "");
+  if (!id || !uid) {
+    return { error: "invalid_reaction", message: "messageId and userId are required." };
+  }
+  if (!ALLOWED_REACTIONS.includes(e)) {
+    return { error: "unsupported_emoji", message: "That reaction is not available." };
+  }
+
+  // Only the two people in the thread may react to it.
+  const { rows: msg } = await query(
+    `SELECT sender_user_id, receiver_user_id FROM messages WHERE id = $1`,
+    [id]
+  );
+  if (!msg[0]) return { error: "message_not_found", message: "Message not found." };
+  if (Number(msg[0].sender_user_id) !== uid && Number(msg[0].receiver_user_id) !== uid) {
+    return { error: "not_in_thread", message: "You are not part of this conversation." };
+  }
+
+  const { rowCount } = await query(
+    `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+    [id, uid, e]
+  );
+  let reacted = false;
+  if (!rowCount) {
+    await query(
+      `INSERT INTO message_reactions (message_id, user_id, emoji)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [id, uid, e]
+    );
+    reacted = true;
+  }
+
+  const holder = [{ id, reactions: [] }];
+  await attachReactions(holder);
+  return { success: true, reacted, reactions: holder[0].reactions };
+}
+
+/**
+ * Post a card that states what the platform did -- escrow moved, a delivery
+ * progressed. Sent from the counterparty's id so it lands in the right thread,
+ * but flagged is_system so the client never draws it as something a person
+ * said.
+ *
+ * Fails soft on purpose: a missing status card must never roll back the
+ * payment or dispatch that triggered it.
+ *
+ * @returns {Promise<object|null>} the stored message, or null
+ */
+export async function postSystemCard({
+  senderUserId,
+  receiverUserId,
+  kind,
+  payload = {},
+  content = "",
+  pin = false,
+} = {}) {
+  try {
+    const result = await sendDirectMessage({
+      senderUserId,
+      receiverUserId,
+      content,
+      kind,
+      payload,
+      isSystem: true,
+    });
+    if (result.error) {
+      console.warn(`[social] system card ${kind} refused:`, result.error);
+      return null;
+    }
+    if (pin) await pinMessage({ messageId: result.message.id, userId: senderUserId });
+    return result.message;
+  } catch (err) {
+    console.warn(`[social] system card ${kind} skipped:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Pin one message to the top of a thread, unpinning whatever was there.
+ *
+ * A thread has exactly one pinned card -- the deal ledger -- so pinning is a
+ * replace, not an append. Done in a transaction: two pinned ledgers would show
+ * the buyer two different sets of agreed terms, which is the exact dispute
+ * the ledger exists to prevent.
+ */
+export async function pinMessage({ messageId, userId } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const id = Number(messageId);
+  if (!id) return { error: "invalid_pin", message: "messageId is required." };
+
+  const { rows } = await query(
+    `SELECT sender_user_id, receiver_user_id FROM messages WHERE id = $1`,
+    [id]
+  );
+  if (!rows[0]) return { error: "message_not_found", message: "Message not found." };
+  const a = Number(rows[0].sender_user_id);
+  const b = Number(rows[0].receiver_user_id);
+
+  return withTransaction(async (client) => {
+    await client.query(
+      `UPDATE messages SET is_pinned = FALSE, updated_at = NOW()
+        WHERE is_pinned = TRUE
+          AND ((sender_user_id = $1 AND receiver_user_id = $2)
+            OR (sender_user_id = $2 AND receiver_user_id = $1))`,
+      [a, b]
+    );
+    const { rows: pinned } = await client.query(
+      `UPDATE messages SET is_pinned = TRUE, updated_at = NOW() WHERE id = $1
+       RETURNING id, sender_user_id, receiver_user_id, content, kind, payload, is_system, expires_at, is_pinned, created_at`,
+      [id]
+    );
+    return { success: true, message: mapMessageRow(pinned[0]) };
+  });
 }
 
 export async function getDirectThread({ userAId, userBId, limit = 50, offset = 0 } = {}) {
@@ -2893,28 +3106,31 @@ export async function getDirectThread({ userAId, userBId, limit = 50, offset = 0
   }
 
   const { rows } = await query(
-    `SELECT id, sender_user_id, receiver_user_id, content, is_flagged, moderation_note, created_at
+    `SELECT id, sender_user_id, receiver_user_id, content, is_flagged, moderation_note,
+            kind, payload, is_system, expires_at, is_pinned, created_at
        FROM messages
-      WHERE (sender_user_id = $1 AND receiver_user_id = $2)
-         OR (sender_user_id = $2 AND receiver_user_id = $1)
+      WHERE ((sender_user_id = $1 AND receiver_user_id = $2)
+         OR (sender_user_id = $2 AND receiver_user_id = $1))
+        -- Expired media is gone as far as the thread is concerned; the row
+        -- stays for moderation history.
+        AND (expires_at IS NULL OR expires_at > NOW())
       ORDER BY created_at DESC
       LIMIT $3 OFFSET $4`,
     [a, b, safeLimit, safeOffset]
   );
 
-  const messages = rows
-    .map((row) => ({
-      id: Number(row.id),
-      senderUserId: Number(row.sender_user_id),
-      receiverUserId: Number(row.receiver_user_id),
-      content: row.content,
-      isFlagged: Boolean(row.is_flagged),
-      moderationNote: row.moderation_note || null,
-      createdAt: row.created_at,
-    }))
-    .reverse();
+  const messages = rows.map(mapMessageRow).reverse();
+  await attachReactions(messages);
+  const pinned = messages.filter((m) => m.isPinned);
 
-  return { messages, count: messages.length, limit: safeLimit, offset: safeOffset };
+  return {
+    messages,
+    // The deal ledger sits above the scroll rather than inside it.
+    pinned,
+    count: messages.length,
+    limit: safeLimit,
+    offset: safeOffset,
+  };
 }
 
 function mapReviewRow(row) {

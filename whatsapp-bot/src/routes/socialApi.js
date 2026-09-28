@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isSystemKind } from "../lib/message-kinds.js";
 import {
   createOrderReview,
   createOffer,
@@ -24,6 +25,8 @@ import {
   sendOfferReminder,
   setSellerHandledOfferQueueState,
   sendDirectMessage,
+  toggleMessageReaction,
+  ALLOWED_REACTIONS,
   toggleFollow,
   updateUserShopProfile,
 } from "../db/repositories/social.js";
@@ -1166,6 +1169,19 @@ router.get("/chat/offers", async (req, res) => {
 router.post("/chat/send", async (req, res) => {
   try {
     let payload = { ...(req.body || {}) };
+    // The body is spread straight into the repository, so anything the client
+    // sets it sets. isSystem is what marks a card as "Sokoni says this" -- a
+    // seller who could set it could post "KES 1,500 locked in escrow" into a
+    // chat where no money exists. Only server code may raise these.
+    delete payload.isSystem;
+    delete payload.expiresAt;
+    delete payload.isPinned;
+    if (isSystemKind(payload.kind)) {
+      return res.status(403).json({
+        error: "system_kind_only",
+        message: "That card can only be sent by Sokoni.",
+      });
+    }
     const hasSellerContext = hasSellerSessionContext(req, payload);
     let usedSellerIdentity = false;
 
@@ -1216,6 +1232,59 @@ router.post("/chat/send", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/** POST /api/social/chat/react — toggle one reaction on a message. */
+router.post("/chat/react", async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}) };
+    const hasSellerContext = hasSellerSessionContext(req, payload);
+    let usedSellerIdentity = false;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) {
+        const requested = Number(payload.userId);
+        if (Number.isInteger(requested) && requested > 0 && requested !== auth.sellerUserId) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the reacting profile in this request.",
+          });
+        }
+        payload.userId = auth.sellerUserId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+      }
+    }
+
+    if (!usedSellerIdentity) {
+      const gated = await applyBuyerIdentityAuth(req, payload, "userId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      payload = gated.payload || payload;
+    }
+
+    const result = await toggleMessageReaction(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/chat/reactions/available */
+router.get("/chat/reactions/available", (_req, res) => {
+  res.json({ emojis: ALLOWED_REACTIONS });
 });
 
 /** GET /api/social/chat/thread?userAId=1&userBId=2 */
