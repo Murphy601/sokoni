@@ -292,6 +292,23 @@ const avatarStaticOpts = {
 app.use("/assets/images/avatars", express.static(AVATARS_DIR, avatarStaticOpts));
 app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStaticOpts));
 
+/** Fit-check photos (opaque UUID filenames; these back public reviews). */
+{
+  const fitDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "fit-checks");
+  app.use(
+    "/assets/fit-checks",
+    express.static(fitDir, {
+      fallthrough: true,
+      maxAge: "7d",
+      setHeaders(res) {
+        // Public, unlike voice notes: these appear on seller profiles.
+        res.setHeader("Cache-Control", "public, max-age=604800");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    })
+  );
+}
+
 /** Web-recorded voice notes (opaque UUID filenames, expire after 48h). */
 {
   const voiceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "voice-notes");

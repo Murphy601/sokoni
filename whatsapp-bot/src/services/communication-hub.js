@@ -1621,6 +1621,23 @@ async function autoReleaseOrder(order, { hours = 24 } = {}) {
   }
 
   const fresh = getOrder(order.id) || order;
+
+  // Escrow is out. Post the released card, then invite a fit pic -- the one
+  // moment the buyer is holding the thing and the deal is finished. Both are
+  // fire-and-forget: a missing card must never hold up a release.
+  try {
+    const { postEscrowCard } = await import("./escrow-chat-cards.js");
+    void postEscrowCard(fresh, "released");
+  } catch (err) {
+    console.warn("[communication-hub] released card skipped:", err.message);
+  }
+  try {
+    const { inviteFitCheck } = await import("./fit-check.js");
+    void inviteFitCheck(fresh);
+  } catch (err) {
+    console.warn("[communication-hub] fit check invite skipped:", err.message);
+  }
+
   void import("../db/repositories/social.js")
     .then(async ({ ensureOrderSellerUserId, creditSellerSaleReview }) => {
       await ensureOrderSellerUserId(fresh);

@@ -454,6 +454,7 @@ function messageBubble(msg) {
   if (msg.kind === "scratch_card") return scratchCard(msg);
   if (msg.kind === "nudge") return nudgeCard(msg);
   if (msg.kind === "locked_drop") return lockedDropCard(msg);
+  if (msg.kind === "fit_check") return fitCheckCard(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -1390,6 +1391,116 @@ function wireDropTimers() {
   tick();
 }
 
+/* ---- Fit check ---------------------------------------------------------- */
+
+/**
+ * The post-sale prompt, and the shared photo once it exists.
+ *
+ * Declining is a normal outcome: there is no nagging, no second ask, and the
+ * card simply sits there. The reward is stated before the buyer decides,
+ * because a discount hinted at and then not honoured costs more trust than
+ * the photo is worth.
+ */
+function fitCheckCard(msg) {
+  const p = msg.payload || {};
+  const mine = Number(msg.receiverUserId) === state.viewerId;
+  const shared = Boolean(p.photoUrl);
+
+  if (shared) {
+    return `
+      <div class="inbox-fit is-shared">
+        <img class="inbox-fit-photo" src="${escapeHtml(p.photoUrl)}" alt="Fit check" loading="lazy"/>
+        <p class="inbox-fit-note">Shared as a verified review${
+          p.orderRef ? ` · ${escapeHtml(p.orderRef)}` : ""
+        }</p>
+        <button type="button" class="inbox-fit-share" data-fit-share="${escapeHtml(p.photoUrl)}"
+                data-fit-title="${escapeHtml(p.productTitle || "")}">Share</button>
+      </div>`;
+  }
+
+  if (!mine) {
+    // The seller sees that it was asked, not a button they cannot press.
+    return `<div class="inbox-fit is-waiting"><p class="inbox-fit-note">Buyer was invited to share a fit pic.</p></div>`;
+  }
+
+  return `
+    <div class="inbox-fit" data-fit-id="${escapeHtml(String(msg.id))}">
+      <p class="inbox-fit-head">📸 Fit check</p>
+      <p class="inbox-fit-copy">${escapeHtml(msg.content)}</p>
+      <label class="inbox-fit-pick">
+        Add a photo
+        <input type="file" accept="image/jpeg,image/png,image/webp" data-fit-input hidden/>
+      </label>
+    </div>`;
+}
+
+async function uploadFitPhoto(messageId, file) {
+  if (!file) return;
+  setStatus("Sharing…");
+  try {
+    const form = new FormData();
+    form.append("photo", file, file.name || "fit.jpg");
+    for (const [k, v] of Object.entries(withAuthBody({ userId: state.viewerId }) || {})) {
+      if (v != null) form.append(k, String(v));
+    }
+    const res = await fetch(`${SOCIAL_API}/chat/fit-check/${encodeURIComponent(messageId)}`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data?.message || "Couldn't share that photo.", true);
+      return;
+    }
+    setStatus(
+      data.published
+        ? `Shared. KES ${data.rewardKes} off your next order.`
+        : `Shared. KES ${data.rewardKes} off your next order.`
+    );
+    await loadThread();
+  } catch {
+    setStatus("Couldn't share that photo.", true);
+  }
+}
+
+/** Hand the card to the OS share sheet, or copy the link where there isn't one. */
+async function shareFitCard(photoUrl, title) {
+  const text = `${title || "My Sokoni find"} — bought on Sokoni Mall`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "Sokoni Mall", text, url: photoUrl });
+      return;
+    }
+    await navigator.clipboard?.writeText(`${text}\n${photoUrl}`);
+    setStatus("Link copied.");
+  } catch {
+    // Cancelling a share sheet lands here and is not a failure.
+  }
+}
+
+function wireFitCheck() {
+  const wrap = el("chat-thread");
+  if (!wrap || wrap.dataset.fitWired === "1") return;
+  wrap.dataset.fitWired = "1";
+
+  wrap.addEventListener("click", (event) => {
+    const share = event.target.closest("[data-fit-share]");
+    if (share) {
+      void shareFitCard(share.dataset.fitShare, share.dataset.fitTitle);
+    }
+  });
+
+  wrap.addEventListener("change", (event) => {
+    const input = event.target.closest("[data-fit-input]");
+    if (!input) return;
+    const id = input.closest("[data-fit-id]")?.dataset.fitId;
+    const file = input.files?.[0];
+    if (id && file) void uploadFitPhoto(id, file);
+    // Clear it, so picking the same file twice still fires a change.
+    input.value = "";
+  });
+}
+
 function renderIcebreakers(messages) {
   const slot = el("chat-icebreakers");
   if (!slot) return;
@@ -1451,6 +1562,7 @@ function renderMessages(messages) {
   wrap.scrollTop = wrap.scrollHeight;
   wireScratchCards();
   wireDropTimers();
+  wireFitCheck();
 }
 
 function renderLedger(pinned) {

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { attachFitCheckPhoto } from "../services/fit-check.js";
+import { storeFitPhoto } from "../services/fit-photo-store.js";
 import {
   sendLockedDrop,
   eligibleDropRecipients,
@@ -1730,6 +1732,57 @@ router.post("/drops", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/social/chat/fit-check/:messageId
+ *
+ * The buyer's photo, uploaded in memory and written once -- same shape as the
+ * voice route, for the same reason.
+ */
+const fitUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
+
+router.post("/chat/fit-check/:messageId", fitUpload.single("photo"), async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}), messageId: req.params.messageId };
+    const gated = await applyBuyerIdentityAuth(req, payload, "userId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    payload = gated.payload || payload;
+
+    if (!req.file?.buffer?.length) {
+      return res.status(400).json({ error: "no_photo", message: "Attach a photo." });
+    }
+    if (!/^image\/(jpe?g|png|webp)$/i.test(String(req.file.mimetype || ""))) {
+      return res.status(400).json({ error: "unsupported_image", message: "Send a JPG, PNG or WebP." });
+    }
+
+    const stored = await storeFitPhoto(req.file.buffer, req.file.mimetype);
+    const result = await attachFitCheckPhoto({
+      messageId: payload.messageId,
+      userId: payload.userId,
+      photoUrl: stored.url,
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "photo_too_large", message: "That photo is too big." });
+    }
     res.status(500).json({ error: err.message });
   }
 });
