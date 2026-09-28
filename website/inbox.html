@@ -176,6 +176,15 @@
       </div>
 
       <!-- Icebreakers. Only rendered into when a thread has no messages yet. -->
+      <div id="bundle-drawer" class="hidden" role="dialog" aria-label="Build a bundle">
+        <div class="bundle-sheet">
+          <div class="bundle-head">
+            <strong>Build a bundle</strong>
+            <button type="button" class="bundle-close" data-bundle-close aria-label="Close">×</button>
+          </div>
+          <div id="bundle-body"></div>
+        </div>
+      </div>
       <div id="chat-icebreakers" class="hidden" role="group" aria-label="Suggested openers"></div>
       <form id="chat-form" class="mt-auto border-t border-zinc-900 p-3 flex gap-2 items-end bg-black">
         <label class="sr-only" for="chat-input">Type message</label>
@@ -185,6 +194,7 @@
           maxlength="2000"
           placeholder="Ask about size, condition, or fit — stay on Sokoni"
           class="flex-1 min-h-[44px] rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300] resize-y"></textarea>
+        <button type="button" id="chat-bundle-btn" class="inbox-bundle-btn" title="Build a bundle" aria-label="Build a bundle">⊞</button>
         <button type="button" id="chat-mic-btn" class="inbox-mic" aria-pressed="false" title="Record a voice note" aria-label="Record a voice note">●</button>
         <button
           id="chat-send-btn"

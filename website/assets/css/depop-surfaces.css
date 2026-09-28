@@ -1240,3 +1240,234 @@ body.sell-depop-page .sell-activity-pill--like {
 @media (prefers-reduced-motion: reduce) {
   .inbox-mic.is-recording { animation: none; }
 }
+
+/* ---- Bundle builder ----------------------------------------------------- */
+
+.inbox-bundle-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.inbox-bundle-btn:hover,
+.inbox-bundle-btn:focus-visible {
+  border-color: #25d366;
+  color: #e4e4e7;
+}
+
+/* Sheet rather than a modal: on a phone the thread should stay visible
+   behind it, so the buyer keeps the conversation in view while picking. */
+#bundle-drawer {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: flex-end;
+  max-height: 100%;
+}
+
+.bundle-sheet {
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #0b0b0b;
+  border-top: 1px solid #27272a;
+  border-radius: 14px 14px 0 0;
+  padding: 12px;
+}
+
+.bundle-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.bundle-close {
+  background: none;
+  border: 0;
+  color: #a1a1aa;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.bundle-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #e4e4e7;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bundle-tile.is-picked {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.12);
+}
+
+.bundle-tile img,
+.bundle-noimg {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 7px;
+  background: #27272a;
+  display: block;
+}
+
+.bundle-tile-name {
+  font-size: 11px;
+  line-height: 1.25;
+  /* Two lines then ellipsis: a long title must not make one tile taller than
+     its neighbours and break the grid rhythm. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bundle-tile-price {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7ef0ab;
+}
+
+.bundle-foot {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #27272a;
+}
+
+.bundle-sum {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.bundle-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.bundle-price-row input {
+  width: 130px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #e4e4e7;
+  text-align: right;
+}
+
+.bundle-send {
+  width: 100%;
+  padding: 11px;
+  border-radius: 999px;
+  border: 0;
+  background: #25d366;
+  color: #06231a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bundle-send:disabled {
+  background: #27272a;
+  color: #71717a;
+  cursor: not-allowed;
+}
+
+/* ---- Bundle card in the thread ----------------------------------------- */
+
+.inbox-bundle {
+  max-width: 85%;
+  padding: 10px;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+.inbox-bundle-mine {
+  margin-left: auto;
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-bundle-head {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.inbox-bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  position: relative;
+}
+
+.inbox-bundle-grid figure {
+  margin: 0;
+}
+
+.inbox-bundle-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.inbox-bundle-grid figcaption {
+  font-size: 10px;
+  color: #a1a1aa;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inbox-bundle-more {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 11px;
+  color: #e4e4e7;
+}
+
+.inbox-bundle-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.inbox-bundle-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #71717a;
+}

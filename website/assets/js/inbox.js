@@ -334,6 +334,8 @@ function beginChatIfReady() {
   enableChatComposer();
   wireIcebreakers();
   wireMic();
+  wireBundle();
+  wireBundleCards();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -445,6 +447,7 @@ function messageBubble(msg) {
   // this page was loaded still shows its fallback rather than nothing.
   if (msg.kind === "escrow_status") return escrowCard(msg);
   if (msg.kind === "voice") return voiceBubble(msg);
+  if (msg.kind === "bundle") return bundleCard(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -638,6 +641,232 @@ function wireMic() {
   });
   // Leaving the page mid-recording must not leave the mic open.
   window.addEventListener("pagehide", releaseMic);
+}
+
+/* ---- Bundle builder ----------------------------------------------------- */
+
+const MAX_BUNDLE_ITEMS = 8;
+let bundlePicked = new Set();
+let bundleCatalogue = [];
+
+/** Mirrors suggestBundlePrice on the server: 10% off, rounded down to 50. */
+function bundleSuggest(items) {
+  const listTotal = items.reduce((s, i) => s + Math.round(Number(i.priceKes) || 0), 0);
+  if (listTotal <= 0) return 0;
+  return Math.max(items.length, Math.floor((listTotal * 0.9) / 50) * 50);
+}
+
+function renderBundlePicker() {
+  const body = el("bundle-body");
+  if (!body) return;
+  if (!bundleCatalogue.length) {
+    body.innerHTML = `<p class="text-sm text-zinc-500">This shop has no other items listed right now.</p>`;
+    return;
+  }
+  const picked = bundleCatalogue.filter((p) => bundlePicked.has(p.id));
+  const listTotal = picked.reduce((s, p) => s + p.priceKes, 0);
+  const suggested = bundleSuggest(picked);
+  const tooFew = picked.length < 2;
+
+  body.innerHTML = `
+    <div class="bundle-grid">
+      ${bundleCatalogue
+        .map(
+          (p) => `
+        <button type="button" class="bundle-tile ${bundlePicked.has(p.id) ? "is-picked" : ""}"
+                data-bundle-pick="${escapeHtml(p.id)}"
+                aria-pressed="${bundlePicked.has(p.id) ? "true" : "false"}">
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy"/>` : `<span class="bundle-noimg"></span>`}
+          <span class="bundle-tile-name">${escapeHtml(p.title)}</span>
+          <span class="bundle-tile-price">${formatKes(p.priceKes)}</span>
+        </button>`
+        )
+        .join("")}
+    </div>
+    <div class="bundle-foot">
+      <p class="bundle-sum">${picked.length} picked${picked.length ? ` &middot; list ${formatKes(listTotal)}` : ""}</p>
+      <label class="bundle-price-row">
+        <span>Your price</span>
+        <input id="bundle-price" type="number" inputmode="numeric" min="1" max="${listTotal || 1}"
+               value="${suggested || ""}" ${tooFew ? "disabled" : ""}/>
+      </label>
+      <button type="button" id="bundle-send" class="bundle-send" ${tooFew ? "disabled" : ""}>Send bundle offer</button>
+    </div>`;
+}
+
+function openBundleDrawer() {
+  const drawer = el("bundle-drawer");
+  if (!drawer || !state.peerHandle) return;
+  drawer.classList.remove("hidden");
+  const body = el("bundle-body");
+  if (body) body.innerHTML = `<p class="text-sm text-zinc-500">Loading this shop…</p>`;
+
+  const want = normalizeHandle(state.peerHandle);
+  fetch(`${PRODUCTS_API}?limit=200&offset=0`)
+    .then((r) => r.json())
+    .then((data) => {
+      const all = Array.isArray(data?.products) ? data.products : [];
+      bundleCatalogue = all
+        .filter((p) => normalizeHandle(p.shopHandle || "") === want)
+        .filter((p) => p.inStock !== false && !p.isSold)
+        .map((p) => ({
+          id: String(p.id),
+          title: String(p.title || "Item"),
+          priceKes: Math.round(Number(p.priceKes ?? p.priceKsh ?? p.price) || 0),
+          imageUrl: p.imageUrl || p.image || null,
+        }))
+        .filter((p) => p.priceKes > 0)
+        .slice(0, 60);
+      renderBundlePicker();
+    })
+    .catch(() => {
+      const b = el("bundle-body");
+      if (b) b.innerHTML = `<p class="text-sm text-red-400">Couldn't load this shop.</p>`;
+    });
+}
+
+function closeBundleDrawer() {
+  el("bundle-drawer")?.classList.add("hidden");
+  bundlePicked = new Set();
+}
+
+async function sendBundle() {
+  const amountKes = Math.round(Number(el("bundle-price")?.value) || 0);
+  const productIds = [...bundlePicked];
+  if (productIds.length < 2) return;
+
+  const btn = el("bundle-send");
+  if (btn) btn.disabled = true;
+  setStatus("Sending bundle…");
+  try {
+    const res = await fetch(`${SOCIAL_API}/bundles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        withAuthBody({
+          buyerUserId: state.viewerId,
+          sellerUserId: state.peerId,
+          productIds,
+          amountKes,
+        })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data?.message || "Couldn't send that bundle.", true);
+      if (btn) btn.disabled = false;
+      return;
+    }
+    closeBundleDrawer();
+    setStatus("");
+    await loadThread();
+  } catch {
+    setStatus("Couldn't send that bundle.", true);
+    if (btn) btn.disabled = false;
+  }
+}
+
+function wireBundle() {
+  const openBtn = el("chat-bundle-btn");
+  if (openBtn && openBtn.dataset.wired !== "1") {
+    openBtn.dataset.wired = "1";
+    openBtn.addEventListener("click", openBundleDrawer);
+  }
+  const drawer = el("bundle-drawer");
+  if (!drawer || drawer.dataset.wired === "1") return;
+  drawer.dataset.wired = "1";
+
+  // One delegated listener: the grid is rebuilt on every pick.
+  drawer.addEventListener("click", (event) => {
+    if (event.target.closest("[data-bundle-close]")) return closeBundleDrawer();
+    const tile = event.target.closest("[data-bundle-pick]");
+    if (tile) {
+      const id = tile.dataset.bundlePick;
+      if (bundlePicked.has(id)) bundlePicked.delete(id);
+      else if (bundlePicked.size >= MAX_BUNDLE_ITEMS) {
+        setStatus(`A bundle holds up to ${MAX_BUNDLE_ITEMS} items.`, true);
+        return;
+      } else bundlePicked.add(id);
+      renderBundlePicker();
+      return;
+    }
+    if (event.target.closest("#bundle-send")) void sendBundle();
+  });
+}
+
+/** Bundle card in the thread: a photo grid, the price, and what it saves. */
+function bundleCard(msg) {
+  const p = msg.payload || {};
+  const items = Array.isArray(p.items) ? p.items : [];
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const closed = ["accepted", "declined", "expired"].includes(p.status);
+  // Only the side that did not move last may respond, which is the same rule
+  // the server enforces. Showing buttons that would be refused is worse than
+  // showing none.
+  const iMovedLast = mine;
+  const myTurn = !closed && !iMovedLast;
+
+  return `
+    <div class="inbox-bundle ${mine ? "inbox-bundle-mine" : ""}" data-bundle-id="${escapeHtml(String(p.bundleId || ""))}">
+      <p class="inbox-bundle-head">${escapeHtml(msg.content)}</p>
+      <div class="inbox-bundle-grid">
+        ${items
+          .slice(0, 4)
+          .map(
+            (i) =>
+              `<figure>${i.imageUrl ? `<img src="${escapeHtml(i.imageUrl)}" alt="" loading="lazy"/>` : ""}<figcaption>${escapeHtml(i.title || "Item")}</figcaption></figure>`
+          )
+          .join("")}
+        ${items.length > 4 ? `<span class="inbox-bundle-more">+${items.length - 4}</span>` : ""}
+      </div>
+      ${
+        myTurn
+          ? `<div class="inbox-bundle-actions">
+               <button type="button" class="inbox-bargain-cta" data-bundle-act="accepted">Accept</button>
+               <button type="button" class="inbox-bargain-ghost" data-bundle-act="countered">Counter</button>
+               <button type="button" class="inbox-bargain-ghost" data-bundle-act="declined">Decline</button>
+             </div>`
+          : `<p class="inbox-bundle-note">${closed ? "" : "Waiting for the other side."}</p>`
+      }
+    </div>`;
+}
+
+async function respondToBundleCard(bundleId, action) {
+  let amountKes;
+  if (action === "countered") {
+    const raw = window.prompt("Counter with what total (KES)?");
+    amountKes = Math.round(Number(raw) || 0);
+    if (!amountKes) return;
+  }
+  setStatus("Sending…");
+  try {
+    const res = await fetch(`${SOCIAL_API}/bundles/${encodeURIComponent(bundleId)}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withAuthBody({ userId: state.viewerId, action, amountKes })),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data?.message || "Couldn't do that.", true);
+      return;
+    }
+    setStatus("");
+    await loadThread();
+  } catch {
+    setStatus("Couldn't do that.", true);
+  }
+}
+
+function wireBundleCards() {
+  const wrap = el("chat-thread");
+  if (!wrap || wrap.dataset.bundleWired === "1") return;
+  wrap.dataset.bundleWired = "1";
+  wrap.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-bundle-act]");
+    if (!btn) return;
+    const id = btn.closest("[data-bundle-id]")?.dataset.bundleId;
+    if (id) void respondToBundleCard(id, btn.dataset.bundleAct);
+  });
 }
 
 function renderIcebreakers(messages) {

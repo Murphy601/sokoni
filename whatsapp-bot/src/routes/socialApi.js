@@ -1,4 +1,10 @@
 import { Router } from "express";
+import {
+  createBundle,
+  respondToBundle,
+  getBundle,
+} from "../db/repositories/bundles.js";
+import { postBundleCard } from "../services/bundle-cards.js";
 import multer from "multer";
 import {
   validateVoiceUpload,
@@ -1464,6 +1470,104 @@ router.get("/chat/media/:messageId", async (req, res) => {
   } catch (err) {
     console.warn("[social] media route failed:", err.message);
     if (!res.headersSent) res.status(502).json({ error: "media_unavailable", message: err.message });
+  }
+});
+
+/** POST /api/social/bundles — propose a bundle of items from one shop. */
+router.post("/bundles", async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}) };
+    const gated = await applyBuyerIdentityAuth(req, payload, "buyerUserId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    payload = gated.payload || payload;
+
+    const result = await createBundle(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+
+    // Drop the card into the thread so the seller sees it where they are
+    // already talking, rather than only in a list somewhere.
+    void postBundleCard(result.bundle).catch((err) =>
+      console.warn("[social] bundle card skipped:", err.message)
+    );
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/bundles/:bundleId/respond — accept, counter or decline. */
+router.post("/bundles/:bundleId/respond", async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}), bundleId: req.params.bundleId };
+    const hasSellerContext = hasSellerSessionContext(req, payload);
+    let usedSellerIdentity = false;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) {
+        const requested = Number(payload.userId);
+        if (Number.isInteger(requested) && requested > 0 && requested !== auth.sellerUserId) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the responding profile in this request.",
+          });
+        }
+        payload.userId = auth.sellerUserId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+      }
+    }
+    if (!usedSellerIdentity) {
+      const gated = await applyBuyerIdentityAuth(req, payload, "userId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      payload = gated.payload || payload;
+    }
+
+    const result = await respondToBundle(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    void postBundleCard(result.bundle).catch((err) =>
+      console.warn("[social] bundle card skipped:", err.message)
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/bundles/:bundleId */
+router.get("/bundles/:bundleId", async (req, res) => {
+  try {
+    const result = await getBundle(req.params.bundleId);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
