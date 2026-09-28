@@ -1621,3 +1621,211 @@ body.sell-depop-page .sell-activity-pill--like {
 .inbox-react-opt:focus-visible {
   background: #27272a;
 }
+
+/* ---- Nudge -------------------------------------------------------------- */
+
+.inbox-nudge-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.inbox-nudge-btn:hover,
+.inbox-nudge-btn:focus-visible {
+  border-color: #25d366;
+}
+
+.inbox-nudge-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inbox-nudge {
+  align-self: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.14);
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  color: #fde68a;
+  font-size: 12px;
+}
+
+.inbox-nudge-mine {
+  opacity: 0.7;
+}
+
+/* Short and small. A big shake on a phone reads as a crash, and the point is
+   a buzz, not a scare. */
+@keyframes inbox-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+}
+
+.is-nudged {
+  animation: inbox-shake 0.6s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still acknowledge the nudge, without moving anything. */
+  .is-nudged {
+    animation: none;
+    outline: 2px solid rgba(250, 204, 21, 0.6);
+    outline-offset: -2px;
+  }
+}
+
+/* ---- Locked drops ------------------------------------------------------- */
+
+.inbox-drop {
+  max-width: 85%;
+  padding: 10px;
+  border-radius: 14px;
+  background: linear-gradient(140deg, #1e1b4b, #111827);
+  border: 1px solid #4c1d95;
+}
+
+.inbox-drop-mine {
+  margin-left: auto;
+  opacity: 0.9;
+}
+
+.inbox-drop-head {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.inbox-drop-art {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #27272a;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+}
+
+.inbox-drop-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Decoration, not protection: the URL is in the payload either way. What the
+     window actually gates is the item being public, which the server owns. */
+  filter: blur(14px) saturate(0.7);
+  transform: scale(1.08);
+  transition: filter 0.5s ease, transform 0.5s ease;
+}
+
+.inbox-drop.is-open .inbox-drop-art img {
+  filter: none;
+  transform: none;
+}
+
+.inbox-drop-lock {
+  position: absolute;
+  font-size: 26px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
+.inbox-drop.is-open .inbox-drop-lock {
+  display: none;
+}
+
+.inbox-drop-name {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ede9fe;
+}
+
+.inbox-drop-meta {
+  margin: 0;
+  font-size: 11px;
+  color: #a5b4fc;
+}
+
+.inbox-drop-meta [data-drop-timer] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+}
+
+/* ---- Fit check ---------------------------------------------------------- */
+
+.inbox-fit {
+  max-width: 85%;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(140deg, rgba(37, 211, 102, 0.16), rgba(37, 211, 102, 0.04));
+  border: 1px solid rgba(37, 211, 102, 0.4);
+}
+
+.inbox-fit.is-waiting {
+  background: #18181b;
+  border-color: #27272a;
+  opacity: 0.8;
+}
+
+.inbox-fit-head {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7ef0ab;
+}
+
+.inbox-fit-copy {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #e4e4e7;
+}
+
+.inbox-fit-pick {
+  display: inline-block;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #06231a;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inbox-fit-photo {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+}
+
+.inbox-fit-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.inbox-fit-share {
+  margin-top: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: transparent;
+  color: #e4e4e7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inbox-fit-share:hover,
+.inbox-fit-share:focus-visible {
+  border-color: #25d366;
+}

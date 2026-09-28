@@ -338,6 +338,7 @@ function beginChatIfReady() {
   wireBundleCards();
   wireReactions();
   wireSoundToggle();
+  wireNudge();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -451,6 +452,9 @@ function messageBubble(msg) {
   if (msg.kind === "voice") return voiceBubble(msg);
   if (msg.kind === "bundle") return bundleCard(msg);
   if (msg.kind === "scratch_card") return scratchCard(msg);
+  if (msg.kind === "nudge") return nudgeCard(msg);
+  if (msg.kind === "locked_drop") return lockedDropCard(msg);
+  if (msg.kind === "fit_check") return fitCheckCard(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -1234,6 +1238,269 @@ function wireSoundToggle() {
   btn.addEventListener("click", () => setSoundPref(!soundOn));
 }
 
+/* ---- Nudge -------------------------------------------------------------- */
+
+/**
+ * Shake the window when a nudge arrives.
+ *
+ * Only for nudges newer than the last render. Replaying every nudge in the
+ * history on each thread reload would shake the page on every poll, which
+ * reads as a fault rather than a feature.
+ */
+let lastNudgeSeen = 0;
+
+function playNudge(messages) {
+  const nudges = (Array.isArray(messages) ? messages : []).filter(
+    (m) => m.kind === "nudge" && Number(m.senderUserId) !== state.viewerId
+  );
+  if (!nudges.length) return;
+  const newest = nudges[nudges.length - 1];
+  const at = new Date(newest.createdAt).getTime();
+  if (!Number.isFinite(at) || at <= lastNudgeSeen) return;
+
+  // The first render of a thread sets the baseline instead of replaying.
+  const first = lastNudgeSeen === 0;
+  lastNudgeSeen = at;
+  if (first) return;
+
+  const shell = document.querySelector(".inbox-shell") || document.body;
+  shell.classList.remove("is-nudged");
+  // Force a reflow, or re-adding the class in the same frame does not restart
+  // the animation.
+  void shell.offsetWidth;
+  shell.classList.add("is-nudged");
+  setTimeout(() => shell.classList.remove("is-nudged"), 700);
+  playReactionTone("👀");
+}
+
+function nudgeCard(msg) {
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  return `
+    <div class="inbox-nudge ${mine ? "inbox-nudge-mine" : ""}">
+      👋 ${mine ? "You nudged" : "Nudged you"}
+    </div>`;
+}
+
+async function sendNudge() {
+  const btn = el("chat-nudge-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${SOCIAL_API}/chat/nudge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        withAuthBody({ senderUserId: state.viewerId, receiverUserId: state.peerId })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // Being on cooldown is a normal answer, not a failure worth alarming
+      // anyone about.
+      setStatus(data?.message || "Couldn't nudge.", data?.error !== "nudge_cooldown");
+      return;
+    }
+    setStatus("Nudged.");
+    await loadThread();
+  } catch {
+    setStatus("Couldn't nudge.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function wireNudge() {
+  const btn = el("chat-nudge-btn");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", () => void sendNudge());
+}
+
+/* ---- Locked drops ------------------------------------------------------- */
+
+function countdownLabel(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * A drop card: blurred until the window opens.
+ *
+ * The blur is decoration, not protection -- the photo is in the payload and
+ * anyone can read it. That is fine, because what the window actually gates is
+ * the item being public, which the server controls. A card that pretended the
+ * image was secret would be lying about something checkable.
+ */
+function lockedDropCard(msg) {
+  const p = msg.payload || {};
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const left = Math.max(0, Math.round((new Date(p.unlocksAt).getTime() - Date.now()) / 1000));
+  const open = left <= 0;
+
+  return `
+    <div class="inbox-drop ${open ? "is-open" : ""} ${mine ? "inbox-drop-mine" : ""}"
+         data-drop-unlocks="${escapeHtml(String(p.unlocksAt || ""))}">
+      <p class="inbox-drop-head">${mine ? "Drop sent" : open ? "Yours to buy" : "Early access"}</p>
+      <div class="inbox-drop-art">
+        ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy"/>` : ""}
+        ${open ? "" : `<span class="inbox-drop-lock">🔒</span>`}
+      </div>
+      <p class="inbox-drop-name">${escapeHtml(p.productTitle || "Item")}</p>
+      <p class="inbox-drop-meta">
+        ${p.priceKes ? formatKes(p.priceKes) : ""}
+        ${open ? "" : ` · unlocks in <span data-drop-timer>${countdownLabel(left)}</span>`}
+      </p>
+    </div>`;
+}
+
+/**
+ * One timer for every drop on screen.
+ *
+ * A setInterval per card would leave one running behind each thread reload;
+ * a single tick that reads the DOM cannot leak that way.
+ */
+let dropTimer = null;
+
+function wireDropTimers() {
+  if (dropTimer) clearInterval(dropTimer);
+  const tick = () => {
+    const cards = document.querySelectorAll("[data-drop-unlocks]");
+    if (!cards.length) {
+      clearInterval(dropTimer);
+      dropTimer = null;
+      return;
+    }
+    let anyOpened = false;
+    cards.forEach((card) => {
+      const left = Math.max(
+        0,
+        Math.round((new Date(card.dataset.dropUnlocks).getTime() - Date.now()) / 1000)
+      );
+      const label = card.querySelector("[data-drop-timer]");
+      if (label) label.textContent = countdownLabel(left);
+      if (left <= 0 && !card.classList.contains("is-open")) {
+        card.classList.add("is-open");
+        anyOpened = true;
+      }
+    });
+    // Redraw once when something opens, so the card switches to its unlocked
+    // wording rather than just losing the blur.
+    if (anyOpened) void loadThread();
+  };
+  dropTimer = setInterval(tick, 1000);
+  tick();
+}
+
+/* ---- Fit check ---------------------------------------------------------- */
+
+/**
+ * The post-sale prompt, and the shared photo once it exists.
+ *
+ * Declining is a normal outcome: there is no nagging, no second ask, and the
+ * card simply sits there. The reward is stated before the buyer decides,
+ * because a discount hinted at and then not honoured costs more trust than
+ * the photo is worth.
+ */
+function fitCheckCard(msg) {
+  const p = msg.payload || {};
+  const mine = Number(msg.receiverUserId) === state.viewerId;
+  const shared = Boolean(p.photoUrl);
+
+  if (shared) {
+    return `
+      <div class="inbox-fit is-shared">
+        <img class="inbox-fit-photo" src="${escapeHtml(p.photoUrl)}" alt="Fit check" loading="lazy"/>
+        <p class="inbox-fit-note">Shared as a verified review${
+          p.orderRef ? ` · ${escapeHtml(p.orderRef)}` : ""
+        }</p>
+        <button type="button" class="inbox-fit-share" data-fit-share="${escapeHtml(p.photoUrl)}"
+                data-fit-title="${escapeHtml(p.productTitle || "")}">Share</button>
+      </div>`;
+  }
+
+  if (!mine) {
+    // The seller sees that it was asked, not a button they cannot press.
+    return `<div class="inbox-fit is-waiting"><p class="inbox-fit-note">Buyer was invited to share a fit pic.</p></div>`;
+  }
+
+  return `
+    <div class="inbox-fit" data-fit-id="${escapeHtml(String(msg.id))}">
+      <p class="inbox-fit-head">📸 Fit check</p>
+      <p class="inbox-fit-copy">${escapeHtml(msg.content)}</p>
+      <label class="inbox-fit-pick">
+        Add a photo
+        <input type="file" accept="image/jpeg,image/png,image/webp" data-fit-input hidden/>
+      </label>
+    </div>`;
+}
+
+async function uploadFitPhoto(messageId, file) {
+  if (!file) return;
+  setStatus("Sharing…");
+  try {
+    const form = new FormData();
+    form.append("photo", file, file.name || "fit.jpg");
+    for (const [k, v] of Object.entries(withAuthBody({ userId: state.viewerId }) || {})) {
+      if (v != null) form.append(k, String(v));
+    }
+    const res = await fetch(`${SOCIAL_API}/chat/fit-check/${encodeURIComponent(messageId)}`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data?.message || "Couldn't share that photo.", true);
+      return;
+    }
+    setStatus(
+      data.published
+        ? `Shared. KES ${data.rewardKes} off your next order.`
+        : `Shared. KES ${data.rewardKes} off your next order.`
+    );
+    await loadThread();
+  } catch {
+    setStatus("Couldn't share that photo.", true);
+  }
+}
+
+/** Hand the card to the OS share sheet, or copy the link where there isn't one. */
+async function shareFitCard(photoUrl, title) {
+  const text = `${title || "My Sokoni find"} — bought on Sokoni Mall`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "Sokoni Mall", text, url: photoUrl });
+      return;
+    }
+    await navigator.clipboard?.writeText(`${text}\n${photoUrl}`);
+    setStatus("Link copied.");
+  } catch {
+    // Cancelling a share sheet lands here and is not a failure.
+  }
+}
+
+function wireFitCheck() {
+  const wrap = el("chat-thread");
+  if (!wrap || wrap.dataset.fitWired === "1") return;
+  wrap.dataset.fitWired = "1";
+
+  wrap.addEventListener("click", (event) => {
+    const share = event.target.closest("[data-fit-share]");
+    if (share) {
+      void shareFitCard(share.dataset.fitShare, share.dataset.fitTitle);
+    }
+  });
+
+  wrap.addEventListener("change", (event) => {
+    const input = event.target.closest("[data-fit-input]");
+    if (!input) return;
+    const id = input.closest("[data-fit-id]")?.dataset.fitId;
+    const file = input.files?.[0];
+    if (id && file) void uploadFitPhoto(id, file);
+    // Clear it, so picking the same file twice still fires a change.
+    input.value = "";
+  });
+}
+
 function renderIcebreakers(messages) {
   const slot = el("chat-icebreakers");
   if (!slot) return;
@@ -1294,6 +1561,8 @@ function renderMessages(messages) {
   wrap.innerHTML = list.filter((m) => !m.isPinned).map(messageBubble).join("");
   wrap.scrollTop = wrap.scrollHeight;
   wireScratchCards();
+  wireDropTimers();
+  wireFitCheck();
 }
 
 function renderLedger(pinned) {
@@ -1461,6 +1730,7 @@ async function loadThread() {
     renderMessages(data.messages || []);
     renderLedger(data.pinned || []);
     renderIcebreakers(data.messages || []);
+    playNudge(data.messages || []);
     void loadOffers();
   } catch {
     setStatus("Could not load chat right now. Check your connection.", true);
