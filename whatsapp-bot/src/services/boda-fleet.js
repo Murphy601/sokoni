@@ -1959,6 +1959,12 @@ export async function acceptBodaDispatch({ orderId, phone, customerKey = "" } = 
   }
 
   const fresh = getOrder(id) || order;
+  try {
+    const { postEscrowCard } = await import("./escrow-chat-cards.js");
+    void postEscrowCard(fresh, "dispatched");
+  } catch (err) {
+    console.warn("[boda-fleet] dispatched card skipped:", err.message);
+  }
   const { sendText } = await import("./whatsapp.js");
   const {
     msgRiderPickupStep,
@@ -3244,6 +3250,13 @@ export async function verifyDeliveryOTP({
     } catch (err) {
       console.warn("[boda-fleet] rider daily quest:", err.message);
     }
+  }
+
+  try {
+    const { postEscrowCard } = await import("./escrow-chat-cards.js");
+    void postEscrowCard(getOrder(id), "delivered");
+  } catch (err) {
+    console.warn("[boda-fleet] delivered card skipped:", err.message);
   }
 
   try {

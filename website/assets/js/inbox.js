@@ -357,7 +357,64 @@ function setPeerLabel() {
   }
 }
 
+const ESCROW_TONE = {
+  awaiting_payment: "inbox-escrow-pending",
+  locked: "inbox-escrow-locked",
+  dispatched: "inbox-escrow-transit",
+  delivered: "inbox-escrow-transit",
+  released: "inbox-escrow-locked",
+  refunded: "inbox-escrow-pending",
+  disputed: "inbox-escrow-alert",
+};
+
+function money(n) {
+  return `KES ${Math.round(Number(n) || 0).toLocaleString("en-US")}`;
+}
+
+/**
+ * A referee card: full width, centred, visibly not a person talking. The point
+ * is that a buyer can tell at a glance this came from Sokoni and not from
+ * whoever they are haggling with.
+ */
+function escrowCard(msg) {
+  const p = msg.payload || {};
+  const tone = ESCROW_TONE[p.state] || "inbox-escrow-pending";
+  return `
+    <div class="inbox-escrow-card ${tone}" data-order="${escapeHtml(p.orderRef || "")}">
+      <span class="inbox-escrow-badge">SOKONI ESCROW</span>
+      <p class="inbox-escrow-line">${escapeHtml(msg.content)}</p>
+      <p class="inbox-escrow-meta">${escapeHtml(p.orderRef || "")} · ${formatTime(msg.createdAt)}</p>
+    </div>`;
+}
+
+/** The pinned ledger, rendered above the scroll rather than inside it. */
+function ledgerCard(msg) {
+  const p = msg.payload || {};
+  const rows = [
+    ["Item", escapeHtml(p.itemName || "Item")],
+    ["Price", money(p.itemKes)],
+    ["Delivery", p.shippingKes > 0 ? `${money(p.shippingKes)} (buyer pays)` : "Free (seller covers)"],
+    ["Total", `<strong>${money(p.totalKes)}</strong>`],
+    ["Escrow", escapeHtml(String(p.state || "").replace(/_/g, " "))],
+  ];
+  return `
+    <div class="inbox-ledger" role="status" aria-label="Agreed deal terms">
+      <div class="inbox-ledger-head">
+        <span class="inbox-ledger-pin">📌 Deal</span>
+        <span class="inbox-ledger-ref">${escapeHtml(p.orderRef || "")}</span>
+      </div>
+      <dl class="inbox-ledger-rows">
+        ${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}
+      </dl>
+    </div>`;
+}
+
 function messageBubble(msg) {
+  // Unknown kinds fall through to the text bubble, so a card shipped after
+  // this page was loaded still shows its fallback rather than nothing.
+  if (msg.kind === "escrow_status") return escrowCard(msg);
+  if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
+
   const mine = Number(msg.senderUserId) === state.viewerId;
   const wrapper = mine ? "items-end" : "items-start";
   const bubble = mine ? "inbox-bubble-mine" : "inbox-bubble-theirs";
@@ -417,8 +474,23 @@ function renderMessages(messages) {
   }
 
   empty.classList.add("hidden");
-  wrap.innerHTML = list.map(messageBubble).join("");
+  // The pinned ledger is drawn once above the thread, never inline, so it
+  // stays visible while the conversation scrolls under it.
+  wrap.innerHTML = list.filter((m) => !m.isPinned).map(messageBubble).join("");
   wrap.scrollTop = wrap.scrollHeight;
+}
+
+function renderLedger(pinned) {
+  const slot = el("chat-ledger");
+  if (!slot) return;
+  const card = (Array.isArray(pinned) ? pinned : []).find((m) => m.kind === "deal_ledger");
+  if (!card) {
+    slot.innerHTML = "";
+    slot.classList.add("hidden");
+    return;
+  }
+  slot.innerHTML = ledgerCard(card);
+  slot.classList.remove("hidden");
 }
 
 function isBuyerSessionAuthError(payload) {
@@ -571,6 +643,7 @@ async function loadThread() {
       return;
     }
     renderMessages(data.messages || []);
+    renderLedger(data.pinned || []);
     void loadOffers();
   } catch {
     setStatus("Could not load chat right now. Check your connection.", true);

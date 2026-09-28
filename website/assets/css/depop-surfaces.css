@@ -1015,3 +1015,127 @@ body.sell-depop-page .sell-activity-pill--like {
 .depop-surface-page .sell-fee-table .sell-fee-total td {
   color: #fff;
 }
+
+/* ---- Escrow referee cards + pinned deal ledger -------------------------- */
+
+/* Full width and centred, so a referee card never reads as a chat bubble.
+   The buyer has to be able to tell at a glance that Sokoni said this, not
+   the person they are haggling with. */
+.inbox-escrow-card {
+  margin: 10px auto;
+  padding: 10px 14px;
+  max-width: 92%;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.inbox-escrow-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+
+.inbox-escrow-line {
+  margin: 4px 0 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.inbox-escrow-meta {
+  margin: 0;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.6;
+}
+
+/* The chat surface is dark whatever the OS theme is -- .inbox-bubble-theirs
+   is a flat #18181b with no media query -- so these are keyed to that surface
+   and not to prefers-color-scheme. Gating them on the OS theme put dark green
+   text on a dark card for anyone browsing in light mode. */
+.inbox-escrow-locked {
+  background: rgba(37, 211, 102, 0.14);
+  border-color: rgba(37, 211, 102, 0.4);
+  color: #7ef0ab;
+}
+
+.inbox-escrow-pending {
+  background: rgba(240, 180, 41, 0.16);
+  border-color: rgba(240, 180, 41, 0.42);
+  color: #ffd479;
+}
+
+.inbox-escrow-transit {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.38);
+  color: #93c5fd;
+}
+
+.inbox-escrow-alert {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+/* Sticky so the agreed terms stay on screen however far the thread scrolls --
+   that is the whole reason it exists. */
+.inbox-ledger {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(11, 31, 24, 0.96);
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  color: #f5f7f6;
+  backdrop-filter: blur(6px);
+}
+
+.inbox-ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.inbox-ledger-pin {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.inbox-ledger-ref {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.7;
+}
+
+.inbox-ledger-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.inbox-ledger-rows > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.inbox-ledger-rows dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+}
+
+.inbox-ledger-rows dd {
+  margin: 0;
+  font-size: 13px;
+}
+
