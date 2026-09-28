@@ -500,9 +500,18 @@ function durationLabel(ms) {
 }
 
 /**
- * Voice note. The src points at our streaming endpoint, not at a file --
- * nothing is downloaded until someone presses play, and the audio passes
- * through the server rather than being stored by it.
+ * Voice note.
+ *
+ * Built by hand rather than with `<audio controls>`. MediaRecorder writes WebM
+ * with no duration in the header, so the native control reads the length as
+ * zero and shows 0:00 / 0:00 next to a scrubber that cannot be dragged. We
+ * already know how long the recording is -- the recorder measured it and it
+ * is on the message -- so the player uses that and only falls back to asking
+ * the file when the number is missing.
+ *
+ * Still preload="none". Knowing the length without downloading anything is
+ * the whole point: a thread of a hundred notes costs one request, not a
+ * hundred, which matters on a metered phone.
  */
 function voiceBubble(msg) {
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -510,16 +519,104 @@ function voiceBubble(msg) {
   const who = mine ? "You" : formatHandle(state.peerHandle) || `User #${state.peerId}`;
   const params = authQueryParams(new URLSearchParams({ userId: String(state.viewerId) }));
   const src = `${SOCIAL_API}/chat/media/${msg.id}?${params.toString()}`;
-  const len = durationLabel(msg.payload?.durationMs);
+  const ms = Number(msg.payload?.durationMs);
+  const known = Number.isFinite(ms) && ms > 0 ? Math.round(ms) : 0;
+  const len = durationLabel(known) || "--:--";
   return `
     <div class="flex flex-col ${wrapper} gap-1">
       <p class="text-[11px] text-zinc-500">${who}</p>
-      <div class="inbox-voice ${mine ? "inbox-voice-mine" : ""}">
-        <audio controls preload="none" src="${escapeHtml(src)}"></audio>
-        ${len ? `<span class="inbox-voice-len">${len}</span>` : ""}
+      <div class="inbox-voice ${mine ? "inbox-voice-mine" : ""}" data-voice="${msg.id}" data-voice-ms="${known}">
+        <button type="button" class="inbox-voice-play" aria-label="Play voice note">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+            <path class="inbox-voice-glyph-play" fill="currentColor" d="M8 5.5v13l11-6.5z"></path>
+            <path class="inbox-voice-glyph-pause" fill="currentColor" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"></path>
+          </svg>
+        </button>
+        <div class="inbox-voice-track" role="presentation">
+          <div class="inbox-voice-fill"></div>
+        </div>
+        <span class="inbox-voice-len">${len}</span>
+        <audio preload="none" src="${escapeHtml(src)}"></audio>
       </div>
       <p class="text-[10px] text-zinc-600 font-mono">${formatTime(msg.createdAt)}</p>
     </div>`;
+}
+
+/**
+ * Wire up every voice bubble in the thread.
+ *
+ * Re-run after each render. Bubbles already wired are skipped, so a poll that
+ * redraws the thread does not stack listeners or restart audio.
+ */
+function wireVoicePlayers(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-voice]").forEach((box) => {
+    if (box.dataset.voiceWired === "1") return;
+    box.dataset.voiceWired = "1";
+
+    const audio = box.querySelector("audio");
+    const btn = box.querySelector(".inbox-voice-play");
+    const fill = box.querySelector(".inbox-voice-fill");
+    const label = box.querySelector(".inbox-voice-len");
+    if (!audio || !btn) return;
+
+    const declared = Number(box.dataset.voiceMs) || 0;
+    let total = declared / 1000;
+
+    const usable = (v) => Number.isFinite(v) && v > 0;
+
+    function paint() {
+      const at = audio.currentTime || 0;
+      if (usable(total)) {
+        fill.style.width = `${Math.min(100, (at / total) * 100)}%`;
+        label.textContent = audio.paused && !at ? durationLabel(total * 1000) : durationLabel(at * 1000);
+      } else {
+        label.textContent = durationLabel(at * 1000) || "--:--";
+      }
+    }
+
+    function showPlaying(on) {
+      // The stylesheet swaps the glyph off this class.
+      box.classList.toggle("is-playing", on);
+      btn.setAttribute("aria-label", on ? "Pause voice note" : "Play voice note");
+    }
+
+    audio.addEventListener("loadedmetadata", () => {
+      // A WebM blob from MediaRecorder reports Infinity here. Only take the
+      // file's answer when it is a real number and we were not told better.
+      if (!usable(total) && usable(audio.duration)) total = audio.duration;
+      paint();
+    });
+    audio.addEventListener("timeupdate", paint);
+    audio.addEventListener("play", () => showPlaying(true));
+    audio.addEventListener("pause", () => showPlaying(false));
+    audio.addEventListener("ended", () => {
+      showPlaying(false);
+      audio.currentTime = 0;
+      fill.style.width = "0%";
+      label.textContent = usable(total) ? durationLabel(total * 1000) : "--:--";
+    });
+    audio.addEventListener("error", () => {
+      showPlaying(false);
+      label.textContent = "unavailable";
+    });
+
+    btn.addEventListener("click", () => {
+      if (!audio.paused) {
+        audio.pause();
+        return;
+      }
+      // One at a time. Two notes talking over each other is unusable, and on a
+      // phone the second one usually just sounds like the first cutting out.
+      document.querySelectorAll("[data-voice] audio").forEach((other) => {
+        if (other !== audio && !other.paused) other.pause();
+      });
+      const started = audio.play();
+      if (started?.catch) started.catch(() => showPlaying(false));
+    });
+
+    paint();
+  });
 }
 
 function messageBubble(msg) {
@@ -1640,6 +1737,7 @@ function renderMessages(messages) {
   wireScratchCards();
   wireDropTimers();
   wireFitCheck();
+  wireVoicePlayers(wrap);
 }
 
 function renderLedger(pinned) {

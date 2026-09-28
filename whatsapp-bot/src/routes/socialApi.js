@@ -18,12 +18,14 @@ import {
 } from "../db/repositories/bundles.js";
 import { postBundleCard } from "../services/bundle-cards.js";
 import multer from "multer";
+import path from "node:path";
 import {
   validateVoiceUpload,
   storeVoiceNote,
   relayVoiceToWhatsApp,
   MAX_VOICE_BYTES,
   VOICE_TTL_MS,
+  VOICE_DIR,
 } from "../services/voice-upload.js";
 import { isSystemKind } from "../lib/message-kinds.js";
 import {
@@ -64,7 +66,6 @@ import { uploadSellerShopAvatar } from "../services/seller-avatar.js";
 import {
   notifyBuyerOfferResponse,
   notifyBuyerOfferReminder,
-  notifyNewDirectMessage,
   notifySellerNewFollower,
   notifySellerNewOffer,
 } from "../services/social-notifications.js";
@@ -1252,9 +1253,8 @@ router.post("/chat/send", async (req, res) => {
         message: result.message,
       });
     }
-    if (result.message) {
-      void notifyNewDirectMessage({ message: result.message });
-    }
+    // The WhatsApp ping fires inside sendDirectMessage, so every card kind
+    // gets one rather than only this route.
     res.status(201).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1418,12 +1418,43 @@ router.post("/chat/voice", voiceUpload.single("audio"), async (req, res) => {
 });
 
 /**
+ * The stored filename when a media URL points at a voice note on our own
+ * disk, otherwise null.
+ *
+ * Only a bare UUID-style name is accepted. The name comes out of the message
+ * payload rather than the request, but a path segment must never be able to
+ * walk out of the folder regardless of where it came from.
+ */
+/**
+ * Serve a note from our own disk.
+ *
+ * sendFile answers Range requests. A browser playing audio asks for ranges,
+ * and a server that ignores them hands back the whole file from byte zero
+ * every time the player rebuffers -- which is what made playback stall and
+ * cut out part way through a note.
+ */
+function serveLocalVoiceNote(res, name) {
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  return res.sendFile(path.join(VOICE_DIR, name), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "media_unavailable" });
+  });
+}
+
+export function localVoiceNoteName(mediaUrl) {
+  const match = /\/assets\/voice-notes\/([A-Za-z0-9._-]+)$/.exec(String(mediaUrl || ""));
+  const name = match?.[1];
+  if (!name || name.includes("..") || name.includes("/") || name.includes("\\")) return null;
+  return name;
+}
+
+/**
  * GET /api/social/chat/media/:messageId
  *
- * Streams a voice note or clip straight from WAHA to the browser. Nothing is
- * buffered on this VM and nothing is written to disk -- the file passes
- * through, so a thread full of voice notes costs the same memory as an empty
- * one.
+ * Two sources behind one URL. A note recorded on the site is on our disk and
+ * goes out through sendFile, so Range requests work and a player can seek and
+ * rebuffer. Anything that arrived over WhatsApp is streamed from WAHA and
+ * passes straight through, buffering nothing on this VM.
  */
 router.get("/chat/media/:messageId", async (req, res) => {
   try {
@@ -1462,8 +1493,14 @@ router.get("/chat/media/:messageId", async (req, res) => {
       });
     }
 
+    const localName = localVoiceNoteName(media.mediaUrl);
+    if (localName) return serveLocalVoiceNote(res, localName);
+
     const { streamWahaMedia } = await import("../services/whatsapp.js");
     const { stream, contentType, contentLength } = await streamWahaMedia(media.mediaUrl);
+    // This one is a straight proxy and cannot serve a partial range, so say
+    // so rather than letting the player assume it can seek.
+    res.setHeader("Accept-Ranges", "none");
 
     res.setHeader("Content-Type", media.mimetype || contentType);
     if (contentLength) res.setHeader("Content-Length", String(contentLength));
