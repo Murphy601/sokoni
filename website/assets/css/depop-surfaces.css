@@ -1168,3 +1168,38 @@ body.sell-depop-page .sell-activity-pill--like {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #a1a1aa;
 }
+
+/* Icebreakers. A single scrolling row above the composer, only while a thread
+   is empty. Scrollbar hidden because on a phone this is a swipe, not a
+   scrollbar people should see. */
+#chat-icebreakers {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#chat-icebreakers::-webkit-scrollbar {
+  display: none;
+}
+
+.inbox-chip {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.inbox-chip:hover,
+.inbox-chip:focus-visible {
+  border-color: #25d366;
+  color: #fff;
+}
