@@ -1263,6 +1263,14 @@ body.sell-depop-page .sell-activity-pill--like {
 
 /* Sheet rather than a modal: on a phone the thread should stay visible
    behind it, so the buyer keeps the conversation in view while picking. */
+/* .hidden is a class (0-1-0) and these are ids (1-0-0), so without an equally
+   specific hidden rule the id wins and the element is stuck on screen. That is
+   what left the bundle sheet covering the inbox. */
+#bundle-drawer.hidden,
+#chat-icebreakers.hidden {
+  display: none;
+}
+
 #bundle-drawer {
   position: absolute;
   inset: auto 0 0 0;
@@ -1828,4 +1836,41 @@ body.sell-depop-page .sell-activity-pill--like {
 .inbox-fit-share:hover,
 .inbox-fit-share:focus-visible {
   border-color: #25d366;
+}
+
+
+/* ---- Composer layout ---------------------------------------------------- */
+
+/* The action buttons are flex-none, so without this the input is the only
+   thing that can shrink -- and it shrank to about two characters wide once
+   there were five of them. min-width:0 lets it actually use the space it is
+   given rather than being held open by its own content. */
+#chat-form {
+  flex-wrap: wrap;
+}
+
+#chat-input {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.inbox-composer-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.inbox-composer-actions > :last-child {
+  margin-left: auto;
+}
+
+/* Tighter round buttons: five at 40px plus gaps is most of a phone's width. */
+.inbox-mic,
+.inbox-sound,
+.inbox-nudge-btn,
+.inbox-bundle-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
 }

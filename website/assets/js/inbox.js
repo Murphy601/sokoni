@@ -243,6 +243,58 @@ function renderAvailableShops(shops) {
     .join("");
 }
 
+/**
+ * Check a handle still belongs to a live shop.
+ *
+ * A deactivated or deleted shop leaves its handle in old links, bookmarks and
+ * recently-viewed entries. Opening a thread against one shows a chat with a
+ * seller who is gone, which looks like the inbox is broken rather than like
+ * the shop has closed.
+ *
+ * Only a definite answer counts as gone: a failed request means we do not
+ * know, and blocking a real conversation on a flaky network is worse than
+ * showing one dead thread.
+ */
+async function shopStillExists(handle) {
+  const want = normalizeHandle(handle);
+  if (!want) return true;
+  try {
+    const res = await fetch(`${PRODUCTS_API}?limit=300&offset=0`);
+    if (!res.ok) return true;
+    const data = await res.json();
+    const products = Array.isArray(data?.products) ? data.products : [];
+    if (!products.length) return true;
+    return products.some(
+      (p) =>
+        normalizeHandle(p.shopHandle || p.sellerHandle || "") === want &&
+        p.inStock !== false &&
+        !p.isSold
+    );
+  } catch {
+    return true;
+  }
+}
+
+/** Say the shop has closed, and offer the way back to a live one. */
+function showShopClosed(handle) {
+  const empty = el("chat-empty");
+  disableChatComposer();
+  setPeerLabel();
+  if (empty) {
+    empty.classList.remove("hidden");
+    empty.innerHTML = `
+      <p class="text-sm text-zinc-300">This shop is no longer on Sokoni.</p>
+      <p class="text-xs text-zinc-500 mt-1">
+        ${escapeHtml(formatHandle(handle) || "That seller")} has closed or removed their listings.
+        Browse the feed to find another fit.
+      </p>`;
+  }
+  state.peerId = null;
+  state.peerHandle = "";
+  shopPickerVisible(true);
+  void loadAvailableShops();
+}
+
 async function loadAvailableShops() {
   const list = el("inbox-shops-list");
   if (!list) return;
@@ -344,6 +396,24 @@ function beginChatIfReady() {
     empty.dataset.defaultHtml = empty.innerHTML;
   }
   if (empty?.dataset.defaultHtml) empty.innerHTML = empty.dataset.defaultHtml;
+
+  // Confirm the shop is still there before opening a thread against it. Done
+  // after the optimistic open so a live chat is not delayed by the check.
+  if (state.peerHandle) {
+    const handle = state.peerHandle;
+    void shopStillExists(handle).then((exists) => {
+      if (!exists && state.peerHandle === handle) {
+        // Not stopPolling?.() -- an undeclared identifier throws rather than
+        // short-circuiting. Clear the timer the way startPolling sets it.
+        if (state.pollTimer) {
+          clearInterval(state.pollTimer);
+          state.pollTimer = null;
+        }
+        showShopClosed(handle);
+      }
+    });
+  }
+
   loadThread();
   startPolling();
   return true;

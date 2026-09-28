@@ -59,10 +59,58 @@
     return raw;
   }
 
-  function renderCarousel(mount, { onSelect } = {}) {
+  /**
+   * Forget anything that is no longer listed.
+   *
+   * This store is a snapshot taken when a product was viewed, so a deleted or
+   * sold item stays in a buyer's browser forever -- showing them a shop and a
+   * price that no longer exist, and offering a chat with a seller who has gone.
+   * Pruned against the live catalogue on render.
+   */
+  async function pruneAgainstCatalogue() {
+    const items = read();
+    if (!items.length) return items;
+    try {
+      const base = window.SOKONI_API_BASE || "";
+      const res = await fetch(`${base}/api/products?limit=300&offset=0`);
+      if (!res.ok) return items;
+      const data = await res.json();
+      const live = new Set(
+        (Array.isArray(data?.products) ? data.products : [])
+          .filter((p) => p && p.inStock !== false && !p.isSold)
+          .map((p) => String(p.id))
+      );
+      // An empty catalogue means the request went wrong, not that every item
+      // is gone. Wiping someone's history on a bad response would be worse
+      // than showing one stale card.
+      if (!live.size) return items;
+      const kept = items.filter((x) => live.has(String(x.id)));
+      if (kept.length !== items.length) write(kept);
+      return kept;
+    } catch {
+      return items;
+    }
+  }
+
+  function renderCarousel(mount, { onSelect, skipPrune = false } = {}) {
     const node = typeof mount === "string" ? document.getElementById(mount) : mount;
     if (!node) return;
+
     const items = list(10);
+
+    // Draw what we have first -- waiting on the network before showing
+    // anything makes the carousel feel broken on a slow phone -- then prune
+    // and redraw only if something actually went. skipPrune stops the redraw
+    // pruning again and looping.
+    if (!skipPrune) {
+      const before = items.map((x) => String(x.id)).join(",");
+      void pruneAgainstCatalogue().then((kept) => {
+        if (kept.map((x) => String(x.id)).join(",") !== before) {
+          renderCarousel(mount, { onSelect, skipPrune: true });
+        }
+      });
+    }
+
     if (!items.length) {
       node.innerHTML = `<p class="text-xs text-zinc-500 px-1">Browse fits on the home feed — they’ll show up here for quick chat.</p>`;
       return;
