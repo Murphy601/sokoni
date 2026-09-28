@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "categories": []
+  "categories": [
+    {
+      "id": "phones-tablets",
+      "label": "Phones & Tablets",
+      "emoji": "📱",
+      "subcategories": []
+    }
+  ]
 }
