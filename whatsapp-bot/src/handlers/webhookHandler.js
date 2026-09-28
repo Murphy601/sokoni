@@ -160,6 +160,15 @@ function extractMedia(payload) {
   const typeLooksVoice = /\b(ptt|audio|voice|ogg)\b/.test(type) || type.includes("ptt");
   const mediaMimetype = rawMime || (typeLooksVoice ? "audio/ogg" : "image/jpeg");
   const isVoiceNote = typeLooksVoice || looksLikeVoiceNoteMime(mediaMimetype);
+  // WAHA reports voice length in whole seconds, and not on every engine. Left
+  // null when absent rather than defaulted -- a player showing 0:00 for every
+  // note is worse than one that reads the length off the stream itself.
+  const seconds = Number(
+    payload?._data?.message?.audioMessage?.seconds ??
+      payload?._data?.audioMessage?.seconds ??
+      payload?._data?.seconds ??
+      payload?.seconds
+  );
   return {
     hasMedia: Boolean((payload?.hasMedia || isVoiceNote) && (media?.url || payload?.id)),
     mediaUrl: media?.url || null,
@@ -167,6 +176,7 @@ function extractMedia(payload) {
     mediaFilename: media?.filename || null,
     mediaError,
     isVoiceNote,
+    mediaDurationMs: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null,
   };
 }
 
@@ -1202,6 +1212,23 @@ export async function handleWahaWebhook(body) {
   const incomingVoiceNote =
     parsed.isVoiceNote ||
     (parsed.hasMedia && looksLikeVoiceNoteMime(parsed.mediaMimetype));
+
+  // A voice note sent while a web chat is open belongs in that chat, not in
+  // the transcription path. Gated on the same short window as a text reply,
+  // so a note sent out of the blue still reaches the agent as before.
+  if (incomingVoiceNote && parsed.mediaUrl) {
+    try {
+      const { tryHandleInboxVoiceNote } = await import("../services/inbox-bridge.js");
+      const routed = await tryHandleInboxVoiceNote(parsed.customerKey, {
+        mediaUrl: parsed.mediaUrl,
+        mimetype: parsed.mediaMimetype,
+        durationMs: parsed.mediaDurationMs,
+      });
+      if (routed) return;
+    } catch (err) {
+      console.warn("[webhook] inbox voice note skipped:", err.message);
+    }
+  }
   const wantsVoice =
     incomingVoiceNote ||
     isExplicitAudioRequest(parsed.text) ||

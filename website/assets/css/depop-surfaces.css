@@ -1139,3 +1139,32 @@ body.sell-depop-page .sell-activity-pill--like {
   font-size: 13px;
 }
 
+
+/* Voice notes. preload="none" on the element means nothing is fetched until
+   play is pressed -- opening a thread full of them costs one request, not one
+   per note. */
+.inbox-voice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+.inbox-voice-mine {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-voice audio {
+  height: 32px;
+  max-width: 220px;
+}
+
+.inbox-voice-len {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #a1a1aa;
+}

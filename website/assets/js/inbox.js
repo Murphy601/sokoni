@@ -409,10 +409,40 @@ function ledgerCard(msg) {
     </div>`;
 }
 
+function durationLabel(ms) {
+  const total = Math.round(Number(ms) / 1000);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Voice note. The src points at our streaming endpoint, not at a file --
+ * nothing is downloaded until someone presses play, and the audio passes
+ * through the server rather than being stored by it.
+ */
+function voiceBubble(msg) {
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const wrapper = mine ? "items-end" : "items-start";
+  const who = mine ? "You" : formatHandle(state.peerHandle) || `User #${state.peerId}`;
+  const params = authQueryParams(new URLSearchParams({ userId: String(state.viewerId) }));
+  const src = `${SOCIAL_API}/chat/media/${msg.id}?${params.toString()}`;
+  const len = durationLabel(msg.payload?.durationMs);
+  return `
+    <div class="flex flex-col ${wrapper} gap-1">
+      <p class="text-[11px] text-zinc-500">${who}</p>
+      <div class="inbox-voice ${mine ? "inbox-voice-mine" : ""}">
+        <audio controls preload="none" src="${escapeHtml(src)}"></audio>
+        ${len ? `<span class="inbox-voice-len">${len}</span>` : ""}
+      </div>
+      <p class="text-[10px] text-zinc-600 font-mono">${formatTime(msg.createdAt)}</p>
+    </div>`;
+}
+
 function messageBubble(msg) {
   // Unknown kinds fall through to the text bubble, so a card shipped after
   // this page was loaded still shows its fallback rather than nothing.
   if (msg.kind === "escrow_status") return escrowCard(msg);
+  if (msg.kind === "voice") return voiceBubble(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
