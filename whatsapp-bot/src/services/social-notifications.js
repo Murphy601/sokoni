@@ -370,8 +370,25 @@ export async function notifyNewDirectMessage({ message, sender } = {}) {
     const msg =
       `💬 *New Sokoni message*\n\n` +
       `From *${senderLabel}*${handle ? ` (@${handle})` : ""}${preview ? `:\n"${preview}${preview.length >= 80 ? "…" : ""}"` : "."}\n\n` +
-      `Reply on-site (keep deals inside Sokoni):\n${inbox}`;
-    await sendUserText(receiverId, msg, { event: "message" });
+      `Reply on-site (keep deals inside Sokoni):\n${inbox}` +
+      `\n\n↩️ *Reply right here* — just type your answer, or *R your message*.`;
+    const sent = await sendUserText(receiverId, msg, { event: "message" });
+
+    // Remember which thread this chat was pinged about, so a bare reply in
+    // the next few minutes knows where to go. Without this the bridge has no
+    // way to tell a chat reply from anything else the bot handles.
+    if (sent?.ok && sent.phone) {
+      try {
+        const { rememberInboxPing } = await import("./inbox-bridge.js");
+        rememberInboxPing(toChatId(sent.phone), {
+          viewerUserId: receiverId,
+          peerUserId: senderId,
+          peerLabel: senderLabel,
+        });
+      } catch (err) {
+        console.warn("[social-notify] reply context skipped:", err.message);
+      }
+    }
   } catch (err) {
     console.warn("[social-notify] DM ping failed:", err.message);
   }
