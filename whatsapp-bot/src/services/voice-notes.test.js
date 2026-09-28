@@ -112,8 +112,11 @@ describe("the inbox plays them lazily", () => {
     assert.match(INBOX, /chat\/media\/\$\{msg\.id\}/);
   });
 
-  it("hides the length when it is unknown", () => {
-    assert.match(INBOX, /len \? `<span class="inbox-voice-len">/);
+  it("never puts a made-up length on a note", () => {
+    // The span is always rendered now -- the custom player writes elapsed time
+    // into it while a note plays -- so the guard moved from hiding the element
+    // to what goes inside it. An unknown length reads --:--, not 0:00.
+    assert.match(INBOX, /durationLabel\(known\) \|\| "--:--"/);
   });
 });
 

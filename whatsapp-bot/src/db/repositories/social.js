@@ -2951,7 +2951,23 @@ export async function sendDirectMessage({
       expiresAt ? new Date(expiresAt) : null,
     ]
   );
-  return { success: true, message: mapMessageRow(rows[0]) };
+  const message = mapMessageRow(rows[0]);
+
+  // Ping the receiver on WhatsApp. This sits here rather than in the route
+  // because every card -- nudge, voice note, bundle, scratch card, drop --
+  // goes through this function and only /chat/send was doing it. A seller who
+  // does not have the site open otherwise never learns the card exists.
+  //
+  // System cards are skipped: escrow and ledger cards are posted by flows that
+  // already message both parties, and pinging twice for one payment is worse
+  // than not pinging at all.
+  if (!isSystem) {
+    void import("../../services/social-notifications.js")
+      .then((m) => m.notifyNewDirectMessage({ message }))
+      .catch((err) => console.warn("[social] DM ping skipped:", err.message));
+  }
+
+  return { success: true, message };
 }
 
 /** Emoji the inbox offers. A fixed set, so nobody stores arbitrary strings. */

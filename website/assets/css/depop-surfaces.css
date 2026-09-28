@@ -1158,9 +1158,67 @@ body.sell-depop-page .sell-activity-pill--like {
   border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
 }
 
+/* The audio element is the engine, not the interface. Its own controls report
+   a WebM recording as zero seconds long, which is what put 0:00 / 0:00 on
+   every note. */
 .inbox-voice audio {
+  display: none;
+}
+
+.inbox-voice-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
   height: 32px;
-  max-width: 220px;
+  border-radius: 999px;
+  border: none;
+  background: #FF2300;
+  color: #fff;
+  cursor: pointer;
+}
+
+.inbox-voice-play:active {
+  transform: scale(0.94);
+}
+
+/* Which glyph shows is component state, so it lives here. Keying it off
+   Tailwind's .hidden would put the play and pause icons on top of each other
+   any time the CDN script did not load. */
+.inbox-voice-glyph-pause {
+  display: none;
+}
+
+.inbox-voice.is-playing .inbox-voice-glyph-play {
+  display: none;
+}
+
+.inbox-voice.is-playing .inbox-voice-glyph-pause {
+  display: block;
+}
+
+.inbox-voice-track {
+  flex: 1 1 auto;
+  min-width: 90px;
+  max-width: 180px;
+  height: 4px;
+  border-radius: 999px;
+  background: #3f3f46;
+  overflow: hidden;
+}
+
+.inbox-voice-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: #FF2300;
+  transition: width 0.12s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-voice-fill {
+    transition: none;
+  }
 }
 
 .inbox-voice-len {
@@ -1873,4 +1931,32 @@ body.sell-depop-page .sell-activity-pill--like {
   width: 36px;
   height: 36px;
   font-size: 14px;
+}
+
+
+/* ---- Composer icons ----------------------------------------------------- */
+
+.inbox-mic svg,
+.inbox-bundle-btn svg {
+  display: block;
+  pointer-events: none;
+}
+
+/* Mic turns into a stop square while recording, so the button says what
+   pressing it again will do. */
+.inbox-mic-stop {
+  display: none;
+}
+
+.inbox-mic.is-recording .inbox-mic-glyph {
+  display: none;
+}
+
+.inbox-mic.is-recording .inbox-mic-stop {
+  display: block;
+}
+
+.inbox-mic.is-recording {
+  background: #FF2300;
+  color: #fff;
 }
