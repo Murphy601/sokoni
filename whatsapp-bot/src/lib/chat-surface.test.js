@@ -73,8 +73,15 @@ describe("a shop that has gone", () => {
     const fn = INBOX.slice(INBOX.indexOf("async function shopStillExists"));
     const body = fn.slice(0, fn.indexOf("\n}"));
     assert.match(body, /if \(!res\.ok\) return true;/);
-    assert.match(body, /if \(!products\.length\) return true;/);
+    assert.match(body, /if \(data\.catalogPaused\) return true;/);
     assert.match(body, /catch \{\s*return true;/);
+  });
+
+  it("only calls a shop gone when it saw the whole catalogue", () => {
+    // Absent from page one is not absent from the marketplace.
+    const fn = INBOX.slice(INBOX.indexOf("async function shopStillExists"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    assert.match(body, /total <= data\.products\.length/);
   });
 
   it("stops the poll timer without calling an undeclared name", () => {
@@ -118,7 +125,11 @@ const twoItems = [
   { id: "p1", name: "Cargo pants", shopHandle: "adivs" },
   { id: "p2", name: "Denim jacket", shopHandle: "live-shop" },
 ];
-const jsonRes = (body) => ({ ok: true, json: async () => body });
+/** The list route always reports how many products exist, not just this page. */
+const jsonRes = (body) => ({
+  ok: true,
+  json: async () => ({ total: (body.products || []).length, ...body }),
+});
 
 describe("recently viewed forgets deleted items", () => {
   it("drops what is no longer in the catalogue", async () => {
@@ -149,13 +160,64 @@ describe("recently viewed forgets deleted items", () => {
     assert.equal(r.kept().length, 2);
   });
 
-  it("keeps everything when the catalogue comes back empty", async () => {
-    // An empty list is what a half-broken API returns. Wiping a buyer's
-    // history on it would be unrecoverable.
+  it("clears history when the catalogue is genuinely empty", async () => {
+    // This is the live case: every shop was removed, so /api/products answers
+    // 200 with total 0. A successful answer of "nothing is listed" is a real
+    // answer, and treating it as a glitch is what kept a deleted shop on
+    // screen after the shop itself was gone.
     const r = runRecent({ stored: twoItems, fetchImpl: async () => jsonRes({ products: [] }) });
     r.api.renderCarousel(r.node);
     await tick();
+    assert.deepEqual(r.kept(), []);
+  });
+
+  it("keeps everything while the catalogue is paused", async () => {
+    // Paused hides products, it does not delete them.
+    const r = runRecent({
+      stored: twoItems,
+      fetchImpl: async () => jsonRes({ products: [], catalogPaused: true }),
+    });
+    r.api.renderCarousel(r.node);
+    await tick();
     assert.equal(r.kept().length, 2);
+  });
+
+  it("keeps everything when the response is not the shape we expect", async () => {
+    const r = runRecent({ stored: twoItems, fetchImpl: async () => jsonRes({ error: "boom" }) });
+    r.api.renderCarousel(r.node);
+    await tick();
+    assert.equal(r.kept().length, 2);
+  });
+
+  it("does not remove an item that could be on the next page", async () => {
+    // total is bigger than what came back, so absence from this page proves
+    // nothing. Only what is listed here and sold gets dropped.
+    const r = runRecent({
+      stored: twoItems,
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({ total: 900, products: [{ id: "p2", inStock: true }] }),
+      }),
+    });
+    r.api.renderCarousel(r.node);
+    await tick();
+    assert.deepEqual(r.kept().map((x) => x.id), ["p1", "p2"]);
+  });
+
+  it("still drops a sold item found on a partial page", async () => {
+    const r = runRecent({
+      stored: twoItems,
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({
+          total: 900,
+          products: [{ id: "p1", isSold: true }, { id: "p2", inStock: true }],
+        }),
+      }),
+    });
+    r.api.renderCarousel(r.node);
+    await tick();
+    assert.deepEqual(r.kept().map((x) => x.id), ["p2"]);
   });
 
   it("keeps everything when fetch throws", async () => {

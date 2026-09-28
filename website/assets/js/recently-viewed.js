@@ -73,18 +73,31 @@
     try {
       const base = window.SOKONI_API_BASE || "";
       const res = await fetch(`${base}/api/products?limit=300&offset=0`);
+      // 503 means no database, 500 means the query blew up. Either way we
+      // know nothing, so nothing gets removed.
       if (!res.ok) return items;
       const data = await res.json();
+      if (!Array.isArray(data?.products)) return items;
+      // Paused is not deleted. An admin hiding the catalogue for an hour must
+      // not erase what every buyer has looked at.
+      if (data.catalogPaused) return items;
+
+      const page = data.products.filter((p) => p && p.id != null);
+      const listed = new Set(page.map((p) => String(p.id)));
       const live = new Set(
-        (Array.isArray(data?.products) ? data.products : [])
-          .filter((p) => p && p.inStock !== false && !p.isSold)
-          .map((p) => String(p.id))
+        page.filter((p) => p.inStock !== false && !p.isSold).map((p) => String(p.id))
       );
-      // An empty catalogue means the request went wrong, not that every item
-      // is gone. Wiping someone's history on a bad response would be worse
-      // than showing one stale card.
-      if (!live.size) return items;
-      const kept = items.filter((x) => live.has(String(x.id)));
+      // Absence only proves something when the page holds the whole
+      // catalogue. Past that an item could be on page two, so it stays.
+      const total = Number(data.total);
+      const wholeCatalogue = Number.isFinite(total) && total <= page.length;
+
+      const kept = items.filter((x) => {
+        const id = String(x.id);
+        if (live.has(id)) return true;
+        if (listed.has(id)) return false;
+        return !wholeCatalogue;
+      });
       if (kept.length !== items.length) write(kept);
       return kept;
     } catch {

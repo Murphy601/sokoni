@@ -262,14 +262,21 @@ async function shopStillExists(handle) {
     const res = await fetch(`${PRODUCTS_API}?limit=300&offset=0`);
     if (!res.ok) return true;
     const data = await res.json();
-    const products = Array.isArray(data?.products) ? data.products : [];
-    if (!products.length) return true;
-    return products.some(
+    if (!Array.isArray(data?.products)) return true;
+    // Paused is not closed.
+    if (data.catalogPaused) return true;
+    const selling = data.products.some(
       (p) =>
         normalizeHandle(p.shopHandle || p.sellerHandle || "") === want &&
         p.inStock !== false &&
         !p.isSold
     );
+    if (selling) return true;
+    // Nothing from this shop on the page we fetched. That only means the shop
+    // has gone if the page was the whole catalogue -- otherwise their listings
+    // could be further down it.
+    const total = Number(data.total);
+    return !(Number.isFinite(total) && total <= data.products.length);
   } catch {
     return true;
   }
