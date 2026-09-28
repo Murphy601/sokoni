@@ -448,6 +448,7 @@ function messageBubble(msg) {
   if (msg.kind === "escrow_status") return escrowCard(msg);
   if (msg.kind === "voice") return voiceBubble(msg);
   if (msg.kind === "bundle") return bundleCard(msg);
+  if (msg.kind === "scratch_card") return scratchCard(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -869,6 +870,173 @@ function wireBundleCards() {
   });
 }
 
+/* ---- Scratch cards ------------------------------------------------------ */
+
+/**
+ * A card the buyer rubs to reveal.
+ *
+ * The foil is a canvas the buyer erases with a finger or the mouse. It is
+ * theatre, but the perk underneath is real and seller-funded, so the reveal
+ * only counts once the server has stamped it -- scratching the pixels alone
+ * must never be what grants a discount.
+ */
+function scratchCard(msg) {
+  const p = msg.payload || {};
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const revealed = Boolean(p.revealedAt);
+  const perk = p.perk || {};
+
+  if (mine) {
+    // The seller sees what they sent, with no foil to rub.
+    return `
+      <div class="inbox-scratch is-sent">
+        <p class="inbox-scratch-head">Deal sent</p>
+        <p class="inbox-scratch-perk">${escapeHtml(perk.label || "Perk")}</p>
+        <p class="inbox-scratch-note">${escapeHtml(p.productTitle || "")}${
+      revealed ? " · scratched" : " · not scratched yet"
+    }</p>
+      </div>`;
+  }
+
+  if (revealed) {
+    return `
+      <div class="inbox-scratch is-revealed" data-scratch-id="${escapeHtml(String(msg.id))}">
+        <p class="inbox-scratch-head">You unlocked</p>
+        <p class="inbox-scratch-perk">${escapeHtml(perk.label || "Perk")}</p>
+        <p class="inbox-scratch-note">${escapeHtml(p.productTitle || "")}${
+      p.finalKes ? ` · now ${formatKes(p.finalKes)}` : ""
+    }</p>
+      </div>`;
+  }
+
+  return `
+    <div class="inbox-scratch" data-scratch-id="${escapeHtml(String(msg.id))}">
+      <p class="inbox-scratch-head">A deal from the seller</p>
+      <div class="inbox-scratch-foil" data-scratch-foil>
+        <span class="inbox-scratch-hint">Scratch to reveal</span>
+      </div>
+      <p class="inbox-scratch-note">${escapeHtml(p.productTitle || "")}</p>
+    </div>`;
+}
+
+/**
+ * Turn the foil into something rubbable.
+ *
+ * Canvas rather than a CSS trick so the erasing follows the finger. Once
+ * enough is cleared the server is asked to reveal; the pixels are only the
+ * gesture.
+ */
+function armScratchFoil(foil, attempt = 0) {
+  if (!foil || foil.dataset.armed === "1") return;
+
+  const card = foil.closest("[data-scratch-id]");
+  const id = card?.dataset.scratchId;
+  if (!id) return;
+
+  const rect = foil.getBoundingClientRect();
+  // wireScratchCards runs in the same tick as the innerHTML that created this
+  // element, so layout may not have happened and the box can still be 0 wide.
+  // Wait a couple of frames for it -- but bounded, because a card that is
+  // genuinely zero-width would otherwise retry forever and never arm at all,
+  // which is worse than arming with an estimate.
+  if (rect.width < 8 && attempt < 3) {
+    requestAnimationFrame(() => armScratchFoil(foil, attempt + 1));
+    return;
+  }
+  foil.dataset.armed = "1";
+
+  const w = Math.max(1, Math.round(rect.width || card.getBoundingClientRect().width || 240));
+  const h = Math.max(1, Math.round(rect.height || 56));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.className = "inbox-scratch-canvas";
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    // No canvas: fall back to a plain tap, so the perk is still reachable.
+    foil.addEventListener("click", () => void revealScratch(id), { once: true });
+    return;
+  }
+  ctx.fillStyle = "#3f3f46";
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = "destination-out";
+  foil.appendChild(canvas);
+
+  let rubbing = false;
+  let cleared = 0;
+  let done = false;
+  const threshold = Math.max(12, Math.round((w * h) / 2600));
+
+  const rub = (event) => {
+    if (!rubbing || done) return;
+    const box = canvas.getBoundingClientRect();
+    const point = event.touches ? event.touches[0] : event;
+    const x = point.clientX - box.left;
+    const y = point.clientY - box.top;
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    cleared += 1;
+    // Roughly a third of the surface. Counting strokes rather than reading
+    // pixels back: getImageData on every move is expensive on a cheap phone.
+    // The floor matters as much as the ratio -- without it a small or
+    // mismeasured card would open on a single touch.
+    if (cleared > threshold) {
+      done = true;
+      canvas.classList.add("is-cleared");
+      void revealScratch(id);
+    }
+  };
+
+  const start = (e) => {
+    rubbing = true;
+    rub(e);
+  };
+  const stop = () => {
+    rubbing = false;
+  };
+
+  canvas.addEventListener("pointerdown", start);
+  canvas.addEventListener("pointermove", rub);
+  window.addEventListener("pointerup", stop);
+  canvas.addEventListener("touchstart", start, { passive: true });
+  canvas.addEventListener("touchmove", rub, { passive: true });
+  canvas.addEventListener("touchend", stop);
+}
+
+async function revealScratch(messageId) {
+  try {
+    const res = await fetch(
+      `${SOCIAL_API}/chat/scratch-card/${encodeURIComponent(messageId)}/reveal`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withAuthBody({ userId: state.viewerId })),
+      }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data?.message || "Couldn't open that deal.", true);
+      return;
+    }
+    setStatus(
+      data.minutesLeft
+        ? `Unlocked: ${data.perk?.label || "deal"} — ${Math.round(data.minutesLeft / 60)}h left.`
+        : `Unlocked: ${data.perk?.label || "deal"}.`
+    );
+    await loadThread();
+  } catch {
+    setStatus("Couldn't open that deal.", true);
+  }
+}
+
+/** Arm any foil that appears after a thread render. */
+function wireScratchCards() {
+  const wrap = el("chat-thread");
+  if (!wrap) return;
+  wrap.querySelectorAll("[data-scratch-foil]").forEach(armScratchFoil);
+}
+
 function renderIcebreakers(messages) {
   const slot = el("chat-icebreakers");
   if (!slot) return;
@@ -928,6 +1096,7 @@ function renderMessages(messages) {
   // stays visible while the conversation scrolls under it.
   wrap.innerHTML = list.filter((m) => !m.isPinned).map(messageBubble).join("");
   wrap.scrollTop = wrap.scrollHeight;
+  wireScratchCards();
 }
 
 function renderLedger(pinned) {
