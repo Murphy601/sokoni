@@ -1,4 +1,12 @@
 import { Router } from "express";
+import multer from "multer";
+import {
+  validateVoiceUpload,
+  storeVoiceNote,
+  relayVoiceToWhatsApp,
+  MAX_VOICE_BYTES,
+  VOICE_TTL_MS,
+} from "../services/voice-upload.js";
 import { isSystemKind } from "../lib/message-kinds.js";
 import {
   createOrderReview,
@@ -1286,6 +1294,109 @@ router.post("/chat/react", async (req, res) => {
 /** GET /api/social/chat/reactions/available */
 router.get("/chat/reactions/available", (_req, res) => {
   res.json({ emojis: ALLOWED_REACTIONS });
+});
+
+/**
+ * POST /api/social/chat/voice
+ *
+ * A browser recording, multipart, held in memory only. Nothing is buffered
+ * beyond the request: the bytes are written once as a short-lived playback
+ * copy, handed to WAHA for the seller's WhatsApp, and then dropped.
+ */
+const voiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_VOICE_BYTES, files: 1 },
+});
+
+router.post("/chat/voice", voiceUpload.single("audio"), async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}) };
+    const hasSellerContext = hasSellerSessionContext(req, payload);
+    let usedSellerIdentity = false;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) {
+        const requested = Number(payload.senderUserId);
+        if (Number.isInteger(requested) && requested > 0 && requested !== auth.sellerUserId) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the sender profile in this request.",
+          });
+        }
+        payload.senderUserId = auth.sellerUserId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+      }
+    }
+    if (!usedSellerIdentity) {
+      const gated = await applyBuyerIdentityAuth(req, payload, "senderUserId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      payload = gated.payload || payload;
+    }
+
+    const check = validateVoiceUpload({
+      buffer: req.file?.buffer,
+      mimetype: req.file?.mimetype || payload.mimetype,
+      durationMs: payload.durationMs,
+    });
+    if (!check.ok) {
+      return res.status(400).json({ error: check.error, message: check.message });
+    }
+
+    const stored = await storeVoiceNote(req.file.buffer, check.ext);
+    const durationMs = Number(payload.durationMs);
+    const result = await sendDirectMessage({
+      senderUserId: Number(payload.senderUserId),
+      receiverUserId: Number(payload.receiverUserId),
+      content: "",
+      kind: "voice",
+      payload: {
+        mediaUrl: stored.url,
+        mimetype: req.file.mimetype,
+        source: "web",
+        ...(Number.isFinite(durationMs) && durationMs > 0 ? { durationMs: Math.round(durationMs) } : {}),
+      },
+      expiresAt: new Date(Date.now() + VOICE_TTL_MS),
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+
+    // Not awaited: WAHA can be slow or restarting, and the message is already
+    // in the thread. A failed relay costs a WhatsApp copy, not the note.
+    void (async () => {
+      try {
+        const { findUserById } = await import("../db/repositories/users.js");
+        const peer = await findUserById(Number(payload.receiverUserId));
+        if (peer?.phone) {
+          await relayVoiceToWhatsApp(peer.phone, req.file.buffer, req.file.mimetype, stored.filename);
+        }
+      } catch (err) {
+        console.warn("[social] voice relay skipped:", err.message);
+      }
+    })();
+
+    res.status(201).json(result);
+  } catch (err) {
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        error: "recording_too_large",
+        message: "That recording is too long. Keep it under 30 seconds.",
+      });
+    }
+    console.warn("[social] voice upload failed:", err.message);
+    res.status(500).json({ error: "voice_upload_failed", message: err.message });
+  }
 });
 
 /**

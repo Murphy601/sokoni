@@ -709,6 +709,44 @@ function voiceFilePayload(filepath, data) {
  * Send a cached MP3 (or ogg) as a WhatsApp voice note.
  * WAHA `convert: true` turns MP3 into PTT — no ffmpeg required on the bot VM.
  */
+/**
+ * Send a voice note straight from a buffer.
+ *
+ * sendVoiceNote reads a cached file off disk. A browser recording is already
+ * in memory, and writing it out only to read it back would put the same bytes
+ * through the filesystem twice for no reason.
+ */
+export async function sendVoiceBuffer(to, buffer, { mimetype = "audio/ogg", filename = "voice.ogg" } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  if (!buffer?.length) throw new Error("empty_buffer");
+
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file: {
+      mimetype: String(mimetype || "audio/ogg").split(";")[0],
+      filename,
+      data: Buffer.from(buffer).toString("base64"),
+    },
+    convert: true,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVoice", { chatId: dest, bytes: buffer.length });
+    return { dryRun: true, chatId: dest };
+  }
+  try {
+    const resp = await callWaha("/api/sendVoice", body, { timeoutMs: 45000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVoiceBuffer failed, trying sendFile:", err.message);
+    const resp = await callWaha("/api/sendFile", { ...body, caption: "" }, { timeoutMs: 45000 });
+    rememberSend(resp, dest);
+    return resp;
+  }
+}
+
 export async function sendVoiceNote(to, filepath) {
   const dest = toChatId(to);
   if (!dest) {

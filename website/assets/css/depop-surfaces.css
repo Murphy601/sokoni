@@ -1203,3 +1203,40 @@ body.sell-depop-page .sell-activity-pill--like {
   border-color: #25d366;
   color: #fff;
 }
+
+/* Record button. Pulses only while recording, so the state is obvious without
+   reading anything -- a mic that is silently live is the worst outcome here. */
+.inbox-mic {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inbox-mic:hover,
+.inbox-mic:focus-visible {
+  border-color: #25d366;
+  color: #e4e4e7;
+}
+
+.inbox-mic.is-recording {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fff;
+  animation: inbox-mic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes inbox-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-mic.is-recording { animation: none; }
+}
