@@ -26,6 +26,7 @@ import {
   setSellerHandledOfferQueueState,
   sendDirectMessage,
   toggleMessageReaction,
+  getMessageMedia,
   ALLOWED_REACTIONS,
   toggleFollow,
   updateUserShopProfile,
@@ -1285,6 +1286,74 @@ router.post("/chat/react", async (req, res) => {
 /** GET /api/social/chat/reactions/available */
 router.get("/chat/reactions/available", (_req, res) => {
   res.json({ emojis: ALLOWED_REACTIONS });
+});
+
+/**
+ * GET /api/social/chat/media/:messageId
+ *
+ * Streams a voice note or clip straight from WAHA to the browser. Nothing is
+ * buffered on this VM and nothing is written to disk -- the file passes
+ * through, so a thread full of voice notes costs the same memory as an empty
+ * one.
+ */
+router.get("/chat/media/:messageId", async (req, res) => {
+  try {
+    const messageId = Number(req.params.messageId);
+    if (!Number.isInteger(messageId) || messageId < 1) {
+      return res.status(400).json({ error: "invalid_message_id" });
+    }
+
+    let payload = { ...(req.query || {}) };
+    const hasSellerContext = hasSellerSessionContext(req, payload);
+    let viewerId = null;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) viewerId = auth.sellerUserId;
+      else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+      }
+    }
+    if (!viewerId) {
+      const gated = await applyBuyerIdentityAuth(req, payload, "userId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      viewerId = Number((gated.payload || payload).userId);
+    }
+
+    const media = await getMessageMedia({ messageId, viewerUserId: viewerId });
+    if (media.error) {
+      return res.status(socialErrorStatus(media.error)).json({
+        error: media.error,
+        message: media.message,
+      });
+    }
+
+    const { streamWahaMedia } = await import("../services/whatsapp.js");
+    const { stream, contentType, contentLength } = await streamWahaMedia(media.mediaUrl);
+
+    res.setHeader("Content-Type", media.mimetype || contentType);
+    if (contentLength) res.setHeader("Content-Length", String(contentLength));
+    // Private: the URL is per-message and only a participant may fetch it.
+    res.setHeader("Cache-Control", "private, max-age=300");
+
+    // If the listener navigates away mid-play, stop pulling from WAHA rather
+    // than finishing a download nobody is waiting for.
+    res.on("close", () => stream.destroy?.());
+    stream.on("error", (err) => {
+      console.warn("[social] media stream error:", err.message);
+      if (!res.headersSent) res.status(502).json({ error: "media_unavailable" });
+      else res.end();
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.warn("[social] media route failed:", err.message);
+    if (!res.headersSent) res.status(502).json({ error: "media_unavailable", message: err.message });
+  }
 });
 
 /** GET /api/social/chat/thread?userAId=1&userBId=2 */

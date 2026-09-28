@@ -189,6 +189,54 @@ function uniqueChatIds(...ids) {
 }
 
 /** Download media from WAHA (image/PDF from WhatsApp message). Retries when WAHA is still saving. */
+/**
+ * Stream one media file straight from WAHA to a caller, without buffering it.
+ *
+ * downloadWahaMedia pulls the whole file into an arraybuffer, which is right
+ * when the bot needs the bytes -- saving a rider's ID photo, say. It is wrong
+ * for serving a chat thread: a buyer opening a conversation with a hundred
+ * voice notes would put every one of them through the Node heap, and this VM
+ * runs pm2 with a 450MB cap.
+ *
+ * The response is piped, so memory stays flat no matter the file size or how
+ * many people are listening at once.
+ *
+ * @param {string} mediaUrl WAHA media URL, as stored on the message
+ * @param {{signal?: AbortSignal}} opts
+ * @returns {Promise<{stream: import("stream").Readable, contentType: string, contentLength: number|null}>}
+ */
+export async function streamWahaMedia(mediaUrl, { signal } = {}) {
+  if (!config.waha.apiUrl) throw new Error("WAHA_API_URL not set");
+  const apiBase = config.waha.apiUrl.replace(/\/$/, "");
+  const url = fixMediaUrl(mediaUrl, apiBase);
+  if (!url) throw new Error("no_media_url");
+
+  const resp = await axios.get(url, {
+    headers: wahaHeaders(),
+    responseType: "stream",
+    timeout: 30_000,
+    signal,
+    validateStatus: (code) => code === 200,
+  });
+
+  const contentType = String(resp.headers["content-type"] || "application/octet-stream");
+  if (contentType.includes("application/json")) {
+    // WAHA answered with a pointer rather than the file. Follow it once.
+    const chunks = [];
+    for await (const chunk of resp.data) chunks.push(chunk);
+    const json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (!json?.media?.url) throw new Error("WAHA returned JSON without media");
+    return streamWahaMedia(json.media.url, { signal });
+  }
+
+  const len = Number(resp.headers["content-length"]);
+  return {
+    stream: resp.data,
+    contentType,
+    contentLength: Number.isFinite(len) && len > 0 ? len : null,
+  };
+}
+
 export async function downloadWahaMedia(
   mediaUrl,
   { messageId, chatId, fromChatId, toChatId, session, mimetype } = {}

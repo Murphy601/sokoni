@@ -44,9 +44,16 @@ const SYSTEM_ONLY = new Set([
  * cards gain fields over time and an older row must not stop rendering.
  */
 const REQUIRED = {
-  [MESSAGE_KINDS.IMAGE]: ["url"],
-  [MESSAGE_KINDS.VOICE]: ["url", "durationMs"],
-  [MESSAGE_KINDS.VIDEO]: ["url"],
+  // mediaUrl, not url: getMessageMedia reads payload.mediaUrl, and two names
+  // for the same thing is how a voice note ends up failing validation while
+  // looking correct in every log.
+  //
+  // Duration is not required. WAHA does not always report it, and a voice
+  // note whose length is unknown is still a voice note -- the player reads it
+  // from the stream. Demanding it would reject real messages.
+  [MESSAGE_KINDS.IMAGE]: ["mediaUrl"],
+  [MESSAGE_KINDS.VOICE]: ["mediaUrl"],
+  [MESSAGE_KINDS.VIDEO]: ["mediaUrl"],
   [MESSAGE_KINDS.ESCROW_STATUS]: ["orderRef", "state"],
   [MESSAGE_KINDS.DEAL_LEDGER]: ["orderRef", "state"],
   [MESSAGE_KINDS.OFFER_CARD]: ["offerId"],

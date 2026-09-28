@@ -167,3 +167,54 @@ export async function tryHandleInboxReply(customerKey, rawText, { phone = "" } =
     return false;
   }
 }
+
+/**
+ * Route a WhatsApp voice note into the web inbox thread.
+ *
+ * Stores a reference -- the WAHA media URL, the mimetype, how long it runs --
+ * and never the audio itself. The bytes stay where WAHA already put them and
+ * are streamed on demand when someone presses play, so a thread with a
+ * hundred voice notes costs this process nothing.
+ *
+ * Voice is treated exactly like a bare text reply: it only lands in a thread
+ * we pinged this chat about in the last few minutes. A seller sending the bot
+ * a voice note out of the blue still reaches the normal transcription path.
+ *
+ * @returns {Promise<boolean>} true when the note was consumed
+ */
+export async function tryHandleInboxVoiceNote(customerKey, { mediaUrl, mimetype, durationMs } = {}) {
+  if (!mediaUrl) return false;
+  const thread = activeInboxThread(customerKey);
+  if (!thread) return false;
+
+  try {
+    const { sendDirectMessage } = await import("../db/repositories/social.js");
+    const { MESSAGE_KINDS } = await import("../lib/message-kinds.js");
+    const result = await sendDirectMessage({
+      senderUserId: thread.viewerUserId,
+      receiverUserId: thread.peerUserId,
+      content: "",
+      kind: MESSAGE_KINDS.VOICE,
+      payload: {
+        // A pointer, not the audio. See streamWahaMedia.
+        mediaUrl: String(mediaUrl),
+        mimetype: String(mimetype || "audio/ogg"),
+        ...(Number(durationMs) > 0 ? { durationMs: Math.round(Number(durationMs)) } : {}),
+        source: "whatsapp",
+      },
+    });
+
+    const { sendText } = await import("./whatsapp.js");
+    if (result?.error) {
+      await sendText(customerKey, "Couldn't add that voice note to your Sokoni chat. Try again?");
+      return true;
+    }
+    rememberInboxPing(customerKey, thread);
+    const who = thread.peerLabel ? ` to ${thread.peerLabel}` : "";
+    await sendText(customerKey, `Voice note sent${who}. ✓`);
+    return true;
+  } catch (err) {
+    console.warn("[inbox-bridge] voice note failed:", err.message);
+    return false;
+  }
+}

@@ -36,9 +36,21 @@ describe("payload validation", () => {
   });
 
   it("names the fields a card is missing", () => {
-    const r = validatePayload(MESSAGE_KINDS.VOICE, { url: "/a.webm" });
+    const r = validatePayload(MESSAGE_KINDS.BUNDLE, {});
     assert.equal(r.ok, false);
-    assert.match(r.message, /durationMs/);
+    assert.match(r.message, /productIds/);
+  });
+
+  it("accepts media by the name the reader actually uses", () => {
+    // getMessageMedia reads payload.mediaUrl. Requiring "url" here meant every
+    // voice note failed validation while looking right everywhere else.
+    assert.equal(validatePayload(MESSAGE_KINDS.VOICE, { mediaUrl: "/a.ogg" }).ok, true);
+    assert.equal(validatePayload(MESSAGE_KINDS.IMAGE, { mediaUrl: "/a.jpg" }).ok, true);
+    assert.equal(validatePayload(MESSAGE_KINDS.VOICE, { url: "/a.ogg" }).ok, false);
+  });
+
+  it("does not demand a duration WAHA may never report", () => {
+    assert.equal(validatePayload(MESSAGE_KINDS.VOICE, { mediaUrl: "/a.ogg" }).ok, true);
   });
 
   it("treats an empty array as missing", () => {
@@ -48,7 +60,7 @@ describe("payload validation", () => {
   });
 
   it("keeps extra fields, so an older row still renders when a card grows", () => {
-    const r = validatePayload(MESSAGE_KINDS.IMAGE, { url: "/x.jpg", width: 800, caption: "hi" });
+    const r = validatePayload(MESSAGE_KINDS.IMAGE, { mediaUrl: "/x.jpg", width: 800, caption: "hi" });
     assert.equal(r.ok, true);
     assert.equal(r.payload.width, 800);
   });

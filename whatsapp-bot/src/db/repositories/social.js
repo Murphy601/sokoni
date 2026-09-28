@@ -3090,6 +3090,52 @@ export async function pinMessage({ messageId, userId } = {}) {
   });
 }
 
+/**
+ * Media reference for one message, if the caller is allowed to hear it.
+ *
+ * Returns the WAHA pointer only -- never bytes. The route streams from there,
+ * so nothing large ever passes through this process.
+ */
+export async function getMessageMedia({ messageId, viewerUserId } = {}) {
+  if (!isDbEnabled()) {
+    return { error: "database_not_configured", message: "Database is not configured." };
+  }
+  const id = Number(messageId);
+  const viewer = parseUserId(viewerUserId);
+  if (!id || !viewer) {
+    return { error: "invalid_media_request", message: "messageId and userId are required." };
+  }
+
+  const { rows } = await query(
+    `SELECT sender_user_id, receiver_user_id, kind, payload, expires_at
+       FROM messages WHERE id = $1`,
+    [id]
+  );
+  const row = rows[0];
+  if (!row) return { error: "message_not_found", message: "Message not found." };
+
+  // Only the two people in the thread. Without this, a sequential id is a
+  // directory of every voice note on the platform.
+  if (Number(row.sender_user_id) !== viewer && Number(row.receiver_user_id) !== viewer) {
+    return { error: "not_in_thread", message: "You are not part of this conversation." };
+  }
+  if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+    return { error: "media_expired", message: "This has expired." };
+  }
+
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const mediaUrl = String(payload.mediaUrl || "");
+  if (!mediaUrl) return { error: "no_media", message: "That message has no media." };
+
+  return {
+    ok: true,
+    mediaUrl,
+    mimetype: String(payload.mimetype || ""),
+    kind: row.kind,
+    durationMs: Number(payload.durationMs) || null,
+  };
+}
+
 export async function getDirectThread({ userAId, userBId, limit = 50, offset = 0 } = {}) {
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
