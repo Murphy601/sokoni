@@ -1,5 +1,10 @@
 import { Router } from "express";
 import {
+  sendScratchCard,
+  revealScratchCard,
+  perkOptions,
+} from "../services/scratch-cards.js";
+import {
   createBundle,
   respondToBundle,
   getBundle,
@@ -1566,6 +1571,72 @@ router.get("/bundles/:bundleId", async (req, res) => {
       });
     }
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/chat/scratch-card — seller sends a funded discount. */
+router.post("/chat/scratch-card", async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}) };
+    const auth = await resolveAuthenticatedSellerSocialContext(req);
+    if (!auth.ok) {
+      // Only a seller may discount their own item, so there is no buyer path.
+      return res.status(auth.status || 403).json({
+        error: auth.error || "seller_session_required",
+        message: auth.message || "Sign in as the seller to send a deal.",
+      });
+    }
+    payload.sellerUserId = auth.sellerUserId;
+
+    const result = await sendScratchCard(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/chat/scratch-card/:messageId/reveal — buyer scratches. */
+router.post("/chat/scratch-card/:messageId/reveal", async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}), messageId: req.params.messageId };
+    const gated = await applyBuyerIdentityAuth(req, payload, "userId");
+    if (gated.error) {
+      return res.status(gated.status || socialErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    payload = gated.payload || payload;
+
+    const result = await revealScratchCard(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/social/chat/scratch-card/options?productId=... */
+router.get("/chat/scratch-card/options", async (req, res) => {
+  try {
+    const { rows } = await import("../db/pool.js").then(({ query }) =>
+      query(`SELECT price_kes FROM products WHERE id = $1`, [String(req.query.productId || "")])
+    );
+    if (!rows[0]) return res.status(404).json({ error: "product_not_found" });
+    res.json({ options: perkOptions(rows[0].price_kes) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
