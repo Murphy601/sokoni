@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { sendNudge } from "../services/inbox-nudge.js";
 import {
   sendScratchCard,
   revealScratchCard,
@@ -1637,6 +1638,53 @@ router.get("/chat/scratch-card/options", async (req, res) => {
     );
     if (!rows[0]) return res.status(404).json({ error: "product_not_found" });
     res.json({ options: perkOptions(rows[0].price_kes) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/social/chat/nudge — buzz the other side, once an hour. */
+router.post("/chat/nudge", async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}) };
+    const hasSellerContext = hasSellerSessionContext(req, payload);
+    let usedSellerIdentity = false;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) {
+        const requested = Number(payload.senderUserId);
+        if (Number.isInteger(requested) && requested > 0 && requested !== auth.sellerUserId) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the sender profile in this request.",
+          });
+        }
+        payload.senderUserId = auth.sellerUserId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+      }
+    }
+    if (!usedSellerIdentity) {
+      const gated = await applyBuyerIdentityAuth(req, payload, "senderUserId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      payload = gated.payload || payload;
+    }
+
+    const result = await sendNudge(payload);
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+    res.status(201).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

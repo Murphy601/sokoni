@@ -1621,3 +1621,65 @@ body.sell-depop-page .sell-activity-pill--like {
 .inbox-react-opt:focus-visible {
   background: #27272a;
 }
+
+/* ---- Nudge -------------------------------------------------------------- */
+
+.inbox-nudge-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.inbox-nudge-btn:hover,
+.inbox-nudge-btn:focus-visible {
+  border-color: #25d366;
+}
+
+.inbox-nudge-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inbox-nudge {
+  align-self: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.14);
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  color: #fde68a;
+  font-size: 12px;
+}
+
+.inbox-nudge-mine {
+  opacity: 0.7;
+}
+
+/* Short and small. A big shake on a phone reads as a crash, and the point is
+   a buzz, not a scare. */
+@keyframes inbox-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+}
+
+.is-nudged {
+  animation: inbox-shake 0.6s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still acknowledge the nudge, without moving anything. */
+  .is-nudged {
+    animation: none;
+    outline: 2px solid rgba(250, 204, 21, 0.6);
+    outline-offset: -2px;
+  }
+}

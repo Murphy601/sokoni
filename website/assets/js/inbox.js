@@ -338,6 +338,7 @@ function beginChatIfReady() {
   wireBundleCards();
   wireReactions();
   wireSoundToggle();
+  wireNudge();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -451,6 +452,7 @@ function messageBubble(msg) {
   if (msg.kind === "voice") return voiceBubble(msg);
   if (msg.kind === "bundle") return bundleCard(msg);
   if (msg.kind === "scratch_card") return scratchCard(msg);
+  if (msg.kind === "nudge") return nudgeCard(msg);
   if (msg.kind === "deal_ledger" && !msg.isPinned) return escrowCard(msg);
 
   const mine = Number(msg.senderUserId) === state.viewerId;
@@ -1234,6 +1236,83 @@ function wireSoundToggle() {
   btn.addEventListener("click", () => setSoundPref(!soundOn));
 }
 
+/* ---- Nudge -------------------------------------------------------------- */
+
+/**
+ * Shake the window when a nudge arrives.
+ *
+ * Only for nudges newer than the last render. Replaying every nudge in the
+ * history on each thread reload would shake the page on every poll, which
+ * reads as a fault rather than a feature.
+ */
+let lastNudgeSeen = 0;
+
+function playNudge(messages) {
+  const nudges = (Array.isArray(messages) ? messages : []).filter(
+    (m) => m.kind === "nudge" && Number(m.senderUserId) !== state.viewerId
+  );
+  if (!nudges.length) return;
+  const newest = nudges[nudges.length - 1];
+  const at = new Date(newest.createdAt).getTime();
+  if (!Number.isFinite(at) || at <= lastNudgeSeen) return;
+
+  // The first render of a thread sets the baseline instead of replaying.
+  const first = lastNudgeSeen === 0;
+  lastNudgeSeen = at;
+  if (first) return;
+
+  const shell = document.querySelector(".inbox-shell") || document.body;
+  shell.classList.remove("is-nudged");
+  // Force a reflow, or re-adding the class in the same frame does not restart
+  // the animation.
+  void shell.offsetWidth;
+  shell.classList.add("is-nudged");
+  setTimeout(() => shell.classList.remove("is-nudged"), 700);
+  playReactionTone("👀");
+}
+
+function nudgeCard(msg) {
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  return `
+    <div class="inbox-nudge ${mine ? "inbox-nudge-mine" : ""}">
+      👋 ${mine ? "You nudged" : "Nudged you"}
+    </div>`;
+}
+
+async function sendNudge() {
+  const btn = el("chat-nudge-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${SOCIAL_API}/chat/nudge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        withAuthBody({ senderUserId: state.viewerId, receiverUserId: state.peerId })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // Being on cooldown is a normal answer, not a failure worth alarming
+      // anyone about.
+      setStatus(data?.message || "Couldn't nudge.", data?.error !== "nudge_cooldown");
+      return;
+    }
+    setStatus("Nudged.");
+    await loadThread();
+  } catch {
+    setStatus("Couldn't nudge.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function wireNudge() {
+  const btn = el("chat-nudge-btn");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", () => void sendNudge());
+}
+
 function renderIcebreakers(messages) {
   const slot = el("chat-icebreakers");
   if (!slot) return;
@@ -1461,6 +1540,7 @@ async function loadThread() {
     renderMessages(data.messages || []);
     renderLedger(data.pinned || []);
     renderIcebreakers(data.messages || []);
+    playNudge(data.messages || []);
     void loadOffers();
   } catch {
     setStatus("Could not load chat right now. Check your connection.", true);
