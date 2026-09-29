@@ -2091,3 +2091,70 @@ body.sell-depop-page .sell-activity-pill--like {
   color: #fafafa;
   cursor: pointer;
 }
+
+
+/* ---- Chat photos -------------------------------------------------------- */
+
+.inbox-photo-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #fafafa;
+  cursor: pointer;
+}
+
+.inbox-photo-btn svg {
+  display: block;
+  pointer-events: none;
+}
+
+.inbox-photo-btn[disabled] {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.inbox-photo {
+  position: relative;
+  max-width: 78%;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  overflow: hidden;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+.inbox-photo-mine {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-photo img {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+}
+
+/* Photos expire after two weeks. Say so rather than leaving a broken frame. */
+.inbox-photo-gone {
+  display: none;
+  padding: 18px 14px;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.inbox-photo.is-gone img {
+  display: none;
+}
+
+.inbox-photo.is-gone .inbox-photo-gone {
+  display: block;
+}
+
+.inbox-photo-caption {
+  max-width: 78%;
+  font-size: 13px;
+  color: #d4d4d8;
+}

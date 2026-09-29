@@ -11,7 +11,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { localVoiceNoteName } from "../routes/socialApi.js";
+import { localMediaFile } from "../routes/socialApi.js";
 
 const src = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
@@ -24,16 +24,16 @@ const MEDIA_ROUTE = API.slice(API.indexOf('router.get("/chat/media/:messageId"')
 
 describe("a note we recorded is served from disk", () => {
   it("goes out through sendFile so ranges work", () => {
-    assert.match(MEDIA_ROUTE.slice(0, 3000), /localVoiceNoteName\(/);
-    assert.match(MEDIA_ROUTE.slice(0, 3000), /serveLocalVoiceNote\(res/);
-    const helper = API.slice(API.indexOf("function serveLocalVoiceNote"));
+    assert.match(MEDIA_ROUTE.slice(0, 3000), /localMediaFile\(/);
+    assert.match(MEDIA_ROUTE.slice(0, 3000), /serveLocalMedia\(res/);
+    const helper = API.slice(API.indexOf("function serveLocalMedia"));
     assert.match(helper.slice(0, 600), /res\.sendFile\(/);
   });
 
   it("checks the local path before reaching for WAHA", () => {
     const head = MEDIA_ROUTE.slice(0, 3000);
     assert.ok(
-      head.indexOf("localVoiceNoteName(") < head.indexOf("streamWahaMedia"),
+      head.indexOf("localMediaFile(") < head.indexOf("streamWahaMedia"),
       "the disk case has to be decided first or it never runs"
     );
   });
@@ -48,7 +48,7 @@ describe("a note we recorded is served from disk", () => {
 describe("the filename never leaves its folder", () => {
   it("accepts a stored note", () => {
     assert.equal(
-      localVoiceNoteName("https://bot.sokonimall.com/assets/voice-notes/abc-123.webm"),
+      localMediaFile("https://bot.sokonimall.com/assets/voice-notes/abc-123.webm")?.name,
       "abc-123.webm"
     );
   });
@@ -61,7 +61,7 @@ describe("the filename never leaves its folder", () => {
       null,
       undefined,
     ]) {
-      assert.equal(localVoiceNoteName(url), null, String(url));
+      assert.equal(localMediaFile(url), null, String(url));
     }
   });
 
@@ -73,7 +73,7 @@ describe("the filename never leaves its folder", () => {
       "https://bot.sokonimall.com/assets/voice-notes/..%2f..%2fconfig.json",
       "https://bot.sokonimall.com/assets/voice-notes/sub/dir.webm",
     ]) {
-      assert.equal(localVoiceNoteName(url), null, url);
+      assert.equal(localMediaFile(url), null, url);
     }
   });
 });
