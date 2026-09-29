@@ -392,12 +392,14 @@ function beginChatIfReady() {
   setStatus("");
   enableChatComposer();
   wireIcebreakers();
+  syncSellerToolsButton();
   wireMic();
   wireBundle();
   wireBundleCards();
   wireReactions();
   wireSoundToggle();
   wireNudge();
+  wireSellerToolsButton();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
     empty.dataset.defaultHtml = empty.innerHTML;
@@ -1714,6 +1716,227 @@ function wireIcebreakers() {
     const form = el("chat-form");
     if (form?.requestSubmit) form.requestSubmit();
     else void sendMessage();
+  });
+}
+
+/* ---- Seller tools ------------------------------------------------------- *
+ *
+ * Scratch cards and locked drops were built, routed and tested, and then had
+ * no button anywhere -- a seller could not send either one from the site. This
+ * is that button.
+ *
+ * Both are seller-only and the server enforces it, so the sheet only opens for
+ * a signed-in seller. Hiding it is courtesy; the 403 is the actual control.
+ */
+
+function sellerToolsAvailable() {
+  return Boolean(
+    state.sellerAuthRequired && state.sellerSession?.phone && state.sellerSession?.sessionToken
+  );
+}
+
+/** Show or hide the entry point to match who is looking. */
+function syncSellerToolsButton() {
+  const btn = el("chat-seller-tools-btn");
+  if (!btn) return;
+  const on = sellerToolsAvailable() && Boolean(state.peerId);
+  btn.classList.toggle("hidden", !on);
+}
+
+function sellerToolsOpen(on) {
+  const drawer = el("seller-tools-drawer");
+  if (!drawer) return;
+  drawer.classList.toggle("hidden", !on);
+  if (on) void renderSellerTools();
+}
+
+/** The sheet: pick a deal to send, or start a drop. */
+async function renderSellerTools() {
+  const body = el("seller-tools-body");
+  if (!body) return;
+  body.innerHTML = `<p class="text-sm text-zinc-500">Loading…</p>`;
+
+  const productId = state.productId || "";
+  const [perks, recipients] = await Promise.all([
+    productId ? loadPerkOptions(productId) : Promise.resolve([]),
+    loadDropRecipients(),
+  ]);
+
+  const perkList = perks.length
+    ? perks
+        .map(
+          (p) => `
+      <button type="button" class="seller-tool-row" data-perk="${escapeHtml(p.type)}"
+        ${p.percent ? `data-percent="${Number(p.percent)}"` : ""}
+        ${p.amountKes ? `data-amount="${Number(p.amountKes)}"` : ""}
+        ${p.available ? "" : "disabled"}>
+        <span class="seller-tool-label">${escapeHtml(p.label || p.type)}</span>
+        ${p.finalKes ? `<span class="seller-tool-note">buyer pays KES ${Number(p.finalKes).toLocaleString()}</span>` : ""}
+        ${p.notice ? `<span class="seller-tool-note">${escapeHtml(p.notice)}</span>` : ""}
+        ${p.available ? "" : `<span class="seller-tool-note">not possible on this price</span>`}
+      </button>`
+        )
+        .join("")
+    : `<p class="text-xs text-zinc-500">Open this chat from one of your listings to send a deal on it.</p>`;
+
+  const dropList = recipients.length
+    ? `
+      <div class="seller-tool-recipients">
+        ${recipients
+          .map(
+            (r) => `
+          <label class="seller-tool-check">
+            <input type="checkbox" value="${Number(r.userId)}" />
+            <span>${escapeHtml(r.name || `User #${r.userId}`)}</span>
+          </label>`
+          )
+          .join("")}
+      </div>
+      <button type="button" class="seller-tool-send" data-drop-send ${productId ? "" : "disabled"}>
+        Send early access
+      </button>
+      ${productId ? "" : `<p class="text-xs text-zinc-500">Open this chat from a listing to drop it.</p>`}`
+    : `<p class="text-xs text-zinc-500">Drops go to people who have bought from you before. Nobody qualifies yet.</p>`;
+
+  body.innerHTML = `
+    <div class="seller-tool-group">
+      <p class="seller-tool-title">Send a deal</p>
+      <p class="seller-tool-hint">They scratch to reveal it. You fund it, so it is your call.</p>
+      ${perkList}
+    </div>
+    <div class="seller-tool-group">
+      <p class="seller-tool-title">Early access drop</p>
+      <p class="seller-tool-hint">One hour of first look, for past buyers only.</p>
+      ${dropList}
+    </div>
+    <p id="seller-tools-status" class="seller-tool-status" role="status"></p>`;
+
+  wireSellerTools(body);
+}
+
+async function loadPerkOptions(productId) {
+  try {
+    const params = authQueryParams(new URLSearchParams({ productId: String(productId) }));
+    const res = await fetch(`${SOCIAL_API}/chat/scratch-card/options?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.options) ? data.options : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadDropRecipients() {
+  try {
+    const params = authQueryParams(new URLSearchParams());
+    const res = await fetch(`${SOCIAL_API}/drops/recipients?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.recipients) ? data.recipients : [];
+  } catch {
+    return [];
+  }
+}
+
+function sellerToolsStatus(text, bad = false) {
+  const slot = el("seller-tools-status");
+  if (!slot) return;
+  slot.textContent = text || "";
+  slot.classList.toggle("is-bad", Boolean(bad));
+}
+
+function wireSellerTools(body) {
+  body.querySelectorAll("[data-perk]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const perk = { type: btn.dataset.perk };
+      if (btn.dataset.percent) perk.percent = Number(btn.dataset.percent);
+      if (btn.dataset.amount) perk.amountKes = Number(btn.dataset.amount);
+      void sendScratchCardFromSheet(perk, btn);
+    });
+  });
+
+  const send = body.querySelector("[data-drop-send]");
+  send?.addEventListener("click", () => {
+    const picked = [...body.querySelectorAll(".seller-tool-check input:checked")].map((i) =>
+      Number(i.value)
+    );
+    void sendDropFromSheet(picked, send);
+  });
+}
+
+async function sendScratchCardFromSheet(perk, btn) {
+  if (!state.peerId || !state.productId) return;
+  btn.disabled = true;
+  sellerToolsStatus("Sending…");
+  try {
+    const res = await fetch(`${SOCIAL_API}/chat/scratch-card`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        withAuthBody({
+          buyerUserId: state.peerId,
+          productId: state.productId,
+          perk,
+        })
+      ),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      sellerToolsStatus(data.message || "Could not send that deal.", true);
+      btn.disabled = false;
+      return;
+    }
+    sellerToolsStatus("Sent.");
+    sellerToolsOpen(false);
+    loadThread();
+  } catch {
+    sellerToolsStatus("Could not send that deal.", true);
+    btn.disabled = false;
+  }
+}
+
+async function sendDropFromSheet(buyerUserIds, btn) {
+  if (!state.productId) return;
+  if (!buyerUserIds.length) {
+    sellerToolsStatus("Pick at least one buyer.", true);
+    return;
+  }
+  btn.disabled = true;
+  sellerToolsStatus("Sending…");
+  try {
+    const res = await fetch(`${SOCIAL_API}/drops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withAuthBody({ productId: state.productId, buyerUserIds })),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      sellerToolsStatus(data.message || "Could not send that drop.", true);
+      btn.disabled = false;
+      return;
+    }
+    sellerToolsStatus(`Sent to ${Number(data.sent) || buyerUserIds.length}.`);
+    sellerToolsOpen(false);
+    loadThread();
+  } catch {
+    sellerToolsStatus("Could not send that drop.", true);
+    btn.disabled = false;
+  }
+}
+
+function wireSellerToolsButton() {
+  const open = el("chat-seller-tools-btn");
+  // beginChatIfReady runs again every time a thread is opened, so guard it or
+  // the sheet ends up with a listener per visit.
+  if (!open || open.dataset.wired === "1") return;
+  open.dataset.wired = "1";
+  open.addEventListener("click", () => sellerToolsOpen(true));
+  document.querySelectorAll("[data-seller-tools-close]").forEach((b) => {
+    b.addEventListener("click", () => sellerToolsOpen(false));
+  });
+  // Tapping the backdrop closes it, same as the bundle sheet.
+  el("seller-tools-drawer")?.addEventListener("click", (event) => {
+    if (event.target === el("seller-tools-drawer")) sellerToolsOpen(false);
   });
 }
 

@@ -1959,4 +1959,134 @@ body.sell-depop-page .sell-activity-pill--like {
 .inbox-mic.is-recording {
   background: #FF2300;
   color: #fff;
+
+/* ---- Seller tools ------------------------------------------------------- */
+
+/* Same sheet treatment as the bundle drawer, and the same specificity trap:
+   an id beats .hidden unless there is a rule at equal weight. */
+#seller-tools-drawer.hidden {
+  display: none;
+}
+
+#seller-tools-drawer {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  height: 100%;
+  z-index: 30;
+}
+
+.seller-tool-group {
+  padding: 10px 0;
+  border-bottom: 1px solid #27272a;
+}
+
+.seller-tool-group:last-of-type {
+  border-bottom: none;
+}
+
+.seller-tool-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.seller-tool-hint {
+  font-size: 11px;
+  color: #71717a;
+  margin-bottom: 8px;
+}
+
+.seller-tool-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  margin-bottom: 6px;
+  border-radius: 0.7rem;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #fafafa;
+  cursor: pointer;
+}
+
+.seller-tool-row[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.seller-tool-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.seller-tool-note {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.seller-tool-recipients {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.seller-tool-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #d4d4d8;
+}
+
+.seller-tool-send {
+  width: 100%;
+  padding: 9px;
+  border: none;
+  border-radius: 999px;
+  background: #FF2300;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seller-tool-send[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.seller-tool-status {
+  min-height: 16px;
+  font-size: 12px;
+  color: #a1a1aa;
+  padding-top: 6px;
+}
+
+.seller-tool-status.is-bad {
+  color: #f87171;
+}
+
+/* :not(.hidden) rather than a bare class: both are 0-1-0, so whichever
+   stylesheet lands last would otherwise decide whether a hidden button is
+   hidden -- and Tailwind arrives from a CDN at a time we do not control. */
+.inbox-seller-tools-btn:not(.hidden) {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #fafafa;
+  cursor: pointer;
 }
