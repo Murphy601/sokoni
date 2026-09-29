@@ -130,8 +130,18 @@ describe("the inbox renders them apart from chat", () => {
 
   it("falls back to a text bubble for kinds it has never seen", () => {
     // A card shipped after this page was loaded must not blank the thread.
+    // Sliced to the end of the function rather than a fixed byte window: the
+    // window broke twice just from adding a kind above the fallthrough.
     const fn = INBOX_JS.slice(INBOX_JS.indexOf("function messageBubble(msg) {"));
-    assert.match(fn.slice(0, 700), /const mine = Number\(msg\.senderUserId\)/);
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    assert.match(body, /const mine = Number\(msg\.senderUserId\)/);
+    // Every early return is a known kind; anything else reaches the bubble.
+    const guarded = [...body.matchAll(/msg\.kind === "(\w+)"/g)].map((m) => m[1]);
+    assert.ok(guarded.length >= 5, "expected the kind switch to still be here");
+    assert.ok(
+      body.indexOf("const mine") > body.lastIndexOf('msg.kind === "'),
+      "the text fallthrough has to come after every kind check"
+    );
   });
 
   it("asks the API for the pinned card", () => {

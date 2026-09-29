@@ -27,6 +27,14 @@ import {
   VOICE_TTL_MS,
   VOICE_DIR,
 } from "../services/voice-upload.js";
+import {
+  validatePhotoUpload,
+  storeChatPhoto,
+  relayPhotoToWhatsApp,
+  MAX_PHOTO_BYTES,
+  PHOTO_TTL_MS,
+  CHAT_PHOTO_DIR,
+} from "../services/chat-photo-store.js";
 import { isSystemKind } from "../lib/message-kinds.js";
 import {
   createOrderReview,
@@ -1321,6 +1329,119 @@ router.get("/chat/reactions/available", (_req, res) => {
  * beyond the request: the bytes are written once as a short-lived playback
  * copy, handed to WAHA for the seller's WhatsApp, and then dropped.
  */
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_PHOTO_BYTES, files: 1 },
+});
+
+/**
+ * POST /api/social/chat/photo
+ *
+ * "Send a photo of the back" is the most common message on a secondhand
+ * marketplace and there was no way to answer it on the site -- images could
+ * arrive from WhatsApp but never leave the browser.
+ *
+ * Same shape as /chat/voice: identity first, validate before anything touches
+ * disk, write, post the message, then relay to WhatsApp without blocking the
+ * response.
+ */
+router.post("/chat/photo", photoUpload.single("photo"), async (req, res) => {
+  try {
+    let payload = { ...(req.body || {}) };
+    const hasSellerContext = hasSellerSessionContext(req, payload);
+    let usedSellerIdentity = false;
+
+    if (hasSellerContext) {
+      const auth = await resolveAuthenticatedSellerSocialContext(req);
+      if (auth.ok) {
+        const requested = Number(payload.senderUserId);
+        if (Number.isInteger(requested) && requested > 0 && requested !== auth.sellerUserId) {
+          return res.status(403).json({
+            error: "seller_session_mismatch",
+            message: "Seller session does not match the sender profile in this request.",
+          });
+        }
+        payload.senderUserId = auth.sellerUserId;
+        usedSellerIdentity = true;
+      } else if (!isAmbiguousSessionAuthError(auth.error)) {
+        return res.status(auth.status || 403).json({ error: auth.error, message: auth.message });
+      }
+    }
+    if (!usedSellerIdentity) {
+      const gated = await applyBuyerIdentityAuth(req, payload, "senderUserId");
+      if (gated.error) {
+        return res.status(gated.status || socialErrorStatus(gated.error)).json({
+          error: gated.error,
+          message: gated.message,
+        });
+      }
+      payload = gated.payload || payload;
+    }
+
+    const check = validatePhotoUpload({
+      buffer: req.file?.buffer,
+      mimetype: req.file?.mimetype || payload.mimetype,
+    });
+    if (!check.ok) {
+      return res.status(400).json({ error: check.error, message: check.message });
+    }
+
+    // A caption rides the normal content field, so it goes through the same
+    // contact-details filter as any other message.
+    const caption = String(payload.caption || "").trim().slice(0, 500);
+    const stored = await storeChatPhoto(req.file.buffer, check.ext);
+    const result = await sendDirectMessage({
+      senderUserId: Number(payload.senderUserId),
+      receiverUserId: Number(payload.receiverUserId),
+      content: caption,
+      kind: "image",
+      payload: {
+        mediaUrl: stored.url,
+        mimetype: req.file.mimetype,
+        source: "web",
+      },
+      expiresAt: new Date(Date.now() + PHOTO_TTL_MS),
+    });
+    if (result.error) {
+      return res.status(socialErrorStatus(result.error)).json({
+        error: result.error,
+        message: result.message,
+      });
+    }
+
+    // Not awaited: WAHA can be slow or restarting, and the photo is already in
+    // the thread. A failed relay costs a WhatsApp copy, not the message.
+    void (async () => {
+      try {
+        const { findUserById } = await import("../db/repositories/users.js");
+        const peer = await findUserById(Number(payload.receiverUserId));
+        if (peer?.phone) {
+          await relayPhotoToWhatsApp(
+            peer.phone,
+            req.file.buffer,
+            req.file.mimetype,
+            stored.filename,
+            caption
+          );
+        }
+      } catch (err) {
+        console.warn("[social] photo relay skipped:", err.message);
+      }
+    })();
+
+    res.status(201).json(result);
+  } catch (err) {
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
+        error: "photo_too_large",
+        message: "That photo is too big. Try a smaller one.",
+      });
+    }
+    console.warn("[social] photo upload failed:", err.message);
+    res.status(500).json({ error: "photo_upload_failed", message: err.message });
+  }
+});
+
 const voiceUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_VOICE_BYTES, files: 1 },
@@ -1433,19 +1554,38 @@ router.post("/chat/voice", voiceUpload.single("audio"), async (req, res) => {
  * every time the player rebuffers -- which is what made playback stall and
  * cut out part way through a note.
  */
-function serveLocalVoiceNote(res, name) {
+function serveLocalMedia(res, { dir, name }) {
   res.setHeader("Cache-Control", "private, max-age=300");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  return res.sendFile(path.join(VOICE_DIR, name), (err) => {
+  return res.sendFile(path.join(dir, name), (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: "media_unavailable" });
   });
 }
 
-export function localVoiceNoteName(mediaUrl) {
-  const match = /\/assets\/voice-notes\/([A-Za-z0-9._-]+)$/.exec(String(mediaUrl || ""));
-  const name = match?.[1];
+/** Folders we serve ourselves, by the path they appear under. */
+const LOCAL_MEDIA_DIRS = new Map([
+  ["voice-notes", () => VOICE_DIR],
+  ["chat-photos", () => CHAT_PHOTO_DIR],
+]);
+
+/**
+ * Resolve a media URL to a file on our own disk, or null if it is not ours.
+ *
+ * Only a bare filename is accepted. The value comes from the message payload
+ * rather than the request, but a path segment must never be able to walk out
+ * of the folder regardless of where it came from.
+ *
+ * @returns {{dir:string, name:string}|null}
+ */
+export function localMediaFile(mediaUrl) {
+  const match = /\/assets\/(voice-notes|chat-photos)\/([A-Za-z0-9._-]+)$/.exec(
+    String(mediaUrl || "")
+  );
+  if (!match) return null;
+  const name = match[2];
   if (!name || name.includes("..") || name.includes("/") || name.includes("\\")) return null;
-  return name;
+  const dir = LOCAL_MEDIA_DIRS.get(match[1]);
+  return dir ? { dir: dir(), name } : null;
 }
 
 /**
@@ -1493,8 +1633,8 @@ router.get("/chat/media/:messageId", async (req, res) => {
       });
     }
 
-    const localName = localVoiceNoteName(media.mediaUrl);
-    if (localName) return serveLocalVoiceNote(res, localName);
+    const local = localMediaFile(media.mediaUrl);
+    if (local) return serveLocalMedia(res, local);
 
     const { streamWahaMedia } = await import("../services/whatsapp.js");
     const { stream, contentType, contentLength } = await streamWahaMedia(media.mediaUrl);

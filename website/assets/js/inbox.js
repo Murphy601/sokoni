@@ -399,6 +399,7 @@ function beginChatIfReady() {
   wireReactions();
   wireSoundToggle();
   wireNudge();
+  wirePhotoButton();
   wireSellerToolsButton();
   const empty = el("chat-empty");
   if (empty && !empty.dataset.defaultHtml) {
@@ -621,11 +622,139 @@ function wireVoicePlayers(root) {
   });
 }
 
+/* ---- Photos ------------------------------------------------------------- *
+ *
+ * "Send a photo of the back" is the most common message on a secondhand
+ * marketplace, and until now the answer on the site was that you could not.
+ */
+
+/** Longest edge after downscaling. Big enough to judge a garment by. */
+const PHOTO_MAX_EDGE = 1280;
+const PHOTO_QUALITY = 0.82;
+/** Matches the server cap; only reachable if downscaling failed. */
+const PHOTO_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Shrink a photo before it leaves the phone.
+ *
+ * A modern phone camera writes 4MB or more per shot. Uploading that on a
+ * Kenyan mobile bundle is most of a megabyte-per-shilling decision the buyer
+ * did not agree to, and the seller only needs to see the stitching. Falls
+ * back to the original file if anything about the canvas path fails, because
+ * a slightly expensive upload beats no photo.
+ */
+async function downscalePhoto(file) {
+  try {
+    if (!file.type.startsWith("image/")) return file;
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 600 * 1024) {
+      bitmap.close?.();
+      return file;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", PHOTO_QUALITY)
+    );
+    // Only take the downscale if it actually helped.
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], "photo.jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
+/** Send one photo into the open thread. */
+async function sendPhoto(file) {
+  if (!file || !state.peerId) return;
+  const btn = el("chat-photo-btn");
+  if (file.size > PHOTO_MAX_BYTES * 3) {
+    setStatus("That photo is too big to send.", true);
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  setStatus("Sending photo…");
+  try {
+    const shrunk = await downscalePhoto(file);
+    if (shrunk.size > PHOTO_MAX_BYTES) {
+      setStatus("That photo is too big to send.", true);
+      return;
+    }
+    const form = new FormData();
+    form.append("photo", shrunk, shrunk.name || "photo.jpg");
+    form.append("receiverUserId", String(state.peerId));
+    if (state.viewerId) form.append("senderUserId", String(state.viewerId));
+    // The caption rides the normal text box, so whatever is typed goes with it.
+    const input = el("chat-input");
+    const caption = (input?.value || "").trim();
+    if (caption) form.append("caption", caption);
+    for (const [k, v] of Object.entries(withAuthBody({}))) form.append(k, String(v));
+
+    const res = await fetch(`${SOCIAL_API}/chat/photo`, { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data.message || "Could not send that photo.", true);
+      return;
+    }
+    if (input) input.value = "";
+    setStatus("");
+    loadThread();
+  } catch {
+    setStatus("Could not send that photo.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function wirePhotoButton() {
+  const btn = el("chat-photo-btn");
+  const input = el("chat-photo-input");
+  if (!btn || !input || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    // Reset first: picking the same file twice must still fire a change.
+    input.value = "";
+    if (file) void sendPhoto(file);
+  });
+}
+
+/** Photo bubble. The src goes through the media route, so only the two people in the thread can fetch it. */
+function imageBubble(msg) {
+  const mine = Number(msg.senderUserId) === state.viewerId;
+  const wrapper = mine ? "items-end" : "items-start";
+  const who = mine ? "You" : formatHandle(state.peerHandle) || `User #${state.peerId}`;
+  const params = authQueryParams(new URLSearchParams({ userId: String(state.viewerId) }));
+  const src = `${SOCIAL_API}/chat/media/${msg.id}?${params.toString()}`;
+  const caption = String(msg.content || "").trim();
+  return `
+    <div class="flex flex-col ${wrapper} gap-1">
+      <p class="text-[11px] text-zinc-500">${who}</p>
+      <div class="inbox-photo ${mine ? "inbox-photo-mine" : ""}">
+        <img src="${escapeHtml(src)}" alt="${caption ? escapeHtml(caption) : "Photo"}" loading="lazy"
+          onerror="this.closest('.inbox-photo')?.classList.add('is-gone');" />
+        <span class="inbox-photo-gone">Photo expired</span>
+      </div>
+      ${caption ? `<p class="inbox-photo-caption">${escapeHtml(caption)}</p>` : ""}
+      <p class="text-[10px] text-zinc-600 font-mono">${formatTime(msg.createdAt)}</p>
+    </div>`;
+}
+
 function messageBubble(msg) {
   // Unknown kinds fall through to the text bubble, so a card shipped after
   // this page was loaded still shows its fallback rather than nothing.
   if (msg.kind === "escrow_status") return escrowCard(msg);
   if (msg.kind === "voice") return voiceBubble(msg);
+  if (msg.kind === "image") return imageBubble(msg);
   if (msg.kind === "bundle") return bundleCard(msg);
   if (msg.kind === "scratch_card") return scratchCard(msg);
   if (msg.kind === "nudge") return nudgeCard(msg);

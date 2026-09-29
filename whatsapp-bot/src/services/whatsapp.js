@@ -898,6 +898,37 @@ export function resolvePublicImageUrl(product) {
   return candidates[0] || null;
 }
 
+/**
+ * Send an image we already hold in memory.
+ *
+ * sendImage takes a link or a base64 string and hardcodes image/jpeg. A chat
+ * photo can be png or webp and we have the bytes, so this keeps the real
+ * mimetype rather than mislabelling it.
+ */
+export async function sendImageBuffer(to, buffer, { mimetype = "image/jpeg", filename = "photo.jpg", caption = "" } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  if (!buffer?.length) throw new Error("empty_buffer");
+
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file: {
+      mimetype: String(mimetype || "image/jpeg").split(";")[0],
+      filename,
+      data: Buffer.from(buffer).toString("base64"),
+    },
+    caption: caption || "",
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendImage", { chatId: dest, bytes: buffer.length });
+    return { dryRun: true, chatId: dest };
+  }
+  const resp = await callWaha("/api/sendImage", body, { timeoutMs: 45000 });
+  rememberSend(resp, dest);
+  return resp;
+}
+
 export async function sendImage(to, { link, data, caption, filename = "product.jpg" }) {
   const file = data
     ? { data, mimetype: "image/jpeg", filename }

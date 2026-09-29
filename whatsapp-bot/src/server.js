@@ -327,6 +327,24 @@ app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStati
   );
 }
 
+/** Chat photos (opaque filenames under data/chat-photos). */
+{
+  const chatPhotoDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "chat-photos");
+  app.use(
+    "/assets/chat-photos",
+    express.static(chatPhotoDir, {
+      fallthrough: true,
+      maxAge: "1h",
+      setHeaders(res) {
+        // Private: the filename is the only secret, so it must not sit in a
+        // shared cache.
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    })
+  );
+}
+
 /** Rider verification docs (opaque filenames under data/boda-docs). */
 {
   const bodaDocsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "boda-docs");
@@ -487,6 +505,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startSellerShippingReminderScheduler();
   startRiderB2CScheduler();
   startVoiceNotePurge();
+  startChatPhotoPurge();
   console.log(
     "✓ Dispatch UX: shipping-gate(fail-closed) · no platform fee invent · " +
       "PICK UP before role-menu · ACCEPT=seller-only · pickup OTP→buyer+admin"
@@ -560,6 +579,17 @@ function startVoiceNotePurge() {
   };
   setTimeout(tick, 60_000).unref?.();
   setInterval(tick, 60 * 60_000).unref?.();
+}
+
+/* Chat photos expire on a 14-day clock, same shape as the voice purge. */
+function startChatPhotoPurge() {
+  const tick = () => {
+    import("./services/chat-photo-store.js")
+      .then(({ purgeExpiredChatPhotos }) => purgeExpiredChatPhotos())
+      .catch((err) => console.warn("[chat-photo-purge] tick:", err.message));
+  };
+  setTimeout(tick, 90_000).unref?.();
+  setInterval(tick, 6 * 60 * 60_000).unref?.();
 }
 
 function startRiderB2CScheduler() {
