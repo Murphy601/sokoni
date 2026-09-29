@@ -19,6 +19,7 @@ import {
   extractMpesaDisplayName,
   namesLikelyMatch,
 } from "../lib/mpesa-name-match.js";
+import { normalizePin } from "../lib/location-pin.js";
 import {
   rankRidersByDispatchScore,
   OFFER_TIMEOUT_MS,
