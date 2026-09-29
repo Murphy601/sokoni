@@ -894,7 +894,7 @@ function renderCategoryChips() {
 
   grid.innerHTML =
     TOP_CHIPS.map(chip).join("") + browseCats.map((c) => chip(c)).join("");
-  if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
+  if (window.SokoniComponents) window.SokoniComponents.upgradeIn(grid);
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       setCatalogFilter({

@@ -16,6 +16,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    # eslint was already in devDependencies and `npm run lint` was already a
+    # script, but there was no config, so it errored out and nothing ran it.
+    # A missing import for normalizePin then reached production and broke
+    # rider registration -- a ReferenceError only fires when its line runs,
+    # and that line was the last step of a 14-step flow.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install eslint
+        run: npm install --no-save eslint@^9.17.0
+
+      - name: Lint
+        run: npx eslint whatsapp-bot/src website/assets/js
+
   bot:
     name: whatsapp-bot unit tests
     runs-on: ubuntu-latest
