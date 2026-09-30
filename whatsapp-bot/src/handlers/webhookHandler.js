@@ -43,6 +43,7 @@ import {
   registerAdminChatId,
 } from "../services/admin.js";
 import { config } from "../config.js";
+import { isOrphanSubmitWord } from "../lib/confirm-words.js";
 import { normalizeKenyaPhone } from "../lib/phone-normalize.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
@@ -476,6 +477,23 @@ export async function handleIncomingMessage(
 
   if (isSellerApplyCommand(text)) {
     await startSellerOnboarding(customerKey, { phone });
+    return;
+  }
+
+  // A bare "submit" or "confirm" with no flow open.
+  //
+  // This reached the shopping agent, which searched the catalogue for a
+  // product called "Submit" and told the applicant it could not find one.
+  // Whatever lost their draft, answering a confirmation word with a product
+  // search is the wrong reply -- say what happened and how to get going
+  // again.
+  if (isOrphanSubmitWord(text) && !hasMedia) {
+    await sendText(
+      customerKey,
+      `There's nothing waiting to be submitted — your application isn't open any more.\n\n` +
+        `Reply *RIDER APPLY* to start a boda application, or *SELL* to open a shop.\n\n` +
+        `You can also apply online:\n${config.publicSiteUrl || "https://sokonimall.com"}/boda/apply.html`
+    );
     return;
   }
 
