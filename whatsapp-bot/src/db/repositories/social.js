@@ -3,6 +3,7 @@ import {
   MESSAGE_KINDS,
   validatePayload,
   isSystemKind,
+  isUserAuthoredKind,
   fallbackText,
 } from "../../lib/message-kinds.js";
 import {
@@ -2929,7 +2930,9 @@ export async function sendDirectMessage({
   if (text.length > 2000) {
     return { error: "message_too_long", message: "Message must be 2000 characters or less." };
   }
-  if (messageKind === MESSAGE_KINDS.TEXT && hasForbiddenMessage(text)) {
+  // Any kind whose content a person typed, which is text plus photo and video
+  // captions. Gating this on TEXT alone let a caption carry a phone number.
+  if (isUserAuthoredKind(messageKind) && hasForbiddenMessage(text)) {
     return {
       error: "message_blocked",
       message:
