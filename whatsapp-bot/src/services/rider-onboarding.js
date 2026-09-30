@@ -328,6 +328,30 @@ export async function startRiderOnboarding(customerKey, { phone = "" } = {}) {
  * Handle one inbound message while a rider application is open.
  * @returns {Promise<boolean>} true when the message was consumed
  */
+/**
+ * Tell ops a submit failed and why.
+ *
+ * Fired, not awaited, and its own failure is swallowed: a broken alert must
+ * not turn a recoverable submit error into a crash.
+ */
+async function reportSubmitFailure(kind, who, err) {
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    const code = err?.code ? ` [${err.code}]` : "";
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId: null,
+      details:
+        `⚠️ ${kind} application could not be submitted\n` +
+        `• Applicant: ${who}\n` +
+        `• Error${code}: ${err?.message || "unknown"}\n` +
+        `Their answers are still saved. If this names a missing column, the ` +
+        `schema is behind the code -- run npm run db:migrate on the VM.`,
+    });
+  } catch {
+    /* the alert is a convenience, never the thing that breaks a submit */
+  }
+}
+
 export async function handleRiderOnboarding(
   customerKey,
   text,
@@ -587,6 +611,11 @@ export async function handleRiderOnboarding(
           err?.code || "",
           err?.message
         );
+        // Tell ops what actually broke. The applicant only ever sees "couldn't
+        // reach Sokoni ops", which is true but useless to whoever has to fix
+        // it -- the reason was reaching a log file nobody reads and the bug
+        // sat there through several deploys.
+        void reportSubmitFailure("rider", draft.phone || customerKey, err);
         await sendText(
           customerKey,
           `Couldn't reach Sokoni ops just now - your answers are saved.\n\nReply *submit* to try again, or apply online:\n${config.publicSiteUrl || "https://sokonimall.com"}/boda/apply.html`

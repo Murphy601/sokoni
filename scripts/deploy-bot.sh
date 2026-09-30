@@ -289,7 +289,25 @@ npm install --omit=dev 2>/dev/null || npm install
 
   if [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=.' "$ENV_FILE" 2>/dev/null; then
   echo "==> Applying DB migrations..."
-  npm run db:migrate || echo "WARN: db:migrate failed"
+  # A failed migration used to print one WARN line in the middle of several
+  # hundred and the deploy still reported success. The code then runs against
+  # a schema it is ahead of, and the first person to hit the missing column
+  # gets a generic "couldn't reach ops" -- which is exactly how rider
+  # registration stayed broken while every deploy looked fine.
+  #
+  # Still non-fatal on purpose: stopping here would leave the bot on old code
+  # with no way to ship an urgent fix. It is recorded and reported at the end
+  # instead, and the exit status says so.
+  if ! npm run db:migrate; then
+    MIGRATE_FAILED=1
+    echo ""
+    echo "########################################################"
+    echo "## DB MIGRATIONS FAILED -- schema is behind the code  ##"
+    echo "## Fix before trusting anything that writes to the DB ##"
+    echo "##   cd $BOT_DIR && npm run db:migrate                ##"
+    echo "########################################################"
+    echo ""
+  fi
   if npm run 2>/dev/null | grep -q 'db:backfill-browse'; then
     PAUSE_FILE="$REPO/website/data/catalog-paused.json"
     if [ -f "$PAUSE_FILE" ] && grep -q '"paused"[[:space:]]*:[[:space:]]*true' "$PAUSE_FILE" 2>/dev/null; then
