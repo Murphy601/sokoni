@@ -288,6 +288,11 @@ body.depop-surface-page,
 .inbox-messenger {
   background: var(--depop-surface);
   border-color: var(--depop-border);
+  /* The bundle and seller-tools sheets are position:absolute with inset
+     bottom. Without a positioned ancestor they resolve against the page and
+     open hundreds of pixels below the panel, which reads as the button doing
+     nothing at all. */
+  position: relative;
 }
 
 .inbox-messenger-head {
