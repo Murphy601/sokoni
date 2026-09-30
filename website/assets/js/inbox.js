@@ -246,10 +246,9 @@ function renderAvailableShops(shops) {
 /**
  * Check a handle still belongs to a live shop.
  *
- * A deactivated or deleted shop leaves its handle in old links, bookmarks and
- * recently-viewed entries. Opening a thread against one shows a chat with a
- * seller who is gone, which looks like the inbox is broken rather than like
- * the shop has closed.
+ * A deactivated or deleted shop leaves its handle in old links and bookmarks.
+ * Opening a thread against one shows a chat with a seller who is gone, which
+ * looks like the inbox is broken rather than like the shop has closed.
  *
  * Only a definite answer counts as gone: a failed request means we do not
  * know, and blocking a real conversation on a flaky network is worse than
@@ -2491,23 +2490,26 @@ async function resolvePeerFromHandle() {
   }
 }
 
+/**
+ * Drop the store the removed "recently viewed" strip used.
+ *
+ * It lived in each visitor's browser, so deleting the feature does not delete
+ * the data. Anyone who used the site before this still has a list of products
+ * sitting in localStorage that nothing will ever read again.
+ */
+function forgetRecentlyViewed() {
+  try {
+    localStorage.removeItem("sokoni-recently-viewed");
+  } catch {
+    /* private mode, or storage blocked. Nothing to clean up either way. */
+  }
+}
+
 function init() {
   parseQuery();
   setPeerLabel();
   syncMakeOfferButton();
-  window.SokoniRecentlyViewed?.renderCarousel?.("inbox-recently-viewed", {
-    onSelect: ({ id, handle, sellerUserId }) => {
-      const params = new URLSearchParams();
-      if (id) params.set("product", id);
-      if (handle) params.set("handle", handle);
-      if (sellerUserId) params.set("with", String(sellerUserId));
-      if (handle || sellerUserId) {
-        window.location.href = `inbox.html?${params.toString()}`;
-        return;
-      }
-      window.location.href = `index.html?q=${encodeURIComponent(id || "")}`;
-    },
-  });
+  forgetRecentlyViewed();
 
   if (state.sellerAuthRequired) {
     hideBuyerAuthPanel();
