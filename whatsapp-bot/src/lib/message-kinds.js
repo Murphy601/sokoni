@@ -91,6 +91,26 @@ export function isSystemKind(kind) {
  * @param {Record<string, unknown>} payload
  * @returns {{ok: true, payload: Record<string, unknown>} | {ok: false, error: string, message: string}}
  */
+/**
+ * Kinds whose `content` is prose a person typed.
+ *
+ * Everything else carries a sentence the platform wrote -- "🎁 A deal to
+ * scratch", an escrow state -- so screening it would only ever produce false
+ * positives. A photo or video caption is typed by a person and has to be
+ * screened exactly like a text message; leaving it out meant a caption was a
+ * clean way to pass a phone number and take the deal off-platform.
+ */
+export const USER_AUTHORED_KINDS = Object.freeze([
+  MESSAGE_KINDS.TEXT,
+  MESSAGE_KINDS.IMAGE,
+  MESSAGE_KINDS.VIDEO,
+]);
+
+/** True when this kind's content came from a person, not from Sokoni. */
+export function isUserAuthoredKind(kind) {
+  return USER_AUTHORED_KINDS.includes(String(kind || ""));
+}
+
 export function validatePayload(kind, payload = {}) {
   const k = String(kind || MESSAGE_KINDS.TEXT);
   if (!isKnownKind(k)) {
