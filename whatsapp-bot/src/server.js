@@ -506,6 +506,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startRiderB2CScheduler();
   startVoiceNotePurge();
   startChatPhotoPurge();
+  startAgentLayer();
   console.log(
     "✓ Dispatch UX: shipping-gate(fail-closed) · no platform fee invent · " +
       "PICK UP before role-menu · ACCEPT=seller-only · pickup OTP→buyer+admin"
@@ -590,6 +591,33 @@ function startChatPhotoPurge() {
   };
   setTimeout(tick, 90_000).unref?.();
   setInterval(tick, 6 * 60 * 60_000).unref?.();
+}
+
+/**
+ * Start the agent layer.
+ *
+ * The main agent only listens; sub-agents publish as they are added. With
+ * none attached this costs one event listener and an empty array, so it is
+ * safe to start before there is anything to report.
+ */
+function startAgentLayer() {
+  if (/^(0|false|off|no)$/i.test(String(process.env.SOKONI_AGENTS_ENABLED || "true"))) {
+    console.log("⚠️ Agent layer disabled (SOKONI_AGENTS_ENABLED=false)");
+    return;
+  }
+  import("./agents/main-agent.js")
+    .then(({ mainAgent }) => {
+      mainAgent.start();
+      console.log("[agents] main agent listening");
+      // Digest every 6 hours. A quiet window sends nothing.
+      const tick = () => {
+        void mainAgent.sendDigest().catch((err) => {
+          console.warn("[agents] digest tick:", err?.message || err);
+        });
+      };
+      setInterval(tick, 6 * 60 * 60_000).unref?.();
+    })
+    .catch((err) => console.warn("[agents] failed to start:", err?.message || err));
 }
 
 function startRiderB2CScheduler() {
