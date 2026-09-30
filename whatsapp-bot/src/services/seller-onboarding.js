@@ -185,6 +185,24 @@ export async function startSellerOnboarding(customerKey, { phone = "" } = {}) {
  * Handle one inbound message while a seller signup is open.
  * @returns {Promise<boolean>} true when the message was consumed
  */
+/** Tell ops a shop could not be created and why. Never throws. */
+async function reportSellerSubmitFailure(who, err) {
+  try {
+    const { notifyAdminEvent } = await import("./communication-hub.js");
+    const code = err?.code ? ` [${err.code}]` : "";
+    await notifyAdminEvent("DISPUTE_OR_HELP", {
+      orderId: null,
+      details:
+        `⚠️ seller signup could not be completed\n` +
+        `• Applicant: ${who}\n` +
+        `• Error${code}: ${err?.message || "unknown"}\n` +
+        `Their answers are still saved.`,
+    });
+  } catch {
+    /* convenience only */
+  }
+}
+
 export async function handleSellerOnboarding(customerKey, text, { phone = "", location = null } = {}) {
   const flow = getFlow(customerKey);
   if (!flow?.step) return false;
@@ -316,6 +334,9 @@ export async function handleSellerOnboarding(customerKey, text, { phone = "", lo
         });
       } catch (err) {
         console.error(`[seller-onboarding] submit threw for ${draft.phone || customerKey}:`, err?.message);
+        // Same reasoning as the rider flow: the shop owner sees a generic
+        // apology, so ops needs the actual reason somewhere they will see it.
+        void reportSellerSubmitFailure(draft.phone || customerKey, err);
         await sendText(
           customerKey,
           `Couldn't create the shop just now - your answers are saved.\n\nReply *confirm* to try again, or use the Hub:\n${config.publicSiteUrl || "https://sokonimall.com"}/suppliers/list.html`
