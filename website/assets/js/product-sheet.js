@@ -803,7 +803,6 @@
     viewerUserId = resolveViewerUserId();
     currentProduct = product;
     window.SokoniFeed?.trackView?.(product.id);
-    window.SokoniRecentlyViewed?.record?.(product);
     const body = document.getElementById("product-sheet-body");
     const sheet = document.getElementById("product-sheet");
     if (!body || !sheet) return;

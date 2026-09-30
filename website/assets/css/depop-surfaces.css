@@ -261,30 +261,6 @@ body.depop-surface-page,
   color: var(--depop-accent);
 }
 
-.inbox-recent-card {
-  border-color: var(--depop-border);
-  background: var(--depop-surface);
-}
-
-.inbox-recent-card:hover,
-.inbox-recent-card:focus-visible {
-  border-color: #3f3f46;
-}
-
-.inbox-recent-thumb,
-.inbox-recent-thumb--empty {
-  background: #18181b;
-  color: var(--depop-muted);
-}
-
-.inbox-recent-name {
-  color: var(--depop-text);
-}
-
-.inbox-recent-price {
-  color: var(--depop-muted);
-}
-
 .inbox-messenger {
   background: var(--depop-surface);
   border-color: var(--depop-border);
