@@ -3938,7 +3938,8 @@ export async function pinShopProduct({ sellerUserId, productId, rank = null } = 
     for (const mv of slot.moves) {
       await client.query(
         `UPDATE products
-            SET pin_rank = $3, pinned_at = CASE WHEN $3 IS NULL THEN NULL ELSE NOW() END,
+            SET pin_rank = $3::smallint,
+                pinned_at = CASE WHEN $3::smallint IS NULL THEN NULL ELSE NOW() END,
                 updated_at = NOW()
           WHERE id = $1 AND seller_user_id = $2`,
         [mv.productId, uid, mv.rank > 0 ? mv.rank : null]

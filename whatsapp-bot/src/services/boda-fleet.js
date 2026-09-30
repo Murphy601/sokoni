@@ -272,7 +272,12 @@ export async function upsertRiderProfile(input = {}) {
        verification_status, is_available, updated_at
      ) VALUES (
        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-       $18,$19, CASE WHEN $18 IS NULL THEN NULL ELSE NOW() END,
+       -- Cast the pin params. $18 is also read by the CASE below, where
+       -- "IS NULL" tells Postgres nothing about its type, so without this the
+       -- whole statement fails to parse with 42P08 and every application
+       -- throws before a single row is written.
+       $18::double precision, $19::double precision,
+       CASE WHEN $18::double precision IS NULL THEN NULL ELSE NOW() END,
        COALESCE($17, 'PENDING'), TRUE, NOW()
      )
      ON CONFLICT (phone) DO UPDATE SET
@@ -2779,10 +2784,12 @@ async function clearRiderPayoutWithFeeSplit({
          gross_delivery_fee, platform_commission, transaction_fee, net_amount_paid,
          requires_manual_approval, payout_hold_reason
        )
-       SELECT $1, $2, $3, $4, $5, $6, $7, $3, $8, $9
+       -- $3 lands in both amount and net_amount_paid. A SELECT gives PG no
+       -- column to infer from, so an uncast reuse is "inconsistent types".
+       SELECT $1, $2::varchar, $3::numeric, $4, $5::numeric, $6::numeric, $7::numeric, $3::numeric, $8, $9
         WHERE NOT EXISTS (
           SELECT 1 FROM rider_payouts
-           WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2)
+           WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2::varchar)
         )`,
       [
         rid,
@@ -3264,10 +3271,10 @@ export async function verifyDeliveryOTP({
     await ensureRiderPayoutsTable();
     await query(
       `INSERT INTO rider_payouts (rider_id, order_ref, amount, gross_delivery_fee, status)
-       SELECT $1, $2, $3, $3, 'PENDING_CLEAR'
+       SELECT $1, $2::varchar, $3::numeric, $3::numeric, 'PENDING_CLEAR'
         WHERE NOT EXISTS (
           SELECT 1 FROM rider_payouts
-           WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2)
+           WHERE rider_id = $1 AND UPPER(order_ref) = UPPER($2::varchar)
         )`,
       [dispatch.rider_id, id, feeKes]
     );
@@ -4457,9 +4464,9 @@ export async function auditRiderMpesaName({ riderId, receiverPublicName } = {}) 
   await query(
     `UPDATE riders SET
        mpesa_account_name = $2,
-       mpesa_name_match_status = $3,
+       mpesa_name_match_status = $3::varchar,
        mpesa_name_last_checked_at = NOW(),
-       mpesa_name_flagged_at = CASE WHEN $3 = 'MISMATCH' THEN NOW() ELSE mpesa_name_flagged_at END,
+       mpesa_name_flagged_at = CASE WHEN $3::varchar = 'MISMATCH' THEN NOW() ELSE mpesa_name_flagged_at END,
        updated_at = NOW()
      WHERE id = $1`,
     [rider.id, String(display).slice(0, 160), status]

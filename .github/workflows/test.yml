@@ -51,7 +51,10 @@ jobs:
 
       - name: Install
         working-directory: whatsapp-bot
-        run: npm ci --omit=dev
+        # Dev deps included: the SQL parameter-type test needs pglite to build
+        # the real schema and parse every statement. The VM deploy still
+        # installs with --omit=dev, so none of this ships.
+        run: npm ci
 
       - name: Unit tests
         working-directory: whatsapp-bot
