@@ -6,6 +6,7 @@ import {
   isUserAuthoredKind,
   fallbackText,
 } from "../../lib/message-kinds.js";
+import { screenMessage, blockedMessageFor } from "../../lib/chat-screening.js";
 import {
   computeOfferFeeBreakdown,
   serializeOfferBreakdown,
@@ -57,22 +58,6 @@ function formatHandle(value, fallback = "") {
 
 const OFFER_STATUSES = new Set(["pending", "accepted", "declined", "expired"]);
 
-const FORBIDDEN_PATTERNS = [
-  /07\d{8}/,
-  /01\d{8}/,
-  /\+254\d{9}/,
-  /\b254\d{9}\b/,
-  /pay outside/i,
-  /direct till/i,
-  /send cash/i,
-  /\b(?:wa\.me|whatsapp\.com|t\.me|telegram)\b/i,
-  /\b(?:instagram\.com|facebook\.com|fb\.com|tiktok\.com)\b/i,
-  /\b(?:call|text|dm)\s*(?:me|us)\b/i,
-  /https?:\/\//i,
-  /www\.\w+/i,
-  /\btill\s*[#:]?\s*\d{5,}/i,
-  /buy\s*goods/i,
-];
 
 const DEFAULT_OFFER_REMINDER_COOLDOWN_SECONDS = 60;
 const MAX_OFFER_REMINDER_COOLDOWN_SECONDS = 600;
@@ -1780,10 +1765,6 @@ export async function getShopProfileByHandle({
   );
 }
 
-function hasForbiddenMessage(content) {
-  return FORBIDDEN_PATTERNS.some((pattern) => pattern.test(content));
-}
-
 function mapStorefrontProductRow(row) {
   const condition = row.condition || null;
   const imageUrl = resolveStorefrontImageUrl({
@@ -2932,12 +2913,15 @@ export async function sendDirectMessage({
   }
   // Any kind whose content a person typed, which is text plus photo and video
   // captions. Gating this on TEXT alone let a caption carry a phone number.
-  if (isUserAuthoredKind(messageKind) && hasForbiddenMessage(text)) {
-    return {
-      error: "message_blocked",
-      message:
-        "Message blocked: For your safety, sharing phone numbers or negotiating offline payments is strictly prohibited.",
-    };
+  if (isUserAuthoredKind(messageKind)) {
+    const screened = screenMessage(text);
+    if (screened.blocked) {
+      return {
+        error: "message_blocked",
+        reason: screened.reason,
+        message: blockedMessageFor(screened.reason),
+      };
+    }
   }
 
   const { rows } = await query(

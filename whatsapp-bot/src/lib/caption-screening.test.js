@@ -56,15 +56,15 @@ describe("which kinds carry typed prose", () => {
 
 describe("the gate in the repository", () => {
   it("no longer checks for text alone", () => {
-    assert.doesNotMatch(REPO, /messageKind === MESSAGE_KINDS\.TEXT && hasForbiddenMessage/);
-    assert.match(REPO, /isUserAuthoredKind\(messageKind\) && hasForbiddenMessage/);
+    assert.doesNotMatch(REPO, /messageKind === MESSAGE_KINDS\.TEXT/);
+    assert.match(REPO, /if \(isUserAuthoredKind\(messageKind\)\) \{/);
   });
 
   it("still runs before the row is written", () => {
     const fn = REPO.slice(REPO.indexOf("export async function sendDirectMessage"));
     const body = fn.slice(0, fn.indexOf("\n}\n"));
     assert.ok(
-      body.indexOf("hasForbiddenMessage") < body.indexOf("INSERT INTO messages"),
+      body.indexOf("screenMessage(") < body.indexOf("INSERT INTO messages"),
       "a blocked caption must never reach the table"
     );
   });
