@@ -100,7 +100,7 @@ describe("off-platform payment", () => {
     ["just pay me directly", "OFF_PLATFORM_PAYMENT"],
     ["let's do it outside sokoni", "OFF_PLATFORM_PAYMENT"],
     ["cancel on sokoni and I'll send it", "OFF_PLATFORM_PAYMENT"],
-    ["send cash on delivery", "OFF_PLATFORM_PAYMENT"],
+    ["just send cash instead", "OFF_PLATFORM_PAYMENT"],
   ];
   for (const [t, want] of bad) {
     it(`blocks "${t}"`, () => assert.equal(reason(t), want, t));
