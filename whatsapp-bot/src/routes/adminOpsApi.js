@@ -121,7 +121,7 @@ router.get("/agent-actions", async (req, res) => {
 
 router.post("/agent-actions/:id/resolve", async (req, res) => {
   try {
-    const result = await resolveAgentAction(req.params.id, req.body?.action);
+    const result = await resolveAgentAction(req.params.id, req.body?.action || req.body?.decision);
     if (result.error === "not_found") return res.status(404).json(result);
     if (
       result.error === "unsupported_action" ||

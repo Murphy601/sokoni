@@ -127,10 +127,13 @@ export function startPlatformAgents() {
         .finally(() => {
           reportToMainAgent({
             type: "CAPACITY",
-            severity: SEVERITY.HIGH,
+            severity: SEVERITY.INFO,
             summary: `Bot heap is ${mb}MB. Expired media was cleared. Hold new uploads until it drops.`,
             data: { heapUsedMb: event?.data?.heapUsedMb ?? null },
           });
+          void import("./admin-notifier.js")
+            .then(({ notifyMemorySpike }) => notifyMemorySpike(event?.data?.heapUsedMb))
+            .catch((err) => console.warn("[heap] alert skipped:", err?.message || err));
         });
     }),
   ];

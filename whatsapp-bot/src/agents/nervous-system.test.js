@@ -102,7 +102,7 @@ describe("what an agent is allowed to see", () => {
 });
 
 describe("chat control reports upward without quoting the message", () => {
-  it("sends one high alert and leaves the body out", async () => {
+  it("keeps the block in the digest and does not page or quote it", async () => {
     const sent = [];
     const agent = new MainSokoniAgent({
       notify: async (text) => {
@@ -121,11 +121,13 @@ describe("chat control reports upward without quoting the message", () => {
       },
     });
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(sent.length, 1);
-    assert.match(sent[0], /PHONE_NUMBER/);
-    assert.match(sent[0], /Flag #9/);
-    assert.doesNotMatch(sent[0], /0712345678/);
-    assert.doesNotMatch(sent[0], /call me/);
+    assert.equal(sent.length, 0);
+    const last = agent.buffer.at(-1);
+    assert.equal(last.severity, "INFO");
+    assert.match(last.summary, /PHONE_NUMBER/);
+    assert.match(last.summary, /Flag #9/);
+    assert.doesNotMatch(last.summary, /0712345678/);
+    assert.doesNotMatch(last.summary, /call me/);
   });
 
   it("does not subscribe twice", () => {

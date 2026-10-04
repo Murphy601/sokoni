@@ -33,6 +33,8 @@ import {
   isAdminSender,
   containsAdminCommand,
   shouldRouteIncomingAsAdmin,
+  isUnauthorizedAdminProbe,
+  PUBLIC_HELP_REPLY,
   requireAdminSender,
   canRunAdminCommands,
   extractCustomerMeta,
@@ -1208,6 +1210,15 @@ export async function handleWahaWebhook(body) {
       phone: parsed.phone || undefined,
     });
     if (handled !== false) return handled;
+  }
+
+  if (isUnauthorizedAdminProbe(parsed.text || "")) {
+    try {
+      await sendText(parsed.customerKey, PUBLIC_HELP_REPLY);
+    } catch (err) {
+      console.warn("[webhook] help reply skipped:", err.message);
+    }
+    return;
   }
 
   if (!parsed.text && !parsed.hasMedia && !parsed.location) return;
