@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { attachFitCheckPhoto } from "../services/fit-check.js";
 import { storeFitPhoto } from "../services/fit-photo-store.js";
@@ -177,7 +178,7 @@ router.post("/follow", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -193,7 +194,7 @@ router.get("/users/:userId/stats", async (req, res) => {
     }
     res.json({ stats: result });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -214,7 +215,7 @@ router.get("/users/:userId/followers", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -235,7 +236,7 @@ router.get("/users/:userId/following", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -251,7 +252,7 @@ router.get("/shop/pins", async (req, res) => {
     const pins = await listShopPins(auth.sellerUserId);
     res.json({ pins, max: MAX_SHOP_PINS, remaining: Math.max(0, MAX_SHOP_PINS - pins.length) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -279,7 +280,7 @@ router.post("/shop/pins", async (req, res) => {
     }
     res.json({ success: true, ...result });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -302,7 +303,7 @@ router.delete("/shop/pins/:productId", async (req, res) => {
     }
     res.json({ success: true, ...result });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -341,7 +342,7 @@ router.post("/shop/avatar", async (req, res) => {
       message: result.message || "Profile photo updated.",
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -413,7 +414,7 @@ router.patch("/shop/profile", async (req, res) => {
       message: "Shop profile updated.",
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -462,7 +463,7 @@ router.get("/notify-prefs", async (req, res) => {
     }
     res.json({ ...result, role: auth.role });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -491,7 +492,7 @@ router.patch("/notify-prefs", async (req, res) => {
     }
     res.json({ ...result, role: auth.role });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -530,7 +531,7 @@ router.get("/activity", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -569,10 +570,7 @@ router.get("/buyer/activity", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({
-      error: "buyer_activity_failed",
-      message: err.message || "Could not load activity right now.",
-    });
+    res.status(500).json(clientError(err, "buyer_activity_failed"));
   }
 });
 
@@ -685,7 +683,7 @@ router.get("/shop/:handle", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -714,7 +712,7 @@ router.post("/offers/create", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -748,7 +746,7 @@ router.get("/offers/:offerId/checkout", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -792,7 +790,7 @@ router.post("/offers/:offerId/place-order", async (req, res) => {
       offer: result.offer,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -839,7 +837,7 @@ router.post("/offers/:offerId/respond", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -887,7 +885,7 @@ router.post("/offers/:offerId/remind", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -926,7 +924,7 @@ router.get("/offers/handled", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -968,7 +966,7 @@ router.get("/offers/handled/events", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1007,7 +1005,7 @@ router.post("/offers/handled/reset", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1048,7 +1046,7 @@ router.post("/offers/:offerId/handled", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1117,7 +1115,7 @@ router.get("/offers", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1197,7 +1195,7 @@ router.get("/chat/offers", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1265,7 +1263,7 @@ router.post("/chat/send", async (req, res) => {
     // gets one rather than only this route.
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1313,7 +1311,7 @@ router.post("/chat/react", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1438,7 +1436,7 @@ router.post("/chat/photo", photoUpload.single("photo"), async (req, res) => {
       });
     }
     console.warn("[social] photo upload failed:", err.message);
-    res.status(500).json({ error: "photo_upload_failed", message: err.message });
+    res.status(500).json(clientError(err, "photo_upload_failed"));
   }
 });
 
@@ -1534,7 +1532,7 @@ router.post("/chat/voice", voiceUpload.single("audio"), async (req, res) => {
       });
     }
     console.warn("[social] voice upload failed:", err.message);
-    res.status(500).json({ error: "voice_upload_failed", message: err.message });
+    res.status(500).json(clientError(err, "voice_upload_failed"));
   }
 });
 
@@ -1658,7 +1656,7 @@ router.get("/chat/media/:messageId", async (req, res) => {
     stream.pipe(res);
   } catch (err) {
     console.warn("[social] media route failed:", err.message);
-    if (!res.headersSent) res.status(502).json({ error: "media_unavailable", message: err.message });
+    if (!res.headersSent) res.status(502).json(clientError(err, "media_unavailable"));
   }
 });
 
@@ -1690,7 +1688,7 @@ router.post("/bundles", async (req, res) => {
     );
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1740,7 +1738,7 @@ router.post("/bundles/:bundleId/respond", async (req, res) => {
     );
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1756,7 +1754,7 @@ router.get("/bundles/:bundleId", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1783,7 +1781,7 @@ router.post("/chat/scratch-card", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1809,7 +1807,7 @@ router.post("/chat/scratch-card/:messageId/reveal", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1822,7 +1820,7 @@ router.get("/chat/scratch-card/options", async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: "product_not_found" });
     res.json({ options: perkOptions(rows[0].price_kes) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1869,7 +1867,7 @@ router.post("/chat/nudge", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1885,7 +1883,7 @@ router.get("/drops/recipients", async (req, res) => {
     }
     res.json({ recipients: await eligibleDropRecipients(auth.sellerUserId) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1909,7 +1907,7 @@ router.post("/drops", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -1960,7 +1958,7 @@ router.post("/chat/fit-check/:messageId", fitUpload.single("photo"), async (req,
     if (err?.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ error: "photo_too_large", message: "That photo is too big." });
     }
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -2033,7 +2031,7 @@ router.get("/chat/thread", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -2096,10 +2094,7 @@ router.post("/reviews/create", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({
-      error: "review_create_failed",
-      message: err.message || "Could not save review right now.",
-    });
+    res.status(500).json(clientError(err, "review_create_failed"));
   }
 });
 
@@ -2127,10 +2122,7 @@ router.get("/reviews/reviewable", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({
-      error: "reviewable_orders_failed",
-      message: err.message || "Could not load reviewable orders.",
-    });
+    res.status(500).json(clientError(err, "reviewable_orders_failed"));
   }
 });
 
@@ -2157,10 +2149,7 @@ router.get("/reviews/reviewable-buyers", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({
-      error: "reviewable_buyers_failed",
-      message: err.message || "Could not load buyers to rate.",
-    });
+    res.status(500).json(clientError(err, "reviewable_buyers_failed"));
   }
 });
 
@@ -2180,7 +2169,7 @@ router.get("/reviews/seller/:sellerUserId", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -2200,7 +2189,7 @@ router.get("/reviews/buyer/:buyerUserId", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

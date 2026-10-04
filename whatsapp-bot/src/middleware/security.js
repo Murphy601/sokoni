@@ -10,6 +10,17 @@ const SITE_ORIGINS = new Set([
   "http://127.0.0.1:8080",
 ]);
 
+/** Headers on every bot response. CSP is none because this server returns JSON, not pages. */
+export function securityHeaders(_req, res, next) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+  next();
+}
+
 /** Browser CORS — only sokonimall.com (and local static) may call the API from JS. */
 export function corsAllowlist(req, res, next) {
   const origin = req.headers.origin;

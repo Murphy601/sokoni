@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { runAgentTurn, agentMeta } from "../services/ai-agent.js";
@@ -72,7 +73,7 @@ router.post("/chat", async (req, res) => {
     });
   } catch (err) {
     console.error("[agent/chat]", err.message);
-    res.status(500).json({ error: "agent_failed", message: err.message });
+    res.status(500).json(clientError(err, "agent_failed"));
   }
 });
 

@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import {
   requireApprovedSeller,
@@ -121,7 +122,7 @@ router.post("/studio", async (req, res) => {
       seller: { id: check.supplier.id, businessName: check.supplier.businessName },
     });
   } catch (err) {
-    res.status(422).json({ error: "studio_failed", message: err.message });
+    res.status(422).json(clientError(err, "studio_failed"));
   }
 });
 

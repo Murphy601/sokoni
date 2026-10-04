@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import {
   addDisputeEvidence,
@@ -53,7 +54,7 @@ router.post("/", async (req, res) => {
     }
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: "dispute_create_failed", message: err.message });
+    res.status(500).json(clientError(err, "dispute_create_failed"));
   }
 });
 
@@ -75,7 +76,7 @@ router.get("/mine", async (req, res) => {
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -97,7 +98,7 @@ router.get("/seller", async (req, res) => {
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -114,7 +115,7 @@ router.get("/admin/list", async (req, res) => {
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -133,7 +134,7 @@ router.post("/admin/:id/resolve", async (req, res) => {
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -172,7 +173,7 @@ router.get("/:id", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -204,7 +205,7 @@ router.post("/:id/evidence", async (req, res) => {
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -226,7 +227,7 @@ router.post("/:id/seller-response", async (req, res) => {
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

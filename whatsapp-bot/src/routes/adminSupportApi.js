@@ -8,6 +8,7 @@
  *
  * Also exposes the WhatsApp admin #command desk so ops can run without the phone.
  */
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { requireAdminToken } from "../lib/admin-auth.js";
 import { config } from "../config.js";
@@ -112,7 +113,7 @@ router.post("/command", async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error("[admin/support/command]", err);
-    res.status(500).json({ ok: false, error: err.message, replies: [] });
+    res.status(500).json({ ok: false, replies: [], ...clientError(err) });
   }
 });
 
@@ -150,7 +151,7 @@ router.get("/desk/payouts", (_req, res) => {
     const summary = getSettlementSummary();
     res.json({ ok: true, ...summary });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, ...clientError(err) });
   }
 });
 
@@ -251,7 +252,7 @@ router.post("/:orderId/reply", async (req, res) => {
       thread: getSupportThread(order.id),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

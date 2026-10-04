@@ -2384,7 +2384,9 @@ async function loadMyListings() {
       return;
     }
     if (!res.ok) {
-      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">${data.message || data.error}</p>`;
+      wrap.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">${escapeHtml(
+        data.message || data.error || "Could not load listings."
+      )}</p>`;
       return;
     }
     const items = [...(data.drafts || []), ...(data.listings || [])];

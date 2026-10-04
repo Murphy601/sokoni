@@ -9,11 +9,20 @@ import {
 
 const router = Router();
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function htmlPage(title, body) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+  const safeTitle = escapeHtml(title);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem;color:#1B1035}
 .ok{color:#128C7E}.err{color:#c0392b}code{background:#f4f4f4;padding:.2em .4em;border-radius:4px}</style></head>
-<body><h1>${title}</h1>${body}</body></html>`;
+<body><h1>${safeTitle}</h1>${body}</body></html>`;
 }
 
 /** One-time connect — open with setup token (backend only). */
@@ -25,7 +34,8 @@ router.get("/connect", (req, res) => {
     const { url } = buildAuthorizationUrl();
     return res.redirect(url);
   } catch (err) {
-    return res.status(500).send(htmlPage("Error", `<p class='err'>${err.message}</p>`));
+    console.error("[tiktok] connect failed:", err.message);
+    return res.status(500).send(htmlPage("Error", "<p class='err'>Could not start TikTok connect.</p>"));
   }
 });
 
@@ -43,7 +53,12 @@ router.get("/callback", async (req, res) => {
   const { code, state, error, error_description: desc } = req.query;
 
   if (error) {
-    return res.status(400).send(htmlPage("TikTok denied", `<p class='err'>${error}: ${desc || ""}</p>`));
+    return res.status(400).send(
+      htmlPage(
+        "TikTok denied",
+        `<p class='err'>${escapeHtml(String(error).slice(0, 80))}: ${escapeHtml(String(desc || "").slice(0, 200))}</p>`
+      )
+    );
   }
   if (!code || !consumeOAuthState(state)) {
     return res.status(400).send(htmlPage("Invalid callback", "<p class='err'>Missing or expired OAuth state. Try connect again.</p>"));
@@ -56,13 +71,14 @@ router.get("/callback", async (req, res) => {
         "TikTok connected",
         `<p class="ok">✅ Sokoni is linked to your TikTok account.</p>
          <p>Access token auto-refreshes — you do not need to update <code>.env</code> manually.</p>
-         <p>Open ID: <code>${tokens.openId || "—"}</code></p>
-         <p>Scopes: <code>${tokens.scope || "—"}</code></p>
+         <p>Open ID: <code>${escapeHtml(tokens.openId || "—")}</code></p>
+         <p>Scopes: <code>${escapeHtml(tokens.scope || "—")}</code></p>
          <p>You can close this tab.</p>`
       )
     );
   } catch (err) {
-    return res.status(500).send(htmlPage("Connect failed", `<p class='err'>${err.message}</p>`));
+    console.error("[tiktok] callback failed:", err.message);
+    return res.status(500).send(htmlPage("Connect failed", "<p class='err'>Could not finish TikTok connect.</p>"));
   }
 });
 

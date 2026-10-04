@@ -1,15 +1,17 @@
 /**
  * Shared admin REST auth — token lives only in bot env.
  * Accepts MASTER_ADMIN_SECRET (Boss), ADMIN_SETUP_TOKEN, SUPPLIER_ADMIN_TOKEN,
- * or TIKTOK_SETUP_TOKEN. Prefer X-Admin-Token / X-Master-Admin-Secret headers.
+ * or TIKTOK_SETUP_TOKEN via header only.
+ * Query-string tokens are ignored so they cannot land in access logs or Referer.
  */
+
+import crypto from "node:crypto";
 
 export function adminTokenFromReq(req) {
   return String(
     req.headers["x-master-admin-secret"] ||
       req.headers["x-admin-token"] ||
       req.headers["x-sokoni-token"] ||
-      req.query?.token ||
       req.body?.token ||
       req.body?.masterAdminSecret ||
       ""
@@ -33,14 +35,21 @@ export function expectedAdminToken() {
 }
 
 /** True when the request presents the dedicated MASTER_ADMIN_SECRET. */
+function tokenEquals(presented, expected) {
+  const a = crypto.createHash("sha256").update(String(presented)).digest();
+  const b = crypto.createHash("sha256").update(String(expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 export function isMasterAdminToken(token) {
   const master = String(process.env.MASTER_ADMIN_SECRET || "").trim();
-  return Boolean(master && token && token === master);
+  if (!master || !token) return false;
+  return tokenEquals(token, master);
 }
 
 export function isAdminTokenValid(token) {
   if (!token) return false;
-  return adminTokenCandidates().includes(token);
+  return adminTokenCandidates().some((candidate) => tokenEquals(token, candidate));
 }
 
 export function requireAdminToken(req, res, next) {
