@@ -10,6 +10,7 @@
 
 import { isDbEnabled, query, withTransaction } from "../pool.js";
 import { apportionBundlePrice, bundleListTotal } from "../../lib/bundle-pricing.js";
+import { emitPlatformEvent } from "../../agents/platform-events.js";
 
 /** Items in one bundle. More than this is a shop, not a bundle. */
 export const MAX_BUNDLE_ITEMS = 8;
@@ -139,6 +140,13 @@ export async function createBundle({ buyerUserId, sellerUserId, productIds, amou
         [bundle.id, lines[i].id, lines[i].priceKes, i]
       );
     }
+    emitPlatformEvent("BUNDLE_CREATED", {
+      buyerUserId: buyer,
+      sellerUserId: seller,
+      bundleId: Number(bundle.id),
+      proposedPriceKes: asked,
+      listedPriceKes: listTotal,
+    });
     return { success: true, bundle: mapBundle(bundle, await loadItems(bundle.id)) };
   });
 }

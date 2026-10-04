@@ -8,6 +8,7 @@ import {
 } from "../../lib/message-kinds.js";
 import { screenMessage, blockedMessageFor } from "../../lib/chat-screening.js";
 import { recordBlockedChat, publishChatMessage } from "../../agents/chat-control.js";
+import { emitPlatformEvent } from "../../agents/platform-events.js";
 import {
   computeOfferFeeBreakdown,
   serializeOfferBreakdown,
@@ -2213,6 +2214,14 @@ export async function createOffer({
   );
 
   const mapped = mapOfferRow(hydrated.rows[0]);
+  emitPlatformEvent("BARGAIN_PROPOSED", {
+    buyerUserId: buyerId,
+    sellerUserId: sellerId,
+    productId: product,
+    offerId,
+    proposedPriceKes: amount,
+    listedPriceKes: productData.price_kes != null ? Number(productData.price_kes) : null,
+  });
   return {
     success: true,
     offer: mapped,
@@ -2958,6 +2967,18 @@ export async function sendDirectMessage({
       messageId: message.id,
       kind: messageKind,
       text,
+    });
+  }
+  if (
+    messageKind === MESSAGE_KINDS.IMAGE ||
+    messageKind === MESSAGE_KINDS.VIDEO ||
+    messageKind === MESSAGE_KINDS.VOICE
+  ) {
+    emitPlatformEvent("MEDIA_UPLOADED", {
+      senderUserId: senderId,
+      receiverUserId: receiverId,
+      messageId: message.id,
+      kind: messageKind,
     });
   }
 

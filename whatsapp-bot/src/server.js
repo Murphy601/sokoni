@@ -612,8 +612,18 @@ function startAgentLayer() {
     .then(async ({ mainAgent }) => {
       mainAgent.start();
       const { startChatControlAgent } = await import("./agents/chat-control.js");
+      const { startPlatformAgents } = await import("./agents/platform-agents.js");
       startChatControlAgent();
-      console.log("[agents] main agent and chat control listening");
+      startPlatformAgents();
+      console.log("[agents] main agent, chat control, and platform agents listening");
+      const heapTick = () => {
+        const heapUsedMb = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
+        if (heapUsedMb < 380) return;
+        void import("./agents/platform-events.js").then(({ emitPlatformEvent }) => {
+          emitPlatformEvent("VM_MEMORY_SPIKE", { heapUsedMb });
+        });
+      };
+      setInterval(heapTick, 60_000).unref?.();
       // Digest every 6 hours. A quiet window sends nothing.
       const tick = () => {
         void mainAgent.sendDigest().catch((err) => {

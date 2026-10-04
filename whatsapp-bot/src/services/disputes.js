@@ -13,6 +13,7 @@ import {
 } from "./settlements.js";
 import { resolveSellerPayoutKes, orderBuyerTotal } from "./shipping-tiers.js";
 import { buildPublicTrackingPayload } from "./shipments.js";
+import { emitPlatformEvent } from "../agents/platform-events.js";
 
 const OPEN_STATUSES = new Set(["open", "under_review"]);
 const REASONS = new Set(["not_as_described", "wrong_item", "damaged", "not_received", "other"]);
@@ -334,6 +335,12 @@ export async function createDispute({
     }
   }
 
+  emitPlatformEvent("DISPUTE_OPENED", {
+    orderId: fresh.id,
+    buyerUserId: buyerId,
+    sellerUserId: resolvedSellerId,
+    disputeId: dispute?.id,
+  });
   return { success: true, dispute, escrowFrozen: Boolean(freeze.frozen) };
 }
 
