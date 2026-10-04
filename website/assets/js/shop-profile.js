@@ -602,9 +602,9 @@ function renderShopHeader(payload) {
     if (shop.avatarUrl) {
       avatarWrap.innerHTML = `<img src="${escapeHtml(shop.avatarUrl)}" alt="${escapeHtml(
         shop.shopName || "Shop avatar"
-      )}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl font-bold text-brand-purple/45 dark:text-white/55\\'>${escapeHtml(
+      )}" class="w-full h-full object-cover" data-fallback-replace="parent" data-fallback-text="${escapeHtml(
         initial
-      )}</span>'" />`;
+      )}" data-fallback-span-class="text-2xl font-bold text-brand-purple/45 dark:text-white/55" />`;
     } else {
       avatarWrap.innerHTML = `<span class="text-2xl font-bold text-brand-purple/45 dark:text-white/55">${escapeHtml(
         initial
@@ -832,7 +832,7 @@ function productCard(product, shop) {
   const title = escapeHtml(product.title || "Item");
   const src = resolveShopProductImage(product);
   const image = src
-    ? `<img src="${escapeHtml(src)}" alt="${title}" class="product-image w-full h-full object-cover" loading="lazy" decoding="async" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-xs text-brand-purple/45\\'>Photo soon</div>'" />`
+    ? `<img src="${escapeHtml(src)}" alt="${title}" class="product-image w-full h-full object-cover" loading="lazy" decoding="async" data-fallback-replace="parent" data-fallback-text="Photo soon" data-fallback-tag="div" data-fallback-span-class="w-full h-full flex items-center justify-center text-xs text-brand-purple/45" />`
     : `<div class="w-full h-full flex items-center justify-center text-xs text-brand-purple/45 dark:text-white/55">Photo soon</div>`;
   const condition = escapeHtml(
     product.conditionLabel ||

@@ -38,7 +38,8 @@
       return `<span class="sokoni-cat-icon ${sizeClass}" aria-hidden="true">
         <img src="${escapeHtml(src)}" alt="" width="240" height="240" loading="lazy"
           referrerpolicy="no-referrer"
-          onerror="this.onerror=null;this.classList.add('is-broken');this.src='https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&h=600&q=80';" />
+          data-fallback-class="is-broken"
+          data-fallback-src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&amp;fit=crop&amp;w=600&amp;h=600&amp;q=80" />
       </span>`;
     }
     // Last resort only — every cat/sub should have a web image in browse-menu.json

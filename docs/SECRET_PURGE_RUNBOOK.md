@@ -80,7 +80,7 @@ git clone git@github.com:Murphy601/sokoni.git sokoni-rewrite && cd sokoni-rewrit
 Replace the key everywhere it appears:
 
 ```bash
-printf 'AQ.Ab8RN6JKsaorEvw8bvKc277LHDh3lL3HMWNbPhrz_LJxDKkhKQ==>REDACTED_ROTATED_KEY\n' > /tmp/secrets.txt
+Write the retired key into `/tmp/secrets.txt` on the machine doing the rewrite (one line: `OLD==>REDACTED_ROTATED_KEY`). Do not commit that file.
 git filter-repo --replace-text /tmp/secrets.txt
 ```
 

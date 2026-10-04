@@ -3,6 +3,7 @@
  * Seller: POST /api/seller/onboard/boda/request (mounted from seller onboard)
  * Admin:  /api/admin/boda/*
  */
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { requireAdminToken } from "../lib/admin-auth.js";
 import {
@@ -143,7 +144,7 @@ adminBodaRouter.post("/riders/:id/delete", async (req, res) => {
     if (!out.ok) return res.status(out.error === "not_found" ? 404 : 400).json(out);
     res.json({ ok: true, ...out });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -198,7 +199,7 @@ adminBodaRouter.post("/dispatches/force-reassign", async (req, res) => {
       data: result.data || null,
     });
   } catch (err) {
-    res.status(500).json({ error: "force_reassign_failed", message: err.message });
+    res.status(500).json(clientError(err, "force_reassign_failed"));
   }
 });
 

@@ -718,7 +718,7 @@ function renderDepopCard(product) {
   const src = resolveProductImage(product);
   const videoSrc = resolveProductVideo(product);
   const imageInner = src
-    ? `<img class="depop-card-still" src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'depop-card-placeholder',textContent:'Photo soon'}))" />`
+    ? `<img class="depop-card-still" src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" data-fallback-text="Photo soon" data-fallback-span-class="depop-card-placeholder" />`
     : `<span class="depop-card-placeholder">Photo soon</span>`;
   const clipInner = videoSrc
     ? `<video class="depop-card-clip" src="${escapeHtml(videoSrc)}"${
@@ -885,7 +885,7 @@ function renderCategoryChips() {
         <span class="depop-cat-card__icon depop-cat-card__icon--img" aria-hidden="true">
           <img src="${escapeHtml(src)}" alt="" width="240" height="240" loading="lazy"
             referrerpolicy="no-referrer"
-            onerror="this.onerror=null;this.src='${FALLBACK_IMG}'" />
+            data-fallback-src="${escapeHtml(FALLBACK_IMG)}" />
         </span>
         <span class="depop-cat-card__label">${escapeHtml(label)}</span>
       </span>

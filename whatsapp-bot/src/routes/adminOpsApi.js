@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import {
   getOpsStatus,
@@ -27,7 +28,7 @@ router.get("/waha", async (_req, res) => {
     const waha = await getWahaSessionStatus();
     res.json({ ok: true, waha });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -46,7 +47,7 @@ router.post("/catalog/sync", async (_req, res) => {
     const status = await syncPublicCatalog();
     res.json({ ok: true, status });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -55,7 +56,7 @@ router.post("/catalog/publish", async (_req, res) => {
     const status = await publishCatalogToGit();
     res.json({ ok: true, status });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -76,7 +77,7 @@ router.post("/db/migrate", async (_req, res) => {
     const result = await runDbMigrate();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -85,7 +86,7 @@ router.post("/db/seed", async (req, res) => {
     const result = await runDbSeed(Boolean(req.body?.dryRun));
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

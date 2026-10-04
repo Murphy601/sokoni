@@ -433,19 +433,33 @@ export async function applyPaymentFailure(checkoutRequestId, resultDesc = "", or
   return getOrder(order.id);
 }
 
-/** Resolve order from STK callback (CheckoutRequestID, then phone+amount fallback). */
+function stkAmountMatches(order, amount) {
+  if (amount == null || amount === "") return true;
+  const got = Math.round(Number(amount));
+  if (!Number.isFinite(got)) return false;
+  return got === Math.round(Number(orderBuyerTotal(order)));
+}
+
+/**
+ * Resolve order from an STK callback.
+ * CheckoutRequestID is the binding we stored when we pushed STK.
+ * Phone + exact amount is the fallback when Safaricom omits that id.
+ * AccountReference is not accepted: order ids are guessable, and this
+ * callback is not signed.
+ */
 export function resolveOrderFromStkCallback(parsed) {
   if (parsed.checkoutRequestId) {
     const byCheckout = findOrderByCheckoutRequestId(parsed.checkoutRequestId);
-    if (byCheckout) return byCheckout;
+    if (byCheckout) {
+      if (!stkAmountMatches(byCheckout, parsed.amount)) {
+        console.warn("[escrow] STK amount does not match order", byCheckout.id);
+        return null;
+      }
+      return byCheckout;
+    }
   }
   if (parsed.phoneNumber && parsed.amount != null) {
-    const byPhone = findProcessingOrderByPhoneAmount(parsed.phoneNumber, parsed.amount);
-    if (byPhone) return byPhone;
-  }
-  if (parsed.accountReference) {
-    const byRef = getOrder(parsed.accountReference);
-    if (byRef) return byRef;
+    return findProcessingOrderByPhoneAmount(parsed.phoneNumber, parsed.amount);
   }
   return null;
 }

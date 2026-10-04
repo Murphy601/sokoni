@@ -3,6 +3,7 @@
  * GET /api/search?q=kiondo
  * GET /api/search/suggest?q=kio
  */
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { smartSearch, smartSuggest } from "../services/smart-search.js";
 import { computeProductTotals } from "../services/shipping-tiers.js";
@@ -61,7 +62,7 @@ router.get("/", async (req, res) => {
       products: (result.products || []).map(toPublic).filter(Boolean),
     });
   } catch (err) {
-    res.status(500).json({ error: "search_failed", message: err.message });
+    res.status(500).json(clientError(err, "search_failed"));
   }
 });
 
@@ -69,7 +70,7 @@ router.get("/suggest", async (req, res) => {
   try {
     res.json(await smartSuggest(String(req.query.q || ""), { limit: Number(req.query.limit) || 8 }));
   } catch (err) {
-    res.status(500).json({ error: "suggest_failed", message: err.message });
+    res.status(500).json(clientError(err, "suggest_failed"));
   }
 });
 

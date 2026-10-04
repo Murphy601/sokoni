@@ -2,6 +2,7 @@
  * Admin Command Center — Platform Manager APIs.
  * Mounted at /admin/command (requireAdminToken).
  */
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { requireAdminToken } from "../lib/admin-auth.js";
 import {
@@ -29,7 +30,7 @@ router.get("/dashboard", async (_req, res) => {
   try {
     res.json(await getPlatformCommandDashboard());
   } catch (err) {
-    res.status(500).json({ error: "dashboard_failed", message: err.message });
+    res.status(500).json(clientError(err, "dashboard_failed"));
   }
 });
 
@@ -140,7 +141,7 @@ router.post("/escrow/:orderId/payb2c", async (req, res) => {
     if (result.error) return res.status(400).json(result);
     res.json({ ok: true, ...result, b2c: b2cMeta() });
   } catch (err) {
-    res.status(500).json({ error: "payb2c_failed", message: err.message });
+    res.status(500).json(clientError(err, "payb2c_failed"));
   }
 });
 
@@ -210,7 +211,7 @@ router.get("/search", async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ error: "search_failed", message: err.message });
+    res.status(500).json(clientError(err, "search_failed"));
   }
 });
 
@@ -249,7 +250,7 @@ router.post("/master", async (req, res) => {
       data: result.data || null,
     });
   } catch (err) {
-    res.status(500).json({ error: "master_command_failed", message: err.message });
+    res.status(500).json(clientError(err, "master_command_failed"));
   }
 });
 
@@ -264,7 +265,7 @@ router.get("/admin-logs", async (req, res) => {
     if (result.error === "database_not_configured") return res.status(503).json(result);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: "admin_logs_failed", message: err.message });
+    res.status(500).json(clientError(err, "admin_logs_failed"));
   }
 });
 
@@ -300,7 +301,7 @@ router.get("/ratings/:type/:id", async (req, res) => {
     if (type === "seller") profile = await getSellerRatingProfile(id);
     res.json({ subjectType: type, subjectId: id, profile, events });
   } catch (err) {
-    res.status(500).json({ error: "ratings_list_failed", message: err.message });
+    res.status(500).json(clientError(err, "ratings_list_failed"));
   }
 });
 
@@ -325,7 +326,7 @@ router.post("/ratings/purge", async (req, res) => {
     }
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(500).json({ error: "purge_failed", message: err.message });
+    res.status(500).json(clientError(err, "purge_failed"));
   }
 });
 

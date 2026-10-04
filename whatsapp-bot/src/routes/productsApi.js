@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -245,7 +246,7 @@ router.post("/create", async (req, res) => {
     }
     res.status(201).json({ success: true, product: toPublicProduct(result.product) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -279,7 +280,7 @@ router.post("/like", async (req, res) => {
       productId: result.productId,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -318,7 +319,7 @@ router.get("/likes", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -362,7 +363,7 @@ router.get("/browse-counts", async (_req, res) => {
     const counts = await getBrowseCountsFromDb();
     res.json({ counts });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -374,7 +375,7 @@ router.get("/categories", async (_req, res) => {
     const categories = await getCategoriesFromDb();
     res.json({ categories });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -413,7 +414,7 @@ router.get("/", async (req, res) => {
       products,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -453,7 +454,7 @@ router.get("/:id", async (req, res) => {
     }
     res.json({ product: toPublicProduct(product) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

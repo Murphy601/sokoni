@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import {
   logFeedEvent,
@@ -55,7 +56,7 @@ router.post("/refresh", async (_req, res) => {
       preloved: cache.preloved.length,
     }});
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

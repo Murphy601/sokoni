@@ -740,7 +740,7 @@ function imageBubble(msg) {
       <p class="text-[11px] text-zinc-500">${who}</p>
       <div class="inbox-photo ${mine ? "inbox-photo-mine" : ""}">
         <img src="${escapeHtml(src)}" alt="${caption ? escapeHtml(caption) : "Photo"}" loading="lazy"
-          onerror="this.closest('.inbox-photo')?.classList.add('is-gone');" />
+          data-fallback-class="is-gone" data-fallback-closest=".inbox-photo" />
         <span class="inbox-photo-gone">Photo expired</span>
       </div>
       ${caption ? `<p class="inbox-photo-caption">${escapeHtml(caption)}</p>` : ""}

@@ -1,3 +1,5 @@
+import { clientError } from "../lib/public-error.js";
+import crypto from "node:crypto";
 import { Router } from "express";
 import { sendText, sendImage } from "../services/whatsapp.js";
 import { adminTokenFromReq, isAdminTokenValid } from "../lib/admin-auth.js";
@@ -6,8 +8,11 @@ const router = Router();
 
 function isTokenValid(token) {
   if (isAdminTokenValid(token)) return true;
-  const sendToken = process.env.WHATSAPP_SEND_TOKEN || "";
-  return Boolean(sendToken && token && token === sendToken);
+  const sendToken = String(process.env.WHATSAPP_SEND_TOKEN || "").trim();
+  if (!sendToken || !token) return false;
+  const a = crypto.createHash("sha256").update(String(token)).digest();
+  const b = crypto.createHash("sha256").update(sendToken).digest();
+  return crypto.timingSafeEqual(a, b);
 }
 
 function requireToken(req, res, next) {
@@ -34,7 +39,7 @@ router.post("/send", async (req, res) => {
     const resp = await sendText(target, text);
     res.json({ success: true, messageId: resp?.id || null });
   } catch (err) {
-    res.status(502).json({ error: "send_failed", message: err.message });
+    res.status(502).json(clientError(err, "send_failed"));
   }
 });
 

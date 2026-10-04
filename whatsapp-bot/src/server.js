@@ -52,8 +52,10 @@ import { elevenLabsHealth } from "./services/elevenlabs-tts.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 import {
   corsAllowlist,
+  securityHeaders,
   attachRawBody,
   requireWahaWebhookAuth,
+  assertProductionWebhookHmac,
   apiLimiter,
   authLimiter,
   adminLimiter,
@@ -63,6 +65,7 @@ import {
 const app = express();
 /** Behind nginx / Cloudflare — needed for express-rate-limit client IP. */
 app.set("trust proxy", 1);
+app.use(securityHeaders);
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -230,24 +233,23 @@ app.get("/health", async (_req, res) => {
   }
 
   const chatRouting = agent.routing || {};
+  const b2c = b2cMeta();
+  const voice = elevenLabsHealth();
+  const mas = masMeta();
   res.json({
     status: "ok",
     build: BUILD_ID,
-    aiModel: chatRouting.primaryModel || config.openai.model || null,
-    catalogVisionModel: config.catalog.visionModel || null,
     aiConfigured: Boolean(config.openai.apiKey || config.groq?.apiKey),
     aiChat: {
       providerPreference: chatRouting.providerPreference || config.aiChat?.provider || "auto",
-      primaryProvider: chatRouting.primaryProvider || null,
-      primaryModel: chatRouting.primaryModel || null,
-      temperature: chatRouting.temperature ?? config.aiChat?.temperature ?? 0.15,
-      maxTokens: Number(config.aiChat?.maxTokens) || 480,
       groqConfigured: Boolean(config.groq?.apiKey),
       openrouterConfigured: Boolean(config.openai?.apiKey),
     },
-    mas: masMeta(),
+    mas: {
+      enabled: Boolean(mas?.flags?.enabled),
+      shadow: Boolean(mas?.flags?.shadow),
+    },
     aiAgent: agent.name,
-    aiTools: agent.tools,
     feedPhase: feed.phase,
     opsPhase: ops.phase,
     catalogPaused: ops.catalog.paused,
@@ -258,14 +260,13 @@ app.get("/health", async (_req, res) => {
     wahaSessionStatus: wahaHealth.wahaSessionStatus,
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
-    dbError: db.ok ? null : db.reason,
     prepaidOnly: checkout.prepaidOnly,
     darajaConfigured: checkout.darajaConfigured,
     paymentRail: checkout.paymentRail || null,
     paystackConfigured: Boolean(checkout.paystackConfigured),
     paystackOnly: checkout.paystackOnly !== false,
-    b2c: b2cMeta(),
-    elevenlabs: elevenLabsHealth(),
+    b2c: { ready: Boolean(b2c.ready), auto: Boolean(b2c.auto) },
+    elevenlabs: { configured: Boolean(voice.configured), ttsEnabled: Boolean(voice.ttsEnabled) },
   });
 });
 
@@ -448,7 +449,9 @@ app.use("/admin/pickup-points", adminPickupPointsRouter);
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */
 app.use("/admin/tiktok", tiktokOAuthRouter);
 
-/** WAHA posts inbound message events here — HMAC when WEBHOOK_HMAC_KEY is set. */
+/** WAHA posts inbound message events here. Production refuses to boot without HMAC. */
+assertProductionWebhookHmac();
+
 app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) => {
   res.sendStatus(200);
   try {

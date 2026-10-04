@@ -130,7 +130,7 @@
       .map((shop) => {
         const name = shop.name || `@${shop.handle}`;
         const avatar = shop.avatarUrl
-          ? `<img src="${escapeHtml(shop.avatarUrl)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(document.createTextNode('🏪'))" />`
+          ? `<img src="${escapeHtml(shop.avatarUrl)}" alt="" loading="lazy" decoding="async" data-fallback-text="🏪" />`
           : "🏪";
         return `<article class="depop-shop-card">
           <div class="depop-shop-avatar">${avatar}</div>

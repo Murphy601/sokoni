@@ -1,3 +1,4 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
 import {
   checkoutMeta,
@@ -50,7 +51,7 @@ router.post("/calculate-shipping", async (req, res) => {
     const status = result.error === "empty_cart" ? 400 : result.ok ? 200 : 422;
     res.status(status).json(result);
   } catch (err) {
-    res.status(500).json({ ok: false, error: "calc_failed", message: err.message });
+    res.status(500).json({ ok: false, ...clientError(err, "calc_failed") });
   }
 });
 
@@ -77,7 +78,7 @@ router.post("/:orderId/apply-shipping", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ ok: false, error: "apply_failed", message: err.message });
+    res.status(500).json({ ok: false, ...clientError(err, "apply_failed") });
   }
 });
 

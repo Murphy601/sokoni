@@ -54,7 +54,7 @@ async function handleB2CResult(req, res) {
   try {
     const parsed = parseB2CResultCallback(req.body);
     if (!parsed.valid) {
-      console.warn("[b2c-result] invalid payload", JSON.stringify(req.body || {}).slice(0, 300));
+      console.warn("[b2c-result] invalid payload");
     } else {
       applyB2CResult(parsed);
       try {
@@ -89,7 +89,7 @@ async function handleB2CTimeout(req, res) {
         console.warn("[b2c-timeout] rider apply:", err.message);
       }
     } else {
-      console.warn("[b2c-timeout] payload", JSON.stringify(req.body || {}).slice(0, 300));
+      console.warn("[b2c-timeout] invalid payload");
     }
     res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch (err) {
