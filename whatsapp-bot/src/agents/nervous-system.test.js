@@ -56,7 +56,8 @@ describe("what an agent is allowed to see", () => {
       }
     );
     assert.equal(seen.length, 1);
-    assert.equal(event.context && Object.keys(event.context).length, 0);
+    assert.equal(event.context.sender, undefined);
+    assert.equal(typeof event.context.global.activeUsers, "number");
     assert.equal(event.data.senderUserId, 4);
     assert.equal(event.data.phone, undefined);
     assert.equal(event.data.text, undefined);
@@ -80,7 +81,8 @@ describe("what an agent is allowed to see", () => {
       }
     );
     assert.equal(calls, 0);
-    assert.deepEqual(event.context, {});
+    assert.equal(event.context.sender, undefined);
+    assert.equal(typeof event.context.global.pendingEscrows, "number");
     assert.equal(event.data.orderId, "SKN-9");
     assert.equal(event.data.amountKes, 1400);
     assert.equal(event.data.phone, undefined);
@@ -177,7 +179,8 @@ describe("the wiring matches the real schema", () => {
 
   it("starts chat control next to the main agent", () => {
     const start = server.slice(server.indexOf("function startAgentLayer"));
-    assert.match(start.slice(0, 800), /startChatControlAgent/);
+    assert.match(start.slice(0, 1200), /startChatControlAgent/);
+    assert.match(start.slice(0, 1200), /startPlatformAgents/);
   });
 
   it("announces a held payment without sitting in front of the duplicate guard", () => {

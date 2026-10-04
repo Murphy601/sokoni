@@ -2,6 +2,7 @@
  * Email/password site accounts — free signup (no mail vendor for Phase A).
  * Sessions are opaque tokens (file-backed), same pattern as buyer WhatsApp OTP.
  */
+import { emitPlatformEvent } from "../agents/platform-events.js";
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -178,6 +179,7 @@ export async function loginAccount({ email, password, rememberMe = false } = {})
 
   const ttlMs = rememberMe ? ACCOUNT_REMEMBER_TTL_MS : ACCOUNT_SESSION_TTL_MS;
   const session = await createSession(found.user, { ttlMs });
+  emitPlatformEvent("USER_SIGNED_IN", { senderUserId: found.user.id });
   return {
     ok: true,
     user: publicUser(found.user),
@@ -340,6 +342,7 @@ export async function loginWithWhatsApp({ phone, buyerSessionToken } = {}) {
   }
 
   const session = await createSession(found.user, { ttlMs: ACCOUNT_REMEMBER_TTL_MS });
+  emitPlatformEvent("USER_SIGNED_IN", { senderUserId: found.user.id });
   return {
     ok: true,
     user: publicUser(found.user),

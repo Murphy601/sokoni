@@ -5,6 +5,7 @@
  */
 import { createHash, randomInt } from "node:crypto";
 import { isDbEnabled, query, withTransaction } from "../db/pool.js";
+import { emitPlatformEvent } from "../agents/platform-events.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
 import {
@@ -1203,6 +1204,7 @@ export async function createPlatformBodaDispatch({
     `[boda-fleet] PLATFORM PIN ${id} zone=${town} rider=#${primary.id} ${primary.fullName} ` +
       `tier=${primary.tier} score=${primary.dispatchScore} dist=${primary.distanceM ?? "—"}`
   );
+  emitPlatformEvent("RIDER_ASSIGNED", { orderId: id, riderId: primary.id });
   return {
     ok: true,
     dispatch,
@@ -3110,6 +3112,11 @@ export async function verifyDeliveryOTP({
         riderPhone,
         attempts: nextFails,
       });
+      emitPlatformEvent("OTP_ATTEMPT_FAILED", {
+        orderId: id,
+        riderId: dispatch.rider_id,
+        attemptCount: nextFails,
+      });
       return {
         error: "otp_locked",
         message:
@@ -3133,6 +3140,11 @@ export async function verifyDeliveryOTP({
       result: "MISMATCH",
       escrowStatus: dispatch.fee_status,
       meta: { failedAttempts: nextFails },
+    });
+    emitPlatformEvent("OTP_ATTEMPT_FAILED", {
+      orderId: id,
+      riderId: dispatch.rider_id,
+      attemptCount: nextFails,
     });
     return {
       error: "otp_mismatch",
@@ -3361,6 +3373,7 @@ export async function verifyDeliveryOTP({
     }
   }
 
+  emitPlatformEvent("OTP_VERIFIED", { orderId: id, riderId: dispatch.rider_id });
   return {
     ok: true,
     orderId: id,
