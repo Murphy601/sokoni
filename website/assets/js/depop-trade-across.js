@@ -51,7 +51,7 @@
               loading="lazy"
               decoding="async"
               referrerpolicy="no-referrer"
-              onerror="this.onerror=null;this.src='${FALLBACK_IMG}'"
+              data-fallback-src="${escapeHtml(FALLBACK_IMG)}"
             />
           </span>
           <span class="depop-trade-cat-card-label">${escapeHtml(label)}</span>

@@ -55,6 +55,7 @@ import {
   securityHeaders,
   attachRawBody,
   requireWahaWebhookAuth,
+  assertProductionWebhookHmac,
   apiLimiter,
   authLimiter,
   adminLimiter,
@@ -448,7 +449,9 @@ app.use("/admin/pickup-points", adminPickupPointsRouter);
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */
 app.use("/admin/tiktok", tiktokOAuthRouter);
 
-/** WAHA posts inbound message events here — HMAC when WEBHOOK_HMAC_KEY is set. */
+/** WAHA posts inbound message events here. Production refuses to boot without HMAC. */
+assertProductionWebhookHmac();
+
 app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) => {
   res.sendStatus(200);
   try {

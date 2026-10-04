@@ -333,10 +333,26 @@ if ! node "$REPO/scripts/verify-bot-import.mjs"; then
   exit 1
 fi
 
+# Production refuses to boot without this. An empty key used to let any POST
+# to /webhook impersonate a WhatsApp message.
+WEBHOOK_KEY_LINE="$(grep -E '^(WEBHOOK_HMAC_KEY|WAHA_WEBHOOK_HMAC_KEY)=' "$BOT_DIR/.env" 2>/dev/null | tail -1 || true)"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_LINE#*=}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE%\"}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE#\"}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE%\'}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE#\'}"
+if [[ -z "${WEBHOOK_HMAC_KEY:-}${WAHA_WEBHOOK_HMAC_KEY:-}" && -z "${WEBHOOK_KEY_VALUE// /}" ]]; then
+  echo "ERROR: WEBHOOK_HMAC_KEY is required before the bot can start."
+  echo "Add it to $BOT_DIR/.env (openssl rand -hex 32), then re-run scripts/configure-waha-session.sh."
+  exit 1
+fi
+
 if pm2 describe "$NAME" >/dev/null 2>&1; then
   pm2 delete "$NAME" || true
 fi
 # Cap heap + auto-restart before a studio OOM takes the whole 1GB VM down.
+# NODE_ENV=production makes server.js refuse to listen if the HMAC key is empty.
+export NODE_ENV=production
 pm2 start src/server.js \
   --name "$NAME" \
   --cwd "$BOT_DIR" \

@@ -146,6 +146,21 @@ export function requireWahaWebhookAuth(req, res, next) {
 /** Alias — Meta hub signature OR WAHA HMAC. */
 export const requireWebhookSignature = requireWahaWebhookAuth;
 
+/**
+ * Production must not boot while /webhook would accept an unsigned POST.
+ * Development and tests leave the key optional.
+ */
+export function assertProductionWebhookHmac(env = process.env) {
+  const nodeEnv = String(env.NODE_ENV || "").trim().toLowerCase();
+  if (nodeEnv !== "production") return;
+  const key = String(env.WEBHOOK_HMAC_KEY || env.WAHA_WEBHOOK_HMAC_KEY || "").trim();
+  if (!key) {
+    throw new Error(
+      "WEBHOOK_HMAC_KEY is required when NODE_ENV=production. Refusing to start so /webhook cannot accept unsigned posts."
+    );
+  }
+}
+
 const jsonError = { error: "Too many requests, please try again later." };
 
 /** Browser / public API — 60 req / min / IP */
