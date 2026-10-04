@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ops desk · Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Fraunces:opsz,wght@9..144,560&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+</head>
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Ops</h1>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <span class="is-active">Ops</span>
+          <a href="admin-support.html">Support</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+  <main class="max-w-3xl mx-auto px-5 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <h2 class="font-display text-2xl font-bold text-[#1B1035]">Live ops desk</h2>
+      <p class="text-sm text-brand-purple/70">Paste the admin token. It stays in this tab and is sent as a header, never in the page address.</p>
+      <label class="block text-sm font-semibold" for="ops-token">Admin token</label>
+      <input id="ops-token" type="password" autocomplete="off" class="w-full min-h-[48px] rounded-2xl border border-black/10 px-3" />
+      <button id="ops-connect" type="button" class="min-h-[48px] px-5 rounded-full bg-[#25D366] text-[#1B1035] font-bold">Connect</button>
+      <p id="ops-status" class="text-sm" role="status"></p>
+    </section>
+    <section class="rounded-3xl border border-black/5 bg-white p-5" aria-live="polite">
+      <h2 class="font-semibold mb-2">Platform pulse</h2>
+      <p id="ops-pulse" class="text-sm text-brand-purple/70">Waiting for a connection.</p>
+    </section>
+    <section class="space-y-3" aria-live="polite">
+      <h2 class="font-semibold">Needs a decision</h2>
+      <div id="ops-actions" class="space-y-3"></div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var BOT = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+        ? "http://127.0.0.1:3001"
+        : "https://bot.sokonimall.com";
+      var socket = null;
+      var statusEl = document.getElementById("ops-status");
+      var pulseEl = document.getElementById("ops-pulse");
+      var listEl = document.getElementById("ops-actions");
+
+      function setStatus(text) {
+        statusEl.textContent = text || "";
+      }
+
+      function renderPulse(data) {
+        var metrics = (data && data.metrics) || {};
+        var heap = data && data.global ? data.global.heapUsedMB : metrics.heapUsedMb;
+        pulseEl.textContent =
+          "Users " + (metrics.activeUsers ?? "—") +
+          " · Escrows " + (metrics.pendingEscrows ?? "—") +
+          " · Today KES " + (metrics.todayVolumeKes ?? "—") +
+          " · Heap " + (heap ?? "—") + "MB";
+      }
+
+      function card(action) {
+        var box = document.createElement("article");
+        box.className = "rounded-3xl border border-black/5 bg-white p-4 space-y-2";
+        box.dataset.actionId = String(action.actionId || "");
+        var title = document.createElement("p");
+        title.className = "font-semibold";
+        title.textContent = (action.actionType || "Action") + " · " + (action.orderId || "");
+        var detail = document.createElement("p");
+        detail.className = "text-sm text-brand-purple/70";
+        var amount = action.amountKes == null ? "" : "KES " + action.amountKes + ". ";
+        detail.textContent = amount + (action.urgencyReason || "");
+        var row = document.createElement("div");
+        row.className = "flex gap-2";
+        ["APPROVE", "REJECT"].forEach(function (decision) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "min-h-[44px] px-4 rounded-full text-sm font-bold " +
+            (decision === "APPROVE" ? "bg-[#25D366] text-[#1B1035]" : "border border-black/15");
+          btn.textContent = decision === "APPROVE" ? "Approve" : "Reject";
+          btn.addEventListener("click", function () { resolve(action.actionId, decision, box); });
+          row.appendChild(btn);
+        });
+        box.appendChild(title);
+        box.appendChild(detail);
+        box.appendChild(row);
+        return box;
+      }
+
+      function resolve(id, decision, box) {
+        var token = document.getElementById("ops-token").value.trim();
+        fetch(BOT + "/admin/ops/agent-actions/" + encodeURIComponent(id) + "/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Admin-Token": token },
+          body: JSON.stringify({ decision: decision })
+        }).then(function (res) {
+          if (res.ok) box.remove();
+          else setStatus("That action was not completed.");
+        }).catch(function () {
+          setStatus("The desk could not reach the bot.");
+        });
+      }
+
+      document.getElementById("ops-connect").addEventListener("click", function () {
+        var token = document.getElementById("ops-token").value.trim();
+        if (!token || typeof io !== "function") {
+          setStatus("Add the admin token first.");
+          return;
+        }
+        if (socket) socket.close();
+        socket = io(BOT + "/ops", { auth: { token: token }, transports: ["websocket", "polling"] });
+        socket.on("connect", function () { setStatus("Connected."); });
+        socket.on("connect_error", function () { setStatus("The desk refused that token."); });
+        socket.on("PLATFORM_PULSE", renderPulse);
+        socket.on("SYSTEM_HEALTH_ALERT", function (data) {
+          setStatus("Heap warning: " + (data && data.heapUsedMB != null ? data.heapUsedMB + "MB" : "high"));
+        });
+        socket.on("ACTION_REQUIRED", function (action) {
+          listEl.prepend(card(action || {}));
+        });
+        socket.on("SECURITY_FLAG", function (flag) {
+          setStatus("Chat flag #" + (flag && flag.flaggedId != null ? flag.flaggedId : "—") +
+            " · " + ((flag && flag.violationType) || "review"));
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
