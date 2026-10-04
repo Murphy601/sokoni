@@ -609,9 +609,11 @@ function startAgentLayer() {
     return;
   }
   import("./agents/main-agent.js")
-    .then(({ mainAgent }) => {
+    .then(async ({ mainAgent }) => {
       mainAgent.start();
-      console.log("[agents] main agent listening");
+      const { startChatControlAgent } = await import("./agents/chat-control.js");
+      startChatControlAgent();
+      console.log("[agents] main agent and chat control listening");
       // Digest every 6 hours. A quiet window sends nothing.
       const tick = () => {
         void mainAgent.sendDigest().catch((err) => {

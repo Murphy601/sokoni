@@ -33,6 +33,19 @@ import {
   sellerNotifyTargets,
 } from "./communication-hub.js";
 
+function publishEscrowHeld(order) {
+  const amountKes = Number(orderBuyerTotal(order));
+  void import("../agents/enrich.js")
+    .then(({ publishEnriched }) =>
+      publishEnriched("PAYMENT_LOCKED", {
+        orderId: order?.id,
+        amountKes: Number.isFinite(amountKes) ? amountKes : null,
+        escrowStatus: "held",
+      })
+    )
+    .catch((err) => console.warn("[escrow] event skipped:", err.message));
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCTS_PATH = path.join(__dirname, "..", "data", "products.json");
 
@@ -275,6 +288,7 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
     qrPayload: label.qrPayload,
     autoPayment: true,
   });
+  publishEscrowHeld(order);
 
   advanceShipmentStatus(order.id, sellerHandled ? "pending" : "label_ready", {
     note: sellerHandled
@@ -345,6 +359,7 @@ async function applyCartParentPostPayment(order, payment = {}) {
   const result = markCartParentPaid(order.id, payment);
   if (result.error) return result;
   if (result.skipped) return { order: getOrder(order.id), skipped: true, reason: result.reason };
+  publishEscrowHeld(order);
 
   const parent = getOrder(order.id);
   const children = getCartChildren(order.id);

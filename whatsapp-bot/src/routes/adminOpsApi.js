@@ -13,6 +13,7 @@ import {
 } from "../services/catalog-ops.js";
 import { getWahaSessionStatus } from "../services/waha-session.js";
 import { requireAdminToken } from "../lib/admin-auth.js";
+import { listFlaggedMessages, resolveFlaggedMessage } from "../agents/flagged-store.js";
 
 const router = Router();
 
@@ -75,6 +76,31 @@ router.post("/flags", (req, res) => {
 router.post("/db/migrate", async (_req, res) => {
   try {
     const result = await runDbMigrate();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err));
+  }
+});
+
+router.get("/flagged-messages", async (req, res) => {
+  try {
+    const result = await listFlaggedMessages(req.query.status);
+    if (result.error === "invalid_status") return res.status(400).json(result);
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err));
+  }
+});
+
+router.post("/flagged-messages/:id/resolve", async (req, res) => {
+  try {
+    const result = await resolveFlaggedMessage(req.params.id, req.body?.action, req.body?.notes);
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (result.error === "unsupported_action" || result.error === "invalid_flag" || result.error === "already_resolved") {
+      return res.status(400).json(result);
+    }
+    if (result.error === "database_not_configured") return res.status(503).json(result);
     res.json(result);
   } catch (err) {
     res.status(500).json(clientError(err));

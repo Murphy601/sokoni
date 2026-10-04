@@ -30,6 +30,8 @@ export const AGENT_EVENTS = Object.freeze({
   ESCROW_TIMEOUT_WARNING: "ESCROW_TIMEOUT_WARNING",
   /** Chat control blocked something. */
   FLAGGED_MESSAGE: "FLAGGED_MESSAGE",
+  /** A person-authored chat message was stored. */
+  CHAT_MESSAGE_CREATED: "CHAT_MESSAGE_CREATED",
   /** A rider dispatch changed state. */
   DISPATCH_UPDATE: "DISPATCH_UPDATE",
 });

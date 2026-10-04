@@ -36,6 +36,7 @@ const SCHEMA_PHASE36_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE37_PATH = path.join(__dirname, "..", "..", "db", "schema-phase37-rich-messages.sql");
 const SCHEMA_PHASE38_PATH = path.join(__dirname, "..", "..", "db", "schema-phase38-bundles.sql");
 const SCHEMA_PHASE39_PATH = path.join(__dirname, "..", "..", "db", "schema-phase39-fit-check.sql");
+const SCHEMA_PHASE40_PATH = path.join(__dirname, "..", "..", "db", "schema-phase40-flagged-messages.sql");
 
 async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
@@ -95,6 +96,7 @@ export async function runMigrations() {
     ["phase37 rich inbox messages", SCHEMA_PHASE37_PATH],
     ["phase38 bundles", SCHEMA_PHASE38_PATH],
     ["phase39 fit check photos", SCHEMA_PHASE39_PATH],
+    ["phase40 flagged messages", SCHEMA_PHASE40_PATH],
   ];
 
   for (const [label, filePath] of phases) {
