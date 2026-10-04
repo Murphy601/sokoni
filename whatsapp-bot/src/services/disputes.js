@@ -341,7 +341,62 @@ export async function createDispute({
     sellerUserId: resolvedSellerId,
     disputeId: dispute?.id,
   });
+  try {
+    const { postEscrowCard } = await import("./escrow-chat-cards.js");
+    void postEscrowCard(fresh, "disputed");
+  } catch (err) {
+    console.warn("[disputes] freeze card skipped:", err?.message || err);
+  }
   return { success: true, dispute, escrowFrozen: Boolean(freeze.frozen) };
+}
+
+/**
+ * A dispute opened while the buyer is still inside the inspection window.
+ * The payment stays frozen only after an unboxing photo is attached.
+ */
+export async function openInspectionClaim({
+  orderRef,
+  buyerUserId,
+  buyerPhone = "",
+  statement = "",
+  evidenceUrl = "",
+} = {}) {
+  const ref = normalizeOrderRef(orderRef);
+  const order = getOrder(ref);
+  if (!order) {
+    return { error: "order_not_found", message: "Order not found. Check your SKN-#### number." };
+  }
+  const { inspectionWindowOpen } = await import("../agents/inspection-window.js");
+  if (!inspectionWindowOpen(order)) {
+    return {
+      error: "dispute_not_allowed",
+      message: "The 2-hour inspection window is not open on this order.",
+    };
+  }
+  const url = String(evidenceUrl || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return {
+      error: "evidence_required",
+      message: "Add a photo of the unboxing before the payment can be frozen.",
+    };
+  }
+  const created = await createDispute({
+    orderRef: ref,
+    buyerUserId,
+    reason: "damaged",
+    statement: statement || "Unboxing problem during the inspection window.",
+    buyerPhone,
+  });
+  if (created.error) return created;
+  const evidence = await addDisputeEvidence({
+    disputeId: created.dispute.id,
+    userId: buyerUserId,
+    kind: "unboxing",
+    url,
+    note: "Unboxing photo",
+  });
+  if (evidence.error) return { ...created, evidenceError: evidence.error };
+  return { ...created, evidence: evidence.evidence };
 }
 
 export async function listDisputesForUser({ userId, role = "buyer", limit = 30 } = {}) {

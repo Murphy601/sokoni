@@ -3273,6 +3273,20 @@ export async function verifyDeliveryOTP({
     }
   }
 
+  const prior = getOrder(id);
+  const inspectionStartedAt = Number(prior?.inspectionStartedAt) || Date.now();
+  updateOrderMeta(id, {
+    bodaStatus: "DELIVERED",
+    bodaCustody: "DELIVERED",
+    bodaFeeStatus: "PENDING_MPESA",
+    bodaPayoutStatus: "HOLD_ESCROW",
+    bodaDisputeWindowEndsAt: Date.now() + 15 * 60 * 1000,
+    payoutStatus: "ESCROW",
+    deliveredAt: prior?.deliveredAt || inspectionStartedAt,
+    inspectionStartedAt,
+    inspectionEndsAt: inspectionStartedAt + INSPECTION_WINDOW_MS,
+  });
+
   try {
     const { postEscrowCard } = await import("./escrow-chat-cards.js");
     void postEscrowCard(getOrder(id), "delivered");
@@ -3294,20 +3308,6 @@ export async function verifyDeliveryOTP({
   } catch (err) {
     console.warn("[boda-fleet] rider_payouts insert:", err.message);
   }
-
-  const prior = getOrder(id);
-  const inspectionStartedAt = Number(prior?.inspectionStartedAt) || Date.now();
-  updateOrderMeta(id, {
-    bodaStatus: "DELIVERED",
-    bodaCustody: "DELIVERED",
-    bodaFeeStatus: "PENDING_MPESA",
-    bodaPayoutStatus: "HOLD_ESCROW",
-    bodaDisputeWindowEndsAt: Date.now() + 15 * 60 * 1000,
-    payoutStatus: "ESCROW",
-    deliveredAt: prior?.deliveredAt || inspectionStartedAt,
-    inspectionStartedAt,
-    inspectionEndsAt: inspectionStartedAt + INSPECTION_WINDOW_MS,
-  });
 
   await writeOtpAudit({
     orderRef: id,

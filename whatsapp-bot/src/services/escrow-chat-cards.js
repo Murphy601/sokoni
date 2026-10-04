@@ -25,16 +25,17 @@ const CARD_COPY = {
     line: (m) => `Awaiting M-Pesa payment of ${m}.`,
   },
   locked: {
-    emoji: "🟢",
-    line: (m) => `${m} locked in M-Pesa escrow. The seller can now dispatch.`,
+    emoji: "🛡️",
+    line: (m) =>
+      `${m} is safe in Sokoni escrow. The seller is not paid until you confirm receipt, or the 2-hour inspection window ends.`,
   },
   dispatched: {
     emoji: "🏍️",
     line: () => "On the way. Escrow stays locked until delivery is confirmed.",
   },
   delivered: {
-    emoji: "📦",
-    line: () => "Delivered. Escrow releases after the inspection window.",
+    emoji: "⏱️",
+    line: () => "Delivered. You have 2 hours to check the item before the funds can be released.",
   },
   released: {
     emoji: "✅",
@@ -141,7 +142,41 @@ export async function postEscrowCard(order, state) {
 
   await upsertDealLedger(order, state, parties);
   void relayToSellerWhatsApp(order, orderRef, state, amountKes);
+  void relayToBuyerWhatsApp(order, orderRef, state, amountKes);
   return { posted: true, messageId: message.id };
+}
+
+/** One line for the pinned ledger, from columns that exist. */
+export function sellerTrustLine(row) {
+  if (!row) return "";
+  const completed = Number(row.completed_orders) || 0;
+  const verified = Boolean(row.is_seller_verified);
+  if (completed < 1) {
+    return verified
+      ? "New verified seller. Your money stays in escrow."
+      : "New seller. Your money stays in escrow.";
+  }
+  const rating = Number(row.rating_score);
+  const reviews = Number(row.rating_count) || 0;
+  const bits = [];
+  if (reviews >= 1 && Number.isFinite(rating)) bits.push(`${rating.toFixed(1)} rating`);
+  bits.push(`${completed} completed order${completed === 1 ? "" : "s"}`);
+  if (verified) bits.push("Verified seller");
+  return bits.join(" · ");
+}
+
+async function trustLineFor(sellerUserId) {
+  try {
+    const { rows } = await query(
+      `SELECT rating_score, rating_count, completed_orders, is_seller_verified
+         FROM users WHERE id = $1`,
+      [sellerUserId]
+    );
+    return sellerTrustLine(rows[0]);
+  } catch (err) {
+    console.warn("[escrow-cards] trust line skipped:", err.message);
+    return "";
+  }
 }
 
 /**
@@ -191,6 +226,8 @@ export async function upsertDealLedger(order, state, partiesIn = null) {
     // Stated outright, because "2,000 including boda or plus boda" is the
     // argument people actually have.
     shippingPayer: shippingKes > 0 ? "buyer" : "seller",
+    inspectionEndsAt: Number(order.inspectionEndsAt) > 0 ? Number(order.inspectionEndsAt) : null,
+    sellerTrustLine: await trustLineFor(parties.sellerUserId),
     updatedAt: new Date().toISOString(),
   };
 
@@ -252,4 +289,32 @@ export function whatsappFallback(orderRef, state, amountKes) {
   const copy = CARD_COPY[state];
   if (!copy) return "";
   return `🤖 *SOKONI ESCROW:* ${copy.line(money(amountKes))} (${orderRef})`;
+}
+
+async function relayToBuyerWhatsApp(order, orderRef, state, amountKes) {
+  const to = order.customerKey;
+  if (!to) return;
+  let text = "";
+  if (state === "locked") {
+    text =
+      `🛡️ *SOKONI ESCROW PROTECTION ACTIVE*\n` +
+      `*Amount held:* ${money(amountKes)}\n` +
+      `*Status:* Safe in Sokoni escrow\n` +
+      `The seller does not get paid until you confirm receipt, or your 2-hour inspection window ends.\n` +
+      `Order ${orderRef}`;
+  } else if (state === "delivered") {
+    const { inspectionRemainingLabel } = await import("../agents/inspection-window.js");
+    text =
+      `⏱️ *${inspectionRemainingLabel(order.inspectionEndsAt)}*\n` +
+      `Order ${orderRef}. Check the item.\n` +
+      `Reply *YES ${orderRef}* to release funds now.\n` +
+      `Reply *HELP ${orderRef}* and send a photo or a short video if something is wrong.`;
+  }
+  if (!text) return;
+  try {
+    const { sendText } = await import("./whatsapp.js");
+    await sendText(to, text);
+  } catch (err) {
+    console.warn(`[escrow-cards] buyer WhatsApp skipped for ${orderRef}:`, err.message);
+  }
 }

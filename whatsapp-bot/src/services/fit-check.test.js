@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { shareCardFor, FIT_CHECK_REWARD_KES, FIT_CHECK_TTL_HOURS } from "./fit-check.js";
+import { shareCardFor, FIT_CHECK_TTL_HOURS } from "./fit-check.js";
 
 const SRC = readFileSync(new URL("./fit-check.js", import.meta.url), "utf8");
 const STORE = readFileSync(new URL("./fit-photo-store.js", import.meta.url), "utf8");
@@ -34,9 +34,9 @@ describe("when it is asked", () => {
     assert.match(block, /catch \(err\)/);
   });
 
-  it("names the reward before the buyer decides", () => {
-    assert.equal(FIT_CHECK_REWARD_KES, 100);
-    assert.match(SRC, /Drop a fit pic for KES \$\{FIT_CHECK_REWARD_KES\} off/);
+  it("asks for a photo and does not offer a discount", () => {
+    assert.match(SRC, /How does it fit/);
+    assert.doesNotMatch(SRC, /KES 100|off your next|rewardKes/);
   });
 
   it("lets the invitation lapse rather than standing forever", () => {

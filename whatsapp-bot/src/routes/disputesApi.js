@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   addDisputeEvidence,
   createDispute,
+  openInspectionClaim,
   getDisputeById,
   listAdminDisputes,
   listDisputesForUser,
@@ -15,6 +16,8 @@ import {
   resolveAuthenticatedBuyerSocialContext,
 } from "../services/buyer-social-auth.js";
 import { config } from "../config.js";
+import { getOrder } from "../services/orders.js";
+import { buyerCanRelease, releaseFundsNow } from "../services/buyer-release.js";
 import { adminTokenFromReq, isAdminTokenValid } from "../lib/admin-auth.js";
 
 const router = Router();
@@ -55,6 +58,66 @@ router.post("/", async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     res.status(500).json(clientError(err, "dispute_create_failed"));
+  }
+});
+
+function buyerOwnsOrder(order, buyerUserId, phone) {
+  if (!order) return false;
+  if (String(order.customerKey || "") === `web:buyer:${buyerUserId}`) return true;
+  const phoneDigits = String(phone || "").replace(/\D/g, "");
+  const orderPhone = String(order.phone || order.mpesaPhone || "").replace(/\D/g, "");
+  return Boolean(phoneDigits && orderPhone && phoneDigits.slice(-9) === orderPhone.slice(-9));
+}
+
+/** POST /api/disputes/release-funds — buyer ends the inspection early. */
+router.post("/release-funds", async (req, res) => {
+  try {
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "buyerUserId");
+    if (gated.error) {
+      return res.status(gated.status || disputeErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const payload = gated.payload || {};
+    const order = getOrder(payload.orderId || payload.orderRef || req.body?.orderId);
+    if (!order) return res.status(404).json({ error: "order_not_found", message: "Order not found." });
+    if (!buyerOwnsOrder(order, payload.buyerUserId, gated.phone || payload.phone)) {
+      return res.status(403).json({ error: "buyer_mismatch", message: "This order does not match your account." });
+    }
+    if (!buyerCanRelease(order)) {
+      return res.status(409).json({ error: "not_ready", message: "That order is not ready to release." });
+    }
+    const result = await releaseFundsNow(order, { via: "inspection_release" });
+    if (result.error) return res.status(409).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err, "release_failed"));
+  }
+});
+
+/** POST /api/disputes/inspection-claim — freeze only with an unboxing photo. */
+router.post("/inspection-claim", async (req, res) => {
+  try {
+    const gated = await applyBuyerIdentityAuth(req, req.body || {}, "buyerUserId");
+    if (gated.error) {
+      return res.status(gated.status || disputeErrorStatus(gated.error)).json({
+        error: gated.error,
+        message: gated.message,
+      });
+    }
+    const payload = gated.payload || {};
+    const result = await openInspectionClaim({
+      orderRef: payload.orderId || payload.orderRef || req.body?.orderId,
+      buyerUserId: payload.buyerUserId,
+      buyerPhone: gated.phone || payload.phone,
+      statement: payload.statement || req.body?.statement,
+      evidenceUrl: payload.evidenceUrl || req.body?.evidenceUrl,
+    });
+    if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err, "inspection_claim_failed"));
   }
 });
 

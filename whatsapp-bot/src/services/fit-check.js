@@ -10,8 +10,8 @@
  *
  *  - Nothing is posted publicly without the buyer choosing to. The prompt is
  *    an invitation; declining it is a normal outcome, not a lapsed reward.
- *  - The reward is named up front. A discount dangled and then not honoured
- *    would cost more trust than the photo is worth.
+ *  - There is no discount attached. A promise of money for a photo is a
+ *    different product, and this one is just a photo the buyer chooses to share.
  */
 
 import { postSystemCard } from "../db/repositories/social.js";
@@ -19,8 +19,6 @@ import { MESSAGE_KINDS } from "../lib/message-kinds.js";
 import { isDbEnabled, query } from "../db/pool.js";
 import { resolveOrderParties } from "./escrow-chat-cards.js";
 
-/** What the buyer gets for sharing one. */
-export const FIT_CHECK_REWARD_KES = 100;
 /** How long the invitation stands. */
 export const FIT_CHECK_TTL_HOURS = 72;
 
@@ -58,11 +56,10 @@ export async function inviteFitCheck(order) {
     payload: {
       orderRef,
       productTitle: order.productName || order.itemName || "your order",
-      rewardKes: FIT_CHECK_REWARD_KES,
       expiresAt: new Date(Date.now() + FIT_CHECK_TTL_HOURS * 3600_000).toISOString(),
       photoUrl: null,
     },
-    content: `📸 Drop a fit pic for KES ${FIT_CHECK_REWARD_KES} off your next order`,
+    content: "How does it fit? Send a photo if you want it on the seller's showcase.",
   });
 }
 
@@ -135,7 +132,6 @@ export async function attachFitCheckPhoto({ messageId, userId, photoUrl } = {}) 
   return {
     success: true,
     published,
-    rewardKes: Number(payload.rewardKes) || FIT_CHECK_REWARD_KES,
     shareCard: shareCardFor(payload, url),
   };
 }

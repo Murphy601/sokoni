@@ -483,6 +483,22 @@ function ledgerCard(msg) {
     ["Total", `<strong>${money(p.totalKes)}</strong>`],
     ["Escrow", escapeHtml(String(p.state || "").replace(/_/g, " "))],
   ];
+  const trust = p.sellerTrustLine
+    ? `<p class="text-xs mt-2 text-zinc-300">${escapeHtml(p.sellerTrustLine)}</p>`
+    : "";
+  const ends = Number(p.inspectionEndsAt);
+  const open = p.state === "delivered" && Number.isFinite(ends) && ends > Date.now();
+  const mine = Number(msg.receiverUserId) === state.viewerId;
+  const actions = open && mine
+    ? `<p class="text-xs mt-2" data-inspection-ends="${ends}">Inspection time remaining</p>
+       <div class="flex flex-wrap gap-2 mt-2">
+         <button type="button" class="min-h-[44px] px-4 rounded-full bg-[#25D366] text-[#1B1035] text-sm font-bold" data-release-order="${escapeHtml(p.orderRef || "")}">Release funds now</button>
+         <label class="min-h-[44px] px-4 rounded-full border border-white/20 text-sm font-bold inline-flex items-center">
+           Open dispute
+           <input type="file" accept="image/jpeg,image/png,image/webp" data-dispute-order="${escapeHtml(p.orderRef || "")}" hidden />
+         </label>
+       </div>`
+    : "";
   return `
     <div class="inbox-ledger" role="status" aria-label="Agreed deal terms">
       <div class="inbox-ledger-head">
@@ -492,6 +508,8 @@ function ledgerCard(msg) {
       <dl class="inbox-ledger-rows">
         ${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}
       </dl>
+      ${trust}
+      ${actions}
     </div>`;
 }
 
@@ -1756,11 +1774,7 @@ async function uploadFitPhoto(messageId, file) {
       setStatus(data?.message || "Couldn't share that photo.", true);
       return;
     }
-    setStatus(
-      data.published
-        ? `Shared. KES ${data.rewardKes} off your next order.`
-        : `Shared. KES ${data.rewardKes} off your next order.`
-    );
+    setStatus(data.published ? "Shared on the seller's showcase." : "Photo saved.");
     await loadThread();
   } catch {
     setStatus("Couldn't share that photo.", true);
@@ -2102,6 +2116,92 @@ function renderLedger(pinned) {
   }
   slot.innerHTML = ledgerCard(card);
   slot.classList.remove("hidden");
+  const sub = el("chat-peer-sub");
+  const trust = card.payload?.sellerTrustLine;
+  if (sub && trust) sub.textContent = trust;
+  wireInspectionLedger(slot);
+}
+
+function inspectionLabel(ends) {
+  const left = Number(ends) - Date.now();
+  if (!Number.isFinite(left) || left <= 0) return "Inspection window ended";
+  const mins = Math.ceil(left / 60000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `Inspection time remaining: ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+}
+
+function wireInspectionLedger(slot) {
+  const timer = slot.querySelector("[data-inspection-ends]");
+  if (timer) {
+    const tick = () => {
+      timer.textContent = inspectionLabel(timer.dataset.inspectionEnds);
+    };
+    tick();
+    if (slot.dataset.inspectionTimer) clearInterval(Number(slot.dataset.inspectionTimer));
+    slot.dataset.inspectionTimer = String(setInterval(tick, 30000));
+  }
+  slot.querySelectorAll("[data-release-order]").forEach((btn) => {
+    if (btn.dataset.wired === "1") return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => releaseInspection(btn.dataset.releaseOrder, btn));
+  });
+  slot.querySelectorAll("[data-dispute-order]").forEach((input) => {
+    if (input.dataset.wired === "1") return;
+    input.dataset.wired = "1";
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      input.value = "";
+      if (file) void openInspectionDispute(input.dataset.disputeOrder, file);
+    });
+  });
+}
+
+async function releaseInspection(orderId, btn) {
+  if (!orderId) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/disputes/release-funds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withAuthBody({ orderId, buyerUserId: state.viewerId })),
+    });
+    const data = await res.json().catch(() => ({}));
+    setStatus(res.ok ? "Funds release started." : data.message || "Could not release that order.", !res.ok);
+  } catch {
+    setStatus("Could not release that order.", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function openInspectionDispute(orderId, file) {
+  setStatus("Sending the photo…");
+  try {
+    const form = new FormData();
+    form.append("photo", file, file.name || "unboxing.jpg");
+    form.append("receiverUserId", String(state.peerId || ""));
+    const body = withAuthBody({ buyerUserId: state.viewerId, orderId });
+    for (const [k, v] of Object.entries(body)) {
+      if (v != null) form.append(k, String(v));
+    }
+    const upload = await fetch(`${SOCIAL_API}/chat/photo`, { method: "POST", body: form });
+    const uploaded = await upload.json().catch(() => ({}));
+    const url = uploaded?.message?.payload?.mediaUrl || uploaded?.payload?.mediaUrl || uploaded?.url;
+    if (!upload.ok || !url) {
+      setStatus(uploaded?.message || "Add a photo of the unboxing first.", true);
+      return;
+    }
+    const res = await fetch(`${API_BASE}/api/disputes/inspection-claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withAuthBody({ orderId, buyerUserId: state.viewerId, evidenceUrl: url, statement: "Unboxing problem" })),
+    });
+    const data = await res.json().catch(() => ({}));
+    setStatus(res.ok ? "Escrow is frozen while Sokoni reviews the photo." : data.message || "Could not open that dispute.", !res.ok);
+  } catch {
+    setStatus("Could not open that dispute.", true);
+  }
 }
 
 function isBuyerSessionAuthError(payload) {
