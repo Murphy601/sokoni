@@ -6,7 +6,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { explainUnresolved } from "./agent-actions.js";
+import { canonicalActionOrderId, explainUnresolved } from "./agent-actions.js";
 import { inspectionDue, INSPECTION_WINDOW_MS } from "./inspection-window.js";
 import { reclaimHeap } from "./heap-guard.js";
 
@@ -55,7 +55,11 @@ describe("the two-hour inspection", () => {
   it("asks for approval and does not call the payout itself", () => {
     const watcher = src("./inspection-window.js");
     assert.match(watcher, /proposeAgentAction/);
+    assert.match(watcher, /strict: true/);
+    assert.match(watcher, /proposal aborted/);
     assert.doesNotMatch(watcher, /releaseEscrowPayout/);
+    assert.equal(canonicalActionOrderId("skn1002"), "SKN-1002");
+    assert.equal(canonicalActionOrderId("SKN-1002"), "SKN-1002");
     const otp = src("../services/boda-fleet.js");
     assert.match(otp, /inspectionStartedAt/);
     assert.match(otp, /DELIVERY_INSPECTION_STARTED/);

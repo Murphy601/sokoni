@@ -54,6 +54,16 @@ export function matchAdminDispatch(text) {
   return null;
 }
 
+async function defaultCanResolveLevel2(phone) {
+  const { phonesMatchKenya } = await import("../lib/phone-normalize.js");
+  const { resolveStaffRole, isSuperAdmin, isEnvSuperAdminPhone } = await import("../services/staff-roles.js");
+  const single = String(process.env.ADMIN_PHONE || "").trim();
+  if (single && phonesMatchKenya(single, phone)) return true;
+  if (isEnvSuperAdminPhone(phone)) return true;
+  const staff = await resolveStaffRole(phone);
+  return isSuperAdmin(staff);
+}
+
 async function defaultQuery(sql, params) {
   const { isDbEnabled, query } = await import("../db/pool.js");
   if (!isDbEnabled()) return { rows: [] };
@@ -185,6 +195,9 @@ export async function handleAdminDispatch(text, deps = {}) {
     }
 
     if (cmd.kind === "resolve") {
+      const allow = deps.canResolveLevel2 || defaultCanResolveLevel2;
+      const allowed = await allow(deps.actorPhone);
+      if (!allowed) return "Only a super admin can approve or reject an action.";
       const result = await resolve(cmd.id, cmd.approve ? "APPROVE" : "REJECT");
       if (!result?.ok) {
         if (result?.error === "not_found" || result?.error === "expired" || result?.error === "already_resolved") {

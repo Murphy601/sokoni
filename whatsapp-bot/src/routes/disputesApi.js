@@ -61,12 +61,27 @@ router.post("/", async (req, res) => {
   }
 });
 
-function buyerOwnsOrder(order, buyerUserId, phone) {
-  if (!order) return false;
-  if (String(order.customerKey || "") === `web:buyer:${buyerUserId}`) return true;
-  const phoneDigits = String(phone || "").replace(/\D/g, "");
-  const orderPhone = String(order.phone || order.mpesaPhone || "").replace(/\D/g, "");
-  return Boolean(phoneDigits && orderPhone && phoneDigits.slice(-9) === orderPhone.slice(-9));
+function sessionRequired() {
+  return {
+    error: "session_required",
+    message: "Sign in with WhatsApp before this action.",
+    status: 401,
+  };
+}
+
+async function requireReleaseSession(gated, order) {
+  if (gated?.error) return gated;
+  if (gated?.softUnauthed || !gated?.buyerUserId) return sessionRequired();
+  const { sessionBuyerOwnsOrder } = await import("../services/buyer-whatsapp.js");
+  const owns = await sessionBuyerOwnsOrder(order, gated.buyerUserId);
+  if (!owns) {
+    return {
+      error: "buyer_mismatch",
+      message: "This order does not match your account.",
+      status: 403,
+    };
+  }
+  return null;
 }
 
 /** POST /api/disputes/release-funds — buyer ends the inspection early. */
@@ -82,8 +97,9 @@ router.post("/release-funds", async (req, res) => {
     const payload = gated.payload || {};
     const order = getOrder(payload.orderId || payload.orderRef || req.body?.orderId);
     if (!order) return res.status(404).json({ error: "order_not_found", message: "Order not found." });
-    if (!buyerOwnsOrder(order, payload.buyerUserId, gated.phone || payload.phone)) {
-      return res.status(403).json({ error: "buyer_mismatch", message: "This order does not match your account." });
+    const denied = await requireReleaseSession(gated, order);
+    if (denied) {
+      return res.status(denied.status || 401).json({ error: denied.error, message: denied.message });
     }
     if (!buyerCanRelease(order)) {
       return res.status(409).json({ error: "not_ready", message: "That order is not ready to release." });
@@ -107,10 +123,16 @@ router.post("/inspection-claim", async (req, res) => {
       });
     }
     const payload = gated.payload || {};
+    const order = getOrder(payload.orderId || payload.orderRef || req.body?.orderId);
+    if (!order) return res.status(404).json({ error: "order_not_found", message: "Order not found." });
+    const denied = await requireReleaseSession(gated, order);
+    if (denied) {
+      return res.status(denied.status || 401).json({ error: denied.error, message: denied.message });
+    }
     const result = await openInspectionClaim({
-      orderRef: payload.orderId || payload.orderRef || req.body?.orderId,
-      buyerUserId: payload.buyerUserId,
-      buyerPhone: gated.phone || payload.phone,
+      orderRef: order.id,
+      buyerUserId: gated.buyerUserId,
+      buyerPhone: gated.phone,
       statement: payload.statement || req.body?.statement,
       evidenceUrl: payload.evidenceUrl || req.body?.evidenceUrl,
     });

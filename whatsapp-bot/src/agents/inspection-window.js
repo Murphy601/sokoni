@@ -58,7 +58,14 @@ export async function processInspectionWindow(now = Date.now()) {
   for (const order of orders) {
     if (!inspectionDue(order, now)) continue;
     try {
-      if (await orderHasOpenDispute(order.id)) continue;
+      let openDispute = false;
+      try {
+        openDispute = await orderHasOpenDispute(order.id, { strict: true });
+      } catch (err) {
+        console.warn("[inspection] dispute lookup failed, proposal aborted:", order.id, err?.message || err);
+        continue;
+      }
+      if (openDispute) continue;
       if (await queryOpenRelease(order.id)) continue;
       const result = await proposeAgentAction({
         actionType: "RELEASE_ESCROW",

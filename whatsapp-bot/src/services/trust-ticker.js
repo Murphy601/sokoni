@@ -19,22 +19,28 @@ function itemOf(order) {
   return (name || "an item").slice(0, 42);
 }
 
+function closedOut(order) {
+  const status = String(order?.status || "").toUpperCase();
+  const escrow = String(order?.escrowStatus || "").toUpperCase();
+  return status === "REFUNDED" || status === "CANCELLED" || escrow === "REFUNDED" || escrow === "CANCELLED";
+}
+
 export function tickerItems(orders, now = Date.now()) {
   const items = [];
   for (const order of orders || []) {
-    if (!order?.id) continue;
+    if (!order?.id || closedOut(order)) continue;
     const item = itemOf(order);
     const place = placeOf(order);
     const amount = Math.round(Number(orderBuyerTotal(order)) || 0);
     const releasedAt = Number(order.buyerConfirmedAt || order.releasedAt || 0);
-    if ((order.escrowStatus === "released" || order.isPaidOut) && releasedAt > 0) {
+    if (amount > 0 && (order.escrowStatus === "released" || order.isPaidOut) && releasedAt > 0) {
       items.push({
         at: releasedAt,
         text: `KES ${amount.toLocaleString("en-KE")} left escrow for ${item} · ${place}`,
       });
     }
     const dispatchedAt = Number(order.sellerDispatchedAt || 0);
-    if (dispatchedAt > 0) {
+    if (amount > 0 && dispatchedAt > 0) {
       items.push({
         at: dispatchedAt,
         text: `A rider was dispatched for ${item} · ${place}`,

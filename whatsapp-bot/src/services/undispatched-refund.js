@@ -98,13 +98,15 @@ export async function refundIfSellerMissedDispatch(order, { now = Date.now(), se
     ? `↩️ *Refund started for ${current.id}*\nThe seller did not dispatch within 12 hours. KES ${amount.toLocaleString("en-KE")} is on the way back to your M-Pesa. No fee.`
     : `↩️ *Refund queued for ${current.id}*\nThe seller did not dispatch within 12 hours. KES ${amount.toLocaleString("en-KE")} stays out of the seller's payout. Sokoni will send it to your M-Pesa. No fee.`;
 
-  if (current.customerKey) {
-    try {
+  try {
+    const { buyerWhatsAppDestination } = await import("./buyer-whatsapp.js");
+    const to = await buyerWhatsAppDestination(current);
+    if (to) {
       const { sendText } = await import("./whatsapp.js");
-      await sendText(current.customerKey, text);
-    } catch (err) {
-      console.warn("[undispatched-refund] buyer note skipped:", err?.message || err);
+      await sendText(to, text);
     }
+  } catch (err) {
+    console.warn("[undispatched-refund] buyer note skipped:", err?.message || err);
   }
   try {
     const { notifyAdminEvent } = await import("./communication-hub.js");

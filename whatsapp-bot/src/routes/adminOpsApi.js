@@ -132,7 +132,8 @@ router.post("/agent-actions/:id/resolve", async (req, res) => {
     }
     if (result.error === "expired") return res.status(409).json(result);
     if (result.error === "database_not_configured") return res.status(503).json(result);
-    const status = result.action?.status === "FAILED" ? 409 : 200;
+    const closed = result.action?.status === "FAILED" || result.action?.status === "FAILED_DUE_TO_DISPUTE";
+    const status = closed ? 409 : 200;
     res.status(status).json(result);
   } catch (err) {
     res.status(500).json(clientError(err));

@@ -292,8 +292,6 @@ export function whatsappFallback(orderRef, state, amountKes) {
 }
 
 async function relayToBuyerWhatsApp(order, orderRef, state, amountKes) {
-  const to = order.customerKey;
-  if (!to) return;
   let text = "";
   if (state === "locked") {
     text =
@@ -312,6 +310,9 @@ async function relayToBuyerWhatsApp(order, orderRef, state, amountKes) {
   }
   if (!text) return;
   try {
+    const { buyerWhatsAppDestination } = await import("./buyer-whatsapp.js");
+    const to = await buyerWhatsAppDestination(order);
+    if (!to) return;
     const { sendText } = await import("./whatsapp.js");
     await sendText(to, text);
   } catch (err) {

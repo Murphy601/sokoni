@@ -5,9 +5,17 @@
  */
 
 import { isDbEnabled, query } from "../db/pool.js";
+import { normalizeOrderId } from "../lib/order-id.js";
 
 const ACTIONS = new Set(["RELEASE_ESCROW", "PROMPT_STK"]);
-const LIST_STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "FAILED", "EXPIRED"]);
+const LIST_STATUSES = new Set([
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "FAILED",
+  "EXPIRED",
+  "FAILED_DUE_TO_DISPUTE",
+]);
 const ACTION_COLUMNS = `id, action_type, order_id, reason, agent_name, status, result_code, created_at, resolved_at, expires_at`;
 
 let proposesThisHour = [];
@@ -23,9 +31,16 @@ function intId(value) {
   return n;
 }
 
-function orderIdOf(value) {
-  const id = String(value || "").trim().slice(0, 40);
+/** skn1002 and SKN-1002 are the same order. */
+export function canonicalActionOrderId(value) {
+  const normalized = normalizeOrderId(value);
+  if (normalized) return normalized.slice(0, 40);
+  const id = String(value || "").trim().toUpperCase().slice(0, 40);
   return id || null;
+}
+
+function orderIdOf(value) {
+  return canonicalActionOrderId(value);
 }
 
 function mapRow(row) {
@@ -88,7 +103,7 @@ export async function proposeAgentAction({ actionType, orderId, reason = "", age
     return { ok: true, action };
   } catch (err) {
     if (err?.code === "23505") {
-      return { error: "already_open", message: "A release for that order is already waiting or decided." };
+      return { error: "already_open", message: "That order already has this action." };
     }
     throw err;
   }
@@ -104,7 +119,7 @@ export async function expireStaleActions() {
   return rowCount || 0;
 }
 
-/** True when a release for this order is still pending, already approved, or was rejected. */
+/** True when this order already has a release proposal, in any status. */
 export async function queryOpenRelease(orderId) {
   const order = orderIdOf(orderId);
   if (!order || !isDbEnabled()) return false;
@@ -112,7 +127,6 @@ export async function queryOpenRelease(orderId) {
     `SELECT id FROM pending_agent_actions
      WHERE order_id = $1
        AND action_type = 'RELEASE_ESCROW'
-       AND status IN ('PENDING', 'APPROVED', 'REJECTED')
      LIMIT 1`,
     [order]
   );
@@ -124,7 +138,7 @@ export async function listAgentActions(status = "PENDING") {
   if (!LIST_STATUSES.has(wanted)) {
     return {
       error: "invalid_status",
-      message: "Status must be PENDING, APPROVED, REJECTED, FAILED, or EXPIRED.",
+      message: "Status must be PENDING, APPROVED, REJECTED, FAILED, EXPIRED, or FAILED_DUE_TO_DISPUTE.",
     };
   }
   if (!isDbEnabled()) {
@@ -152,7 +166,11 @@ async function defaultExecute(row) {
     const { initiateMpesaCheckout } = await import("../services/prepaid-checkout.js");
     const order = getOrder(row.order_id);
     if (!order) return { error: "not_found" };
-    return initiateMpesaCheckout(order);
+    const response = await initiateMpesaCheckout(order);
+    if (response?.ok !== true) {
+      return { error: response?.error || response?.method || "stk_failed", ok: false };
+    }
+    return response;
   }
   return { error: "unsupported_action" };
 }
@@ -200,6 +218,16 @@ export async function resolveAgentAction(actionId, decision, { execute = default
   }
   if (choice === "REJECT") return { ok: true, action: mapRow(row) };
 
+  if (row.action_type === "RELEASE_ESCROW" && (await releaseBlockedByDispute(row.order_id))) {
+    await markAction(id, "FAILED_DUE_TO_DISPUTE", "dispute_open");
+    return {
+      ok: false,
+      error: "dispute_open",
+      action: { ...mapRow(row), status: "FAILED_DUE_TO_DISPUTE", resultCode: "dispute_open" },
+      resultCode: "dispute_open",
+    };
+  }
+
   let result;
   try {
     result = await execute(row);
@@ -226,6 +254,40 @@ export async function resolveAgentAction(actionId, decision, { execute = default
     action: { ...mapRow(row), status: failed ? "FAILED" : "APPROVED", resultCode: code },
     resultCode: code,
   };
+}
+
+async function markAction(id, status, code) {
+  try {
+    await query(
+      `UPDATE pending_agent_actions
+       SET status = $2, result_code = $3
+       WHERE id = $1`,
+      [id, status, code]
+    );
+  } catch (err) {
+    console.warn("[agent-actions] status write fell back:", err?.message || err);
+    await query(
+      `UPDATE pending_agent_actions
+       SET status = 'FAILED', result_code = $2
+       WHERE id = $1`,
+      [id, code]
+    );
+  }
+}
+
+/** A dispute opened after the proposal still blocks the payout. A lookup failure does too. */
+async function releaseBlockedByDispute(orderId) {
+  const { getOrder } = await import("../services/orders.js");
+  const { orderHasOpenDispute } = await import("../services/disputes.js");
+  const order = getOrder(orderId);
+  if (!order) return false;
+  if (order.disputeHold) return true;
+  try {
+    return await orderHasOpenDispute(orderId, { strict: true });
+  } catch (err) {
+    console.warn("[agent-actions] dispute lookup failed, payout aborted:", err?.message || err);
+    return true;
+  }
 }
 
 export function resetActionLimitsForTests() {

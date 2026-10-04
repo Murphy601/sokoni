@@ -105,10 +105,34 @@
           headers: { "Content-Type": "application/json", "X-Admin-Token": token },
           body: JSON.stringify({ decision: decision })
         }).then(function (res) {
-          if (res.ok) box.remove();
-          else setStatus("That action was not completed.");
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            if (res.ok || res.status === 409 || data.error === "already_resolved") box.remove();
+            if (!res.ok) setStatus(data.message || "That action is closed.");
+          });
         }).catch(function () {
           setStatus("The desk could not reach the bot.");
+        });
+      }
+
+      function loadPending(token) {
+        fetch(BOT + "/admin/ops/agent-actions", {
+          headers: { "X-Admin-Token": token }
+        }).then(function (res) {
+          return res.ok ? res.json() : null;
+        }).then(function (data) {
+          if (!data || !data.actions) return;
+          listEl.textContent = "";
+          data.actions.forEach(function (action) {
+            listEl.appendChild(card({
+              actionId: action.id,
+              actionType: action.actionType,
+              orderId: action.orderId,
+              amountKes: action.amountKes,
+              urgencyReason: action.reason
+            }));
+          });
+        }).catch(function () {
+          setStatus("Could not load the queue.");
         });
       }
 
@@ -120,7 +144,10 @@
         }
         if (socket) socket.close();
         socket = io(BOT + "/ops", { auth: { token: token }, transports: ["websocket", "polling"] });
-        socket.on("connect", function () { setStatus("Connected."); });
+        socket.on("connect", function () {
+          setStatus("Connected.");
+          loadPending(token);
+        });
         socket.on("connect_error", function () { setStatus("The desk refused that token."); });
         socket.on("PLATFORM_PULSE", renderPulse);
         socket.on("SYSTEM_HEALTH_ALERT", function (data) {

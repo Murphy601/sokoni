@@ -127,6 +127,7 @@ describe("admin commands", () => {
   it("approves through the claim, and says when the row is missing", async () => {
     let decision = null;
     const approved = await handleAdminDispatch("A 12", {
+      canResolveLevel2: async () => true,
       resolve: async (id, choice) => {
         decision = { id, choice };
         return { ok: true, action: { orderId: "SKN-9", status: "APPROVED" } };
@@ -140,6 +141,23 @@ describe("admin commands", () => {
       lookupUser: async () => null,
     });
     assert.match(missing, /I do not have that record available/);
+  });
+
+  it("refuses to approve unless the sender is a super admin", async () => {
+    let called = false;
+    const reply = await handleAdminDispatch("A 12", {
+      actorPhone: "254700000000",
+      canResolveLevel2: async () => false,
+      resolve: async () => {
+        called = true;
+        return { ok: true };
+      },
+    });
+    assert.equal(called, false);
+    assert.match(reply, /super admin/i);
+    const body = src("./admin-dispatch.js");
+    assert.match(body, /ADMIN_PHONE/);
+    assert.match(body, /isSuperAdmin/);
   });
 
   it("shows the command list instead of a failure", async () => {
@@ -182,6 +200,10 @@ describe("hallucinated output", () => {
     assert.match(dirty, /KES 2500/);
     const kept = sanitizeOutboundAgentText("Paid with QA12BC3456.", { mpesaReceipts: ["QA12BC3456"] });
     assert.match(kept, /QA12BC3456/);
+    const phone = sanitizeOutboundAgentText("Blocked text mentioned 0712345678 and +254712345678.");
+    assert.doesNotMatch(phone, /0712345678|254712345678/);
+    assert.match(phone, /REDACTED_PHONE/);
+    assert.match(sanitizeOutboundAgentText("Order SKN-1042 is KES 2500."), /SKN-1042/);
   });
 
   it("rejects an action outside the schema", () => {

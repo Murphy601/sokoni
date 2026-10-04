@@ -14,6 +14,8 @@ const state = {
   peerHandle: "",
   productId: "",
   pollTimer: null,
+  disputeOrderId: "",
+  disputePickerOpen: false,
   sellerAuthRequired: false,
   sellerSession: null,
   offers: [],
@@ -493,10 +495,7 @@ function ledgerCard(msg) {
     ? `<p class="text-xs mt-2" data-inspection-ends="${ends}">Inspection time remaining</p>
        <div class="flex flex-wrap gap-2 mt-2">
          <button type="button" class="min-h-[44px] px-4 rounded-full bg-[#25D366] text-[#1B1035] text-sm font-bold" data-release-order="${escapeHtml(p.orderRef || "")}">Release funds now</button>
-         <label class="min-h-[44px] px-4 rounded-full border border-white/20 text-sm font-bold inline-flex items-center">
-           Open dispute
-           <input type="file" accept="image/jpeg,image/png,image/webp" data-dispute-order="${escapeHtml(p.orderRef || "")}" hidden />
-         </label>
+         <button type="button" class="min-h-[44px] px-4 rounded-full border border-white/20 text-sm font-bold" data-dispute-order="${escapeHtml(p.orderRef || "")}">Open dispute</button>
        </div>`
     : "";
   return `
@@ -2110,6 +2109,7 @@ function renderLedger(pinned) {
   if (!slot) return;
   const card = (Array.isArray(pinned) ? pinned : []).find((m) => m.kind === "deal_ledger");
   if (!card) {
+    clearInspectionTimer(slot);
     slot.innerHTML = "";
     slot.classList.add("hidden");
     return;
@@ -2131,14 +2131,23 @@ function inspectionLabel(ends) {
   return `Inspection time remaining: ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
 }
 
+function clearInspectionTimer(slot) {
+  if (!slot?.dataset.inspectionTimer) return;
+  clearInterval(Number(slot.dataset.inspectionTimer));
+  delete slot.dataset.inspectionTimer;
+}
+
 function wireInspectionLedger(slot) {
+  clearInspectionTimer(slot);
   const timer = slot.querySelector("[data-inspection-ends]");
   if (timer) {
     const tick = () => {
-      timer.textContent = inspectionLabel(timer.dataset.inspectionEnds);
+      const label = inspectionLabel(timer.dataset.inspectionEnds);
+      timer.textContent = label;
+      if (label === "Inspection window ended") clearInspectionTimer(slot);
     };
     tick();
-    if (slot.dataset.inspectionTimer) clearInterval(Number(slot.dataset.inspectionTimer));
+    if (inspectionLabel(timer.dataset.inspectionEnds) === "Inspection window ended") return;
     slot.dataset.inspectionTimer = String(setInterval(tick, 30000));
   }
   slot.querySelectorAll("[data-release-order]").forEach((btn) => {
@@ -2146,14 +2155,32 @@ function wireInspectionLedger(slot) {
     btn.dataset.wired = "1";
     btn.addEventListener("click", () => releaseInspection(btn.dataset.releaseOrder, btn));
   });
-  slot.querySelectorAll("[data-dispute-order]").forEach((input) => {
-    if (input.dataset.wired === "1") return;
-    input.dataset.wired = "1";
-    input.addEventListener("change", () => {
-      const file = input.files && input.files[0];
-      input.value = "";
-      if (file) void openInspectionDispute(input.dataset.disputeOrder, file);
+  slot.querySelectorAll("[data-dispute-order]").forEach((btn) => {
+    if (btn.dataset.wired === "1") return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => {
+      state.disputeOrderId = btn.dataset.disputeOrder || "";
+      state.disputePickerOpen = true;
+      el("file-picker")?.click();
     });
+  });
+}
+
+function wireDisputePicker() {
+  const picker = el("file-picker");
+  if (!picker || picker.dataset.wired === "1") return;
+  picker.dataset.wired = "1";
+  picker.addEventListener("change", () => {
+    const file = picker.files && picker.files[0];
+    const orderId = state.disputeOrderId;
+    picker.value = "";
+    state.disputePickerOpen = false;
+    if (file && orderId) void openInspectionDispute(orderId, file);
+  });
+  window.addEventListener("focus", () => {
+    setTimeout(() => {
+      if (!picker.files || picker.files.length === 0) state.disputePickerOpen = false;
+    }, 400);
   });
 }
 
@@ -2178,8 +2205,13 @@ async function releaseInspection(orderId, btn) {
 async function openInspectionDispute(orderId, file) {
   setStatus("Sending the photo…");
   try {
+    const shrunk = await downscalePhoto(file);
+    if (shrunk.size > PHOTO_MAX_BYTES) {
+      setStatus("That photo is too big to send.", true);
+      return;
+    }
     const form = new FormData();
-    form.append("photo", file, file.name || "unboxing.jpg");
+    form.append("photo", shrunk, shrunk.name || "unboxing.jpg");
     form.append("receiverUserId", String(state.peerId || ""));
     const body = withAuthBody({ buyerUserId: state.viewerId, orderId });
     for (const [k, v] of Object.entries(body)) {
@@ -2188,6 +2220,10 @@ async function openInspectionDispute(orderId, file) {
     const upload = await fetch(`${SOCIAL_API}/chat/photo`, { method: "POST", body: form });
     const uploaded = await upload.json().catch(() => ({}));
     const url = uploaded?.message?.payload?.mediaUrl || uploaded?.payload?.mediaUrl || uploaded?.url;
+    if (upload.status === 413 || shrunk.size > PHOTO_MAX_BYTES) {
+      setStatus("That photo is too big to send.", true);
+      return;
+    }
     if (!upload.ok || !url) {
       setStatus(uploaded?.message || "Add a photo of the unboxing first.", true);
       return;
@@ -2565,6 +2601,9 @@ function parseQuery() {
 function startPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => {
+    const picker = el("file-picker");
+    if (state.disputePickerOpen) return;
+    if (picker && picker.files && picker.files.length > 0) return;
     loadThread();
   }, 7000);
 }
@@ -2607,6 +2646,7 @@ function forgetRecentlyViewed() {
 
 function init() {
   parseQuery();
+  wireDisputePicker();
   setPeerLabel();
   syncMakeOfferButton();
   forgetRecentlyViewed();

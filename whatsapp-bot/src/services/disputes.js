@@ -98,7 +98,7 @@ export async function freezeOrderEscrow(orderRef) {
   return { frozen: true, orderId: order.id };
 }
 
-export async function orderHasOpenDispute(orderRef) {
+export async function orderHasOpenDispute(orderRef, { strict = false } = {}) {
   if (!isDbEnabled()) return false;
   const ref = normalizeOrderRef(orderRef);
   if (!ref) return false;
@@ -111,7 +111,9 @@ export async function orderHasOpenDispute(orderRef) {
       [ref]
     );
     return Boolean(rows[0]);
-  } catch {
+  } catch (err) {
+    console.warn("[disputes] open-dispute lookup failed:", err?.message || err);
+    if (strict) throw err;
     return false;
   }
 }
