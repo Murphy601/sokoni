@@ -1292,6 +1292,21 @@ async function flowBuyerYes(customerKey, phone, orderId) {
   }
 
   if (order.status === "delivered" || getEffectiveShipmentStatus(order) === "delivered") {
+    try {
+      const { buyerCanRelease, releaseFundsNow } = await import("./buyer-release.js");
+      if (buyerCanRelease(order)) {
+        const released = await releaseFundsNow(order, { via: "whatsapp_yes" });
+        if (released.ok) {
+          await sendSafeWhatsApp(
+            customerKey,
+            `✅ *${order.id}* released.\nYou confirmed the item. The seller payout check has run.`
+          );
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("[communication-hub] early release skipped:", err.message);
+    }
     await sendSafeWhatsApp(customerKey, msgBuyerConfirmAck(order));
     return;
   }
@@ -1686,6 +1701,16 @@ export async function processOrderCommunicationReminders() {
     const dispatchedAt = Number(order.sellerDispatchedAt || order.inTransitAt || 0);
 
     if (!isDispatched(order) && paidAt) {
+      try {
+        const { refundIfSellerMissedDispatch } = await import("./undispatched-refund.js");
+        const refund = await refundIfSellerMissedDispatch(order, { now });
+        if (refund?.ok) {
+          n += 1;
+          continue;
+        }
+      } catch (err) {
+        console.warn("[communication-hub] dispatch refund skipped:", err.message);
+      }
       const age = now - paidAt;
       const supplier = order.supplierId ? getSupplier(order.supplierId) : null;
       if (supplier?.phone) {

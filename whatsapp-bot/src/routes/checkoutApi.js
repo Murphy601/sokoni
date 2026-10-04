@@ -15,6 +15,7 @@ import { listLandmarkHubs, formatLandmarkLine } from "../lib/landmark-hubs.js";
 import { calculateShipping } from "../services/calculate-shipping.js";
 import { applyShippingToOrder } from "../services/apply-order-shipping.js";
 import { listCounties, listTownsForCounty, loadKenyaLocations } from "../services/kenya-locations.js";
+import { hubInspectionOffer } from "../services/hub-inspection.js";
 
 const router = Router();
 
@@ -207,6 +208,7 @@ router.get("/:orderId", (req, res) => {
     checkoutUrl: checkoutUrlForOrder(order.id),
     trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(order.id)}`,
     instructions: formatPrepaidCheckoutPrompt(order),
+    hubInspection: hubInspectionOffer(order),
     meta: checkoutMeta(),
   });
 });

@@ -369,6 +369,19 @@
           : "Choose county (or map pin) above and apply — delivery is added before M-Pesa.";
     }
     renderSellerShippingBreakdown(data);
+    const hub = document.getElementById("checkout-hub");
+    if (hub) {
+      const offer = data.hubInspection;
+      if (offer && offer.offered) {
+        hub.hidden = false;
+        hub.classList.remove("hidden");
+        hub.textContent = `${offer.label}. ${offer.detail || ""}`.trim();
+      } else {
+        hub.hidden = true;
+        hub.classList.add("hidden");
+        hub.textContent = "";
+      }
+    }
     if (payBtn && !payBusy) {
       const paid = data.paymentStatus === "confirmed";
       if (!paid) {

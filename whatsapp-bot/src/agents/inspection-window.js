@@ -16,6 +16,23 @@ import { expireStaleActions, proposeAgentAction, queryOpenRelease } from "./agen
 
 export const INSPECTION_WINDOW_MS = 2 * 60 * 60 * 1000;
 
+/** The buyer still has time to check the item. */
+export function inspectionWindowOpen(order, now = Date.now()) {
+  const ends = Number(order?.inspectionEndsAt);
+  const started = Number(order?.inspectionStartedAt);
+  if (!Number.isFinite(ends) || !Number.isFinite(started) || started <= 0) return false;
+  return ends > now;
+}
+
+export function inspectionRemainingLabel(endsAt, now = Date.now()) {
+  const left = Number(endsAt) - now;
+  if (!Number.isFinite(left) || left <= 0) return "Inspection window ended";
+  const mins = Math.ceil(left / 60000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `Inspection time remaining: ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+}
+
 export function inspectionDue(order, now = Date.now()) {
   if (!order?.id) return false;
   if (order.disputeHold || order.adminTakeOver) return false;

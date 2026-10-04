@@ -338,7 +338,13 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   // and must not be held up by, or rolled back for, a chat card.
   try {
     const { postEscrowCard } = await import("./escrow-chat-cards.js");
-    void postEscrowCard(getOrder(order.id) || updated, "locked");
+    const paidOrder = getOrder(order.id) || updated;
+    if (!paidOrder.dispatchDeadlineAt) {
+      const { stampDispatchDeadline } = await import("./undispatched-refund.js");
+      const deadline = stampDispatchDeadline(Date.now());
+      if (deadline) updateOrderMeta(order.id, { dispatchDeadlineAt: deadline });
+    }
+    void postEscrowCard(getOrder(order.id) || paidOrder, "locked");
   } catch (err) {
     console.warn("[escrow] chat card skipped:", err.message);
   }
