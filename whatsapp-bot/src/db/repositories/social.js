@@ -7,6 +7,7 @@ import {
   fallbackText,
 } from "../../lib/message-kinds.js";
 import { screenMessage, blockedMessageFor } from "../../lib/chat-screening.js";
+import { recordBlockedChat, publishChatMessage } from "../../agents/chat-control.js";
 import {
   computeOfferFeeBreakdown,
   serializeOfferBreakdown,
@@ -2916,6 +2917,16 @@ export async function sendDirectMessage({
   if (isUserAuthoredKind(messageKind)) {
     const screened = screenMessage(text);
     if (screened.blocked) {
+      try {
+        await recordBlockedChat({
+          senderUserId: senderId,
+          receiverUserId: receiverId,
+          content: text,
+          violationType: screened.reason,
+        });
+      } catch (err) {
+        console.warn("[social] flag record skipped:", err.message);
+      }
       return {
         error: "message_blocked",
         reason: screened.reason,
@@ -2939,6 +2950,16 @@ export async function sendDirectMessage({
     ]
   );
   const message = mapMessageRow(rows[0]);
+
+  if (isUserAuthoredKind(messageKind) && !isSystem) {
+    publishChatMessage({
+      senderUserId: senderId,
+      receiverUserId: receiverId,
+      messageId: message.id,
+      kind: messageKind,
+      text,
+    });
+  }
 
   // Ping the receiver on WhatsApp. This sits here rather than in the route
   // because every card -- nudge, voice note, bundle, scratch card, drop --
