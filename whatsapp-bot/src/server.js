@@ -509,6 +509,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startRiderB2CScheduler();
   startVoiceNotePurge();
   startChatPhotoPurge();
+  startInspectionWindow();
   startAgentLayer();
   console.log(
     "✓ Dispatch UX: shipping-gate(fail-closed) · no platform fee invent · " +
@@ -571,6 +572,17 @@ function startSellerShippingReminderScheduler() {
   setTimeout(tick, 3 * 60 * 1000);
   setInterval(tick, 2 * 60 * 60 * 1000);
   console.log("✓ Seller shipping-rate reminder scheduler enabled (every 2 hours)");
+}
+
+/** Propose an escrow release once a delivered order's 2-hour inspection has passed. */
+function startInspectionWindow() {
+  const tick = () => {
+    import("./agents/inspection-window.js")
+      .then(({ processInspectionWindow }) => processInspectionWindow())
+      .catch((err) => console.warn("[inspection] tick:", err.message));
+  };
+  setTimeout(tick, 60_000).unref?.();
+  setInterval(tick, 5 * 60 * 1000).unref?.();
 }
 
 /** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */

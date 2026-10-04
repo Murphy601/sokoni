@@ -35,7 +35,7 @@ pm2 start src/server.js \
   --cwd "$BOT_DIR" \
   --update-env \
   --max-memory-restart 450M \
-  --node-args="--max-old-space-size=384"
+  --node-args="--max-old-space-size=384 --expose-gc"
 pm2 save
 
 echo "==> Waiting for :3001..."

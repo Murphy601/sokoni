@@ -662,7 +662,7 @@ export function normalizeBotMessageSpacing(text) {
   return s;
 }
 
-export async function sendText(to, text) {
+export async function sendText(to, text, { timeoutMs = 30000 } = {}) {
   const body = normalizeBotMessageSpacing(text);
   const dest = toChatId(to);
   if (!dest) {
@@ -678,11 +678,15 @@ export async function sendText(to, text) {
   // Hot path: single attempt only. Never route normal chat through multi-JID
   // retries — those can stack 30s WAHA timeouts and freeze the whole bot.
   try {
-    const resp = await callWaha("/api/sendText", {
-      session: config.waha.session,
-      chatId: dest,
-      text: body,
-    });
+    const resp = await callWaha(
+      "/api/sendText",
+      {
+        session: config.waha.session,
+        chatId: dest,
+        text: body,
+      },
+      { timeoutMs }
+    );
     rememberSend(resp, dest);
     return resp;
   } catch (err) {

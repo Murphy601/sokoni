@@ -9,6 +9,7 @@
 import { agentBus, AGENT_EVENTS, SEVERITY } from "./event-bus.js";
 import { reportToMainAgent } from "./main-agent.js";
 import { platformState } from "./platform-state.js";
+import { reclaimHeap } from "./heap-guard.js";
 import { isDbEnabled, query } from "../db/pool.js";
 
 const NUDGE_WINDOW_MS = 30 * 60 * 1000;
@@ -55,7 +56,8 @@ async function defaultNudge(sellerId, text) {
   const phone = rows[0]?.phone;
   if (!phone) return false;
   const { sendText } = await import("../services/whatsapp.js");
-  await sendText(phone, text);
+  // Three seconds. A stalled WhatsApp session must not sit on this process.
+  await sendText(phone, text, { timeoutMs: 3000 });
   return true;
 }
 
@@ -120,12 +122,16 @@ export function startPlatformAgents() {
     }),
     agentBus.subscribe("SecurityGuardAgent", AGENT_EVENTS.VM_MEMORY_SPIKE, (event) => {
       const mb = event?.data?.heapUsedMb ?? "high";
-      reportToMainAgent({
-        type: "CAPACITY",
-        severity: SEVERITY.HIGH,
-        summary: `Bot heap is ${mb}MB. Hold new media until it drops.`,
-        data: { heapUsedMb: event?.data?.heapUsedMb ?? null },
-      });
+      void reclaimHeap()
+        .catch((err) => console.warn("[heap] reclaim skipped:", err?.message || err))
+        .finally(() => {
+          reportToMainAgent({
+            type: "CAPACITY",
+            severity: SEVERITY.HIGH,
+            summary: `Bot heap is ${mb}MB. Expired media was cleared. Hold new uploads until it drops.`,
+            data: { heapUsedMb: event?.data?.heapUsedMb ?? null },
+          });
+        });
     }),
   ];
 }
