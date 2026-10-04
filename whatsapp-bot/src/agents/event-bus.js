@@ -32,6 +32,26 @@ export const AGENT_EVENTS = Object.freeze({
   FLAGGED_MESSAGE: "FLAGGED_MESSAGE",
   /** A person-authored chat message was stored. */
   CHAT_MESSAGE_CREATED: "CHAT_MESSAGE_CREATED",
+  /** A photo, video, or voice note was stored. */
+  MEDIA_UPLOADED: "MEDIA_UPLOADED",
+  /** Someone signed in. */
+  USER_SIGNED_IN: "USER_SIGNED_IN",
+  /** A buyer proposed a price. */
+  BARGAIN_PROPOSED: "BARGAIN_PROPOSED",
+  /** A buyer proposed a multi-item price. */
+  BUNDLE_CREATED: "BUNDLE_CREATED",
+  /** An M-Pesa prompt was sent. */
+  STK_PROMPTED: "STK_PROMPTED",
+  /** A buyer opened a dispute. */
+  DISPUTE_OPENED: "DISPUTE_OPENED",
+  /** Sokoni pinned a rider on an order. */
+  RIDER_ASSIGNED: "RIDER_ASSIGNED",
+  /** A delivery code did not match. */
+  OTP_ATTEMPT_FAILED: "OTP_ATTEMPT_FAILED",
+  /** A delivery code matched. */
+  OTP_VERIFIED: "OTP_VERIFIED",
+  /** The bot heap crossed the comfort line. */
+  VM_MEMORY_SPIKE: "VM_MEMORY_SPIKE",
   /** A rider dispatch changed state. */
   DISPATCH_UPDATE: "DISPATCH_UPDATE",
 });

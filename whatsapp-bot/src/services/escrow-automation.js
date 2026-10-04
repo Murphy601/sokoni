@@ -23,6 +23,7 @@ import { advanceShipmentStatus } from "./shipments.js";
 import { recordPurchaseFeedEvent } from "./feed-ranking.js";
 import { isDbEnabled } from "../db/pool.js";
 import { orderBuyerTotal } from "./shipping-tiers.js";
+import { emitPlatformEvent } from "../agents/platform-events.js";
 import { labelPageUrlForOrder } from "./prepaid-checkout.js";
 import {
   dispatchMessages,
@@ -35,15 +36,11 @@ import {
 
 function publishEscrowHeld(order) {
   const amountKes = Number(orderBuyerTotal(order));
-  void import("../agents/enrich.js")
-    .then(({ publishEnriched }) =>
-      publishEnriched("PAYMENT_LOCKED", {
-        orderId: order?.id,
-        amountKes: Number.isFinite(amountKes) ? amountKes : null,
-        escrowStatus: "held",
-      })
-    )
-    .catch((err) => console.warn("[escrow] event skipped:", err.message));
+  emitPlatformEvent("PAYMENT_LOCKED", {
+    orderId: order?.id,
+    amountKes: Number.isFinite(amountKes) ? amountKes : null,
+    escrowStatus: "held",
+  });
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

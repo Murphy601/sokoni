@@ -13,6 +13,7 @@
 
 import { isDbEnabled, query } from "../db/pool.js";
 import { agentBus } from "./event-bus.js";
+import { platformState } from "./platform-state.js";
 
 const PARTY_KEYS = ["senderUserId", "receiverUserId"];
 
@@ -35,10 +36,32 @@ export function pickEventData(raw) {
   const receiverUserId = intId(raw.receiverUserId);
   const flaggedId = intId(raw.flaggedId);
   const messageId = intId(raw.messageId);
+  const buyerUserId = intId(raw.buyerUserId);
+  const sellerUserId = intId(raw.sellerUserId);
+  const offerId = intId(raw.offerId);
+  const bundleId = intId(raw.bundleId);
+  const disputeId = intId(raw.disputeId);
+  const riderId = intId(raw.riderId);
   if (senderUserId) data.senderUserId = senderUserId;
   if (receiverUserId) data.receiverUserId = receiverUserId;
+  if (buyerUserId) data.buyerUserId = buyerUserId;
+  if (sellerUserId) data.sellerUserId = sellerUserId;
   if (flaggedId) data.flaggedId = flaggedId;
   if (messageId) data.messageId = messageId;
+  if (offerId) data.offerId = offerId;
+  if (bundleId) data.bundleId = bundleId;
+  if (disputeId) data.disputeId = disputeId;
+  if (riderId) data.riderId = riderId;
+  if (raw.productId) data.productId = String(raw.productId).slice(0, 64);
+  if (raw.checkoutId) data.checkoutId = String(raw.checkoutId).slice(0, 64);
+  const attempt = Number(raw.attemptCount);
+  if (Number.isInteger(attempt) && attempt >= 0 && attempt <= 9) data.attemptCount = attempt;
+  const listed = finiteNumber(raw.listedPriceKes);
+  const proposed = finiteNumber(raw.proposedPriceKes);
+  const heap = finiteNumber(raw.heapUsedMb);
+  if (listed != null) data.listedPriceKes = listed;
+  if (proposed != null) data.proposedPriceKes = proposed;
+  if (heap != null) data.heapUsedMb = heap;
   if (raw.violationType) data.violationType = String(raw.violationType).slice(0, 32);
   if (raw.kind) data.kind = String(raw.kind).slice(0, 40);
   if (raw.orderId) data.orderId = String(raw.orderId).slice(0, 40);
@@ -71,12 +94,19 @@ function mapParty(row) {
  * One primary-key read for the two people in the thread.
  * Returns {} when there is nothing to look up or the database is off.
  */
+function parties(data) {
+  return {
+    senderUserId: intId(data?.senderUserId) || intId(data?.buyerUserId),
+    receiverUserId: intId(data?.receiverUserId) || intId(data?.sellerUserId),
+  };
+}
+
 export async function enrichContext(data) {
   if (!isDbEnabled()) return {};
+  const who = parties(data);
   const ids = [];
   for (const key of PARTY_KEYS) {
-    const id = intId(data?.[key]);
-    if (id) ids.push(id);
+    if (who[key]) ids.push(who[key]);
   }
   const unique = [...new Set(ids)];
   if (!unique.length) return {};
@@ -92,23 +122,24 @@ export async function enrichContext(data) {
   );
   const byId = new Map(rows.map((row) => [Number(row.id), mapParty(row)]));
   return {
-    sender: byId.get(intId(data.senderUserId)) || null,
-    receiver: byId.get(intId(data.receiverUserId)) || null,
+    sender: byId.get(who.senderUserId) || null,
+    receiver: byId.get(who.receiverUserId) || null,
   };
 }
 
 async function emitEnriched(event, rawData, lookup) {
   const data = pickEventData(rawData);
-  let context = {};
-  const hasParty = Boolean(data.senderUserId || data.receiverUserId);
-  if (hasParty && lookup) {
+  const who = parties(data);
+  let entity = {};
+  if ((who.senderUserId || who.receiverUserId) && lookup) {
     try {
-      const found = await lookup(data);
-      if (found && typeof found === "object" && !Array.isArray(found)) context = found;
+      const found = await lookup({ ...data, ...who });
+      if (found && typeof found === "object" && !Array.isArray(found)) entity = found;
     } catch (err) {
       console.warn("[agent-bus] context skipped:", err?.message || err);
     }
   }
+  const context = { ...entity, global: platformState.getSnapshot() };
   const richEvent = {
     eventId: `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     eventType: String(event),

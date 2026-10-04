@@ -12,6 +12,7 @@ import {
 import { isPrepaidOnlyEffective, isMultiSellerCartEnabled } from "./platform-flags.js";
 import { gateShippingBeforeStk } from "./shipping-gate.js";
 import { STK_TIMEOUT_MS } from "../lib/ops-edge-constants.js";
+import { emitPlatformEvent } from "../agents/platform-events.js";
 
 export const ESCROW_STATUSES = ["pending", "held", "released", "refunded"];
 
@@ -202,6 +203,12 @@ export async function initiateMpesaCheckout(order, { phone } = {}) {
       stkSentAt: Date.now(),
     });
 
+    emitPlatformEvent("STK_PROMPTED", {
+      orderId: payOrder.id,
+      amountKes,
+      checkoutId: stk.checkoutRequestId,
+      escrowStatus: "prompted",
+    });
     return {
       ok: true,
       method: "mpesa_stk",
@@ -240,6 +247,13 @@ async function initiatePaystackChargeForOrder(payOrder, { phone, amountKes }) {
     paymentStatus: "processing",
     paymentRail: "paystack",
     stkSentAt: Date.now(),
+  });
+
+  emitPlatformEvent("STK_PROMPTED", {
+    orderId: payOrder.id,
+    amountKes,
+    checkoutId: charge.reference,
+    escrowStatus: "prompted",
   });
 
   return {
