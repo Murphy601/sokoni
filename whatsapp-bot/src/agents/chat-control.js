@@ -6,8 +6,9 @@
  * normal on Sokoni. It records the refusal, publishes one enriched event, and
  * reports upward so the main agent's hourly cap still applies.
  *
- * It does not push an STK, release escrow, or send its own WhatsApp. Those
- * stay on the payment and admin paths that already check them.
+ * It does not push an STK or release escrow. The urgent WhatsApp for a block
+ * goes out once, through the admin notifier, and this report stays INFO so
+ * the main agent does not page a second time.
  */
 
 import { agentBus, AGENT_EVENTS, SEVERITY } from "./event-bus.js";
@@ -24,7 +25,7 @@ function onFlagged(event) {
   const flaggedId = data.flaggedId ?? "—";
   reportToMainAgent({
     type: "CHAT_CONTROL",
-    severity: SEVERITY.HIGH,
+    severity: SEVERITY.INFO,
     summary: `Blocked a chat message (${violation}) from user ${senderId}. Flag #${flaggedId}.`,
     data: {
       flaggedId: data.flaggedId ?? null,
@@ -68,6 +69,18 @@ export async function recordBlockedChat({
     receiverUserId,
     violationType,
   });
+  if (row?.id) {
+    void import("./admin-notifier.js")
+      .then(({ notifySecurityFlag }) =>
+        notifySecurityFlag({
+          flaggedId: row.id,
+          violationType,
+          senderUserId,
+          snippet: String(content || "").slice(0, 140),
+        })
+      )
+      .catch((err) => console.warn("[chat-control] security alert skipped:", err?.message || err));
+  }
   return row;
 }
 

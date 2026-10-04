@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
+import { handleAdminDispatch, matchAdminDispatch } from "../agents/admin-dispatch.js";
 import {
   sendText,
   toChatId,
@@ -241,6 +242,29 @@ export function registerAdminChatId(chatId, phone = "") {
   console.log("[admin] registered chat id", chatId, "for", p);
 }
 
+/** Shop reply for someone who is not an admin and typed an admin command. */
+export const PUBLIC_HELP_REPLY =
+  "Welcome to Sokoni Mall. Need help with an order or listing an item? Reply *menu* to browse.";
+
+/**
+ * True when the text is trying to open the admin desk.
+ * Ordinary words such as "approve" inside a sentence are left alone.
+ */
+export function isUnauthorizedAdminProbe(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (/^\/admin\b/i.test(t) || /^admin\b/i.test(t)) return true;
+  if (/^\/(dashboard|sysinfo|ops)\b/i.test(t)) return true;
+  if (/^(dashboard|sysinfo|ops)$/i.test(t)) return true;
+  if (/^\s*FORCE\s+RELEASE\b/i.test(t) || /^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
+  if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
+  if (/^(stats|volume|heap|pulse|pending|actions|queue)$/i.test(t)) return true;
+  if (/^(a|approve|r|reject)\s+\d+\s*[.!]?\s*$/i.test(t)) return true;
+  if (/^user\s+\+?[\d][\d\s-]{7,18}$/i.test(t)) return true;
+  if (/^escrow\s+[A-Za-z0-9-]{3,40}$/i.test(t)) return true;
+  return containsAdminCommand(t);
+}
+
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
@@ -315,9 +339,11 @@ export async function shouldRouteIncomingAsAdmin(body, parsed) {
     /^\s*SYSTEM\s+(PAUSE|RESUME)\b/i.test(text) ||
     /^\s*OVERRIDE\s+TEST\s*$/i.test(text) ||
     /^admin\b/i.test(text) ||
+    /^\/admin\b/i.test(text) ||
     /^orders?\b/i.test(text) ||
     /^[1-4]$/.test(text) ||
-    containsAdminCommand(parsed.text);
+    containsAdminCommand(parsed.text) ||
+    Boolean(matchAdminDispatch(text));
 
   if (!looksLikeStaffCmd) return false;
 
@@ -1404,6 +1430,12 @@ export async function handleAdminIncoming({ customerKey, text, quotedText, phone
     }
   } catch (err) {
     console.warn("[admin] master command skipped:", err.message);
+  }
+
+  if (matchAdminDispatch(text)) {
+    const reply = await handleAdminDispatch(text);
+    if (reply) await sendText(customerKey, reply);
+    return true;
   }
 
   const cmd = normalizeAdminCommand(text);

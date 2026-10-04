@@ -81,7 +81,11 @@ export async function proposeAgentAction({ actionType, orderId, reason = "", age
       [type, order, String(reason || "").slice(0, 280) || null, String(agentName || "agent").slice(0, 40)]
     );
     proposesThisHour.push(now);
-    return { ok: true, action: mapRow(rows[0]) };
+    const action = mapRow(rows[0]);
+    void import("./admin-notifier.js")
+      .then(({ notifyProposedAction }) => notifyProposedAction(action))
+      .catch((err) => console.warn("[agent-actions] notify skipped:", err?.message || err));
+    return { ok: true, action };
   } catch (err) {
     if (err?.code === "23505") {
       return { error: "already_open", message: "A release for that order is already waiting or decided." };

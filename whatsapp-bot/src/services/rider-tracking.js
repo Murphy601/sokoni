@@ -21,6 +21,9 @@ export function attachRiderSocket(server) {
           if (id) socket.join(`order-${id}`);
         });
       });
+      import("../agents/ops-desk.js")
+        .then(({ attachOpsNamespace }) => attachOpsNamespace(io))
+        .catch((err) => console.warn("[ops] namespace skipped:", err?.message || err));
       console.log("[rider] Socket.io attached at /socket.io");
     })
     .catch(() => {
