@@ -50,6 +50,8 @@ export const AGENT_EVENTS = Object.freeze({
   OTP_ATTEMPT_FAILED: "OTP_ATTEMPT_FAILED",
   /** A delivery code matched. */
   OTP_VERIFIED: "OTP_VERIFIED",
+  /** The buyer's two-hour inspection of a delivered item has started. */
+  DELIVERY_INSPECTION_STARTED: "DELIVERY_INSPECTION_STARTED",
   /** The bot heap crossed the comfort line. */
   VM_MEMORY_SPIKE: "VM_MEMORY_SPIKE",
   /** A rider dispatch changed state. */

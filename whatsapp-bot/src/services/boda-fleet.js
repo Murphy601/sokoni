@@ -6,6 +6,7 @@
 import { createHash, randomInt } from "node:crypto";
 import { isDbEnabled, query, withTransaction } from "../db/pool.js";
 import { emitPlatformEvent } from "../agents/platform-events.js";
+import { INSPECTION_WINDOW_MS } from "../agents/inspection-window.js";
 import { config } from "../config.js";
 import { getOrder, normalizeOrderId, updateOrderMeta } from "./orders.js";
 import {
@@ -3294,6 +3295,8 @@ export async function verifyDeliveryOTP({
     console.warn("[boda-fleet] rider_payouts insert:", err.message);
   }
 
+  const prior = getOrder(id);
+  const inspectionStartedAt = Number(prior?.inspectionStartedAt) || Date.now();
   updateOrderMeta(id, {
     bodaStatus: "DELIVERED",
     bodaCustody: "DELIVERED",
@@ -3301,6 +3304,9 @@ export async function verifyDeliveryOTP({
     bodaPayoutStatus: "HOLD_ESCROW",
     bodaDisputeWindowEndsAt: Date.now() + 15 * 60 * 1000,
     payoutStatus: "ESCROW",
+    deliveredAt: prior?.deliveredAt || inspectionStartedAt,
+    inspectionStartedAt,
+    inspectionEndsAt: inspectionStartedAt + INSPECTION_WINDOW_MS,
   });
 
   await writeOtpAudit({
@@ -3374,6 +3380,10 @@ export async function verifyDeliveryOTP({
   }
 
   emitPlatformEvent("OTP_VERIFIED", { orderId: id, riderId: dispatch.rider_id });
+  emitPlatformEvent("DELIVERY_INSPECTION_STARTED", {
+    orderId: id,
+    riderId: dispatch.rider_id,
+  });
   return {
     ok: true,
     orderId: id,

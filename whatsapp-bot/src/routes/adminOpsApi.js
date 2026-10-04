@@ -130,6 +130,7 @@ router.post("/agent-actions/:id/resolve", async (req, res) => {
     ) {
       return res.status(400).json(result);
     }
+    if (result.error === "expired") return res.status(409).json(result);
     if (result.error === "database_not_configured") return res.status(503).json(result);
     const status = result.action?.status === "FAILED" ? 409 : 200;
     res.status(status).json(result);

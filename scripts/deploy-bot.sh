@@ -358,7 +358,7 @@ pm2 start src/server.js \
   --cwd "$BOT_DIR" \
   --update-env \
   --max-memory-restart 450M \
-  --node-args="--max-old-space-size=384"
+  --node-args="--max-old-space-size=384 --expose-gc"
 pm2 save
 
 # Local Remotion HTTP worker (clip fallback) — fail-soft if install/start fails.

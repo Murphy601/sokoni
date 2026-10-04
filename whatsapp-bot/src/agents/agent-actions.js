@@ -7,7 +7,8 @@
 import { isDbEnabled, query } from "../db/pool.js";
 
 const ACTIONS = new Set(["RELEASE_ESCROW", "PROMPT_STK"]);
-const LIST_STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "FAILED"]);
+const LIST_STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "FAILED", "EXPIRED"]);
+const ACTION_COLUMNS = `id, action_type, order_id, reason, agent_name, status, result_code, created_at, resolved_at, expires_at`;
 
 let proposesThisHour = [];
 
@@ -38,6 +39,21 @@ function mapRow(row) {
     resultCode: row.result_code || null,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at || null,
+    expiresAt: row.expires_at || null,
+  };
+}
+
+/** Why a claim that matched zero rows cannot run. */
+export function explainUnresolved(row, now = Date.now()) {
+  if (!row) return { error: "not_found", message: "Action not found." };
+  const exp = row.expires_at ? new Date(row.expires_at).getTime() : 0;
+  if (row.status === "PENDING" && Number.isFinite(exp) && exp <= now) {
+    return { error: "expired", message: "That action expired before it was approved." };
+  }
+  return {
+    error: "already_resolved",
+    message: "That action was already resolved.",
+    status: row.status,
   };
 }
 
@@ -57,26 +73,62 @@ export async function proposeAgentAction({ actionType, orderId, reason = "", age
     return { error: "rate_limited", message: "Too many agent proposals this hour." };
   }
 
-  const { rows } = await query(
-    `INSERT INTO pending_agent_actions (action_type, order_id, reason, agent_name, status)
-     VALUES ($1, $2, $3, $4, 'PENDING')
-     RETURNING id, action_type, order_id, reason, agent_name, status, result_code, created_at, resolved_at`,
-    [type, order, String(reason || "").slice(0, 280) || null, String(agentName || "agent").slice(0, 40)]
+  try {
+    const { rows } = await query(
+      `INSERT INTO pending_agent_actions (action_type, order_id, reason, agent_name, status, expires_at)
+       VALUES ($1, $2, $3, $4, 'PENDING', NOW() + INTERVAL '2 hours')
+       RETURNING ${ACTION_COLUMNS}`,
+      [type, order, String(reason || "").slice(0, 280) || null, String(agentName || "agent").slice(0, 40)]
+    );
+    proposesThisHour.push(now);
+    return { ok: true, action: mapRow(rows[0]) };
+  } catch (err) {
+    if (err?.code === "23505") {
+      return { error: "already_open", message: "A release for that order is already waiting or decided." };
+    }
+    throw err;
+  }
+}
+
+export async function expireStaleActions() {
+  if (!isDbEnabled()) return 0;
+  const { rowCount } = await query(
+    `UPDATE pending_agent_actions
+     SET status = 'EXPIRED', result_code = 'expired', resolved_at = NOW()
+     WHERE status = 'PENDING' AND expires_at <= NOW()`
   );
-  proposesThisHour.push(now);
-  return { ok: true, action: mapRow(rows[0]) };
+  return rowCount || 0;
+}
+
+/** True when a release for this order is still pending, already approved, or was rejected. */
+export async function queryOpenRelease(orderId) {
+  const order = orderIdOf(orderId);
+  if (!order || !isDbEnabled()) return false;
+  const { rows } = await query(
+    `SELECT id FROM pending_agent_actions
+     WHERE order_id = $1
+       AND action_type = 'RELEASE_ESCROW'
+       AND status IN ('PENDING', 'APPROVED', 'REJECTED')
+     LIMIT 1`,
+    [order]
+  );
+  return Boolean(rows[0]);
 }
 
 export async function listAgentActions(status = "PENDING") {
   const wanted = String(status || "PENDING").toUpperCase();
   if (!LIST_STATUSES.has(wanted)) {
-    return { error: "invalid_status", message: "Status must be PENDING, APPROVED, REJECTED, or FAILED." };
+    return {
+      error: "invalid_status",
+      message: "Status must be PENDING, APPROVED, REJECTED, FAILED, or EXPIRED.",
+    };
   }
   if (!isDbEnabled()) {
     return { error: "database_not_configured", message: "Database is not configured." };
   }
+  await expireStaleActions();
   const { rows } = await query(
-    `SELECT id, action_type, order_id, reason, agent_name, status, result_code, created_at, resolved_at
+    `SELECT ${ACTION_COLUMNS}
      FROM pending_agent_actions
      WHERE status = $1
      ORDER BY created_at DESC
@@ -116,27 +168,33 @@ export async function resolveAgentAction(actionId, decision, { execute = default
     return { error: "database_not_configured", message: "Database is not configured." };
   }
 
-  const current = await query(
-    `SELECT id, action_type, order_id, reason, agent_name, status
-     FROM pending_agent_actions WHERE id = $1`,
-    [id]
+  const nextStatus = choice === "APPROVE" ? "APPROVED" : "REJECTED";
+  // Claim the row before any payout or STK call. A second click matches zero rows.
+  const claimed = await query(
+    `UPDATE pending_agent_actions
+     SET status = $2, resolved_at = NOW()
+     WHERE id = $1 AND status = 'PENDING' AND expires_at > NOW()
+     RETURNING ${ACTION_COLUMNS}`,
+    [id, nextStatus]
   );
-  const row = current.rows[0];
-  if (!row) return { error: "not_found", message: "Action not found." };
-  if (row.status !== "PENDING") {
-    return { error: "already_resolved", message: "That action was already resolved.", status: row.status };
-  }
-
-  if (choice === "REJECT") {
-    const { rows } = await query(
-      `UPDATE pending_agent_actions
-       SET status = 'REJECTED', resolved_at = NOW()
-       WHERE id = $1 AND status = 'PENDING'
-       RETURNING id, action_type, order_id, reason, agent_name, status, result_code, created_at, resolved_at`,
+  const row = claimed.rows[0];
+  if (!row) {
+    const existing = await query(
+      `SELECT ${ACTION_COLUMNS} FROM pending_agent_actions WHERE id = $1`,
       [id]
     );
-    return { ok: true, action: mapRow(rows[0]) };
+    const explained = explainUnresolved(existing.rows[0]);
+    if (explained.error === "expired") {
+      await query(
+        `UPDATE pending_agent_actions
+         SET status = 'EXPIRED', result_code = 'expired', resolved_at = NOW()
+         WHERE id = $1 AND status = 'PENDING'`,
+        [id]
+      );
+    }
+    return explained;
   }
+  if (choice === "REJECT") return { ok: true, action: mapRow(row) };
 
   let result;
   try {
@@ -146,15 +204,24 @@ export async function resolveAgentAction(actionId, decision, { execute = default
   }
   const failed = Boolean(result?.error);
   const code = failed ? String(result.error).slice(0, 64) : "ok";
-  const { rows } = await query(
-    `UPDATE pending_agent_actions
-     SET status = $2, result_code = $3, resolved_at = NOW()
-     WHERE id = $1 AND status = 'PENDING'
-     RETURNING id, action_type, order_id, reason, agent_name, status, result_code, created_at, resolved_at`,
-    [id, failed ? "FAILED" : "APPROVED", code]
-  );
-  if (!rows[0]) return { error: "already_resolved", message: "That action was already resolved." };
-  return { ok: !failed, action: mapRow(rows[0]), resultCode: code };
+  if (failed) {
+    await query(
+      `UPDATE pending_agent_actions
+       SET status = 'FAILED', result_code = $2
+       WHERE id = $1 AND status = 'APPROVED'`,
+      [id, code]
+    );
+  } else {
+    await query(
+      `UPDATE pending_agent_actions SET result_code = $2 WHERE id = $1`,
+      [id, code]
+    );
+  }
+  return {
+    ok: !failed,
+    action: { ...mapRow(row), status: failed ? "FAILED" : "APPROVED", resultCode: code },
+    resultCode: code,
+  };
 }
 
 export function resetActionLimitsForTests() {
