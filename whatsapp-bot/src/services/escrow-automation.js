@@ -331,6 +331,19 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
     console.warn("[escrow] boda auto-dispatch skipped:", err.message);
   }
 
+  // 12-hour dispatch clock. Its own try: a missing module here must not skip
+  // the escrow card, and neither may throw back into the payment callback.
+  try {
+    const paidOrder = getOrder(order.id) || updated;
+    if (!paidOrder.dispatchDeadlineAt) {
+      const { stampDispatchDeadline } = await import("./undispatched-refund.js");
+      const deadline = stampDispatchDeadline(Date.now());
+      if (deadline) updateOrderMeta(order.id, { dispatchDeadlineAt: deadline });
+    }
+  } catch (err) {
+    console.warn("[escrow] dispatch deadline skipped:", err.message);
+  }
+
   // Referee card + pinned ledger in the buyer/seller chat. Reached only on
   // this path, which the already_paid guard above protects -- Safaricom
   // retries its callback, and the card is the last thing that should look
@@ -338,13 +351,7 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   // and must not be held up by, or rolled back for, a chat card.
   try {
     const { postEscrowCard } = await import("./escrow-chat-cards.js");
-    const paidOrder = getOrder(order.id) || updated;
-    if (!paidOrder.dispatchDeadlineAt) {
-      const { stampDispatchDeadline } = await import("./undispatched-refund.js");
-      const deadline = stampDispatchDeadline(Date.now());
-      if (deadline) updateOrderMeta(order.id, { dispatchDeadlineAt: deadline });
-    }
-    void postEscrowCard(getOrder(order.id) || paidOrder, "locked");
+    void postEscrowCard(getOrder(order.id) || updated, "locked");
   } catch (err) {
     console.warn("[escrow] chat card skipped:", err.message);
   }
