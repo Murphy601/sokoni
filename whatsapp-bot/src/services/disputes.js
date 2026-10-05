@@ -2,7 +2,7 @@
  * Phase 13 — In-app dispute resolution + escrow freeze helpers.
  * Money stays on JSON SK-orders + settlements.json (same as live prepaid flow).
  */
-import { isDbEnabled, query } from "../db/pool.js";
+import { isDbEnabled, query, withTransaction } from "../db/pool.js";
 import { getOrder, updateOrderMeta, updateOrderStatus, listAllOrders, normalizeOrderId } from "./orders.js";
 import {
   cancelSettlementPayout,
@@ -116,6 +116,42 @@ export async function orderHasOpenDispute(orderRef, { strict = false } = {}) {
     if (strict) throw err;
     return false;
   }
+}
+
+/**
+ * Last check before a seller payout.
+ * Orders are the JSON record. The dispute row is order_disputes.
+ * Open rows are locked with FOR UPDATE. A true dispute flag rolls the
+ * transaction back. A database error is rethrown so the caller does not pay.
+ */
+export async function lockDisputeBeforePayout(orderId) {
+  const current = getOrder(orderId);
+  if (orderHasDisputeHold(current)) return { clear: false, reason: "dispute_hold" };
+  if (!isDbEnabled()) return { clear: true };
+
+  const ref = normalizeOrderRef(orderId);
+  if (!ref) return { clear: false, reason: "bad_ref" };
+
+  try {
+    await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `SELECT id FROM order_disputes
+          WHERE UPPER(order_ref) = $1
+            AND status IN ('open', 'under_review')
+          FOR UPDATE`,
+        [ref]
+      );
+      if (rows.length || orderHasDisputeHold(getOrder(orderId))) {
+        const err = new Error("dispute_open");
+        err.code = "DISPUTE_OPEN";
+        throw err;
+      }
+    });
+  } catch (err) {
+    if (err?.code === "DISPUTE_OPEN") return { clear: false, reason: "dispute_open" };
+    throw err;
+  }
+  return { clear: true };
 }
 
 /** Open / under_review dispute row for an order, or null. */

@@ -200,6 +200,10 @@ describe("hallucinated output", () => {
     assert.match(dirty, /KES 2500/);
     const kept = sanitizeOutboundAgentText("Paid with QA12BC3456.", { mpesaReceipts: ["QA12BC3456"] });
     assert.match(kept, /QA12BC3456/);
+    const lower = sanitizeOutboundAgentText("Paid with qa12bc3456 for SKN-1042.");
+    assert.match(lower, /Transaction Code Pending/);
+    assert.doesNotMatch(lower, /qa12bc3456/i);
+    assert.match(lower, /SKN-1042/);
     const phone = sanitizeOutboundAgentText("Blocked text mentioned 0712345678 and +254712345678.");
     assert.doesNotMatch(phone, /0712345678|254712345678/);
     assert.match(phone, /REDACTED_PHONE/);
