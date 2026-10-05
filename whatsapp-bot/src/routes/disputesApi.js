@@ -18,6 +18,7 @@ import {
 import { config } from "../config.js";
 import { getOrder } from "../services/orders.js";
 import { buyerCanRelease, releaseFundsNow } from "../services/buyer-release.js";
+import { askBuyerForInspectionPhoto } from "../services/inspection-photo-request.js";
 import { adminTokenFromReq, isAdminTokenValid } from "../lib/admin-auth.js";
 
 const router = Router();
@@ -129,12 +130,21 @@ router.post("/inspection-claim", async (req, res) => {
     if (denied) {
       return res.status(denied.status || 401).json({ error: denied.error, message: denied.message });
     }
+    const evidenceUrl = String(payload.evidenceUrl || req.body?.evidenceUrl || "").trim();
+    if (!/^https?:\/\//i.test(evidenceUrl)) {
+      const ask = await askBuyerForInspectionPhoto(order);
+      return res.status(400).json({
+        error: "evidence_required",
+        message: "Add a photo of the unboxing before the payment can be frozen.",
+        photoRequested: Boolean(ask.asked),
+      });
+    }
     const result = await openInspectionClaim({
       orderRef: order.id,
       buyerUserId: gated.buyerUserId,
       buyerPhone: gated.phone,
       statement: payload.statement || req.body?.statement,
-      evidenceUrl: payload.evidenceUrl || req.body?.evidenceUrl,
+      evidenceUrl,
     });
     if (result.error) return res.status(disputeErrorStatus(result.error)).json(result);
     res.status(201).json(result);

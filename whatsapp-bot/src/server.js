@@ -512,6 +512,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startVoiceNotePurge();
   startChatPhotoPurge();
   startInspectionWindow();
+  startReviewNudge();
   startAgentLayer();
   console.log(
     "✓ Dispatch UX: shipping-gate(fail-closed) · no platform fee invent · " +
@@ -585,6 +586,17 @@ function startInspectionWindow() {
   };
   setTimeout(tick, 60_000).unref?.();
   setInterval(tick, 5 * 60 * 1000).unref?.();
+}
+
+/** One day after a clean release, ask for a Trustpilot review. Quiet until the URL is set. */
+function startReviewNudge() {
+  const tick = () => {
+    import("./agents/review-nudge.js")
+      .then(({ processReviewAsks }) => processReviewAsks())
+      .catch((err) => console.warn("[review-nudge] tick:", err?.message || err));
+  };
+  setTimeout(tick, 4 * 60 * 1000).unref?.();
+  setInterval(tick, 60 * 60 * 1000).unref?.();
 }
 
 /** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */
