@@ -516,7 +516,7 @@ export async function onOrderDelivered(order) {
 
   try {
     const { orderHasOpenDispute, orderHasDisputeHold } = await import("./disputes.js");
-    if (orderHasDisputeHold(order) || (await orderHasOpenDispute(order.id))) {
+    if (orderHasDisputeHold(order) || (await orderHasOpenDispute(order.id, { strict: true }))) {
       updateOrderMeta(order.id, {
         deliveredAt: Date.now(),
         disputeHold: true,
@@ -527,7 +527,8 @@ export async function onOrderDelivered(order) {
       return;
     }
   } catch (err) {
-    console.warn("[escrow] dispute check skipped:", err.message);
+    console.warn("[escrow] dispute lookup failed, payout aborted:", err?.message || err);
+    return;
   }
 
   const { creditSellerWalletAfterDelivery, escrowHoldBusinessDays } = await import(

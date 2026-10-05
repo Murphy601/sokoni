@@ -534,9 +534,14 @@ export async function processUpcountryEscrowReleases({ limit = 40 } = {}) {
       let openDispute = false;
       try {
         const { orderHasOpenDispute } = await import("./disputes.js");
-        openDispute = await orderHasOpenDispute(order.id);
-      } catch {
-        openDispute = false;
+        openDispute = await orderHasOpenDispute(order.id, { strict: true });
+      } catch (err) {
+        console.warn(
+          "[upcountry-shipments] dispute lookup failed, auto-release aborted:",
+          order.id,
+          err?.message || err
+        );
+        continue;
       }
       if (openDispute || order.disputeHold) continue;
 
