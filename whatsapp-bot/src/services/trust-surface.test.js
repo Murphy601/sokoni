@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { sellerTrustLine } from "./escrow-chat-cards.js";
+import { buyerUserIdFromOrder, buyerWhatsAppDestination, sessionBuyerOwnsOrder } from "./buyer-whatsapp.js";
 import { buyerCanRelease } from "./buyer-release.js";
 import { refundDue, stampDispatchDeadline, DISPATCH_DEADLINE_MS } from "./undispatched-refund.js";
 import { hubInspectionOffer } from "./hub-inspection.js";
@@ -87,6 +88,25 @@ describe("the public ticker and the hub", () => {
     assert.equal(items.length, 1);
     assert.match(items[0].text, /Kisumu/);
     assert.doesNotMatch(items[0].text, /2547|SKN-9/);
+    const hidden = tickerItems([
+      {
+        id: "SKN-1",
+        productName: "Cancelled coat",
+        status: "cancelled",
+        escrowStatus: "refunded",
+        buyerConfirmedAt: Date.now() - 60_000,
+        sellerDispatchedAt: Date.now() - 120_000,
+        totalKes: 1400,
+      },
+      {
+        id: "SKN-2",
+        productName: "Free item",
+        escrowStatus: "released",
+        buyerConfirmedAt: Date.now() - 60_000,
+        totalKes: 0,
+      },
+    ]);
+    assert.equal(hidden.length, 0);
   });
 
   it("does not offer hub inspection until the flag is on", () => {
@@ -95,5 +115,18 @@ describe("the public ticker and the hub", () => {
     assert.equal(hubInspectionOffer({ totalKes: 8000 }).offered, false);
     if (previous == null) delete process.env.SOKONI_HUB_INSPECTION;
     else process.env.SOKONI_HUB_INSPECTION = previous;
+  });
+});
+
+describe("the buyer's WhatsApp", () => {
+  it("sends to the order phone, not web:buyer", async () => {
+    assert.equal(buyerUserIdFromOrder({ customerKey: "web:buyer:42" }), 42);
+    const dest = await buyerWhatsAppDestination({
+      customerKey: "web:buyer:42",
+      phone: "0712345678",
+    });
+    assert.equal(dest, "254712345678@c.us");
+    assert.equal(await sessionBuyerOwnsOrder({ customerKey: "web:buyer:42" }, 42), true);
+    assert.equal(await sessionBuyerOwnsOrder({ customerKey: "web:buyer:42" }, 7), false);
   });
 });

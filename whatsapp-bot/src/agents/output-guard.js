@@ -1,12 +1,13 @@
 /**
  * Stop an agent reply from carrying a receipt code the database did not return.
  *
- * The pattern needs both a letter and a digit, so a KES amount, a phone, and
- * an order id like SKN-1042 stay intact. It runs on text we composed for the
- * admin, never on a message a person typed.
+ * The receipt pattern needs both a letter and a digit, so a KES amount and an
+ * order id like SKN-1042 stay intact. Phone numbers are masked. It runs on
+ * text we composed for the admin, never on a message a person typed.
  */
 
 const RECEIPT_LIKE = /\b(?=[A-Z0-9]{10}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{10}\b/g;
+const PHONE_LIKE = /(?:\+?254|0)[17]\d{8}/g;
 
 const ACTION_TYPES = new Set(["NOTIFY_SELLER", "SEND_UI_CARD", "QUEUE_LEVEL2_APPROVAL"]);
 const ACTION_KEYS = new Set(["actionType", "targetId", "reason", "suggestedAmount"]);
@@ -17,7 +18,8 @@ export function sanitizeOutboundAgentText(text, validContext = {}) {
       String(code).toUpperCase()
     )
   );
-  return String(text || "").replace(RECEIPT_LIKE, (match) => {
+  const masked = String(text || "").replace(PHONE_LIKE, "[REDACTED_PHONE]");
+  return masked.replace(RECEIPT_LIKE, (match) => {
     if (allowed.has(match.toUpperCase())) return match;
     console.warn("[admin-notifier] stripped an unverified receipt-like token");
     return "[Transaction Code Pending]";

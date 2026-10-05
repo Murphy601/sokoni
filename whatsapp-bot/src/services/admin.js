@@ -1433,7 +1433,9 @@ export async function handleAdminIncoming({ customerKey, text, quotedText, phone
   }
 
   if (matchAdminDispatch(text)) {
-    const reply = await handleAdminDispatch(text);
+    const reply = await handleAdminDispatch(text, {
+      actorPhone: phone || phoneDigitsFromChatId(customerKey),
+    });
     if (reply) await sendText(customerKey, reply);
     return true;
   }
