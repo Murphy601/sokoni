@@ -1764,9 +1764,14 @@ export async function processOrderCommunicationReminders() {
         let openDispute = false;
         try {
           const { orderHasOpenDispute } = await import("./disputes.js");
-          openDispute = await orderHasOpenDispute(order.id);
-        } catch {
-          openDispute = false;
+          openDispute = await orderHasOpenDispute(order.id, { strict: true });
+        } catch (err) {
+          console.warn(
+            "[communication-hub] dispute lookup failed, auto-release aborted:",
+            order.id,
+            err?.message || err
+          );
+          continue;
         }
         if (openDispute || order.disputeHold) {
           if (!order.confirmReminded24hAt) {

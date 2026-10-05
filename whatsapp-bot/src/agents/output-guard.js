@@ -2,11 +2,12 @@
  * Stop an agent reply from carrying a receipt code the database did not return.
  *
  * The receipt pattern needs both a letter and a digit, so a KES amount and an
- * order id like SKN-1042 stay intact. Phone numbers are masked. It runs on
- * text we composed for the admin, never on a message a person typed.
+ * order id like SKN-1042 stay intact. Matching ignores case, so qa12bc3456
+ * is stripped the same way as QA12BC3456. Phone numbers are masked. It runs
+ * on text we composed for the admin, never on a message a person typed.
  */
 
-const RECEIPT_LIKE = /\b(?=[A-Z0-9]{10}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{10}\b/g;
+const RECEIPT_LIKE = /\b(?=[A-Z0-9]{10}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{10}\b/gi;
 const PHONE_LIKE = /(?:\+?254|0)[17]\d{8}/g;
 
 const ACTION_TYPES = new Set(["NOTIFY_SELLER", "SEND_UI_CARD", "QUEUE_LEVEL2_APPROVAL"]);

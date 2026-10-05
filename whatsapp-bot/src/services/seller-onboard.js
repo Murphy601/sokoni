@@ -1447,21 +1447,46 @@ export async function releaseEscrowPayout(orderId) {
   }
 
   const { getSupplier } = await import("./suppliers.js");
-  const seller = getSupplier(order.supplierId);
-  const mpesaPhone = seller?.mpesaNumber || seller?.phone;
-  const netAmount = sellerOrderNet(order);
-
   const { updateOrderMeta } = await import("./orders.js");
   const { creditSellerWalletAfterDelivery, escrowHoldBusinessDays } = await import(
     "./settlements.js"
   );
   const { isB2CReady, b2cMeta } = await import("./daraja-mpesa.js");
   const { isPaystackReady, paystackMeta, resolvePayoutRail } = await import("./paystack-transfers.js");
+  const { lockDisputeBeforePayout } = await import("./disputes.js");
+
+  let gate;
+  try {
+    gate = await lockDisputeBeforePayout(orderId);
+  } catch (err) {
+    console.warn("[seller-onboard] dispute lookup failed, payout aborted:", err?.message || err);
+    return {
+      error: "dispute_lookup_failed",
+      message: "Payout aborted. The dispute check did not complete.",
+    };
+  }
+  if (!gate?.clear) {
+    return { error: "dispute_open", message: "Payout aborted. This order is in dispute." };
+  }
+
+  const fresh = getOrder(orderId);
+  if (!fresh) return { error: "not_found" };
+  if (fresh.disputeHold || fresh.escrowStatus === "refunded") {
+    return { error: "dispute_open", message: "Payout aborted. This order is in dispute." };
+  }
+  if (fresh.isPaidOut) return { skipped: true, message: "Already paid out." };
+  if (fresh.status !== "delivered") {
+    return { error: "not_delivered", message: "Order must be delivered first." };
+  }
+
+  const seller = getSupplier(fresh.supplierId);
+  const mpesaPhone = seller?.mpesaNumber || seller?.phone;
+  const netAmount = sellerOrderNet(fresh);
 
   const holdDays = escrowHoldBusinessDays();
   const ready = creditSellerWalletAfterDelivery(
     {
-      ...order,
+      ...fresh,
       sourcePriceKes: netAmount,
       sellerNetKes: netAmount,
     },

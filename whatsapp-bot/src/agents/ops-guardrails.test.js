@@ -66,6 +66,37 @@ describe("the two-hour inspection", () => {
   });
 });
 
+describe("a payout that might be in dispute", () => {
+  it("locks the dispute row inside the payout and aborts when the lookup fails", () => {
+    const payout = src("../services/seller-onboard.js");
+    const fn = payout.slice(payout.indexOf("export async function releaseEscrowPayout"));
+    const lock = fn.indexOf("await lockDisputeBeforePayout");
+    const credit = fn.indexOf("creditSellerWalletAfterDelivery(");
+    assert.ok(lock !== -1 && credit !== -1 && lock < credit);
+    assert.match(fn, /dispute_lookup_failed/);
+    assert.match(fn, /dispute_open/);
+    assert.match(src("../services/disputes.js"), /FOR UPDATE/);
+
+    const hub = src("../services/communication-hub.js");
+    const auto = hub.slice(hub.indexOf("if (age >= releaseMs && !order.autoReleasedAt)"));
+    assert.match(auto, /strict: true/);
+    assert.match(auto, /auto-release aborted/);
+    assert.doesNotMatch(auto, /catch[\s\S]{0,120}openDispute = false/);
+
+    const upcountry = src("../services/upcountry-shipments.js");
+    const loop = upcountry.slice(upcountry.indexOf("for (const order of candidates)"));
+    assert.match(loop, /strict: true/);
+    assert.match(loop, /auto-release aborted/);
+    assert.doesNotMatch(loop, /catch[\s\S]{0,120}openDispute = false/);
+
+    const courier = src("../services/escrow-automation.js");
+    const delivered = courier.slice(courier.indexOf("export async function onOrderDelivered"));
+    assert.match(delivered, /strict: true/);
+    assert.match(delivered, /payout aborted/);
+    assert.doesNotMatch(delivered.slice(0, delivered.indexOf("creditSellerWalletAfterDelivery")), /dispute check skipped/);
+  });
+});
+
 describe("a slow WhatsApp send and a hot heap", () => {
   it("gives the sales nudge three seconds", () => {
     assert.match(src("./platform-agents.js"), /timeoutMs: 3000/);
