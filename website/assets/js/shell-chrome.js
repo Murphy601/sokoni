@@ -67,8 +67,9 @@
     if (page === "ask") {
       return [{ href: "track.html", label: "Track" }, account];
     }
-    if (page === "about" || page === "faq" || page === "terms" || page === "privacy") {
+    if (page === "about" || page === "faq" || page === "terms" || page === "privacy" || page === "trust") {
       return [
+        { href: "trust-and-safety.html", label: "Trust" },
         { href: "faq.html", label: "FAQ" },
         account,
       ];
@@ -90,7 +91,8 @@
       page === "about" ||
       page === "faq" ||
       page === "terms" ||
-      page === "privacy"
+      page === "privacy" ||
+      page === "trust"
     ) {
       return "profile";
     }

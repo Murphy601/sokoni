@@ -27,6 +27,7 @@ import {
 } from "../services/session.js";
 import { findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
+import { isWhereIsMyOrder } from "../services/order-status-question.js";
 import {
   handleAdminOutgoing,
   handleAdminIncoming,
@@ -741,6 +742,7 @@ export async function handleIncomingMessage(
     }
   }
   if (
+    isWhereIsMyOrder(normalized) ||
     /^track\b/i.test(normalized) ||
     normalized === "track order" ||
     normalized === "my order" ||
