@@ -25,6 +25,7 @@ let sendTimestamps = [];
 
 export const OPS_TOOL_NAMES = [
   "get_inquiry_metrics",
+  "get_rider_roster",
   "check_escrow_status",
   "lookup_order_history",
   "send_whatsapp_message",
@@ -202,6 +203,59 @@ export async function getInquiryMetrics({ dateRange } = {}, now = Date.now()) {
   };
 }
 
+const RIDER_STATUSES = new Set(["PENDING", "VERIFIED", "SUSPENDED", "REJECTED"]);
+
+export async function getRiderRoster(args = {}) {
+  const raw = String(args.status || args.verification_status || args.verificationStatus || "").trim().toUpperCase();
+  const status = RIDER_STATUSES.has(raw) ? raw : null;
+  if (!isDbEnabled()) {
+    return {
+      ok: false,
+      error: "database_offline",
+      tool: "get_rider_roster",
+      message: "Rider roster lives in Postgres — the bot is not connected to the database.",
+    };
+  }
+  const { listRiderStatusCounts, listRiders } = await import("./boda-fleet.js");
+  const counts = await listRiderStatusCounts();
+  if (counts?.error) {
+    return {
+      ok: false,
+      error: "list_failed",
+      tool: "get_rider_roster",
+      message: String(counts.error).slice(0, 160),
+      counts,
+    };
+  }
+  const listed = await listRiders({ status, limit: 12 });
+  if (listed?.error && !listed.ok) {
+    return {
+      ok: false,
+      error: listed.error,
+      tool: "get_rider_roster",
+      message: listed.message || "Could not list riders.",
+      counts: listed.counts || counts,
+    };
+  }
+  const riders = (listed.riders || []).slice(0, 12).map((r) => ({
+    name: r.fullName || null,
+    town: r.operatingTown || null,
+    status: r.verificationStatus || null,
+    available: Boolean(r.isAvailable),
+    fleetStatus: r.fleetStatus || null,
+  }));
+  const availableVerified = riders.filter((r) => r.status === "VERIFIED" && r.available).length;
+  return {
+    ok: true,
+    tool: "get_rider_roster",
+    registered: Number(counts.total) || 0,
+    counts,
+    filter: status,
+    sampleAvailableOnThisPage: availableVerified,
+    riders,
+  };
+}
+
 export async function checkEscrowStatus(args = {}, now = Date.now()) {
   const orderId = args.order_id || args.orderId;
   const phoneNumber = args.phone_number || args.phoneNumber || args.phone;
@@ -359,6 +413,7 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
   const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {};
   try {
     if (tool === "get_inquiry_metrics") return await getInquiryMetrics({ dateRange: args.date_range || args.dateRange }, extras.now);
+    if (tool === "get_rider_roster") return await getRiderRoster(args);
     if (tool === "check_escrow_status") return await checkEscrowStatus(args, extras.now);
     if (tool === "lookup_order_history") return await lookupOrderHistory(args);
     if (tool === "send_whatsapp_message") return await sendWhatsAppMessage(args, extras);

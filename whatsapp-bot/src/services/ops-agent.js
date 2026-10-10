@@ -13,10 +13,11 @@ import { executeOpsTool, OPS_TOOL_NAMES } from "./ops-tools.js";
 export { OPS_TOOL_NAMES };
 
 export const OPS_SYSTEM_PROMPT = `You are the Sokoni Mall ops assistant for staff only.
-You help check prepaid M-Pesa escrow, order history, and buyer-seller inquiry volume, then you may send a WhatsApp follow-up.
+You help check prepaid M-Pesa escrow, order history, rider roster, and buyer-seller inquiry volume, then you may send a WhatsApp follow-up.
 
 Rules:
 - Always look up the customer with check_escrow_status or lookup_order_history before sending WhatsApp.
+- Use get_rider_roster for questions about registered / verified / available boda riders. Do not invent rider counts.
 - Never invent a phone number, SKN id, or escrow state. Use tool results only.
 - send_whatsapp_message is for known Sokoni buyers/sellers only. Keep notes short, warm, and countrywide Kenya — no city-only marketing.
 - Do not release escrow, refund, or change payouts. Those stay on the admin desk.
@@ -35,6 +36,23 @@ export const OPS_TOOLS = [
           date_range: {
             type: "string",
             description: "today | 24h | 7d | this_week | 30d",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_rider_roster",
+      description:
+        "Count registered boda riders by verification status (PENDING, VERIFIED, SUSPENDED, REJECTED) and list a short sample.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            description: "Optional filter: PENDING | VERIFIED | SUSPENDED | REJECTED",
           },
         },
       },
