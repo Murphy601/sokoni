@@ -112,6 +112,15 @@ export const config = {
     maxAttempts: Number(process.env.NVIDIA_VISION_MAX_ATTEMPTS) || 4,
   },
   /**
+   * Admin ops agent (tool calling). Separate from Plug shopper chat.
+   * OpenRouter free models first, NVIDIA NIM fallback.
+   */
+  opsAgent: {
+    openrouterModels: process.env.OPS_AGENT_OPENROUTER_MODELS || "",
+    nvidiaModels: process.env.OPS_AGENT_NVIDIA_MODELS || "",
+    dryRun: /^(1|true|yes|on)$/i.test(String(process.env.OPS_AGENT_DRY_RUN || "").trim()),
+  },
+  /**
    * Buyer WhatsApp photo → similar stock (free vision only).
    * Order: OpenRouter free VLMs → NVIDIA free VLMs → optional Gemini.
    * Override with IMAGE_SEARCH_VISION_MODELS (comma list; must stay :free / openrouter/free).
