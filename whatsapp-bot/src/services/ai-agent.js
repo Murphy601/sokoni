@@ -571,6 +571,20 @@ export async function runAgentTurn({
     /* ignore */
   }
 
+  if (channel === "whatsapp" && !adminSender) {
+    try {
+      const { recordInbound } = await import("./whatsapp-crm.js");
+      recordInbound({
+        customerKey: sessionKey,
+        text,
+        phone,
+        chatId: sessionKey,
+      });
+    } catch (err) {
+      console.warn("[ai-agent] crm inbound skipped:", err.message);
+    }
+  }
+
   const sessionEarly = channel === "whatsapp" ? getSession(sessionKey) : null;
   const historyForTools = history || sessionEarly?.history || [];
 

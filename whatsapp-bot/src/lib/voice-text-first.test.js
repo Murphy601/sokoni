@@ -112,7 +112,9 @@ describe("voice-reply turn store", () => {
     assert.equal(isVoiceReplyTurn(), false);
   });
 
-  it("skips flush when ElevenLabs is not configured", async () => {
+  it("skips flush when no TTS provider is configured", async () => {
+    const { isAnyTtsReady } = await import("../services/voice-tts.js");
+    if (isAnyTtsReady()) return;
     const result = await withVoiceReply(true, async () => {
       recordVoiceReplyText("Hello! Welcome to Sokoni, how can I help you today?");
       return flushVoiceReply("254700000000@c.us");

@@ -431,6 +431,35 @@ export async function handleIncomingMessage(
     /* fail-soft */
   }
 
+  // Mini-CRM: intent tag + last inbound (Meta 24h window). Assign humans for complaints / explicit handoff.
+  try {
+    const adminish = bossHit || isAdminSender(customerKey, phone);
+    if (!adminish) {
+      const { recordInbound, assignAgent } = await import("../services/whatsapp-crm.js");
+      const spokenOrText = String(combinedText || text || "").trim();
+      const crm = recordInbound({
+        customerKey,
+        text: spokenOrText,
+        displayName,
+        phone,
+        chatId,
+      });
+      if (crm.intent?.assignHuman) {
+        await assignAgent({
+          customerKey,
+          chatId,
+          displayName,
+          phone,
+          lastMessage: spokenOrText,
+          reason: crm.intent.intent,
+          priority: crm.intent.intent === "complaint" ? "high" : "normal",
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[webhook] crm inbound skipped:", err.message);
+  }
+
   // Persist seller phone ↔ chatId early (critical for WhatsApp @lid replies).
   if (phone) {
     try {

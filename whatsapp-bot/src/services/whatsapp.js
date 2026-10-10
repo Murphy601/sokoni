@@ -701,7 +701,11 @@ function voiceFilePayload(filepath, data) {
   const mimetype =
     ext === ".ogg" || ext === ".oga" || ext === ".opus"
       ? "audio/ogg; codecs=opus"
-      : "audio/mpeg";
+      : ext === ".wav"
+        ? "audio/wav"
+        : ext === ".m4a"
+          ? "audio/mp4"
+          : "audio/mpeg";
   return {
     data: Buffer.from(data).toString("base64"),
     mimetype,

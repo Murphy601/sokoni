@@ -1,10 +1,11 @@
 /**
- * Per-turn voice follow-up: collect sendText bodies, then one cached ElevenLabs clip.
- * Text always goes out first. TTS only when this turn is a voice note / explicit ask.
+ * Per-turn voice follow-up: collect sendText bodies, then TTS.
+ * Text always goes out first. Audio only on a voice note / explicit ask.
+ * Chain: ElevenLabs → Groq Orpheus → Grok.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { isElevenLabsTtsReady, generateVoiceNote } from "./elevenlabs-tts.js";
 import { shouldSkipTtsForText, toSpeechScript } from "../lib/voice-text-first.js";
+import { isAnyTtsReady, synthesizeVoiceNote } from "./voice-tts.js";
 
 const voiceTurn = new AsyncLocalStorage();
 
@@ -24,13 +25,13 @@ export function recordVoiceReplyText(text) {
   s.texts.push(t);
 }
 
-export async function flushVoiceReply(to) {
+export async function flushVoiceReply(to, extras = {}) {
   const s = voiceTurn.getStore();
   if (!s?.enabled || s.flushed) return { skipped: true, reason: "inactive" };
   s.flushed = true;
 
-  if (!isElevenLabsTtsReady()) {
-    console.warn("[voice-reply] skip: ElevenLabs not configured");
+  if (!isAnyTtsReady() && !extras.synthesize) {
+    console.warn("[voice-reply] skip: no TTS provider (ElevenLabs / Groq / Grok)");
     return { skipped: true, reason: "not_configured" };
   }
 
@@ -40,16 +41,20 @@ export async function flushVoiceReply(to) {
     return { skipped: true, reason: "empty" };
   }
 
-  const filepath = await generateVoiceNote(spoken);
-  if (!filepath) {
+  const synth = extras.synthesize || synthesizeVoiceNote;
+  const generated = await synth(spoken, extras);
+  const files = generated?.filepaths || (generated?.filepath ? [generated.filepath] : []);
+  if (!generated?.ok || !files.length) {
     console.warn("[voice-reply] skip: tts_failed");
     return { skipped: true, reason: "tts_failed" };
   }
 
   try {
     const { sendVoiceNote } = await import("./whatsapp.js");
-    await sendVoiceNote(to, filepath);
-    return { ok: true, filepath };
+    for (const filepath of files) {
+      await sendVoiceNote(to, filepath);
+    }
+    return { ok: true, filepath: files[0], filepaths: files, provider: generated.provider };
   } catch (err) {
     console.warn("[voice-reply] sendVoice failed (text already sent):", err.message);
     return { skipped: true, reason: "send_failed", error: err.message };
