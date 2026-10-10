@@ -511,8 +511,46 @@ export async function processAbandonedCheckoutRecovery({ olderThanMs = 30 * 60 *
   return { sent };
 }
 
+const GROQ_STT_MAX_BYTES = 25 * 1024 * 1024;
+
+async function transcribeWithClient({
+  apiKey,
+  baseURL,
+  model,
+  buffer,
+  mimetype,
+  languageHint,
+}) {
+  const OpenAI = (await import("openai")).default;
+  const client = new OpenAI({ apiKey, baseURL });
+  const file = new File([buffer], "voice.ogg", { type: mimetype || "audio/ogg" });
+  const lang = languageHint === "sw" || languageHint === "en" ? languageHint : undefined;
+  const params = { file, model };
+  if (lang) params.language = lang;
+  const result = await client.audio.transcriptions.create(params);
+  const text = String(result?.text || "").trim();
+  return { text, model, language: lang || null };
+}
+
+async function tryMasVoiceFallback({ buffer, mimetype, languageHint, label }) {
+  try {
+    const { tryMasSttAssist } = await import("./mas/assist.js");
+    const mas = await tryMasSttAssist({
+      audioBuffer: buffer,
+      mimeType: mimetype,
+      filename: "voice.ogg",
+    });
+    if (mas?.text) {
+      return { ok: true, text: mas.text, model: label, language: languageHint || null, provider: "mas" };
+    }
+  } catch (err) {
+    console.warn("[commerce-ops] MAS STT assist:", err.message);
+  }
+  return null;
+}
+
 /**
- * Optional voice → text via OpenRouter/OpenAI-compatible Whisper.
+ * Voice → text. Groq Whisper first (free tier), then OpenRouter, then MAS.
  * Pass languageHint "sw" | "en" when known (Kiswahili / English); omit for auto.
  */
 export async function transcribeWhatsAppAudio({
@@ -520,51 +558,57 @@ export async function transcribeWhatsAppAudio({
   mimetype = "audio/ogg",
   languageHint = undefined,
 } = {}) {
-  if (!config.openai?.apiKey || !buffer?.length) {
-    // Primary STT unavailable — optional MAS voice assist (flag off by default)
-    try {
-      const { tryMasSttAssist } = await import("./mas/assist.js");
-      const mas = await tryMasSttAssist({
-        audioBuffer: buffer,
-        mimeType: mimetype,
-        filename: "voice.ogg",
-      });
-      if (mas?.text) return { ok: true, text: mas.text, model: "mas_stt", language: languageHint || null };
-    } catch {
-      /* ignore */
-    }
+  if (!buffer?.length) {
     return { ok: false, error: "stt_unavailable", text: "" };
   }
-  try {
-    const OpenAI = (await import("openai")).default;
-    const client = new OpenAI({
-      apiKey: config.openai.apiKey,
-      baseURL: config.openai.baseUrl,
-    });
-    const file = new File([buffer], "voice.ogg", { type: mimetype || "audio/ogg" });
-    const model = process.env.OPENAI_TRANSCRIBE_MODEL || "openai/whisper-large-v3-turbo";
-    const lang =
-      languageHint === "sw" || languageHint === "en" ? languageHint : undefined;
-    const params = { file, model };
-    if (lang) params.language = lang;
-    const result = await client.audio.transcriptions.create(params);
-    const text = String(result?.text || "").trim();
-    return { ok: Boolean(text), text, model, language: lang || null };
-  } catch (err) {
-    console.warn("[commerce-ops] whisper/stt:", err.message);
+
+  const groqKey = config.groq?.apiKey?.trim();
+  const groqModel = config.groq?.sttModel || process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3-turbo";
+  if (groqKey && buffer.length <= GROQ_STT_MAX_BYTES) {
     try {
-      const { tryMasSttAssist } = await import("./mas/assist.js");
-      const mas = await tryMasSttAssist({
-        audioBuffer: buffer,
-        mimeType: mimetype,
-        filename: "voice.ogg",
+      const result = await transcribeWithClient({
+        apiKey: groqKey,
+        baseURL: config.groq.baseUrl || "https://api.groq.com/openai/v1",
+        model: groqModel,
+        buffer,
+        mimetype,
+        languageHint,
       });
-      if (mas?.text) return { ok: true, text: mas.text, model: "mas_stt_fallback", language: languageHint || null };
-    } catch (masErr) {
-      console.warn("[commerce-ops] MAS STT assist:", masErr.message);
+      if (result.text) {
+        return { ok: true, ...result, provider: "groq" };
+      }
+    } catch (err) {
+      console.warn("[commerce-ops] groq whisper:", err.message);
     }
-    return { ok: false, error: err.message, text: "" };
   }
+
+  if (config.openai?.apiKey) {
+    try {
+      const model = process.env.OPENAI_TRANSCRIBE_MODEL || "openai/whisper-large-v3-turbo";
+      const result = await transcribeWithClient({
+        apiKey: config.openai.apiKey,
+        baseURL: config.openai.baseUrl,
+        model,
+        buffer,
+        mimetype,
+        languageHint,
+      });
+      if (result.text) {
+        return { ok: true, ...result, provider: "openrouter" };
+      }
+    } catch (err) {
+      console.warn("[commerce-ops] whisper/stt:", err.message);
+    }
+  }
+
+  const mas = await tryMasVoiceFallback({
+    buffer,
+    mimetype,
+    languageHint,
+    label: "mas_stt_fallback",
+  });
+  if (mas) return mas;
+  return { ok: false, error: "stt_unavailable", text: "" };
 }
 
 export function parseCommerceIntent(text) {

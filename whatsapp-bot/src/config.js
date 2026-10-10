@@ -54,6 +54,16 @@ export const config = {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    /** Free Whisper STT — Groq first (voice notes). OpenRouter is fallback only. */
+    sttModel: process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3-turbo",
+  },
+  /**
+   * WhatsApp mini-CRM (intent tags + Meta 24h session window).
+   * lastInboundAt lives on session.customerMeta and data/crm-contacts.json.
+   */
+  crm: {
+    windowHours: Number(process.env.CRM_WINDOW_HOURS) || 24,
+    storePath: process.env.CRM_STORE_PATH || "",
   },
   /**
    * Chat routing: auto (Groq→OpenRouter) | groq | gemini | openrouter

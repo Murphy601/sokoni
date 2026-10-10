@@ -37,6 +37,14 @@ import { filterPendingPaymentClaims } from "../services/payment.js";
 import { isDarajaConfigured } from "../services/prepaid-checkout.js";
 import { getSettlementSummary } from "../services/settlements.js";
 import { orderBuyerTotal } from "../services/shipping-tiers.js";
+import {
+  listCrmContacts,
+  setCrmTag,
+  assignAgent,
+  runTaggedBroadcast,
+  CRM_TAGS,
+  CRM_TEMPLATES,
+} from "../services/whatsapp-crm.js";
 
 const router = Router();
 router.use(requireAdminToken);
@@ -151,6 +159,84 @@ router.get("/desk/payouts", (_req, res) => {
     const summary = getSettlementSummary();
     res.json({ ok: true, ...summary });
   } catch (err) {
+    res.status(500).json({ ok: false, ...clientError(err) });
+  }
+});
+
+/** GET /admin/support/crm/templates — approved 24h-window templates */
+router.get("/crm/templates", (_req, res) => {
+  res.json({
+    ok: true,
+    tags: CRM_TAGS,
+    templates: CRM_TEMPLATES,
+    windowHours: config.crm?.windowHours || 24,
+  });
+});
+
+/** GET /admin/support/crm/contacts */
+router.get("/crm/contacts", (req, res) => {
+  try {
+    const contacts = listCrmContacts({
+      tag: String(req.query.tag || ""),
+      window: String(req.query.window || "any"),
+      q: String(req.query.q || ""),
+      sinceDays: Number(req.query.sinceDays || 0) || 0,
+      limit: Number(req.query.limit || 100) || 100,
+    });
+    res.json({ ok: true, contacts, count: contacts.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, ...clientError(err) });
+  }
+});
+
+/** POST /admin/support/crm/tag  { customerKey, tag } */
+router.post("/crm/tag", (req, res) => {
+  try {
+    const customerKey = String(req.body?.customerKey || req.body?.chatId || "").trim();
+    const result = setCrmTag(customerKey, req.body?.tag);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, ...clientError(err) });
+  }
+});
+
+/** POST /admin/support/crm/assign  { customerKey, reason? } — assign_agent */
+router.post("/crm/assign", async (req, res) => {
+  try {
+    const customerKey = String(req.body?.customerKey || req.body?.chatId || "").trim();
+    const result = await assignAgent({
+      customerKey,
+      chatId: String(req.body?.chatId || customerKey),
+      displayName: String(req.body?.displayName || ""),
+      phone: String(req.body?.phone || ""),
+      lastMessage: String(req.body?.lastMessage || req.body?.reason || "Assigned from CRM desk"),
+      reason: String(req.body?.reason || "assign_agent"),
+      priority: String(req.body?.priority || ""),
+    });
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error("[admin/support/crm/assign]", err);
+    res.status(500).json({ ok: false, ...clientError(err) });
+  }
+});
+
+/** POST /admin/support/crm/broadcast  { tag, message?, templateName?, sinceDays?, dryRun? } */
+router.post("/crm/broadcast", async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun !== false && req.body?.confirm !== true;
+    const result = await runTaggedBroadcast({
+      tag: req.body?.tag,
+      message: req.body?.message || req.body?.text || "",
+      templateName: req.body?.templateName || "follow_up",
+      sinceDays: Number(req.body?.sinceDays || 7) || 7,
+      dryRun,
+    });
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error("[admin/support/crm/broadcast]", err);
     res.status(500).json({ ok: false, ...clientError(err) });
   }
 });

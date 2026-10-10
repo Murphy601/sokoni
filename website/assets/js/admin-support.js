@@ -103,6 +103,7 @@
     if (name === "orders") void loadOrdersDesk();
     if (name === "payments") void loadPaymentsDesk();
     if (name === "payouts") void loadPayoutsDesk();
+    if (name === "crm") void loadCrmDesk();
   }
 
   function showActionResult(replies, fallback) {
@@ -568,6 +569,181 @@
     }
   }
 
+  function crmWindowLabel(win) {
+    if (!win) return "—";
+    if (win.open) {
+      const hrs = Math.max(1, Math.round((win.remainingMs || 0) / 3600000));
+      return `Open · ~${hrs}h left`;
+    }
+    return win.reason === "no_inbound" ? "No inbound" : "Closed · template";
+  }
+
+  function renderCrmTable(contacts) {
+    const box = el("crm-table");
+    if (!box) return;
+    if (!contacts?.length) {
+      box.innerHTML = `<p class="text-brand-purple/55">No CRM contacts for this filter yet. Inbound WhatsApp chats tag themselves.</p>`;
+      return;
+    }
+    box.innerHTML = `<table class="w-full text-left">
+      <thead><tr class="text-xs uppercase tracking-wide text-brand-purple/45 border-b border-black/5">
+        <th class="py-2 pr-2">Contact</th><th class="py-2 pr-2">Tag</th><th class="py-2 pr-2">Intent</th><th class="py-2 pr-2">24h window</th><th class="py-2">Actions</th>
+      </tr></thead>
+      <tbody>${contacts
+        .map((c) => {
+          const key = escapeHtml(c.customerKey || "");
+          const tag = escapeHtml(c.tag || "");
+          return `<tr class="border-b border-black/5 align-top">
+            <td class="py-2 pr-2 text-xs"><strong>${escapeHtml(c.displayName || c.phone || key)}</strong><br/>
+              <span class="text-brand-purple/50">${escapeHtml(c.phone || "")} ${escapeHtml(formatTime(c.lastInboundAt))}</span></td>
+            <td class="py-2 pr-2"><span class="text-[10px] font-bold uppercase tracking-wide bg-brand-purple/10 px-1.5 py-0.5 rounded-full">${tag}</span></td>
+            <td class="py-2 pr-2 text-xs">${escapeHtml(c.lastIntent || "")}${c.ticketId ? `<br/><span class="text-brand-purple/50">${escapeHtml(c.ticketId)}</span>` : ""}</td>
+            <td class="py-2 pr-2 text-xs">${escapeHtml(crmWindowLabel(c.serviceWindow))}</td>
+            <td class="py-2">
+              <div class="flex flex-wrap gap-1">
+                <button type="button" data-crm-assign="${key}" class="crm-assign min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">Assign human</button>
+                <button type="button" data-crm-tag="${key}" data-next="interested" class="crm-tag min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">Interested</button>
+                <button type="button" data-crm-tag="${key}" data-next="closed" class="crm-tag min-h-[36px] px-2 rounded-full border border-black/10 text-[11px] font-semibold">Closed</button>
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("")}</tbody></table>`;
+    box.querySelectorAll(".crm-assign").forEach((btn) => {
+      btn.addEventListener("click", () => void crmAssign(btn.getAttribute("data-crm-assign")));
+    });
+    box.querySelectorAll(".crm-tag").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        void crmSetTag(btn.getAttribute("data-crm-tag"), btn.getAttribute("data-next"))
+      );
+    });
+  }
+
+  async function loadCrmDesk() {
+    if (!token()) {
+      setStatus("Enter admin token.", true);
+      return;
+    }
+    const params = new URLSearchParams();
+    const tag = el("crm-filter-tag")?.value || "";
+    const win = el("crm-filter-window")?.value || "any";
+    const q = el("crm-filter-q")?.value?.trim() || "";
+    if (tag) params.set("tag", tag);
+    if (win) params.set("window", win);
+    if (q) params.set("q", q);
+    try {
+      const res = await fetch(`${SUPPORT_API}/crm/contacts?${params}`, { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Could not load CRM.", true);
+        return;
+      }
+      renderCrmTable(data.contacts || []);
+      setStatusQuiet(`${data.count || 0} CRM contact(s).`);
+    } catch {
+      setStatus("Network error loading CRM.", true);
+    }
+  }
+
+  async function crmSetTag(customerKey, tag) {
+    if (!customerKey || !token()) return;
+    try {
+      const res = await fetch(`${SUPPORT_API}/crm/tag`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ customerKey, tag }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Tag failed.", true);
+        return;
+      }
+      setStatus(`Tagged ${customerKey} → ${tag}.`);
+      void loadCrmDesk();
+    } catch {
+      setStatus("Network error tagging contact.", true);
+    }
+  }
+
+  async function crmAssign(customerKey) {
+    if (!customerKey || !token()) return;
+    try {
+      const res = await fetch(`${SUPPORT_API}/crm/assign`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ customerKey, reason: "assign_agent" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Assign failed.", true);
+        return;
+      }
+      setStatus(
+        data.alreadyAssigned
+          ? `Already with a human (${data.ticketId || "open"}).`
+          : `Assigned ${data.ticketId || "human"} — bot paused.`
+      );
+      void loadCrmDesk();
+    } catch {
+      setStatus("Network error assigning agent.", true);
+    }
+  }
+
+  function showCrmBroadcastOut(text) {
+    const box = el("crm-broadcast-out");
+    if (!box) return;
+    box.classList.remove("hidden");
+    box.textContent = text || "";
+  }
+
+  async function crmBroadcast({ confirm = false } = {}) {
+    if (!token()) {
+      setStatus("Enter admin token.", true);
+      return;
+    }
+    const payload = {
+      tag: el("crm-broadcast-tag")?.value || "interested",
+      templateName: el("crm-broadcast-template")?.value || "follow_up",
+      message: el("crm-broadcast-message")?.value?.trim() || "",
+      sinceDays: Number(el("crm-broadcast-since")?.value || 7) || 7,
+      dryRun: !confirm,
+      confirm,
+    };
+    if (confirm) {
+      const ok = window.confirm(
+        `Send to "${payload.tag}" contacts from the last ${payload.sinceDays} day(s)? Free-form inside 24h; template after.`
+      );
+      if (!ok) return;
+    }
+    try {
+      const res = await fetch(`${SUPPORT_API}/crm/broadcast`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.message || data.error || "Broadcast failed.", true);
+        showCrmBroadcastOut(data.message || data.error || "Broadcast failed.");
+        return;
+      }
+      setStatus(data.message || (confirm ? "Broadcast sent." : "Dry run ready."));
+      showCrmBroadcastOut(
+        [
+          data.message,
+          `free-form ${data.freeform || 0} · template ${data.templated || 0} · total ${data.total || 0}`,
+          (data.preview || [])
+            .map((p) => `${p.mode} → ${p.chatId}: ${String(p.body || "").slice(0, 80)}`)
+            .join("\n"),
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+    } catch {
+      setStatus("Network error broadcasting.", true);
+    }
+  }
+
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(() => {
@@ -593,10 +769,20 @@
     } else if (activeTab === "orders") void loadOrdersDesk();
     else if (activeTab === "payments") void loadPaymentsDesk();
     else if (activeTab === "payouts") void loadPayoutsDesk();
+    else if (activeTab === "crm") void loadCrmDesk();
   });
   el("orders-refresh")?.addEventListener("click", () => void loadOrdersDesk());
   el("payments-refresh")?.addEventListener("click", () => void loadPaymentsDesk());
   el("payouts-refresh")?.addEventListener("click", () => void loadPayoutsDesk());
+  el("crm-refresh")?.addEventListener("click", () => void loadCrmDesk());
+  el("crm-filter-tag")?.addEventListener("change", () => void loadCrmDesk());
+  el("crm-filter-window")?.addEventListener("change", () => void loadCrmDesk());
+  el("crm-filter-q")?.addEventListener("change", () => void loadCrmDesk());
+  el("crm-broadcast-form")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    void crmBroadcast({ confirm: false });
+  });
+  el("crm-broadcast-send")?.addEventListener("click", () => void crmBroadcast({ confirm: true }));
   el("reply-form")?.addEventListener("submit", sendReply);
   el("resolve-btn")?.addEventListener("click", resolveThread);
   el("admin-token")?.addEventListener("change", () => {
