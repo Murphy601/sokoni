@@ -13,19 +13,26 @@ import { executeOpsTool, OPS_TOOL_NAMES } from "./ops-tools.js";
 export { OPS_TOOL_NAMES };
 
 export const OPS_SYSTEM_PROMPT = `You are the Sokoni Mall ops assistant for staff only.
-You help check prepaid M-Pesa escrow, sellers, riders, store policies, order history, and buyer-seller inquiry volume, then you may WhatsApp a registered contact.
+You can look up the live platform and WhatsApp registered contacts. Always call a tool before you say you cannot do something.
+
+Tools:
+- get_order_metrics — total orders, by status, paid count (use for “how many orders”).
+- list_pending_escrow — every prepaid order still held (use for “pending escrow”).
+- get_platform_snapshot — held KES, pauses, open disputes.
+- list_open_disputes — open dispute tickets.
+- get_seller_roster / get_rider_roster — counts plus name and registered WhatsApp.
+- list_crm_contacts — tagged WhatsApp leads and 24h window.
+- search_catalog — live stock by keywords.
+- search_store_policies — escrow / returns / shipping FAQ (markdown if pgvector is empty).
+- check_escrow_status / lookup_order_history — one customer or SKN.
+- send_whatsapp_message — text to a registered seller, rider, or known buyer.
+- send_whatsapp_voice — TTS voice note to the same people (use when staff say “voice note”).
 
 Rules:
-- Use get_seller_roster for seller counts or contacts. It returns name, shop, and the WhatsApp they registered with.
-- Use get_rider_roster for rider counts or contacts. It returns name, phone, town, and status.
-- Use search_store_policies for refund, escrow, shipping, or FAQ questions. Quote the retrieved answer — do not invent policy.
-- Always look up the person first (seller/rider roster, check_escrow_status, or lookup_order_history) before send_whatsapp_message.
-- When staff ask for numbers, quote the name + phone from the tool. Do not invent contacts.
-- send_whatsapp_message can reach a registered seller, rider, or a buyer with an order/chat. Pass phone, or seller_name / rider_name.
-- Keep notes short, warm, and countrywide Kenya — no city-only marketing.
+- Look the person up first, then send. Quote name + phone from the tool. Never invent contacts or SKN ids.
+- Keep notes short, warm, countrywide Kenya.
 - Do not release escrow, refund, or change payouts. Those stay on the admin desk.
-- If a tool returns an error, explain it in plain language. Do not retry a send that already succeeded.
-- Reply to the staff operator with what you found and what you sent.`;
+- If a tool errors, explain it in plain language. Do not retry a send that already succeeded.`;
 
 export const OPS_TOOLS = [
   {
@@ -40,6 +47,51 @@ export const OPS_TOOLS = [
             type: "string",
             description: "today | 24h | 7d | this_week | 30d",
           },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_order_metrics",
+      description: "Platform-wide order counts: total, by status, paid, held in escrow. Use for “how many orders”.",
+      parameters: {
+        type: "object",
+        properties: {
+          date_range: { type: "string", description: "all | today | 7d | 30d" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_platform_snapshot",
+      description: "Held escrow KES, paused orders, open disputes. No till numbers.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_pending_escrow",
+      description: "List prepaid orders still in escrow across the platform.",
+      parameters: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_open_disputes",
+      description: "Open or under-review dispute tickets.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", description: "open | all" },
         },
       },
     },
@@ -72,6 +124,35 @@ export const OPS_TOOLS = [
             description: "Optional filter: PENDING | VERIFIED | SUSPENDED | REJECTED",
           },
           q: { type: "string", description: "Optional rider name or phone filter" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_crm_contacts",
+      description: "WhatsApp CRM contacts with tag and 24-hour window.",
+      parameters: {
+        type: "object",
+        properties: {
+          tag: { type: "string" },
+          q: { type: "string" },
+          window: { type: "string", description: "any | inside | outside" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_catalog",
+      description: "Search live Sokoni stock by keywords.",
+      parameters: {
+        type: "object",
+        properties: {
+          keywords: { type: "string" },
+          q: { type: "string" },
         },
       },
     },
@@ -136,6 +217,24 @@ export const OPS_TOOLS = [
           rider_name: { type: "string", description: "Resolve the rider’s registered WhatsApp" },
           text: { type: "string" },
           order_id: { type: "string" },
+        },
+        required: ["text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp_voice",
+      description:
+        "Synthesize a short voice note (ElevenLabs / Groq / Grok) and send it via WAHA to a registered seller, rider, or known buyer.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone: { type: "string" },
+          seller_name: { type: "string" },
+          rider_name: { type: "string" },
+          text: { type: "string", description: "Spoken script, under 400 characters" },
         },
         required: ["text"],
       },
