@@ -656,6 +656,82 @@
     }
   }
 
+  const opsHistory = [];
+
+  function appendOpsLine(kind, html) {
+    const log = el("ops-agent-log");
+    if (!log) return;
+    const wrap = document.createElement("div");
+    wrap.className =
+      kind === "user"
+        ? "rounded-2xl bg-white border border-black/5 px-3 py-2"
+        : kind === "error"
+          ? "rounded-2xl bg-red-50 border border-red-100 px-3 py-2 text-red-800"
+          : "rounded-2xl bg-white border border-black/5 px-3 py-2";
+    wrap.innerHTML = html;
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function loadOpsMeta() {
+    const node = el("ops-agent-meta");
+    if (!node || !token()) return;
+    try {
+      const res = await fetch(`${CMD_API}/ops-agent`, { headers: adminHeaders() });
+      const data = await res.json();
+      if (!res.ok) return;
+      const model = data.primaryModel || "no model key";
+      node.textContent = `${data.primaryProvider || "offline"} · ${model}`;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function runOpsAgent(prompt) {
+    const message = String(prompt || "").trim();
+    if (!message) return;
+    if (!token()) {
+      setStatus("Enter admin token first.", true);
+      return;
+    }
+    appendOpsLine("user", `<p class="font-semibold">You</p><p>${escapeHtml(message)}</p>`);
+    el("ops-agent-input").value = "";
+    try {
+      const res = await fetch(`${CMD_API}/ops-agent`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          message,
+          history: opsHistory.slice(-8),
+          dryRun: Boolean(el("ops-agent-dry")?.checked),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data.reply) {
+        appendOpsLine("error", `<p>${escapeHtml(data.message || data.error || "Agent failed.")}</p>`);
+        return;
+      }
+      const tools = (data.tools || [])
+        .map((t) => {
+          const status = t.result?.ok ? "ok" : t.result?.error || "error";
+          return `<code class="text-[11px]">${escapeHtml(t.tool)} · ${escapeHtml(status)}</code>`;
+        })
+        .join(" ");
+      appendOpsLine(
+        "assistant",
+        `<p class="font-semibold">Agent</p><p class="whitespace-pre-wrap">${escapeHtml(data.reply || "")}</p>${
+          tools ? `<p class="mt-2 flex flex-wrap gap-2">${tools}</p>` : ""
+        }`
+      );
+      if (data.reply) {
+        opsHistory.push({ role: "user", content: message });
+        opsHistory.push({ role: "assistant", content: data.reply });
+      }
+    } catch {
+      appendOpsLine("error", "<p>Network error talking to the bot.</p>");
+    }
+  }
+
   function bindUi() {
     const tokenInput = el("admin-token");
     if (tokenInput) {
@@ -684,6 +760,10 @@
         void runSmartSearch(el("smart-q")?.value);
       }
     });
+    el("ops-agent-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      void runOpsAgent(el("ops-agent-input")?.value);
+    });
   }
 
   bindUi();
@@ -693,11 +773,13 @@
   });
   if (token()) {
     void loadDashboard();
+    void loadOpsMeta();
     startDashboardPolling();
   } else setStatus("Enter admin token to load the holding tank.");
   el("admin-token")?.addEventListener("change", () => {
     if (token()) {
       void loadDashboard();
+      void loadOpsMeta();
       startDashboardPolling();
     }
   });
