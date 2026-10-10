@@ -200,15 +200,18 @@ describe("tagged broadcast", () => {
 });
 
 describe("Groq-first voice notes", () => {
-  it("tries Groq Whisper before OpenRouter", () => {
+  it("tries Groq Whisper, then Grok, then OpenRouter", () => {
     const src = readFileSync(new URL("./commerce-ops.js", import.meta.url), "utf8");
     const fn = src.slice(src.indexOf("export async function transcribeWhatsAppAudio"));
     const groqAt = fn.indexOf("config.groq");
+    const grokAt = fn.indexOf("transcribeWithGrok");
     const openrouterAt = fn.indexOf("config.openai");
     assert.ok(groqAt > 0, "Groq STT must be present");
-    assert.ok(openrouterAt > groqAt, "OpenRouter STT must follow Groq");
+    assert.ok(grokAt > groqAt, "Grok STT must follow Groq");
+    assert.ok(openrouterAt > grokAt, "OpenRouter STT must follow Grok");
     assert.match(fn, /whisper-large-v3-turbo/);
     assert.match(fn, /provider:\s*"groq"/);
+    assert.match(src, /voiceAudioFilename/);
   });
 });
 

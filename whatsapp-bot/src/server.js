@@ -50,6 +50,7 @@ import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
 import { masMeta } from "./services/mas/index.js";
 import { elevenLabsHealth } from "./services/elevenlabs-tts.js";
+import { voiceTtsHealth } from "./services/voice-tts.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
 import {
   corsAllowlist,
@@ -268,6 +269,13 @@ app.get("/health", async (_req, res) => {
     paystackOnly: checkout.paystackOnly !== false,
     b2c: { ready: Boolean(b2c.ready), auto: Boolean(b2c.auto) },
     elevenlabs: { configured: Boolean(voice.configured), ttsEnabled: Boolean(voice.ttsEnabled) },
+    voice: (() => {
+      try {
+        return voiceTtsHealth();
+      } catch {
+        return { ready: Boolean(voice.configured), elevenlabs: voice };
+      }
+    })(),
   });
 });
 

@@ -56,6 +56,24 @@ export const config = {
       .filter(Boolean),
     /** Free Whisper STT — Groq first (voice notes). OpenRouter is fallback only. */
     sttModel: process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3-turbo",
+    /** Orpheus TTS — WAV for WAHA sendVoice. 200-char chunks. */
+    ttsModel: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
+    ttsVoice: process.env.GROQ_TTS_VOICE || "autumn",
+  },
+  /**
+   * xAI Grok voice — STT + TTS fallback when Groq / ElevenLabs miss.
+   * XAI_API_KEY or GROK_API_KEY.
+   */
+  grok: {
+    apiKey: process.env.XAI_API_KEY || process.env.GROK_API_KEY || "",
+    baseUrl: (process.env.XAI_BASE_URL || "https://api.x.ai/v1").replace(/\/$/, ""),
+    sttModel: process.env.XAI_STT_MODEL || "grok-voice-transcribe-2.0",
+    ttsVoice: process.env.XAI_TTS_VOICE || "eve",
+    ttsLanguage: process.env.XAI_TTS_LANGUAGE || "en",
+  },
+  /** TTS provider order for WhatsApp voice replies. */
+  voice: {
+    ttsOrder: process.env.VOICE_TTS_ORDER || "elevenlabs,groq,grok",
   },
   /**
    * WhatsApp mini-CRM (intent tags + Meta 24h session window).

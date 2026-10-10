@@ -521,9 +521,11 @@ async function transcribeWithClient({
   mimetype,
   languageHint,
 }) {
+  const { voiceAudioFilename } = await import("../lib/voice-audio.js");
   const OpenAI = (await import("openai")).default;
   const client = new OpenAI({ apiKey, baseURL });
-  const file = new File([buffer], "voice.ogg", { type: mimetype || "audio/ogg" });
+  const filename = voiceAudioFilename(mimetype);
+  const file = new File([buffer], filename, { type: mimetype || "audio/ogg" });
   const lang = languageHint === "sw" || languageHint === "en" ? languageHint : undefined;
   const params = { file, model };
   if (lang) params.language = lang;
@@ -550,7 +552,7 @@ async function tryMasVoiceFallback({ buffer, mimetype, languageHint, label }) {
 }
 
 /**
- * Voice → text. Groq Whisper first (free tier), then OpenRouter, then MAS.
+ * Voice → text. Groq Whisper first (ogg/m4a as-is), then Grok, then OpenRouter, then MAS.
  * Pass languageHint "sw" | "en" when known (Kiswahili / English); omit for auto.
  */
 export async function transcribeWhatsAppAudio({
@@ -580,6 +582,14 @@ export async function transcribeWhatsAppAudio({
     } catch (err) {
       console.warn("[commerce-ops] groq whisper:", err.message);
     }
+  }
+
+  try {
+    const { transcribeWithGrok } = await import("./grok-voice.js");
+    const grok = await transcribeWithGrok({ buffer, mimetype, languageHint });
+    if (grok.ok && grok.text) return grok;
+  } catch (err) {
+    console.warn("[commerce-ops] grok stt:", err.message);
   }
 
   if (config.openai?.apiKey) {
