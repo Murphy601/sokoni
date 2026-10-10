@@ -7,6 +7,7 @@ import {
   resetOpsSendLimiter,
   checkEscrowStatus,
   getInquiryMetrics,
+  getRiderRoster,
 } from "./ops-tools.js";
 import {
   parseToolArguments,
@@ -14,6 +15,7 @@ import {
   runOpsAgentTurn,
   OPS_TOOL_NAMES,
   opsAgentMeta,
+  opsAgentGroqModels,
 } from "./ops-agent.js";
 
 beforeEach(() => resetOpsSendLimiter());
@@ -72,6 +74,21 @@ describe("ops tool argument guards", () => {
     assert.equal(metrics.ok, true);
     assert.equal(metrics.tool, "get_inquiry_metrics");
     assert.ok(["postgres", "file_store"].includes(metrics.source) || metrics.source);
+  });
+
+  it("rider roster is a named tool and fails soft without Postgres", async () => {
+    const viaName = await executeOpsTool("get_rider_roster", {});
+    assert.equal(viaName.tool, "get_rider_roster");
+    assert.ok(viaName.ok === true || viaName.error === "database_offline" || viaName.error === "list_failed");
+
+    const direct = await getRiderRoster({ status: "VERIFIED" });
+    assert.equal(direct.tool, "get_rider_roster");
+    if (direct.ok) {
+      assert.equal(typeof direct.registered, "number");
+      assert.ok(direct.counts);
+    } else {
+      assert.ok(["database_offline", "list_failed", "database_not_configured"].includes(direct.error));
+    }
   });
 });
 
@@ -193,5 +210,11 @@ describe("ops agent execution loop", () => {
     assert.deepEqual(meta.tools, OPS_TOOL_NAMES);
     assert.equal(meta.style, "openai_tool_calling");
     assert.match(meta.note, /Plug/);
+  });
+
+  it("lists a Groq chat model for the ops agent", () => {
+    const models = opsAgentGroqModels();
+    assert.ok(models.length >= 1);
+    assert.match(models[0], /gpt-oss|llama|groq/i);
   });
 });
