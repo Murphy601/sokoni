@@ -26,6 +26,7 @@ let sendTimestamps = [];
 export const OPS_TOOL_NAMES = [
   "get_inquiry_metrics",
   "get_rider_roster",
+  "search_store_policies",
   "check_escrow_status",
   "lookup_order_history",
   "send_whatsapp_message",
@@ -414,6 +415,13 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
   try {
     if (tool === "get_inquiry_metrics") return await getInquiryMetrics({ dateRange: args.date_range || args.dateRange }, extras.now);
     if (tool === "get_rider_roster") return await getRiderRoster(args);
+    if (tool === "search_store_policies") {
+      const { searchStorePolicies } = await import("./knowledge-rag.js");
+      return searchStorePolicies(args.query || args.question || args.q, {
+        limit: args.limit,
+        minSimilarity: args.min_similarity || args.minSimilarity,
+      });
+    }
     if (tool === "check_escrow_status") return await checkEscrowStatus(args, extras.now);
     if (tool === "lookup_order_history") return await lookupOrderHistory(args);
     if (tool === "send_whatsapp_message") return await sendWhatsAppMessage(args, extras);

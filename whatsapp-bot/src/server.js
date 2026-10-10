@@ -511,6 +511,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startTokenRefreshScheduler();
   startTiktokScheduler();
   startExecutiveBriefingScheduler();
+  startReorderReminderScheduler();
   startPayoutScheduler();
   startOrderCommunicationScheduler();
   startFeedScheduler();
@@ -841,4 +842,31 @@ function startExecutiveBriefingScheduler() {
     .catch((err) => console.warn("[staff-roles] seed:", err.message));
 
   console.log(`✓ Boss briefing cron enabled (${tz})`);
+}
+
+/** Daily consumable re-order nudges (default 09:00 EAT). Numbered 1 / 2 replies. */
+function startReorderReminderScheduler() {
+  if (/^(0|false|off|no)$/i.test(String(process.env.REORDER_REMINDER_ENABLED || "true"))) {
+    console.log("⚠️ Re-order reminder cron disabled (REORDER_REMINDER_ENABLED=false)");
+    return;
+  }
+  const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  let lastKey = "";
+  setInterval(() => {
+    const now = clockInTimezone(tz);
+    import("./services/reorder-reminders.js")
+      .then(async ({ REORDER_HOUR_EAT, sendReorderReminders }) => {
+        const hour = REORDER_HOUR_EAT;
+        if (now.hour === hour && now.minute === 0) {
+          const key = `${now.dateKey}-${hour}`;
+          if (key !== lastKey) {
+            lastKey = key;
+            const r = await sendReorderReminders();
+            console.log("[reorder] daily sent:", r.sent, "candidates:", r.candidates);
+          }
+        }
+      })
+      .catch((err) => console.warn("[reorder] cron:", err.message));
+  }, 60_000);
+  console.log(`✓ Re-order reminder cron enabled (${tz})`);
 }

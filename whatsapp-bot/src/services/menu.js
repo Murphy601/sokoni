@@ -1587,6 +1587,17 @@ export async function handleMenuAction(from, id) {
   if (id.startsWith("pay_offer_")) {
     return startPrepaidOrderFromOffer(from, id.replace(/^pay_offer_/i, ""));
   }
+  if (id.startsWith("reorder_now_")) {
+    const productId = id.replace("reorder_now_", "");
+    return startPrepaidOrder(from, productId);
+  }
+  if (id.startsWith("reorder_week_")) {
+    const orderId = id.replace("reorder_week_", "");
+    const { snoozeReorderReminder } = await import("./reorder-reminders.js");
+    const meta = getCustomerMeta(from) || {};
+    await snoozeReorderReminder({ orderId, phone: meta.phone || from, days: 7 });
+    return sendText(from, "Sawa — I'll nudge you again in a week. Type *menu* anytime.");
+  }
   if (id.startsWith("order_")) return startPrepaidOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);

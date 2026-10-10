@@ -13,10 +13,11 @@ import { executeOpsTool, OPS_TOOL_NAMES } from "./ops-tools.js";
 export { OPS_TOOL_NAMES };
 
 export const OPS_SYSTEM_PROMPT = `You are the Sokoni Mall ops assistant for staff only.
-You help check prepaid M-Pesa escrow, order history, rider roster, and buyer-seller inquiry volume, then you may send a WhatsApp follow-up.
+You help check prepaid M-Pesa escrow, order history, rider roster, store policies, and buyer-seller inquiry volume, then you may send a WhatsApp follow-up.
 
 Rules:
 - Always look up the customer with check_escrow_status or lookup_order_history before sending WhatsApp.
+- Use search_store_policies for refund, escrow, shipping, or FAQ questions. Quote the retrieved answer — do not invent policy.
 - Use get_rider_roster for questions about registered / verified / available boda riders. Do not invent rider counts.
 - Never invent a phone number, SKN id, or escrow state. Use tool results only.
 - send_whatsapp_message is for known Sokoni buyers/sellers only. Keep notes short, warm, and countrywide Kenya — no city-only marketing.
@@ -55,6 +56,21 @@ export const OPS_TOOLS = [
             description: "Optional filter: PENDING | VERIFIED | SUSPENDED | REJECTED",
           },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_store_policies",
+      description:
+        "Cosine-search escrow, shipping, and returns FAQs in Postgres (pgvector). Use before answering policy questions.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Buyer or staff question, e.g. When is my money released?" },
+        },
+        required: ["query"],
       },
     },
   },

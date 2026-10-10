@@ -1292,9 +1292,17 @@ export async function updateSellerListingStock({ phone, productId, stockQuantity
   }
 
   try {
-    const { notifySellerLowStock } = await import("./inventory-alerts.js");
+    const { notifySellerLowStock, notifyAdminLowStock } = await import("./inventory-alerts.js");
     await notifySellerLowStock(updated, { reason: "stock_saved" });
+    await notifyAdminLowStock(updated);
   } catch {}
+
+  if (qty > 0) {
+    try {
+      const { notifyWaitlistOnRestock } = await import("./product-waitlist.js");
+      await notifyWaitlistOnRestock(updated);
+    } catch {}
+  }
 
   return {
     success: true,
@@ -1388,8 +1396,17 @@ export async function updateSellerListingVariants({ phone, productId, variants, 
   }
 
   try {
-    const { notifySellerLowStock } = await import("./inventory-alerts.js");
+    const { notifySellerLowStock, notifyAdminLowStock } = await import("./inventory-alerts.js");
     await notifySellerLowStock(updated, { reason: "variants_saved" });
+    await notifyAdminLowStock(updated);
+  } catch {}
+
+  try {
+    const { productStockOnHand } = await import("./product-availability.js");
+    if (productStockOnHand(updated) > 0) {
+      const { notifyWaitlistOnRestock } = await import("./product-waitlist.js");
+      await notifyWaitlistOnRestock(updated);
+    }
   } catch {}
 
   const { listProductVariants, productStockOnHand } = await import("./product-availability.js");
