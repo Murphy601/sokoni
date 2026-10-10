@@ -706,7 +706,17 @@
           dryRun: Boolean(el("ops-agent-dry")?.checked),
         }),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        appendOpsLine(
+          "error",
+          `<p>Bot returned HTTP ${res.status} without JSON. Redeploy this branch (skip WAHA) so <code>/admin/command/ops-agent</code> exists.</p>`
+        );
+        return;
+      }
       if (!res.ok && !data.reply) {
         appendOpsLine("error", `<p>${escapeHtml(data.message || data.error || "Agent failed.")}</p>`);
         return;
@@ -727,8 +737,11 @@
         opsHistory.push({ role: "user", content: message });
         opsHistory.push({ role: "assistant", content: data.reply });
       }
-    } catch {
-      appendOpsLine("error", "<p>Network error talking to the bot.</p>");
+    } catch (err) {
+      appendOpsLine(
+        "error",
+        `<p>Could not reach ${escapeHtml(CMD_API)}/ops-agent. ${escapeHtml(err?.message || "Network error")}.</p>`
+      );
     }
   }
 
