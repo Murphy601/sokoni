@@ -15,6 +15,7 @@ import {
   runOpsAgentTurn,
   OPS_TOOL_NAMES,
   opsAgentMeta,
+  opsAgentGroqModels,
 } from "./ops-agent.js";
 
 beforeEach(() => resetOpsSendLimiter());
@@ -209,5 +210,11 @@ describe("ops agent execution loop", () => {
     assert.deepEqual(meta.tools, OPS_TOOL_NAMES);
     assert.equal(meta.style, "openai_tool_calling");
     assert.match(meta.note, /Plug/);
+  });
+
+  it("lists a Groq chat model for the ops agent", () => {
+    const models = opsAgentGroqModels();
+    assert.ok(models.length >= 1);
+    assert.match(models[0], /gpt-oss|llama|groq/i);
   });
 });

@@ -141,10 +141,11 @@ export const config = {
   },
   /**
    * Admin ops agent (tool calling). Separate from Plug shopper chat.
-   * OpenRouter free models first, NVIDIA NIM fallback.
+   * OpenRouter free models first, then Groq (already on the VM), then NVIDIA NIM.
    */
   opsAgent: {
     openrouterModels: process.env.OPS_AGENT_OPENROUTER_MODELS || "",
+    groqModels: process.env.OPS_AGENT_GROQ_MODELS || "",
     nvidiaModels: process.env.OPS_AGENT_NVIDIA_MODELS || "",
     dryRun: /^(1|true|yes|on)$/i.test(String(process.env.OPS_AGENT_DRY_RUN || "").trim()),
   },

@@ -128,9 +128,17 @@ export function opsAgentNvidiaModels() {
   );
 }
 
+export function opsAgentGroqModels() {
+  return csvList(
+    config.opsAgent?.groqModels,
+    config.groq?.model || "openai/gpt-oss-20b"
+  );
+}
+
 export function buildOpsProviderChain() {
   const chain = [];
   const openrouterKey = config.openai?.apiKey?.trim();
+  const groqKey = config.groq?.apiKey?.trim();
   const nvidiaKey = config.nvidia?.apiKey?.trim();
 
   if (openrouterKey) {
@@ -146,6 +154,17 @@ export function buildOpsProviderChain() {
         },
       }),
       models: opsAgentOpenRouterModels(),
+    });
+  }
+  if (groqKey) {
+    chain.push({
+      name: "groq",
+      client: new OpenAI({
+        apiKey: groqKey,
+        baseURL: config.groq.baseUrl || "https://api.groq.com/openai/v1",
+        timeout: 28_000,
+      }),
+      models: opsAgentGroqModels(),
     });
   }
   if (nvidiaKey) {
@@ -229,7 +248,7 @@ async function completeWithTools(messages, { completeFn } = {}) {
   }
   const chain = buildOpsProviderChain();
   if (!chain.length) {
-    throw new Error("No ops-agent key (set OPENAI_API_KEY and/or NVIDIA_API_KEY)");
+    throw new Error("No ops-agent key (set OPENAI_API_KEY, GROQ_API_KEY, and/or NVIDIA_API_KEY)");
   }
   let lastError = null;
   for (const provider of chain) {
