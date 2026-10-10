@@ -13,6 +13,7 @@ import {
   tryNumberedMenuReply,
 } from "../services/menu.js";
 import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend, resolveWahaLidToPhone, extractWahaProductMessage } from "../services/whatsapp.js";
+import { extractWahaOrderCart } from "../services/whatsapp-native-cart.js";
 import { withVoiceReply, flushVoiceReply } from "../services/voice-reply.js";
 import { looksLikeVoiceNoteMime, isExplicitAudioRequest } from "../lib/voice-text-first.js";
 import { runAiAgent } from "../services/ai.js";
@@ -235,7 +236,8 @@ export function parseWahaMessage(body) {
   const mediaInfo = extractMedia(payload);
   const location = extractWahaLocation(payload);
   const hasProductCard = Boolean(extractWahaProductMessage(payload));
-  if (!text && !mediaInfo.hasMedia && !hasProductCard && !location) return null;
+  const hasNativeCart = Boolean(extractWahaOrderCart(payload));
+  if (!text && !mediaInfo.hasMedia && !hasProductCard && !hasNativeCart && !location) return null;
   if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
 
   const quotedText = extractQuotedText(payload);
@@ -344,6 +346,7 @@ export async function handleIncomingMessage(
     messageId = null,
     wahaSession = null,
     location = null,
+    rawPayload = null,
   } = {}
 ) {
   // If still @lid with no phone, try WAHA lids API once more
@@ -910,6 +913,22 @@ export async function handleIncomingMessage(
     return sendMainMenu(customerKey);
   }
 
+  try {
+    const { startNativeWhatsAppCart, extractWahaOrderCart } = await import("../services/whatsapp-native-cart.js");
+    if (extractWahaOrderCart(rawPayload) && (await startNativeWhatsAppCart(customerKey, rawPayload))) {
+      return;
+    }
+  } catch (err) {
+    console.warn("[webhook] native cart skipped:", err.message);
+  }
+
+  try {
+    const { tryHandleWaitlistAsk } = await import("../services/product-waitlist.js");
+    if (await tryHandleWaitlistAsk(customerKey, combinedText || text, { phone })) return;
+  } catch (err) {
+    console.warn("[webhook] waitlist skipped:", err.message);
+  }
+
   if (normalized === "cart" || normalized === "my cart" || normalized === "my cart?") {
     return handleCart(customerKey);
   }
@@ -1252,7 +1271,7 @@ export async function handleWahaWebhook(body) {
     return;
   }
 
-  if (!parsed.text && !parsed.hasMedia && !parsed.location) return;
+  if (!parsed.text && !parsed.hasMedia && !parsed.location && !extractWahaOrderCart(parsed.rawPayload)) return;
 
   const runTurn = () =>
     handleIncomingMessage(parsed.customerKey, parsed.text || "", {
@@ -1267,6 +1286,7 @@ export async function handleWahaWebhook(body) {
       messageId: parsed.messageId,
       wahaSession: parsed.session,
       location: parsed.location || null,
+      rawPayload: parsed.rawPayload || null,
     });
 
   const incomingVoiceNote =

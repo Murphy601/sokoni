@@ -3,6 +3,7 @@
  * Threshold matches Seller Hub badge (LOW_STOCK_THRESHOLD).
  */
 import { getSupplier } from "./suppliers.js";
+import { config } from "../config.js";
 import {
   LOW_STOCK_THRESHOLD,
   isLowStock,
@@ -10,6 +11,8 @@ import {
   productStockOnHand,
 } from "./product-availability.js";
 import { msgSellerLowStock, sellerHubRestockUrl } from "../lib/wa-ux.js";
+
+export const ADMIN_LOW_STOCK_UNITS = Number(process.env.ADMIN_LOW_STOCK_UNITS || 5) || 5;
 
 const lastAlertAt = new Map();
 const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h per product
@@ -73,9 +76,50 @@ export async function notifySellerLowStock(product, { reason = "stock_update" } 
       }
     }
     lastAlertAt.set(key, Date.now());
+    await notifyAdminLowStock(product, { onHand });
     return { ok: true, onHand, productId: product.id };
   } catch (err) {
     console.warn("[inventory-alerts]", err.message);
+    return { error: err.message };
+  }
+}
+
+export async function notifyAdminLowStock(product, { onHand } = {}) {
+  try {
+    const units = onHand != null ? Number(onHand) : productStockOnHand(product);
+    if (!(units <= ADMIN_LOW_STOCK_UNITS)) return { skipped: true, reason: "ok_stock" };
+    const key = `admin:${product?.id}:${units === 0 ? "zero" : "low"}`;
+    const prev = lastAlertAt.get(key) || 0;
+    if (Date.now() - prev < ALERT_COOLDOWN_MS) return { skipped: true, reason: "cooldown" };
+
+    const admins = [
+      ...new Set(
+        [...(config.admin?.phones || []), config.admin?.primary]
+          .map((p) => String(p || "").replace(/\D/g, ""))
+          .filter((p) => p.length >= 9)
+      ),
+    ];
+    if (!admins.length) return { skipped: true, reason: "no_admin" };
+
+    const name = product?.name || product?.id || "listing";
+    const body =
+      `⚠️ *Low stock*\n\n` +
+      `• *${name}*\n` +
+      `• Units: *${units}* (alert under ${ADMIN_LOW_STOCK_UNITS})\n` +
+      `Seller Hub restock: ${sellerHubRestockUrl()}`;
+
+    const { sendText } = await import("./whatsapp.js");
+    for (const phone of admins) {
+      try {
+        await sendText(`${phone}@c.us`, body);
+      } catch (err) {
+        console.warn("[inventory-alerts] admin send failed:", phone, err.message);
+      }
+    }
+    lastAlertAt.set(key, Date.now());
+    return { ok: true, onHand: units };
+  } catch (err) {
+    console.warn("[inventory-alerts] admin:", err.message);
     return { error: err.message };
   }
 }

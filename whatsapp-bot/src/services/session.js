@@ -182,6 +182,10 @@ export function setProductContext(phoneNumber, product) {
   scheduleDurablePersist(phoneNumber);
 }
 
+export function getProductContext(phoneNumber) {
+  return getSession(phoneNumber).lastProductContext || null;
+}
+
 /**
  * Prepaid order state. When a customer taps "Order" we stash the
  * chosen product and wait for checkout steps in the next messages.

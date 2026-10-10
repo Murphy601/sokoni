@@ -179,15 +179,32 @@ function guessCategory(docId) {
 /**
  * Keyword RAG-lite. Tries DB platform_knowledge when available (embeddings optional).
  */
-export async function retrieveKnowledgeAsync(query, { limit = 2, specialist = "general" } = {}) {
+export async function retrieveKnowledgeAsync(query, { limit = 3, specialist = "general" } = {}) {
+  const cap = Math.max(1, Math.min(5, limit));
+  const merged = [];
+  const seen = new Set();
+  const take = (rows) => {
+    for (const row of rows || []) {
+      const key = String(row.id || row.excerpt || "").slice(0, 80);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(row);
+      if (merged.length >= cap) return true;
+    }
+    return false;
+  };
+
   try {
-    const { retrievePlatformKnowledge } = await import("./knowledge-rag.js");
-    const fromDb = await retrievePlatformKnowledge(query, { limit, specialist });
-    if (fromDb?.length) return fromDb;
+    const { searchStorePolicies, retrievePlatformKnowledge } = await import("./knowledge-rag.js");
+    const cosine = await searchStorePolicies(query, { limit: cap, minSimilarity: 0.7 });
+    if (take(cosine.hits)) return merged;
+    const fromDb = await retrievePlatformKnowledge(query, { limit: cap, specialist });
+    if (take(fromDb)) return merged;
   } catch {
     /* fall through to markdown */
   }
-  return retrieveKnowledge(query, { limit, specialist });
+  take(retrieveKnowledge(query, { limit: cap, specialist }));
+  return merged;
 }
 
 /**
