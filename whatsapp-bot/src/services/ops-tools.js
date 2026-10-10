@@ -27,18 +27,47 @@ export const OPS_TOOL_NAMES = [
   "get_inquiry_metrics",
   "get_order_metrics",
   "get_platform_snapshot",
+  "list_orders",
   "list_pending_escrow",
   "list_open_disputes",
   "get_seller_roster",
   "get_rider_roster",
   "list_crm_contacts",
   "search_catalog",
+  "search_catalog_items",
   "search_store_policies",
   "check_escrow_status",
+  "get_order_and_escrow_details",
   "lookup_order_history",
+  "add_restock_alert",
+  "create_mpesa_stk_push",
+  "confirm_item_dispatch",
+  "submit_inspection_photos",
+  "release_escrow_payout",
+  "raise_order_dispute",
+  "trigger_12h_dispatch_refund",
+  "schedule_reorder_reminder",
+  "process_incoming_voicenote",
+  "escalate_to_human_agent",
+  "notify_admin_ops",
   "send_whatsapp_message",
   "send_whatsapp_voice",
+  "send_whatsapp_buttons",
+  "send_whatsapp_list",
 ];
+
+const TOOL_ALIASES = {
+  get_order_and_escrow_details: "check_escrow_status",
+  search_catalog_items: "search_catalog",
+};
+
+function normalizeToolArgs(args = {}) {
+  const next = { ...args };
+  if (next.search_query && !next.query) next.query = next.search_query;
+  if (next.query && !next.keywords && !next.q) next.q = next.query;
+  if (next.buyer_phone && !next.phone_number) next.phone_number = next.buyer_phone;
+  return next;
+}
 
 export function parseDateRange(raw, now = Date.now()) {
   const key = String(raw || "7d")
@@ -361,7 +390,7 @@ export async function getRiderRoster(args = {}) {
 
 export async function checkEscrowStatus(args = {}, now = Date.now()) {
   const orderId = args.order_id || args.orderId;
-  const phoneNumber = args.phone_number || args.phoneNumber || args.phone;
+  const phoneNumber = args.phone_number || args.phoneNumber || args.phone || args.buyer_phone || args.buyerPhone;
   const customerName = args.customer_name || args.customerName;
   if (!orderId && !phoneNumber && !String(customerName || "").trim()) {
     return {
@@ -388,7 +417,7 @@ export async function checkEscrowStatus(args = {}, now = Date.now()) {
 
 export async function lookupOrderHistory(args = {}) {
   const orderId = args.order_id || args.orderId;
-  const phoneNumber = args.phone_number || args.phoneNumber || args.phone;
+  const phoneNumber = args.phone_number || args.phoneNumber || args.phone || args.buyer_phone || args.buyerPhone;
   const customerName = args.customer_name || args.customerName;
   const orders = findOrdersForOps({ orderId, phoneNumber, customerName });
   if (!orders.length) {
@@ -674,8 +703,11 @@ export async function sendWhatsAppVoice(args = {}, extras = {}) {
 }
 
 export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
-  const tool = String(name || "").trim();
-  const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {};
+  const requested = String(name || "").trim();
+  const tool = TOOL_ALIASES[requested] || requested;
+  const args = normalizeToolArgs(
+    rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {}
+  );
   try {
     if (tool === "get_inquiry_metrics") return await getInquiryMetrics({ dateRange: args.date_range || args.dateRange }, extras.now);
     if (tool === "get_order_metrics") {
@@ -685,6 +717,13 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "get_platform_snapshot") {
       const { getPlatformSnapshot } = await import("./ops-desk-reads.js");
       return getPlatformSnapshot();
+    }
+    if (tool === "list_orders") {
+      const { listOrders } = await import("./ops-desk-reads.js");
+      return listOrders(
+        { status: args.status, dateRange: args.date_range || args.dateRange, limit: args.limit },
+        extras.now
+      );
     }
     if (tool === "list_pending_escrow") {
       const { listPendingEscrow } = await import("./ops-desk-reads.js");
@@ -706,7 +745,7 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     }
     if (tool === "search_store_policies") {
       const { searchStorePolicies } = await import("./knowledge-rag.js");
-      return searchStorePolicies(args.query || args.question || args.q, {
+      return searchStorePolicies(args.query || args.search_query || args.question || args.q, {
         limit: args.limit,
         minSimilarity: args.min_similarity || args.minSimilarity,
       });
@@ -715,12 +754,64 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "lookup_order_history") return await lookupOrderHistory(args);
     if (tool === "send_whatsapp_message") return await sendWhatsAppMessage(args, extras);
     if (tool === "send_whatsapp_voice") return await sendWhatsAppVoice(args, extras);
-    return { ok: false, error: "unknown_tool", message: `Tool "${tool}" is not allowed.` };
+    if (tool === "add_restock_alert") {
+      const { addRestockAlert } = await import("./ops-desk-actions.js");
+      return addRestockAlert(args);
+    }
+    if (tool === "create_mpesa_stk_push") {
+      const { createMpesaStkPush } = await import("./ops-desk-actions.js");
+      return createMpesaStkPush(args, extras);
+    }
+    if (tool === "confirm_item_dispatch") {
+      const { confirmItemDispatch } = await import("./ops-desk-actions.js");
+      return confirmItemDispatch(args);
+    }
+    if (tool === "submit_inspection_photos") {
+      const { submitInspectionPhotos } = await import("./ops-desk-actions.js");
+      return submitInspectionPhotos(args);
+    }
+    if (tool === "release_escrow_payout") {
+      const { releaseEscrowPayout } = await import("./ops-desk-actions.js");
+      return releaseEscrowPayout(args);
+    }
+    if (tool === "raise_order_dispute") {
+      const { raiseOrderDispute } = await import("./ops-desk-actions.js");
+      return raiseOrderDispute(args);
+    }
+    if (tool === "trigger_12h_dispatch_refund") {
+      const { trigger12hDispatchRefund } = await import("./ops-desk-actions.js");
+      return trigger12hDispatchRefund(args);
+    }
+    if (tool === "schedule_reorder_reminder") {
+      const { scheduleReorderReminderTool } = await import("./ops-desk-actions.js");
+      return scheduleReorderReminderTool(args);
+    }
+    if (tool === "process_incoming_voicenote") {
+      const { processIncomingVoicenote } = await import("./ops-desk-actions.js");
+      return processIncomingVoicenote(args, extras);
+    }
+    if (tool === "escalate_to_human_agent") {
+      const { escalateToHumanAgent } = await import("./ops-desk-actions.js");
+      return escalateToHumanAgent(args, extras);
+    }
+    if (tool === "notify_admin_ops") {
+      const { notifyAdminOps } = await import("./ops-desk-actions.js");
+      return notifyAdminOps(args, extras);
+    }
+    if (tool === "send_whatsapp_buttons") {
+      const { sendWhatsAppButtons } = await import("./ops-desk-actions.js");
+      return sendWhatsAppButtons(args, extras);
+    }
+    if (tool === "send_whatsapp_list") {
+      const { sendWhatsAppList } = await import("./ops-desk-actions.js");
+      return sendWhatsAppList(args, extras);
+    }
+    return { ok: false, error: "unknown_tool", message: `Tool "${requested}" is not allowed.` };
   } catch (err) {
     return {
       ok: false,
       error: "tool_crashed",
-      tool,
+      tool: requested,
       message: String(err?.message || err).slice(0, 200),
     };
   }

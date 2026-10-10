@@ -142,6 +142,107 @@ describe("ops tool argument guards", () => {
       assert.ok("shop" in direct.sellers[0]);
     }
   });
+
+  it("lists order IDs instead of only counts", async () => {
+    const listed = await executeOpsTool("list_orders", { status: "all", limit: 10 });
+    assert.equal(listed.ok, true);
+    assert.equal(listed.tool, "list_orders");
+    assert.ok(Array.isArray(listed.orders));
+    assert.equal(typeof listed.count, "number");
+    if (listed.orders.length) {
+      assert.ok(listed.orders[0].orderId);
+      assert.ok("status" in listed.orders[0]);
+    }
+  });
+
+  it("accepts search_query and catalog item aliases", async () => {
+    const policy = await executeOpsTool("search_store_policies", { search_query: "How long does escrow last?" });
+    assert.equal(policy.tool, "search_store_policies");
+    assert.ok(policy.ok === true || policy.hits);
+
+    const catalog = await executeOpsTool("search_catalog_items", { query: "jacket", max_price: 5000 });
+    assert.equal(catalog.tool, "search_catalog");
+    assert.ok(Array.isArray(catalog.products));
+  });
+
+  it("keeps payout and 12h refund on the desk", async () => {
+    const release = await executeOpsTool("release_escrow_payout", {
+      order_id: "SKN-1016",
+      release_reason: "BUYER_CONFIRMED",
+    });
+    assert.equal(release.ok, false);
+    assert.equal(release.error, "desk_only");
+
+    const refund = await executeOpsTool("trigger_12h_dispatch_refund", { order_id: "SKN-1016" });
+    assert.equal(refund.ok, false);
+    assert.equal(refund.error, "desk_only");
+  });
+
+  it("refuses STK without a real SKN order", async () => {
+    const missing = await executeOpsTool("create_mpesa_stk_push", {
+      phone_number: "254712345678",
+      total_amount: 999,
+      order_reference: "NOT-AN-ORDER",
+    });
+    assert.equal(missing.ok, false);
+    assert.ok(["missing_order", "order_not_found"].includes(missing.error));
+  });
+
+  it("sends interactive choices as numbered menus", async () => {
+    const buttons = await executeOpsTool(
+      "send_whatsapp_buttons",
+      {
+        phone_number: "254711111111",
+        message_text: "Did your package arrive?",
+        buttons: [
+          { id: "confirm_yes", title: "Yes, it arrived" },
+          { id: "speak_human", title: "Speak to Human" },
+        ],
+      },
+      { dryRun: true }
+    );
+    assert.equal(buttons.ok, true);
+    assert.equal(buttons.channel, "numbered_menu");
+    assert.match(buttons.body, /1\. Yes, it arrived/);
+
+    const list = await executeOpsTool(
+      "send_whatsapp_list",
+      {
+        phone_number: "254711111111",
+        menu_title: "View Categories",
+        message_text: "What are you looking for today?",
+        list_items: [
+          { id: "cat_shoes", title: "Vintage Shoes" },
+          { id: "cat_denim", title: "Denim" },
+        ],
+      },
+      { dryRun: true }
+    );
+    assert.equal(list.ok, true);
+    assert.equal(list.channel, "numbered_menu");
+    assert.match(list.body, /Vintage Shoes/);
+  });
+
+  it("validates waitlist, dispute, and voicenote args", async () => {
+    const wait = await executeOpsTool("add_restock_alert", { customer_phone: "2547" });
+    assert.equal(wait.ok, false);
+
+    const dispute = await executeOpsTool("raise_order_dispute", {
+      order_id: "SKN-0000",
+      dispute_reason: "empty parcel",
+      disputed_by: "BUYER",
+    });
+    assert.equal(dispute.ok, false);
+    assert.ok(["not_found", "missing_args"].includes(dispute.error));
+
+    const voice = await executeOpsTool(
+      "process_incoming_voicenote",
+      { media_url: "https://example.com/audio.ogg", sender_phone: "254711111111" },
+      { dryRun: true }
+    );
+    assert.equal(voice.ok, true);
+    assert.equal(voice.dryRun, true);
+  });
 });
 
 describe("free-model tool call parsing", () => {

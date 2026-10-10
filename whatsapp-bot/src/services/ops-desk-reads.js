@@ -139,13 +139,60 @@ export async function listOpenDisputes({ status = "open", limit = 20 } = {}) {
   }
 }
 
-export async function searchCatalog({ keywords, q, limit = 8 } = {}) {
+export function listOrders({ status, dateRange, limit = 40 } = {}, now = Date.now()) {
+  const cap = Math.min(80, Math.max(1, Number(limit) || 40));
+  const range = parseRange(dateRange, now);
+  const want = String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  let rows = listAllOrders().filter((o) => o.kind !== "cart_child");
+  if (range.sinceMs) {
+    rows = rows.filter((o) => {
+      const t = Number(o.createdAt) || 0;
+      return t >= range.sinceMs && t < range.untilMs;
+    });
+  }
+  if (want && want !== "all") {
+    rows = rows.filter((o) => {
+      const s = String(o.status || "").toLowerCase();
+      const e = String(o.escrowStatus || "").toLowerCase();
+      if (s === want || e === want) return true;
+      if (want === "held" || want === "escrow") return e === "held" || o.disputeHold || o.escrowPaused;
+      if (want === "paid") return Boolean(o.paidAt || o.customerPaymentStatus === "confirmed");
+      return false;
+    });
+  }
+  rows.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  const orders = rows.slice(0, cap).map((o) => ({
+    orderId: o.id,
+    status: o.status || null,
+    escrowStatus: o.escrowStatus || null,
+    productName: o.productName || null,
+    customerName: o.customerName || null,
+    phone: normalizeKenyaPhone(o.phone || o.mpesaPhone || o.customerKey) || null,
+    totalKes: Number(o.totalKes ?? o.buyerTotalKes ?? o.priceKes) || 0,
+    createdAt: o.createdAt || null,
+  }));
+  return {
+    ok: true,
+    tool: "list_orders",
+    count: rows.length,
+    showing: orders.length,
+    status: want || "all",
+    dateRange: range.label,
+    orders,
+  };
+}
+
+export async function searchCatalog({ keywords, q, query, max_price, maxPrice, limit = 8 } = {}) {
   const { searchProducts } = await import("./catalog.js");
   const hits = await searchProducts({
-    keywords: keywords || q,
+    keywords: keywords || q || query,
     limit: Math.min(12, Math.max(1, Number(limit) || 8)),
   });
-  const products = (hits || []).slice(0, 8).map((p) => ({
+  const capPrice = Number(max_price ?? maxPrice);
+  let products = (hits || []).slice(0, 8).map((p) => ({
     id: p.id,
     name: p.name,
     priceKes: p.priceKes,
@@ -153,6 +200,9 @@ export async function searchCatalog({ keywords, q, limit = 8 } = {}) {
     shop: p.shopHandle || p.sellerHandle || null,
     inStock: p.inStock !== false && !p.isSold,
   }));
+  if (Number.isFinite(capPrice) && capPrice > 0) {
+    products = products.filter((p) => Number(p.priceKes) <= capPrice);
+  }
   return { ok: true, tool: "search_catalog", count: products.length, products };
 }
 
