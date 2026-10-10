@@ -25,6 +25,7 @@ let sendTimestamps = [];
 
 export const OPS_TOOL_NAMES = [
   "get_inquiry_metrics",
+  "get_seller_roster",
   "get_rider_roster",
   "search_store_policies",
   "check_escrow_status",
@@ -206,9 +207,101 @@ export async function getInquiryMetrics({ dateRange } = {}, now = Date.now()) {
 
 const RIDER_STATUSES = new Set(["PENDING", "VERIFIED", "SUSPENDED", "REJECTED"]);
 
+function matchNeedle(hay, needle) {
+  const want = String(needle || "").trim().toLowerCase();
+  if (!want) return true;
+  return String(hay || "").toLowerCase().includes(want);
+}
+
+function sellerRecord(s, source) {
+  const phone = normalizeOpsPhone(s.phone || s.mpesaNumber || s.whatsappChatId || "");
+  return {
+    name: s.contactName || s.displayName || s.display_name || s.businessName || s.shopName || s.shop_name || null,
+    shop: s.businessName || s.business_name || s.shopName || s.shop_name || s.shopHandle || s.handle || null,
+    phone: phone || null,
+    email: s.email || null,
+    city: s.city || s.location || null,
+    verified: Boolean(s.is_verified || s.isSellerVerified || s.is_seller_verified),
+    source,
+  };
+}
+
+async function sellersFromDb(limit = 80) {
+  if (!isDbEnabled()) return [];
+  try {
+    const { rows } = await query(
+      `SELECT u.phone, u.email, u.display_name, u.handle, u.shop_name, u.location,
+              s.business_name, s.city, s.is_verified
+         FROM users u
+         LEFT JOIN sellers s ON s.user_id = u.id
+        WHERE u.role = 'seller' OR s.id IS NOT NULL
+        ORDER BY u.id DESC
+        LIMIT $1`,
+      [Math.max(1, Math.min(200, limit))]
+    );
+    return (rows || []).map((row) =>
+      sellerRecord(
+        {
+          phone: row.phone,
+          email: row.email,
+          displayName: row.display_name,
+          handle: row.handle,
+          shopName: row.shop_name,
+          location: row.location,
+          businessName: row.business_name,
+          city: row.city,
+          is_verified: row.is_verified,
+        },
+        "postgres"
+      )
+    );
+  } catch (err) {
+    console.warn("[ops-tools] seller db list skipped:", err.message);
+    return [];
+  }
+}
+
+export async function getSellerRoster(args = {}) {
+  const q = String(args.q || args.name || args.shop || "").trim();
+  const limit = Math.max(1, Math.min(80, Number(args.limit) || 40));
+  const merged = [];
+  const seen = new Set();
+  const take = (row) => {
+    if (!row) return;
+    const key = row.phone || `${row.shop || ""}:${row.name || ""}`.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(row);
+  };
+
+  try {
+    const { listSuppliers } = await import("./suppliers.js");
+    for (const s of listSuppliers() || []) take(sellerRecord(s, "file"));
+  } catch (err) {
+    console.warn("[ops-tools] seller file list skipped:", err.message);
+  }
+  for (const row of await sellersFromDb(200)) take(row);
+
+  const filtered = q
+    ? merged.filter((row) => matchNeedle([row.name, row.shop, row.phone, row.email, row.city].join(" "), q))
+    : merged;
+
+  return {
+    ok: true,
+    tool: "get_seller_roster",
+    registered: merged.length,
+    matched: filtered.length,
+    filter: q || null,
+    sellers: filtered.slice(0, limit),
+    note: "Admin-only. Name + registered WhatsApp. send_whatsapp_message can reach these phones.",
+  };
+}
+
 export async function getRiderRoster(args = {}) {
   const raw = String(args.status || args.verification_status || args.verificationStatus || "").trim().toUpperCase();
   const status = RIDER_STATUSES.has(raw) ? raw : null;
+  const q = String(args.q || args.name || "").trim();
+  const limit = Math.max(1, Math.min(80, Number(args.limit) || (q ? 40 : 40)));
   if (!isDbEnabled()) {
     return {
       ok: false,
@@ -228,7 +321,7 @@ export async function getRiderRoster(args = {}) {
       counts,
     };
   }
-  const listed = await listRiders({ status, limit: 12 });
+  const listed = await listRiders({ status, q: q || null, limit });
   if (listed?.error && !listed.ok) {
     return {
       ok: false,
@@ -238,8 +331,9 @@ export async function getRiderRoster(args = {}) {
       counts: listed.counts || counts,
     };
   }
-  const riders = (listed.riders || []).slice(0, 12).map((r) => ({
+  const riders = (listed.riders || []).slice(0, limit).map((r) => ({
     name: r.fullName || null,
+    phone: normalizeOpsPhone(r.phone) || r.phone || null,
     town: r.operatingTown || null,
     status: r.verificationStatus || null,
     available: Boolean(r.isAvailable),
@@ -249,11 +343,12 @@ export async function getRiderRoster(args = {}) {
   return {
     ok: true,
     tool: "get_rider_roster",
-    registered: Number(counts.total) || 0,
+    registered: Number(counts.total) || riders.length,
     counts,
-    filter: status,
+    filter: status || q || null,
     sampleAvailableOnThisPage: availableVerified,
     riders,
+    note: "Admin-only. Name + registered WhatsApp. send_whatsapp_message can reach these phones.",
   };
 }
 
@@ -320,25 +415,101 @@ export function resetOpsSendLimiter() {
   sendTimestamps = [];
 }
 
-function knownRecipient(phone) {
+function phoneMatches(a, b) {
+  const x = normalizeOpsPhone(a);
+  const y = normalizeOpsPhone(b);
+  if (!x || !y) return false;
+  return x === y || x.slice(-9) === y.slice(-9);
+}
+
+async function isDirectoryPhone(phone) {
+  if (!phone) return false;
+  try {
+    const { findSupplierByPhone, listSuppliers } = await import("./suppliers.js");
+    if (findSupplierByPhone(phone)) return true;
+    if ((listSuppliers() || []).some((s) => phoneMatches(s.phone, phone) || phoneMatches(s.mpesaNumber, phone))) {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!isDbEnabled()) return false;
+  const tail = `%${String(phone).replace(/\D/g, "").slice(-9)}`;
+  try {
+    const riders = await query(
+      `SELECT 1 FROM riders WHERE regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') LIKE $1 LIMIT 1`,
+      [tail]
+    );
+    if (riders.rows?.length) return true;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const users = await query(
+      `SELECT 1 FROM users
+        WHERE role = 'seller'
+          AND regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') LIKE $1
+        LIMIT 1`,
+      [tail]
+    );
+    if (users.rows?.length) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+async function knownRecipient(phone) {
   if (!phone) return false;
   const orders = getOrdersForCustomer("", phone);
   if (orders.length) return true;
-  return getAllContacts().some((c) => normalizeOpsPhone(c.phone || c.customerKey) === phone);
+  if (getAllContacts().some((c) => phoneMatches(c.phone || c.customerKey, phone))) return true;
+  return isDirectoryPhone(phone);
+}
+
+async function resolveDirectoryPhone(args = {}) {
+  let phone = normalizeOpsPhone(args.phone || args.phone_number || args.phoneNumber);
+  if (phone) return phone;
+  const sellerName = String(args.seller_name || args.sellerName || "").trim();
+  const riderName = String(args.rider_name || args.riderName || "").trim();
+  const name = String(args.name || "").trim();
+  const role = String(args.role || "").trim().toLowerCase();
+
+  if (sellerName || role === "seller") {
+    const roster = await getSellerRoster({ q: sellerName || name, limit: 5 });
+    const hit = roster.sellers?.find((s) => s.phone);
+    if (hit?.phone) return hit.phone;
+  }
+  if (riderName || role === "rider") {
+    const roster = await getRiderRoster({ q: riderName || name, limit: 5 });
+    const hit = roster.riders?.find((r) => r.phone);
+    if (hit?.phone) return hit.phone;
+  }
+  if (name) {
+    const sellers = await getSellerRoster({ q: name, limit: 3 });
+    if (sellers.sellers?.[0]?.phone) return sellers.sellers[0].phone;
+    const riders = await getRiderRoster({ q: name, limit: 3 });
+    if (riders.riders?.[0]?.phone) return riders.riders[0].phone;
+  }
+  return "";
 }
 
 export async function sendWhatsAppMessage(args = {}, extras = {}) {
   const { sender = sendText, now = Date.now(), dryRun = false } = extras;
   const text = String(args.text || args.message || "").trim();
-  let phone = normalizeOpsPhone(args.phone || args.phone_number || args.phoneNumber);
   const orderId = args.order_id || args.orderId;
+  let phone = await resolveDirectoryPhone(args);
 
   if (!phone && orderId) {
     const order = getOrder(orderId);
     phone = phoneOfOrder(order);
   }
   if (!phone) {
-    return { ok: false, error: "missing_phone", message: "Need a Kenya WhatsApp number or an order id with a saved phone." };
+    return {
+      ok: false,
+      error: "missing_phone",
+      message: "Need a Kenya WhatsApp number, a seller/rider name, or an order id with a saved phone.",
+    };
   }
   if (!/^2547\d{8}$/.test(phone) && !/^2541\d{8}$/.test(phone)) {
     return { ok: false, error: "invalid_phone", message: "That does not look like a Kenya mobile number." };
@@ -349,11 +520,11 @@ export async function sendWhatsAppMessage(args = {}, extras = {}) {
   if (text.length > SEND_MAX_CHARS) {
     return { ok: false, error: "text_too_long", message: `Keep WhatsApp notes under ${SEND_MAX_CHARS} characters.` };
   }
-  if (!extras.allowUnknown && !knownRecipient(phone)) {
+  if (!extras.allowUnknown && !(await knownRecipient(phone))) {
     return {
       ok: false,
       error: "unknown_recipient",
-      message: "Can only message a number that already has a Sokoni order or WhatsApp chat.",
+      message: "Can only message a registered seller, rider, or a number that already has a Sokoni order or chat.",
     };
   }
   if (!takeSendSlot(now)) {
@@ -414,6 +585,7 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
   const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {};
   try {
     if (tool === "get_inquiry_metrics") return await getInquiryMetrics({ dateRange: args.date_range || args.dateRange }, extras.now);
+    if (tool === "get_seller_roster") return await getSellerRoster(args);
     if (tool === "get_rider_roster") return await getRiderRoster(args);
     if (tool === "search_store_policies") {
       const { searchStorePolicies } = await import("./knowledge-rag.js");

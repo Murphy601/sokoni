@@ -13,14 +13,16 @@ import { executeOpsTool, OPS_TOOL_NAMES } from "./ops-tools.js";
 export { OPS_TOOL_NAMES };
 
 export const OPS_SYSTEM_PROMPT = `You are the Sokoni Mall ops assistant for staff only.
-You help check prepaid M-Pesa escrow, order history, rider roster, store policies, and buyer-seller inquiry volume, then you may send a WhatsApp follow-up.
+You help check prepaid M-Pesa escrow, sellers, riders, store policies, order history, and buyer-seller inquiry volume, then you may WhatsApp a registered contact.
 
 Rules:
-- Always look up the customer with check_escrow_status or lookup_order_history before sending WhatsApp.
+- Use get_seller_roster for seller counts or contacts. It returns name, shop, and the WhatsApp they registered with.
+- Use get_rider_roster for rider counts or contacts. It returns name, phone, town, and status.
 - Use search_store_policies for refund, escrow, shipping, or FAQ questions. Quote the retrieved answer — do not invent policy.
-- Use get_rider_roster for questions about registered / verified / available boda riders. Do not invent rider counts.
-- Never invent a phone number, SKN id, or escrow state. Use tool results only.
-- send_whatsapp_message is for known Sokoni buyers/sellers only. Keep notes short, warm, and countrywide Kenya — no city-only marketing.
+- Always look up the person first (seller/rider roster, check_escrow_status, or lookup_order_history) before send_whatsapp_message.
+- When staff ask for numbers, quote the name + phone from the tool. Do not invent contacts.
+- send_whatsapp_message can reach a registered seller, rider, or a buyer with an order/chat. Pass phone, or seller_name / rider_name.
+- Keep notes short, warm, and countrywide Kenya — no city-only marketing.
 - Do not release escrow, refund, or change payouts. Those stay on the admin desk.
 - If a tool returns an error, explain it in plain language. Do not retry a send that already succeeded.
 - Reply to the staff operator with what you found and what you sent.`;
@@ -45,9 +47,23 @@ export const OPS_TOOLS = [
   {
     type: "function",
     function: {
+      name: "get_seller_roster",
+      description:
+        "Count registered Sokoni sellers and return name, shop, and the WhatsApp number they registered with. Use for “how many sellers” and “what is their number”.",
+      parameters: {
+        type: "object",
+        properties: {
+          q: { type: "string", description: "Optional name, shop, or phone filter" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_rider_roster",
       description:
-        "Count registered boda riders by verification status (PENDING, VERIFIED, SUSPENDED, REJECTED) and list a short sample.",
+        "Count registered boda riders and return name, WhatsApp phone, town, and verification status.",
       parameters: {
         type: "object",
         properties: {
@@ -55,6 +71,7 @@ export const OPS_TOOLS = [
             type: "string",
             description: "Optional filter: PENDING | VERIFIED | SUSPENDED | REJECTED",
           },
+          q: { type: "string", description: "Optional rider name or phone filter" },
         },
       },
     },
@@ -110,11 +127,13 @@ export const OPS_TOOLS = [
     function: {
       name: "send_whatsapp_message",
       description:
-        "Send a WhatsApp text via WAHA to a Kenya number that already has a Sokoni order or chat.",
+        "Send a WhatsApp text via WAHA to a registered seller, rider, or a Kenya number that already has a Sokoni order or chat.",
       parameters: {
         type: "object",
         properties: {
           phone: { type: "string" },
+          seller_name: { type: "string", description: "Resolve the seller’s registered WhatsApp" },
+          rider_name: { type: "string", description: "Resolve the rider’s registered WhatsApp" },
           text: { type: "string" },
           order_id: { type: "string" },
         },
