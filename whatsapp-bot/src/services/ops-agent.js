@@ -16,22 +16,34 @@ export const OPS_SYSTEM_PROMPT = `You are the Sokoni Mall ops assistant for staf
 You can look up the live platform and WhatsApp registered contacts. Always call a tool before you say you cannot do something.
 
 Tools:
-- get_order_metrics — total orders, by status, paid count (use for “how many orders”).
-- list_pending_escrow — every prepaid order still held (use for “pending escrow”).
+- list_orders — every order ID (optional status / date_range). Use when staff ask “what are the order IDs”.
+- get_order_metrics — totals by status. Use for “how many orders”.
+- list_pending_escrow — prepaid orders still held.
+- get_order_and_escrow_details / check_escrow_status — one SKN or buyer phone: escrow, 12h dispatch, 2h/24h/48h timers.
+- lookup_order_history — recent orders for a phone or name.
 - get_platform_snapshot — held KES, pauses, open disputes.
 - list_open_disputes — open dispute tickets.
-- get_seller_roster / get_rider_roster — counts plus name and registered WhatsApp.
+- raise_order_dispute — freeze escrow and flag anti-scam review. Does not refund.
+- confirm_item_dispatch — log courier + tracking for a seller drop-off.
+- submit_inspection_photos — store buyer inspection photo URLs.
+- get_seller_roster / get_rider_roster — name and registered WhatsApp.
 - list_crm_contacts — tagged WhatsApp leads and 24h window.
-- search_catalog — live stock by keywords.
+- search_catalog / search_catalog_items — live stock by keywords / max price.
 - search_store_policies — escrow / returns / shipping FAQ (markdown if pgvector is empty).
-- check_escrow_status / lookup_order_history — one customer or SKN.
-- send_whatsapp_message — text to a registered seller, rider, or known buyer.
-- send_whatsapp_voice — TTS voice note to the same people (use when staff say “voice note”).
+- add_restock_alert — waitlist a buyer for an out-of-stock SKU.
+- schedule_reorder_reminder — snooze a consumable re-order WhatsApp.
+- create_mpesa_stk_push — STK for an existing SKN only (shipping gate still applies).
+- process_incoming_voicenote — transcribe a WAHA audio URL (Groq Whisper).
+- escalate_to_human_agent — open a support ticket on the ops desk.
+- notify_admin_ops — WhatsApp alert to ADMIN_PHONES.
+- send_whatsapp_message / send_whatsapp_voice — reach a registered seller, rider, or known buyer.
+- send_whatsapp_buttons / send_whatsapp_list — numbered menus (WAHA tap buttons are unreliable).
 
 Rules:
 - Look the person up first, then send. Quote name + phone from the tool. Never invent contacts or SKN ids.
+- When asked for order IDs, call list_orders. Do not say you lack that tool.
 - Keep notes short, warm, countrywide Kenya.
-- Do not release escrow, refund, or change payouts. Those stay on the admin desk.
+- release_escrow_payout and trigger_12h_dispatch_refund are desk-only. Tell staff to use Command Center.
 - If a tool errors, explain it in plain language. Do not retry a send that already succeeded.`;
 
 export const OPS_TOOLS = [
@@ -61,6 +73,23 @@ export const OPS_TOOLS = [
         properties: {
           date_range: { type: "string", description: "all | today | 7d | 30d" },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_orders",
+      description:
+        "Returns live order IDs (SKN-####) with status, buyer name, phone, and total. Use whenever staff ask for order IDs or a list of orders.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", description: "all | pending | paid | held | delivered | cancelled | escrow" },
+          date_range: { type: "string", description: "all | today | 7d | 30d" },
+          limit: { type: "number" },
+        },
+        additionalProperties: false,
       },
     },
   },
@@ -153,7 +182,25 @@ export const OPS_TOOLS = [
         properties: {
           keywords: { type: "string" },
           q: { type: "string" },
+          query: { type: "string" },
+          max_price: { type: "number", description: "Optional max price in KSh." },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_catalog_items",
+      description: "Searches Sokoni Mall thrift catalog by keyword, size, price, or category.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search terms (e.g., 'denim jacket size M')." },
+          max_price: { type: "number", description: "Optional max price in KSh." },
+        },
+        required: ["query"],
+        additionalProperties: false,
       },
     },
   },
@@ -162,13 +209,17 @@ export const OPS_TOOLS = [
     function: {
       name: "search_store_policies",
       description:
-        "Cosine-search escrow, shipping, and returns FAQs in Postgres (pgvector). Use before answering policy questions.",
+        "Searches the Sokoni Mall FAQ and policy database. Use this WHENEVER staff or a buyer ask about shipping, escrow, refunds, or store rules.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Buyer or staff question, e.g. When is my money released?" },
+          search_query: {
+            type: "string",
+            description: "The core question to search for, e.g., 'How long does escrow last?'",
+          },
+          query: { type: "string", description: "Alias for search_query." },
         },
-        required: ["query"],
+        additionalProperties: false,
       },
     },
   },
@@ -183,8 +234,25 @@ export const OPS_TOOLS = [
         properties: {
           customer_name: { type: "string" },
           phone_number: { type: "string" },
+          buyer_phone: { type: "string" },
           order_id: { type: "string", description: "SKN-#### or SK-####" },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_order_and_escrow_details",
+      description:
+        "Fetches full status for an order, including M-Pesa escrow lock, 12h dispatch window, and 2h/24h/48h inspection timers.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string", description: "The unique order ID or receipt code." },
+          buyer_phone: { type: "string", description: "Optional phone number to look up active orders." },
+        },
+        additionalProperties: false,
       },
     },
   },
@@ -237,6 +305,247 @@ export const OPS_TOOLS = [
           text: { type: "string", description: "Spoken script, under 400 characters" },
         },
         required: ["text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_restock_alert",
+      description: "Subscribes a customer to a WhatsApp notification when an out-of-stock product is back.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_phone: { type: "string", description: "Buyer phone, e.g. +254712345678" },
+          product_id: { type: "string", description: "Catalog id or exact product name." },
+        },
+        required: ["customer_phone", "product_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_mpesa_stk_push",
+      description:
+        "Starts an M-Pesa STK for an existing SKN cart/order. Uses the order total after the shipping gate — never an invented amount.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "M-Pesa phone starting with 254." },
+          total_amount: { type: "number", description: "Ignored — the order total is used." },
+          order_reference: { type: "string", description: "Existing SKN order id." },
+        },
+        required: ["phone_number", "order_reference"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "confirm_item_dispatch",
+      description: "Marks an order dispatched with courier/rider name and optional tracking.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string" },
+          courier_name: { type: "string", description: "Farasi, Rider Direct, or Personal Drop." },
+          tracking_reference: { type: "string" },
+        },
+        required: ["order_id", "courier_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "submit_inspection_photos",
+      description: "Stores buyer inspection photo URLs and opens or extends the 2-hour review window.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string" },
+          photo_urls: { type: "array", items: { type: "string" } },
+          buyer_note: { type: "string" },
+        },
+        required: ["order_id", "photo_urls"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "release_escrow_payout",
+      description:
+        "Desk-only. Tells staff to release from Command Center. The agent cannot move money.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string" },
+          release_reason: { type: "string", description: "BUYER_CONFIRMED | AUTO_RELEASE_24H | AUTO_RELEASE_48H" },
+        },
+        required: ["order_id", "release_reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "raise_order_dispute",
+      description: "Freezes escrow immediately and flags the order for anti-scam review.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string" },
+          dispute_reason: { type: "string" },
+          disputed_by: { type: "string", description: "BUYER or SELLER" },
+        },
+        required: ["order_id", "dispute_reason", "disputed_by"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "trigger_12h_dispatch_refund",
+      description:
+        "Desk-only. Tells staff to run the 12h undispatched refund from Command Center. The agent cannot refund.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string" },
+        },
+        required: ["order_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "schedule_reorder_reminder",
+      description: "Schedules a WhatsApp re-order reminder for a consumable (default 30 days).",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_phone: { type: "string" },
+          product_id: { type: "string" },
+          days_delay: { type: "number" },
+        },
+        required: ["customer_phone", "product_id", "days_delay"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "process_incoming_voicenote",
+      description: "Downloads a WAHA voice note and transcribes it with Groq Whisper.",
+      parameters: {
+        type: "object",
+        properties: {
+          media_url: { type: "string", description: "WAHA audio download URL." },
+          sender_phone: { type: "string" },
+        },
+        required: ["media_url", "sender_phone"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "escalate_to_human_agent",
+      description: "Opens a support ticket on the ops desk when the AI cannot resolve the chat.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_phone: { type: "string" },
+          summary_reason: { type: "string" },
+        },
+        required: ["customer_phone", "summary_reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "notify_admin_ops",
+      description: "Sends an urgent WhatsApp alert to Sokoni admin phones.",
+      parameters: {
+        type: "object",
+        properties: {
+          alert_level: { type: "string", description: "INFO | WARNING | CRITICAL" },
+          message_body: { type: "string" },
+        },
+        required: ["alert_level", "message_body"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp_buttons",
+      description:
+        "Sends a numbered quick-reply menu (1–3 options). WAHA tap buttons are unreliable, so buyers reply with the number.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string" },
+          message_text: { type: "string" },
+          buttons: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                title: { type: "string" },
+              },
+              required: ["id", "title"],
+            },
+          },
+        },
+        required: ["phone_number", "message_text", "buttons"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp_list",
+      description:
+        "Sends a numbered list menu (up to 10 rows) for categories, sizes, or FAQ topics. Buyers reply with the number.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string" },
+          menu_title: { type: "string" },
+          message_text: { type: "string" },
+          list_items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                title: { type: "string" },
+                description: { type: "string" },
+              },
+              required: ["id", "title"],
+            },
+          },
+        },
+        required: ["phone_number", "menu_title", "message_text", "list_items"],
+        additionalProperties: false,
       },
     },
   },

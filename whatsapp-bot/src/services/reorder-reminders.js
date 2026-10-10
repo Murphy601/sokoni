@@ -106,6 +106,31 @@ export async function snoozeReorderReminder({ orderId, phone, days = 7 }) {
   return { ok: true, snoozeUntil: until };
 }
 
+export async function scheduleReorderReminder({ customerPhone, productId, daysDelay = 30, orderId } = {}) {
+  const phone = normalizeKenyaPhone(customerPhone);
+  const id = String(productId || "").trim();
+  const days = Math.min(180, Math.max(1, Number(daysDelay) || 30));
+  if (!phone || !id) {
+    return { ok: false, error: "missing_lookup", message: "Need a customer phone and product id." };
+  }
+  const until = new Date(Date.now() + days * DAY_MS).toISOString();
+  await recordSent({
+    orderId: orderId || `sched-${id}`,
+    phone,
+    productId: id,
+    snoozeUntil: until,
+  });
+  return {
+    ok: true,
+    tool: "schedule_reorder_reminder",
+    phone,
+    productId: id,
+    daysDelay: days,
+    remindAt: until,
+    source: isDbEnabled() ? "postgres" : "memory",
+  };
+}
+
 export async function sendReorderReminders({ now = Date.now(), sender } = {}) {
   const { sendText, toChatId } = await import("./whatsapp.js");
   const { setMenuState } = await import("./session.js");
