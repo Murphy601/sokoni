@@ -91,6 +91,7 @@
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="resolve">Overrides &amp; disputes</button>
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="hubs">Hub performance</button>
         <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="search">Smart search</button>
+        <button type="button" class="cmd-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="ops-agent">Ops agent</button>
       </div>
     </section>
 
@@ -271,6 +272,40 @@
         <div id="smart-results" class="space-y-2"></div>
         <p class="text-xs text-brand-purple/50">
           Public API: <code class="font-mono">GET /api/search?q=</code> · Suggest: <code class="font-mono">GET /api/search/suggest?q=</code>
+        </p>
+      </div>
+    </section>
+
+    <!-- OPS AGENT (tool calling) -->
+    <section data-panel="ops-agent" class="space-y-4 hidden">
+      <div class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="font-display text-xl font-bold">Ops agent</h2>
+            <p class="text-sm text-brand-purple/65 mt-1 max-w-2xl">
+              Ask in plain language. The agent looks up escrow and order history, then can send a WhatsApp follow-up through WAHA. Prepaid funds stay held until the buyer confirms.
+            </p>
+          </div>
+          <p id="ops-agent-meta" class="text-xs text-brand-purple/50 font-mono"></p>
+        </div>
+        <div id="ops-agent-log" class="min-h-[180px] max-h-[360px] overflow-y-auto rounded-2xl border border-black/5 bg-brand-cream/40 p-4 space-y-3 text-sm" aria-live="polite"></div>
+        <form id="ops-agent-form" class="flex flex-col sm:flex-row gap-2">
+          <label class="sr-only" for="ops-agent-input">Ask the ops agent</label>
+          <input
+            id="ops-agent-input"
+            type="text"
+            autocomplete="off"
+            class="flex-1 min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+            placeholder='Did John get SKN-1002? Ask him how the jacket fits.'
+          />
+          <button type="submit" class="min-h-[48px] px-5 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Ask &amp; act</button>
+        </form>
+        <label class="flex items-center gap-2 text-xs text-brand-purple/60">
+          <input id="ops-agent-dry" type="checkbox" class="rounded" />
+          Dry-run WhatsApp (log only, do not send)
+        </label>
+        <p class="text-xs text-brand-purple/50">
+          Admin only. Tools: inquiry metrics, escrow status, order history, send WhatsApp. Does not release payouts.
         </p>
       </div>
     </section>

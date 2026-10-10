@@ -21,6 +21,7 @@ import { config } from "../config.js";
 import { updateOrderMeta } from "../services/orders.js";
 import { listAdminDisputes, resolveDispute } from "../services/disputes.js";
 import { smartSearch, smartSuggest } from "../services/smart-search.js";
+import { runOpsAgentTurn, opsAgentMeta } from "../services/ops-agent.js";
 
 const router = Router();
 router.use(requireAdminToken);
@@ -327,6 +328,28 @@ router.post("/ratings/purge", async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json(clientError(err, "purge_failed"));
+  }
+});
+
+/** GET /admin/command/ops-agent — provider + tool list (no customer data). */
+router.get("/ops-agent", (_req, res) => {
+  res.json(opsAgentMeta());
+});
+
+/**
+ * POST /admin/command/ops-agent
+ * Staff natural-language: "Did John get his order? Ask him how the jacket fits."
+ * LLM may call Postgres tools then WAHA sendText. Admin token required.
+ */
+router.post("/ops-agent", async (req, res) => {
+  try {
+    const message = String(req.body?.message || req.body?.prompt || "").trim();
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    const dryRun = req.body?.dryRun === true || req.body?.dry_run === true;
+    const result = await runOpsAgentTurn({ message, history, dryRun });
+    res.status(result.ok ? 200 : result.error === "missing_message" ? 400 : 502).json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err, "ops_agent_failed"));
   }
 });
 
