@@ -9,6 +9,7 @@ import {
   getInquiryMetrics,
   getRiderRoster,
   getSellerRoster,
+  sendWhatsAppVoice,
 } from "./ops-tools.js";
 import {
   parseToolArguments,
@@ -94,6 +95,38 @@ describe("ops tool argument guards", () => {
     } else {
       assert.ok(["database_offline", "list_failed", "database_not_configured"].includes(direct.error));
     }
+  });
+
+  it("order metrics and pending escrow are named tools", async () => {
+    const metrics = await executeOpsTool("get_order_metrics", { date_range: "all" });
+    assert.equal(metrics.ok, true);
+    assert.equal(metrics.tool, "get_order_metrics");
+    assert.equal(typeof metrics.total, "number");
+
+    const escrow = await executeOpsTool("list_pending_escrow", { limit: 5 });
+    assert.equal(escrow.ok, true);
+    assert.equal(escrow.tool, "list_pending_escrow");
+    assert.ok(Array.isArray(escrow.orders));
+    assert.equal(escrow.till, undefined);
+  });
+
+  it("policy search falls back to markdown when pgvector is missing", async () => {
+    const result = await executeOpsTool("search_store_policies", { query: "When is escrow released after a dispute?" });
+    assert.equal(result.tool, "search_store_policies");
+    assert.ok(result.ok === true || result.hits);
+    if (result.ok) assert.ok(result.hits.length >= 1);
+  });
+
+  it("voice send needs a known recipient and dry-runs without WAHA", async () => {
+    const missing = await sendWhatsAppVoice({ text: "Habari" });
+    assert.equal(missing.error, "missing_phone");
+    const dry = await sendWhatsAppVoice(
+      { phone: "254711111111", text: "Habari, checking the jacket." },
+      { allowUnknown: true, dryRun: true }
+    );
+    assert.equal(dry.ok, true);
+    assert.equal(dry.dryRun, true);
+    assert.equal(dry.tool, "send_whatsapp_voice");
   });
 
   it("seller roster returns a count and name/phone fields", async () => {

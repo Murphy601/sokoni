@@ -25,12 +25,19 @@ let sendTimestamps = [];
 
 export const OPS_TOOL_NAMES = [
   "get_inquiry_metrics",
+  "get_order_metrics",
+  "get_platform_snapshot",
+  "list_pending_escrow",
+  "list_open_disputes",
   "get_seller_roster",
   "get_rider_roster",
+  "list_crm_contacts",
+  "search_catalog",
   "search_store_policies",
   "check_escrow_status",
   "lookup_order_history",
   "send_whatsapp_message",
+  "send_whatsapp_voice",
 ];
 
 export function parseDateRange(raw, now = Date.now()) {
@@ -580,13 +587,123 @@ export async function sendWhatsAppMessage(args = {}, extras = {}) {
   }
 }
 
+const VOICE_MAX_CHARS = 400;
+
+export async function sendWhatsAppVoice(args = {}, extras = {}) {
+  const text = String(args.text || args.message || args.script || "").trim();
+  const dry = extras.dryRun === true || args.dryRun === true;
+  const phone = await resolveDirectoryPhone(args);
+  if (!phone) {
+    return {
+      ok: false,
+      error: "missing_phone",
+      tool: "send_whatsapp_voice",
+      message: "Need a Kenya WhatsApp number, seller_name, or rider_name.",
+    };
+  }
+  if (!text) {
+    return { ok: false, error: "missing_text", tool: "send_whatsapp_voice", message: "Voice note text is required." };
+  }
+  if (text.length > VOICE_MAX_CHARS) {
+    return {
+      ok: false,
+      error: "text_too_long",
+      tool: "send_whatsapp_voice",
+      message: `Keep voice notes under ${VOICE_MAX_CHARS} characters.`,
+    };
+  }
+  if (!extras.allowUnknown && !(await knownRecipient(phone))) {
+    return {
+      ok: false,
+      error: "unknown_recipient",
+      tool: "send_whatsapp_voice",
+      message: "Can only send a voice note to a registered seller, rider, or known chat.",
+    };
+  }
+  if (!takeSendSlot(extras.now || Date.now())) {
+    return { ok: false, error: "rate_limited", tool: "send_whatsapp_voice", message: "Too many WhatsApp sends this minute." };
+  }
+
+  const chatId = toChatId(phone);
+  if (dry || !config.waha?.apiUrl) {
+    return {
+      ok: true,
+      tool: "send_whatsapp_voice",
+      dryRun: true,
+      phone,
+      chatId,
+      text,
+      message: "WAHA dry-run — voice note logged, not sent.",
+    };
+  }
+
+  try {
+    const { synthesizeVoiceNote } = await import("./voice-tts.js");
+    const synth = await synthesizeVoiceNote(text);
+    if (!synth.ok || !synth.filepaths?.length) {
+      return {
+        ok: false,
+        error: synth.error || "tts_unavailable",
+        tool: "send_whatsapp_voice",
+        message: "Could not synthesize a voice note. Send text instead, or check ElevenLabs / Groq / Grok keys.",
+      };
+    }
+    const { sendVoiceNote } = extras.voiceSender
+      ? { sendVoiceNote: extras.voiceSender }
+      : await import("./whatsapp.js");
+    for (const fp of synth.filepaths) {
+      await sendVoiceNote(chatId, fp);
+    }
+    return {
+      ok: true,
+      tool: "send_whatsapp_voice",
+      phone,
+      chatId,
+      text,
+      provider: synth.provider,
+      message: "Voice note sent.",
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "send_failed",
+      tool: "send_whatsapp_voice",
+      message: String(err?.message || err).slice(0, 200),
+    };
+  }
+}
+
 export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
   const tool = String(name || "").trim();
   const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {};
   try {
     if (tool === "get_inquiry_metrics") return await getInquiryMetrics({ dateRange: args.date_range || args.dateRange }, extras.now);
+    if (tool === "get_order_metrics") {
+      const { getOrderMetrics } = await import("./ops-desk-reads.js");
+      return getOrderMetrics({ dateRange: args.date_range || args.dateRange }, extras.now);
+    }
+    if (tool === "get_platform_snapshot") {
+      const { getPlatformSnapshot } = await import("./ops-desk-reads.js");
+      return getPlatformSnapshot();
+    }
+    if (tool === "list_pending_escrow") {
+      const { listPendingEscrow } = await import("./ops-desk-reads.js");
+      return listPendingEscrow(args);
+    }
+    if (tool === "list_open_disputes") {
+      const { listOpenDisputes } = await import("./ops-desk-reads.js");
+      return listOpenDisputes(args);
+    }
     if (tool === "get_seller_roster") return await getSellerRoster(args);
     if (tool === "get_rider_roster") return await getRiderRoster(args);
+    if (tool === "list_crm_contacts") {
+      const { listCrmDirectory } = await import("./ops-desk-reads.js");
+      return listCrmDirectory(args);
+    }
+    if (tool === "search_catalog") {
+      const { searchCatalog } = await import("./ops-desk-reads.js");
+      return searchCatalog(args);
+    }
     if (tool === "search_store_policies") {
       const { searchStorePolicies } = await import("./knowledge-rag.js");
       return searchStorePolicies(args.query || args.question || args.q, {
@@ -597,6 +714,7 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "check_escrow_status") return await checkEscrowStatus(args, extras.now);
     if (tool === "lookup_order_history") return await lookupOrderHistory(args);
     if (tool === "send_whatsapp_message") return await sendWhatsAppMessage(args, extras);
+    if (tool === "send_whatsapp_voice") return await sendWhatsAppVoice(args, extras);
     return { ok: false, error: "unknown_tool", message: `Tool "${tool}" is not allowed.` };
   } catch (err) {
     return {

@@ -38,13 +38,47 @@ function mapPolicyRow(row, score) {
  * Named tool used by the ops agent and shopper RAG.
  * Embeds the question, then cosine-ranks platform_knowledge (store_policies view).
  */
+async function markdownPolicyHits(queryText, limit = 3) {
+  try {
+    const { retrieveKnowledge } = await import("./agent-specialists.js");
+    const rows = retrieveKnowledge(queryText, { limit, specialist: "dispute" });
+    return (rows || []).map((r) => ({
+      id: r.id,
+      question: r.id,
+      answer: r.excerpt,
+      excerpt: r.excerpt,
+      category: r.category || "general",
+      score: 1,
+      similarity: 1,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function searchStorePolicies(queryText, { limit = 3, minSimilarity = POLICY_SIMILARITY_MIN } = {}) {
   const q = String(queryText || "").trim();
   if (!q) {
     return { ok: false, error: "missing_query", tool: "search_store_policies", hits: [] };
   }
+  const lim = Math.max(1, Math.min(5, Number(limit) || 3));
+  const fallback = async (reason) => {
+    const hits = await markdownPolicyHits(q, lim);
+    if (hits.length) {
+      return {
+        ok: true,
+        tool: "search_store_policies",
+        source: "markdown",
+        hits,
+        count: hits.length,
+        note: reason,
+      };
+    }
+    return { ok: false, error: reason, tool: "search_store_policies", hits: [] };
+  };
+
   if (!isDbEnabled()) {
-    return { ok: false, error: "database_offline", tool: "search_store_policies", hits: [] };
+    return fallback("database_offline");
   }
 
   let embedding = null;
@@ -52,20 +86,13 @@ export async function searchStorePolicies(queryText, { limit = 3, minSimilarity 
     const { embedText } = await import("./product-embeddings.js");
     embedding = await embedText(q);
   } catch (err) {
-    return {
-      ok: false,
-      error: "embed_failed",
-      tool: "search_store_policies",
-      hits: [],
-      message: String(err?.message || err).slice(0, 160),
-    };
+    return fallback(String(err?.message || "embed_failed").slice(0, 160));
   }
   if (!embedding) {
-    return { ok: false, error: "embed_unavailable", tool: "search_store_policies", hits: [] };
+    return fallback("embed_unavailable");
   }
 
   const floor = Math.min(0.99, Math.max(0.3, Number(minSimilarity) || POLICY_SIMILARITY_MIN));
-  const lim = Math.max(1, Math.min(5, Number(limit) || 3));
   const lit = vectorLiteral(embedding);
 
   try {
@@ -82,6 +109,7 @@ export async function searchStorePolicies(queryText, { limit = 3, minSimilarity 
       [lit, floor, lim]
     );
     const hits = (rows || []).map((r) => mapPolicyRow(r, r.similarity));
+    if (!hits.length) return fallback("no_vector_hits");
     return {
       ok: true,
       tool: "search_store_policies",
@@ -90,13 +118,7 @@ export async function searchStorePolicies(queryText, { limit = 3, minSimilarity 
       count: hits.length,
     };
   } catch (err) {
-    return {
-      ok: false,
-      error: "search_failed",
-      tool: "search_store_policies",
-      hits: [],
-      message: String(err?.message || err).slice(0, 160),
-    };
+    return fallback(String(err?.message || err).slice(0, 160));
   }
 }
 
