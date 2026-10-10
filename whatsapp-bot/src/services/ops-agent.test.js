@@ -8,6 +8,7 @@ import {
   checkEscrowStatus,
   getInquiryMetrics,
   getRiderRoster,
+  getSellerRoster,
 } from "./ops-tools.js";
 import {
   parseToolArguments,
@@ -86,8 +87,26 @@ describe("ops tool argument guards", () => {
     if (direct.ok) {
       assert.equal(typeof direct.registered, "number");
       assert.ok(direct.counts);
+      if (direct.riders?.length) {
+        assert.ok("phone" in direct.riders[0]);
+        assert.ok("name" in direct.riders[0]);
+      }
     } else {
       assert.ok(["database_offline", "list_failed", "database_not_configured"].includes(direct.error));
+    }
+  });
+
+  it("seller roster returns a count and name/phone fields", async () => {
+    const viaName = await executeOpsTool("get_seller_roster", {});
+    assert.equal(viaName.tool, "get_seller_roster");
+    assert.equal(viaName.ok, true);
+    assert.equal(typeof viaName.registered, "number");
+    const direct = await getSellerRoster({});
+    assert.ok(Array.isArray(direct.sellers));
+    if (direct.sellers.length) {
+      assert.ok("name" in direct.sellers[0]);
+      assert.ok("phone" in direct.sellers[0]);
+      assert.ok("shop" in direct.sellers[0]);
     }
   });
 });
