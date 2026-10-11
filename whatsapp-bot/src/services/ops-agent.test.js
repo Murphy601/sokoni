@@ -271,6 +271,18 @@ describe("ops tool argument guards", () => {
     assert.deepEqual(posted.destinations, ["STATUS", "CHANNEL"]);
     assert.equal(posted.dryRun, true);
 
+    const withPhoto = await executeOpsTool(
+      "publish_whatsapp_status_or_channel",
+      {
+        destination_type: "BOTH",
+        text: "Today's drop — prepaid escrow, countrywide Kenya.",
+        media_url: "https://res.cloudinary.com/rztynxme/image/upload/v1/sokoni-studio/cutout.jpg",
+      },
+      { dryRun: true }
+    );
+    assert.equal(withPhoto.ok, true);
+    assert.match(withPhoto.mediaUrl, /res\.cloudinary\.com/);
+
     const till = await executeOpsTool("publish_whatsapp_status_or_channel", {
       destination_type: "BOTH",
       text: "Pay till 123456 now",
