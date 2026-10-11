@@ -290,6 +290,15 @@ describe("ops tool argument guards", () => {
     assert.equal(till.ok, false);
     assert.equal(till.error, "no_till");
 
+    const invite = await executeOpsTool(
+      "send_channel_invite",
+      { phone_number: "254700000099", context: "To catch the next shoe drop, join here:" },
+      { dryRun: true, force: true }
+    );
+    assert.equal(invite.ok, true);
+    assert.equal(invite.tool, "send_channel_invite");
+    assert.match(invite.text, /0029VbE5SoTGJP8FzgHwmU2Q/);
+
     const listed = await executeOpsTool("list_whatsapp_channels", { role: "OWNER" }, { dryRun: true });
     assert.equal(listed.ok, true);
     assert.equal(listed.tool, "list_whatsapp_channels");

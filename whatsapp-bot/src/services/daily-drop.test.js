@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { pickDailyDropItems, dailyDropCaption, runDailyDrop } from "./daily-drop.js";
+import {
+  pickDailyDropItems,
+  pickNextDripItem,
+  dailyDropCaption,
+  dripDropCaption,
+  isDripSlot,
+  runDailyDrop,
+} from "./daily-drop.js";
 import { ensureCatalogImageBotUrl } from "../lib/catalog-images.js";
 
 describe("daily drop curation", () => {
@@ -33,6 +40,7 @@ describe("daily drop curation", () => {
     assert.equal(posted.destination, "BOTH");
     assert.deepEqual(posted.destinations, ["STATUS", "CHANNEL"]);
     assert.equal(posted.dailyDrop, true);
+    assert.equal(posted.drip, true);
   });
 
   it("reuses a local catalog cover for WhatsApp", async () => {
@@ -60,6 +68,32 @@ describe("daily drop curation", () => {
     assert.equal(posted.mediaUrl, cloudinary);
     assert.ok(!posted.mediaSkipped);
     assert.match(posted.text, /Black Itel Feature Phone/);
+  });
+
+  it("rotates the seller who has waited longest, then their oldest item", () => {
+    const next = pickNextDripItem(
+      [
+        { id: "a1", name: "A jacket", sellerHandle: "ada", inStock: true, lastPromotedAt: 100, priceKes: 800 },
+        { id: "b1", name: "B boots", sellerHandle: "ben", inStock: true, lastPromotedAt: 50, priceKes: 1200 },
+        { id: "b2", name: "B bag", sellerHandle: "ben", inStock: true, lastPromotedAt: null, priceKes: 900 },
+        { id: "sold", name: "Gone", sellerHandle: "ada", isSold: true, lastPromotedAt: null },
+      ],
+      {}
+    );
+    assert.equal(next.id, "b2");
+    const caption = dripDropCaption(next);
+    assert.match(caption, /B bag/);
+    assert.match(caption, /Prepaid M-Pesa escrow/);
+    assert.equal(/\bpaybill\b/i.test(caption), false);
+  });
+
+  it("fires on the 30-minute window from 08:00 to 20:30 EAT", () => {
+    assert.equal(isDripSlot({ hour: 8, minute: 0 }), true);
+    assert.equal(isDripSlot({ hour: 8, minute: 30 }), true);
+    assert.equal(isDripSlot({ hour: 20, minute: 30 }), true);
+    assert.equal(isDripSlot({ hour: 7, minute: 30 }), false);
+    assert.equal(isDripSlot({ hour: 21, minute: 0 }), false);
+    assert.equal(isDripSlot({ hour: 12, minute: 15 }), false);
   });
 
   it("skips unknown hosts and still posts the caption", async () => {

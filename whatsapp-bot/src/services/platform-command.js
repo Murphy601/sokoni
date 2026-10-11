@@ -480,6 +480,10 @@ export function releaseEscrowOrder(orderId, { reason = "", adminLabel = "admin" 
     payoutAmountKes: ready?.payoutAmountKes ?? netAmount,
   });
 
+  void import("./channel-invite.js")
+    .then(({ queueChannelInvite }) => queueChannelInvite(order.phone, "purchase"))
+    .catch((err) => console.warn("[platform-command] channel invite skipped:", err.message));
+
   return {
     ok: true,
     action: "release",

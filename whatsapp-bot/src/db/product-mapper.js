@@ -203,6 +203,9 @@ export function rowToCatalogProduct(row, imageUrls = []) {
     publishedAt: legacy.publishedAt != null ? Number(legacy.publishedAt) : undefined,
 
     inStock: row.in_stock !== false && !row.is_sold,
+    lastPromotedAt: row.last_promoted_at
+      ? Date.parse(row.last_promoted_at) || row.last_promoted_at
+      : undefined,
     isSold: Boolean(row.is_sold),
     trackingCode: row.tracking_code || undefined,
 

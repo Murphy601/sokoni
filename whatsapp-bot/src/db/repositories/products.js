@@ -209,6 +209,48 @@ export async function getProductById(id) {
   return rows[0] ? mapRow(rows[0]) : null;
 }
 
+/** Next live listing: seller who waited longest, then their oldest-unpromoted item. */
+export async function pickLeastPromotedProduct() {
+  try {
+    const { rows } = await query(
+      `${PRODUCT_SELECT}
+       WHERE p.in_stock = TRUE
+         AND COALESCE(p.is_sold, FALSE) = FALSE
+         AND COALESCE(p.stock_quantity, 1) > 0
+       ORDER BY (
+         SELECT MAX(p2.last_promoted_at)
+           FROM products p2
+          WHERE COALESCE(p2.seller_user_id::text, p2.seller_id::text, 'none')
+              = COALESCE(p.seller_user_id::text, p.seller_id::text, 'none')
+            AND p2.in_stock = TRUE
+            AND COALESCE(p2.is_sold, FALSE) = FALSE
+       ) ASC NULLS FIRST,
+       p.last_promoted_at ASC NULLS FIRST,
+       p.created_at ASC
+       LIMIT 1`
+    );
+    return rows[0] ? mapRow(rows[0]) : null;
+  } catch (err) {
+    console.warn("[products] pickLeastPromotedProduct:", err.message);
+    return null;
+  }
+}
+
+export async function markProductPromoted(id, at = new Date()) {
+  const productId = String(id || "").trim();
+  if (!productId) return false;
+  try {
+    await query(`UPDATE products SET last_promoted_at = $2, updated_at = NOW() WHERE id = $1`, [
+      productId,
+      at instanceof Date ? at : new Date(at),
+    ]);
+    return true;
+  } catch (err) {
+    console.warn("[products] markProductPromoted:", err.message);
+    return false;
+  }
+}
+
 /**
  * Create a product listing with mandatory social-marketplace metadata.
  */

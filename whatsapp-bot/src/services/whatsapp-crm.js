@@ -811,6 +811,12 @@ export async function tagCrmContact(
     );
   }
 
+  if (add.includes("new-lead") || add.includes("hot-lead")) {
+    void import("./channel-invite.js")
+      .then(({ queueChannelInvite }) => queueChannelInvite(digits, "lead", extras))
+      .catch((err) => console.warn("[whatsapp-crm] channel invite skipped:", err.message));
+  }
+
   return {
     ok: true,
     tool: "tag_crm_contact",

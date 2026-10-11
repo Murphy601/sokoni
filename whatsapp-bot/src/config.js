@@ -31,14 +31,20 @@ export const config = {
     session: process.env.WAHA_SESSION || "default",
     /** Official Sokoni WhatsApp Channel (`123@newsletter`). Empty = resolve via GET /channels?role=OWNER. */
     channelId: String(process.env.WAHA_CHANNEL_ID || "").trim(),
+    /** Public invite — WhatsApp blocks force-adding people to Channels. */
+    channelInviteUrl: String(
+      process.env.WAHA_CHANNEL_INVITE_URL || "https://whatsapp.com/channel/0029VbE5SoTGJP8FzgHwmU2Q"
+    ).trim(),
   },
   /**
-   * Morning catalog drop to Status AND Channel. Off unless DAILY_DROP_ENABLED=true
-   * so we do not post to a live Status by surprise.
+   * Catalog drip to Status AND Channel. Off unless DAILY_DROP_ENABLED=true.
+   * One live item every 30 minutes, 08:00–20:00 EAT, rotating sellers.
    */
   dailyDrop: {
     enabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_ENABLED || "")),
     hourEat: Number(process.env.DAILY_DROP_HOUR_EAT ?? 8) || 8,
+    endHourEat: Number(process.env.DAILY_DROP_END_HOUR_EAT ?? 20) || 20,
+    intervalMinutes: Number(process.env.DAILY_DROP_INTERVAL_MINUTES ?? 30) || 30,
     destination: String(process.env.DAILY_DROP_DESTINATION || "BOTH").trim().toUpperCase(),
   },
   /** WhatsApp + web chat AI (text only). Prefer Groq/Gemini for speed; OpenRouter free as fallback. */

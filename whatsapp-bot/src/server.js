@@ -872,29 +872,31 @@ function startReorderReminderScheduler() {
   console.log(`✓ Re-order reminder cron enabled (${tz})`);
 }
 
-/** 08:00 EAT catalog drop to WhatsApp Status / Channel. Off unless DAILY_DROP_ENABLED=true. */
+/** One live listing every 30 min, 08:00–20:00 EAT. Off unless DAILY_DROP_ENABLED=true. */
 function startDailyDropScheduler() {
   if (!config.dailyDrop?.enabled) {
-    console.log("⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to post Status + Channel at 08:00 EAT)");
+    console.log(
+      "⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to drip Status + Channel every 30 min, 08:00–20:00 EAT)"
+    );
     return;
   }
   const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  const start = String(config.dailyDrop.hourEat).padStart(2, "0");
+  const end = String(config.dailyDrop.endHourEat ?? 20).padStart(2, "0");
+  const interval = config.dailyDrop.intervalMinutes || 30;
   let lastKey = "";
   setInterval(() => {
     const now = clockInTimezone(tz);
     import("./services/daily-drop.js")
-      .then(async ({ DAILY_DROP_HOUR_EAT, runDailyDrop }) => {
-        const hour = DAILY_DROP_HOUR_EAT;
-        if (now.hour === hour && now.minute === 0) {
-          const key = `${now.dateKey}-${hour}`;
-          if (key !== lastKey) {
-            lastKey = key;
-            const r = await runDailyDrop();
-            console.log("[daily-drop]", r.ok ? `posted ${r.itemCount}` : r.error || r.message);
-          }
-        }
+      .then(async ({ isDripSlot, runDailyDrop }) => {
+        if (!isDripSlot(now, config.dailyDrop)) return;
+        const key = `${now.dateKey}-${now.hour}-${now.minute}`;
+        if (key === lastKey) return;
+        lastKey = key;
+        const r = await runDailyDrop();
+        console.log("[daily-drop]", r.ok ? `drip ${r.items?.[0]?.id || r.itemCount}` : r.error || r.message);
       })
       .catch((err) => console.warn("[daily-drop] cron:", err.message));
   }, 60_000);
-  console.log(`✓ Daily drop cron enabled (${tz}) at ${String(config.dailyDrop.hourEat).padStart(2, "0")}:00`);
+  console.log(`✓ Daily drop drip enabled (${tz}) every ${interval} min ${start}:00–${end}:00`);
 }
