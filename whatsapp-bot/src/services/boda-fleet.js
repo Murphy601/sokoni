@@ -475,6 +475,9 @@ export async function registerRiderApplication(input = {}) {
   }
 
   console.log(`[boda-fleet] rider application PENDING #${result.rider.id} ${phone} ${zone}`);
+  void import("./channel-invite.js")
+    .then(({ queueChannelInvite }) => queueChannelInvite(phone, "onboarding"))
+    .catch((err) => console.warn("[boda-fleet] channel invite skipped:", err.message));
   return {
     ok: true,
     success: true,

@@ -59,6 +59,7 @@ export const OPS_TOOL_NAMES = [
   "list_whatsapp_channels",
   "send_video_note",
   "create_mediation_group",
+  "send_channel_invite",
 ];
 
 const TOOL_ALIASES = {
@@ -830,6 +831,10 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "create_mediation_group") {
       const { createMediationGroup } = await import("./ops-desk-actions.js");
       return createMediationGroup(args, extras);
+    }
+    if (tool === "send_channel_invite") {
+      const { sendChannelInvite } = await import("./channel-invite.js");
+      return sendChannelInvite(args, extras);
     }
     return { ok: false, error: "unknown_tool", message: `Tool "${requested}" is not allowed.` };
   } catch (err) {

@@ -190,6 +190,12 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     whatsappChatId: `${normalizedPhone}@c.us`,
   });
 
+  if (!result.existing) {
+    void import("./channel-invite.js")
+      .then(({ queueChannelInvite }) => queueChannelInvite(normalizedPhone, "onboarding"))
+      .catch((err) => console.warn("[seller-onboard] channel invite skipped:", err.message));
+  }
+
   return {
     success: true,
     seller: sanitizeSeller(result.supplier),
@@ -1516,6 +1522,10 @@ export async function releaseEscrowPayout(orderId) {
     payoutEligibleAt: ready?.payoutEligibleAt || Date.now(),
     escrowStatus: "released",
   });
+
+  void import("./channel-invite.js")
+    .then(({ queueChannelInvite }) => queueChannelInvite(fresh.phone, "purchase"))
+    .catch((err) => console.warn("[seller-onboard] channel invite skipped:", err.message));
 
   return {
     success: true,

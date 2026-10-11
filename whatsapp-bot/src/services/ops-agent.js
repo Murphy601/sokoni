@@ -43,6 +43,7 @@ Tools:
 - list_whatsapp_channels — GET /api/{session}/channels?role=OWNER to read 111…@newsletter ids.
 - send_video_note — circular video note to a known buyer/seller (WAHA or sokonimall.com URL).
 - create_mediation_group — buyer + seller + admin WhatsApp group for a disputed SKN. Auto on raise_order_dispute when the order is KES 10,000+.
+- send_channel_invite — send the official Channel invite link (https://whatsapp.com/channel/…) when someone asks for updates or new arrivals.
 
 Rules:
 - Look the person up first, then send. Quote name + phone from the tool. Never invent contacts or SKN ids.
@@ -657,6 +658,27 @@ export const OPS_TOOLS = [
         required: ["group_name", "participant_phones", "initial_message"],
         additionalProperties: false,
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_channel_invite",
+      description:
+        "Sends the official Sokoni Mall WhatsApp Channel invite link to the user. Use this when users ask for updates, new arrivals, or want to stay connected.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "The user's phone number." },
+          context: {
+            type: "string",
+            description: "A short, personalized intro based on the chat (e.g. 'To catch the next shoe drop, join here:').",
+          },
+        },
+        required: ["phone_number", "context"],
+        additionalProperties: false,
+      },
+      strict: true,
     },
   },
 ];
