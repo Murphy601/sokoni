@@ -11,8 +11,10 @@ import {
   listCrmContacts,
   assignAgent,
   runTaggedBroadcast,
+  tagCrmContact,
   resetCrmStoreForTests,
   CRM_WINDOW_MS,
+  CRM_TAXONOMY_TAGS,
   approvedTemplate,
 } from "./whatsapp-crm.js";
 
@@ -61,6 +63,51 @@ describe("CRM tag ranks", () => {
     assert.equal(contact.tag, "interested");
     assert.equal(contact.lastInboundAt, now);
     assert.equal(setCrmTag("254711111111@c.us", "closed").contact.tag, "closed");
+    assert.ok(contact.tags.includes("hot-lead"));
+  });
+});
+
+describe("CRM taxonomy tags", () => {
+  it("adds and removes hyphenated tags on a phone", async () => {
+    recordInbound({
+      customerKey: "254733333333@c.us",
+      text: "Hello",
+      phone: "254733333333",
+      now: Date.now(),
+    });
+    const tagged = await tagCrmContact({
+      phone_number: "254733333333",
+      tags_to_add: ["hot-lead", "inspection-pending"],
+      tags_to_remove: ["new-lead"],
+      sync: false,
+    });
+    assert.equal(tagged.ok, true);
+    assert.ok(tagged.tags.includes("hot-lead"));
+    assert.ok(tagged.tags.includes("inspection-pending"));
+    assert.ok(!tagged.tags.includes("new-lead"));
+    assert.equal(tagged.tag, "interested");
+
+    const listed = listCrmContacts({ tag: "hot-lead" });
+    assert.ok(listed.some((c) => c.phone === "254733333333" || c.customerKey.includes("254733333333")));
+  });
+
+  it("rejects unknown tags and accepts aliases", async () => {
+    const bad = await tagCrmContact({
+      phone_number: "254733333334",
+      tags_to_add: ["world-class-lead"],
+      sync: false,
+    });
+    assert.equal(bad.ok, false);
+    assert.equal(bad.error, "invalid_tag");
+
+    const alias = await tagCrmContact({
+      phone_number: "254733333334",
+      tags_to_add: ["interested"],
+      sync: false,
+    });
+    assert.equal(alias.ok, true);
+    assert.ok(alias.tags.includes("hot-lead"));
+    assert.ok(CRM_TAXONOMY_TAGS.includes("vip-buyer"));
   });
 });
 

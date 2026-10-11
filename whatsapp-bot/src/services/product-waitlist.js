@@ -105,6 +105,25 @@ export async function joinWaitlist({ phone, productId, productName } = {}) {
   return { ok: true, source: "file", phone: p, productId: id, productName: name };
 }
 
+export async function hasOpenWaitlistForPhone(phone) {
+  const p = digits(phone);
+  if (!p) return false;
+  if (isDbEnabled()) {
+    try {
+      const { rows } = await query(
+        `SELECT 1 FROM product_waitlist
+          WHERE phone = $1 AND notified_at IS NULL
+          LIMIT 1`,
+        [p]
+      );
+      return Boolean(rows?.[0]);
+    } catch {
+      /* file fallback */
+    }
+  }
+  return loadFile().rows.some((r) => r.phone === p && !r.notifiedAt);
+}
+
 export async function listOpenWaitlist(productId) {
   const id = String(productId || "").trim();
   if (!id) return [];

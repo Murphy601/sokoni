@@ -217,6 +217,7 @@ export async function listCrmDirectory({ tag, q, window = "any", limit = 20 } = 
       name: c.displayName || null,
       phone: c.phone || null,
       tag: c.tag || null,
+      tags: Array.isArray(c.tags) ? c.tags : [],
       windowOpen: Boolean(c.serviceWindow?.open),
     })),
   };

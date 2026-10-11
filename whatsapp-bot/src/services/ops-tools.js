@@ -54,6 +54,7 @@ export const OPS_TOOL_NAMES = [
   "send_whatsapp_voice",
   "send_whatsapp_buttons",
   "send_whatsapp_list",
+  "tag_crm_contact",
 ];
 
 const TOOL_ALIASES = {
@@ -805,6 +806,10 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "send_whatsapp_list") {
       const { sendWhatsAppList } = await import("./ops-desk-actions.js");
       return sendWhatsAppList(args, extras);
+    }
+    if (tool === "tag_crm_contact") {
+      const { tagCrmContact } = await import("./whatsapp-crm.js");
+      return tagCrmContact(args, extras);
     }
     return { ok: false, error: "unknown_tool", message: `Tool "${requested}" is not allowed.` };
   } catch (err) {
