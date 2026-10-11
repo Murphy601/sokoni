@@ -245,7 +245,7 @@ export async function scheduleReorderReminderTool({ customer_phone, product_id, 
   });
 }
 
-function allowedMediaUrl(url) {
+export function isAllowedOpsMediaUrl(url) {
   try {
     const parsed = new URL(String(url || ""));
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
@@ -256,10 +256,16 @@ function allowedMediaUrl(url) {
     if (waha && host === new URL(waha).hostname.toLowerCase()) return true;
     const site = String(config.publicSiteUrl || "").trim();
     if (site && host === new URL(site).hostname.toLowerCase()) return true;
+    const bot = String(config.botPublicUrl || "").trim();
+    if (bot && host === new URL(bot).hostname.toLowerCase()) return true;
     return false;
   } catch {
     return false;
   }
+}
+
+function allowedMediaUrl(url) {
+  return isAllowedOpsMediaUrl(url);
 }
 
 export async function processIncomingVoicenote({ media_url, sender_phone } = {}, extras = {}) {
