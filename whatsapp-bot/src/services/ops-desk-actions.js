@@ -252,6 +252,8 @@ export function isAllowedOpsMediaUrl(url) {
     const host = parsed.hostname.toLowerCase();
     if (host === "localhost" || host === "127.0.0.1") return true;
     if (host === "sokonimall.com" || host.endsWith(".sokonimall.com")) return true;
+    // Catalog stills / clips live on the Sokoni Cloudinary cloud (same as seller publish).
+    if (host === "res.cloudinary.com" || host.endsWith(".cloudinary.com")) return true;
     const waha = String(config.waha?.apiUrl || "").trim();
     if (waha && host === new URL(waha).hostname.toLowerCase()) return true;
     const site = String(config.publicSiteUrl || "").trim();
@@ -443,7 +445,7 @@ export async function publishWhatsAppStatusOrChannel(
       ok: false,
       error: "url_not_allowed",
       tool: "publish_whatsapp_status_or_channel",
-      message: "Media must be on WAHA or sokonimall.com.",
+      message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
     };
   }
 
@@ -524,7 +526,7 @@ export async function sendVideoNoteTool({ phone_number, video_url, order_id } = 
     return { ok: false, error: "missing_args", tool: "send_video_note", message: "Need phone_number and video_url." };
   }
   if (!allowedMediaUrl(url)) {
-    return { ok: false, error: "url_not_allowed", tool: "send_video_note", message: "Video must be a WAHA or sokonimall.com URL." };
+    return { ok: false, error: "url_not_allowed", tool: "send_video_note", message: "Video must be a WAHA, sokonimall.com, or catalog Cloudinary URL." };
   }
   const known =
     extras.allowUnknown === true ||
