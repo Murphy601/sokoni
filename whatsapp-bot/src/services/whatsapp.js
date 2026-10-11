@@ -118,6 +118,25 @@ function wahaHeaders(extra = {}) {
   return headers;
 }
 
+async function callWahaGet(endpoint, { timeoutMs = 20000 } = {}) {
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run] GET", endpoint);
+    return { dryRun: true };
+  }
+  try {
+    const { data } = await axios.get(`${config.waha.apiUrl}${endpoint}`, {
+      headers: wahaHeaders({ Accept: "application/json" }),
+      timeout: timeoutMs,
+    });
+    return data;
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.message || err.response?.data?.error || err.message;
+    console.error(`[waha] GET ${endpoint} failed${status ? ` (${status})` : ""}:`, detail);
+    throw err;
+  }
+}
+
 async function callWaha(endpoint, body, { timeoutMs = 30000 } = {}) {
   if (!config.waha.apiUrl) {
     console.log("[waha:dry-run]", endpoint, JSON.stringify(body, null, 2));
@@ -1124,10 +1143,71 @@ export async function publishWhatsAppStatus({ text = "", mediaUrl = "" } = {}) {
   }
 }
 
+function normalizeChannelRow(row = {}) {
+  const id = toChannelId(row.id || row.jid || row.chatId || row.newsletterId || "");
+  return {
+    id,
+    name: row.name || row.title || row.subject || null,
+    role: row.role || row.membership || row.permission || null,
+    description: row.description || row.desc || null,
+  };
+}
+
+/** GET /api/{session}/channels?role=OWNER — ids look like 111111111111111111@newsletter. */
+export async function listWhatsAppChannels({ role = "OWNER" } = {}) {
+  const session = config.waha.session || "default";
+  const q = role ? `?role=${encodeURIComponent(role)}` : "";
+  if (!config.waha.apiUrl) {
+    return { ok: true, dryRun: true, session, role: role || null, count: 0, channels: [] };
+  }
+  try {
+    const data = await callWahaGet(`/api/${encodeURIComponent(session)}/channels${q}`);
+    const rows = Array.isArray(data) ? data : data?.channels || data?.data || [];
+    const channels = rows.map(normalizeChannelRow).filter((c) => c.id);
+    return { ok: true, session, role: role || null, count: channels.length, channels };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "channels_failed",
+      message: String(err?.message || err).slice(0, 200),
+      session,
+      channels: [],
+    };
+  }
+}
+
+export async function resolveWhatsAppChannelId(explicit = "") {
+  const fromArg = toChannelId(explicit || config.waha.channelId);
+  if (fromArg) {
+    return { ok: true, channelId: fromArg, source: explicit ? "argument" : "env" };
+  }
+  const listed = await listWhatsAppChannels({ role: "OWNER" });
+  if (listed.dryRun) {
+    return { ok: true, dryRun: true, channelId: null, source: "dry_run" };
+  }
+  const first = listed.channels?.[0];
+  if (first?.id) {
+    return { ok: true, channelId: first.id, source: "waha_owner", name: first.name };
+  }
+  return {
+    ok: false,
+    error: "missing_channel_id",
+    message:
+      "No OWNER channel from GET /api/{session}/channels. Scan the WAHA QR, then pass channel_id or set WAHA_CHANNEL_ID (111…@newsletter).",
+  };
+}
+
 export async function publishWhatsAppChannel({ channelId = "", text = "", mediaUrl = "" } = {}) {
-  const dest = toChannelId(channelId || config.waha.channelId);
+  const resolved = await resolveWhatsAppChannelId(channelId);
+  if (!resolved.ok && !resolved.dryRun) return resolved;
+  const dest = resolved.channelId;
   if (!dest) {
-    return { ok: false, error: "missing_channel_id", message: "Set WAHA_CHANNEL_ID or pass channel_id (123@newsletter)." };
+    return {
+      ok: Boolean(resolved.dryRun),
+      dryRun: Boolean(resolved.dryRun),
+      error: resolved.dryRun ? undefined : "missing_channel_id",
+      message: resolved.message || "Need a channel id (111…@newsletter).",
+    };
   }
   if (mediaUrl) {
     return sendImage(dest, { link: mediaUrl, caption: text });

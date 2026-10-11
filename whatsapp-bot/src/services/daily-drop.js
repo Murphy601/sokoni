@@ -1,5 +1,5 @@
 /**
- * Morning catalog drop for WhatsApp Status / Channel.
+ * Morning catalog drop — posts to WhatsApp Status AND the official Channel.
  * Off unless DAILY_DROP_ENABLED=true. Caption is prepaid-escrow, countrywide Kenya.
  */
 import { config } from "../config.js";
@@ -50,13 +50,13 @@ export async function runDailyDrop(extras = {}) {
   }
   const text = extras.text || dailyDropCaption(items);
   const media = extras.media_url || extras.mediaUrl || items[0]?.image || items[0]?.imageUrl || items[0]?.photo || "";
-  const dest = String(extras.destination_type || extras.destination || config.dailyDrop?.destination || "STATUS")
+  const dest = String(extras.destination_type || extras.destination || config.dailyDrop?.destination || "BOTH")
     .trim()
     .toUpperCase();
   const { publishWhatsAppStatusOrChannel } = await import("./ops-desk-actions.js");
   const posted = await publishWhatsAppStatusOrChannel(
     {
-      destination_type: dest === "CHANNEL" ? "CHANNEL" : "STATUS",
+      destination_type: dest === "STATUS" || dest === "CHANNEL" ? dest : "BOTH",
       channel_id: extras.channel_id || config.waha?.channelId,
       text,
       media_url: media || undefined,

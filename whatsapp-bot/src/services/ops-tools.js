@@ -56,6 +56,7 @@ export const OPS_TOOL_NAMES = [
   "send_whatsapp_list",
   "tag_crm_contact",
   "publish_whatsapp_status_or_channel",
+  "list_whatsapp_channels",
   "send_video_note",
   "create_mediation_group",
 ];
@@ -817,6 +818,10 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "publish_whatsapp_status_or_channel") {
       const { publishWhatsAppStatusOrChannel } = await import("./ops-desk-actions.js");
       return publishWhatsAppStatusOrChannel(args, extras);
+    }
+    if (tool === "list_whatsapp_channels") {
+      const { listWhatsAppChannelsTool } = await import("./ops-desk-actions.js");
+      return listWhatsAppChannelsTool(args, extras);
     }
     if (tool === "send_video_note") {
       const { sendVideoNoteTool } = await import("./ops-desk-actions.js");

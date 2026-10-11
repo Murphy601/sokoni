@@ -411,14 +411,16 @@ export async function publishWhatsAppStatusOrChannel(
   { destination_type, channel_id, text, media_url } = {},
   extras = {}
 ) {
-  const dest = String(destination_type || "").trim().toUpperCase();
+  const dest = String(destination_type || "BOTH").trim().toUpperCase();
+  const wantStatus = dest === "STATUS" || dest === "BOTH" || dest === "ALL";
+  const wantChannel = dest === "CHANNEL" || dest === "BOTH" || dest === "ALL";
   const body = cleanText(text, 700);
-  if (!["STATUS", "CHANNEL"].includes(dest) || !body) {
+  if ((!wantStatus && !wantChannel) || !body) {
     return {
       ok: false,
       error: "missing_args",
       tool: "publish_whatsapp_status_or_channel",
-      message: "Need destination_type (STATUS|CHANNEL) and text.",
+      message: "Need destination_type (BOTH|STATUS|CHANNEL) and text.",
     };
   }
   if (hasTillLeak(body)) {
@@ -438,32 +440,75 @@ export async function publishWhatsAppStatusOrChannel(
       message: "Media must be on WAHA or sokonimall.com.",
     };
   }
+
+  const destinations = [];
+  if (wantStatus) destinations.push("STATUS");
+  if (wantChannel) destinations.push("CHANNEL");
+
   if (extras.dryRun === true || !config.waha?.apiUrl) {
+    let channelId = channel_id || config.waha?.channelId || null;
+    if (wantChannel && !channelId) {
+      const { resolveWhatsAppChannelId } = await import("./whatsapp.js");
+      const resolved = await resolveWhatsAppChannelId(channel_id);
+      channelId = resolved.channelId || null;
+    }
     return {
       ok: true,
       dryRun: true,
       tool: "publish_whatsapp_status_or_channel",
-      destination: dest,
-      channelId: dest === "CHANNEL" ? channel_id || config.waha?.channelId || null : null,
+      destination: dest === "STATUS" || dest === "CHANNEL" ? dest : "BOTH",
+      destinations,
+      channelId: wantChannel ? channelId : null,
       text: body,
       mediaUrl: media || null,
     };
   }
-  if (dest === "STATUS") {
+
+  const posted = {};
+  if (wantStatus) {
     const { publishWhatsAppStatus } = await import("./whatsapp.js");
-    const posted = await publishWhatsAppStatus({ text: body, mediaUrl: media });
-    return { ok: true, tool: "publish_whatsapp_status_or_channel", destination: "STATUS", ...posted };
+    try {
+      posted.status = { ok: true, ...(await publishWhatsAppStatus({ text: body, mediaUrl: media })) };
+    } catch (err) {
+      posted.status = { ok: false, error: String(err?.message || err).slice(0, 160) };
+    }
   }
-  const { publishWhatsAppChannel } = await import("./whatsapp.js");
-  const posted = await publishWhatsAppChannel({
-    channelId: channel_id || config.waha?.channelId,
-    text: body,
-    mediaUrl: media,
-  });
-  if (posted?.error) {
-    return { ok: false, tool: "publish_whatsapp_status_or_channel", ...posted };
+  if (wantChannel) {
+    const { publishWhatsAppChannel } = await import("./whatsapp.js");
+    posted.channel = await publishWhatsAppChannel({
+      channelId: channel_id || config.waha?.channelId,
+      text: body,
+      mediaUrl: media,
+    });
+    if (posted.channel && posted.channel.ok === undefined) posted.channel.ok = !posted.channel.error;
   }
-  return { ok: true, tool: "publish_whatsapp_status_or_channel", destination: "CHANNEL", ...posted };
+
+  const statusOk = !wantStatus || posted.status?.ok !== false;
+  const channelOk = !wantChannel || posted.channel?.ok !== false;
+  return {
+    ok: statusOk || channelOk,
+    tool: "publish_whatsapp_status_or_channel",
+    destination: dest === "STATUS" || dest === "CHANNEL" ? dest : "BOTH",
+    destinations,
+    posted,
+    partial: Boolean(wantStatus && wantChannel && !(statusOk && channelOk)),
+  };
+}
+
+export async function listWhatsAppChannelsTool({ role = "OWNER" } = {}, extras = {}) {
+  const { listWhatsAppChannels } = await import("./whatsapp.js");
+  if (extras.dryRun === true || !config.waha?.apiUrl) {
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "list_whatsapp_channels",
+      role: role || "OWNER",
+      channels: [],
+      message: "WAHA GET /api/{session}/channels?role=OWNER — ids look like 111…@newsletter.",
+    };
+  }
+  const listed = await listWhatsAppChannels({ role });
+  return { ...listed, tool: "list_whatsapp_channels" };
 }
 
 export async function sendVideoNoteTool({ phone_number, video_url, order_id } = {}, extras = {}) {
