@@ -33,4 +33,16 @@ describe("daily drop curation", () => {
     assert.deepEqual(posted.destinations, ["STATUS", "CHANNEL"]);
     assert.equal(posted.dailyDrop, true);
   });
+
+  it("posts text when the product photo is on a blocked host", async () => {
+    const posted = await runDailyDrop({
+      dryRun: true,
+      media_url: "https://res.cloudinary.com/demo/itel.jpg",
+      items: [{ id: "c", name: "Black Itel Feature Phone", priceKes: 12 }],
+    });
+    assert.equal(posted.ok, true);
+    assert.equal(posted.destination, "BOTH");
+    assert.equal(posted.mediaUrl, null);
+    assert.equal(posted.mediaSkipped, true);
+  });
 });

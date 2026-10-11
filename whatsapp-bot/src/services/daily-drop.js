@@ -49,7 +49,20 @@ export async function runDailyDrop(extras = {}) {
     return { ok: false, error: "empty_catalog", tool: "daily_drop", message: "No unsold listings to post." };
   }
   const text = extras.text || dailyDropCaption(items);
-  const media = extras.media_url || extras.mediaUrl || items[0]?.image || items[0]?.imageUrl || items[0]?.photo || "";
+  const { isAllowedOpsMediaUrl } = await import("./ops-desk-actions.js");
+  let media = String(extras.media_url || extras.mediaUrl || "").trim();
+  if (!media) {
+    const lead = items[0] || {};
+    try {
+      const { catalogImageBotUrl, resolveStorefrontImageUrl } = await import("../lib/catalog-images.js");
+      media = catalogImageBotUrl(lead) || resolveStorefrontImageUrl(lead) || "";
+    } catch {
+      media = lead.image || lead.imageUrl || lead.photo || "";
+    }
+  }
+  media = String(media || "").trim();
+  const mediaSkipped = Boolean(media) && !isAllowedOpsMediaUrl(media);
+  if (mediaSkipped) media = "";
   const dest = String(extras.destination_type || extras.destination || config.dailyDrop?.destination || "BOTH")
     .trim()
     .toUpperCase();
@@ -68,6 +81,7 @@ export async function runDailyDrop(extras = {}) {
     tool: posted.tool || "publish_whatsapp_status_or_channel",
     dailyDrop: true,
     itemCount: items.length,
+    mediaSkipped: mediaSkipped || undefined,
     items: items.map((p) => ({ id: p.id, name: p.name, priceKes: p.priceKes })),
   };
 }
