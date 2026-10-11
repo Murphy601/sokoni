@@ -355,6 +355,17 @@ export function createOrder({ customerKey, chatId, product, details, offerId = n
   };
   store.orders[id] = order;
   persist();
+  void import("./whatsapp-crm.js")
+    .then(({ upsertCrmFromRosterPerson }) =>
+      upsertCrmFromRosterPerson({
+        phone: order.phone,
+        name: order.customerName || "",
+        role: "buyer",
+        tagsToAdd: ["new-lead"],
+        lastInboundAt: now,
+      })
+    )
+    .catch((err) => console.warn("[orders] CRM buyer sync skipped:", err.message));
   return order;
 }
 

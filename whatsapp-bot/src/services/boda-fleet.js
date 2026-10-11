@@ -572,6 +572,19 @@ export async function setRiderVerificationStatus(riderId, status, { reason = "",
   if (!rows[0]) return { error: "not_found", message: "Rider not found." };
   const rider = mapRider(rows[0]);
 
+  if (isVerified && rider.phone) {
+    void import("./whatsapp-crm.js")
+      .then(({ upsertCrmFromRosterPerson }) =>
+        upsertCrmFromRosterPerson({
+          phone: rider.phone,
+          name: rider.fullName,
+          role: "rider",
+          status: "VERIFIED",
+        })
+      )
+      .catch((err) => console.warn("[boda-fleet] CRM rider sync skipped:", err.message));
+  }
+
   if (silent) return { ok: true, rider };
 
   const text = riderVerificationNotifyText(rider, st, reason);
