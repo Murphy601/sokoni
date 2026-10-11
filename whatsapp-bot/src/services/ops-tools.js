@@ -55,6 +55,9 @@ export const OPS_TOOL_NAMES = [
   "send_whatsapp_buttons",
   "send_whatsapp_list",
   "tag_crm_contact",
+  "publish_whatsapp_status_or_channel",
+  "send_video_note",
+  "create_mediation_group",
 ];
 
 const TOOL_ALIASES = {
@@ -777,7 +780,7 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     }
     if (tool === "raise_order_dispute") {
       const { raiseOrderDispute } = await import("./ops-desk-actions.js");
-      return raiseOrderDispute(args);
+      return raiseOrderDispute(args, extras);
     }
     if (tool === "trigger_12h_dispatch_refund") {
       const { trigger12hDispatchRefund } = await import("./ops-desk-actions.js");
@@ -810,6 +813,18 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "tag_crm_contact") {
       const { tagCrmContact } = await import("./whatsapp-crm.js");
       return tagCrmContact(args, extras);
+    }
+    if (tool === "publish_whatsapp_status_or_channel") {
+      const { publishWhatsAppStatusOrChannel } = await import("./ops-desk-actions.js");
+      return publishWhatsAppStatusOrChannel(args, extras);
+    }
+    if (tool === "send_video_note") {
+      const { sendVideoNoteTool } = await import("./ops-desk-actions.js");
+      return sendVideoNoteTool(args, extras);
+    }
+    if (tool === "create_mediation_group") {
+      const { createMediationGroup } = await import("./ops-desk-actions.js");
+      return createMediationGroup(args, extras);
     }
     return { ok: false, error: "unknown_tool", message: `Tool "${requested}" is not allowed.` };
   } catch (err) {

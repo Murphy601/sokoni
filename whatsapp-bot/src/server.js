@@ -512,6 +512,7 @@ const httpServer = app.listen(config.port, "0.0.0.0", () => {
   startTiktokScheduler();
   startExecutiveBriefingScheduler();
   startReorderReminderScheduler();
+  startDailyDropScheduler();
   startPayoutScheduler();
   startOrderCommunicationScheduler();
   startFeedScheduler();
@@ -869,4 +870,31 @@ function startReorderReminderScheduler() {
       .catch((err) => console.warn("[reorder] cron:", err.message));
   }, 60_000);
   console.log(`✓ Re-order reminder cron enabled (${tz})`);
+}
+
+/** 08:00 EAT catalog drop to WhatsApp Status / Channel. Off unless DAILY_DROP_ENABLED=true. */
+function startDailyDropScheduler() {
+  if (!config.dailyDrop?.enabled) {
+    console.log("⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to post at 08:00 EAT)");
+    return;
+  }
+  const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  let lastKey = "";
+  setInterval(() => {
+    const now = clockInTimezone(tz);
+    import("./services/daily-drop.js")
+      .then(async ({ DAILY_DROP_HOUR_EAT, runDailyDrop }) => {
+        const hour = DAILY_DROP_HOUR_EAT;
+        if (now.hour === hour && now.minute === 0) {
+          const key = `${now.dateKey}-${hour}`;
+          if (key !== lastKey) {
+            lastKey = key;
+            const r = await runDailyDrop();
+            console.log("[daily-drop]", r.ok ? `posted ${r.itemCount}` : r.error || r.message);
+          }
+        }
+      })
+      .catch((err) => console.warn("[daily-drop] cron:", err.message));
+  }, 60_000);
+  console.log(`✓ Daily drop cron enabled (${tz}) at ${String(config.dailyDrop.hourEat).padStart(2, "0")}:00`);
 }

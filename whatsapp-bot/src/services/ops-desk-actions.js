@@ -5,7 +5,7 @@
  */
 import { normalizeKenyaPhone } from "../lib/phone-normalize.js";
 import { normalizeOrderId } from "../lib/order-id.js";
-import { getOrder, updateOrderMeta } from "./orders.js";
+import { getOrder, updateOrderMeta, getOrdersForCustomer } from "./orders.js";
 import { sendText, toChatId } from "./whatsapp.js";
 import { setMenuState } from "./session.js";
 import { config } from "../config.js";
@@ -163,7 +163,21 @@ export async function submitInspectionPhotos({ order_id, photo_urls, buyer_note 
   };
 }
 
-export async function raiseOrderDispute({ order_id, dispute_reason, disputed_by } = {}) {
+export const MEDIATION_MIN_KES = 10_000;
+
+function mediationPhonesForOrder(order) {
+  return [
+    order?.phone,
+    order?.mpesaPhone,
+    order?.sellerPhone,
+    order?.supplierPhone,
+    ...(Array.isArray(config.admin?.phones) ? config.admin.phones : []),
+  ]
+    .map((p) => normalizeKenyaPhone(p))
+    .filter(Boolean);
+}
+
+export async function raiseOrderDispute({ order_id, dispute_reason, disputed_by } = {}, extras = {}) {
   const id = normalizeOrderId(order_id);
   const reason = cleanText(dispute_reason, 500);
   const who = String(disputed_by || "BUYER").trim().toUpperCase();
@@ -183,7 +197,7 @@ export async function raiseOrderDispute({ order_id, dispute_reason, disputed_by 
     disputeReason: reason,
     disputedBy: who,
   });
-  return {
+  const result = {
     ok: Boolean(frozen?.frozen),
     tool: "raise_order_dispute",
     orderId: id,
@@ -194,6 +208,32 @@ export async function raiseOrderDispute({ order_id, dispute_reason, disputed_by 
       ? "Escrow frozen. Resolve on Command Center — the agent cannot pay out or refund."
       : frozen?.reason || "Could not freeze escrow.",
   };
+
+  const total = Number(order.totalKes ?? order.buyerTotalKes ?? order.priceKes) || 0;
+  if (frozen?.frozen && total >= MEDIATION_MIN_KES && extras.skipMediation !== true) {
+    try {
+      const group = await createMediationGroup(
+        {
+          group_name: `Dispute: ${id}`,
+          participant_phones: mediationPhonesForOrder(order),
+          initial_message:
+            `Escrow hold on *${id}* (KES ${total}). ${who} opened a dispute: ${reason}\n\n` +
+            `Photos and tracking stay on this order. Staff will mediate here — no payout or refund from this chat.`,
+          order_id: id,
+        },
+        extras
+      );
+      result.mediation = {
+        ok: group.ok,
+        groupId: group.groupId || null,
+        dryRun: Boolean(group.dryRun),
+        error: group.error || null,
+      };
+    } catch (err) {
+      result.mediation = { ok: false, error: String(err?.message || err).slice(0, 160) };
+    }
+  }
+  return result;
 }
 
 export async function scheduleReorderReminderTool({ customer_phone, product_id, days_delay } = {}) {
@@ -209,12 +249,14 @@ function allowedMediaUrl(url) {
   try {
     const parsed = new URL(String(url || ""));
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host === "sokonimall.com" || host.endsWith(".sokonimall.com")) return true;
     const waha = String(config.waha?.apiUrl || "").trim();
-    if (waha) {
-      const allowed = new URL(waha);
-      return parsed.host === allowed.host;
-    }
-    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    if (waha && host === new URL(waha).hostname.toLowerCase()) return true;
+    const site = String(config.publicSiteUrl || "").trim();
+    if (site && host === new URL(site).hostname.toLowerCase()) return true;
+    return false;
   } catch {
     return false;
   }
@@ -359,4 +401,182 @@ export async function sendWhatsAppList({ phone_number, menu_title, message_text,
   const send = extras.sender || sendText;
   await send(toChatId(phone), body);
   return { ok: true, tool: "send_whatsapp_list", channel: "numbered_menu", phone, itemCount: items.length };
+}
+
+function hasTillLeak(text) {
+  return /\b(till|paybill|business\s*number)\b/i.test(String(text || ""));
+}
+
+export async function publishWhatsAppStatusOrChannel(
+  { destination_type, channel_id, text, media_url } = {},
+  extras = {}
+) {
+  const dest = String(destination_type || "").trim().toUpperCase();
+  const body = cleanText(text, 700);
+  if (!["STATUS", "CHANNEL"].includes(dest) || !body) {
+    return {
+      ok: false,
+      error: "missing_args",
+      tool: "publish_whatsapp_status_or_channel",
+      message: "Need destination_type (STATUS|CHANNEL) and text.",
+    };
+  }
+  if (hasTillLeak(body)) {
+    return {
+      ok: false,
+      error: "no_till",
+      tool: "publish_whatsapp_status_or_channel",
+      message: "Do not publish till or paybill numbers. Prepaid checkout links only.",
+    };
+  }
+  const media = String(media_url || "").trim();
+  if (media && !allowedMediaUrl(media)) {
+    return {
+      ok: false,
+      error: "url_not_allowed",
+      tool: "publish_whatsapp_status_or_channel",
+      message: "Media must be on WAHA or sokonimall.com.",
+    };
+  }
+  if (extras.dryRun === true || !config.waha?.apiUrl) {
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "publish_whatsapp_status_or_channel",
+      destination: dest,
+      channelId: dest === "CHANNEL" ? channel_id || config.waha?.channelId || null : null,
+      text: body,
+      mediaUrl: media || null,
+    };
+  }
+  if (dest === "STATUS") {
+    const { publishWhatsAppStatus } = await import("./whatsapp.js");
+    const posted = await publishWhatsAppStatus({ text: body, mediaUrl: media });
+    return { ok: true, tool: "publish_whatsapp_status_or_channel", destination: "STATUS", ...posted };
+  }
+  const { publishWhatsAppChannel } = await import("./whatsapp.js");
+  const posted = await publishWhatsAppChannel({
+    channelId: channel_id || config.waha?.channelId,
+    text: body,
+    mediaUrl: media,
+  });
+  if (posted?.error) {
+    return { ok: false, tool: "publish_whatsapp_status_or_channel", ...posted };
+  }
+  return { ok: true, tool: "publish_whatsapp_status_or_channel", destination: "CHANNEL", ...posted };
+}
+
+export async function sendVideoNoteTool({ phone_number, video_url, order_id } = {}, extras = {}) {
+  const phone = normalizeKenyaPhone(phone_number);
+  const url = String(video_url || "").trim();
+  if (!phone || !url) {
+    return { ok: false, error: "missing_args", tool: "send_video_note", message: "Need phone_number and video_url." };
+  }
+  if (!allowedMediaUrl(url)) {
+    return { ok: false, error: "url_not_allowed", tool: "send_video_note", message: "Video must be a WAHA or sokonimall.com URL." };
+  }
+  const known =
+    extras.allowUnknown === true ||
+    getOrdersForCustomer("", phone).length > 0 ||
+    (Array.isArray(config.admin?.phones) && config.admin.phones.includes(phone));
+  if (!known) {
+    return {
+      ok: false,
+      error: "unknown_recipient",
+      tool: "send_video_note",
+      message: "Can only send a video note to a known buyer, seller, or admin.",
+    };
+  }
+  const orderId = normalizeOrderId(order_id);
+  if (orderId && getOrder(orderId)) {
+    const order = getOrder(orderId);
+    const prev = Array.isArray(order.inspectionVideos) ? order.inspectionVideos : [];
+    updateOrderMeta(orderId, { inspectionVideos: [...prev, url].slice(-8), inspectionVideoAt: Date.now() });
+  }
+  if (extras.dryRun === true || !config.waha?.apiUrl) {
+    return { ok: true, dryRun: true, tool: "send_video_note", phone, videoUrl: url, orderId: orderId || null };
+  }
+  const { sendVideoNote } = await import("./whatsapp.js");
+  await sendVideoNote(phone, { url });
+  return { ok: true, tool: "send_video_note", phone, videoUrl: url, orderId: orderId || null };
+}
+
+export async function createMediationGroup(
+  { group_name, participant_phones, initial_message, order_id } = {},
+  extras = {}
+) {
+  const name = cleanText(group_name, 80);
+  const intro = cleanText(initial_message, 700);
+  const fromArgs = (Array.isArray(participant_phones) ? participant_phones : [])
+    .map((p) => normalizeKenyaPhone(p))
+    .filter(Boolean);
+  const orderRef = normalizeOrderId(order_id) || (name.match(/SKN-\d+(?:-\d+)?/i) || [])[0] || "";
+  const order = orderRef ? getOrder(orderRef) : null;
+  const phones = [...new Set([...fromArgs, ...(order ? mediationPhonesForOrder(order) : []), ...(config.admin?.phones || [])])];
+
+  if (!name || !intro || phones.length < 2) {
+    return {
+      ok: false,
+      error: "missing_args",
+      tool: "create_mediation_group",
+      message: "Need a group name, an initial message, and at least two Kenya numbers (buyer + seller or admin).",
+    };
+  }
+  if (!order && fromArgs.length < 2) {
+    return {
+      ok: false,
+      error: "unknown_parties",
+      tool: "create_mediation_group",
+      message: "Pass an SKN in the group name or two known party phones. Do not invent a group.",
+    };
+  }
+  if (hasTillLeak(intro)) {
+    return { ok: false, error: "no_till", tool: "create_mediation_group", message: "Do not put till numbers in the group intro." };
+  }
+  if (order?.mediationGroupId && extras.force !== true) {
+    return {
+      ok: true,
+      already: true,
+      tool: "create_mediation_group",
+      groupId: order.mediationGroupId,
+      orderId: order.id,
+      message: "A mediation group already exists for this order.",
+    };
+  }
+
+  if (extras.dryRun === true || !config.waha?.apiUrl) {
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "create_mediation_group",
+      groupId: "dryrun@g.us",
+      name,
+      phones,
+      orderId: order?.id || null,
+      text: intro,
+    };
+  }
+
+  const { createWhatsAppGroup } = await import("./whatsapp.js");
+  const created = await createWhatsAppGroup({ name, participants: phones });
+  if (!created?.ok && !created?.groupId) {
+    return { ok: false, error: created?.error || "group_failed", tool: "create_mediation_group", message: created?.message };
+  }
+  const groupId = created.groupId;
+  if (order?.id) {
+    updateOrderMeta(order.id, { mediationGroupId: groupId, mediationOpenedAt: Date.now() });
+  }
+  try {
+    await sendText(groupId, intro);
+  } catch (err) {
+    console.warn("[mediation] intro send skipped:", err.message);
+  }
+  return {
+    ok: true,
+    tool: "create_mediation_group",
+    groupId,
+    name,
+    phones,
+    orderId: order?.id || null,
+  };
 }
