@@ -1050,3 +1050,114 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
     `What next?\n\n1. 🤖 Ask AI about it\n2. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
   );
 }
+
+export function toChannelId(channelId) {
+  const raw = String(channelId || "").trim();
+  if (!raw) return "";
+  if (/@newsletter$/i.test(raw)) return raw;
+  return `${raw.replace(/@.*$/, "")}@newsletter`;
+}
+
+/** Circular video note (WAHA sendVideo asNote). Falls back to sendFile. */
+export async function sendVideoNote(to, { url, data, mimetype = "video/mp4", filename = "note.mp4" } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  const file = data
+    ? { data: Buffer.from(data).toString("base64"), mimetype, filename }
+    : { url, mimetype, filename };
+  if (!file.url && !file.data) throw new Error("missing_video");
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file,
+    convert: true,
+    asNote: true,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVideo", { chatId: dest, asNote: true });
+    return { dryRun: true, chatId: dest, endpoint: "/api/sendVideo" };
+  }
+  try {
+    const resp = await callWaha("/api/sendVideo", body, { timeoutMs: 60000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVideo note failed, trying sendFile:", err.message);
+    const resp = await callWaha("/api/sendFile", { ...body, caption: "" }, { timeoutMs: 60000 });
+    rememberSend(resp, dest);
+    return resp;
+  }
+}
+
+export async function publishWhatsAppStatus({ text = "", mediaUrl = "" } = {}) {
+  const session = config.waha.session;
+  const caption = String(text || "").trim();
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "status@broadcast", { caption, mediaUrl: Boolean(mediaUrl) });
+    return { dryRun: true, destination: "status@broadcast", text: caption };
+  }
+  if (mediaUrl) {
+    try {
+      return await callWaha(`/api/${encodeURIComponent(session)}/status/image`, {
+        file: { url: mediaUrl },
+        caption,
+      });
+    } catch (err) {
+      console.warn("[whatsapp] status/image failed, trying sendImage:", err.message);
+      return callWaha("/api/sendImage", {
+        session,
+        chatId: "status@broadcast",
+        file: { url: mediaUrl },
+        caption,
+      });
+    }
+  }
+  try {
+    return await callWaha(`/api/${encodeURIComponent(session)}/status/text`, { text: caption });
+  } catch (err) {
+    console.warn("[whatsapp] status/text failed, trying sendText:", err.message);
+    return callWaha("/api/sendText", {
+      session,
+      chatId: "status@broadcast",
+      text: caption,
+    });
+  }
+}
+
+export async function publishWhatsAppChannel({ channelId = "", text = "", mediaUrl = "" } = {}) {
+  const dest = toChannelId(channelId || config.waha.channelId);
+  if (!dest) {
+    return { ok: false, error: "missing_channel_id", message: "Set WAHA_CHANNEL_ID or pass channel_id (123@newsletter)." };
+  }
+  if (mediaUrl) {
+    return sendImage(dest, { link: mediaUrl, caption: text });
+  }
+  return sendText(dest, text);
+}
+
+export async function createWhatsAppGroup({ name, participants = [] } = {}) {
+  const session = config.waha.session;
+  const members = [...new Set(participants.map((p) => toChatId(p)).filter(Boolean))];
+  const body = { session, name: String(name || "").trim().slice(0, 80), participants: members };
+  if (!body.name || members.length < 1) {
+    return { ok: false, error: "missing_args", message: "Need a group name and at least one participant." };
+  }
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/createGroup", body);
+    return { ok: true, dryRun: true, name: body.name, participants: members, groupId: "dryrun@g.us" };
+  }
+  try {
+    const data = await callWaha("/api/createGroup", body, { timeoutMs: 45000 });
+    const groupId = data?.id || data?.gid?._serialized || data?.groupId || "";
+    return { ok: true, ...data, groupId, name: body.name, participants: members };
+  } catch (err) {
+    console.warn("[whatsapp] createGroup failed, trying session groups:", err.message);
+    const data = await callWaha(
+      `/api/${encodeURIComponent(session)}/groups`,
+      { name: body.name, participants: members },
+      { timeoutMs: 45000 }
+    );
+    const groupId = data?.id || data?.gid?._serialized || data?.groupId || "";
+    return { ok: true, ...data, groupId, name: body.name, participants: members };
+  }
+}

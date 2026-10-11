@@ -39,6 +39,9 @@ Tools:
 - notify_admin_ops — WhatsApp alert to ADMIN_PHONES.
 - send_whatsapp_message / send_whatsapp_voice — reach a registered seller, rider, or known buyer.
 - send_whatsapp_buttons / send_whatsapp_list — numbered menus (WAHA tap buttons are unreliable).
+- publish_whatsapp_status_or_channel — post a catalog drop to Status or the official Channel (no till numbers).
+- send_video_note — circular video note to a known buyer/seller (WAHA or sokonimall.com URL).
+- create_mediation_group — buyer + seller + admin WhatsApp group for a disputed SKN. Auto on raise_order_dispute when the order is KES 10,000+.
 
 Rules:
 - Look the person up first, then send. Quote name + phone from the tool. Never invent contacts or SKN ids.
@@ -576,6 +579,63 @@ export const OPS_TOOLS = [
           },
         },
         required: ["phone_number", "tags_to_add"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "publish_whatsapp_status_or_channel",
+      description:
+        "Publishes a text or media update to the official WhatsApp Status or a Sokoni WhatsApp Channel. Never include till or paybill numbers.",
+      parameters: {
+        type: "object",
+        properties: {
+          destination_type: { type: "string", description: "STATUS or CHANNEL" },
+          channel_id: { type: "string", description: "Channel id if CHANNEL, e.g. 123@newsletter." },
+          text: { type: "string", description: "Caption or announcement." },
+          media_url: { type: "string", description: "Optional image/video URL on WAHA or sokonimall.com." },
+        },
+        required: ["destination_type", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_video_note",
+      description: "Sends a native WhatsApp circular video note to a known buyer or seller.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "Recipient phone." },
+          video_url: { type: "string", description: "WAHA or sokonimall.com video URL." },
+        },
+        required: ["phone_number", "video_url"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_mediation_group",
+      description:
+        "Creates a temporary WhatsApp group for dispute mediation (buyer, seller, admin). Use for a real SKN. The agent still cannot pay out or refund.",
+      parameters: {
+        type: "object",
+        properties: {
+          group_name: { type: "string", description: "e.g. Dispute: SKN-1016" },
+          participant_phones: {
+            type: "array",
+            items: { type: "string" },
+            description: "Buyer, seller, and admin phones.",
+          },
+          initial_message: { type: "string", description: "First message explaining the hold." },
+        },
+        required: ["group_name", "participant_phones", "initial_message"],
         additionalProperties: false,
       },
     },

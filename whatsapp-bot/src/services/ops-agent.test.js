@@ -259,6 +259,66 @@ describe("ops tool argument guards", () => {
     assert.equal(voice.ok, true);
     assert.equal(voice.dryRun, true);
   });
+
+  it("publishes Status dry-run and refuses till numbers", async () => {
+    const posted = await executeOpsTool(
+      "publish_whatsapp_status_or_channel",
+      { destination_type: "STATUS", text: "Today's drop — prepaid escrow, countrywide Kenya." },
+      { dryRun: true }
+    );
+    assert.equal(posted.ok, true);
+    assert.equal(posted.destination, "STATUS");
+    assert.equal(posted.dryRun, true);
+
+    const till = await executeOpsTool("publish_whatsapp_status_or_channel", {
+      destination_type: "STATUS",
+      text: "Pay till 123456 now",
+    });
+    assert.equal(till.ok, false);
+    assert.equal(till.error, "no_till");
+  });
+
+  it("sends video notes only to known chats with allowed URLs", async () => {
+    const badUrl = await executeOpsTool(
+      "send_video_note",
+      { phone_number: "254711111111", video_url: "https://evil.example/note.mp4" },
+      { dryRun: true, allowUnknown: true }
+    );
+    assert.equal(badUrl.ok, false);
+    assert.equal(badUrl.error, "url_not_allowed");
+
+    const unknown = await executeOpsTool(
+      "send_video_note",
+      { phone_number: "254711111111", video_url: "https://sokonimall.com/demo.mp4" },
+      { dryRun: true }
+    );
+    assert.equal(unknown.ok, false);
+    assert.equal(unknown.error, "unknown_recipient");
+
+    const dry = await executeOpsTool(
+      "send_video_note",
+      { phone_number: "254711111111", video_url: "https://sokonimall.com/demo.mp4" },
+      { dryRun: true, allowUnknown: true }
+    );
+    assert.equal(dry.ok, true);
+    assert.equal(dry.dryRun, true);
+  });
+
+  it("creates a mediation group in dry-run for two Kenya numbers", async () => {
+    const group = await executeOpsTool(
+      "create_mediation_group",
+      {
+        group_name: "Dispute: SKN-1016",
+        participant_phones: ["254711111111", "254722222222"],
+        initial_message: "Escrow is held. Staff will mediate — no payout from this chat.",
+      },
+      { dryRun: true }
+    );
+    assert.equal(group.ok, true);
+    assert.equal(group.dryRun, true);
+    assert.equal(group.groupId, "dryrun@g.us");
+    assert.ok(group.phones.length >= 2);
+  });
 });
 
 describe("free-model tool call parsing", () => {
