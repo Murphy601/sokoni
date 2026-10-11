@@ -875,7 +875,7 @@ function startReorderReminderScheduler() {
 /** 08:00 EAT catalog drop to WhatsApp Status / Channel. Off unless DAILY_DROP_ENABLED=true. */
 function startDailyDropScheduler() {
   if (!config.dailyDrop?.enabled) {
-    console.log("⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to post at 08:00 EAT)");
+    console.log("⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to post Status + Channel at 08:00 EAT)");
     return;
   }
   const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";

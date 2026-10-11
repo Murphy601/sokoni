@@ -39,7 +39,8 @@ Tools:
 - notify_admin_ops — WhatsApp alert to ADMIN_PHONES.
 - send_whatsapp_message / send_whatsapp_voice — reach a registered seller, rider, or known buyer.
 - send_whatsapp_buttons / send_whatsapp_list — numbered menus (WAHA tap buttons are unreliable).
-- publish_whatsapp_status_or_channel — post a catalog drop to Status or the official Channel (no till numbers).
+- publish_whatsapp_status_or_channel — post a catalog drop to Status AND the official Channel (default BOTH; no till numbers).
+- list_whatsapp_channels — GET /api/{session}/channels?role=OWNER to read 111…@newsletter ids.
 - send_video_note — circular video note to a known buyer/seller (WAHA or sokonimall.com URL).
 - create_mediation_group — buyer + seller + admin WhatsApp group for a disputed SKN. Auto on raise_order_dispute when the order is KES 10,000+.
 
@@ -588,16 +589,34 @@ export const OPS_TOOLS = [
     function: {
       name: "publish_whatsapp_status_or_channel",
       description:
-        "Publishes a text or media update to the official WhatsApp Status or a Sokoni WhatsApp Channel. Never include till or paybill numbers.",
+        "Publishes the same caption to WhatsApp Status AND the official Sokoni Channel. Default destination_type is BOTH. Channel id is resolved from WAHA GET /api/{session}/channels?role=OWNER when omitted. Never include till or paybill numbers.",
       parameters: {
         type: "object",
         properties: {
-          destination_type: { type: "string", description: "STATUS or CHANNEL" },
-          channel_id: { type: "string", description: "Channel id if CHANNEL, e.g. 123@newsletter." },
+          destination_type: { type: "string", description: "BOTH (default) | STATUS | CHANNEL" },
+          channel_id: {
+            type: "string",
+            description: "Optional 111…@newsletter. If empty, uses WAHA_CHANNEL_ID or the first OWNER channel.",
+          },
           text: { type: "string", description: "Caption or announcement." },
           media_url: { type: "string", description: "Optional image/video URL on WAHA or sokonimall.com." },
         },
-        required: ["destination_type", "text"],
+        required: ["text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_whatsapp_channels",
+      description:
+        "Lists WhatsApp Channels for the active WAHA session (GET /api/{session}/channels). Use role=OWNER to find ids you can post to.",
+      parameters: {
+        type: "object",
+        properties: {
+          role: { type: "string", description: "OWNER | ADMIN | optional filter" },
+        },
         additionalProperties: false,
       },
     },

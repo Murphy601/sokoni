@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { pickDailyDropItems, dailyDropCaption } from "./daily-drop.js";
+import { pickDailyDropItems, dailyDropCaption, runDailyDrop } from "./daily-drop.js";
 
 describe("daily drop curation", () => {
   it("picks the most viewed unsold items and writes a prepaid caption", () => {
@@ -21,5 +21,16 @@ describe("daily drop curation", () => {
     assert.match(caption, /Countrywide Kenya/);
     assert.equal(/\bpaybill\b/i.test(caption), false);
     assert.match(caption, /Popular boots/);
+  });
+
+  it("posts the drop to Status and Channel together", async () => {
+    const posted = await runDailyDrop({
+      dryRun: true,
+      items: [{ id: "c", name: "Popular boots", priceKes: 3500, views: 400 }],
+    });
+    assert.equal(posted.ok, true);
+    assert.equal(posted.destination, "BOTH");
+    assert.deepEqual(posted.destinations, ["STATUS", "CHANNEL"]);
+    assert.equal(posted.dailyDrop, true);
   });
 });

@@ -29,17 +29,17 @@ export const config = {
     apiUrl: (process.env.WAHA_API_URL || process.env.WAHA_URL || "").replace(/\/$/, ""),
     apiKey: process.env.WAHA_API_KEY || "",
     session: process.env.WAHA_SESSION || "default",
-    /** Official Sokoni WhatsApp Channel (123@newsletter). Empty = status-only. */
+    /** Official Sokoni WhatsApp Channel (`123@newsletter`). Empty = resolve via GET /channels?role=OWNER. */
     channelId: String(process.env.WAHA_CHANNEL_ID || "").trim(),
   },
   /**
-   * Morning catalog drop to Status / Channel. Off unless DAILY_DROP_ENABLED=true
+   * Morning catalog drop to Status AND Channel. Off unless DAILY_DROP_ENABLED=true
    * so we do not post to a live Status by surprise.
    */
   dailyDrop: {
     enabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_ENABLED || "")),
     hourEat: Number(process.env.DAILY_DROP_HOUR_EAT ?? 8) || 8,
-    destination: String(process.env.DAILY_DROP_DESTINATION || "STATUS").trim().toUpperCase(),
+    destination: String(process.env.DAILY_DROP_DESTINATION || "BOTH").trim().toUpperCase(),
   },
   /** WhatsApp + web chat AI (text only). Prefer Groq/Gemini for speed; OpenRouter free as fallback. */
   openai: {
