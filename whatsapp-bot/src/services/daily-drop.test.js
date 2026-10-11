@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { pickDailyDropItems, dailyDropCaption, runDailyDrop } from "./daily-drop.js";
+import { ensureCatalogImageBotUrl } from "../lib/catalog-images.js";
 
 describe("daily drop curation", () => {
   it("picks the most viewed unsold items and writes a prepaid caption", () => {
@@ -34,10 +35,37 @@ describe("daily drop curation", () => {
     assert.equal(posted.dailyDrop, true);
   });
 
-  it("posts text when the product photo is on a blocked host", async () => {
+  it("reuses a local catalog cover for WhatsApp", async () => {
+    const url = await ensureCatalogImageBotUrl(
+      { id: "pt-tondx-001" },
+      "https://res.cloudinary.com/rztynxme/image/upload/v1/sokoni-studio/cutout.jpg"
+    );
+    assert.match(String(url), /catalog-images\/pt-tondx-001\.jpg/);
+  });
+
+  it("attaches the Cloudinary catalog photo with the caption", async () => {
+    const { isAllowedOpsMediaUrl } = await import("./ops-desk-actions.js");
+    const cloudinary =
+      "https://res.cloudinary.com/rztynxme/image/upload/v1790629931/sokoni-studio/cutout.jpg";
+    assert.equal(isAllowedOpsMediaUrl(cloudinary), true);
+    assert.equal(isAllowedOpsMediaUrl("https://evil.example/itel.jpg"), false);
+
     const posted = await runDailyDrop({
       dryRun: true,
-      media_url: "https://res.cloudinary.com/demo/itel.jpg",
+      media_url: cloudinary,
+      items: [{ id: "c", name: "Black Itel Feature Phone", priceKes: 12 }],
+    });
+    assert.equal(posted.ok, true);
+    assert.equal(posted.destination, "BOTH");
+    assert.equal(posted.mediaUrl, cloudinary);
+    assert.ok(!posted.mediaSkipped);
+    assert.match(posted.text, /Black Itel Feature Phone/);
+  });
+
+  it("skips unknown hosts and still posts the caption", async () => {
+    const posted = await runDailyDrop({
+      dryRun: true,
+      media_url: "https://evil.example/itel.jpg",
       items: [{ id: "c", name: "Black Itel Feature Phone", priceKes: 12 }],
     });
     assert.equal(posted.ok, true);

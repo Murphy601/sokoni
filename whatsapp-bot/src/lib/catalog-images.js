@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
+
+const MAX_COVER_BYTES = 8 * 1024 * 1024;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const CATALOG_IMAGES_DIR = path.join(__dirname, "..", "..", "..", "website", "assets", "images", "products");
@@ -29,6 +31,55 @@ export function catalogImageBotUrl(product) {
   const fileOnDisk = catalogImageFileForProduct(product);
   if (!fileOnDisk) return null;
   return `${config.botPublicUrl}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+}
+
+function isCatalogCdnUrl(url) {
+  try {
+    const u = new URL(String(url || ""));
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    return (
+      host === "res.cloudinary.com" ||
+      host.endsWith(".cloudinary.com") ||
+      host === "sokonimall.com" ||
+      host.endsWith(".sokonimall.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cache a catalog CDN still onto /catalog-images/{id}.jpg so WAHA can fetch
+ * bot.sokonimall.com. Returns the bot URL when the file is already on disk
+ * or after a successful write.
+ */
+export async function ensureCatalogImageBotUrl(product, sourceUrl) {
+  const existing = catalogImageBotUrl(product);
+  if (existing) return existing;
+  if (!product?.id || !config.botPublicUrl) return null;
+  const src = String(
+    sourceUrl ||
+      product.imageUrl ||
+      (Array.isArray(product.images) ? product.images[0] : "") ||
+      ""
+  ).trim();
+  if (!src || !isCatalogCdnUrl(src)) return null;
+  try {
+    let fetchUrl = src;
+    if (/res\.cloudinary\.com/i.test(src) && !/\/f_jpg/i.test(src)) {
+      fetchUrl = src.replace("/upload/", "/upload/c_limit,w_1200,q_auto,f_jpg/");
+    }
+    const res = await fetch(fetchUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length || buf.length > MAX_COVER_BYTES) return null;
+    await mkdir(CATALOG_IMAGES_DIR, { recursive: true });
+    await writeFile(path.join(CATALOG_IMAGES_DIR, `${product.id}.jpg`), buf);
+    return catalogImageBotUrl(product);
+  } catch {
+    return null;
+  }
 }
 
 /**

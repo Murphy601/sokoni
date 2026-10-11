@@ -43,26 +43,48 @@ export async function loadDailyDropItems(limit = 5) {
   return pickDailyDropItems(products, limit);
 }
 
+/** Bot /catalog-images first, then catalog Cloudinary — never drop the photo if either is allowed. */
+async function resolveDailyDropMedia(items, extras = {}) {
+  const { isAllowedOpsMediaUrl } = await import("./ops-desk-actions.js");
+  let media = String(extras.media_url || extras.mediaUrl || "").trim();
+  const lead = items[0] || {};
+  if (!media) {
+    try {
+      const { catalogImageBotUrl, resolveStorefrontImageUrl, ensureCatalogImageBotUrl } = await import(
+        "../lib/catalog-images.js"
+      );
+      media = catalogImageBotUrl(lead) || "";
+      const remote = resolveStorefrontImageUrl(lead) || lead.imageUrl || lead.image || lead.photo || "";
+      if (!media && remote && extras.dryRun !== true) {
+        media = (await ensureCatalogImageBotUrl(lead, remote)) || remote;
+      } else if (!media) {
+        media = remote;
+      }
+    } catch {
+      media = lead.image || lead.imageUrl || lead.photo || "";
+    }
+  }
+  media = String(media || "").trim();
+  if (media && !isAllowedOpsMediaUrl(media) && extras.dryRun !== true && lead.id) {
+    try {
+      const { ensureCatalogImageBotUrl } = await import("../lib/catalog-images.js");
+      media = (await ensureCatalogImageBotUrl(lead, media)) || media;
+    } catch {
+      /* keep media */
+    }
+  }
+  const mediaSkipped = Boolean(media) && !isAllowedOpsMediaUrl(media);
+  if (mediaSkipped) media = "";
+  return { media, mediaSkipped };
+}
+
 export async function runDailyDrop(extras = {}) {
   const items = extras.items || (await loadDailyDropItems(5));
   if (!items.length) {
     return { ok: false, error: "empty_catalog", tool: "daily_drop", message: "No unsold listings to post." };
   }
   const text = extras.text || dailyDropCaption(items);
-  const { isAllowedOpsMediaUrl } = await import("./ops-desk-actions.js");
-  let media = String(extras.media_url || extras.mediaUrl || "").trim();
-  if (!media) {
-    const lead = items[0] || {};
-    try {
-      const { catalogImageBotUrl, resolveStorefrontImageUrl } = await import("../lib/catalog-images.js");
-      media = catalogImageBotUrl(lead) || resolveStorefrontImageUrl(lead) || "";
-    } catch {
-      media = lead.image || lead.imageUrl || lead.photo || "";
-    }
-  }
-  media = String(media || "").trim();
-  const mediaSkipped = Boolean(media) && !isAllowedOpsMediaUrl(media);
-  if (mediaSkipped) media = "";
+  const { media, mediaSkipped } = await resolveDailyDropMedia(items, extras);
   const dest = String(extras.destination_type || extras.destination || config.dailyDrop?.destination || "BOTH")
     .trim()
     .toUpperCase();
