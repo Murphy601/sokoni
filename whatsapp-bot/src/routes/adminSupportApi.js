@@ -43,6 +43,9 @@ import {
   assignAgent,
   runTaggedBroadcast,
   CRM_TAGS,
+  CRM_TAXONOMY_TAGS,
+  CRM_TAG_GROUPS,
+  tagCrmContact,
   CRM_TEMPLATES,
 } from "../services/whatsapp-crm.js";
 
@@ -168,6 +171,8 @@ router.get("/crm/templates", (_req, res) => {
   res.json({
     ok: true,
     tags: CRM_TAGS,
+    taxonomy: CRM_TAXONOMY_TAGS,
+    groups: CRM_TAG_GROUPS,
     templates: CRM_TEMPLATES,
     windowHours: config.crm?.windowHours || 24,
   });
@@ -189,9 +194,20 @@ router.get("/crm/contacts", (req, res) => {
   }
 });
 
-/** POST /admin/support/crm/tag  { customerKey, tag } */
-router.post("/crm/tag", (req, res) => {
+/** POST /admin/support/crm/tag  { customerKey, tag } or { phone, tags_to_add, tags_to_remove } */
+router.post("/crm/tag", async (req, res) => {
   try {
+    const phone = String(req.body?.phone || req.body?.phone_number || "").trim();
+    const add = req.body?.tags_to_add || req.body?.tagsToAdd;
+    if (phone && Array.isArray(add)) {
+      const result = await tagCrmContact({
+        phone_number: phone,
+        tags_to_add: add,
+        tags_to_remove: req.body?.tags_to_remove || req.body?.tagsToRemove || [],
+      });
+      if (!result.ok) return res.status(400).json(result);
+      return res.json(result);
+    }
     const customerKey = String(req.body?.customerKey || req.body?.chatId || "").trim();
     const result = setCrmTag(customerKey, req.body?.tag);
     if (!result.ok) return res.status(400).json(result);
