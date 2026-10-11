@@ -27,7 +27,8 @@ Tools:
 - confirm_item_dispatch — log courier + tracking for a seller drop-off.
 - submit_inspection_photos — store buyer inspection photo URLs.
 - get_seller_roster / get_rider_roster — name and registered WhatsApp.
-- list_crm_contacts — tagged WhatsApp leads and 24h window.
+- list_crm_contacts — tagged WhatsApp leads and 24h window (new-lead, hot-lead, dispute-open, …).
+- tag_crm_contact — add or remove CRM taxonomy tags on a phone (buyer / seller / escrow / support).
 - search_catalog / search_catalog_items — live stock by keywords / max price.
 - search_store_policies — escrow / returns / shipping FAQ (markdown if pgvector is empty).
 - add_restock_alert — waitlist a buyer for an out-of-stock SKU.
@@ -161,11 +162,12 @@ export const OPS_TOOLS = [
     type: "function",
     function: {
       name: "list_crm_contacts",
-      description: "WhatsApp CRM contacts with tag and 24-hour window.",
+      description:
+        "WhatsApp CRM contacts with funnel tag, taxonomy tags, and 24-hour window. Filter by new-lead, hot-lead, cart-abandoned, dispute-open, and the rest of the Sokoni taxonomy.",
       parameters: {
         type: "object",
         properties: {
-          tag: { type: "string" },
+          tag: { type: "string", description: "Legacy or hyphenated taxonomy tag" },
           q: { type: "string" },
           window: { type: "string", description: "any | inside | outside" },
         },
@@ -545,6 +547,35 @@ export const OPS_TOOLS = [
           },
         },
         required: ["phone_number", "menu_title", "message_text", "list_items"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "tag_crm_contact",
+      description:
+        "Applies or removes CRM tags for a WhatsApp contact to segment buyers, sellers, escrow, and support. Valid tags: new-lead, hot-lead, cart-abandoned, active-buyer, repeat-buyer, vip-buyer, seller-prospect, active-seller, top-seller, delayed-dispatch, inspection-pending, dispute-open, rider-partner, payout-pending, complaint, follow-up, restock-subscriber, opt-out.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: {
+            type: "string",
+            description: "The contact's phone number in international format (e.g. 254…). ",
+          },
+          tags_to_add: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tags to apply (e.g. ['hot-lead', 'inspection-pending']).",
+          },
+          tags_to_remove: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tags to remove (e.g. ['new-lead']).",
+          },
+        },
+        required: ["phone_number", "tags_to_add"],
         additionalProperties: false,
       },
     },

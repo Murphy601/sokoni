@@ -223,6 +223,22 @@ describe("ops tool argument guards", () => {
     assert.match(list.body, /Vintage Shoes/);
   });
 
+  it("tags a CRM contact with the taxonomy", async () => {
+    const tagged = await executeOpsTool(
+      "tag_crm_contact",
+      {
+        phone_number: "254711111111",
+        tags_to_add: ["hot-lead", "follow-up"],
+        tags_to_remove: ["new-lead"],
+      },
+      { now: Date.now() }
+    );
+    assert.equal(tagged.ok, true);
+    assert.equal(tagged.tool, "tag_crm_contact");
+    assert.ok(tagged.tags.includes("hot-lead"));
+    assert.ok(tagged.tags.includes("follow-up"));
+  });
+
   it("validates waitlist, dispute, and voicenote args", async () => {
     const wait = await executeOpsTool("add_restock_alert", { customer_phone: "2547" });
     assert.equal(wait.ok, false);
