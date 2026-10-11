@@ -260,22 +260,28 @@ describe("ops tool argument guards", () => {
     assert.equal(voice.dryRun, true);
   });
 
-  it("publishes Status dry-run and refuses till numbers", async () => {
+  it("publishes Status and Channel together and refuses till numbers", async () => {
     const posted = await executeOpsTool(
       "publish_whatsapp_status_or_channel",
-      { destination_type: "STATUS", text: "Today's drop — prepaid escrow, countrywide Kenya." },
+      { text: "Today's drop — prepaid escrow, countrywide Kenya." },
       { dryRun: true }
     );
     assert.equal(posted.ok, true);
-    assert.equal(posted.destination, "STATUS");
+    assert.equal(posted.destination, "BOTH");
+    assert.deepEqual(posted.destinations, ["STATUS", "CHANNEL"]);
     assert.equal(posted.dryRun, true);
 
     const till = await executeOpsTool("publish_whatsapp_status_or_channel", {
-      destination_type: "STATUS",
+      destination_type: "BOTH",
       text: "Pay till 123456 now",
     });
     assert.equal(till.ok, false);
     assert.equal(till.error, "no_till");
+
+    const listed = await executeOpsTool("list_whatsapp_channels", { role: "OWNER" }, { dryRun: true });
+    assert.equal(listed.ok, true);
+    assert.equal(listed.tool, "list_whatsapp_channels");
+    assert.ok(Array.isArray(listed.channels));
   });
 
   it("sends video notes only to known chats with allowed URLs", async () => {
