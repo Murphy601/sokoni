@@ -216,7 +216,7 @@ export async function listCrmDirectory({ tag, q, window = "any", limit = 20 } = 
     count: rows.length,
     synced: synced.cached
       ? { cached: true }
-      : { riders: synced.riders || 0, sellers: synced.sellers || 0 },
+      : { riders: synced.riders || 0, sellers: synced.sellers || 0, buyers: synced.buyers || 0 },
     contacts: rows.map((c) => ({
       name: c.displayName || null,
       phone: c.phone || null,

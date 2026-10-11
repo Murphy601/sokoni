@@ -251,6 +251,24 @@ describe("ops tool argument guards", () => {
     assert.equal(listed.ok, true);
     assert.equal(listed.tool, "list_crm_contacts");
     assert.ok(listed.contacts.some((c) => c.phone === "254748879579" && c.tags.includes("rider-partner")));
+
+    const buyers = await executeOpsTool(
+      "list_crm_contacts",
+      { tag: "active-buyer" },
+      {
+        riders: [],
+        sellers: [],
+        buyers: [
+          {
+            phone: "254722222222",
+            name: "Amina Buyer",
+            orders: [{ paidAt: 1, status: "awaiting_delivery", totalKes: 1800 }],
+          },
+        ],
+      }
+    );
+    assert.equal(buyers.ok, true);
+    assert.ok(buyers.contacts.some((c) => c.phone === "254722222222" && c.tags.includes("active-buyer")));
   });
 
   it("validates waitlist, dispute, and voicenote args", async () => {

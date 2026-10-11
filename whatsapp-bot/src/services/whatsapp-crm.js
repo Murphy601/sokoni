@@ -839,7 +839,7 @@ export async function tagCrmContact(
 
 /** Stamp a rider or seller onto the CRM so list_crm_contacts is not empty of roster people. */
 export function upsertCrmFromRosterPerson(
-  { phone, name = "", role = "", status = "" } = {},
+  { phone, name = "", role = "", status = "", tagsToAdd: extraTags = [], lastInboundAt = 0 } = {},
   now = Date.now()
 ) {
   const digits = normalizeKenyaPhone(phone);
@@ -853,7 +853,12 @@ export function upsertCrmFromRosterPerson(
     else tagsToRemove.push("rider-partner");
   }
   if (who === "seller") tagsToAdd.push("active-seller");
+  if (who === "buyer") {
+    const extra = uniqueTags(extraTags);
+    tagsToAdd.push(...(extra.length ? extra : ["new-lead"]));
+  }
   const key = findCrmKeyByPhone(digits);
+  const lastSeen = Number(lastInboundAt) || 0;
   return upsertCrmContact(
     key,
     {
@@ -862,14 +867,32 @@ export function upsertCrmFromRosterPerson(
       displayName: String(name || "").trim(),
       tagsToAdd,
       tagsToRemove,
+      ...(lastSeen ? { lastInboundAt: lastSeen } : {}),
     },
     now
   );
 }
 
+function buyerNameFromOrder(order = {}) {
+  return String(
+    order.customerName || order.name || order.details?.name || order.details?.fullName || ""
+  ).trim();
+}
+
+function mergeBuyer(map, { phone, name = "", orders = [], lastSeen = 0 } = {}) {
+  const digits = normalizeKenyaPhone(phone);
+  if (!digits) return;
+  const prev = map.get(digits) || { phone: digits, name: "", orders: [], lastSeen: 0 };
+  prev.orders.push(...(Array.isArray(orders) ? orders : []));
+  prev.name = prev.name || String(name || "").trim();
+  prev.lastSeen = Math.max(Number(prev.lastSeen) || 0, Number(lastSeen) || 0);
+  map.set(digits, prev);
+}
+
 async function loadRosterPeople() {
   const riders = [];
   const sellers = [];
+  const buyers = new Map();
   try {
     const { listRiders } = await import("./boda-fleet.js");
     const listed = await listRiders({ status: "VERIFIED", limit: 200 });
@@ -896,26 +919,81 @@ async function loadRosterPeople() {
   } catch (err) {
     console.warn("[whatsapp-crm] seller roster sync skipped:", err.message);
   }
-  return { riders, sellers };
+  try {
+    const { listAllOrders, getAllContacts } = await import("./orders.js");
+    for (const o of listAllOrders() || []) {
+      if (!o || o.kind === "cart_child") continue;
+      mergeBuyer(buyers, {
+        phone: o.phone || o.mpesaPhone || o.customerKey,
+        name: buyerNameFromOrder(o),
+        orders: [o],
+        lastSeen: o.updatedAt || o.createdAt || 0,
+      });
+    }
+    for (const c of getAllContacts() || []) {
+      mergeBuyer(buyers, {
+        phone: c.phone || c.customerKey,
+        name: c.displayName || c.name || "",
+        lastSeen: c.lastSeen || 0,
+      });
+    }
+  } catch (err) {
+    console.warn("[whatsapp-crm] buyer order sync skipped:", err.message);
+  }
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    if (isDbEnabled()) {
+      const { rows } = await query(
+        `SELECT phone, display_name
+           FROM users
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND LOWER(COALESCE(role, 'buyer')) = 'buyer'
+          LIMIT 400`
+      );
+      for (const row of rows || []) {
+        mergeBuyer(buyers, { phone: row.phone, name: row.display_name || "" });
+      }
+    }
+  } catch (err) {
+    console.warn("[whatsapp-crm] buyer account sync skipped:", err.message);
+  }
+  return { riders, sellers, buyers: [...buyers.values()] };
 }
 
-/** Import verified riders + live sellers into CRM. Cached 60s unless extras force a list. */
+/** Import riders, sellers, and buyers into CRM. Cached 60s unless extras force a list. */
 export async function syncCrmFromRosters(extras = {}) {
   const now = extras.now || Date.now();
-  const injected = extras.riders != null || extras.sellers != null;
+  const injected = extras.riders != null || extras.sellers != null || extras.buyers != null;
   if (!injected && lastRosterSyncAt && now - lastRosterSyncAt < 60_000) {
     return { ok: true, cached: true, tool: "sync_crm_from_rosters" };
   }
   const loaded = injected
-    ? { riders: extras.riders || [], sellers: extras.sellers || [] }
+    ? { riders: extras.riders || [], sellers: extras.sellers || [], buyers: extras.buyers || [] }
     : await loadRosterPeople();
   let riders = 0;
   let sellers = 0;
+  let buyers = 0;
   for (const r of loaded.riders || []) {
     if (upsertCrmFromRosterPerson({ ...r, role: "rider" }, now)) riders += 1;
   }
   for (const s of loaded.sellers || []) {
     if (upsertCrmFromRosterPerson({ ...s, role: "seller" }, now)) sellers += 1;
+  }
+  for (const b of loaded.buyers || []) {
+    const tags = uniqueTags(b.tags || deriveTagsFromOrders(b.orders || [], now));
+    if (
+      upsertCrmFromRosterPerson(
+        {
+          ...b,
+          role: "buyer",
+          tagsToAdd: tags,
+          lastInboundAt: b.lastSeen || b.lastInboundAt,
+        },
+        now
+      )
+    ) {
+      buyers += 1;
+    }
   }
   lastRosterSyncAt = now;
   return {
@@ -923,6 +1001,7 @@ export async function syncCrmFromRosters(extras = {}) {
     tool: "sync_crm_from_rosters",
     riders,
     sellers,
-    count: riders + sellers,
+    buyers,
+    count: riders + sellers + buyers,
   };
 }

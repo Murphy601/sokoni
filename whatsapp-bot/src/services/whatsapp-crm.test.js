@@ -126,6 +126,27 @@ describe("CRM taxonomy tags", () => {
     const sellers = listCrmContacts({ tag: "active-seller" });
     assert.ok(sellers.some((c) => c.phone === "254711111111"));
   });
+
+  it("imports buyers from orders as active-buyer or new-lead", async () => {
+    const synced = await syncCrmFromRosters({
+      riders: [],
+      sellers: [],
+      buyers: [
+        {
+          phone: "254722222222",
+          name: "Amina Buyer",
+          lastSeen: Date.parse("2026-10-11T08:00:00+03:00"),
+          orders: [{ paidAt: 1, status: "awaiting_delivery", totalKes: 1800 }],
+        },
+        { phone: "254733333300", name: "Window Shopper" },
+      ],
+    });
+    assert.equal(synced.buyers, 2);
+    const active = listCrmContacts({ tag: "active-buyer" });
+    assert.ok(active.some((c) => c.phone === "254722222222" && c.tags.includes("active-buyer")));
+    const leads = listCrmContacts({ tag: "new-lead" });
+    assert.ok(leads.some((c) => c.phone === "254733333300"));
+  });
 });
 
 describe("Meta 24-hour customer service window", () => {

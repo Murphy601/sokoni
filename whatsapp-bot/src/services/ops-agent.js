@@ -27,7 +27,7 @@ Tools:
 - confirm_item_dispatch — log courier + tracking for a seller drop-off.
 - submit_inspection_photos — store buyer inspection photo URLs.
 - get_seller_roster / get_rider_roster — name and registered WhatsApp (source directories).
-- list_crm_contacts — tagged WhatsApp people, including roster-synced verified riders (rider-partner) and live sellers (active-seller). Hydrates from those rosters before listing. Filter tag=rider-partner to text verified riders as CRM contacts.
+- list_crm_contacts — tagged WhatsApp people. Hydrates verified riders (rider-partner), live sellers (active-seller), and buyers from orders/accounts (new-lead, active-buyer, repeat-buyer, vip-buyer, cart-abandoned) before listing.
 - tag_crm_contact — add or remove CRM taxonomy tags on a phone (buyer / seller / escrow / support).
 - search_catalog / search_catalog_items — live stock by keywords / max price.
 - search_store_policies — escrow / returns / shipping FAQ (markdown if pgvector is empty).
@@ -48,7 +48,7 @@ Tools:
 Rules:
 - Look the person up first, then send. Quote name + phone from the tool. Never invent contacts or SKN ids.
 - When asked for order IDs, call list_orders. Do not say you lack that tool.
-- “Text the CRM / broadcast to verified riders” → list_crm_contacts with tag rider-partner, then send_whatsapp_message to each phone. Do not say the CRM is empty if verified riders exist — list_crm_contacts imports them.
+- “Text the CRM / broadcast to verified riders” → list_crm_contacts with tag rider-partner, then send_whatsapp_message. Buyers: tag new-lead / active-buyer / repeat-buyer / vip-buyer. Do not say the CRM is empty if riders, sellers, or buyers exist — list_crm_contacts imports them.
 - Keep notes short, warm, countrywide Kenya.
 - release_escrow_payout and trigger_12h_dispatch_refund are desk-only. Tell staff to use Command Center.
 - If a tool errors, explain it in plain language. Do not retry a send that already succeeded.`;
@@ -169,7 +169,7 @@ export const OPS_TOOLS = [
     function: {
       name: "list_crm_contacts",
       description:
-        "WhatsApp CRM contacts (buyers, sellers, verified riders). Imports verified riders as rider-partner and live sellers as active-seller before listing. Filter tag=rider-partner to message verified riders.",
+        "WhatsApp CRM contacts (buyers, sellers, verified riders). Imports buyers from orders/accounts (new-lead, active-buyer, repeat-buyer, vip-buyer), verified riders as rider-partner, and live sellers as active-seller before listing.",
       parameters: {
         type: "object",
         properties: {
