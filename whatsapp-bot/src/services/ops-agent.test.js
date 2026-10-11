@@ -239,6 +239,20 @@ describe("ops tool argument guards", () => {
     assert.ok(tagged.tags.includes("follow-up"));
   });
 
+  it("lists verified riders from the CRM after roster sync", async () => {
+    const listed = await executeOpsTool(
+      "list_crm_contacts",
+      { tag: "rider-partner" },
+      {
+        riders: [{ phone: "254748879579", name: "Peter Mwangi", status: "VERIFIED" }],
+        sellers: [],
+      }
+    );
+    assert.equal(listed.ok, true);
+    assert.equal(listed.tool, "list_crm_contacts");
+    assert.ok(listed.contacts.some((c) => c.phone === "254748879579" && c.tags.includes("rider-partner")));
+  });
+
   it("validates waitlist, dispute, and voicenote args", async () => {
     const wait = await executeOpsTool("add_restock_alert", { customer_phone: "2547" });
     assert.equal(wait.ok, false);

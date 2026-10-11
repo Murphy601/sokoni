@@ -743,7 +743,7 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "get_rider_roster") return await getRiderRoster(args);
     if (tool === "list_crm_contacts") {
       const { listCrmDirectory } = await import("./ops-desk-reads.js");
-      return listCrmDirectory(args);
+      return listCrmDirectory(args, extras);
     }
     if (tool === "search_catalog") {
       const { searchCatalog } = await import("./ops-desk-reads.js");

@@ -12,6 +12,7 @@ import {
   assignAgent,
   runTaggedBroadcast,
   tagCrmContact,
+  syncCrmFromRosters,
   resetCrmStoreForTests,
   CRM_WINDOW_MS,
   CRM_TAXONOMY_TAGS,
@@ -108,6 +109,22 @@ describe("CRM taxonomy tags", () => {
     assert.equal(alias.ok, true);
     assert.ok(alias.tags.includes("hot-lead"));
     assert.ok(CRM_TAXONOMY_TAGS.includes("vip-buyer"));
+  });
+
+  it("imports verified riders as rider-partner so CRM is not empty of the roster", async () => {
+    const synced = await syncCrmFromRosters({
+      riders: [{ phone: "254748879579", name: "Peter Mwangi", status: "VERIFIED" }],
+      sellers: [{ phone: "254711111111", name: "Ada Shop" }],
+    });
+    assert.equal(synced.ok, true);
+    assert.equal(synced.riders, 1);
+    assert.equal(synced.sellers, 1);
+    const riders = listCrmContacts({ tag: "rider-partner" });
+    assert.equal(riders.length, 1);
+    assert.equal(riders[0].phone, "254748879579");
+    assert.ok(riders[0].tags.includes("rider-partner"));
+    const sellers = listCrmContacts({ tag: "active-seller" });
+    assert.ok(sellers.some((c) => c.phone === "254711111111"));
   });
 });
 

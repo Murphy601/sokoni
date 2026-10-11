@@ -190,6 +190,16 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     whatsappChatId: `${normalizedPhone}@c.us`,
   });
 
+  void import("./whatsapp-crm.js")
+    .then(({ upsertCrmFromRosterPerson }) =>
+      upsertCrmFromRosterPerson({
+        phone: normalizedPhone,
+        name: String(shopName || "").trim(),
+        role: "seller",
+      })
+    )
+    .catch((err) => console.warn("[seller-onboard] CRM seller sync skipped:", err.message));
+
   if (!result.existing) {
     void import("./channel-invite.js")
       .then(({ queueChannelInvite }) => queueChannelInvite(normalizedPhone, "onboarding"))

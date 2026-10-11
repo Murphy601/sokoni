@@ -206,13 +206,17 @@ export async function searchCatalog({ keywords, q, query, max_price, maxPrice, l
   return { ok: true, tool: "search_catalog", count: products.length, products };
 }
 
-export async function listCrmDirectory({ tag, q, window = "any", limit = 20 } = {}) {
-  const { listCrmContacts } = await import("./whatsapp-crm.js");
+export async function listCrmDirectory({ tag, q, window = "any", limit = 20 } = {}, extras = {}) {
+  const { listCrmContacts, syncCrmFromRosters } = await import("./whatsapp-crm.js");
+  const synced = await syncCrmFromRosters(extras);
   const rows = listCrmContacts({ tag, q, window, limit: Math.min(40, Number(limit) || 20) });
   return {
     ok: true,
     tool: "list_crm_contacts",
     count: rows.length,
+    synced: synced.cached
+      ? { cached: true }
+      : { riders: synced.riders || 0, sellers: synced.sellers || 0 },
     contacts: rows.map((c) => ({
       name: c.displayName || null,
       phone: c.phone || null,

@@ -123,8 +123,6 @@ const DERIVED_TAGS = new Set([
   "dispute-open",
   "payout-pending",
   "restock-subscriber",
-  "active-seller",
-  "rider-partner",
 ]);
 
 export const CRM_INTENTS = Object.freeze([
@@ -211,10 +209,13 @@ function persist() {
   }
 }
 
+let lastRosterSyncAt = 0;
+
 export function resetCrmStoreForTests(seed = {}) {
   memoryOnly = true;
   loaded = true;
   store = { contacts: { ...seed } };
+  lastRosterSyncAt = 0;
 }
 
 function slugTag(raw) {
@@ -833,5 +834,95 @@ export async function tagCrmContact(
       tag: contact.tag,
       tags: contact.tags,
     },
+  };
+}
+
+/** Stamp a rider or seller onto the CRM so list_crm_contacts is not empty of roster people. */
+export function upsertCrmFromRosterPerson(
+  { phone, name = "", role = "", status = "" } = {},
+  now = Date.now()
+) {
+  const digits = normalizeKenyaPhone(phone);
+  if (!digits) return null;
+  const who = String(role || "").toLowerCase();
+  const st = String(status || "").toUpperCase();
+  const tagsToAdd = [];
+  const tagsToRemove = [];
+  if (who === "rider") {
+    if (!st || st === "VERIFIED") tagsToAdd.push("rider-partner");
+    else tagsToRemove.push("rider-partner");
+  }
+  if (who === "seller") tagsToAdd.push("active-seller");
+  const key = findCrmKeyByPhone(digits);
+  return upsertCrmContact(
+    key,
+    {
+      phone: digits,
+      chatId: key,
+      displayName: String(name || "").trim(),
+      tagsToAdd,
+      tagsToRemove,
+    },
+    now
+  );
+}
+
+async function loadRosterPeople() {
+  const riders = [];
+  const sellers = [];
+  try {
+    const { listRiders } = await import("./boda-fleet.js");
+    const listed = await listRiders({ status: "VERIFIED", limit: 200 });
+    for (const r of listed?.riders || []) {
+      riders.push({
+        phone: r.phone,
+        name: r.fullName || r.name || "",
+        status: r.verificationStatus || "VERIFIED",
+        role: "rider",
+      });
+    }
+  } catch (err) {
+    console.warn("[whatsapp-crm] rider roster sync skipped:", err.message);
+  }
+  try {
+    const { listSuppliers } = await import("./suppliers.js");
+    for (const s of listSuppliers() || []) {
+      sellers.push({
+        phone: s.phone || s.whatsapp || s.mpesaNumber,
+        name: s.businessName || s.shopName || s.shopHandle || "",
+        role: "seller",
+      });
+    }
+  } catch (err) {
+    console.warn("[whatsapp-crm] seller roster sync skipped:", err.message);
+  }
+  return { riders, sellers };
+}
+
+/** Import verified riders + live sellers into CRM. Cached 60s unless extras force a list. */
+export async function syncCrmFromRosters(extras = {}) {
+  const now = extras.now || Date.now();
+  const injected = extras.riders != null || extras.sellers != null;
+  if (!injected && lastRosterSyncAt && now - lastRosterSyncAt < 60_000) {
+    return { ok: true, cached: true, tool: "sync_crm_from_rosters" };
+  }
+  const loaded = injected
+    ? { riders: extras.riders || [], sellers: extras.sellers || [] }
+    : await loadRosterPeople();
+  let riders = 0;
+  let sellers = 0;
+  for (const r of loaded.riders || []) {
+    if (upsertCrmFromRosterPerson({ ...r, role: "rider" }, now)) riders += 1;
+  }
+  for (const s of loaded.sellers || []) {
+    if (upsertCrmFromRosterPerson({ ...s, role: "seller" }, now)) sellers += 1;
+  }
+  lastRosterSyncAt = now;
+  return {
+    ok: true,
+    tool: "sync_crm_from_rosters",
+    riders,
+    sellers,
+    count: riders + sellers,
   };
 }
