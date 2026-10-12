@@ -64,10 +64,11 @@ import {
   webhookLimiter,
 } from "./middleware/security.js";
 import { publicErrorHandler } from "./lib/public-error.js";
+import { trustedProxySetting } from "./lib/trust-proxy.js";
 
 const app = express();
-/** Behind nginx / Cloudflare — needed for express-rate-limit client IP. */
-app.set("trust proxy", 1);
+/** nginx on this VM → Node on loopback. Never a hop count (CVE-2026-90711). */
+app.set("trust proxy", trustedProxySetting());
 app.use(securityHeaders);
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
