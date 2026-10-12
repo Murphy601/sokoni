@@ -20,6 +20,9 @@ const CATALOG_CACHE_TTL_MS = 10_000;
 export function invalidateProductCache() {
   cachedProducts = null;
   cachedAtMs = 0;
+  import("./category-tree.js")
+    .then(({ invalidateCategoryCache }) => invalidateCategoryCache())
+    .catch(() => {});
 }
 
 /**

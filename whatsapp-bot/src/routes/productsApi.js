@@ -11,8 +11,6 @@ import {
   getProductById,
   searchProductsDb,
   countSearchProductsDb,
-  getCategoriesFromDb,
-  getBrowseCountsFromDb,
   countProducts,
 } from "../db/repositories/products.js";
 import { toggleProductLike, listLikedProductIds } from "../db/repositories/social.js";
@@ -23,6 +21,10 @@ import { publicPromoFields } from "../lib/public-promo.js";
 import { resolveAuthenticatedSellerSocialContext } from "../services/seller-social-auth.js";
 import { applyBuyerIdentityAuth } from "../services/buyer-social-auth.js";
 import { notifySellerProductLiked } from "../services/social-notifications.js";
+import {
+  getCategoryTree,
+  categoryTreeCacheControl,
+} from "../services/category-tree.js";
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -349,9 +351,20 @@ router.get("/meta", async (_req, res) => {
 router.get("/browse-menu", async (_req, res) => {
   try {
     const raw = await readFile(BROWSE_MENU_PATH, "utf-8");
+    res.set("Cache-Control", categoryTreeCacheControl());
     res.type("json").send(raw);
   } catch {
     res.status(404).json({ error: "browse_menu_not_found" });
+  }
+});
+
+router.get("/categories/tree", async (_req, res) => {
+  try {
+    const tree = await getCategoryTree();
+    res.set("Cache-Control", categoryTreeCacheControl());
+    res.json(tree);
+  } catch (err) {
+    res.status(500).json(clientError(err, "category_tree_failed"));
   }
 });
 
@@ -360,20 +373,30 @@ router.get("/browse-counts", async (_req, res) => {
     return res.status(503).json({ error: "database_not_configured" });
   }
   try {
-    const counts = await getBrowseCountsFromDb();
-    res.json({ counts });
+    const tree = await getCategoryTree();
+    const counts = {};
+    for (const cat of tree.categories || []) {
+      counts[cat.id] = { "": cat.count || 0 };
+      for (const sub of cat.subcategories || []) {
+        counts[cat.id][sub.id] = sub.count || 0;
+      }
+    }
+    res.set("Cache-Control", categoryTreeCacheControl());
+    res.json({ counts, cached: tree.cached === true });
   } catch (err) {
     res.status(500).json(clientError(err));
   }
 });
 
 router.get("/categories", async (_req, res) => {
-  if (!isDbEnabled()) {
-    return res.status(503).json({ error: "database_not_configured" });
-  }
   try {
-    const categories = await getCategoriesFromDb();
-    res.json({ categories });
+    const tree = await getCategoryTree();
+    const categories = {};
+    for (const cat of tree.legacyCategories || []) {
+      categories[cat.id] = (cat.subcategories || []).map((s) => s.id);
+    }
+    res.set("Cache-Control", categoryTreeCacheControl());
+    res.json({ categories, tree: tree.categories, cached: tree.cached === true });
   } catch (err) {
     res.status(500).json(clientError(err));
   }

@@ -32,12 +32,6 @@
     return n.length <= max ? n : `${n.slice(0, max - 1)}…`;
   }
 
-  function dataUrl(file) {
-    const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
-    const v = meta?.getAttribute("content") || String(Date.now());
-    return `${file}?v=${v}`;
-  }
-
   function productKey(browseCat, browseSub) {
     return `${browseCat}::${browseSub || ""}`;
   }
@@ -353,14 +347,6 @@
 
     await window.SokoniBrowse?.loadMenu?.();
     menuData = window.SokoniBrowse?.getMenu?.() || null;
-    if (!menuData) {
-      try {
-        const res = await fetch(dataUrl("data/browse-menu.json"));
-        if (res.ok) menuData = await res.json();
-      } catch {
-        menuData = null;
-      }
-    }
 
     const toggle = document.getElementById("catalog-nav-toggle");
     const backdrop = document.getElementById("catalog-nav-backdrop");
