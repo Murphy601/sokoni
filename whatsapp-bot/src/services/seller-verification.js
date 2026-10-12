@@ -2,7 +2,7 @@
  * Free WhatsApp OTP for seller sign-in — sent via existing WAHA session (Sokoni Mall).
  * Every visit requires a fresh code; session lasts for the browser tab (sessionStorage).
  */
-import { randomInt, randomBytes } from "node:crypto";
+import { randomInt, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -147,7 +147,14 @@ export async function validateSellerSession(phone, sessionToken) {
   }
 
   const entry = store.sessions?.[digits];
-  if (!entry || entry.token !== token) {
+  const stored = String(entry?.token || "");
+  const presented = Buffer.from(token);
+  const expect = Buffer.from(stored);
+  const tokenOk =
+    stored &&
+    presented.length === expect.length &&
+    timingSafeEqual(presented, expect);
+  if (!entry || !tokenOk) {
     return {
       error: "session_invalid",
       message: "Session expired — verify WhatsApp again to continue.",

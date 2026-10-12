@@ -2,6 +2,12 @@ import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { config } from "../config.js";
 
+function tokenEquals(presented, expected) {
+  const a = crypto.createHash("sha256").update(String(presented)).digest();
+  const b = crypto.createHash("sha256").update(String(expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 const SITE_ORIGINS = new Set([
   config.publicSiteUrl,
   "https://sokonimall.com",
@@ -198,3 +204,40 @@ export const webhookLimiter = rateLimit({
   legacyHeaders: false,
   message: jsonError,
 });
+
+/** M-Pesa STK / Paystack charge — 8 / min / IP so bots cannot burn airtime. */
+export const stkLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_STK_MAX) || 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonError,
+});
+
+/**
+ * Optional shared secret on Daraja STK / B2C callbacks.
+ * Safaricom does not HMAC these POSTs — put the same value in the registered
+ * callback URL (`?token=`) or send `x-webhook-secret`.
+ * Unset = accept (CheckoutRequestID + amount still bind the order).
+ */
+export function requireDarajaCallbackAuth(req, res, next) {
+  const secret = String(
+    process.env.DARAJA_CALLBACK_SECRET || process.env.MPESA_CALLBACK_SECRET || ""
+  ).trim();
+  if (!secret) {
+    req.darajaCallbackVerified = false;
+    return next();
+  }
+  const presented = String(
+    req.headers["x-webhook-secret"] ||
+      req.headers["x-daraja-secret"] ||
+      req.query?.token ||
+      ""
+  ).trim();
+  if (!presented || !tokenEquals(presented, secret)) {
+    console.warn("[security] Daraja callback secret rejected");
+    return res.status(401).json({ error: "webhook_auth_invalid" });
+  }
+  req.darajaCallbackVerified = true;
+  next();
+}

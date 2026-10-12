@@ -7,6 +7,20 @@ import {
   isSetupTokenValid,
 } from "../services/tiktok-auth.js";
 
+function setupTokenFromReq(req) {
+  const header = String(
+    req.headers["x-admin-token"] ||
+      req.headers["x-sokoni-token"] ||
+      req.headers["x-tiktok-setup-token"] ||
+      ""
+  ).trim();
+  if (header) return header;
+  if (String(process.env.NODE_ENV || "").toLowerCase() !== "production") {
+    return String(req.query?.token || "").trim();
+  }
+  return "";
+}
+
 const router = Router();
 
 function escapeHtml(value) {
@@ -27,7 +41,7 @@ function htmlPage(title, body) {
 
 /** One-time connect — open with setup token (backend only). */
 router.get("/connect", (req, res) => {
-  if (!isSetupTokenValid(req.query.token)) {
+  if (!isSetupTokenValid(setupTokenFromReq(req))) {
     return res.status(403).send(htmlPage("Forbidden", "<p class='err'>Invalid or missing setup token.</p>"));
   }
   try {
@@ -84,7 +98,7 @@ router.get("/callback", async (req, res) => {
 
 /** Backend status check (requires setup token). */
 router.get("/status", (req, res) => {
-  if (!isSetupTokenValid(req.query.token)) {
+  if (!isSetupTokenValid(setupTokenFromReq(req))) {
     return res.status(403).json({ error: "forbidden" });
   }
   return res.json(getConnectionStatus());

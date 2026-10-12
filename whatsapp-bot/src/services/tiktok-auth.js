@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
@@ -242,7 +242,10 @@ export function consumeOAuthState(state) {
 
 export function isSetupTokenValid(token) {
   const expected = config.tiktok.setupToken;
-  return expected && token && token === expected;
+  if (!expected || !token) return false;
+  const a = createHash("sha256").update(String(token)).digest();
+  const b = createHash("sha256").update(String(expected)).digest();
+  return timingSafeEqual(a, b);
 }
 
 /** Proactively refresh before cron posts (every 6h + on startup if expiring soon). */

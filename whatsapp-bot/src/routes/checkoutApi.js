@@ -16,8 +16,15 @@ import { calculateShipping } from "../services/calculate-shipping.js";
 import { applyShippingToOrder } from "../services/apply-order-shipping.js";
 import { listCounties, listTownsForCounty, loadKenyaLocations } from "../services/kenya-locations.js";
 import { hubInspectionOffer } from "../services/hub-inspection.js";
+import { stkLimiter } from "../middleware/security.js";
 
 const router = Router();
+
+function checkoutPhoneOk(raw) {
+  if (raw == null || String(raw).trim() === "") return true;
+  const d = String(raw).replace(/\D/g, "");
+  return d.length >= 9 && d.length <= 15;
+}
 
 router.get("/meta", (_req, res) => {
   res.json({
@@ -214,13 +221,16 @@ router.get("/:orderId", (req, res) => {
 });
 
 /** POST /api/checkout/:orderId/stk — M-Pesa STK (Paystack Charge). */
-router.post("/:orderId/stk", async (req, res) => {
+router.post("/:orderId/stk", stkLimiter, async (req, res) => {
   const order = getOrder(req.params.orderId);
   if (!order) {
     return res.status(404).json({ error: "order_not_found" });
   }
   if (order.customerPaymentStatus === "confirmed") {
     return res.status(409).json({ error: "already_paid" });
+  }
+  if (!checkoutPhoneOk(req.body?.phone)) {
+    return res.status(400).json({ error: "invalid_phone" });
   }
   const phone = req.body?.phone || order.phone;
   const result = await initiateMpesaCheckout(order, { phone });

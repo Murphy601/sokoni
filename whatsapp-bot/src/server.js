@@ -63,6 +63,7 @@ import {
   adminLimiter,
   webhookLimiter,
 } from "./middleware/security.js";
+import { publicErrorHandler } from "./lib/public-error.js";
 
 const app = express();
 /** Behind nginx / Cloudflare — needed for express-rate-limit client IP. */
@@ -366,7 +367,8 @@ app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStati
       setHeaders(res) {
         res.setHeader("Cache-Control", "private, max-age=86400");
         res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Origin", "https://sokonimall.com");
+        res.setHeader("Vary", "Origin");
       },
     })
   );
@@ -388,7 +390,8 @@ app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStati
       setHeaders(res) {
         res.setHeader("Cache-Control", "private, max-age=86400");
         res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Origin", "https://sokonimall.com");
+        res.setHeader("Vary", "Origin");
       },
     })
   );
@@ -473,6 +476,8 @@ app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) =>
     console.error("Error handling webhook:", err);
   }
 });
+
+app.use(publicErrorHandler);
 
 const httpServer = app.listen(config.port, "0.0.0.0", () => {
   console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port} (build ${BUILD_ID})`);
