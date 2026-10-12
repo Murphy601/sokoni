@@ -14,6 +14,7 @@ import {
   verifyPaystackSignature,
 } from "../services/paystack-transfers.js";
 import { config } from "../config.js";
+import { requireDarajaCallbackAuth } from "../middleware/security.js";
 
 const router = Router();
 
@@ -27,7 +28,9 @@ async function handleMpesaStkCallback(req, res) {
     }
 
     if (parsed.success) {
-      const order = resolveOrderFromStkCallback(parsed);
+      const order = resolveOrderFromStkCallback(parsed, {
+        signed: Boolean(req.darajaCallbackVerified),
+      });
       if (!order) {
         console.warn("[mpesa-callback] order not found for", parsed.checkoutRequestId);
       } else {
@@ -98,10 +101,10 @@ async function handleB2CTimeout(req, res) {
   }
 }
 
-router.post("/mpesa-callback", handleMpesaStkCallback);
-router.post("/daraja/callback", handleMpesaStkCallback);
-router.post("/daraja/b2c/result", handleB2CResult);
-router.post("/daraja/b2c/timeout", handleB2CTimeout);
+router.post("/mpesa-callback", requireDarajaCallbackAuth, handleMpesaStkCallback);
+router.post("/daraja/callback", requireDarajaCallbackAuth, handleMpesaStkCallback);
+router.post("/daraja/b2c/result", requireDarajaCallbackAuth, handleB2CResult);
+router.post("/daraja/b2c/timeout", requireDarajaCallbackAuth, handleB2CTimeout);
 router.post("/paystack", handlePaystackWebhook);
 router.post("/paystack/webhook", handlePaystackWebhook);
 

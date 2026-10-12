@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { confirmOrderDelivery } from "../services/seller-onboard.js";
+import { requireAdminToken } from "../lib/admin-auth.js";
 
 const router = Router();
 
-/** POST /api/orders/confirm-delivery — mark delivered + schedule/release payout */
-router.post("/confirm-delivery", async (req, res) => {
+/** POST /api/orders/confirm-delivery — desk-only. Marks delivered and schedules payout. */
+router.post("/confirm-delivery", requireAdminToken, async (req, res) => {
   const { orderId } = req.body || {};
   if (!orderId) {
     return res.status(400).json({ error: "missing_order_id" });

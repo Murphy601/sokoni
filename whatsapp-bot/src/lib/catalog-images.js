@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
+import { isAllowlistedOutboundUrl, fetchAllowlistedUrl } from "./outbound-url.js";
 
 const MAX_COVER_BYTES = 8 * 1024 * 1024;
 
@@ -34,19 +35,7 @@ export function catalogImageBotUrl(product) {
 }
 
 function isCatalogCdnUrl(url) {
-  try {
-    const u = new URL(String(url || ""));
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
-    return (
-      host === "res.cloudinary.com" ||
-      host.endsWith(".cloudinary.com") ||
-      host === "sokonimall.com" ||
-      host.endsWith(".sokonimall.com")
-    );
-  } catch {
-    return false;
-  }
+  return isAllowlistedOutboundUrl(url);
 }
 
 /**
@@ -70,7 +59,7 @@ export async function ensureCatalogImageBotUrl(product, sourceUrl) {
     if (/res\.cloudinary\.com/i.test(src) && !/\/f_jpg/i.test(src)) {
       fetchUrl = src.replace("/upload/", "/upload/c_limit,w_1200,q_auto,f_jpg/");
     }
-    const res = await fetch(fetchUrl, { signal: AbortSignal.timeout(15000) });
+    const res = await fetchAllowlistedUrl(fetchUrl, { timeoutMs: 15000 });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (!buf.length || buf.length > MAX_COVER_BYTES) return null;

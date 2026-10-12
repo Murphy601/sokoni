@@ -9,6 +9,7 @@ import { getOrder, updateOrderMeta, getOrdersForCustomer } from "./orders.js";
 import { sendText, toChatId } from "./whatsapp.js";
 import { setMenuState } from "./session.js";
 import { config } from "../config.js";
+import { isOpsMediaUrl, fetchAllowlistedUrl } from "../lib/outbound-url.js";
 
 function deskOnly(tool) {
   return {
@@ -246,24 +247,7 @@ export async function scheduleReorderReminderTool({ customer_phone, product_id, 
 }
 
 export function isAllowedOpsMediaUrl(url) {
-  try {
-    const parsed = new URL(String(url || ""));
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-    const host = parsed.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1") return true;
-    if (host === "sokonimall.com" || host.endsWith(".sokonimall.com")) return true;
-    // Catalog stills / clips live on the Sokoni Cloudinary cloud (same as seller publish).
-    if (host === "res.cloudinary.com" || host.endsWith(".cloudinary.com")) return true;
-    const waha = String(config.waha?.apiUrl || "").trim();
-    if (waha && host === new URL(waha).hostname.toLowerCase()) return true;
-    const site = String(config.publicSiteUrl || "").trim();
-    if (site && host === new URL(site).hostname.toLowerCase()) return true;
-    const bot = String(config.botPublicUrl || "").trim();
-    if (bot && host === new URL(bot).hostname.toLowerCase()) return true;
-    return false;
-  } catch {
-    return false;
-  }
+  return isOpsMediaUrl(url);
 }
 
 function allowedMediaUrl(url) {
@@ -287,7 +271,17 @@ export async function processIncomingVoicenote({ media_url, sender_phone } = {},
       message: "Only WAHA media URLs can be transcribed.",
     };
   }
-  const res = await fetch(url);
+  let res;
+  try {
+    res = await fetchAllowlistedUrl(url, { allowPrivateConfigured: true, timeoutMs: 30_000 });
+  } catch (err) {
+    return {
+      ok: false,
+      error: err?.code === "url_not_allowed" ? "url_not_allowed" : "download_failed",
+      tool: "process_incoming_voicenote",
+      message: "Could not download that media URL.",
+    };
+  }
   if (!res.ok) {
     return { ok: false, error: "download_failed", tool: "process_incoming_voicenote", message: `WAHA media ${res.status}.` };
   }

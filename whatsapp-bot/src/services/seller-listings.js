@@ -36,6 +36,7 @@ import { findSupplierByPhone, getSupplier } from "./suppliers.js";
 import { upsertCatalogProduct, dbProductsAvailable } from "../db/repositories/products.js";
 import { runPostPublishModeration, listFlaggedListings, takedownListing, restoreListing, hideListingsForSupplier, restoreListingsForSupplier, summarizeModeration, assertListingAllowedForPublish } from "./listing-moderation.js";
 import { requireAuthenticatedSeller } from "./seller-onboard.js";
+import { isSellerMediaUrl, fetchAllowlistedUrl } from "../lib/outbound-url.js";
 import {
   BULK_CSV_MAX_ROWS,
   BULK_CSV_HEADERS,
@@ -111,20 +112,7 @@ function decodeBase64(dataUrl) {
 
 /** Allow seller publish to pull studio CDN assets without stuffing them through nginx (413). */
 function isAllowedRemoteMediaUrl(url) {
-  try {
-    const u = new URL(String(url));
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    const host = u.hostname.toLowerCase();
-    return (
-      host === "res.cloudinary.com" ||
-      host.endsWith(".cloudinary.com") ||
-      host === "bot.sokonimall.com" ||
-      host === "localhost" ||
-      host === "127.0.0.1"
-    );
-  } catch {
-    return false;
-  }
+  return isSellerMediaUrl(url);
 }
 
 /**
@@ -153,18 +141,24 @@ async function resolveMediaBuffer(source, opts = {}) {
       console.warn("[seller-listings] blocked remote media host:", raw.slice(0, 120));
       return null;
     }
-    const res = await fetch(raw, { signal: AbortSignal.timeout(90_000) });
-    if (!res.ok) {
-      console.warn("[seller-listings] remote media fetch failed:", res.status, raw.slice(0, 120));
+    try {
+      const res = await fetchAllowlistedUrl(raw, { timeoutMs: 90_000 });
+      if (!res.ok) {
+        console.warn("[seller-listings] remote media fetch failed:", res.status, raw.slice(0, 120));
+        return null;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > maxBytes) {
+        const err = new Error(`${label}_too_large`);
+        err.code = "media_too_large";
+        throw err;
+      }
+      return buf.length ? buf : null;
+    } catch (err) {
+      if (err?.code === "media_too_large") throw err;
+      console.warn("[seller-listings] remote media fetch blocked:", err?.message || err);
       return null;
     }
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > maxBytes) {
-      const err = new Error(`${label}_too_large`);
-      err.code = "media_too_large";
-      throw err;
-    }
-    return buf.length ? buf : null;
   }
 
   return null;

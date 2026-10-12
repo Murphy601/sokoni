@@ -260,6 +260,15 @@ export async function applyPostPaymentAutomation(order, payment = {}) {
   if (order.customerPaymentStatus === "confirmed") {
     return { order, skipped: true, reason: "already_paid" };
   }
+  const status = String(order.status || "").toLowerCase();
+  if (status === "delivered" || status === "cancelled") {
+    console.warn("[escrow] STK ignored — order not payable", order.id, status);
+    return { order, skipped: true, reason: "not_payable" };
+  }
+  if (String(order.escrowStatus || "") === "refunded") {
+    console.warn("[escrow] STK ignored — order already refunded", order.id);
+    return { order, skipped: true, reason: "refunded" };
+  }
 
   if (order.kind === "cart_parent") {
     return applyCartParentPostPayment(order, payment);
@@ -472,7 +481,7 @@ function stkAmountMatches(order, amount) {
  * AccountReference is not accepted: order ids are guessable, and this
  * callback is not signed.
  */
-export function resolveOrderFromStkCallback(parsed) {
+export function resolveOrderFromStkCallback(parsed, { signed = false } = {}) {
   if (parsed.checkoutRequestId) {
     const byCheckout = findOrderByCheckoutRequestId(parsed.checkoutRequestId);
     if (byCheckout) {
@@ -483,7 +492,8 @@ export function resolveOrderFromStkCallback(parsed) {
       return byCheckout;
     }
   }
-  if (parsed.phoneNumber && parsed.amount != null) {
+  // Unsigned callbacks cannot bind by phone+amount — those values are guessable.
+  if (signed && parsed.phoneNumber && parsed.amount != null) {
     return findProcessingOrderByPhoneAmount(parsed.phoneNumber, parsed.amount);
   }
   return null;
