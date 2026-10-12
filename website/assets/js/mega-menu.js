@@ -220,16 +220,6 @@
     if (navigate) onNavigate = navigate;
     await window.SokoniBrowse?.loadMenu?.();
     menuData = window.SokoniBrowse?.getMenu?.() || null;
-    if (!menuData) {
-      try {
-        const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
-        const v = meta?.getAttribute("content") || String(Date.now());
-        const res = await fetch(`data/browse-menu.json?v=${v}`);
-        if (res.ok) menuData = await res.json();
-      } catch {
-        menuData = null;
-      }
-    }
 
     renderList();
 

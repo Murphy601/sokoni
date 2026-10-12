@@ -42,6 +42,7 @@ const SCHEMA_PHASE42_PATH = path.join(__dirname, "..", "..", "db", "schema-phase
 const SCHEMA_PHASE43_PATH = path.join(__dirname, "..", "..", "db", "schema-phase43-action-once.sql");
 const SCHEMA_PHASE44_PATH = path.join(__dirname, "..", "..", "db", "schema-phase44-native-jobs.sql");
 const SCHEMA_PHASE45_PATH = path.join(__dirname, "..", "..", "db", "schema-phase45-promotion-queue.sql");
+const SCHEMA_PHASE46_PATH = path.join(__dirname, "..", "..", "db", "schema-phase46-category-tree-indexes.sql");
 
 async function applySchemaFile(label, filePath, { required = false } = {}) {
   try {
@@ -107,6 +108,7 @@ export async function runMigrations() {
     ["phase43 one release proposal", SCHEMA_PHASE43_PATH],
     ["phase44 waitlist + reorder + policy view", SCHEMA_PHASE44_PATH],
     ["phase45 promotion queue last_promoted_at", SCHEMA_PHASE45_PATH],
+    ["phase46 category tree indexes", SCHEMA_PHASE46_PATH],
   ];
 
   for (const [label, filePath] of phases) {

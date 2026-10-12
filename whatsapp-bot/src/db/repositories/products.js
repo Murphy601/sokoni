@@ -2,8 +2,13 @@ import { query, isDbEnabled } from "../pool.js";
 import { rowToCatalogProduct, jsonToDbProduct } from "../product-mapper.js";
 import { ensureDefaultSeller, getSellerById, getSellerBySlug } from "./sellers.js";
 
-const PRODUCT_SELECT = `
-  SELECT p.*,
+const PRODUCT_FROM = `
+  FROM products p
+  LEFT JOIN sellers s ON s.id = p.seller_id
+  LEFT JOIN users su ON su.id = COALESCE(p.seller_user_id, s.user_id)
+`;
+
+const PRODUCT_SELLER_COLS = `
     s.business_name AS seller_business_name,
     s.slug AS seller_slug,
     s.user_id AS seller_table_user_id,
@@ -20,6 +25,27 @@ const PRODUCT_SELECT = `
     COALESCE(su.completed_orders, 0)::int AS seller_completed_orders,
     COALESCE(su.dispute_count, 0)::int AS seller_dispute_count,
     COALESCE(su.unresolved_disputes, 0)::int AS seller_unresolved_disputes,
+    COALESCE(
+      (SELECT json_agg(pi.url ORDER BY pi.sort_order)
+       FROM product_images pi WHERE pi.product_id = p.id),
+      '[]'::json
+    ) AS image_urls
+`;
+
+/** Grid / search — uses users.completed_orders instead of per-row sold COUNTs. */
+const PRODUCT_LIST_SELECT = `
+  SELECT p.*,
+    ${PRODUCT_SELLER_COLS},
+    COALESCE(su.completed_orders, 0)::int AS seller_sales_count,
+    COALESCE(su.rating_score, 0)::numeric(10,2) AS seller_avg_rating,
+    COALESCE(su.rating_count, 0)::int AS seller_total_reviews
+  ${PRODUCT_FROM}
+`;
+
+/** Detail — keep exact sold-count / review fallbacks. */
+const PRODUCT_SELECT = `
+  SELECT p.*,
+    ${PRODUCT_SELLER_COLS},
     (
       SELECT COUNT(*)::int
         FROM products px
@@ -43,15 +69,8 @@ const PRODUCT_SELECT = `
         FROM order_reviews r
        WHERE r.seller_user_id = COALESCE(p.seller_user_id, s.user_id)
          AND r.direction = 'buyer_to_seller'
-    ) AS seller_total_reviews,
-    COALESCE(
-      (SELECT json_agg(pi.url ORDER BY pi.sort_order)
-       FROM product_images pi WHERE pi.product_id = p.id),
-      '[]'::json
-    ) AS image_urls
-  FROM products p
-  LEFT JOIN sellers s ON s.id = p.seller_id
-  LEFT JOIN users su ON su.id = COALESCE(p.seller_user_id, s.user_id)
+    ) AS seller_total_reviews
+  ${PRODUCT_FROM}
 `;
 
 /**
@@ -194,7 +213,7 @@ function buildSearchClauses({
 }
 
 export async function listProducts({ inStockOnly = false } = {}) {
-  let sql = `${PRODUCT_SELECT}`;
+  let sql = `${PRODUCT_LIST_SELECT}`;
   const params = [];
   if (inStockOnly) {
     sql += ` WHERE p.in_stock = TRUE AND p.is_sold = FALSE`;
@@ -213,7 +232,7 @@ export async function getProductById(id) {
 export async function pickLeastPromotedProduct() {
   try {
     const { rows } = await query(
-      `${PRODUCT_SELECT}
+      `${PRODUCT_LIST_SELECT}
        WHERE p.in_stock = TRUE
          AND COALESCE(p.is_sold, FALSE) = FALSE
          AND COALESCE(p.stock_quantity, 1) > 0
@@ -422,7 +441,7 @@ export async function searchProductsDb({
     inStockOnly,
   });
 
-  let sql = PRODUCT_SELECT;
+  let sql = PRODUCT_LIST_SELECT;
   if (clauses.length) sql += ` WHERE ${clauses.join(" AND ")}`;
   sql += ` ORDER BY p.rating DESC NULLS LAST, p.review_count DESC, p.title`;
 

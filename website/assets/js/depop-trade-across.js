@@ -76,9 +76,12 @@
     if (!root) return;
 
     try {
-      const res = await fetch(MENU_URL, { cache: "no-cache" });
-      if (!res.ok) throw new Error(`browse-menu ${res.status}`);
-      const menu = await res.json();
+      const menu =
+        (await window.SokoniBrowse?.loadMenu?.()) ||
+        (await fetch(MENU_URL).then((res) => {
+          if (!res.ok) throw new Error(`browse-menu ${res.status}`);
+          return res.json();
+        }));
       BOARDS.forEach((board) => renderBoard(menu.categories, board));
     } catch (err) {
       console.warn("[trade-across]", err);
