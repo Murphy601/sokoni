@@ -283,9 +283,9 @@ app.get("/health", async (_req, res) => {
 
 /** Product photos — served from VM disk (no Cloudflare wait). */
 const catalogImageStatic = express.static(CATALOG_IMAGES_DIR, {
-  maxAge: "1d",
+  maxAge: "7d",
   setHeaders(res) {
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "public, max-age=604800");
     res.setHeader("Access-Control-Allow-Origin", "*");
   },
 });

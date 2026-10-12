@@ -5,7 +5,11 @@
 (function () {
   const MENU_URL = "data/browse-menu.json";
   const FALLBACK_IMG =
-    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&h=600&q=80";
+    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=150&h=150&q=80";
+
+  function browseThumb(src) {
+    return window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
+  }
 
   const BOARDS = [
     {
@@ -44,14 +48,14 @@
         <span class="depop-trade-cat-card-glass">
           <span class="depop-trade-cat-card-media">
             <img
-              src="${escapeHtml(src)}"
+              src="${escapeHtml(browseThumb(src))}"
               alt=""
-              width="600"
-              height="600"
+              width="150"
+              height="150"
               loading="lazy"
               decoding="async"
               referrerpolicy="no-referrer"
-              data-fallback-src="${escapeHtml(FALLBACK_IMG)}"
+              data-fallback-src="${escapeHtml(browseThumb(FALLBACK_IMG))}"
             />
           </span>
           <span class="depop-trade-cat-card-label">${escapeHtml(label)}</span>
