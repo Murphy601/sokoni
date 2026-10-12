@@ -2,6 +2,18 @@
  * Depop-style header — category strip from browse-menu, search sync, bottom nav.
  */
 (function () {
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function browseThumb(src) {
+    return window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
+  }
+
   function scrollToDeals() {
     document.getElementById("deals")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -52,9 +64,9 @@
       .slice(0, 12)
       .map((c) => {
         const icon = c.image
-          ? `<img class="depop-cat-strip__img" src="${c.image}" alt="" width="32" height="32" loading="lazy" referrerpolicy="no-referrer" />`
-          : `<span class="depop-cat-strip__emoji">${c.emoji || ""}</span>`;
-        return `<button type="button" data-depop-filter='${JSON.stringify({ category: c.id, scroll: true })}'>${icon} ${c.label}</button>`;
+          ? `<img class="depop-cat-strip__img" src="${escapeHtml(browseThumb(c.image))}" alt="" width="32" height="32" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+          : `<span class="depop-cat-strip__emoji">${escapeHtml(c.emoji || "")}</span>`;
+        return `<button type="button" data-depop-filter='${escapeHtml(JSON.stringify({ category: c.id, scroll: true }))}'>${icon} ${escapeHtml(c.label)}</button>`;
       })
       .join("");
 

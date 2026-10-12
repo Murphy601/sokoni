@@ -5,7 +5,7 @@
  */
 
 const u = (id, sig = 1) =>
-  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=600&h=600&q=80&sig=${sig}`;
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=150&h=150&q=80&sig=${sig}`;
 
 /** Top-level browse category → image URL */
 export const CATEGORY_IMAGES = {

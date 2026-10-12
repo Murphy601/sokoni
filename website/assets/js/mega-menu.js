@@ -32,14 +32,21 @@
     return categories().find((c) => c.id === activeCategoryId) || null;
   }
 
+  function browseThumb(src) {
+    return window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
+  }
+
   function iconHtml(item, sizeClass) {
     const src = item?.image;
     if (src) {
+      const fallback = window.SokoniBrowseThumb?.FALLBACK || browseThumb(
+        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=150&h=150&q=80"
+      );
       return `<span class="sokoni-cat-icon ${sizeClass}" aria-hidden="true">
-        <img src="${escapeHtml(src)}" alt="" width="240" height="240" loading="lazy"
-          referrerpolicy="no-referrer"
+        <img src="${escapeHtml(browseThumb(src))}" alt="" width="150" height="150" loading="lazy"
+          decoding="async" referrerpolicy="no-referrer"
           data-fallback-class="is-broken"
-          data-fallback-src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&amp;fit=crop&amp;w=600&amp;h=600&amp;q=80" />
+          data-fallback-src="${escapeHtml(fallback)}" />
       </span>`;
     }
     // Last resort only — every cat/sub should have a web image in browse-menu.json

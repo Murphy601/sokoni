@@ -856,36 +856,39 @@ function renderCategoryChips() {
   // Skip nav-only aliases (Phones/TV/Computers/Appliances → Electronics).
   const browseCats = (menu?.categories || []).filter((c) => !c.navOnly);
   const FALLBACK_IMG =
-    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&h=600&q=80";
+    window.SokoniBrowseThumb?.FALLBACK ||
+    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=150&h=150&q=80";
   const TOP_CHIPS = [
     {
       id: "all",
       label: "All Products",
       image:
-        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&h=600&q=80&sig=all",
+        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=150&h=150&q=80&sig=all",
     },
     {
       id: "viral",
       label: "Viral Bargains",
       image:
-        "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=600&h=600&q=80&sig=viral",
+        "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=150&h=150&q=80&sig=viral",
     },
   ];
+
+  const browseThumb = (src) => window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
 
   const chip = (item) => {
     const id = item.id;
     const label = item.label || id;
     const active = activeCategory === id && !activeProductId;
-    const src = item.image || FALLBACK_IMG;
-    // Keep dynamic image URLs intact — glass shell wraps existing media/label.
+    const src = browseThumb(item.image || FALLBACK_IMG);
+    // Scaled Cloudinary/Unsplash thumbs — glass shell wraps existing media/label.
     return `
     <button type="button" data-cat="${escapeHtml(id)}"
       class="depop-cat-card cat-chip ${active ? "is-active" : ""}">
       <span class="depop-cat-card__glass">
         <span class="depop-cat-card__icon depop-cat-card__icon--img" aria-hidden="true">
-          <img src="${escapeHtml(src)}" alt="" width="240" height="240" loading="lazy"
-            referrerpolicy="no-referrer"
-            data-fallback-src="${escapeHtml(FALLBACK_IMG)}" />
+          <img src="${escapeHtml(src)}" alt="" width="150" height="150" loading="lazy"
+            decoding="async" referrerpolicy="no-referrer"
+            data-fallback-src="${escapeHtml(browseThumb(FALLBACK_IMG))}" />
         </span>
         <span class="depop-cat-card__label">${escapeHtml(label)}</span>
       </span>
