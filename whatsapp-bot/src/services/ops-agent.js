@@ -36,12 +36,14 @@ Tools:
 - create_mpesa_stk_push — STK for an existing SKN only (shipping gate still applies).
 - process_incoming_voicenote — transcribe a WAHA audio URL (Groq Whisper).
 - escalate_to_human_agent — open a support ticket on the ops desk.
-- notify_admin_ops — WhatsApp alert to ADMIN_PHONES.
-- send_whatsapp_message / send_whatsapp_voice — reach a registered seller, rider, or known buyer.
+- notify_admin_ops — WhatsApp alert to ADMIN_PHONES (do not ask staff for the admin number).
+- send_whatsapp_message / send_whatsapp_voice — reach a registered seller, rider, admin, or known buyer.
 - send_whatsapp_buttons / send_whatsapp_list — numbered menus (WAHA tap buttons are unreliable).
 - publish_whatsapp_status_or_channel — post a catalog drop to Status AND the official Channel (default BOTH; no till numbers).
 - list_whatsapp_channels — GET /api/{session}/channels?role=OWNER to read 111…@newsletter ids.
-- send_video_note — circular video note to a known buyer/seller (WAHA or sokonimall.com URL).
+- send_video_note — circular video note to a known buyer, seller, rider, or admin. Use rider_name / get_rider_roster for riders. For “the admin”, set role=admin (ADMIN_PHONES). If you lack a video URL, call generate_listing_clip first.
+- generate_listing_clip — Cloudinary Ken Burns MP4 from a catalog product_id or allowlisted image_url. Use this when staff ask to generate a clip.
+- place_whatsapp_call — ring a known buyer, seller, rider, or admin on WhatsApp (WAHA voice-calls app). If the tool returns calls_unavailable, send a voice note instead.
 - create_mediation_group — buyer + seller + admin WhatsApp group for a disputed SKN. Auto on raise_order_dispute when the order is KES 10,000+.
 - send_channel_invite — send the official Channel invite link (https://whatsapp.com/channel/…) when someone asks for updates or new arrivals.
 
@@ -627,14 +629,59 @@ export const OPS_TOOLS = [
     type: "function",
     function: {
       name: "send_video_note",
-      description: "Sends a native WhatsApp circular video note to a known buyer or seller.",
+      description:
+        "Sends a native WhatsApp circular video note to a known buyer, seller, rider, or admin. Resolve riders with rider_name. For the admin, set role=admin (uses ADMIN_PHONES). If video_url is missing, pass product_id or image_url so a clip is generated first.",
       parameters: {
         type: "object",
         properties: {
           phone_number: { type: "string", description: "Recipient phone." },
-          video_url: { type: "string", description: "WAHA or sokonimall.com video URL." },
+          rider_name: { type: "string", description: "Resolve a registered rider’s WhatsApp." },
+          seller_name: { type: "string", description: "Resolve a registered seller’s WhatsApp." },
+          role: { type: "string", description: "buyer | seller | rider | admin" },
+          video_url: { type: "string", description: "WAHA, sokonimall.com, or Cloudinary MP4 URL." },
+          product_id: { type: "string", description: "Catalog id — generate a clip if video_url is empty." },
+          image_url: { type: "string", description: "Cloudinary still — generate a clip if video_url is empty." },
         },
-        required: ["phone_number", "video_url"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_listing_clip",
+      description:
+        "Builds a short Cloudinary Ken Burns MP4 from a catalog product or an allowlisted still. Use when staff ask to generate a clip. Then send it with send_video_note.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_id: { type: "string", description: "Live catalog product id." },
+          image_url: { type: "string", description: "Cloudinary or sokonimall.com still." },
+          image_urls: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional extra stills for a multi-photo reel.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "place_whatsapp_call",
+      description:
+        "Places a WhatsApp voice (or video) call to a known buyer, seller, rider, or admin via the WAHA voice-calls app. If the session cannot call, send a voice note instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string" },
+          rider_name: { type: "string" },
+          seller_name: { type: "string" },
+          role: { type: "string", description: "buyer | seller | rider | admin" },
+          as_video: { type: "boolean", description: "true for a video call; default voice." },
+        },
         additionalProperties: false,
       },
     },

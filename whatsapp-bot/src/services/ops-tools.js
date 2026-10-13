@@ -58,6 +58,8 @@ export const OPS_TOOL_NAMES = [
   "publish_whatsapp_status_or_channel",
   "list_whatsapp_channels",
   "send_video_note",
+  "generate_listing_clip",
+  "place_whatsapp_call",
   "create_mediation_group",
   "send_channel_invite",
 ];
@@ -65,6 +67,10 @@ export const OPS_TOOL_NAMES = [
 const TOOL_ALIASES = {
   get_order_and_escrow_details: "check_escrow_status",
   search_catalog_items: "search_catalog",
+  generate_clip: "generate_listing_clip",
+  make_call: "place_whatsapp_call",
+  start_voice_call: "place_whatsapp_call",
+  place_call: "place_whatsapp_call",
 };
 
 function normalizeToolArgs(args = {}) {
@@ -72,6 +78,9 @@ function normalizeToolArgs(args = {}) {
   if (next.search_query && !next.query) next.query = next.search_query;
   if (next.query && !next.keywords && !next.q) next.q = next.query;
   if (next.buyer_phone && !next.phone_number) next.phone_number = next.buyer_phone;
+  if (next.recipient && !next.name) next.name = next.recipient;
+  if (next.to && !next.role) next.role = next.to;
+  if (next.photo_url && !next.image_url) next.image_url = next.photo_url;
   return next;
 }
 
@@ -501,21 +510,44 @@ async function isDirectoryPhone(phone) {
   return false;
 }
 
-async function knownRecipient(phone) {
+export async function knownRecipient(phone, extras = {}) {
   if (!phone) return false;
+  if ((config.admin?.phones || []).some((p) => phoneMatches(p, phone))) return true;
+  if ((extras.adminPhones || []).some((p) => phoneMatches(p, phone))) return true;
+  if ((extras.riders || []).some((r) => phoneMatches(r.phone, phone))) return true;
+  if ((extras.sellers || []).some((s) => phoneMatches(s.phone, phone))) return true;
   const orders = getOrdersForCustomer("", phone);
   if (orders.length) return true;
   if (getAllContacts().some((c) => phoneMatches(c.phone || c.customerKey, phone))) return true;
   return isDirectoryPhone(phone);
 }
 
-async function resolveDirectoryPhone(args = {}) {
+export async function resolveDirectoryPhone(args = {}, extras = {}) {
   let phone = normalizeOpsPhone(args.phone || args.phone_number || args.phoneNumber);
   if (phone) return phone;
   const sellerName = String(args.seller_name || args.sellerName || "").trim();
   const riderName = String(args.rider_name || args.riderName || "").trim();
   const name = String(args.name || "").trim();
   const role = String(args.role || "").trim().toLowerCase();
+
+  if (role === "admin" || /^(the\s+)?admins?$/i.test(name)) {
+    const fromExtras = extras.adminPhones?.[0];
+    return normalizeOpsPhone(fromExtras || config.admin?.phones?.[0] || config.admin?.primary || "");
+  }
+  if ((riderName || role === "rider") && Array.isArray(extras.riders)) {
+    const q = (riderName || name).toLowerCase();
+    const hit = extras.riders.find(
+      (r) => r.phone && (!q || String(r.name || "").toLowerCase().includes(q) || String(r.phone).includes(q))
+    );
+    if (hit?.phone) return normalizeOpsPhone(hit.phone);
+  }
+  if ((sellerName || role === "seller") && Array.isArray(extras.sellers)) {
+    const q = (sellerName || name).toLowerCase();
+    const hit = extras.sellers.find(
+      (s) => s.phone && (!q || String(s.name || s.shop || "").toLowerCase().includes(q))
+    );
+    if (hit?.phone) return normalizeOpsPhone(hit.phone);
+  }
 
   if (sellerName || role === "seller") {
     const roster = await getSellerRoster({ q: sellerName || name, limit: 5 });
@@ -536,11 +568,17 @@ async function resolveDirectoryPhone(args = {}) {
   return "";
 }
 
+export async function resolveOpsRecipient(args = {}, extras = {}) {
+  const role = String(args.role || "").trim().toLowerCase();
+  const phone = await resolveDirectoryPhone(args, extras);
+  return { phone, role: role || null };
+}
+
 export async function sendWhatsAppMessage(args = {}, extras = {}) {
   const { sender = sendText, now = Date.now(), dryRun = false } = extras;
   const text = String(args.text || args.message || "").trim();
   const orderId = args.order_id || args.orderId;
-  let phone = await resolveDirectoryPhone(args);
+  let phone = await resolveDirectoryPhone(args, extras);
 
   if (!phone && orderId) {
     const order = getOrder(orderId);
@@ -562,11 +600,11 @@ export async function sendWhatsAppMessage(args = {}, extras = {}) {
   if (text.length > SEND_MAX_CHARS) {
     return { ok: false, error: "text_too_long", message: `Keep WhatsApp notes under ${SEND_MAX_CHARS} characters.` };
   }
-  if (!extras.allowUnknown && !(await knownRecipient(phone))) {
+  if (!extras.allowUnknown && !(await knownRecipient(phone, extras))) {
     return {
       ok: false,
       error: "unknown_recipient",
-      message: "Can only message a registered seller, rider, or a number that already has a Sokoni order or chat.",
+      message: "Can only message a registered seller, rider, admin, or a number that already has a Sokoni order or chat.",
     };
   }
   if (!takeSendSlot(now)) {
@@ -627,7 +665,7 @@ const VOICE_MAX_CHARS = 400;
 export async function sendWhatsAppVoice(args = {}, extras = {}) {
   const text = String(args.text || args.message || args.script || "").trim();
   const dry = extras.dryRun === true || args.dryRun === true;
-  const phone = await resolveDirectoryPhone(args);
+  const phone = await resolveDirectoryPhone(args, extras);
   if (!phone) {
     return {
       ok: false,
@@ -647,12 +685,12 @@ export async function sendWhatsAppVoice(args = {}, extras = {}) {
       message: `Keep voice notes under ${VOICE_MAX_CHARS} characters.`,
     };
   }
-  if (!extras.allowUnknown && !(await knownRecipient(phone))) {
+  if (!extras.allowUnknown && !(await knownRecipient(phone, extras))) {
     return {
       ok: false,
       error: "unknown_recipient",
       tool: "send_whatsapp_voice",
-      message: "Can only send a voice note to a registered seller, rider, or known chat.",
+      message: "Can only send a voice note to a registered seller, rider, admin, or known chat.",
     };
   }
   if (!takeSendSlot(extras.now || Date.now())) {
@@ -827,6 +865,14 @@ export async function executeOpsTool(name, rawArgs = {}, extras = {}) {
     if (tool === "send_video_note") {
       const { sendVideoNoteTool } = await import("./ops-desk-actions.js");
       return sendVideoNoteTool(args, extras);
+    }
+    if (tool === "generate_listing_clip") {
+      const { generateListingClipTool } = await import("./ops-desk-actions.js");
+      return generateListingClipTool(args, extras);
+    }
+    if (tool === "place_whatsapp_call") {
+      const { placeWhatsAppCallTool } = await import("./ops-desk-actions.js");
+      return placeWhatsAppCallTool(args, extras);
     }
     if (tool === "create_mediation_group") {
       const { createMediationGroup } = await import("./ops-desk-actions.js");
