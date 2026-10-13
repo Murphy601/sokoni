@@ -36,6 +36,18 @@ Admin detail (redacted phone):
 curl -s "https://bot.sokonimall.com/admin/ops/waha?token=$ADMIN_SETUP_TOKEN"
 ```
 
+## Voice-calls app (outgoing WhatsApp rings)
+
+Install on the **running WAHA container**, session `default` — not on the Node bot.
+
+```bash
+cd ~/sokoni
+git fetch origin cursor/ops-call-clip-tools-2301 && git checkout cursor/ops-call-clip-tools-2301
+bash scripts/install-waha-voice-calls.sh
+```
+
+That script does **not** recreate WAHA. If GET `/api/apps` is 404, this image is Core and cannot place calls; the ops agent sends a voice note instead. Applying compose env (`WAHA_APPS_ENABLED`) only takes effect on the next `FORCE_WAHA_RECREATE=1 bash scripts/deploy-waha.sh` (re-link required).
+
 ## Reset / re-link
 
 ```bash
