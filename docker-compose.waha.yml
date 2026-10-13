@@ -30,10 +30,9 @@ services:
       # NOWEB = no Chromium browser (more reliable on small VMs)
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_PRINT_QR: "true"
-      # Session apps (voice-calls for outgoing rings). The built-in `calls` app
-      # only rejects inbound and cannot share a session with voice-calls.
+      # Apps API is on. Core only allows chatwoot / calls (reject inbound) / mcp.
+      # There is no outgoing-ring app on Core — do not set WAHA_APPS_ON=voice-calls.
       WAHA_APPS_ENABLED: ${WAHA_APPS_ENABLED:-True}
-      WAHA_APPS_ON: ${WAHA_APPS_ON:-voice-calls}
       # Save incoming images/files so the bot can download them (required for catalog photos)
       WHATSAPP_DOWNLOAD_MEDIA: "true"
       # Keep files until manually cleared — default 180s deletes files during large album uploads

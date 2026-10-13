@@ -46,7 +46,7 @@ git fetch origin cursor/ops-call-clip-tools-2301 && git checkout cursor/ops-call
 bash scripts/install-waha-voice-calls.sh
 ```
 
-That script does **not** recreate WAHA. If GET `/api/apps` is 404, this image is Core and cannot place calls; the ops agent sends a voice note instead. Applying compose env (`WAHA_APPS_ENABLED`) only takes effect on the next `FORCE_WAHA_RECREATE=1 bash scripts/deploy-waha.sh` (re-link required).
+That script does **not** recreate WAHA. On Core (`devlikeapro/waha`) the Apps API only accepts `chatwoot`, `calls` (reject inbound), and `mcp` — there is no outgoing-ring app. Leave the container running. The ops agent sends a voice note instead of a live call. Real rings need **WAHA Plus**.
 
 ## Reset / re-link
 

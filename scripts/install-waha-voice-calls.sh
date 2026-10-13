@@ -92,12 +92,17 @@ echo "$BODY"
 echo "==> POST /api/apps HTTP $CODE"
 
 if [ "$CODE" != "200" ] && [ "$CODE" != "201" ]; then
+  if printf '%s' "$BODY" | grep -q 'chatwoot, calls, mcp'; then
+    echo "This is WAHA Core ($WAHA_DEFAULT_IMAGE)."
+    echo "Core apps are only: chatwoot, calls (reject inbound), mcp."
+    echo "There is no outgoing-ring app on this image — do not install 'calls'."
+    echo "Leave WAHA running (session WORKING). Do not recreate the container."
+    echo "Ops agent: send_whatsapp_voice / send_video_note instead of a live call."
+    echo "Real rings need WAHA Plus (devlikeapro/waha-plus) with a license."
+    exit 5
+  fi
   echo "ERROR: could not install voice-calls (HTTP $CODE)."
-  echo "       If the body says apps are disabled, add these to docker-compose.waha.yml and recreate WAHA later:"
-  echo "         WAHA_APPS_ENABLED=True"
-  echo "         WAHA_APPS_ON=voice-calls"
-  echo "       Recreate only when you can re-link: FORCE_WAHA_RECREATE=1 bash scripts/deploy-waha.sh"
-  echo "       Then re-run: bash scripts/install-waha-voice-calls.sh"
+  echo "       Do not bounce WAHA unless you can re-link WhatsApp."
   exit 4
 fi
 

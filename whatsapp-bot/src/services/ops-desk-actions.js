@@ -691,7 +691,7 @@ export async function placeWhatsAppCallTool(args = {}, extras = {}) {
       tool: "place_whatsapp_call",
       phone,
       message:
-        "WAHA cannot start a live call on this session. Send a voice note (send_whatsapp_voice) or video note instead.",
+        "This WAHA Core image cannot place an outgoing call (apps are only chatwoot, inbound-reject calls, mcp). Send a voice note (send_whatsapp_voice) or video note instead.",
     };
   }
 }

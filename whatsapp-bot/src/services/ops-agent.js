@@ -43,7 +43,7 @@ Tools:
 - list_whatsapp_channels — GET /api/{session}/channels?role=OWNER to read 111…@newsletter ids.
 - send_video_note — circular video note to a known buyer, seller, rider, or admin. Use rider_name / get_rider_roster for riders. For “the admin”, set role=admin (ADMIN_PHONES). If you lack a video URL, call generate_listing_clip first.
 - generate_listing_clip — Cloudinary Ken Burns MP4 from a catalog product_id or allowlisted image_url. Use this when staff ask to generate a clip.
-- place_whatsapp_call — ring a known buyer, seller, rider, or admin on WhatsApp (WAHA voice-calls app). If the tool returns calls_unavailable, send a voice note instead.
+- place_whatsapp_call — ring a known buyer, seller, rider, or admin. WAHA Core cannot place outgoing calls; if the tool returns calls_unavailable, send_whatsapp_voice instead. Do not ask staff to install a voice app on Core.
 - create_mediation_group — buyer + seller + admin WhatsApp group for a disputed SKN. Auto on raise_order_dispute when the order is KES 10,000+.
 - send_channel_invite — send the official Channel invite link (https://whatsapp.com/channel/…) when someone asks for updates or new arrivals.
 
