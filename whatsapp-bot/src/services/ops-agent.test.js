@@ -363,6 +363,76 @@ describe("ops tool argument guards", () => {
     assert.equal(dry.dryRun, true);
   });
 
+  it("sends video notes to riders and admin phones without asking for a number", async () => {
+    const rider = await executeOpsTool(
+      "send_video_note",
+      { rider_name: "Peter", video_url: "https://sokonimall.com/demo.mp4" },
+      {
+        dryRun: true,
+        riders: [{ name: "Peter Mwangi", phone: "254748879579" }],
+      }
+    );
+    assert.equal(rider.ok, true);
+    assert.equal(rider.phone, "254748879579");
+    assert.equal(rider.dryRun, true);
+
+    const admin = await executeOpsTool(
+      "send_video_note",
+      { role: "admin", video_url: "https://sokonimall.com/demo.mp4" },
+      { dryRun: true, adminPhones: ["254757764009"] }
+    );
+    assert.equal(admin.ok, true);
+    assert.equal(admin.phone, "254757764009");
+  });
+
+  it("generates a Cloudinary clip URL and places a WhatsApp call in dry-run", async () => {
+    const clip = await executeOpsTool(
+      "generate_listing_clip",
+      { image_url: "https://res.cloudinary.com/rztynxme/image/upload/v1/sokoni-studio/cutout.jpg" },
+      { dryRun: true }
+    );
+    assert.equal(clip.ok, true);
+    assert.equal(clip.tool, "generate_listing_clip");
+    assert.match(clip.videoUrl, /\/upload\/f_mp4\/sokoni-studio\/cutout\.mp4$/);
+
+    const viaAlias = await executeOpsTool(
+      "generate_clip",
+      { image_url: "https://res.cloudinary.com/rztynxme/image/upload/v1/sokoni-studio/cutout.jpg" },
+      { dryRun: true }
+    );
+    assert.equal(viaAlias.tool, "generate_listing_clip");
+
+    const missing = await executeOpsTool("generate_listing_clip", {}, { dryRun: true });
+    assert.equal(missing.ok, false);
+    assert.equal(missing.error, "missing_image");
+
+    const call = await executeOpsTool(
+      "place_whatsapp_call",
+      { rider_name: "Peter" },
+      { dryRun: true, riders: [{ name: "Peter Mwangi", phone: "254748879579" }] }
+    );
+    assert.equal(call.ok, true);
+    assert.equal(call.tool, "place_whatsapp_call");
+    assert.equal(call.phone, "254748879579");
+    assert.equal(call.dryRun, true);
+
+    const aliasCall = await executeOpsTool(
+      "make_call",
+      { role: "admin" },
+      { dryRun: true, adminPhones: ["254757764009"] }
+    );
+    assert.equal(aliasCall.tool, "place_whatsapp_call");
+    assert.equal(aliasCall.phone, "254757764009");
+
+    const stranger = await executeOpsTool(
+      "place_whatsapp_call",
+      { phone_number: "254700000000" },
+      { dryRun: true }
+    );
+    assert.equal(stranger.ok, false);
+    assert.equal(stranger.error, "unknown_recipient");
+  });
+
   it("creates a mediation group in dry-run for two Kenya numbers", async () => {
     const group = await executeOpsTool(
       "create_mediation_group",
