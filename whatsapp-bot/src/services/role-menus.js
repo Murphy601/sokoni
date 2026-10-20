@@ -2,11 +2,20 @@ import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
 import { setMenuState } from "./session.js";
 import { requireAdminSender } from "./admin.js";
-import { findSupplierByPhone } from "./suppliers.js";
+import { attachSellerWhatsAppChat, findSupplierByPhone } from "./suppliers.js";
 import { sendWelcome, formatNumberedMenu } from "./menu.js";
-import { startSupplierOnboarding } from "./supplier-onboarding.js";
+// Supplier-programme onboarding retired with the P2P pivot — see seller-onboarding.js
+import { startSellerOnboarding } from "./seller-onboarding.js";
 import { startPickupOnboarding } from "./pickup-point-onboarding.js";
 import { OFFER_PERCENT, PROMO_CODE } from "./trust-copy.js";
+import { formatSellerWalletReply } from "./seller-wallet.js";
+
+function linkSellerChatIfKnown(customerKey, phone) {
+  const supplier = phone ? findSupplierByPhone(phone) : null;
+  if (!supplier?.phone) return supplier;
+  if (customerKey) attachSellerWhatsAppChat(supplier.phone, customerKey);
+  return supplier;
+}
 
 function normalize(text) {
   return String(text || "").trim().toLowerCase();
@@ -29,8 +38,18 @@ export function isCustomerMenuIntent(text) {
   );
 }
 
+/** True when the message is a rider custody OTP command, not hub-apply intent. */
+export function isRiderPickupOtpCommand(text) {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  // PICKUP / PICK UP SKN-1015 5972 (hyphen optional, trailing junk ok)
+  return /^(?:pick\s*up|pickup)\s+skn-?\d{1,6}(?:-\d+)?(?:\s+\d{4})?\b/i.test(t);
+}
+
 export function isPickupMenuIntent(text) {
   const raw = String(text || "").trim();
+  // Must NOT steal rider "Pick up SKN-#### ####" → that caused false late-pickup penalties.
+  if (isRiderPickupOtpCommand(raw)) return false;
+
   const t = collapsePickupPhrase(raw).replace(/^#/, "");
   return (
     t === "pickup" ||
@@ -40,8 +59,9 @@ export function isPickupMenuIntent(text) {
     t === "pickup point menu" ||
     t === "become a pickup point" ||
     t === "apply pickup point" ||
-    /^pickup\b/.test(t) ||
     /^become a pickup\b/.test(t) ||
+    // Allow "pickup …" menu phrases, but never SKN / OTP custody commands.
+    (/^pickup\b/.test(t) && !/\bskn-?\d/i.test(t) && !/\b\d{4}\b/.test(t)) ||
     /^#(?:pickup|pickuppoint|pickup-point)\b/i.test(raw)
   );
 }
@@ -91,6 +111,7 @@ export async function sendPickupApplyPrompt(customerKey) {
 export async function sendVendorMenu(customerKey, supplier) {
   const options = [
     { id: "vendor_status", label: "📋 My application / products" },
+    { id: "vendor_balance", label: "💼 Wallet & balance" },
     { id: "vendor_payouts", label: "💰 Payouts & delivery policy" },
     { id: "vendor_add_product", label: "➕ List a product (photo + AI)" },
     { id: "vendor_contact", label: "📞 Contact Sokoni ops" },
@@ -144,7 +165,7 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
   }
 
   if (isVendorMenuIntent(trimmed)) {
-    const supplier = findSupplierByPhone(phone);
+    const supplier = linkSellerChatIfKnown(customerKey, phone);
     if (supplier) {
       await sendVendorMenu(customerKey, supplier);
       return true;
@@ -153,12 +174,12 @@ export async function tryRoleMenu(customerKey, text, { phone = "" } = {}) {
   }
 
   if (/^vendor\s+contact$/i.test(trimmed)) {
-    const supplier = findSupplierByPhone(phone);
+    const supplier = linkSellerChatIfKnown(customerKey, phone);
     if (supplier) return handleVendorMenuAction(customerKey, "vendor_contact", { phone });
     return sendVendorApplyPrompt(customerKey);
   }
   if (/^vendor\s+status$/i.test(trimmed)) {
-    const supplier = findSupplierByPhone(phone);
+    const supplier = linkSellerChatIfKnown(customerKey, phone);
     if (supplier) return handleVendorMenuAction(customerKey, "vendor_status", { phone });
     return sendVendorApplyPrompt(customerKey);
   }
@@ -183,14 +204,14 @@ export async function handlePickupMenuAction(customerKey, actionId, { phone = ""
 }
 
 export async function handleVendorMenuAction(customerKey, actionId, { phone = "" } = {}) {
-  const supplier = findSupplierByPhone(phone);
+  const supplier = linkSellerChatIfKnown(customerKey, phone);
   if (!supplier && actionId !== "vendor_start_apply" && actionId !== "customer_menu" && actionId !== "shop_all") {
     return sendVendorApplyPrompt(customerKey);
   }
 
   switch (actionId) {
     case "vendor_start_apply":
-      return startSupplierOnboarding(customerKey, { phone });
+      return startSellerOnboarding(customerKey, { phone });
     case "vendor_status":
       await sendText(
         customerKey,
@@ -207,20 +228,24 @@ export async function handleVendorMenuAction(customerKey, actionId, { phone = ""
         customerKey,
         `💰 *Supplier payouts*\n\n` +
           `• Buyers pay upfront via M-Pesa STK — funds held in Sokoni escrow\n` +
-          `• Sokoni remits your *supply price* 2–3 business days after delivery\n` +
+          `• Sokoni remits your earnings after delivery is confirmed\n` +
           `• Delivery: ${supplier.delivers ? supplier.deliveryAreas || "your areas" : "hub / pickup coordination"}\n\n` +
-          `Questions? Reply *vendor contact*.`
+          `Reply *balance* for live wallet totals · *WITHDRAW* to cash out.`
       );
+      return true;
+    case "vendor_balance":
+      await sendText(customerKey, formatSellerWalletReply(supplier));
       return true;
     case "vendor_add_product":
       await sendText(
         customerKey,
         `➕ *Sell on Sokoni*\n\n` +
           `Open sokonimall.com/suppliers/list.html\n\n` +
-          `1. Upload up to 4 photos (+ optional video)\n` +
-          `2. Add title, tags, category & price\n` +
-          `3. Tap *Post listing* — live instantly\n\n` +
-          `_Like Depop — no waiting for admin approval._`
+          `1. Upload photos (+ optional video) → Post listing\n` +
+          `2. Hub Drop-Offs — countrywide or city hub + rider pickup\n` +
+          `3. Inventory alerts — set units so multi-stock stays on the menu\n` +
+          `4. WhatsApp Promo — share sokonimall.com + your @handle\n\n` +
+          `_Live instantly — no waiting for admin approval._`
       );
       return true;
     case "vendor_contact":

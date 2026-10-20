@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="../assets/vendor/purify.min.js"></script>
+<script src="../assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sokoni Boda Rider Registration</title>
+<meta name="description" content="Apply to join the Sokoni vetted boda delivery network. Submit ID, Class A licence, and stage letter for review." />
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/css/boda-depop.css?v=proof-4x5" />
+  <style>
+    .boda-pin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+    .boda-pin-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    .boda-pin-map { height: 220px; border-radius: 10px; margin-top: 8px; }
+    .boda-pin-status { font-size: .85rem; opacity: .8; margin: 4px 0 0; }
+    .boda-pin-status[data-tone="ok"] { opacity: 1; }
+  </style>
+</head>
+<body class="boda-depop">
+  <header class="boda-nav">
+    <div class="boda-wrap boda-nav-inner">
+      <a href="../index.html" class="boda-logo">SOKONI<span>.</span></a>
+      <nav class="boda-nav-links" aria-label="Apply">
+        <a href="index.html">Pitch</a>
+        <a href="dashboard.html">Workspace</a>
+        <a href="https://wa.me/254117422428?text=Habari%20Sokoni%20—%20ninaomba%20msaada%20kwa%20boda%20rider%20application"
+           target="_blank" rel="noopener" class="boda-btn boda-btn--wa" style="min-height:44px;padding:0.5rem 1.15rem">WhatsApp help</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="boda-wrap" style="max-width:40rem;padding-top:2.5rem;padding-bottom:3.5rem">
+    <div id="success-box" class="boda-success-box hidden">
+      <h1>Application received</h1>
+      <p style="font-size:0.9rem;color:#6b6b6b;margin:0 0 0.35rem">Reference: rider #<strong id="application-id"></strong></p>
+      <p style="font-size:0.9rem;color:#6b6b6b;margin:0">
+        Status: <strong style="color:#1a1a1a">PENDING</strong> review. Keep your WhatsApp on — Sokoni will message you when you’re verified.
+      </p>
+      <a href="index.html" class="boda-btn boda-btn--red" style="margin-top:1.5rem">Back to pitch</a>
+    </div>
+
+    <form id="boda-apply-form" enctype="multipart/form-data" novalidate>
+      <div style="margin-bottom:1.75rem">
+        <p class="boda-eyebrow">Sokoni boda network</p>
+        <h1 style="font-size:clamp(1.75rem,4vw,2.35rem);font-weight:900;letter-spacing:-0.03em;margin:0 0 0.65rem;line-height:1.1">Join as a delivery rider</h1>
+        <p style="font-size:0.9rem;color:#6b6b6b;margin:0 0 0.75rem;line-height:1.5">
+          Submit your details and verification docs. Ops reviews every rider before WhatsApp dispatch offers start.
+        </p>
+        <a href="index.html" style="font-size:0.875rem;font-weight:800;color:#ff2300">Read why ride · how jobs work · payouts →</a>
+      </div>
+
+      <section class="boda-form-card">
+        <h2>Your details</h2>
+        <label class="boda-field">Full name *
+          <input id="fullName" name="fullName" required autocomplete="name" placeholder="e.g. John Kamau" />
+        </label>
+        <div class="boda-grid-2">
+          <label class="boda-field">WhatsApp / M-Pesa phone *
+            <input id="phone" name="phone" type="tel" required inputmode="tel" autocomplete="tel" placeholder="0712345678" />
+          </label>
+          <label class="boda-field">National ID number *
+            <input id="nationalId" name="nationalId" required placeholder="12345678" />
+          </label>
+        </div>
+        <div class="boda-grid-2">
+          <label class="boda-field">Operating town *
+            <select id="operatingTown" name="operatingTown" required>
+              <option value="">Select town</option>
+              <option value="NAIROBI">Nairobi</option>
+              <option value="THIKA">Thika</option>
+            </select>
+          </label>
+          <label class="boda-field">Base stage / location *
+            <input id="stageLocation" name="stageLocation" required placeholder="e.g. Westlands Stage" />
+          </label>
+        </div>
+        <div class="boda-field" data-pin-field data-lat-input="#stageLat" data-lng-input="#stageLng">
+          <span>Pin your stage <small>(optional, but jobs go to the nearest riders first)</small></span>
+          <input type="hidden" id="stageLat" name="stageLat" />
+          <input type="hidden" id="stageLng" name="stageLng" />
+          <div class="boda-pin-actions">
+            <button type="button" class="boda-pin-btn" data-pin-use>Use my current location</button>
+            <button type="button" class="boda-pin-btn" data-pin-open-map>Pick on a map</button>
+            <button type="button" class="boda-pin-btn boda-pin-clear" data-pin-clear hidden>Clear pin</button>
+          </div>
+          <div class="boda-pin-map" data-pin-map hidden></div>
+          <p class="boda-pin-status" data-pin-status>No pin set. You can add one later.</p>
+        </div>
+        <label class="boda-field">Motorbike registration plate *
+          <input id="motorbikePlate" name="motorbikePlate" required class="uppercase" placeholder="KMCR 123X" style="text-transform:uppercase" />
+        </label>
+      </section>
+
+      <section class="boda-form-card">
+        <h2>Verification uploads</h2>
+        <p style="font-size:0.75rem;color:#6b6b6b;margin:-0.35rem 0 1rem">Images or PDF · max 5 MB each. Phone photos are shrunk before upload — prefer clear snaps over full gallery originals. Required *</p>
+        <label class="boda-field">National ID — front *
+          <input id="idDocument" name="idDocument" type="file" accept="image/*,.pdf,application/pdf" required />
+        </label>
+        <label class="boda-field">National ID — back
+          <input id="idDocumentBack" name="idDocumentBack" type="file" accept="image/*,.pdf,application/pdf" />
+        </label>
+        <label class="boda-field">Valid driving licence (Class A) *
+          <input id="dlDocument" name="dlDocument" type="file" accept="image/*,.pdf,application/pdf" required />
+        </label>
+        <label class="boda-field">Stage chairman recommendation letter *
+          <input id="stageLetter" name="stageLetter" type="file" accept="image/*,.pdf,application/pdf" required />
+        </label>
+        <label class="boda-field">Logbook / power of attorney
+          <input id="logbookDocument" name="logbookDocument" type="file" accept="image/*,.pdf,application/pdf" />
+        </label>
+        <label class="boda-field">Good Conduct certificate (DCI)
+          <input id="goodConductDocument" name="goodConductDocument" type="file" accept="image/*,.pdf,application/pdf" />
+        </label>
+        <label class="boda-field">NTSA badge / registration
+          <input id="ntsaBadgeDocument" name="ntsaBadgeDocument" type="file" accept="image/*,.pdf,application/pdf" />
+        </label>
+      </section>
+
+      <section class="boda-form-card">
+        <h2>Guarantor / next of kin</h2>
+        <div class="boda-grid-2">
+          <label class="boda-field">Guarantor full name
+            <input id="guarantorName" name="guarantorName" placeholder="Optional but recommended" />
+          </label>
+          <label class="boda-field">Guarantor phone
+            <input id="guarantorPhone" name="guarantorPhone" type="tel" inputmode="tel" placeholder="07xx…" />
+          </label>
+        </div>
+      </section>
+
+      <p id="form-status" style="font-size:0.875rem;color:#ff2300;font-weight:700" role="status"></p>
+      <p style="font-size:0.75rem;color:#6b6b6b;margin:0 0 1.25rem;line-height:1.45">
+        By submitting you agree to our
+        <a href="../terms.html" style="color:#1a1a1a;text-decoration:underline">Terms</a> and
+        <a href="../privacy.html" style="color:#1a1a1a;text-decoration:underline">Privacy Policy</a>.
+        Docs are used only for rider vetting.
+      </p>
+      <button id="submit-btn" type="submit" class="boda-btn boda-btn--red" style="width:100%;max-width:20rem">
+        Submit rider application
+      </button>
+    </form>
+  </main>
+
+  <footer class="boda-wrap boda-footer">
+    <span>© Sokoni Mall · Countrywide Kenya</span>
+    <a href="index.html">← Pitch</a>
+  </footer>
+
+  <script src="../assets/js/boda-rider-apply.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <script src="../assets/js/location-pin-field.js" defer></script>
+</body>
+</html>

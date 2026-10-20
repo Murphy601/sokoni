@@ -283,9 +283,9 @@ export function formatAdminFulfillmentBlock(order, locationText = "") {
       (s) => `• *${s.point.shopName}* (${s.point.id}) · ${s.point.city} · score ${s.score}`
     );
     block += `Suggested pickup:\n${lines.join("\n")}\n`;
-    block += `#pickup ${order?.id || "SK-xxxx"} ${suggestions[0].point.id}`;
+    block += `#pickup ${order?.id || "SKN-xxxx"} ${suggestions[0].point.id}`;
   } else {
-    block += `No pickup partners in this area yet.\n#fulfill ${order?.id || "SK-xxxx"} · or add partners via pickup programme`;
+    block += `No pickup partners in this area yet.\n#fulfill ${order?.id || "SKN-xxxx"} · or add partners via pickup programme`;
   }
   return block;
 }

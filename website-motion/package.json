@@ -1,0 +1,22 @@
+{
+  "name": "website-motion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sokoni Path B — React + Framer Motion progressive enhancement for the static website/ shell (Cloudflare Wrangler assets). Does not replace app.js/auth/catalog.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.12",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^7.1.2"
+  }
+}

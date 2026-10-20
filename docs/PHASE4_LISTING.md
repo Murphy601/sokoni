@@ -6,6 +6,12 @@ Post-publish **automated moderation** scans listings after go-live and can hide 
 
 Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
+## Slices
+
+1. **Listing readiness polish** — seller-net test fix, AI fallback copy, flagged moderation endpoint help, env notes
+2. **Moderation visibility** — seller hidden reasons, admin review queue page, moderation helper tests
+3. **Photo studio polish** — `/studio` preview (background only), seller toggle, publish cleaned cover
+
 ## Seller workflow
 
 ```
@@ -15,11 +21,13 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 
 | Step | What the seller does |
 |------|----------------------|
-| Media | Up to 4 photos + optional video. First photo = cover. AI auto-fills from cover photo. |
+| Media | Up to 4 photos + optional video. First photo = cover. AI auto-fills from cover photo when configured. Optional **Preview clean background** (Photoroom) with toggle to post cleaned vs original. |
 | Details | Title, description, up to 5 style hashtags, up to 2 brand tags |
 | Attributes | Browse category/subcategory, condition, size, colour, era |
-| Pricing | Supply price → retail shown. Dispatch city. |
+| Pricing | **Seller-net** price (what you receive) → buyer total = net + shipping + platform fee. Dispatch city. |
 | Post | **Instant publish** to shop + WhatsApp catalog. Optional **Save draft**. |
+
+Pricing is **seller-net first**: the number sellers enter is what they receive. Buyers see shipping + platform fee on top. Listings are **prepaid escrow** (not COD).
 
 ## Files
 
@@ -29,17 +37,24 @@ Legacy admin catalog intake (`#add`, `catalog-admin.js`) remains removed.
 | `whatsapp-bot/src/services/seller-listings.js` | Instant publish, drafts, catalog sync |
 | `whatsapp-bot/src/services/listing-moderation.js` | Post-publish scan, hide/restore |
 | `whatsapp-bot/src/routes/sellerListingsApi.js` | Seller REST API |
+| `whatsapp-bot/src/services/listing-studio.js` | Optional Photoroom background cleanup + preview helper |
 | `website/suppliers/list.html` | Depop-style 5-step wizard |
 | `website/assets/js/seller-listing.js` | Wizard client |
 | `website/assets/css/depop-sell.css` | Wizard styles |
 
 ## Seller API
 
-Auth = approved supplier `phone`. No admin token.
+Auth = approved supplier `phone` + session. No admin token.
 
 ```
 POST /api/seller/listings/generate
-  { phone, imageBase64, mimeType?, caption? }
+  { phone, imageBase64, mimeType?, caption?, skipStudio? }
+  → { draft, studioApplied, cleanImageBase64?, product… }
+
+POST /api/seller/listings/studio
+  { phone, imageBase64, mimeType? }
+  → { studioApplied, cleanImageBase64?, clipApplied?, clipVideoUrl?, clipVideoBase64?, provider?, reason?, message }
+  (cloud BG cleanup; clip built from cleaned cutout via Cloudinary CDN URL — no AI draft)
 
 POST /api/seller/listings/publish
   { phone, draft, images[], videoBase64?, draftId? }
@@ -50,7 +65,12 @@ POST /api/seller/listings/draft
 
 GET /api/seller/listings?phone=254...
 GET /api/seller/listings/meta
+  → visionModel, visionProvider, geminiVisionEnabled, studioEnabled, shippingTiers, …
 ```
+
+AI keys are **optional** for listing: caption/manual fill still works. Photo→draft order: **OpenRouter** (`OPENAI_API_KEY` + `CATALOG_VISION_*`) → **NVIDIA NIM** (`NVIDIA_API_KEY`, random free VLMs) → **Gemini** (`GEMINI_API_KEY`) → caption stub. Background cleanup needs any cloud studio provider (`CLOUDINARY_*`, `HUGGINGFACE_API_KEY`, or `PHOTOROOM_API_KEY`) — see [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
+
+When studio is enabled, sellers can **Preview clean background** on the cover, toggle **Use cleaned cover when posting**, and the publish payload uses the cleaned image when the toggle is on. Optional seller videos (15–30s / 15MB) or AI preview clips (`videoKind`) play on the storefront per [PRODUCT_VIDEO.md](./PRODUCT_VIDEO.md).
 
 ## Admin moderation API
 
@@ -59,6 +79,10 @@ GET  /admin/suppliers/seller-listings/flagged?token=...
 POST /admin/suppliers/seller-listings/:productId/takedown?token=...
 POST /admin/suppliers/seller-listings/:productId/restore?token=...
 ```
+
+Website queue (token-gated): `https://sokonimall.com/admin-seller-listings.html?token=...`
+
+Seller “My listings” shows human-readable reasons (e.g. Off-platform contact) and review guidance when a listing is hidden. Share links are withheld for hidden items.
 
 ## Moderation rules (automated)
 
@@ -76,13 +100,26 @@ Failed scans → listing hidden (`inStock: false`), seller + admin notified on W
 4. Optional git auto-push (`CATALOG_AUTO_PUSH=true`)
 5. Async moderation scan
 
-## Verify
+## Readiness smoke
 
 ```bash
 cd whatsapp-bot
-node scripts/test-listing-generator.mjs
-curl https://bot.sokonimall.com/api/seller/listings/meta
+npm run test:listing
+npm run test:listing-moderation
+npm run test:listing-studio
+node scripts/test-seller-fees.mjs
+curl -s https://bot.sokonimall.com/api/seller/listings/meta | python3 -m json.tool
 ```
+
+Manual:
+1. Seller dashboard → My listings shows reason + hint when status is `hidden`
+2. Open `/admin-seller-listings.html?token=…` → restore / keep removed
+3. With Cloudinary: cover upload → Preview clean + product clip → toggles for cleaned cover / generated clip → post
+4. With HF/Photoroom only: clean cover (no clip)
+
+## Media studio (cloud cleanup + clips)
+
+Cloudinary does cleanup **and** short product clips. Hugging Face / Photoroom are image-only fallbacks. No rembg/ffmpeg on the VM. See [MEDIA_STUDIO_PLAN.md](./MEDIA_STUDIO_PLAN.md).
 
 ## Next: Phase 5.1
 

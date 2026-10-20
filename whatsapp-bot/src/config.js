@@ -1,4 +1,17 @@
-import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+import { normalizeKenyaPhone, expandKenyaPhoneAliases } from "./lib/phone-normalize.js";
+
+// Always load whatsapp-bot/.env as source of truth. Default dotenv does not
+// override existing process.env, so a polluted `pm2 restart --update-env` from
+// a shell with a bad/OCR Consumer Key would win and break STK OAuth (HTTP 400)
+// even when the .env file (and scripts/test-daraja-oauth.sh) were correct.
+const __configDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({
+  path: path.join(__configDir, "..", ".env"),
+  override: true,
+});
 
 /**
  * Central config, read once from environment variables. Missing values are left
@@ -16,19 +29,108 @@ export const config = {
     apiUrl: (process.env.WAHA_API_URL || process.env.WAHA_URL || "").replace(/\/$/, ""),
     apiKey: process.env.WAHA_API_KEY || "",
     session: process.env.WAHA_SESSION || "default",
+    /** Official Sokoni WhatsApp Channel (`123@newsletter`). Empty = resolve via GET /channels?role=OWNER. */
+    channelId: String(process.env.WAHA_CHANNEL_ID || "").trim(),
+    /** Public invite — WhatsApp blocks force-adding people to Channels. */
+    channelInviteUrl: String(
+      process.env.WAHA_CHANNEL_INVITE_URL || "https://whatsapp.com/channel/0029VbE5SoTGJP8FzgHwmU2Q"
+    ).trim(),
   },
-  /** WhatsApp + web chat AI (text only — keep on free OpenRouter models). */
+  /**
+   * Catalog drip to Status AND Channel. Off unless DAILY_DROP_ENABLED=true.
+   * One live item every 30 minutes, 08:00–20:00 EAT, rotating sellers.
+   */
+  dailyDrop: {
+    enabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_ENABLED || "")),
+    hourEat: Number(process.env.DAILY_DROP_HOUR_EAT ?? 8) || 8,
+    endHourEat: Number(process.env.DAILY_DROP_END_HOUR_EAT ?? 20) || 20,
+    intervalMinutes: Number(process.env.DAILY_DROP_INTERVAL_MINUTES ?? 30) || 30,
+    destination: String(process.env.DAILY_DROP_DESTINATION || "BOTH").trim().toUpperCase(),
+  },
+  /** WhatsApp + web chat AI (text only). Prefer Groq/Gemini for speed; OpenRouter free as fallback. */
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
     baseUrl: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    model: process.env.OPENAI_MODEL || "openrouter/free",
+    // Named free model (fast) — avoid openrouter/free auto-router as primary (slow queues).
+    model: process.env.OPENAI_MODEL || "google/gemma-4-31b-it:free",
     modelFallbacks: (process.env.OPENAI_MODEL_FALLBACKS ||
-      "google/gemma-4-26b-a4b-it:free")
+      "openrouter/free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
   },
-  /** Optional Google Gemini direct API — fallback for seller photos only (not WhatsApp chat). */
+  /**
+   * Fast chat: Groq Cloud — set GROQ_API_KEY for production WhatsApp latency.
+   * Default openai/gpt-oss-20b (replaces retired llama-3.1-8b-instant, Aug 2026).
+   */
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || "",
+    baseUrl: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+    model: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
+    modelFallbacks: (process.env.GROQ_MODEL_FALLBACKS || "openai/gpt-oss-120b")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    /** Free Whisper STT — Groq first (voice notes). OpenRouter is fallback only. */
+    sttModel: process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3-turbo",
+    /** Orpheus TTS — WAV for WAHA sendVoice. 200-char chunks. */
+    ttsModel: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
+    ttsVoice: process.env.GROQ_TTS_VOICE || "autumn",
+  },
+  /**
+   * xAI Grok voice — STT + TTS fallback when Groq / ElevenLabs miss.
+   * XAI_API_KEY or GROK_API_KEY.
+   */
+  grok: {
+    apiKey: process.env.XAI_API_KEY || process.env.GROK_API_KEY || "",
+    baseUrl: (process.env.XAI_BASE_URL || "https://api.x.ai/v1").replace(/\/$/, ""),
+    sttModel: process.env.XAI_STT_MODEL || "grok-voice-transcribe-2.0",
+    ttsVoice: process.env.XAI_TTS_VOICE || "eve",
+    ttsLanguage: process.env.XAI_TTS_LANGUAGE || "en",
+  },
+  /** TTS provider order for WhatsApp voice replies. */
+  voice: {
+    ttsOrder: process.env.VOICE_TTS_ORDER || "elevenlabs,groq,grok",
+  },
+  /**
+   * WhatsApp mini-CRM (intent tags + Meta 24h session window).
+   * lastInboundAt lives on session.customerMeta and data/crm-contacts.json.
+   */
+  crm: {
+    windowHours: Number(process.env.CRM_WINDOW_HOURS) || 24,
+    storePath: process.env.CRM_STORE_PATH || "",
+  },
+  /**
+   * Chat routing: auto (Groq→OpenRouter) | groq | gemini | openrouter
+   * Gemini chat only when AI_CHAT_PROVIDER=gemini or AI_CHAT_USE_GEMINI=true
+   * (GEMINI_API_KEY alone is for listing vision — do not put it in the chat chain).
+   * Temperature kept low (0.1–0.2) for consistent buyer/seller replies.
+   */
+  aiChat: {
+    provider: process.env.AI_CHAT_PROVIDER || "auto",
+    temperature: Number(process.env.AI_CHAT_TEMPERATURE ?? 0.15),
+    /** Soft ceiling for chat completions (WhatsApp); clamped 200–800 in ai-agent. */
+    maxTokens: Number(process.env.AI_CHAT_MAX_TOKENS ?? 480),
+    useGemini:
+      process.env.AI_CHAT_PROVIDER === "gemini" ||
+      /^(1|true|yes|on)$/i.test(String(process.env.AI_CHAT_USE_GEMINI || "").trim()),
+  },
+  /**
+   * Multi-Agent System fallback gateway (strangler fig).
+   * Does NOT replace Cloudinary→HeyGen→Remotion, Groq chat, or listing vision primaries.
+   * Shadow on by default when MAS_ENABLED; live assists need explicit flags.
+   */
+  mas: {
+    enabled: process.env.MAS_ENABLED !== "false",
+    shadow: process.env.MAS_SHADOW !== "false",
+    mediaFallback: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_MEDIA_FALLBACK || "")),
+    voiceAssist: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_VOICE_ASSIST || "")),
+    moderationLive: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_MODERATION_LIVE || "")),
+    chatFailover: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_CHAT_FAILOVER || "")),
+    transactionalShadow: /^(1|true|yes|on)$/i.test(String(process.env.MAS_ENABLE_TX_SHADOW || "")),
+    timeoutMs: Number(process.env.MAS_TIMEOUT_MS ?? 2000) || 2000,
+  },
+  /** Optional Google Gemini — listing vision + optional chat (opt-in via AI_CHAT_*). */
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
     visionModel: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
@@ -36,11 +138,55 @@ export const config = {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    chatModel: process.env.GEMINI_CHAT_MODEL || "gemini-2.0-flash",
+    chatBaseUrl:
+      process.env.GEMINI_CHAT_BASE_URL ||
+      "https://generativelanguage.googleapis.com/v1beta/openai/",
+  },
+  /**
+   * NVIDIA NIM (build.nvidia.com) — OpenAI-compatible VLMs for listing drafts
+   * and buyer WhatsApp photo→stock match (free pool).
+   */
+  nvidia: {
+    apiKey: process.env.NVIDIA_API_KEY || "",
+    baseUrl: (process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/$/, ""),
+    visionModels: (process.env.NVIDIA_VISION_MODELS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    maxAttempts: Number(process.env.NVIDIA_VISION_MAX_ATTEMPTS) || 4,
+  },
+  /**
+   * Admin ops agent (tool calling). Separate from Plug shopper chat.
+   * OpenRouter free models first, then Groq (already on the VM), then NVIDIA NIM.
+   */
+  opsAgent: {
+    openrouterModels: process.env.OPS_AGENT_OPENROUTER_MODELS || "",
+    groqModels: process.env.OPS_AGENT_GROQ_MODELS || "",
+    nvidiaModels: process.env.OPS_AGENT_NVIDIA_MODELS || "",
+    dryRun: /^(1|true|yes|on)$/i.test(String(process.env.OPS_AGENT_DRY_RUN || "").trim()),
+  },
+  /**
+   * Buyer WhatsApp photo → similar stock (free vision only).
+   * Order: OpenRouter free VLMs → NVIDIA free VLMs → optional Gemini.
+   * Override with IMAGE_SEARCH_VISION_MODELS (comma list; must stay :free / openrouter/free).
+   */
+  imageSearch: {
+    openrouterModels: (process.env.IMAGE_SEARCH_VISION_MODELS ||
+      "openrouter/free,nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    /** Set IMAGE_SEARCH_ALLOW_GEMINI=false to skip Gemini entirely when keys expire weekly. */
+    allowGemini: process.env.IMAGE_SEARCH_ALLOW_GEMINI !== "false",
   },
   /** Seller listing photo AI only (sell page + WhatsApp catalog uploads — NOT chat). */
   catalog: {
-    visionModel: process.env.CATALOG_VISION_MODEL || "krea/krea-2-medium-turbo",
-    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS || "google/gemma-4-26b-a4b-it:free")
+    // Prefer free OpenRouter VLMs; code still falls through to NVIDIA NIM → Gemini.
+    // Keep krea only if you add it via env (image-gen — skipped for photo→JSON).
+    visionModel: process.env.CATALOG_VISION_MODEL || "openrouter/free",
+    visionFallbacks: (process.env.CATALOG_VISION_FALLBACKS ||
+      "nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
@@ -62,7 +208,9 @@ export const config = {
     phone: process.env.BUSINESS_WHATSAPP_NUMBER || "254117422428",
     phoneDisplay: process.env.BUSINESS_PHONE_DISPLAY || "+254 117 422 428",
     email: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
-    founderName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
+    /** Alias used by some menus — same as email */
+    supportEmail: process.env.SUPPORT_EMAIL || "support@sokonimall.com",
+    founderName: process.env.FOUNDER_NAME || "David Thuku Muiruri",
     location: process.env.BUSINESS_LOCATION || "Sokoni Mall Startup Hub, Nairobi, Kenya",
   },
   offers: {
@@ -82,42 +230,163 @@ export const config = {
     codAreas: process.env.STORE_COD_AREAS || "Kenya countrywide",
     deliveryNote:
       process.env.STORE_DELIVERY_NOTE ||
-      "Delivery in 1-3 days within Nairobi; countrywide via courier. 100% prepaid upfront — funds held in escrow until delivery.",
+      "Countrywide via Sokoni Mashinani hubs + courier. Sellers dispatch after prepaid escrow. Funds held until delivery confirmed.",
+    /** Buy Goods Till (PartyB). Org/Daraja H.O. is config.mpesa.shortcode (3439153). */
     mpesaTill: process.env.MPESA_TILL_NUMBER || "4775847",
     mpesaTillName: process.env.MPESA_TILL_NAME || "David Thuku Muiruri",
   },
-  /** Safaricom Daraja — STK push + escrow auto-confirm (Phase 5.1). */
-  mpesa: {
-    consumerKey: process.env.MPESA_CONSUMER_KEY || "",
-    consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
-    passkey: process.env.MPESA_PASSKEY || "",
-    shortcode: process.env.MPESA_SHORTCODE || "",
-    callbackUrl: process.env.MPESA_CALLBACK_URL || "",
-    env: process.env.MPESA_ENV === "production" ? "production" : "sandbox",
-    transactionType: process.env.MPESA_TRANSACTION_TYPE || "CustomerBuyGoodsOnline",
-  },
+  /** Safaricom Daraja — STK push + B2C seller payouts. */
+  mpesa: (() => {
+    const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
+    const envRaw = trim(process.env.MPESA_ENV).toLowerCase();
+    const shortcode = trim(process.env.MPESA_SHORTCODE) || "3439153";
+    // SHORTCODE 3439153 = org/Daraja H.O. (password). TILL 4775847 = PartyB.
+    // Merchant store 4421485 is not used in STK.
+    const partyB =
+      trim(process.env.MPESA_PARTY_B) ||
+      trim(process.env.MPESA_TILL_NUMBER) ||
+      "4775847";
+    const botBase = "https://bot.sokonimall.com";
+    const b2cShortcode = trim(process.env.MPESA_B2C_SHORTCODE) || shortcode;
+    return {
+      consumerKey: trim(process.env.MPESA_CONSUMER_KEY),
+      consumerSecret: trim(process.env.MPESA_CONSUMER_SECRET),
+      passkey: trim(process.env.MPESA_PASSKEY),
+      shortcode,
+      partyB,
+      // Prefer /daraja/callback — Safaricom often rejects callback URLs containing "mpesa".
+      callbackUrl:
+        trim(process.env.MPESA_CALLBACK_URL) || `${botBase}/api/payments/daraja/callback`,
+      env: envRaw === "production" || envRaw === "prod" ? "production" : "sandbox",
+      transactionType: trim(process.env.MPESA_TRANSACTION_TYPE) || "CustomerBuyGoodsOnline",
+      /** B2C (BusinessPayment) — seller escrow disbursement. */
+      b2cShortcode,
+      initiatorName: trim(process.env.MPESA_INITIATOR_NAME),
+      /** Pre-encrypted initiator password (Daraja portal / openssl). Preferred. */
+      securityCredential: trim(process.env.MPESA_SECURITY_CREDENTIAL),
+      /** Plain initiator password — encrypted at runtime if cert path is set. */
+      initiatorPassword: trim(process.env.MPESA_INITIATOR_PASSWORD),
+      certPath: trim(process.env.MPESA_CERT_PATH),
+      b2cCommandId: trim(process.env.MPESA_B2C_COMMAND_ID) || "BusinessPayment",
+      b2cResultUrl:
+        trim(process.env.MPESA_B2C_RESULT_URL) || `${botBase}/api/payments/daraja/b2c/result`,
+      b2cTimeoutUrl:
+        trim(process.env.MPESA_B2C_TIMEOUT_URL) || `${botBase}/api/payments/daraja/b2c/timeout`,
+      /** When true, owed settlements are auto-sent via B2C after escrow hold. */
+      b2cAuto: /^(1|true|yes)$/i.test(trim(process.env.MPESA_B2C_AUTO) || ""),
+      /**
+       * Business days after delivery before Ready for M-Pesa.
+       * 0 = credit seller dashboard wallet immediately on delivery / buyer confirm.
+       * Set ESCROW_HOLD_BUSINESS_DAYS=3 for a Depop-style hold.
+       */
+      escrowHoldBusinessDays: (() => {
+        const raw = trim(process.env.ESCROW_HOLD_BUSINESS_DAYS);
+        if (raw === "") return 0;
+        const n = Number(raw);
+        return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+      })(),
+      /**
+       * When true (default) and B2C is configured, seller Withdraw triggers Daraja B2C
+       * immediately for Ready balances. If B2C is not configured, withdraw stays manual.
+       */
+      withdrawInstantB2c: !/^(0|false|no)$/i.test(
+        trim(process.env.SELLER_WITHDRAW_INSTANT_B2C) || "true"
+      ),
+    };
+  })(),
+  /**
+   * Paystack — buyer C2B (M-Pesa STK charge) + seller transfers.
+   * PAYSTACK_ONLY=true (default) never falls back to Daraja STK / B2C.
+   */
+  paystack: (() => {
+    const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
+    const railRaw = trim(process.env.SELLER_PAYOUT_RAIL).toLowerCase();
+    const payoutRail =
+      railRaw === "paystack" || railRaw === "b2c" || railRaw === "manual" || railRaw === "admin"
+        ? railRaw === "manual"
+          ? "admin"
+          : railRaw
+        : "paystack";
+    const collectRaw = trim(process.env.BUYER_PAY_RAIL).toLowerCase();
+    const collectRail =
+      collectRaw === "paystack" || collectRaw === "daraja" || collectRaw === "manual"
+        ? collectRaw
+        : "paystack";
+    const botBase = "https://bot.sokonimall.com";
+    return {
+      secretKey: trim(process.env.PAYSTACK_SECRET_KEY),
+      publicKey: trim(process.env.PAYSTACK_PUBLIC_KEY),
+      webhookUrl:
+        trim(process.env.PAYSTACK_WEBHOOK_URL) || `${botBase}/api/webhooks/paystack`,
+      payoutRail,
+      collectRail,
+      only: !/^(0|false|no)$/i.test(trim(process.env.PAYSTACK_ONLY) || "true"),
+      collect: !/^(0|false|no)$/i.test(trim(process.env.PAYSTACK_COLLECT) || "true"),
+      chargeEmail: trim(process.env.PAYSTACK_CHARGE_EMAIL),
+      withdrawInstant: !/^(0|false|no)$/i.test(
+        trim(process.env.SELLER_WITHDRAW_INSTANT_PAYSTACK) || "true"
+      ),
+      /** false = skip Transfer API (Starter Business) and queue admin #paid. */
+      transfers: !/^(0|false|no)$/i.test(trim(process.env.PAYSTACK_TRANSFERS) || "true"),
+    };
+  })(),
   adminNotifyUrl: process.env.ADMIN_NOTIFY_URL || "",
   /**
    * Admin console phone(s). Set ADMIN_PHONES to a number DIFFERENT from the bot
    * so the owner can manage the shop from their own WhatsApp. Messages from
    * these numbers are treated as admin commands, and order/handoff alerts are
-   * sent here. Defaults to the business number (self-chat) if unset.
+   * sent here. Always stored as Kenya international digits (2547…).
+   * Local 07… / +254… forms in env are normalized automatically.
    */
   admin: (() => {
-    const phones = (process.env.ADMIN_PHONES || "")
-      .split(",")
-      .map((p) => p.replace(/\D/g, ""))
-      .filter(Boolean);
+    const phones = [
+      ...(process.env.ADMIN_PHONES || "").split(","),
+      process.env.ADMIN_WHATSAPP_NUMBER || "",
+      ...(process.env.BOSS_PHONES || "").split(","),
+    ]
+      .map((p) => normalizeKenyaPhone(p))
+      .filter((p) => p && p.length >= 9);
+    const unique = [...new Set(phones)];
+    // Seed aliases in-memory for matching (international + national) without duplicating primary.
+    const matchAliases = [
+      ...new Set(
+        unique.flatMap((p) =>
+          expandKenyaPhoneAliases(p)
+            .map((a) => String(a).replace(/\D/g, ""))
+            .filter(Boolean)
+        )
+      ),
+    ];
     const alertPhone =
-      phones[0] ||
-      (process.env.BUSINESS_WHATSAPP_NUMBER || "").replace(/\D/g, "") ||
+      unique[0] ||
+      normalizeKenyaPhone(process.env.BUSINESS_WHATSAPP_NUMBER || "") ||
       "";
-    if (phones.length === 0) {
+    if (unique.length === 0) {
       console.warn(
-        "[config] ADMIN_PHONES not set — admin commands disabled; alerts go to business number only"
+        "[config] ADMIN_PHONES / ADMIN_WHATSAPP_NUMBER not set — admin commands disabled; alerts go to business number only"
+      );
+    } else {
+      console.log(
+        `[config] ADMIN_PHONES normalized → ${unique.join(", ")} (aliases: ${matchAliases.length})`
       );
     }
-    return { phones, primary: alertPhone };
+    return { phones: unique, matchAliases, primary: alertPhone };
+  })(),
+  /**
+   * ElevenLabs TTS (WhatsApp voice notes). Text-first: no API call unless the
+   * shopper sent a voice note or explicitly asked for audio. Keys stay on the VM.
+   */
+  elevenlabs: (() => {
+    const trim = (v) => String(v || "").trim().replace(/^['"]|['"]$/g, "");
+    return {
+      apiKey: trim(process.env.ELEVENLABS_API_KEY),
+      /** Premade slug: rachel | adam | antoni | bella | josh | elli | domini */
+      voiceName: trim(process.env.ELEVENLABS_VOICE),
+      voiceId: trim(process.env.ELEVENLABS_VOICE_ID),
+      modelId: trim(process.env.ELEVENLABS_MODEL_ID) || "eleven_flash_v2_5",
+      outputFormat: trim(process.env.ELEVENLABS_OUTPUT_FORMAT) || "mp3_44100_128",
+      enabled: !/^(0|false|no|off)$/i.test(trim(process.env.ELEVENLABS_TTS) || "true"),
+    };
   })(),
   /** Public URL where product images are hosted (needed for WhatsApp image messages). */
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
@@ -127,6 +396,15 @@ export const config = {
   database: {
     url: process.env.DATABASE_URL || "",
     poolMax: Number(process.env.DATABASE_POOL_MAX) || 10,
+  },
+  /**
+   * Buyer social auth mode:
+   * - soft (default): if phone+sessionToken present, enforce identity; else allow legacy client IDs
+   * - hard: require buyer WhatsApp session on social write actions
+   * - off: disable buyer session checks
+   */
+  buyerAuth: {
+    mode: (process.env.BUYER_AUTH_MODE || "soft").trim().toLowerCase(),
   },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {

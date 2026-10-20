@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { getSupplier } from "./suppliers.js";
+import { orderBuyerTotal, formatBuyerTotalLine } from "./shipping-tiers.js";
 import { sendText, formatCustomerLabel } from "./whatsapp.js";
 import { formatAdminFulfillmentBlock } from "./fulfillment.js";
 import { humanHandoffAck } from "./trust-copy.js";
@@ -10,20 +11,27 @@ import {
   getCustomerMeta,
   setCustomerMeta,
 } from "./session.js";
+import {
+  openGeneralSupportTicket,
+  appendGeneralSupportCustomerMessage,
+  supportInboxSiteHint,
+} from "./support-inbox.js";
 
-/** Simple admin ping when a customer wants a human — no relay / #reply flow. */
-async function pingAdminSimple(title, customerKey, { chatId, displayName, phone, detail = "" }) {
+/** Admin ping when a customer wants a human — also opens dashboard inbox ticket. */
+async function pingAdminSimple(title, customerKey, { chatId, displayName, phone, detail = "", ticketId = "" }) {
   const label = formatCustomerLabel({ chatId, displayName, phone }, customerKey);
+  const inbox = supportInboxSiteHint();
   const text =
     `${title}\n\n` +
     `Customer: *${displayName || "Unknown"}*\n` +
     `${phone ? `Phone: +${phone}\n` : ""}` +
     `Chat: \`${chatId || customerKey}\`\n` +
+    (ticketId ? `Inbox: *${ticketId}*\n` : "") +
     (detail ? `${detail}\n\n` : "\n") +
-    `Open their chat in WhatsApp to reply, or use:\n` +
-    `*#SK-xxxx <message>* after an order alert · *#help* for commands`;
+    `Reply from the support inbox:\n${inbox}\n` +
+    `_Or open their WhatsApp chat directly._`;
 
-  console.log(`[handoff] ${label}`);
+  console.log(`[handoff] ${label}${ticketId ? ` ${ticketId}` : ""}`);
 
   if (!config.admin.primary) return;
   try {
@@ -44,6 +52,8 @@ async function pingAdminSimple(title, customerKey, { chatId, displayName, phone,
           displayName,
           phone,
           detail,
+          ticketId,
+          inboxUrl: inbox,
         }),
       });
     } catch (err) {
@@ -52,24 +62,46 @@ async function pingAdminSimple(title, customerKey, { chatId, displayName, phone,
   }
 }
 
-export async function startHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage }) {
+export async function startHumanHandoff(
+  customerKey,
+  { chatId, displayName, phone, lastMessage, priority = "normal", escalationReason = "" } = {}
+) {
   setCustomerMeta(customerKey, { chatId, displayName, phone });
-  setHumanHandoff(customerKey, { startedAt: Date.now() });
+
+  const opened = openGeneralSupportTicket({
+    customerKey,
+    chatId,
+    displayName,
+    phone,
+    lastMessage,
+    priority,
+    escalationReason,
+  });
+
+  const high = priority === "high" || priority === "urgent";
   await pingAdminSimple(
-    "🙋 *Customer wants a human*",
+    high ? "🚨 *HIGH PRIORITY — human needed*" : "🙋 *Customer wants a human*",
     customerKey,
     {
       chatId,
       displayName,
       phone,
-      detail: lastMessage ? `They said: _"${lastMessage.slice(0, 120)}"_` : "",
+      detail: lastMessage ? `They said: _"${String(lastMessage).slice(0, 120)}"_` : "",
+      ticketId: opened?.ticket?.id || "",
     }
   );
+
+  return opened;
 }
 
-export async function handleCustomerWhileHandoff(customerKey) {
+export async function handleCustomerWhileHandoff(customerKey, text = "") {
   const handoff = getHumanHandoff(customerKey);
   if (!handoff) return false;
+
+  const body = String(text || "").trim();
+  if (body) {
+    appendGeneralSupportCustomerMessage(customerKey, body);
+  }
 
   if (!handoff.ackSent) {
     setHumanHandoff(customerKey, { ...handoff, ackSent: true });
@@ -99,7 +131,7 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
   return (
     `🧾 *NEW PREPAID ORDER*${orderId}\n` +
     `Product: ${pending.name}\n` +
-    `Retail: KES ${pending.priceKes.toLocaleString()} (customer pays upfront — escrow)\n` +
+    `Total: ${formatBuyerTotalLine(pending)} (customer pays upfront — escrow)\n` +
     supplierBlock +
     `Customer: ${label}\n` +
     `Name: ${details.name}\n` +
@@ -107,12 +139,12 @@ export function buildOrderAdminSummary({ customerKey, pending, details, order })
     `Phone: ${details.phone}\n\n` +
     `${formatAdminFulfillmentBlock(order, details.location)}\n\n` +
     `*Next steps:*\n` +
-    `${order?.id ? `#fulfill ${order.id}` : "#fulfill SK-xxxx"} — ping supplier (no customer contact)\n` +
-    `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SK-xxxx share"} — supplier delivers (includes address)\n` +
+    `${order?.id ? `#fulfill ${order.id}` : "#fulfill SKN-xxxx"} — ping supplier (no customer contact)\n` +
+    `${order?.id ? `#fulfill ${order.id} share` : "#fulfill SKN-xxxx share"} — supplier delivers (includes address)\n` +
     `#status ${order?.id || "<id>"} confirmed\n` +
-    `#pickup ${order?.id || "SK-xxxx"} <pp-id> — assign pickup point\n` +
+    `#pickup ${order?.id || "SKN-xxxx"} <pp-id> — assign pickup point\n` +
     `Till: *${config.store.mpesaTill}* (${config.store.mpesaTillName})\n` +
-    `#payconfirm ${order?.id || "SK-xxxx"} — after M-Pesa verified\n` +
-    `#${order?.id || "SK-xxxx"} Message to customer`
+    `#payconfirm ${order?.id || "SKN-xxxx"} — after M-Pesa verified\n` +
+    `#${order?.id || "SKN-xxxx"} Message to customer`
   );
 }

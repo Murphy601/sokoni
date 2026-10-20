@@ -7,8 +7,10 @@ import {
   pauseCatalog,
   unpauseCatalog,
   syncPublicCatalog,
+  syncMasterCatalogToDb,
   publishCatalogToGit,
   setProductStock,
+  markProductSoldAndSync,
   runDbMigrate,
   runDbSeed,
   updatePlatformFlags,
@@ -34,6 +36,7 @@ export async function handleOpsCommand(adminChatId) {
     `${formatOpsStatus(status)}\n\n` +
       `#catalog live · #catalog pause\n` +
       `#sync — rebuild public catalog\n` +
+      `#sync db — master JSON → Postgres (fixes /shop + homepage)\n` +
       `#sync push — build + git push\n` +
       `#stock <id> in|out\n` +
       `#flags prepaid on|off`
@@ -42,7 +45,23 @@ export async function handleOpsCommand(adminChatId) {
 
 export async function handleSyncCommand(adminChatId, args) {
   const push = /\bpush\b/i.test(args);
+  const dbSync = /\bdb\b/i.test(args);
   try {
+    if (dbSync) {
+      const result = await syncMasterCatalogToDb();
+      if (!result.ok && result.errors?.[0] === "database_not_configured") {
+        return sendText(adminChatId, "⚠️ Postgres not configured — storefront uses JSON only.");
+      }
+      const errNote = result.errors?.length
+        ? `\n⚠️ ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}`
+        : "";
+      return sendText(
+        adminChatId,
+        `✅ Master → Postgres: ${result.upserted}/${result.total || result.upserted} products.` +
+          `\nHomepage + /shop now read this DB.` +
+          errNote
+      );
+    }
     if (push) {
       await publishCatalogToGit();
       return sendText(adminChatId, "✅ Catalog published (build + git push). Cloudflare deploys in ~1–2 min.");
@@ -86,10 +105,24 @@ export async function handleStockCommand(adminChatId, args) {
   if (!productId) {
     return sendText(adminChatId, "Usage: #stock prod_abc123 in\nOr: #stock prod_abc123 out");
   }
+  const markSold = /^(sold)$/i.test(action);
   const inStock = !/^(out|off|0|false|sold)$/i.test(action);
+
+  if (markSold) {
+    const result = await markProductSoldAndSync(productId);
+    if (result.error) {
+      return sendText(adminChatId, `⚠️ Mark sold failed: ${result.error} (${productId})`);
+    }
+    return sendText(
+      adminChatId,
+      `✅ *${productId}* marked *sold* (tombstoned — will not reappear on publish).\nPublic catalog synced.`
+    );
+  }
+
   const result = await setProductStock(productId, inStock);
   if (result.error) {
-    return sendText(adminChatId, `⚠️ Stock update failed: ${result.error} (${productId})`);
+    const detail = result.message ? ` — ${result.message}` : "";
+    return sendText(adminChatId, `⚠️ Stock update failed: ${result.error}${detail} (${productId})`);
   }
   return sendText(
     adminChatId,

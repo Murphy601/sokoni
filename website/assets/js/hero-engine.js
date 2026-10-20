@@ -66,9 +66,9 @@
     return {
       productName: p.name || "Tecno Spark 20",
       price: formatKes(p.priceKes || 13599),
-      orderId: "SK-1042",
-      till: siteStory.mpesaTill || "4775847",
-      tillName: siteStory.mpesaTillName || "David Thuku Muiruri",
+      orderId: "SKN-1002-1",
+      till: "STK",
+      tillName: "Sokoni",
       whatsappDisplay: siteStory.whatsappDisplay || "+254 117 422 428",
       promoCode: siteStory.promoCode || "SOKONI3",
       offerPercent: siteStory.offerPercent || 3,
@@ -91,7 +91,9 @@
   }
 
   function pickProducts(list) {
-    const store = list.filter((p) => p.fulfillment === "store" && p.inStock !== false);
+    const store = list.filter(
+      (p) => p.fulfillment === "store" && p.inStock !== false && p.isSold !== true
+    );
     const intl = list.filter((p) => p.scope === "international");
     featured = store.find((p) => p.imageUrl) || store[0] || null;
     intlProduct = intl[0] || null;
@@ -114,7 +116,9 @@
    */
   function buildDiverseFilmstrip(list) {
     const PER_SUB_CAP = 6;
-    const store = list.filter((p) => p.imageUrl && p.fulfillment === "store" && p.inStock !== false);
+    const store = list.filter(
+      (p) => p.imageUrl && p.fulfillment === "store" && p.inStock !== false && p.isSold !== true
+    );
     const buckets = new Map();
     for (const p of store) {
       const key = `${p.category || "other"}::${p.subcategory || "general"}`;
@@ -173,7 +177,7 @@
       `<div class="hero-filmstrip-img-wrap"><img src="${esc(p.imageUrl)}" alt="${name}" loading="lazy" decoding="async" /></div>` +
       `<div class="hero-filmstrip-caption"><strong>${name}</strong>` +
       (trail ? `<span class="hero-filmstrip-trail">${esc(trail)}</span>` : "") +
-      `<span class="hero-filmstrip-price">${price} · Pay on delivery</span></div></div>`;
+      `<span class="hero-filmstrip-price">${price} · Prepaid escrow</span></div></div>`;
     requestAnimationFrame(() => slide.classList.add("is-active"));
   }
 
@@ -229,7 +233,7 @@
         .map(
           (p, i) =>
             `<div class="hero-site-product${frame.highlightIndex === i ? " is-highlight" : ""}"><img src="${esc(p.imageUrl)}" alt="" />` +
-            `<div><strong>${esc(p.name?.slice(0, 22) || "Product")}</strong><br/>${formatKes(p.priceKes)} · COD</div></div>`
+            `<div><strong>${esc(p.name?.slice(0, 22) || "Product")}</strong><br/>${formatKes(p.priceKes)} · prepaid</div></div>`
         )
         .join("");
       stage.innerHTML = `${bar}<p class="mb-2 font-bold">📱 Smartphones</p>${rows}`;
@@ -241,7 +245,7 @@
       stage.innerHTML =
         `${bar}<p class="mb-2">🔍 <strong>${esc(q)}</strong></p>` +
         `<div class="hero-site-list-item is-highlight">${esc(featured?.name || ctx.productName)} — ${ctx.price}</div>` +
-        `<div class="hero-site-list-item">…more pay-on-delivery matches</div>`;
+        `<div class="hero-site-list-item">…more prepaid matches</div>`;
       return;
     }
 
@@ -251,7 +255,7 @@
         `${bar}` +
         (p?.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" class="w-full h-16 object-contain rounded-lg mb-2 bg-white/50" />` : "") +
         `<p class="font-bold">${esc(p?.name || ctx.productName)}</p>` +
-        `<p class="text-brand-green font-bold">${ctx.price} · Pay on delivery</p>` +
+        `<p class="text-brand-green font-bold">${ctx.price} · Prepaid escrow</p>` +
         `<p class="mt-1 rounded-full bg-brand-green/20 text-center py-1 font-bold">💬 Ask on WhatsApp</p>`;
       return;
     }
@@ -286,7 +290,7 @@
     if (frame.panel === "supplier-info") {
       stage.innerHTML =
         `${bar}<p class="font-bold mb-1">🏪 Sell on Sokoni</p>` +
-        `<p>Zero listing fees · WhatsApp orders · pay on delivery</p>` +
+        `<p>Zero listing fees · WhatsApp orders · prepaid escrow</p>` +
         `<p class="mt-2 rounded-lg bg-brand-green/15 px-2 py-1 font-bold">Apply on site → prefilled on WhatsApp</p>`;
       return;
     }
@@ -374,7 +378,7 @@
         : `<p class="text-xs text-brand-purple/40 text-center py-4">Photo coming soon</p>`;
       const name = esc(p?.name || ctx.productName);
       const price = formatKes(p?.priceKes);
-      return `<div class="wa-bubble wa-bubble-product">${img}<p class="font-semibold">${name}</p><p class="text-brand-purple/60 text-xs">${price} · Pay on delivery 💵</p></div>`;
+      return `<div class="wa-bubble wa-bubble-product">${img}<p class="font-semibold">${name}</p><p class="text-brand-purple/60 text-xs">${price} · Prepaid escrow 💵</p></div>`;
     }
 
     if (frame.kind === "menu" && frame.lines) {
@@ -424,10 +428,43 @@
     if (!stage) return;
     const p = featured;
     stage.innerHTML = `
-      <div class="wa-bubble wa-bubble-in">👋 Karibu! Type <strong>menu</strong> to browse — pay on delivery.</div>
+      <div class="wa-bubble wa-bubble-in">👋 Karibu! Type <strong>menu</strong> to browse — pay upfront, escrow until delivery.</div>
       <div class="wa-bubble wa-bubble-out">menu</div>
       <div class="wa-bubble wa-bubble-in">1. 🛍️ Browse Categories<br/>2. 🧾 Track My Order<br/>3. 🙋 Talk to a Human</div>
-      ${p ? `<div class="wa-bubble wa-bubble-product">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" />` : ""}<p class="font-semibold">${esc(p.name)}</p><p>${formatKes(p.priceKes)} · COD</p></div>` : ""}`;
+      ${p ? `<div class="wa-bubble wa-bubble-product">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" />` : ""}<p class="font-semibold">${esc(p.name)}</p><p>${formatKes(p.priceKes)} · prepaid</p></div>` : ""}`;
+  }
+
+  async function loadCatalogForHero() {
+    const apiBase =
+      typeof location !== "undefined" && /localhost|127\.0\.0\.1/.test(location.hostname)
+        ? "http://localhost:3001/api/products"
+        : "https://bot.sokonimall.com/api/products";
+    try {
+      const res = await fetch(`${apiBase}?limit=200&offset=0`);
+      if (res.ok) {
+        const data = await res.json();
+        // Empty API list is authoritative — do not resurrect peers from static JSON.
+        return Array.isArray(data.products) ? data.products : [];
+      }
+    } catch {
+      /* fall through */
+    }
+    try {
+      const staticData = await loadJson("data/products.json");
+      const list = Array.isArray(staticData) ? staticData : staticData.products || [];
+      // Static fallback: platform rows only (never deleted peer shops).
+      return list.filter((p) => {
+        const h = String(p.shopHandle || p.sellerHandle || "")
+          .trim()
+          .replace(/^@+/, "")
+          .toLowerCase();
+        if (h && h !== "sokoni-store") return false;
+        if (p.isSold === true || p.inStock === false) return false;
+        return true;
+      });
+    } catch {
+      return [];
+    }
   }
 
   async function init() {
@@ -439,13 +476,13 @@
     try {
       const [siteStoryData, productsData, heroData] = await Promise.all([
         loadJson("data/site-story.json"),
-        loadJson("data/products.json"),
+        loadCatalogForHero(),
         loadJson("data/hero-stories.json"),
       ]);
       siteStory = siteStoryData;
       stories = heroData.stories || [];
       storyDurationMs = heroData.storyDurationMs || STORY_MS_DEFAULT;
-      pickProducts(productsData);
+      pickProducts(Array.isArray(productsData) ? productsData : productsData.products || []);
       buildFilmstrip();
       renderTrustChips();
 

@@ -1,0 +1,310 @@
+/* Inbox messenger + disputes — Depop matte black / scarlet (#000 · #09090B · #FF2300 · #10B981) */
+
+.inbox-hub-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff2300;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.inbox-recent-strip {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+}
+
+.inbox-recent-card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  width: 6.5rem;
+  text-align: left;
+  border-radius: 1rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  padding: 0.5rem;
+  min-height: 44px;
+  transition: border-color 0.15s ease;
+}
+
+.inbox-recent-card:hover,
+.inbox-recent-card:focus-visible {
+  border-color: #3f3f46;
+  outline: none;
+}
+
+.inbox-recent-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0.65rem;
+  display: block;
+  background: #18181b;
+}
+
+.inbox-recent-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #71717a;
+  background: #18181b;
+}
+
+.inbox-recent-name {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-recent-price {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #a1a1aa;
+}
+
+.inbox-shops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inbox-shop-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  text-align: left;
+  color: #fff;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.inbox-shop-row:hover,
+.inbox-shop-row:focus-visible {
+  border-color: #3f3f46;
+  background: #0c0c0e;
+  outline: none;
+}
+
+.inbox-shop-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: #18181b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.inbox-shop-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inbox-shop-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.inbox-shop-meta strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-shop-meta span {
+  display: block;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  margin-top: 0.1rem;
+}
+
+.inbox-shop-cta {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #ff2300;
+}
+
+.inbox-messenger {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  border-radius: 1.5rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  overflow: hidden;
+}
+
+.inbox-messenger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #18181b;
+  background: #000;
+}
+
+.inbox-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: #000;
+}
+
+.inbox-bubble-mine {
+  background: #ff2300;
+  color: #fff;
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-bubble-theirs {
+  background: #18181b;
+  color: #e4e4e7;
+  border: 1px solid #27272a;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+}
+
+.inbox-bargain-card {
+  border-radius: 1.1rem;
+  border: 1px solid #18181b;
+  background: #000;
+  padding: 1rem;
+  color: #fff;
+}
+
+.inbox-bargain-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  background: #ff2300;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.inbox-bargain-cta:hover {
+  background: #d91e00;
+}
+
+.inbox-bargain-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  border: 1px solid #27272a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #a1a1aa;
+  background: #18181b;
+}
+
+.inbox-bargain-ghost:hover {
+  color: #fff;
+}
+
+/* Disputes / Resolution Center */
+.dispute-hub-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff2300;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dispute-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.dispute-badge--review {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.dispute-badge--resolved {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.dispute-badge--action {
+  background: rgba(255, 35, 0, 0.1);
+  color: #ff2300;
+  border: 1px solid rgba(255, 35, 0, 0.2);
+}
+
+.dispute-card {
+  border-radius: 1.25rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  padding: 1.25rem;
+  color: #fff;
+}
+
+.dispute-guide-carousel {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+  padding-bottom: 0.25rem;
+}
+
+.dispute-guide-card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  min-width: 14rem;
+  max-width: 16rem;
+  border-radius: 1rem;
+  border: 1px solid #18181b;
+  background: #09090b;
+  padding: 1rem;
+  text-align: left;
+  color: #fff;
+}

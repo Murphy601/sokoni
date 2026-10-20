@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { CATALOG_IMAGES_DIR } from "./lib/catalog-images.js";
+import { AVATARS_DIR, LEGACY_AVATARS_DIR, migrateLegacyAvatars } from "./services/seller-avatar.js";
 import { handleWahaWebhook } from "./handlers/webhookHandler.js";
 import { runTiktokPostJob } from "./services/tiktok.js";
 import { startTokenRefreshScheduler, getConnectionStatus } from "./services/tiktok-auth.js";
@@ -16,22 +17,59 @@ import { listReviews, addReview } from "./services/reviews.js";
 import { checkoutMeta } from "./services/prepaid-checkout.js";
 import productsApiRouter from "./routes/productsApi.js";
 import sellerListingsApiRouter from "./routes/sellerListingsApi.js";
+import { stageSellerVideo, stageSellerVideoChunk, VIDEO_UPLOAD_CHUNK_BYTES } from "./services/seller-listings.js";
 import sellerOnboardApiRouter from "./routes/sellerOnboardApi.js";
+import { sellerBodaRouter, adminBodaRouter } from "./routes/bodaFleetApi.js";
+import ridersApiRouter from "./routes/ridersApi.js";
+import socialApiRouter from "./routes/socialApi.js";
+import buyerAuthApiRouter from "./routes/buyerAuthApi.js";
+import accountAuthApiRouter from "./routes/accountAuthApi.js";
 import ordersApiRouter from "./routes/ordersApi.js";
+import disputesApiRouter from "./routes/disputesApi.js";
 import checkoutApiRouter from "./routes/checkoutApi.js";
-import paymentsApiRouter from "./routes/paymentsApi.js";
+import trustApiRouter from "./routes/trustApi.js";
+import cartApiRouter from "./routes/cartApi.js";
+import paymentsApiRouter, { handlePaystackWebhook } from "./routes/paymentsApi.js";
 import trackingApiRouter from "./routes/trackingApi.js";
+import vendorShippingApiRouter from "./routes/vendorShippingApi.js";
+import { attachRiderSocket } from "./services/rider-tracking.js";
 import adminShipmentsRouter from "./routes/adminShipments.js";
 import agentApiRouter from "./routes/agentApi.js";
 import adminOpsApiRouter from "./routes/adminOpsApi.js";
+import adminCommandApiRouter from "./routes/adminCommandApi.js";
+import adminSupportApiRouter from "./routes/adminSupportApi.js";
+import whatsappApiRouter from "./routes/whatsappApi.js";
 import feedApiRouter from "./routes/feedApi.js";
-import { processDuePayouts } from "./services/settlements.js";
+import searchApiRouter from "./routes/searchApi.js";
+import growthApiRouter from "./routes/growth.js";
+import { processDuePayouts, disburseOwedPayoutsViaB2C } from "./services/settlements.js";
+import { isB2CReady, b2cMeta } from "./services/daraja-mpesa.js";
+import { paystackMeta, resolvePayoutRail } from "./services/paystack-transfers.js";
 import { agentMeta } from "./services/ai-agent.js";
 import { feedMeta } from "./services/feed-ranking.js";
 import { refreshFeedCache } from "./services/feed-ranking.js";
+import { masMeta } from "./services/mas/index.js";
+import { elevenLabsHealth } from "./services/elevenlabs-tts.js";
+import { voiceTtsHealth } from "./services/voice-tts.js";
 import { pingDb, isDbEnabled } from "./db/pool.js";
+import {
+  corsAllowlist,
+  securityHeaders,
+  attachRawBody,
+  requireWahaWebhookAuth,
+  assertProductionWebhookHmac,
+  apiLimiter,
+  authLimiter,
+  adminLimiter,
+  webhookLimiter,
+} from "./middleware/security.js";
+import { publicErrorHandler } from "./lib/public-error.js";
+import { trustedProxySetting } from "./lib/trust-proxy.js";
 
 const app = express();
+/** nginx on this VM → Node on loopback. Never a hop count (CVE-2026-90711). */
+app.set("trust proxy", trustedProxySetting());
+app.use(securityHeaders);
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -46,26 +84,106 @@ function resolveBuildId() {
 
 const BUILD_ID = resolveBuildId();
 
-const SITE_ORIGINS = new Set([
-  config.publicSiteUrl,
-  "https://sokonimall.com",
-  "https://www.sokonimall.com",
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
-]);
+app.use(corsAllowlist);
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && SITE_ORIGINS.has(origin.replace(/\/$/, ""))) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+function sellerVideoAuthStatus(result) {
+  if (
+    result.error === "session_required" ||
+    result.error === "session_invalid" ||
+    result.error === "session_expired"
+  ) {
+    return 401;
   }
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
+  if (result.error === "not_onboarded" || result.error === "not_approved" || result.error === "forbidden") {
+    return 403;
+  }
+  if (result.error === "video_too_large" || result.error === "chunk_too_large") return 413;
+  if (
+    result.error === "invalid_phone" ||
+    result.error === "missing_video" ||
+    result.error === "invalid_upload" ||
+    result.error === "invalid_chunk" ||
+    result.error === "incomplete_upload"
+  ) {
+    return 400;
+  }
+  return 0;
+}
 
-app.use(express.json({ limit: "25mb" }));
+/**
+ * Chunked seller-video staging — works when nginx client_max_body_size is stuck at ~1m.
+ * Must run BEFORE express.json. Auth via query phone + sessionToken.
+ */
+app.post(
+  "/api/seller/listings/upload-video-chunk",
+  express.raw({
+    type: () => true,
+    limit: "1mb",
+  }),
+  async (req, res) => {
+    try {
+      const phone = String(req.query.phone || req.headers["x-seller-phone"] || "").trim();
+      const sessionToken = String(
+        req.query.sessionToken || req.headers["x-seller-session"] || ""
+      ).trim();
+      const chunkBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+      const result = await stageSellerVideoChunk({
+        phone,
+        sessionToken,
+        uploadId: req.query.uploadId,
+        chunkIndex: req.query.chunkIndex,
+        chunkCount: req.query.chunkCount,
+        totalBytes: req.query.totalBytes,
+        chunkBuffer,
+      });
+      const authStatus = sellerVideoAuthStatus(result);
+      if (authStatus) return res.status(authStatus).json(result);
+      if (result.error) return res.status(400).json(result);
+      if (result.incomplete) return res.status(200).json(result);
+      return res.status(201).json(result);
+    } catch (err) {
+      console.warn("[upload-video-chunk]", err?.message || err);
+      return res.status(500).json({ error: "upload_failed", message: "Video upload failed — try again." });
+    }
+  }
+);
+
+/**
+ * Binary seller-video staging — must run BEFORE express.json so the MP4 body
+ * is not chewed by the JSON parser (and so we avoid 33% base64 bloat on mobile).
+ * Auth: phone + sessionToken query params (same pattern as other seller GETs).
+ * Prefer /upload-video-chunk when nginx body limit is low.
+ */
+app.post(
+  "/api/seller/listings/upload-video-bin",
+  express.raw({
+    type: () => true,
+    limit: "16mb",
+  }),
+  async (req, res) => {
+    try {
+      const phone = String(req.query.phone || req.headers["x-seller-phone"] || "").trim();
+      const sessionToken = String(
+        req.query.sessionToken || req.headers["x-seller-session"] || ""
+      ).trim();
+      const videoBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+      const result = await stageSellerVideo({ phone, videoBuffer, sessionToken });
+      const authStatus = sellerVideoAuthStatus(result);
+      if (authStatus) return res.status(authStatus).json(result);
+      if (result.error) return res.status(400).json(result);
+      return res.status(201).json(result);
+    } catch (err) {
+      console.warn("[upload-video-bin]", err?.message || err);
+      return res.status(500).json({
+        error: "upload_failed",
+        message: "Video upload failed — try chunked upload or trim the clip.",
+        chunkBytes: VIDEO_UPLOAD_CHUNK_BYTES,
+      });
+    }
+  }
+);
+
+app.use(express.json({ limit: "25mb", verify: attachRawBody }));
 
 app.get("/", (_req, res) => {
   res.json({
@@ -97,36 +215,197 @@ app.get("/health", async (_req, res) => {
   } catch (err) {
     ops = { phase: 9, catalog: { paused: false }, opsError: err.message };
   }
+  let wahaHealth = {
+    wahaConfigured: Boolean(config.waha.apiUrl),
+    wahaReachable: false,
+    wahaLinked: false,
+    wahaSessionStatus: null,
+  };
+  try {
+    const { getWahaHealthSummary } = await import("./services/waha-session.js");
+    wahaHealth = await withTimeout(getWahaHealthSummary(), 3500, wahaHealth);
+  } catch {
+    /* keep defaults */
+  }
+
+  let studioClipEnabled = false;
+  try {
+    const { isStudioClipEnabled } = await import("./services/listing-studio.js");
+    studioClipEnabled = isStudioClipEnabled();
+  } catch {
+    studioClipEnabled = false;
+  }
+
+  const chatRouting = agent.routing || {};
+  const b2c = b2cMeta();
+  const voice = elevenLabsHealth();
+  const mas = masMeta();
   res.json({
     status: "ok",
     build: BUILD_ID,
-    aiModel: config.openai.model || null,
-    catalogVisionModel: config.catalog.visionModel || null,
-    aiConfigured: Boolean(config.openai.apiKey),
+    aiConfigured: Boolean(config.openai.apiKey || config.groq?.apiKey),
+    aiChat: {
+      providerPreference: chatRouting.providerPreference || config.aiChat?.provider || "auto",
+      groqConfigured: Boolean(config.groq?.apiKey),
+      openrouterConfigured: Boolean(config.openai?.apiKey),
+    },
+    mas: {
+      enabled: Boolean(mas?.flags?.enabled),
+      shadow: Boolean(mas?.flags?.shadow),
+    },
     aiAgent: agent.name,
-    aiTools: agent.tools,
     feedPhase: feed.phase,
     opsPhase: ops.phase,
     catalogPaused: ops.catalog.paused,
-    wahaConfigured: Boolean(config.waha.apiUrl),
+    studioClipEnabled,
+    wahaConfigured: wahaHealth.wahaConfigured,
+    wahaReachable: wahaHealth.wahaReachable,
+    wahaLinked: wahaHealth.wahaLinked,
+    wahaSessionStatus: wahaHealth.wahaSessionStatus,
     dbEnabled: isDbEnabled(),
     dbConnected: db.ok,
-    dbError: db.ok ? null : db.reason,
     prepaidOnly: checkout.prepaidOnly,
     darajaConfigured: checkout.darajaConfigured,
+    paymentRail: checkout.paymentRail || null,
+    paystackConfigured: Boolean(checkout.paystackConfigured),
+    paystackOnly: checkout.paystackOnly !== false,
+    b2c: { ready: Boolean(b2c.ready), auto: Boolean(b2c.auto) },
+    elevenlabs: { configured: Boolean(voice.configured), ttsEnabled: Boolean(voice.ttsEnabled) },
+    voice: (() => {
+      try {
+        return voiceTtsHealth();
+      } catch {
+        return { ready: Boolean(voice.configured), elevenlabs: voice };
+      }
+    })(),
   });
 });
 
-/** Product photos for WhatsApp — served from VM disk (no Cloudflare wait). */
-app.use(
-  "/catalog-images",
-  express.static(CATALOG_IMAGES_DIR, {
-    maxAge: "1d",
-    setHeaders(res) {
-      res.setHeader("Cache-Control", "public, max-age=86400");
-    },
-  })
-);
+/** Product photos — served from VM disk (no Cloudflare wait). */
+const catalogImageStatic = express.static(CATALOG_IMAGES_DIR, {
+  maxAge: "7d",
+  setHeaders(res) {
+    res.setHeader("Cache-Control", "public, max-age=604800");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  },
+});
+app.use("/catalog-images", catalogImageStatic);
+/** Alias so relative assets/images/products/* URLs also hit the VM when proxied. */
+app.use("/assets/images/products", catalogImageStatic);
+
+/** Seller shop avatars — durable data/avatars, then legacy website path. */
+const avatarStaticOpts = {
+  maxAge: "1d",
+  setHeaders(res) {
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  },
+};
+app.use("/assets/images/avatars", express.static(AVATARS_DIR, avatarStaticOpts));
+app.use("/assets/images/avatars", express.static(LEGACY_AVATARS_DIR, avatarStaticOpts));
+
+/** Fit-check photos (opaque UUID filenames; these back public reviews). */
+{
+  const fitDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "fit-checks");
+  app.use(
+    "/assets/fit-checks",
+    express.static(fitDir, {
+      fallthrough: true,
+      maxAge: "7d",
+      setHeaders(res) {
+        // Public, unlike voice notes: these appear on seller profiles.
+        res.setHeader("Cache-Control", "public, max-age=604800");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    })
+  );
+}
+
+/** Web-recorded voice notes (opaque UUID filenames, expire after 48h). */
+{
+  const voiceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "voice-notes");
+  app.use(
+    "/assets/voice-notes",
+    express.static(voiceDir, {
+      fallthrough: true,
+      maxAge: "1h",
+      setHeaders(res) {
+        // Private: the filename is the only secret, so it must not sit in a
+        // shared cache.
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    })
+  );
+}
+
+/** Chat photos (opaque filenames under data/chat-photos). */
+{
+  const chatPhotoDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "chat-photos");
+  app.use(
+    "/assets/chat-photos",
+    express.static(chatPhotoDir, {
+      fallthrough: true,
+      maxAge: "1h",
+      setHeaders(res) {
+        // Private: the filename is the only secret, so it must not sit in a
+        // shared cache.
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    })
+  );
+}
+
+/** Rider verification docs (opaque filenames under data/boda-docs). */
+{
+  const bodaDocsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "boda-docs");
+  app.use(
+    "/assets/boda-docs",
+    express.static(bodaDocsDir, {
+      fallthrough: true,
+      maxAge: "1d",
+      setHeaders(res) {
+        res.setHeader("Cache-Control", "private, max-age=86400");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Access-Control-Allow-Origin", "https://sokonimall.com");
+        res.setHeader("Vary", "Origin");
+      },
+    })
+  );
+}
+
+/** Buyer dispute evidence (gitignored data/dispute-evidence — never the public asset tree). */
+{
+  const disputeEvidenceDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "data",
+    "dispute-evidence"
+  );
+  app.use(
+    "/assets/dispute-evidence",
+    express.static(disputeEvidenceDir, {
+      fallthrough: true,
+      maxAge: "1d",
+      setHeaders(res) {
+        res.setHeader("Cache-Control", "private, max-age=86400");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Access-Control-Allow-Origin", "https://sokonimall.com");
+        res.setHeader("Vary", "Origin");
+      },
+    })
+  );
+}
+
+app.use("/api/", apiLimiter);
+/** OTP only — do NOT throttle session-authed Seller Hub routes (ledger/orders/shipping). */
+app.use("/api/seller/onboard/send-code", authLimiter);
+app.use("/api/seller/onboard/verify-code", authLimiter);
+app.use("/api/buyer/auth", authLimiter);
+app.use("/api/account/auth", authLimiter);
+app.use("/api/agent", authLimiter);
+app.use("/admin/", adminLimiter);
 
 /** Public reviews for website + WhatsApp-collected feedback. */
 app.get("/api/reviews", (_req, res) => {
@@ -153,23 +432,41 @@ app.use("/api/suppliers", suppliersApiRouter);
 app.use("/api/products", productsApiRouter);
 app.use("/api/seller/listings", sellerListingsApiRouter);
 app.use("/api/seller/onboard", sellerOnboardApiRouter);
+app.use("/api/seller/onboard/boda", sellerBodaRouter);
+app.use("/api/riders", ridersApiRouter);
+app.use("/api/social", socialApiRouter);
+app.use("/api/buyer/auth", buyerAuthApiRouter);
+app.use("/api/account/auth", accountAuthApiRouter);
 app.use("/api/orders", ordersApiRouter);
+app.use("/api/disputes", disputesApiRouter);
 app.use("/api/checkout", checkoutApiRouter);
+app.use("/api/trust", trustApiRouter);
+app.use("/api/cart", cartApiRouter);
 app.use("/api/payments", paymentsApiRouter);
+app.post("/api/webhooks/paystack", webhookLimiter, handlePaystackWebhook);
 app.use("/api/tracking", trackingApiRouter);
+app.use("/api/vendor", vendorShippingApiRouter);
 app.use("/api/agent", agentApiRouter);
 app.use("/api/feed", feedApiRouter);
+app.use("/api/search", searchApiRouter);
+app.use("/api/growth", growthApiRouter);
+app.use("/api/whatsapp", whatsappApiRouter);
 app.use("/admin/shipments", adminShipmentsRouter);
 app.use("/admin/ops", adminOpsApiRouter);
+app.use("/admin/command", adminCommandApiRouter);
+app.use("/admin/support", adminSupportApiRouter);
 app.use("/admin/suppliers", adminSuppliersRouter);
+app.use("/admin/boda", adminBodaRouter);
 app.use("/api/pickup-points", pickupPointsApiRouter);
 app.use("/admin/pickup-points", adminPickupPointsRouter);
 
 /** Backend-only TikTok OAuth (connect once; tokens auto-refresh). */
 app.use("/admin/tiktok", tiktokOAuthRouter);
 
-/** WAHA posts inbound message events here. */
-app.post("/webhook", async (req, res) => {
+/** WAHA posts inbound message events here. Production refuses to boot without HMAC. */
+assertProductionWebhookHmac();
+
+app.post("/webhook", webhookLimiter, requireWahaWebhookAuth, async (req, res) => {
   res.sendStatus(200);
   try {
     const events = Array.isArray(req.body) ? req.body : [req.body];
@@ -181,8 +478,12 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.listen(config.port, "0.0.0.0", () => {
+app.use(publicErrorHandler);
+
+const httpServer = app.listen(config.port, "0.0.0.0", () => {
   console.log(`${config.brand.name} WhatsApp bot listening on port ${config.port} (build ${BUILD_ID})`);
+  void migrateLegacyAvatars();
+  attachRiderSocket(httpServer);
   if (!config.waha.apiUrl) {
     console.log("⚠️ WAHA_API_URL not set — running in dry-run mode (messages will be logged, not sent).");
   } else {
@@ -190,6 +491,22 @@ app.listen(config.port, "0.0.0.0", () => {
   }
   if (!config.openai.apiKey) {
     console.log("⚠️ OPENAI_API_KEY not set — free-text replies will use a basic keyword-search fallback.");
+  }
+  try {
+    const routing = agentMeta()?.routing || {};
+    const providers = (routing.providers || [])
+      .map((p) => `${p.name}=[${(p.models || []).join(",")}]`)
+      .join(" → ");
+    console.log(
+      `✓ Chat LLM: ${providers || "(no keys)"} | temp=${routing.temperature ?? "?"} | geminiChat=${
+        String(process.env.AI_CHAT_USE_GEMINI || "").toLowerCase() === "true" ||
+        String(process.env.AI_CHAT_PROVIDER || "").toLowerCase() === "gemini"
+          ? "on"
+          : "off"
+      }`
+    );
+  } catch (err) {
+    console.warn("[llm-router] meta at startup:", err.message);
   }
   const tiktok = getConnectionStatus();
   if (tiktok.connected) {
@@ -199,9 +516,189 @@ app.listen(config.port, "0.0.0.0", () => {
   }
   startTokenRefreshScheduler();
   startTiktokScheduler();
+  startExecutiveBriefingScheduler();
+  startReorderReminderScheduler();
+  startDailyDropScheduler();
   startPayoutScheduler();
+  startOrderCommunicationScheduler();
   startFeedScheduler();
+  startBodaDisputeWindowScheduler();
+  startSellerShippingReminderScheduler();
+  startRiderB2CScheduler();
+  startVoiceNotePurge();
+  startChatPhotoPurge();
+  startInspectionWindow();
+  startReviewNudge();
+  startAgentLayer();
+  console.log(
+    "✓ Dispatch UX: shipping-gate(fail-closed) · no platform fee invent · " +
+      "PICK UP before role-menu · ACCEPT=seller-only · pickup OTP→buyer+admin"
+  );
+  // Ensure platform storefront has a social user id (Make an offer / inbox).
+  if (isDbEnabled()) {
+    import("./db/repositories/sellers.js")
+      .then(({ ensureDefaultSeller }) => ensureDefaultSeller())
+      .then(() => import("./services/catalog.js"))
+      .then(({ invalidateProductCache }) => invalidateProductCache())
+      .catch((err) => console.warn("[sellers] default storefront ensure:", err.message));
+    // Hide peer products whose shops were hard-deleted (stop zombies on the grid).
+    import("./services/orphan-catalog-scrub.js")
+      .then(({ scrubOrphanPeerProducts }) => scrubOrphanPeerProducts())
+      .then((r) => {
+        if (r?.hidden) console.log(`✓ Orphan peer scrub: hid ${r.hidden} product(s)`);
+      })
+      .catch((err) => console.warn("[orphan-scrub] startup:", err.message));
+  }
 });
+
+/** Clear boda rider fees after the 15-min buyer DISPUTE / HOLD_ESCROW window elapses. */
+function startBodaDisputeWindowScheduler() {
+  const tick = () => {
+    import("./services/boda-fleet.js")
+      .then(
+        ({
+          processBodaDisputeWindows,
+          processBodaOfferTimeouts,
+          applyLatePickupPenalties,
+        }) =>
+          Promise.all([
+            processBodaDisputeWindows(),
+            processBodaOfferTimeouts(),
+            applyLatePickupPenalties(),
+          ])
+      )
+      .catch((err) => console.warn("[boda-fleet] dispute/offer window tick:", err.message));
+    import("./services/boda-no-show.js")
+      .then(({ processNoShowTimeouts }) => processNoShowTimeouts())
+      .catch((err) => console.warn("[boda-no-show] tick:", err.message));
+    import("./services/prepaid-checkout.js")
+      .then(({ expireStaleStkPayments }) => expireStaleStkPayments())
+      .catch((err) => console.warn("[checkout] stk expire tick:", err.message));
+  };
+  tick();
+  setInterval(tick, 2 * 60 * 1000);
+  console.log("✓ Boda HOLD_ESCROW + no-show + STK expire scheduler enabled (every 2 min)");
+}
+
+/** Nudge sellers missing Hub shipping rates every 2 hours. */
+function startSellerShippingReminderScheduler() {
+  const tick = () => {
+    import("./services/shipping-reminders.js")
+      .then(({ processSellerShippingReminders }) => processSellerShippingReminders())
+      .catch((err) => console.warn("[shipping-remind] tick:", err.message));
+  };
+  // First run after 3 minutes so boot is not blocked; then every 2 hours.
+  setTimeout(tick, 3 * 60 * 1000);
+  setInterval(tick, 2 * 60 * 60 * 1000);
+  console.log("✓ Seller shipping-rate reminder scheduler enabled (every 2 hours)");
+}
+
+/** Propose an escrow release once a delivered order's 2-hour inspection has passed. */
+function startInspectionWindow() {
+  const tick = () => {
+    import("./agents/inspection-window.js")
+      .then(({ processInspectionWindow }) => processInspectionWindow())
+      .catch((err) => console.warn("[inspection] tick:", err.message));
+  };
+  setTimeout(tick, 60_000).unref?.();
+  setInterval(tick, 5 * 60 * 1000).unref?.();
+}
+
+/** One day after a clean release, ask for a Trustpilot review. Quiet until the URL is set. */
+function startReviewNudge() {
+  const tick = () => {
+    import("./agents/review-nudge.js")
+      .then(({ processReviewAsks }) => processReviewAsks())
+      .catch((err) => console.warn("[review-nudge] tick:", err?.message || err));
+  };
+  setTimeout(tick, 4 * 60 * 1000).unref?.();
+  setInterval(tick, 60 * 60 * 1000).unref?.();
+}
+
+/** Disburse CLEARED rider delivery fees via Daraja B2C (min KES 200, retry queue). */
+/** Clear expired web voice notes. Hourly, plus once shortly after boot. */
+function startVoiceNotePurge() {
+  const tick = () => {
+    import("./services/voice-upload.js")
+      .then(({ purgeExpiredVoiceNotes }) => purgeExpiredVoiceNotes())
+      .catch((err) => console.warn("[voice-purge] tick:", err.message));
+  };
+  setTimeout(tick, 60_000).unref?.();
+  setInterval(tick, 60 * 60_000).unref?.();
+}
+
+/* Chat photos expire on a 14-day clock, same shape as the voice purge. */
+function startChatPhotoPurge() {
+  const tick = () => {
+    import("./services/chat-photo-store.js")
+      .then(({ purgeExpiredChatPhotos }) => purgeExpiredChatPhotos())
+      .catch((err) => console.warn("[chat-photo-purge] tick:", err.message));
+  };
+  setTimeout(tick, 90_000).unref?.();
+  setInterval(tick, 6 * 60 * 60_000).unref?.();
+}
+
+/**
+ * Start the agent layer.
+ *
+ * The main agent only listens; sub-agents publish as they are added. With
+ * none attached this costs one event listener and an empty array, so it is
+ * safe to start before there is anything to report.
+ */
+function startAgentLayer() {
+  if (/^(0|false|off|no)$/i.test(String(process.env.SOKONI_AGENTS_ENABLED || "true"))) {
+    console.log("⚠️ Agent layer disabled (SOKONI_AGENTS_ENABLED=false)");
+    return;
+  }
+  import("./agents/main-agent.js")
+    .then(async ({ mainAgent }) => {
+      mainAgent.start();
+      const { startChatControlAgent } = await import("./agents/chat-control.js");
+      const { startPlatformAgents } = await import("./agents/platform-agents.js");
+      startChatControlAgent();
+      startPlatformAgents();
+      console.log("[agents] main agent, chat control, and platform agents listening");
+      const heapTick = () => {
+        const heapUsedMb = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
+        if (heapUsedMb < 380) return;
+        void import("./agents/platform-events.js").then(({ emitPlatformEvent }) => {
+          emitPlatformEvent("VM_MEMORY_SPIKE", { heapUsedMb });
+        });
+      };
+      setInterval(heapTick, 60_000).unref?.();
+      // Digest every 6 hours. A quiet window sends nothing.
+      const tick = () => {
+        void mainAgent.sendDigest().catch((err) => {
+          console.warn("[agents] digest tick:", err?.message || err);
+        });
+      };
+      setInterval(tick, 6 * 60 * 60_000).unref?.();
+    })
+    .catch((err) => console.warn("[agents] failed to start:", err?.message || err));
+}
+
+function startRiderB2CScheduler() {
+  const tick = () => {
+    import("./services/rider-b2c.js")
+      .then(({ processRiderB2CPayouts, riderB2cConfigured, RIDER_B2C_MIN_FLOOR_KES }) => {
+        if (!riderB2cConfigured()) return null;
+        return processRiderB2CPayouts({ minKes: RIDER_B2C_MIN_FLOOR_KES, limit: 10 });
+      })
+      .then((result) => {
+        if (result?.triggered > 0) {
+          console.log(`[rider-b2c] triggered ${result.triggered} payout batch(es)`);
+        }
+        if (result?.capped > 0) {
+          console.log(`[rider-b2c] daily-cap deferred ${result.capped} rider(s)`);
+        }
+      })
+      .catch((err) => console.warn("[rider-b2c] tick:", err.message));
+  };
+  // 30-min cadence so PENDING_RETRY backoff can fire; also covers morning rollover.
+  setTimeout(tick, 90 * 1000);
+  setInterval(tick, 30 * 60 * 1000);
+  console.log("✓ Rider B2C payout scheduler enabled (every 30 min when B2C ready; floor KES 200)");
+}
 
 /** Refresh trending / price-tier feed slices hourly. */
 function startFeedScheduler() {
@@ -213,19 +710,50 @@ function startFeedScheduler() {
   console.log("✓ Feed ranking scheduler enabled (hourly)");
 }
 
-/** Move scheduled seller payouts to owed after 2–3 business day escrow hold. */
+/** Move scheduled seller payouts to owed after 2–3 business day escrow hold; optional B2C auto-send. */
 function startPayoutScheduler() {
-  const tick = () => {
+  const tick = async () => {
     try {
       const n = processDuePayouts();
       if (n > 0) console.log(`[settlements] ${n} seller payout(s) now owed`);
+      const rail = resolvePayoutRail(isB2CReady());
+      if (rail === "b2c" && isB2CReady()) {
+        const sent = await disburseOwedPayoutsViaB2C({ includeFailed: false, limit: 10 });
+        if (sent > 0) console.log(`[settlements] B2C accepted ${sent} payout(s)`);
+      }
     } catch (err) {
       console.error("[settlements] payout cron:", err.message);
     }
   };
   tick();
   setInterval(tick, 60 * 60 * 1000);
-  console.log("✓ Seller payout scheduler enabled (hourly)");
+  const b2c = b2cMeta();
+  const paystack = paystackMeta();
+  const rail = resolvePayoutRail(b2c.ready);
+  console.log(
+    `✓ Seller payout scheduler enabled (hourly) · rail ${rail}` +
+      `${paystack.ready ? ` · Paystack ${paystack.collectReady ? "C2B+transfers" : "transfers"}` : ""}` +
+      `${b2c.ready ? ` · B2C ${b2c.auto ? "auto" : "manual (#payb2c)"}` : " · B2C not configured"}`
+  );
+}
+
+/** DISPATCH / YES reminders + overdue buyer-confirm admin flags (communication hub). */
+function startOrderCommunicationScheduler() {
+  const tick = () => {
+    import("./services/communication-hub.js")
+      .then(({ processOrderCommunicationReminders }) => processOrderCommunicationReminders())
+      .catch((err) => console.error("[communication-hub] reminder cron:", err.message));
+    import("./services/upcountry-shipments.js")
+      .then(({ processUpcountryEscrowReleases }) => processUpcountryEscrowReleases())
+      .catch((err) => console.error("[upcountry] escrow cron:", err.message));
+    import("./services/commerce-ops.js")
+      .then(({ processAbandonedCheckoutRecovery }) => processAbandonedCheckoutRecovery())
+      .catch((err) => console.error("[commerce-ops] abandon cron:", err.message));
+  };
+  // Offset from payout cron so we don't stampede the WAHA API.
+  setTimeout(tick, 90_000);
+  setInterval(tick, 60 * 60 * 1000);
+  console.log("✓ Order communication + upcountry escrow + abandon-recovery scheduler enabled (hourly)");
 }
 
 /** Parse "HH:MM" slots for daily posting. */
@@ -276,4 +804,105 @@ function startTiktokScheduler() {
 
   const label = slots.map((s) => `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`).join(", ");
   console.log(`✓ TikTok cron enabled (${tz}): ${label}`);
+}
+
+/** Daily Boss briefing (default 08:00 EAT) + hourly stale-dispute nag. */
+function startExecutiveBriefingScheduler() {
+  if (/^(0|false|off|no)$/i.test(String(process.env.BOSS_BRIEFING_ENABLED || "true"))) {
+    console.log("⚠️ Boss briefing cron disabled (BOSS_BRIEFING_ENABLED=false)");
+    return;
+  }
+  const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  let lastBriefKey = "";
+  let lastStaleHour = "";
+
+  setInterval(() => {
+    const now = clockInTimezone(tz);
+    import("./services/exec-briefing.js")
+      .then(async ({ briefingHourEat, sendExecutiveBriefingToAdmins, alertStaleOpenDisputes }) => {
+        const hour = briefingHourEat();
+        if (now.hour === hour && now.minute === 0) {
+          const key = `${now.dateKey}-${hour}`;
+          if (key !== lastBriefKey) {
+            lastBriefKey = key;
+            const r = await sendExecutiveBriefingToAdmins();
+            console.log("[exec-briefing] daily sent:", r.sent);
+          }
+        }
+        // Every hour at :15 — stale disputes >30m
+        if (now.minute === 15) {
+          const hk = `${now.dateKey}-${now.hour}`;
+          if (hk !== lastStaleHour) {
+            lastStaleHour = hk;
+            await alertStaleOpenDisputes({ olderThanMinutes: 30 });
+          }
+        }
+      })
+      .catch((err) => console.warn("[exec-briefing] cron:", err.message));
+  }, 60_000);
+
+  import("./services/staff-roles.js")
+    .then(({ seedEnvAdminsAsSuperAdmin }) => seedEnvAdminsAsSuperAdmin())
+    .then((r) => {
+      if (r?.seeded) console.log(`✓ staff_roles seeded SUPER_ADMIN ×${r.seeded}`);
+    })
+    .catch((err) => console.warn("[staff-roles] seed:", err.message));
+
+  console.log(`✓ Boss briefing cron enabled (${tz})`);
+}
+
+/** Daily consumable re-order nudges (default 09:00 EAT). Numbered 1 / 2 replies. */
+function startReorderReminderScheduler() {
+  if (/^(0|false|off|no)$/i.test(String(process.env.REORDER_REMINDER_ENABLED || "true"))) {
+    console.log("⚠️ Re-order reminder cron disabled (REORDER_REMINDER_ENABLED=false)");
+    return;
+  }
+  const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  let lastKey = "";
+  setInterval(() => {
+    const now = clockInTimezone(tz);
+    import("./services/reorder-reminders.js")
+      .then(async ({ REORDER_HOUR_EAT, sendReorderReminders }) => {
+        const hour = REORDER_HOUR_EAT;
+        if (now.hour === hour && now.minute === 0) {
+          const key = `${now.dateKey}-${hour}`;
+          if (key !== lastKey) {
+            lastKey = key;
+            const r = await sendReorderReminders();
+            console.log("[reorder] daily sent:", r.sent, "candidates:", r.candidates);
+          }
+        }
+      })
+      .catch((err) => console.warn("[reorder] cron:", err.message));
+  }, 60_000);
+  console.log(`✓ Re-order reminder cron enabled (${tz})`);
+}
+
+/** One live listing every 30 min, 08:00–20:00 EAT. Off unless DAILY_DROP_ENABLED=true. */
+function startDailyDropScheduler() {
+  if (!config.dailyDrop?.enabled) {
+    console.log(
+      "⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to drip Status + Channel every 30 min, 08:00–20:00 EAT)"
+    );
+    return;
+  }
+  const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
+  const start = String(config.dailyDrop.hourEat).padStart(2, "0");
+  const end = String(config.dailyDrop.endHourEat ?? 20).padStart(2, "0");
+  const interval = config.dailyDrop.intervalMinutes || 30;
+  let lastKey = "";
+  setInterval(() => {
+    const now = clockInTimezone(tz);
+    import("./services/daily-drop.js")
+      .then(async ({ isDripSlot, runDailyDrop }) => {
+        if (!isDripSlot(now, config.dailyDrop)) return;
+        const key = `${now.dateKey}-${now.hour}-${now.minute}`;
+        if (key === lastKey) return;
+        lastKey = key;
+        const r = await runDailyDrop();
+        console.log("[daily-drop]", r.ok ? `drip ${r.items?.[0]?.id || r.itemCount}` : r.error || r.message);
+      })
+      .catch((err) => console.warn("[daily-drop] cron:", err.message));
+  }, 60_000);
+  console.log(`✓ Daily drop drip enabled (${tz}) every ${interval} min ${start}:00–${end}:00`);
 }

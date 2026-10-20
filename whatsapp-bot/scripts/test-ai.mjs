@@ -11,5 +11,6 @@ setProductContext("254700000000", {
   fulfillment: "store",
 });
 
-const reply = await runAiAgent("254700000000", "Are they good for phone calls?");
-console.log("REPLY:", reply);
+const result = await runAiAgent("254700000000", "Are they good for phone calls?");
+console.log("REPLY:", result.reply);
+console.log("TOOLS:", (result.tools || []).map((t) => t.tool).join(", "));

@@ -1,11 +1,71 @@
 #!/usr/bin/env bash
 # Ensure WAHA default session has NOWEB store (new sessions) + bot webhook.
+# WAHA Core does NOT persist session config across container restarts — re-apply every deploy.
 set -euo pipefail
 
-WAHA_URL="${WAHA_API_URL:-http://127.0.0.1:3000}"
-WAHA_KEY="${WAHA_API_KEY:-sokoni-local-dev-key}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
+# shellcheck source=lib/waha-common.sh
+source "$SCRIPT_DIR/lib/waha-common.sh"
 WEBHOOK_URL="${BOT_WEBHOOK_URL:-http://host.docker.internal:3001/webhook}"
-SESSION="${WAHA_SESSION:-default}"
+SESSION="${WAHA_SESSION}"
+# Shared with bot WEBHOOK_HMAC_KEY — WAHA signs raw body (X-Webhook-Hmac / sha512).
+if [[ -z "${WEBHOOK_HMAC_KEY:-}" && -z "${WAHA_WEBHOOK_HMAC_KEY:-}" && -f "$REPO/whatsapp-bot/.env" ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  # Only pull the HMAC key line(s) — avoid sourcing unrelated secrets into this shell unnecessarily.
+  WEBHOOK_HMAC_KEY="$(grep -E '^(WEBHOOK_HMAC_KEY|WAHA_WEBHOOK_HMAC_KEY)=' "$REPO/whatsapp-bot/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)"
+  set +a
+fi
+WEBHOOK_HMAC_KEY="${WEBHOOK_HMAC_KEY:-${WAHA_WEBHOOK_HMAC_KEY:-}}"
+
+# JSON fragment for webhooks[] entry (url + events + optional hmac).
+webhook_config_json() {
+  python3 -c "
+import json, os
+url = os.environ.get('WEBHOOK_URL', '')
+key = (os.environ.get('WEBHOOK_HMAC_KEY') or '').strip()
+entry = {'url': url, 'events': ['message.any']}
+if key:
+  entry['hmac'] = {'key': key}
+print(json.dumps(entry))
+" 
+}
+
+# Never print webhook HMAC keys (or API keys) in deploy logs.
+redact_session_json() {
+  python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+  d = json.loads(raw)
+except Exception:
+  print(raw[:500])
+  raise SystemExit(0)
+cfg = d.get('config') if isinstance(d, dict) else None
+hooks = (cfg or {}).get('webhooks') if isinstance(cfg, dict) else None
+if isinstance(hooks, list):
+  for h in hooks:
+    if isinstance(h, dict) and isinstance(h.get('hmac'), dict) and h['hmac'].get('key'):
+      h['hmac']['key'] = '[redacted]'
+# Compact summary — enough to confirm webhook/HMAC without dumping secrets.
+out = {
+  'name': d.get('name') if isinstance(d, dict) else None,
+  'status': d.get('status') if isinstance(d, dict) else None,
+  'me': (d.get('me') or {}).get('id') if isinstance(d, dict) else None,
+  'webhooks': [
+    {
+      'url': h.get('url'),
+      'events': h.get('events'),
+      'hmac': bool((h.get('hmac') or {}).get('key')),
+    }
+    for h in (hooks or []) if isinstance(h, dict)
+  ],
+}
+print(json.dumps(out, separators=(',', ':')))
+"
+}
 
 json_field() {
   local json="$1" field="$2"
@@ -17,6 +77,18 @@ try:
   print('' if d is None else d)
 except Exception:
   print('')" 2>/dev/null || echo ""
+}
+
+session_json() {
+  curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" 2>/dev/null || echo ""
+}
+
+session_status() {
+  json_field "$(session_json)" status
+}
+
+session_store_enabled() {
+  json_field "$(session_json)" config.noweb.store.enabled
 }
 
 wait_waha() {
@@ -33,6 +105,13 @@ wait_waha() {
 
 create_session() {
   echo "==> Creating WAHA session '$SESSION' (NOWEB store + webhook → $WEBHOOK_URL)"
+  if [[ -n "$WEBHOOK_HMAC_KEY" ]]; then
+    echo "==> Webhook HMAC enabled (WEBHOOK_HMAC_KEY)"
+  else
+    echo "==> WARN: WEBHOOK_HMAC_KEY unset — bot /webhook will accept unsigned POSTs"
+  fi
+  local hook
+  hook="$(WEBHOOK_URL="$WEBHOOK_URL" WEBHOOK_HMAC_KEY="$WEBHOOK_HMAC_KEY" webhook_config_json)"
   curl -sf -X POST \
     -H "X-Api-Key: $WAHA_KEY" \
     -H "Content-Type: application/json" \
@@ -40,66 +119,169 @@ create_session() {
       \"name\": \"$SESSION\",
       \"config\": {
         \"noweb\": { \"store\": { \"enabled\": true, \"fullSync\": false } },
-        \"webhooks\": [{ \"url\": \"$WEBHOOK_URL\", \"events\": [\"message.any\"] }]
+        \"webhooks\": [$hook]
       }
     }" \
-    "$WAHA_URL/api/sessions" | head -c 600
+    "$WAHA_URL/api/sessions" | redact_session_json
   echo ""
 }
 
-update_webhook() {
-  echo "==> Updating webhook → $WEBHOOK_URL"
+apply_session_config() {
+  echo "==> Applying NOWEB store + webhook → $WEBHOOK_URL"
+  if [[ -n "$WEBHOOK_HMAC_KEY" ]]; then
+    echo "==> Webhook HMAC enabled (WEBHOOK_HMAC_KEY)"
+  else
+    echo "==> WARN: WEBHOOK_HMAC_KEY unset — bot /webhook will accept unsigned POSTs"
+  fi
+  local hook
+  hook="$(WEBHOOK_URL="$WEBHOOK_URL" WEBHOOK_HMAC_KEY="$WEBHOOK_HMAC_KEY" webhook_config_json)"
   curl -sf -X PUT \
     -H "X-Api-Key: $WAHA_KEY" \
     -H "Content-Type: application/json" \
-    -d "{\"config\":{\"webhooks\":[{\"url\":\"$WEBHOOK_URL\",\"events\":[\"message.any\"]}]}}" \
+    -d "{
+      \"config\": {
+        \"noweb\": { \"store\": { \"enabled\": true, \"fullSync\": false } },
+        \"webhooks\": [$hook]
+      }
+    }" \
     "$WAHA_URL/api/sessions/$SESSION" >/dev/null
 }
 
+start_session() {
+  curl -sf -X POST -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION/start" >/dev/null 2>&1 || true
+}
+
+stop_session() {
+  curl -sf -X POST -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION/stop" >/dev/null 2>&1 || true
+}
+
+restart_session() {
+  curl -sf -X POST -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION/restart" >/dev/null 2>&1 || true
+}
+
 reset_session() {
-  echo "==> RESET: deleting session '$SESSION' (you will need to scan QR again)"
+  echo "==> RESET: deleting session '$SESSION' (WhatsApp re-link required)"
   curl -sf -X DELETE -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" >/dev/null 2>&1 || true
   sleep 2
   create_session
+}
+
+print_waha_logs() {
+  waha_print_recent_logs 30
+}
+
+recover_failed_session() {
+  echo "==> Session FAILED — trying restart..."
+  restart_session
+  sleep 5
+  if [ "$(session_status)" = "WORKING" ]; then
+    echo "==> Session recovered after restart"
+    return 0
+  fi
+
+  echo "==> Restart failed — stop + re-apply NOWEB store config..."
+  stop_session
+  sleep 2
+  apply_session_config || true
+  sleep 4
+  local status
+  status="$(session_status)"
+  if [ "$status" = "WORKING" ] || [ "$status" = "STARTING" ] || [ "$status" = "SCAN_QR_CODE" ]; then
+    return 0
+  fi
+
+  echo "==> Session still $status — recreating (WhatsApp re-link required)..."
+  reset_session
+  return 1
+}
+
+wait_session_working() {
+  local i status
+  for i in $(seq 1 45); do
+    status="$(session_status)"
+    if [ "$status" = "WORKING" ]; then
+      echo "==> Session WORKING — WhatsApp send/receive ready"
+      return 0
+    fi
+    if [ "$status" = "SCAN_QR_CODE" ]; then
+      echo ""
+      echo "ERROR: WhatsApp needs pairing — bot cannot reply until linked."
+      echo "       Run: bash scripts/waha-link-whatsapp.sh"
+      return 1
+    fi
+    if [ "$status" = "FAILED" ] && [ "$i" -eq 8 ]; then
+      recover_failed_session || true
+    fi
+    if [ "$i" -le 3 ] || [ $((i % 5)) -eq 0 ]; then
+      echo "==> Waiting for session WORKING (status=${status:-unknown}, ${i}/45)..."
+    fi
+    sleep 2
+  done
+  status="$(session_status)"
+  echo ""
+  echo "ERROR: WAHA session not WORKING (status=${status:-unknown}) — WhatsApp replies will fail."
+  echo "       NOWEB store must be enabled on every container restart (WAHA Core)."
+  echo "       Fix: bash scripts/waha-link-whatsapp.sh"
+  echo "       Or full reset: RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
+  print_waha_logs
+  return 1
 }
 
 wait_waha
 
 if [ "${RESET_WAHA_SESSION:-}" = "1" ]; then
   reset_session
-else
-  SESSION_JSON="$(curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" 2>/dev/null || echo "")"
-  STATUS="$(json_field "$SESSION_JSON" status)"
-  STORE="$(json_field "$SESSION_JSON" config.noweb.store.enabled)"
-
-  if [ -z "$STATUS" ]; then
-    create_session
-  else
-    echo "==> Session '$SESSION': status=$STATUS noweb.store.enabled=${STORE:-false}"
-    update_webhook
-
-    if [ "$STORE" != "True" ] && [ "$STORE" != "true" ]; then
-      echo "WARN: NOWEB store is OFF — media/download APIs fail until session is recreated."
-      echo "      Fix (requires new QR scan): RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
-    fi
-
-    case "$STATUS" in
-      STOPPED|FAILED)
-        echo "==> Starting session..."
-        curl -sf -X POST -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION/start" >/dev/null || true
-        ;;
-      SCAN_QR_CODE)
-        echo "==> Scan QR — do NOT use docker logs (ASCII is not scannable)."
-        echo "    Run: bash scripts/waha-link-whatsapp.sh"
-        echo "    Or pairing code + PNG QR saved to ~/sokoni/waha-qr.png"
-        ;;
-      WORKING)
-        echo "==> Session WORKING"
-        ;;
-    esac
-  fi
+  echo "==> Starting freshly created session..."
+  start_session
+  sleep 2
+  echo "==> Reset complete (status=$(session_status)). Pairing required — do not wait for WORKING."
+  echo "==> Final session:"
+  curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | redact_session_json
+  echo ""
+  exit 0
 fi
 
+STATUS="$(session_status)"
+STORE="$(session_store_enabled)"
+
+if [ -z "$STATUS" ]; then
+  create_session
+  echo "==> Starting new session..."
+  start_session
+else
+  echo "==> Session '$SESSION': status=$STATUS noweb.store.enabled=${STORE:-false}"
+  apply_session_config
+  STATUS="$(session_status)"
+  STORE="$(session_store_enabled)"
+  echo "==> After config apply: status=$STATUS noweb.store.enabled=${STORE:-false}"
+
+  case "$STATUS" in
+    WORKING)
+      echo "==> Session WORKING"
+      ;;
+    FAILED)
+      recover_failed_session || true
+      ;;
+    STOPPED)
+      echo "==> Starting session..."
+      start_session
+      ;;
+    SCAN_QR_CODE)
+      echo "==> WhatsApp needs pairing — run: bash scripts/waha-link-whatsapp.sh"
+      ;;
+    STARTING)
+      echo "==> Session starting..."
+      ;;
+  esac
+fi
+
+WAHA_SESSION_OK=0
+wait_session_working && WAHA_SESSION_OK=1 || WAHA_SESSION_OK=0
+
 echo "==> Final session:"
-curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | head -c 500
+curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$SESSION" | redact_session_json
 echo ""
+
+if [ "$WAHA_SESSION_OK" -ne 1 ]; then
+  exit 1
+fi

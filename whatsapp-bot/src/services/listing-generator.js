@@ -6,8 +6,9 @@ import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "../config.js";
-import { computeRetailPrice } from "./pricing.js";
+import { applyAiShippingSuggestion, computeFeeBreakdown } from "./shipping-tiers.js";
 import { geminiVisionAvailable, geminiVisionListingJson } from "./gemini-vision.js";
+import { nvidiaVisionAvailable, nvidiaVisionListingJson } from "./nvidia-vision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TAXONOMY_PATH = path.join(__dirname, "..", "..", "..", "scripts", "browse-taxonomy.mjs");
@@ -23,6 +24,8 @@ export const VALID_CATEGORIES = [
   "gaming",
   "supermarket",
   "baby-products",
+  "restaurant",
+  "wines-spirits",
 ];
 
 export const VALID_CONDITIONS = [
@@ -44,6 +47,10 @@ const SUBCATEGORY_GUIDE = {
   gaming: "consoles, gaming-accessories",
   supermarket: "groceries, beverages, snacks, household",
   "baby-products": "diapers, feeding, baby-care, toys",
+  restaurant:
+    "nyama-choma, ugali plates, pilau, chapati, githeri, stews, chicken, fish, street bites, breakfast, lunch boxes, vegan, healthy bowls, diet meals, juices, desserts, catering",
+  "wines-spirits":
+    "local beer, Kenyan spirits (Kenya Cane), red wine, white wine, sparkling/champagne, whisky, gin, vodka, cognac/brandy, rum, cider/RTDs, liqueurs, mixers, party packs, non-alcoholic",
 };
 
 const CATEGORY_KEYWORDS = [
@@ -56,7 +63,90 @@ const CATEGORY_KEYWORDS = [
   { category: "gaming", words: ["playstation", "xbox", "game", "controller", "ps5", "ps4"] },
   { category: "supermarket", words: ["rice", "flour", "sugar", "oil", "tea", "coffee", "cereal"] },
   { category: "baby-products", words: ["diaper", "pampers", "baby", "stroller", "formula"] },
+  {
+    category: "power-tools",
+    words: [
+      "drill",
+      "grinder",
+      "welder",
+      "welding",
+      "jigsaw",
+      "circular saw",
+      "chainsaw",
+      "generator",
+      "water pump",
+      "spray gun",
+      "compressor",
+      "makita",
+      "dewalt",
+      "toolset",
+      "hand tool",
+    ],
+  },
   { category: "home-office", words: ["chair", "desk", "bed", "mattress", "curtain", "lamp", "furniture"] },
+  {
+    category: "wines-spirits",
+    words: [
+      "wine",
+      "wines",
+      "spirit",
+      "spirits",
+      "liquor",
+      "alcohol",
+      "beer",
+      "tusker",
+      "whitecap",
+      "guinness",
+      "kenya cane",
+      "cane",
+      "whisky",
+      "whiskey",
+      "gin",
+      "vodka",
+      "cognac",
+      "brandy",
+      "rum",
+      "champagne",
+      "prosecco",
+      "cider",
+      "liqueur",
+      "baileys",
+      "mixer",
+      "soda water",
+      "tonic",
+    ],
+  },
+  {
+    category: "restaurant",
+    words: [
+      "nyama",
+      "choma",
+      "ugali",
+      "sukuma",
+      "githeri",
+      "pilau",
+      "biryani",
+      "chapati",
+      "mandazi",
+      "mahamri",
+      "mutura",
+      "smokie",
+      "viazi",
+      "matumbo",
+      "tilapia",
+      "samosa",
+      "meal",
+      "dish",
+      "stew",
+      "plate",
+      "catering",
+      "juice",
+      "vegan",
+      "lunch",
+      "breakfast",
+      "dinner",
+    ],
+  },
 ];
 
 let taxonomyModule = null;
@@ -69,10 +159,24 @@ async function getTaxonomy() {
   return taxonomyModule;
 }
 
+/** Free OpenRouter VLMs tried first so paid Gemini keys can't block seller drafts. */
+const FREE_OPENROUTER_VISION = [
+  "openrouter/free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+];
+
 function visionModelChain() {
   const primary = config.catalog.visionModel?.trim();
   const fallbacks = config.catalog.visionFallbacks || [];
-  return [...new Set([primary, ...fallbacks].filter(Boolean))];
+  // Free models first, then configured CATALOG_VISION_* (paid Gemini etc. as last resort).
+  const chain = [...new Set([...FREE_OPENROUTER_VISION, primary, ...fallbacks].filter(Boolean))];
+  if (chain.some((m) => /^krea\//i.test(m) || /image-gen|flux|dall-e|stable-diffusion/i.test(m))) {
+    console.warn(
+      "[listing-generator] image-gen models (e.g. krea) stay in CATALOG_VISION_FALLBACKS but are skipped for photo→JSON — free OpenRouter / NVIDIA / Gemini handle listing drafts."
+    );
+  }
+  return chain;
 }
 
 function getVisionClient() {
@@ -182,85 +286,322 @@ function normalizeSubcategory(category, subcategory, name) {
   return slugifySubcategory(name, category);
 }
 
+const CONDITION_ALIASES = {
+  brand_new_with_tags: "brand_new_with_tags",
+  "brand new with tags": "brand_new_with_tags",
+  bnwt: "brand_new_with_tags",
+  brand_new_without_tags: "brand_new_without_tags",
+  "brand new without tags": "brand_new_without_tags",
+  brand_new: "brand_new_without_tags",
+  "brand new": "brand_new_without_tags",
+  new: "brand_new_without_tags",
+  like_new: "like_new",
+  "like new": "like_new",
+  excellent: "like_new",
+  gently_used: "gently_used",
+  "gently used": "gently_used",
+  good: "gently_used",
+  used: "gently_used",
+  "pre-loved": "gently_used",
+  preloved: "gently_used",
+  "pre loved": "gently_used",
+  thrift: "gently_used",
+  fair_condition: "fair_condition",
+  "fair condition": "fair_condition",
+  fair: "fair_condition",
+  well_loved: "fair_condition",
+  "well loved": "fair_condition",
+};
+
+function normalizeCondition(raw) {
+  if (raw == null || raw === "") return null;
+  const key = String(raw).trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  const underscored = key.replace(/\s+/g, "_");
+  return (
+    CONDITION_ALIASES[key] ||
+    CONDITION_ALIASES[underscored] ||
+    (VALID_CONDITIONS.includes(underscored) ? underscored : null)
+  );
+}
+
 function inferConditionFromHints(name, isSecondhand) {
   if (isSecondhand) return "gently_used";
   const hay = normalizeName(name);
-  if (/with tags|bnwt|brand new/.test(hay)) return "brand_new_with_tags";
-  return "brand_new_without_tags";
+  if (/with tags|bnwt|brand new with tags/.test(hay)) return "brand_new_with_tags";
+  if (/brand new|bnwot|unworn|deadstock/.test(hay)) return "brand_new_without_tags";
+  if (/like new|excellent/.test(hay)) return "like_new";
+  if (/fair|worn|faded|stain/.test(hay)) return "fair_condition";
+  // Sokoni is thrift-first — don't invent "brand new" when the photo is ambiguous.
+  return "gently_used";
 }
 
-export async function resolveBrowsePath({ category, subcategory, browseCategory, browseSubCategory, name = "" }) {
+/** Drop placeholder brands / empty strings the model invents when nothing is readable. */
+function sanitizeOptionalLabel(value, maxLen = 60) {
+  const s = String(value || "").trim();
+  if (!s) return undefined;
+  if (/^(unknown|n\/?a|none|null|undefined|not visible|unreadable|no brand|blank)$/i.test(s)) {
+    return undefined;
+  }
+  return s.slice(0, maxLen);
+}
+
+function isValidBrowsePath(tax, browseCategory, browseSubCategory) {
+  const cat = tax.BROWSE_TAXONOMY.find((c) => c.id === browseCategory);
+  if (!cat || cat.navOnly) return false;
+  return Boolean(cat.subcategories?.some((s) => s.id === browseSubCategory));
+}
+
+export async function resolveBrowsePath({ category, subcategory, browseCategory, browseSubCategory, name = "", caption = "" }) {
   const tax = await getTaxonomy();
-  if (browseCategory && browseSubCategory) {
+  if (browseCategory && browseSubCategory && isValidBrowsePath(tax, browseCategory, browseSubCategory)) {
     return { browse: browseCategory, sub: browseSubCategory };
   }
+
+  // AI sometimes puts legacy ids (fashion) into browse fields — remap instead of trusting.
   const mapped = tax.mapLegacyToBrowse(category, subcategory);
-  const hay = normalizeName(name);
-  if (/\bwomen\b|\bladies\b|\bfemale\b/.test(hay)) {
-    return { browse: "women", sub: mapped.sub === "sneakers" ? "shoes" : mapped.sub };
+  const hay = normalizeName(`${name} ${caption}`);
+  if (/\bwomen\b|\bladies\b|\bfemale\b|\bgirl\b/.test(hay)) {
+    const sub = mapped.sub === "sneakers" ? "shoes" : mapped.sub;
+    const browse = "women";
+    if (isValidBrowsePath(tax, browse, sub)) return { browse, sub };
+    return { browse: "women", sub: "tops" };
   }
-  if (/\bmen\b|\bgents\b|\bmale\b/.test(hay) && !/\bwomen\b/.test(hay)) {
-    return { browse: "men", sub: mapped.sub === "shoes" ? "sneakers" : mapped.sub };
+  if (/\bmen\b|\bgents\b|\bmale\b|\bman\b/.test(hay) && !/\bwomen\b/.test(hay)) {
+    const sub = mapped.sub === "shoes" ? "sneakers" : mapped.sub;
+    const browse = "men";
+    if (isValidBrowsePath(tax, browse, sub)) return { browse, sub };
+    return { browse: "men", sub: "t-shirts" };
   }
-  if (/kid|baby|child/.test(hay)) {
-    return { browse: "kids", sub: mapped.sub === "shoes" ? "shoes" : "clothing" };
+  if (/kid|baby|child|toddler|infant/.test(hay)) {
+    if (/\bbalance\s*bike\b/.test(hay)) return { browse: "kids", sub: "balance-bikes" };
+    if (/\bscooter\b/.test(hay)) return { browse: "kids", sub: "scooters" };
+    if (/\btricycle|tri\s*cycle\b/.test(hay)) return { browse: "kids", sub: "tricycles" };
+    if (/\bride[- ]?on\b/.test(hay)) return { browse: "kids", sub: "ride-ons" };
+    if (/\bhelmet|knee\s*pad|elbow\s*pad\b/.test(hay)) return { browse: "kids", sub: "helmets-pads" };
+    if (/\bbike|bicycle|cycle\b/.test(hay)) return { browse: "kids", sub: "bikes" };
+    if (/\bshoe|sneaker|boot|sandal|trainer\b/.test(hay)) return { browse: "kids", sub: "shoes" };
+    if (/\btoy|lego|doll|puzzle\b/.test(hay)) return { browse: "kids", sub: "toys" };
+    if (/\bstroller|pram|cot\b/.test(hay)) return { browse: "kids", sub: "strollers" };
+    if (/\bbaby\b/.test(hay)) return { browse: "kids", sub: "baby-gear" };
+    if (/\bschool|uniform\b/.test(hay)) return { browse: "kids", sub: "school-wear" };
+    return { browse: "kids", sub: "clothing" };
   }
-  return mapped;
+  if (/\b(angle\s*grinder|grinder)\b/.test(hay)) return { browse: "power-tools", sub: "grinders" };
+  if (/\b(circular\s*saw|skill\s*saw)\b/.test(hay)) return { browse: "power-tools", sub: "circular-saws" };
+  if (/\b(jigsaw)\b/.test(hay)) return { browse: "power-tools", sub: "jigsaws" };
+  if (/\b(chainsaw|chain\s*saw|power\s*saw)\b/.test(hay)) return { browse: "power-tools", sub: "chain-powersaws" };
+  if (/\b(water\s*pump|borehole\s*pump)\b/.test(hay)) return { browse: "power-tools", sub: "water-pumps" };
+  if (/\b(welding\s*generator)\b/.test(hay)) return { browse: "power-tools", sub: "welding-generators" };
+  if (/\b(welder|welding\s*machine|arc\s*weld)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "welding-machines" };
+  }
+  if (/\b(spray\s*gun|paint\s*gun)\b/.test(hay)) return { browse: "power-tools", sub: "spray-guns" };
+  if (/\b(car\s*wash\s*gun|carwash\s*spray)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "carwash-spray-guns" };
+  }
+  if (/\b(impact\s*driver)\b/.test(hay)) return { browse: "power-tools", sub: "impact-drivers" };
+  if (/\b(air\s*compressor)\b/.test(hay)) return { browse: "power-tools", sub: "air-compressors" };
+  if (/\b(generator|genset)\b/.test(hay) && !/\bwelding\b/.test(hay)) {
+    return { browse: "power-tools", sub: "generators" };
+  }
+  if (/\b(drill\s*set|tool\s*set|toolset|drillset)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "toolsets-drillsets" };
+  }
+  if (/\b(cordless\s*drill|power\s*drill|\bdrill\b|makita|dewalt|bosch\s*tool)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "drills" };
+  }
+  if (/\b(hand\s*tool|spanner|wrench|hammer|screwdriver\s*set)\b/.test(hay)) {
+    return { browse: "power-tools", sub: "hand-tools" };
+  }
+  if (/\b(tv|television|smart\s*tv)\b/.test(hay)) return { browse: "electronics", sub: "tvs-audio" };
+  if (/\b(console|playstation|xbox|nintendo|controller|gaming)\b/.test(hay)) {
+    return { browse: "electronics", sub: "gaming" };
+  }
+  if (/\b(power\s*bank|phone\s*case|charger|earbud|airpod|phone\s*accessor)\b/.test(hay)) {
+    return { browse: "electronics", sub: "phones" };
+  }
+  if (/\b(laptop|notebook\s*pc|macbook)\b/.test(hay)) return { browse: "electronics", sub: "computing" };
+  if (/\b(camera|dslr|mirrorless)\b/.test(hay)) return { browse: "electronics", sub: "cameras" };
+  if (/\b(fridge|freezer|fan|air\s*con|ac\s*unit|washing\s*machine|blender)\b/.test(hay)) {
+    return { browse: "electronics", sub: "appliances" };
+  }
+  if (/\b(dog|cat|pet\s*food|leash|collar)\b/.test(hay)) return { browse: "pets", sub: "pet-food" };
+  if (/\b(plant|seedling|garden\s*tool|hose)\b/.test(hay)) return { browse: "garden", sub: "plants" };
+  if (/\b(notebook|pen|stationery|textbook)\b/.test(hay)) return { browse: "office", sub: "stationery" };
+  if (/\b(tusker|whitecap|guinness|local\s*beer|kenya\s*beer|\bbeer\b)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "local-beer" };
+  }
+  if (/\b(kenya\s*cane|kenyan\s*spirit|chrome\s*vodka|chrome)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "kenyan-spirits" };
+  }
+  if (/\b(red\s*wine|merlot|cabernet|shiraz)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "red-wine" };
+  }
+  if (/\b(white\s*wine|sauvignon|chardonnay)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "white-wine" };
+  }
+  if (/\b(champagne|prosecco|sparkling\s*wine)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "sparkling-champagne" };
+  }
+  if (/\b(whisky|whiskey|johnnie|jameson|scotch)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "whisky" };
+  }
+  if (/\b(\bgin\b|gordons|tanqueray)\b/.test(hay)) return { browse: "wines-spirits", sub: "gin" };
+  if (/\b(vodka|smirnoff)\b/.test(hay)) return { browse: "wines-spirits", sub: "vodka" };
+  if (/\b(cognac|brandy|hennessy|remy)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "cognac-brandy" };
+  }
+  if (/\b(\brum\b|bacardi|captain\s*morgan)\b/.test(hay)) return { browse: "wines-spirits", sub: "rum" };
+  if (/\b(cider|rtd|ready[- ]to[- ]drink|snapp)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "cider-rtd" };
+  }
+  if (/\b(liqueur|baileys|amarula)\b/.test(hay)) return { browse: "wines-spirits", sub: "liqueurs" };
+  if (/\b(mixer|tonic|soda\s*water|bitter\s*lemon)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "mixers" };
+  }
+  if (/\b(party\s*pack|crate|case\s*of\s*beer|dozen\s*beer)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "party-packs" };
+  }
+  if (/\b(non[- ]?alcoholic|alcohol[- ]free|0%\s*alcohol)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "non-alcoholic" };
+  }
+  if (/\b(\bwine\b|wines|spirits?|liquor|alcohol)\b/.test(hay)) {
+    return { browse: "wines-spirits", sub: "red-wine" };
+  }
+  if (/\b(nyama\s*choma|choma|mbuzi|nyama)\b/.test(hay)) {
+    return { browse: "restaurant", sub: "nyama-choma" };
+  }
+  if (/\b(ugali|sukuma)\b/.test(hay)) return { browse: "restaurant", sub: "ugali-plates" };
+  if (/\b(pilau|biryani)\b/.test(hay)) return { browse: "restaurant", sub: "pilau-biryani" };
+  if (/\b(chapati|mahamri|mandazi)\b/.test(hay)) return { browse: "restaurant", sub: "chapati-meals" };
+  if (/\b(githeri|matumbo|stew|soup)\b/.test(hay)) return { browse: "restaurant", sub: "githeri-stews" };
+  if (/\b(tilapia|fish|samaki|seafood)\b/.test(hay)) return { browse: "restaurant", sub: "fish-seafood" };
+  if (/\b(mutura|smokie|viazi|street\s*food|kibanda)\b/.test(hay)) {
+    return { browse: "restaurant", sub: "street-bites" };
+  }
+  if (/\b(vegan|plant[- ]based)\b/.test(hay)) return { browse: "restaurant", sub: "vegan-plant" };
+  if (/\b(diet|keto|low[- ]carb|diabetic)\b/.test(hay)) return { browse: "restaurant", sub: "diet-meals" };
+  if (/\b(juice|smoothie|uji)\b/.test(hay)) return { browse: "restaurant", sub: "fresh-juices" };
+  if (/\b(catering|platter|buffet)\b/.test(hay)) return { browse: "restaurant", sub: "catering-platters" };
+  if (/\b(breakfast|brunch)\b/.test(hay)) return { browse: "restaurant", sub: "breakfast" };
+  if (/\b(lunch\s*box|meal\s*prep)\b/.test(hay)) return { browse: "restaurant", sub: "lunch-boxes" };
+  if (/\b(dessert|cake|sweet)\b/.test(hay)) return { browse: "restaurant", sub: "desserts" };
+  if (/\b(chicken|kuku)\b/.test(hay) && /\b(meal|dish|plate|fried|stew)\b/.test(hay)) {
+    return { browse: "restaurant", sub: "chicken-dishes" };
+  }
+  if (isValidBrowsePath(tax, mapped.browse, mapped.sub)) return mapped;
+  return { browse: "trending", sub: "streetwear" };
 }
 
 async function buildListingPrompt(caption = "") {
   const tax = await getTaxonomy();
-  const categoryLines = VALID_CATEGORIES.map(
-    (c) => `- ${c}: subcategories → ${SUBCATEGORY_GUIDE[c] || c}`
-  ).join("\n");
-  const browseLines = tax.BROWSE_TAXONOMY.map(
-    (c) => `- ${c.id}: ${c.subcategories.map((s) => s.id).join(", ")}`
-  ).join("\n");
+  const sellerTax =
+    typeof tax.sellerBrowseTaxonomy === "function"
+      ? tax.sellerBrowseTaxonomy()
+      : tax.BROWSE_TAXONOMY.filter((c) => !c.navOnly);
+  const browseLines = sellerTax
+    .map((c) => `- ${c.id}: ${(c.subcategories || []).map((s) => s.id).join(", ")}`)
+    .join("\n");
   const capHints = caption ? parseCaptionHints(caption) : null;
 
   return (
-    `You catalog products for Sokoni Mall — a Kenyan WhatsApp marketplace (Depop-style browse).\n` +
-    `Study the product photo. Many supplier photos have NO price sticker and NO printed name.\n\n` +
-    `TASK — reply ONLY JSON (no markdown):\n` +
-    `1. *name* — clear English title (brand if visible, else item type + colour + style)\n` +
-    `2. *sourcePriceKes* — store cost in KES (integer)\n` +
+    `You are a Sokoni Mall listing assistant (Kenya) — fashion thrift AND local brand-new goods.\n` +
+    `Look ONLY at what is visible in the product photo. Do NOT invent brands, sizes, colours, or details you cannot see.\n` +
+    `If something is unclear, use null — never guess.\n\n` +
+    `Reply with ONLY a JSON object (no markdown fences).\n\n` +
+    `Required fields:\n` +
+    `1. name — short English title from what you see (type + colour + style). Include brand ONLY if a logo/label is readable.\n` +
+    `2. sellerNetKes — integer KES the seller receives.\n` +
     (capHints?.cost != null
-      ? `   - Caption price for this batch: use *${capHints.cost}*, ignore stickers.\n`
-      : `   - From sticker/tag, caption, or 0 if unknown.\n`) +
-    `3. *category* + *subcategory* — legacy catalog (see below)\n` +
-    `4. *browseCategory* + *browseSubCategory* — Depop-style drawer path (see BROWSE)\n` +
-    `5. *condition* — one of: ${VALID_CONDITIONS.join(", ")}\n` +
-    `6. *isSecondhand* — true for thrift/pre-loved/vintage, else false\n` +
-    `7. *brand*, *color* — strings or null\n` +
-    `8. *description* — 1–2 sentence shopper-friendly description\n\n` +
-    `LEGACY CATEGORIES:\n${categoryLines}\n\n` +
-    `BROWSE PATHS (browseCategory / browseSubCategory):\n${browseLines}\n\n` +
-    (caption ? `WhatsApp caption: "${caption}"\n\n` : "") +
-    `Example:\n` +
-    `{"name":"Women's Rhinestone Flat Sandals - Burgundy","sourcePriceKes":130,"category":"fashion","subcategory":"shoes","browseCategory":"women","browseSubCategory":"shoes","condition":"brand_new_without_tags","isSecondhand":false,"brand":null,"color":"burgundy","description":"Flat sandals with rhinestone detail. 100% prepaid across Kenya."}`
+      ? `   Caption already has the price: use ${capHints.cost} exactly. Ignore any sticker that differs.\n`
+      : `   Use a readable price sticker/tag if present; otherwise 0.\n`) +
+    `3. browseCategory + browseSubCategory — MUST be ids from BROWSE PATHS below (not free text, not "fashion").\n` +
+    `   Matching tips:\n` +
+    `   - Kids footwear → kids / shoes (never women/shoes heels).\n` +
+    `   - Phone chargers, cases, cables → electronics / phones (caption may say accessories).\n` +
+    `   - Power banks → electronics / phones.\n` +
+    `   - TVs → electronics / tvs-audio; consoles/controllers → electronics / gaming.\n` +
+    `   - Fans, AC, fridge cooling → electronics / appliances.\n` +
+    `   - Cameras → electronics / cameras; plugs/smart bulbs → electronics / smart-home.\n` +
+    `   - Pet food/collars → pets; notebooks/pens → office; plants/tools → garden.\n` +
+    `   - Skirts/jumpsuits/sleepwear → women; trousers/shorts/jackets → men.\n` +
+    `   - Kenyan meals/food (nyama choma, ugali, pilau, chapati, githeri, street bites, juices) → restaurant + matching sub.\n` +
+    `   - Prefer Kenya dishes/diets — not foreign restaurant chains or import cuisine labels.\n` +
+    `   - Beer, wine, whisky, gin, vodka, Kenya Cane, champagne, mixers → wines-spirits + matching sub (Kenya liquor aisle).\n` +
+    `   - Soft drinks alone stay supermarket/beverages; alcohol & bar stock → wines-spirits.\n` +
+    `4. category — one of: ${VALID_CATEGORIES.join(", ")}\n` +
+    `5. subcategory — short legacy slug (e.g. shoes, mens-fashion, womens-fashion)\n` +
+    `6. condition — exactly one of: ${VALID_CONDITIONS.join(", ")}\n` +
+    `   Prefer gently_used / like_new for worn thrift. Use brand_new_* only if tags/packaging clearly show new.\n` +
+    `7. isSecondhand — true unless clearly brand-new with packaging/tags\n` +
+    `8. brand — string or null (null if logo not readable)\n` +
+    `9. color — dominant colour string or null\n` +
+    `10. size — size label if visible on tag/item (e.g. "M", "UK 9", "32W/32L"), else null\n` +
+    `11. tags — array of up to 5 short vibe tags from the photo (e.g. ["vintage","denim","90s"]), else []\n` +
+    `12. description — 1–2 factual sentences about the item in the photo (no marketing fluff)\n` +
+    `13. Optional flat measurements in inches if garment is laid flat and measurable: pitToPitIn, lengthIn, waistIn (numbers or null)\n` +
+    `Do NOT suggest shipping fees or weight classes — sellers arrange delivery themselves.\n\n` +
+    `BROWSE PATHS (browseCategory / browseSubCategory — pick ONLY from this list):\n${browseLines}\n\n` +
+    (caption ? `Seller caption (hints only): "${caption}"\n\n` : "") +
+    `Example JSON:\n` +
+    `{"name":"Navy Nike Hoodie","sellerNetKes":2500,"category":"fashion","subcategory":"mens-fashion","browseCategory":"men","browseSubCategory":"hoodies","condition":"gently_used","isSecondhand":true,"brand":"Nike","color":"navy","size":"L","tags":["vintage","streetwear","90s"],"description":"Navy Nike pullover hoodie with visible swoosh. Light wear at cuffs.","pitToPitIn":22,"lengthIn":28,"waistIn":null}`
   );
 }
 
 function applyCaptionToDraft(parsed, caption = "") {
   const hints = parseCaptionHints(caption);
   const capCost = parseCost(caption);
+  // Caption/form price always wins when present — don't let a wrong sticker OCR overwrite it.
   if (capCost != null) {
     parsed.sourcePriceKes = capCost;
-  } else if (hints.cost != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes === 0)) {
+    parsed.sellerNetKes = capCost;
+  } else if (hints.cost != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0)) {
     parsed.sourcePriceKes = hints.cost;
+    parsed.sellerNetKes = hints.cost;
   }
   if (hints.category && !VALID_CATEGORIES.includes(parsed.category)) {
     parsed.category = hints.category;
   }
-  if (hints.subcategory) parsed.subcategory = hints.subcategory;
-  if (hints.nameHint && (!parsed.name || parsed.name.length < 4)) {
+  // Only fill subcategory from caption when AI left it empty/invalid — don't clobber a good vision read.
+  const aiSub = String(parsed.subcategory || "").trim();
+  if (hints.subcategory && (!aiSub || aiSub.length < 2)) {
+    parsed.subcategory = hints.subcategory;
+  }
+  if (hints.nameHint && (!parsed.name || parsed.name.length < 4 || /^product listing$/i.test(parsed.name))) {
     parsed.name = hints.nameHint;
   }
   if (hints.isSecondhand) parsed.isSecondhand = true;
   return parsed;
 }
 
+function normalizeOptionalInches(value) {
+  if (value == null || value === "") return undefined;
+  const n = Number(String(value).replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.round(n * 10) / 10;
+}
+
+function normalizeTags(raw) {
+  const list = Array.isArray(raw)
+    ? raw
+    : String(raw || "")
+        .split(/[,;#]+/)
+        .map((t) => t.trim());
+  return list
+    .map((t) => String(t || "").replace(/^#/, "").trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 export async function finalizeListingDraft(parsed, caption = "") {
+  // Alias price fields before caption merge / validation.
+  if (parsed.sellerNetKes != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0)) {
+    parsed.sourcePriceKes = parsed.sellerNetKes;
+  }
+  if (parsed.sourcePriceKes != null && (parsed.sellerNetKes == null || parsed.sellerNetKes <= 0)) {
+    parsed.sellerNetKes = parsed.sourcePriceKes;
+  }
+
   applyCaptionToDraft(parsed, caption);
 
   if (!parsed.name || String(parsed.name).trim().length < 3) {
@@ -270,17 +611,19 @@ export async function finalizeListingDraft(parsed, caption = "") {
   if (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0) {
     const capCost = parseCost(caption);
     if (capCost != null) parsed.sourcePriceKes = capCost;
-    else throw new Error("No price found — add caption e.g. `130 ksh per shoe` or `cost 130`");
+    else throw new Error("No price found — add your price on the sell form, or a caption e.g. `130 ksh`");
   }
 
   if (!VALID_CATEGORIES.includes(parsed.category)) parsed.category = inferCategory(parsed.name);
   parsed.subcategory = normalizeSubcategory(parsed.category, parsed.subcategory, parsed.name);
   parsed.sourcePriceKes = Math.round(Number(parsed.sourcePriceKes));
 
-  if (!VALID_CONDITIONS.includes(parsed.condition)) {
-    parsed.condition = inferConditionFromHints(parsed.name, Boolean(parsed.isSecondhand));
-  }
-  parsed.isSecondhand = Boolean(parsed.isSecondhand) || ["gently_used", "fair_condition", "like_new"].includes(parsed.condition);
+  const mappedCondition = normalizeCondition(parsed.condition);
+  if (mappedCondition) parsed.condition = mappedCondition;
+  else parsed.condition = inferConditionFromHints(parsed.name, Boolean(parsed.isSecondhand));
+  parsed.isSecondhand =
+    Boolean(parsed.isSecondhand) ||
+    ["gently_used", "fair_condition", "like_new"].includes(parsed.condition);
 
   const browse = await resolveBrowsePath({
     category: parsed.category,
@@ -288,14 +631,40 @@ export async function finalizeListingDraft(parsed, caption = "") {
     browseCategory: parsed.browseCategory,
     browseSubCategory: parsed.browseSubCategory,
     name: parsed.name,
+    caption,
   });
   parsed.browseCategory = browse.browse;
   parsed.browseSubCategory = browse.sub;
-  parsed.priceKes = computeRetailPrice(parsed.sourcePriceKes);
 
-  if (!parsed.description) {
-    parsed.description = `${parsed.name}. 100% prepaid across Kenya.`;
+  // Prefer caption price when present; otherwise keep AI sellerNet/sourcePrice.
+  const capCost = parseCost(caption);
+  const sellerNet = Math.round(
+    Number(capCost != null ? capCost : parsed.sellerNetKes ?? parsed.sourcePriceKes) || 0
+  );
+  parsed.sellerNetKes = sellerNet;
+  parsed.sourcePriceKes = sellerNet;
+  parsed.priceKes = sellerNet;
+
+  parsed.brand = sanitizeOptionalLabel(parsed.brand, 60);
+  parsed.color = sanitizeOptionalLabel(parsed.color, 40);
+  parsed.size = sanitizeOptionalLabel(parsed.size, 40);
+  parsed.tags = normalizeTags(parsed.tags);
+  parsed.pitToPitIn = normalizeOptionalInches(parsed.pitToPitIn);
+  parsed.lengthIn = normalizeOptionalInches(parsed.lengthIn);
+  parsed.waistIn = normalizeOptionalInches(parsed.waistIn);
+
+  const desc = String(parsed.description || "").trim();
+  if (!desc || /100% prepaid across Kenya/i.test(desc)) {
+    const bits = [parsed.name];
+    if (parsed.color) bits.push(`Colour: ${parsed.color}.`);
+    if (parsed.size) bits.push(`Size ${parsed.size}.`);
+    if (parsed.condition === "gently_used") bits.push("Pre-loved condition.");
+    parsed.description = bits.join(" ").slice(0, 2000);
+  } else {
+    parsed.description = desc.slice(0, 2000);
   }
+
+  Object.assign(parsed, applyAiShippingSuggestion(parsed));
 
   return parsed;
 }
@@ -306,9 +675,9 @@ export async function enrichManualDraft(draft, caption = "") {
   if (caption) applyCaptionToDraft(base, caption);
   if (!VALID_CATEGORIES.includes(base.category)) base.category = inferCategory(base.name);
   base.subcategory = normalizeSubcategory(base.category, base.subcategory, base.name);
-  if (!VALID_CONDITIONS.includes(base.condition)) {
-    base.condition = inferConditionFromHints(base.name, Boolean(base.isSecondhand));
-  }
+  const mappedCondition = normalizeCondition(base.condition);
+  if (mappedCondition) base.condition = mappedCondition;
+  else base.condition = inferConditionFromHints(base.name, Boolean(base.isSecondhand));
   base.isSecondhand = Boolean(base.isSecondhand);
   const browse = await resolveBrowsePath({
     category: base.category,
@@ -316,18 +685,18 @@ export async function enrichManualDraft(draft, caption = "") {
     browseCategory: base.browseCategory,
     browseSubCategory: base.browseSubCategory,
     name: base.name,
+    caption,
   });
   base.browseCategory = browse.browse;
   base.browseSubCategory = browse.sub;
-  const listingPrice = Math.round(Number(base.priceKes) || 0);
-  base.sourcePriceKes = Math.round(Number(base.sourcePriceKes) || 0);
-  if (listingPrice > 0) {
-    base.priceKes = listingPrice;
-    if (!base.sourcePriceKes) base.sourcePriceKes = Math.round(listingPrice * 0.92);
-  } else if (base.sourcePriceKes > 0) {
-    base.priceKes = computeRetailPrice(base.sourcePriceKes);
+  const sellerNet = Math.round(Number(base.sellerNetKes ?? base.priceKes ?? base.sourcePriceKes) || 0);
+  base.sellerNetKes = sellerNet;
+  base.sourcePriceKes = sellerNet;
+  base.priceKes = sellerNet;
+  if (base.shippingKes != null || base.freeShipping) {
+    Object.assign(base, applyAiShippingSuggestion(base));
   } else {
-    base.priceKes = 0;
+    Object.assign(base, applyAiShippingSuggestion({ name: base.name }));
   }
   return base;
 }
@@ -342,14 +711,27 @@ export function applyListingFieldsToProduct(product, draft) {
   if (draft.isSecondhand != null) product.isSecondhand = Boolean(draft.isSecondhand);
   if (draft.brand) product.brand = draft.brand;
   if (draft.color) product.color = draft.color;
+  if (draft.size) product.size = draft.size;
+  if (Array.isArray(draft.tags) && draft.tags.length) product.tags = draft.tags.slice(0, 5);
+  if (draft.pitToPitIn != null) product.pitToPitIn = Number(draft.pitToPitIn);
+  if (draft.lengthIn != null) product.lengthIn = Number(draft.lengthIn);
+  if (draft.waistIn != null) product.waistIn = Number(draft.waistIn);
   if (draft.description) product.description = draft.description;
-  if (draft.sourcePriceKes != null) {
-    product.sourcePriceKes = draft.sourcePriceKes;
-    product.priceKes = draft.priceKes != null ? draft.priceKes : computeRetailPrice(draft.sourcePriceKes);
-  } else if (draft.priceKes != null) {
-    product.priceKes = draft.priceKes;
-    product.sourcePriceKes = Math.round(draft.priceKes * 0.92);
+  if (draft.sourcePriceKes != null || draft.sellerNetKes != null || draft.priceKes != null) {
+    const sellerNet = Math.round(Number(draft.sellerNetKes ?? draft.sourcePriceKes ?? draft.priceKes) || 0);
+    product.sellerNetKes = sellerNet;
+    product.sourcePriceKes = sellerNet;
+    const fees = computeFeeBreakdown(sellerNet, product.shippingKes ?? draft.shippingKes, {
+      freeShipping: product.freeShipping ?? draft.freeShipping,
+      deliveryMethod: product.deliveryMethod ?? draft.deliveryMethod,
+    });
+    product.priceKes = fees.buyerTotalKes;
+    product.platformFeeKes = fees.platformFeeKes;
+    if (fees.transactionFeeKes != null) product.transactionFeeKes = fees.transactionFeeKes;
   }
+  if (draft.shippingKes != null) product.shippingKes = Math.round(Number(draft.shippingKes));
+  if (draft.freeShipping != null) product.freeShipping = Boolean(draft.freeShipping);
+  if (draft.estimatedWeightClass) product.estimatedWeightClass = draft.estimatedWeightClass;
   return product;
 }
 
@@ -363,12 +745,25 @@ export async function formatListingBrowseLabel(product) {
 }
 
 /**
- * Generate a listing draft from a product photo (OpenRouter vision, then Gemini/caption).
+ * Generate a listing draft from a product photo.
+ * Order: OpenRouter (primary) → NVIDIA NIM (random free VLMs) → Gemini → caption stub.
  * @param {Buffer} buffer
  * @param {string} mimetype
  * @param {string} [caption]
  */
 export async function generateListingFromImage(buffer, mimetype, caption = "") {
+  // MAS Phase 1 shadow — does not change primary OpenRouter→NVIDIA→Gemini chain
+  try {
+    const { shadowInboundText, shadowTask } = await import("./mas/index.js");
+    const { MAS_TASKS } = await import("./mas/tasks.js");
+    shadowInboundText(String(caption || "").slice(0, 2000), { channel: "listing" });
+    shadowTask(MAS_TASKS.FAST_VISION, {
+      text: `Listing draft assist (shadow). Caption: ${String(caption || "").slice(0, 400)}`,
+    });
+  } catch {
+    /* fail-soft */
+  }
+
   const prompt = await buildListingPrompt(caption);
   let lastError = null;
 
@@ -387,18 +782,26 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
     ];
 
     for (const model of visionModelChain()) {
+      // Skip known image-generation models that cannot describe photos.
+      if (/^krea\//i.test(model) || /image-gen|flux|dall-e|stable-diffusion/i.test(model)) {
+        console.warn(`[listing-generator] skipping non-vision model: ${model}`);
+        continue;
+      }
       try {
         const response = await client.chat.completions.create({
           model,
           messages,
-          max_tokens: 600,
-          temperature: 0.1,
+          max_tokens: 1200,
+          temperature: 0.05,
         });
 
         const raw = response.choices[0]?.message?.content?.trim() || "";
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error("Vision model returned no JSON");
         const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.sellerNetKes != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0)) {
+          parsed.sourcePriceKes = parsed.sellerNetKes;
+        }
         if (parsed.error && (!caption || !parseCost(caption))) throw new Error(parsed.error);
 
         await finalizeListingDraft(parsed, caption);
@@ -415,10 +818,38 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
         console.warn(`[listing-generator] openrouter failed (${model}):`, err.message);
       }
     }
-  } else {
+  } else if (!lastError) {
     lastError = new Error("OPENAI_API_KEY not set — OpenRouter vision unavailable");
   }
 
+  // NVIDIA NIM — free VLMs when OpenRouter is rate-limited / out of tokens.
+  if (nvidiaVisionAvailable()) {
+    try {
+      const { parsed, model } = await nvidiaVisionListingJson({
+        prompt,
+        imageBuffer: buffer,
+        mimeType: mimetype,
+      });
+      if (parsed.error && (!caption || !parseCost(caption))) throw new Error(String(parsed.error));
+      if (parsed.sellerNetKes != null && (!parsed.sourcePriceKes || parsed.sourcePriceKes <= 0)) {
+        parsed.sourcePriceKes = parsed.sellerNetKes;
+      }
+      await finalizeListingDraft(parsed, caption);
+      console.log(
+        `[listing-generator] ok via nvidia/${model}:`,
+        parsed.name,
+        parsed.sourcePriceKes,
+        parsed.browseCategory,
+        parsed.browseSubCategory
+      );
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      console.warn("[listing-generator] NVIDIA vision failed:", err.message);
+    }
+  }
+
+  // Gemini direct API — second fallback (generous free tier).
   if (geminiVisionAvailable()) {
     try {
       const { parsed, model } = await geminiVisionListingJson({
@@ -438,20 +869,23 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
       return parsed;
     } catch (err) {
       lastError = err;
-      console.warn("[listing-generator] Gemini vision fallback failed:", err.message);
+      console.warn("[listing-generator] Gemini vision failed:", err.message);
     }
   }
 
   const capCost = parseCost(caption);
   const hints = parseCaptionHints(caption);
-  if (capCost != null || hints.nameHint) {
+  // Caption-only fallback only when we have a real name hint — never invent "fashion" silently.
+  if (capCost != null && hints.nameHint && hints.nameHint.length > 3) {
     try {
       const stub = {
-        name: hints.nameHint || "Product listing",
-        sourcePriceKes: capCost || hints.cost || 0,
-        category: hints.category || "fashion",
+        name: hints.nameHint,
+        sourcePriceKes: capCost,
+        sellerNetKes: capCost,
+        category: hints.category || inferCategory(hints.nameHint),
         subcategory: hints.subcategory,
         isSecondhand: hints.isSecondhand,
+        condition: hints.isSecondhand ? "gently_used" : undefined,
       };
       await finalizeListingDraft(stub, caption);
       console.log("[listing-generator] caption-only fallback:", stub.name, stub.sourcePriceKes);
@@ -461,7 +895,25 @@ export async function generateListingFromImage(buffer, mimetype, caption = "") {
     }
   }
 
-  throw lastError || new Error("All vision models failed — add a caption with price e.g. `130 ksh women sandals`");
+  throw new Error(friendlyListingVisionError(lastError));
+}
+
+/** Never leak raw Gemini/NVIDIA/OpenRouter auth payloads to the sell page. */
+export function friendlyListingVisionError(err) {
+  const msg = String(err?.message || "");
+  if (/401|invalid authentication|UNAUTH|API_KEY_INVALID|PERMISSION_DENIED/i.test(msg)) {
+    return "AI draft unavailable right now — keep your price, fill the details, or try again in a minute.";
+  }
+  if (/429|rate limit|quota|insufficient/i.test(msg)) {
+    return "AI is busy right now — wait a moment and try again, or fill details manually.";
+  }
+  if (/Gemini|NVIDIA|openrouter|Vision model|no JSON/i.test(msg)) {
+    return "Could not read that photo clearly — check the image is sharp, add your price, and fill details manually if needed.";
+  }
+  if (!msg) {
+    return "Could not read that photo clearly — check the image is sharp, add your price, and fill details manually if needed.";
+  }
+  return msg.length > 160 ? `${msg.slice(0, 160)}…` : msg;
 }
 
 /** Build a draft from WhatsApp-style caption only (no photo). */
@@ -470,9 +922,11 @@ export async function generateListingFromCaption(caption = "") {
   const stub = {
     name: hints.nameHint || "",
     sourcePriceKes: hints.cost || parseCost(caption) || 0,
-    category: hints.category || "fashion",
+    sellerNetKes: hints.cost || parseCost(caption) || 0,
+    category: hints.category || (hints.nameHint ? inferCategory(hints.nameHint) : undefined),
     subcategory: hints.subcategory,
     isSecondhand: hints.isSecondhand,
+    condition: hints.isSecondhand ? "gently_used" : undefined,
   };
   return finalizeListingDraft(stub, caption);
 }

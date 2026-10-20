@@ -20,15 +20,20 @@
       .replace(/"/g, "&quot;");
   }
 
+  function browseThumb(src) {
+    return window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
+  }
+
+  function catIconHtml(cat) {
+    if (cat?.image) {
+      return `<span class="catalog-nav-emoji catalog-nav-emoji--img" aria-hidden="true"><img src="${escapeHtml(browseThumb(cat.image))}" alt="" width="40" height="40" loading="lazy" decoding="async" referrerpolicy="no-referrer" /></span>`;
+    }
+    return `<span class="catalog-nav-emoji" aria-hidden="true">${escapeHtml(cat?.emoji || "🛍️")}</span>`;
+  }
+
   function truncateName(name, max = 42) {
     const n = String(name || "").replace(/\s+/g, " ").trim();
     return n.length <= max ? n : `${n.slice(0, max - 1)}…`;
-  }
-
-  function dataUrl(file) {
-    const meta = document.querySelector('meta[name="sokoni-catalog-version"]');
-    const v = meta?.getAttribute("content") || String(Date.now());
-    return `${file}?v=${v}`;
   }
 
   function productKey(browseCat, browseSub) {
@@ -57,8 +62,32 @@
     }
   }
 
+  function resolveNav(categoryId, subId) {
+    return (
+      window.SokoniBrowse?.resolveNavFilter?.(categoryId, subId) || {
+        browse: categoryId,
+        sub: subId,
+      }
+    );
+  }
+
+  /** Products under a nav sub — honors resolvesTo (including browse-only aliases). */
+  function productsForSub(categoryId, subId) {
+    const nav = resolveNav(categoryId, subId);
+    if (!nav?.browse) return [];
+    if (nav.sub) return productsByKey.get(productKey(nav.browse, nav.sub)) || [];
+    // sub null → all products in that browse category
+    const out = [];
+    for (const [key, list] of productsByKey.entries()) {
+      if (key === nav.browse || key.startsWith(`${nav.browse}::`)) {
+        out.push(...list);
+      }
+    }
+    return out;
+  }
+
   function countForSub(categoryId, subId) {
-    return productsByKey.get(productKey(categoryId, subId))?.length || 0;
+    return productsForSub(categoryId, subId).length;
   }
 
   function findSubDef(categoryId, subId) {
@@ -102,7 +131,7 @@
       html += `
         <button type="button" class="catalog-nav-item catalog-nav-top ${isActiveCategory(item.id) ? "is-active" : ""}"
           data-nav-type="top" data-category="${item.id}">
-          <span class="catalog-nav-emoji">${item.emoji}</span>
+          ${catIconHtml(item)}
           <span class="catalog-nav-label">${item.label}</span>
         </button>`;
     }
@@ -117,7 +146,7 @@
           <button type="button" class="catalog-nav-item catalog-nav-cat ${catActive && !selection.subcategory ? "is-active" : ""}"
             data-nav-type="category" data-category="${cat.id}" aria-expanded="${catExpanded}">
             <span class="catalog-nav-chevron" aria-hidden="true"></span>
-            <span class="catalog-nav-emoji">${cat.emoji || "🛍️"}</span>
+            ${catIconHtml(cat)}
             <span class="catalog-nav-label">${escapeHtml(cat.label)}</span>
           </button>
           <div class="catalog-nav-children" ${catExpanded ? "" : "hidden"}>
@@ -127,7 +156,7 @@
         const count = countForSub(cat.id, sub.id);
         const subKey = `${cat.id}::${sub.id}`;
         const subExpanded = expandedSubcategories.has(subKey);
-        const products = (productsByKey.get(productKey(cat.id, sub.id)) || []).slice(0, MAX_PRODUCTS_PER_SUB);
+        const products = productsForSub(cat.id, sub.id).slice(0, MAX_PRODUCTS_PER_SUB);
         const more = count - products.length;
 
         html += `
@@ -272,6 +301,8 @@
   }
 
   function openPanel() {
+    // Mobile / narrow: left drawer. Desktop uses embedded category rail (no modal).
+    window.SokoniMegaMenu?.close?.();
     const panel = document.getElementById("catalog-nav-panel");
     const backdrop = document.getElementById("catalog-nav-backdrop");
     if (!panel) return;
@@ -320,14 +351,6 @@
 
     await window.SokoniBrowse?.loadMenu?.();
     menuData = window.SokoniBrowse?.getMenu?.() || null;
-    if (!menuData) {
-      try {
-        const res = await fetch(dataUrl("data/browse-menu.json"));
-        if (res.ok) menuData = await res.json();
-      } catch {
-        menuData = null;
-      }
-    }
 
     const toggle = document.getElementById("catalog-nav-toggle");
     const backdrop = document.getElementById("catalog-nav-backdrop");

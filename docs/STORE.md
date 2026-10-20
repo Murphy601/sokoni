@@ -1,4 +1,4 @@
-# Sokoni Store (Pay-on-Delivery)
+# Sokoni Store (Prepaid M-Pesa escrow)
 
 This is the model Sokoni runs on **right now**, so you don't have to wait for
 affiliate approvals to start selling. Customers just see "Sokoni Store" — the
@@ -11,8 +11,9 @@ words "reseller/dropship" are never shown to them.
 2. They're listed in the store at **your price = supplier cost + margin**. The
    current rule is a flat **+ KES 100** (buy at 300 → sell at 400).
 3. A customer orders through the website or the WhatsApp bot.
-4. They **pay on delivery** — cash or M-Pesa to the rider. No paying upfront,
-   which removes the #1 trust problem for a new brand.
+4. They **pay upfront via M-Pesa STK**, into Sokoni escrow. The seller is not paid
+   until the buyer has the item and confirms it, which is what removes the trust
+   problem for a new brand — the buyer's money is recoverable, cash at the door is not.
 5. You place the actual order with the supplier / buy from the wholesaler, and
    deliver.
 
@@ -61,7 +62,7 @@ A store item in the master file looks like this:
   "tags": ["smartphone", "camera", "battery"],
   "scope": "local",
   "fulfillment": "store",
-  "payment": "cod"
+  "payment": "prepaid"
 }
 ```
 
@@ -71,8 +72,8 @@ A store item in the master file looks like this:
 | `priceKes`       | What the customer pays = `sourcePriceKes` + your margin.     |
 | `source`         | Supplier, for **your** reference only (private).             |
 | `sourceUrl`      | Where **you** buy it to fulfil (private).                    |
-| `fulfillment`    | `"store"` — shows the pay-on-delivery "Order" button.       |
-| `payment`        | `"cod"` — pay on delivery.                                    |
+| `fulfillment`    | `"store"` — shows the prepaid "Order" button.               |
+| `payment`        | `"prepaid"` — M-Pesa STK into escrow.                        |
 
 ## Adding a real product in ~20 seconds
 
@@ -159,8 +160,8 @@ the ones you actually want to sell.
 ```
 BUSINESS_WHATSAPP_NUMBER=2547XXXXXXXX   # your selling number
 STORE_MARKUP_KES=100                    # flat margin per item
-STORE_COD_AREAS=Nairobi & environs
-STORE_DELIVERY_NOTE=Delivery in 1-3 days within Nairobi; countrywide via courier. Pay cash/M-Pesa on delivery.
+STORE_COD_AREAS=Nairobi & environs      # legacy env name; delivery areas only
+STORE_DELIVERY_NOTE=Delivery in 1-3 days within Nairobi; countrywide via courier. 100% prepaid — escrow until delivery confirmed.
 ADMIN_NOTIFY_URL=                       # optional webhook to receive new orders
 ```
 
@@ -169,8 +170,9 @@ real number so the website "Order" buttons open a chat with you.
 
 ## Order flow in the bot
 
-1. Customer taps **🛒 Order (COD)** on a product card.
+1. Customer taps **🛒 Order (prepaid escrow)** on a product card.
 2. Bot asks for name + delivery location + phone.
 3. Customer replies in one message; the bot confirms, logs the order, and (if
    `ADMIN_NOTIFY_URL` is set) POSTs the order to your webhook.
-4. You arrange delivery and collect payment on arrival.
+4. Customer pays by M-Pesa STK; funds sit in escrow.
+5. You arrange delivery. Escrow releases after the buyer confirms receipt.

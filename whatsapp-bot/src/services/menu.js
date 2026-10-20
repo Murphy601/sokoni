@@ -1,5 +1,6 @@
 import { config } from "../config.js";
-import { sendText, sendProductCard } from "./whatsapp.js";
+import { normalizePin } from "../lib/location-pin.js";
+import { sendText, sendProductCard, sendProductImage } from "./whatsapp.js";
 import { searchProducts, getProductById, findProductFromMessage, listCategoryProducts, listBrowseProducts, getPerfumeVariantsForFamily, listPerfumeScentFamilies } from "./catalog.js";
 import { buildBrowseSubmenus, priceTierMaxKes } from "./browse-menu.js";
 import { isCatalogPubliclyDisabled } from "./catalog-guard.js";
@@ -9,12 +10,26 @@ import {
   setPendingOrder,
   getPendingOrder,
   clearPendingOrder,
+  setPendingCart,
+  getPendingCart,
+  clearPendingCart,
   setMenuState,
+  getMenuState,
+  clearMenuState,
   setProductContext,
   clearHumanHandoff,
   getCustomerMeta,
   setCustomerMeta,
 } from "./session.js";
+import { isMultiSellerCartEnabled } from "./platform-flags.js";
+import {
+  createCartOrder,
+  parseCartHandoffMessage,
+  computeCartLineFees,
+  computeCartParentTotals,
+  getCartChildren,
+  CART_PARENT_KIND,
+} from "./cart-orders.js";
 import { startHumanHandoff, buildOrderAdminSummary } from "./handoff.js";
 import {
   createOrder,
@@ -29,7 +44,9 @@ import {
   initiateMpesaCheckout,
   isPrepaidOnly,
   prepaidPaymentLine,
+  checkoutUrlForOrder,
 } from "./prepaid-checkout.js";
+import { ensureHybridShippingBeforePayment } from "./apply-order-shipping.js";
 import {
   renderShipmentTimelineText,
   getEffectiveShipmentStatus,
@@ -40,15 +57,26 @@ import { planFulfillment, applyFulfillmentPlan, formatFulfillmentConfirmBlock, f
 import {
   welcomeMessage,
   howItWorksMessage,
-  prepaidOrderPlacedMessage,
 } from "./trust-copy.js";
 import { welcomeMessageForCustomer } from "./customer-automations.js";
+import { computeProductTotals, orderBuyerTotal, formatBuyerTotalLine, formatProductListPrice } from "./shipping-tiers.js";
 import {
   parseDeliveryDetails,
   isOrderCorrectionMessage,
-  deliveryDetailsHint,
-  looksLikeDeliveryDetails,
 } from "./delivery-details.js";
+import {
+  ORDER_STEPS,
+  parseLocationStep,
+  parseContactStep,
+  quoteShippingForPending,
+  locationPrompt,
+  feeBreakdownPrompt,
+  contactPrompt,
+  shortOrderPlacedMessage,
+  shortStkPrompt,
+  shortStkFailPrompt,
+} from "./prepaid-order-steps.js";
+import { applyShippingToOrder } from "./apply-order-shipping.js";
 
 export function formatNumberedMenu(title, options) {
   const lines = options.map((o, i) => `${i + 1}. ${o.label}`);
@@ -56,8 +84,58 @@ export function formatNumberedMenu(title, options) {
 }
 
 function sendNumberedMenu(to, title, options) {
-  setMenuState(to, { options });
+  setMenuState(to, { type: "numbered_menu", options });
   return sendText(to, formatNumberedMenu(title, options));
+}
+
+function parseMenuChoice(text) {
+  const match = String(text || "").trim().match(/^(\d{1,2})$/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Route a numbered reply (1, 2, 3…) to the active menu. Returns true if handled.
+ * Must run before human-handoff silence and before free-text product/AI routing.
+ */
+export async function tryNumberedMenuReply(customerKey, text, { phone = "" } = {}) {
+  const choice = parseMenuChoice(text);
+  if (!choice) return false;
+
+  const menuState = getMenuState(customerKey);
+  if (!menuState?.options?.length || choice > menuState.options.length) return false;
+
+  if (menuState.type === "product_list" || menuState.type === "product_list_paged") {
+    if (menuState.productIds?.[choice - 1]) {
+      return showProductActions(customerKey, menuState.productIds[choice - 1]);
+    }
+    return false;
+  }
+
+  const option = menuState.options[choice - 1];
+  if (!option?.id) return false;
+
+  clearHumanHandoff(customerKey);
+
+  if (menuState.type === "vendor_apply_gate" || menuState.type === "role_menu") {
+    const { handleVendorMenuAction } = await import("./role-menus.js");
+    return handleVendorMenuAction(customerKey, option.id, { phone });
+  }
+  if (menuState.type === "pickup_apply_gate") {
+    const { handlePickupMenuAction } = await import("./role-menus.js");
+    return handlePickupMenuAction(customerKey, option.id, { phone });
+  }
+  if (option.id === "human_handoff") {
+    const meta = getCustomerMeta(customerKey) || {};
+    return sendHumanHandoff(customerKey, { ...meta, phone, lastMessage: text });
+  }
+
+  try {
+    return await handleMenuAction(customerKey, option.id);
+  } catch (err) {
+    console.error("[menu] numbered reply failed:", err.message);
+    await sendText(customerKey, "Sorry, something went wrong. Type *menu* to try again.");
+    return true;
+  }
 }
 
 export async function sendWelcome(to) {
@@ -183,7 +261,7 @@ async function findSubcategoryRow(rowId) {
     const row = menu.rows.find((r) => r.id === rowId);
     if (row) {
       return {
-        browseCategory: menu.browseCategory,
+        browseCategory: row.browseCategory || menu.browseCategory,
         browseSubCategory: row.browseSubCategory || null,
         priceTier: row.priceTier || null,
         legacyCategory: row.legacyCategory || null,
@@ -293,7 +371,7 @@ export async function sendPerfumeSizePicker(to, scentFamily) {
 
   const lines = variants.map((p, i) => {
     const label = p.volumeMl === 1000 ? "1 Litre" : `${p.volumeMl}ml`;
-    return `${formatListNumber(i + 1)} *${label}* — ${formatKes(p.priceKes)} · 100% prepaid`;
+    return `${formatListNumber(i + 1)} *${label}* — ${formatProductListPrice(p)} · 100% prepaid`;
   });
 
   setMenuState(to, {
@@ -328,7 +406,7 @@ export async function sendPaginatedProductList(
 
   const lines = pageProducts.map(
     (p, i) =>
-      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · 100% prepaid`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatProductListPrice(p)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   let navFooter = "";
@@ -381,12 +459,12 @@ export async function sendNumberedProductList(to, products, { title = "Pick an i
   }
   const lines = products.map(
     (p, i) =>
-      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatKes(p.priceKes)} · ⭐ ${p.rating} · 100% prepaid`
+      `${formatListNumber(i + 1)} *${p.name}*\n   ${formatProductListPrice(p)} · ⭐ ${p.rating} · 100% prepaid`
   );
 
   const options = products.map((p) => ({
     id: `pick_${p.id}`,
-    label: `${p.name} — KES ${p.priceKes.toLocaleString()}`,
+    label: `${p.name} — ${formatProductListPrice(p)}`,
   }));
   options.push({ id: "menu_main", label: "⬅ Main menu" });
 
@@ -484,23 +562,33 @@ async function sendPrepaidCheckoutSafe(to, order) {
     const phone = fresh.phone || meta.phone;
     const result = await initiateMpesaCheckout(fresh, { phone });
     const updated = getOrder(order.id) || fresh;
+    const total = orderBuyerTotal(updated);
 
     if (result.alreadyPaid) return;
 
     if (result.ok) {
-      await sendText(to, formatPrepaidCheckoutPrompt(updated));
+      await sendText(to, shortStkPrompt(updated.id, total));
+      return;
+    }
+
+    // Shipping gate already WhatsApp'd buyer + seller and cancelled the order.
+    if (result.method === "shipping_blocked" || result.cancelled) {
+      if (result.message && !result.cancelled) {
+        await sendText(to, result.message);
+      }
       return;
     }
 
     await sendText(
       to,
-      `⚠️ Couldn't start M-Pesa payment${result.message ? `: ${result.message}` : ""}.\n\n` +
-        `Reply *pay* to retry STK push.\n\n` +
-        formatPrepaidCheckoutPrompt(updated)
+      shortStkFailPrompt(updated.id, total, checkoutUrlForOrder(updated.id))
     );
   } catch (err) {
     console.error("[checkout] prepaid prompt failed:", err.message);
-    await sendText(to, formatPrepaidCheckoutPrompt(order));
+    await sendText(
+      to,
+      shortStkFailPrompt(order.id, orderBuyerTotal(order), checkoutUrlForOrder(order.id))
+    );
   }
 }
 
@@ -557,7 +645,7 @@ function renderOrderCard(order) {
   return (
     `📦 *${order.id}*\n` +
     `🛍️ ${order.productName}\n` +
-    `💰 KES ${formatOrderKes(order.priceKes)} — ${paymentLineForOrder(order)}\n` +
+    `💰 ${formatBuyerTotalLine(order)} — ${paymentLineForOrder(order)}\n` +
     `📍 ${order.location}\n` +
     `🚚 ${formatFulfillmentLine(order)}\n` +
     courierLine +
@@ -565,13 +653,33 @@ function renderOrderCard(order) {
   );
 }
 
-/** Show a specific order by ID (customer typed e.g. SK-1042). */
+/** Show a specific order by ID (customer typed e.g. SKN-1002-1). */
 export async function sendOrderStatus(to, orderId, phone = "") {
   const order = getOrder(orderId);
   if (!orderBelongsToCustomer(order, to, phone)) {
     return sendText(to, `I couldn't find order *${orderId}* on this number. Type *track* to see your orders.`);
   }
   try {
+    if (order.kind === CART_PARENT_KIND) {
+      const children = getCartChildren(order.id);
+      const lines = children
+        .map(
+          (c) =>
+            `• *${c.id}* — ${c.productName}\n  ${statusLabel(c.status)} · ${c.shipmentStatus || "pending"} · escrow ${c.escrowStatus || "—"}`
+        )
+        .join("\n");
+      await sendText(
+        to,
+        `🛒 *Cart ${order.id}*\n` +
+          `Pay status: ${order.customerPaymentStatus === "confirmed" ? "✅ Paid" : "💳 Awaiting payment"}\n` +
+          `Total: KES ${orderBuyerTotal(order).toLocaleString()}\n` +
+          `Parent status: ${order.status}\n\n` +
+          `*Items:*\n${lines}\n\n` +
+          `_Track a child ID (e.g. ${children[0]?.id || "SKN-…-1"}) for shipment detail._`
+      );
+      if (order.customerPaymentStatus !== "confirmed") await sendPaymentReminderSafe(to, order);
+      return true;
+    }
     await sendText(to, renderOrderCard(order) + `\n\n_Need help? type *menu* → Talk to a Human._`);
     await sendPaymentReminderSafe(to, order);
     return true;
@@ -599,7 +707,7 @@ export async function sendTrackOrderMenu(to, phone = "") {
     if (pending) {
       blocks.push(
         `⏳ *Order not finished*\n` +
-          `${pending.name} — KES ${formatOrderKes(pending.priceKes)}\n` +
+          `${pending.name} — ${formatBuyerTotalLine(pending)}\n` +
           `Send your name, location & phone to complete it, or type *cancel*.`
       );
     }
@@ -611,7 +719,7 @@ export async function sendTrackOrderMenu(to, phone = "") {
       to,
       `📦 *Your Sokoni orders*\n\n` +
         blocks.join("\n\n━━━━━━━━━━━━━━━\n\n") +
-        `\n\n_Type an order number (e.g. ${orders[0]?.id || "SK-1001"}) for details, or *menu* to shop._`
+        `\n\n_Type an order number (e.g. ${orders[0]?.id || "SKN-1001"}) for details, or *menu* to shop._`
     );
     await sendPaymentReminderSafe(to, pickPaymentReminderOrder(orders));
     return true;
@@ -680,103 +788,502 @@ export async function startCodOrder(to, productId) {
   return startPrepaidOrder(to, productId);
 }
 
-export async function startPrepaidOrder(to, productId) {
+function phoneDigitsFromChat(to) {
+  const metaPhone = getCustomerMeta(to)?.phone;
+  const raw = String(metaPhone || to || "").replace(/\D/g, "");
+  if (raw.startsWith("0") && raw.length >= 10) return `254${raw.slice(1)}`;
+  if (raw.length === 9) return `254${raw}`;
+  return raw;
+}
+
+/** Start prepaid checkout from an accepted structured offer (agreed buyer total). */
+export async function startPrepaidOrderFromOffer(to, offerId) {
+  try {
+    const { findOrCreateBuyerUserByPhone } = await import("../db/repositories/users.js");
+    const { getAcceptedOfferForCheckout } = await import("../db/repositories/social.js");
+    const phone = phoneDigitsFromChat(to);
+    const userResult = await findOrCreateBuyerUserByPhone(phone);
+    if (userResult.error || !userResult.user?.id) {
+      return sendText(
+        to,
+        "I couldn't match your WhatsApp to a Sokoni buyer profile. Open the site, verify WhatsApp, then reply *pay_offer_" +
+          String(offerId) +
+          "* again."
+      );
+    }
+    const checkout = await getAcceptedOfferForCheckout({
+      offerId,
+      buyerUserId: userResult.user.id,
+    });
+    if (checkout.error) {
+      return sendText(to, checkout.message || "That offer can't be checked out right now.");
+    }
+    return startPrepaidOrder(to, checkout.productId, {
+      offerId: checkout.offer.id,
+      totalsOverride: checkout.breakdown,
+    });
+  } catch (err) {
+    console.error("[offer-checkout] start failed:", err.message);
+    return sendText(to, "Couldn't start offer checkout right now. Try again in a moment.");
+  }
+}
+
+export async function startPrepaidOrder(to, productId, { offerId = null, totalsOverride = null } = {}) {
   const product = await getProductById(productId);
   if (!product) return sendMainMenu(to);
+
+  let totals = totalsOverride;
+  let activeOfferId = offerId;
+
+  if (activeOfferId && !totals) {
+    return startPrepaidOrderFromOffer(to, activeOfferId);
+  }
+
+  if (!totals) {
+    totals = computeProductTotals(product);
+  }
+
   setPendingOrder(to, {
     productId: product.id,
     name: product.name,
-    priceKes: product.priceKes,
+    priceKes: totals.itemKes,
+    shippingKes: totals.shippingKes || 0,
+    totalKes: totals.totalKes,
+    platformFeeKes: totals.platformFeeKes,
+    sellerNetKes: totals.sellerNetKes,
+    shopHandle: product.shopHandle || product.sellerHandle || null,
+    supplierId: product.supplierId || null,
+    sellerPhone: product.sellerPhone || null,
+    offerId: activeOfferId || null,
+    fromOffer: Boolean(activeOfferId),
+    step: ORDER_STEPS.LOCATION,
+    quote: null,
   });
-  return sendText(
-    to,
-    `Great choice! 🛍️\n` +
-      `*${product.name}* — KES ${product.priceKes.toLocaleString()} (100% prepaid · escrow)\n\n` +
-      `To place your order, reply in *one message* with:\n` +
-      `1️⃣ Your full name\n` +
-      `2️⃣ Delivery location (estate/town + a landmark)\n` +
-      `3️⃣ Phone number for the rider\n\n` +
-      `_Example: Jane Wanjiru, Umoja 1 near the market, 07xx xxx xxx_\n\n` +
-      `You'll pay upfront via M-Pesa before we dispatch — no COD.\n\n` +
-      `Wrong item? Type *cancel* or tell me the correct product name.`
-  );
+  // Leave product menu so reply "1" means Continue on the fee quote, not Order again.
+  clearMenuState(to);
+
+  if (activeOfferId) {
+    return sendText(
+      to,
+      `*${product.name}*\n` +
+        `Offer: *KES ${Number(totals.totalKes).toLocaleString()}*\n\n` +
+        `Where should we deliver?\n` +
+        `Reply: *County, Town, delivery spot*\n` +
+        `_e.g. Kiambu, Ruiru, Quickmart gate_\n\n` +
+        `Type *cancel* to stop.`
+    );
+  }
+
+  return sendText(to, locationPrompt(product.name));
 }
 
 /** Handle messages while customer is mid-order (before confirm). */
-export async function tryHandlePendingOrder(to, text) {
+export async function tryHandlePendingOrder(to, text, { location = null } = {}) {
+  const raw = String(text || "");
+  const lower = raw.trim().toLowerCase();
+
+  // Blank / media-only messages are not delivery answers — let photo match (etc.) run.
+  // Still allow cancel when they typed it.
+  const hasTypedAnswer = Boolean(raw.trim());
+
+  const pendingCart = getPendingCart(to);
+  if (pendingCart?.lines?.length) {
+    if (/^(cancel|stop|nevermind|abort)(\s+order)?$/i.test(lower) || /cancel order/i.test(lower)) {
+      clearPendingCart(to);
+      await sendText(to, "Cart cancelled. Type *menu*.");
+      return true;
+    }
+    if (!hasTypedAnswer) return false;
+    const parsed = parseDeliveryDetails(text);
+    if (!parsed) {
+      await sendText(
+        to,
+        `Cart (${pendingCart.lines.length} items) — send: *Name, location, phone*\n` +
+          `_e.g. Jane Wanjiru, Ruiru Quickmart, 0712345678_`
+      );
+      return true;
+    }
+    return confirmCartOrder(to, parsed);
+  }
+
   const pending = getPendingOrder(to);
   if (!pending) return false;
 
-  const lower = text.toLowerCase();
-
   if (/^(cancel|stop|nevermind|abort)(\s+order)?$/i.test(lower) || /cancel order/i.test(lower)) {
     clearPendingOrder(to);
-    await sendText(to, "Order cancelled ✅ Type *menu* to shop again.");
+    await sendText(to, "Cancelled. Type *menu*.");
     return true;
   }
 
+  if (!hasTypedAnswer) return false;
+
+  // Legacy pending orders without step → start at location
+  const step = pending.step || ORDER_STEPS.LOCATION;
+
+  if (step === ORDER_STEPS.LOCATION) {
+    // A dropped pin is the best answer this step can get: it prices the
+    // delivery exactly and it is what the rider's CONFIRM geofence checks
+    // against. Without one the drop-off has to be geocoded from typed text,
+    // which is what leaves "drop-off GPS not on file" at the door.
+    const droppedPin = normalizePin(location);
+    if (droppedPin) {
+      setPendingOrder(to, { ...pending, buyerLat: droppedPin.lat, buyerLng: droppedPin.lng });
+      pending.buyerLat = droppedPin.lat;
+      pending.buyerLng = droppedPin.lng;
+      if (!pending.buyerCounty) {
+        await sendText(
+          to,
+          `📍 Pin saved — the rider will use it to find you.\n\n` +
+            `Now send: *County, Town, delivery spot*\n_e.g. Kiambu, Ruiru, Quickmart gate_`
+        );
+        return true;
+      }
+    }
+
+    const loc = parseLocationStep(text);
+    if (!loc) {
+      await sendText(
+        to,
+        `Send: *County, Town, delivery spot*\n_e.g. Kiambu, Ruiru, Quickmart gate_\n\nType *cancel* to stop.`
+      );
+      return true;
+    }
+
+    const catalogProduct = pending.productId ? await getProductById(pending.productId) : null;
+    const quoteBase = {
+      ...pending,
+      shopHandle: pending.shopHandle || catalogProduct?.shopHandle || catalogProduct?.sellerHandle,
+      sellerHandle: catalogProduct?.sellerHandle,
+      supplierId: pending.supplierId || catalogProduct?.supplierId,
+      sellerNetKes: pending.sellerNetKes ?? catalogProduct?.sellerNetKes ?? pending.priceKes,
+    };
+    const quote = quoteShippingForPending(quoteBase, {
+      ...loc,
+      buyerCoordinates: normalizePin({ lat: pending.buyerLat, lng: pending.buyerLng }),
+    });
+    if (!quote.ok) {
+      await sendText(to, `${quote.message || "Can't deliver there."}\nTry another county, or *cancel*.`);
+      return true;
+    }
+
+    setPendingOrder(to, {
+      ...pending,
+      ...quoteBase,
+      step: ORDER_STEPS.CONFIRM_FEES,
+      buyerCounty: loc.county,
+      buyerTown: loc.town,
+      landmark: loc.landmark,
+      buyerLat: pending.buyerLat ?? null,
+      buyerLng: pending.buyerLng ?? null,
+      quote,
+      shippingKes: quote.shippingKes,
+      totalKes: quote.totalKes,
+      platformFeeKes: quote.platformFeeKes,
+      shippingCommissionKes: quote.shippingCommissionKes ?? 0,
+      transactionFeeKes: quote.transactionFeeKes ?? 0,
+      sellerNetKes: quote.sellerNetKes,
+      sellerPayoutKes: quote.sellerPayoutKes,
+      shippingRecipient: "seller",
+    });
+    await sendText(to, feeBreakdownPrompt(pending.name, quote));
+    return true;
+  }
+
+  if (step === ORDER_STEPS.CONFIRM_FEES) {
+    // Accept bare 1/2 even if WAHA appends quoted card text.
+    const feeChoice = String(text || "").trim().match(/^([12])(?:\b|[^\d]|$)/);
+    if (feeChoice?.[1] === "2" || /^(change|back|edit|location)$/i.test(lower)) {
+      setPendingOrder(to, {
+        ...pending,
+        step: ORDER_STEPS.LOCATION,
+        quote: null,
+      });
+      await sendText(to, locationPrompt(pending.name));
+      return true;
+    }
+    if (feeChoice?.[1] === "1" || /^(yes|ok|okay|continue|proceed)$/i.test(lower)) {
+      setPendingOrder(to, { ...pending, step: ORDER_STEPS.CONTACT });
+      clearMenuState(to);
+      await sendText(to, contactPrompt());
+      return true;
+    }
+    await sendText(to, `Reply *1* to continue or *2* to change location.`);
+    return true;
+  }
+
+  if (step === ORDER_STEPS.CONTACT) {
+    const contact = parseContactStep(text);
+    if (!contact) {
+      // Backward-compat: full "name, location, phone" still works
+      const legacy = parseDeliveryDetails(text);
+      if (legacy) {
+        return confirmPrepaidOrder(to, {
+          name: legacy.name,
+          phone: legacy.phone,
+          location:
+            [pending.landmark, pending.buyerTown, pending.buyerCounty].filter(Boolean).join(", ") ||
+            legacy.location,
+        });
+      }
+      await sendText(to, contactPrompt());
+      return true;
+    }
+    const locationLine = [pending.landmark, pending.buyerTown, pending.buyerCounty]
+      .filter(Boolean)
+      .join(", ");
+    return confirmPrepaidOrder(to, {
+      name: contact.name,
+      phone: contact.phone,
+      location: locationLine || pending.buyerCounty || "Kenya",
+      deliveryCounty: pending.buyerCounty,
+      deliveryTown: pending.buyerTown,
+      landmarkNote: pending.landmark,
+    });
+  }
+
+  // Fallback for unknown step
   if (isOrderCorrectionMessage(text)) {
     const alt = await findProductFromMessage(text);
     if (alt) return startPrepaidOrder(to, alt.id);
     clearPendingOrder(to);
-    await sendText(
-      to,
-      "Order cancelled. Type *menu* → browse categories, pick a number, then reply *1* to order."
-    );
+    await sendText(to, "Cancelled. Type *menu*.");
     return true;
   }
 
   const parsed = parseDeliveryDetails(text);
-  if (!parsed) {
-    if (!looksLikeDeliveryDetails(text)) {
-      const alt = await findProductFromMessage(text);
-      if (alt && alt.id !== pending.productId) return startPrepaidOrder(to, alt.id);
-    }
-    await sendText(
-      to,
-      `Still ordering *${pending.name}*.\n\n` +
-        `${deliveryDetailsHint(text)}\n\n` +
-        `_Example: Jane Wanjiru, Umoja 1 near the market, 0712345678_\n\n` +
-        `Wrong item? Type *cancel* or say e.g. "I want Hisense TV instead".`
-    );
-    return true;
-  }
+  if (parsed) return confirmPrepaidOrder(to, parsed);
 
-  return confirmPrepaidOrder(to, parsed);
+  await sendText(to, locationPrompt(pending.name));
+  return true;
 }
 
 export async function cancelOrder(to) {
+  if (getPendingCart(to)) {
+    clearPendingCart(to);
+    return sendText(to, "Cart cancelled. Type *menu*.");
+  }
   if (getPendingOrder(to)) {
     clearPendingOrder(to);
-    return sendText(to, "Your order was cancelled ✅ Type *menu* to shop again.");
+    return sendText(to, "Cancelled. Type *menu*.");
   }
-  return sendText(to, "You don't have an open order. Type *menu* to browse and order.");
+  return sendText(to, "No open order. Type *menu*.");
 }
 
 export async function changeOrder(to) {
   if (getPendingOrder(to)) {
     clearPendingOrder(to);
-    return sendText(
-      to,
-      "Order cleared ✅ Type *menu* → browse → reply with the item number, then *1* to order the new item."
-    );
+    return sendText(to, "Cleared. Type *menu*, pick an item, reply *1*.");
   }
-  return sendText(to, "No active order to change. Type *menu* to start shopping.");
+  return sendText(to, "No open order. Type *menu*.");
 }
 
 export async function handleCart(to) {
+  const pendingCart = getPendingCart(to);
+  if (pendingCart?.lines?.length) {
+    const n = pendingCart.lines.length;
+    return sendText(
+      to,
+      `🛒 Cart (${n}) · ~KES ${Number(pendingCart.estimatedTotalKes || 0).toLocaleString()}\n` +
+        `Send: *Name, location, phone*\n` +
+        `Or *cancel*.`
+    );
+  }
   const pending = getPendingOrder(to);
   if (pending) {
     return sendText(
       to,
-      `🛒 *Your current order:*\n*${pending.name}* — KES ${pending.priceKes.toLocaleString()} (100% prepaid)\n\n` +
-        `Send delivery details to complete, or type *cancel* / *change order*.`
+      `Ordering *${pending.name}*.\nFinish the steps, or *cancel*.`
     );
+  }
+  if (!isMultiSellerCartEnabled()) {
+    return sendText(to, "One item at a time. Type *menu* → pick → reply *1*.");
   }
   return sendText(
     to,
-    "Sokoni orders one item at a time (100% prepaid — no cart).\n\nType *menu* → browse → reply with an item number → *1* to order."
+    "Bag on the website, then *Order cart on WhatsApp*.\nOr type *menu* for one item."
   );
+}
+
+/**
+ * Website bag handoff (SOKONI_CART + [SKU:id]).
+ * Flow: product images for each line → ONE message asking name / landmark / phone.
+ * No AI till prompts, no "pick a number" lists.
+ */
+export async function startCartFromHandoff(to, text) {
+  if (!isMultiSellerCartEnabled()) return false;
+  const parsed = parseCartHandoffMessage(text);
+  if (!parsed?.lines?.length) return false;
+
+  clearPendingOrder(to);
+  clearMenuState(to);
+
+  const resolved = [];
+  for (const line of parsed.lines.slice(0, 20)) {
+    const product = await getProductById(line.productId);
+    if (!product) continue;
+    const fees = computeCartLineFees({ ...product, productId: product.id }, line.quantity || 1);
+    resolved.push({ product: { ...product, productId: product.id }, quantity: fees.quantity, fees });
+  }
+  if (!resolved.length) {
+    await sendText(
+      to,
+      "I couldn't match those bag items in the catalog. Open the site bag again or type *menu* to browse."
+    );
+    return true;
+  }
+
+  const parentTotals = computeCartParentTotals(resolved.map((r) => r.fees));
+  setPendingCart(to, {
+    lines: resolved.map((r) => ({
+      productId: r.product.id,
+      quantity: r.quantity,
+      name: r.product.name,
+      lineBuyerKes: r.fees.lineBuyerKes,
+    })),
+    estimatedTotalKes: parentTotals.totalKes,
+    estimatedTxnFeeKes: parentTotals.transactionFeeKes,
+    estimatedPlatformFeeKes: parentTotals.platformFeeKes,
+    createdAt: Date.now(),
+  });
+
+  // 1) Show each ordered item with its photo (no order-action menus)
+  for (const r of resolved) {
+    const caption =
+      `*${r.product.name}*\n` +
+      `KES ${r.fees.lineBuyerKes.toLocaleString()}` +
+      (r.quantity > 1 ? ` × ${r.quantity}` : "") +
+      `\n_In your cart_`;
+    try {
+      const sent = await sendProductImage(to, r.product, caption);
+      if (!sent) {
+        await sendText(to, caption);
+      }
+    } catch (err) {
+      console.warn("[cart] image send failed:", r.product.id, err.message);
+      await sendText(to, caption);
+    }
+  }
+
+  await sendText(
+    to,
+    `🛒 ${resolved.length} items · *KES ${parentTotals.totalKes.toLocaleString()}*\n` +
+      `Send: *Name, location, phone*\n` +
+      `_e.g. Amina Otieno, Archways Mall, 0712345678_`
+  );
+  return true;
+}
+
+export async function confirmCartOrder(to, parsed) {
+  const pending = getPendingCart(to);
+  if (!pending?.lines?.length) return false;
+
+  const details =
+    typeof parsed === "string" ? parseDeliveryDetails(parsed) : parsed;
+  if (!details) {
+    await sendText(
+      to,
+      `Send: *Name, location, phone*\n_e.g. Jane Wanjiru, Ruiru Quickmart, 0712345678_`
+    );
+    return true;
+  }
+
+  clearPendingCart(to);
+  setCustomerMeta(to, { phone: details.phone.replace(/\D/g, "") });
+  const meta = getCustomerMeta(to) || {};
+
+  const lineInputs = [];
+  for (const line of pending.lines) {
+    const product = await getProductById(line.productId);
+    if (!product) continue;
+    lineInputs.push({
+      product: { ...product, productId: product.id },
+      quantity: line.quantity || 1,
+    });
+  }
+  if (!lineInputs.length) {
+    await sendText(to, "Those cart items are no longer available. Type *menu* to browse again.");
+    return true;
+  }
+
+  let created = null;
+  try {
+    created = createCartOrder({
+      customerKey: to,
+      chatId: meta.chatId || to,
+      lines: lineInputs,
+      details,
+    });
+  } catch (err) {
+    console.error("[cart] createCartOrder failed:", err.message);
+    await sendText(
+      to,
+      `Could not create the cart order (${err.message}). Type *menu* or try a single-item order.`
+    );
+    return true;
+  }
+
+  let { parent, children } = created;
+  try {
+    const ensured = await ensureHybridShippingBeforePayment(parent);
+    if (ensured?.order) parent = ensured.order;
+    children = (parent.itemIds || []).map((id) => getOrder(id)).filter(Boolean);
+  } catch (err) {
+    console.warn("[cart] hybrid shipping ensure skipped:", err?.message || err);
+  }
+
+  // Block STK before celebrating — missing Hub rates cancel the cart parent.
+  try {
+    const { gateShippingBeforeStk } = await import("./shipping-gate.js");
+    const gated = await gateShippingBeforeStk(parent);
+    if (!gated.ok) {
+      return true;
+    }
+    parent = gated.order || parent;
+    children = (parent.itemIds || []).map((id) => getOrder(id)).filter(Boolean);
+  } catch (err) {
+    console.error("[cart] shipping gate FAILED — blocking STK:", err?.message || err);
+    try {
+      const { cancelOrderMissingShipping } = await import("./shipping-gate.js");
+      await cancelOrderMissingShipping(parent, { reason: "shipping_gate_error" });
+    } catch (_) {
+      /* ignore */
+    }
+    return true;
+  }
+
+  const childLines = children
+    .map((c) => `• *${c.id}* — ${c.productName}`)
+    .join("\n");
+
+  try {
+    await sendText(
+      config.admin.primary,
+      `🛒 *CART ORDER ${parent.id}*\n` +
+        `${children.length} lines · KES ${orderBuyerTotal(parent).toLocaleString()}\n` +
+        `Buyer: ${details.name} · ${details.phone}\n` +
+        `📍 ${details.location}\n` +
+        `${childLines}`
+    );
+  } catch (err) {
+    console.error("[cart] admin notify failed:", err.message);
+  }
+
+  const shipLine =
+    Math.round(Number(parent.shippingKes) || 0) > 0
+      ? `🚚 Shipping: KES ${Math.round(Number(parent.shippingKes)).toLocaleString()}\n`
+      : "";
+
+  await sendText(
+    to,
+    `✅ *${parent.id}*\n` +
+      `${childLines}\n` +
+      shipLine +
+      `*KES ${orderBuyerTotal(parent).toLocaleString()}*\n` +
+      `${details.name} · ${details.phone}`
+  );
+
+  await sendPrepaidCheckoutSafe(to, parent);
+  return true;
 }
 
 export async function confirmPrepaidOrder(to, parsed) {
@@ -785,25 +1292,137 @@ export async function confirmPrepaidOrder(to, parsed) {
 
   const details =
     typeof parsed === "string" ? parseDeliveryDetails(parsed) : parsed;
-  if (!details) {
-    await sendText(
-      to,
-      `I can't place the order yet — I still need your delivery details.\n\n` +
-        `${deliveryDetailsHint(typeof parsed === "string" ? parsed : text)}\n\n` +
-        `_Example: Jane Wanjiru, Umoja 1 near the market, 0712345678_`
-    );
+  if (!details?.name || !details?.phone) {
+    await sendText(to, contactPrompt());
     return true;
   }
-
-  clearPendingOrder(to);
 
   setCustomerMeta(to, { phone: details.phone.replace(/\D/g, "") });
 
   const meta = getCustomerMeta(to) || {};
   const catalogProduct = pending.productId ? await getProductById(pending.productId) : null;
   const productForOrder = catalogProduct
-    ? { ...catalogProduct, productId: catalogProduct.id }
+    ? {
+        ...catalogProduct,
+        productId: catalogProduct.id,
+        shopHandle:
+          catalogProduct.shopHandle ||
+          catalogProduct.sellerHandle ||
+          pending.shopHandle ||
+          null,
+      }
     : pending;
+
+  // Strict re-quote at contact confirm — never create order / fire STK on stale or
+  // missing Hub rates (old path treated missing profile as free shipping → STK).
+  const county = details.deliveryCounty || pending.buyerCounty || "";
+  const town = details.deliveryTown || pending.buyerTown || "";
+  const quoteBase = {
+    ...pending,
+    shopHandle:
+      pending.shopHandle || catalogProduct?.shopHandle || catalogProduct?.sellerHandle,
+    sellerHandle: catalogProduct?.sellerHandle,
+    supplierId: pending.supplierId || catalogProduct?.supplierId,
+    sellerNetKes: pending.sellerNetKes ?? catalogProduct?.sellerNetKes ?? pending.priceKes,
+  };
+
+  let quote = null;
+  let totalsOverride = null;
+
+  if (county) {
+    quote = quoteShippingForPending(quoteBase, {
+      county,
+      town,
+      landmark: details.landmarkNote || pending.landmark || "",
+      tier: pending.tier,
+    });
+    if (!quote?.ok || !quote?.configured) {
+      clearPendingOrder(to);
+      const region = county || town || "your area";
+      await sendText(
+        to,
+        quote?.message ||
+          [
+            `❌ *ORDER NOT STARTED*`,
+            ``,
+            `We could not process checkout because shipping is not set for *${region}* yet.`,
+            ``,
+            `• Status: No order created.`,
+            `• Payment: No M-Pesa prompt will be sent.`,
+            ``,
+            `Reply *menu* to keep shopping.`,
+          ].join("\n")
+      );
+      try {
+        const { findSupplierByPhone, getSupplier } = await import("./suppliers.js");
+        const { msgSellerShippingCancel } = await import("../lib/wa-ux.js");
+        const sup =
+          (pending.supplierId && getSupplier(pending.supplierId)) ||
+          findSupplierByPhone(pending.sellerPhone) ||
+          null;
+        const sellerPhone = String(sup?.phone || pending.sellerPhone || "").replace(/\D/g, "");
+        if (sellerPhone.length >= 9) {
+          await sendText(
+            `${sellerPhone}@c.us`,
+            msgSellerShippingCancel("pending", pending.name || "item", region)
+          );
+        }
+      } catch (err) {
+        console.warn("[order] seller shipping-block notify:", err?.message || err);
+      }
+      return true;
+    }
+    totalsOverride = {
+      itemKes: quote.itemKes,
+      shippingKes: quote.shippingKes,
+      totalKes: quote.totalKes,
+      platformFeeKes: quote.platformFeeKes,
+      shippingCommissionKes: quote.shippingCommissionKes ?? 0,
+      transactionFeeKes: quote.transactionFeeKes,
+      sellerNetKes: quote.sellerNetKes,
+      sellerPayoutKes: quote.sellerPayoutKes,
+      freeShipping: quote.freeShipping,
+      deliveryMethod: "seller_express",
+      shippingRecipient: "seller",
+      shippingSource: "hub",
+    };
+  } else if (pending.offerId && pending.totalKes != null) {
+    // Negotiated offers may skip county quote; STK gate still runs below.
+    totalsOverride = {
+      itemKes: pending.priceKes,
+      shippingKes: pending.shippingKes || 0,
+      totalKes: pending.totalKes,
+      platformFeeKes: pending.platformFeeKes,
+      sellerNetKes: pending.sellerNetKes,
+    };
+  } else if (pending.quote?.ok && pending.quote?.configured) {
+    quote = pending.quote;
+    totalsOverride = {
+      itemKes: quote.itemKes,
+      shippingKes: quote.shippingKes,
+      totalKes: quote.totalKes,
+      platformFeeKes: quote.platformFeeKes,
+      shippingCommissionKes: quote.shippingCommissionKes ?? 0,
+      transactionFeeKes: quote.transactionFeeKes,
+      sellerNetKes: quote.sellerNetKes,
+      sellerPayoutKes: quote.sellerPayoutKes,
+      freeShipping: quote.freeShipping,
+      deliveryMethod: "seller_express",
+      shippingRecipient: "seller",
+      shippingSource: "hub",
+    };
+  } else {
+    clearPendingOrder(to);
+    await sendText(
+      to,
+      `❌ *ORDER NOT STARTED*\n\n` +
+        `Delivery location is missing, so we cannot verify shipping rates.\n` +
+        `No M-Pesa prompt will be sent. Reply *menu* and order again.`
+    );
+    return true;
+  }
+
+  clearPendingOrder(to);
 
   let order = null;
   try {
@@ -811,15 +1430,76 @@ export async function confirmPrepaidOrder(to, parsed) {
       customerKey: to,
       chatId: meta.chatId || to,
       product: productForOrder,
-      details,
+      details: {
+        ...details,
+        deliveryType: details.deliveryType || "other",
+        landmarkTown: details.deliveryTown || pending.buyerTown || null,
+        landmarkInstructions: details.landmarkNote || pending.landmark || null,
+        // The pin the buyer dropped. Priced the delivery already; it also has
+        // to reach the dispatch row, because it is what the rider's CONFIRM
+        // geofence checks against. Dropping it here is what leaves
+        // "Drop-off GPS is not on file" at the door.
+        buyerLat: pending.buyerLat ?? null,
+        buyerLng: pending.buyerLng ?? null,
+      },
+      offerId: pending.offerId || null,
+      totalsOverride,
     });
   } catch (err) {
     console.error("[order] createOrder failed (continuing):", err.message);
+    if (
+      err.code === "insufficient_stock" ||
+      err.code === "out_of_stock" ||
+      err.code === "variant_not_found" ||
+      err.code === "shop_unavailable"
+    ) {
+      await sendText(to, `⚠️ ${err.message || "That item is sold out."}`);
+      return;
+    }
+  }
+
+  if (order && (pending.buyerCounty || details.deliveryCounty)) {
+    try {
+      const applied = await applyShippingToOrder(order.id, {
+        deliveryMethod: "COUNTY_DROPDOWN",
+        buyerCounty: details.deliveryCounty || pending.buyerCounty,
+        buyerTown: details.deliveryTown || pending.buyerTown,
+        landmarkNote: details.landmarkNote || pending.landmark,
+      });
+      if (applied?.ok) order = getOrder(order.id) || order;
+      else {
+        const ensured = await ensureHybridShippingBeforePayment(order);
+        if (ensured?.order) order = ensured.order;
+      }
+    } catch (err) {
+      console.warn("[order] shipping apply skipped:", err?.message || err);
+    }
+  }
+
+  // Final gate before celebrating / STK — cancels unpaid order if rates still missing.
+  if (order) {
+    try {
+      const { gateShippingBeforeStk } = await import("./shipping-gate.js");
+      const gated = await gateShippingBeforeStk(order);
+      if (!gated.ok) {
+        return true;
+      }
+      order = gated.order || order;
+    } catch (err) {
+      console.error("[order] shipping gate before STK:", err?.message || err);
+      try {
+        const { cancelOrderMissingShipping } = await import("./shipping-gate.js");
+        await cancelOrderMissingShipping(order, { reason: "shipping_gate_error" });
+      } catch (_) {
+        /* ignore */
+      }
+      return true;
+    }
   }
 
   const summary = buildOrderAdminSummary({
     customerKey: to,
-    pending,
+    pending: quote ? { ...pending, quote } : pending,
     details,
     order,
   });
@@ -843,23 +1523,22 @@ export async function confirmPrepaidOrder(to, parsed) {
     }
   }
 
-  const orderRef = order?.id;
+  const orderRef = order?.id || "pending";
+  const total =
+    order ? orderBuyerTotal(order) : totalsOverride?.totalKes ?? pending.totalKes ?? pending.priceKes;
   await sendText(
     to,
-    prepaidOrderPlacedMessage({
-      orderId: orderRef || "pending",
+    shortOrderPlacedMessage({
+      orderId: orderRef,
       productName: pending.name,
-      amountKes: pending.priceKes,
-      customerName: details.name,
-      location: details.location,
+      totalKes: total,
+      shippingKes: order?.shippingKes ?? totalsOverride?.shippingKes ?? pending.shippingKes ?? 0,
+      county: pending.buyerCounty || details.deliveryCounty || "",
       phone: details.phone,
-    }) +
-      (order ? `\nStatus: ${statusLabel(order.status)}` : "") +
-      `\n\n${siteUrlLine()}`
+    })
   );
 
   if (order) await sendPrepaidCheckoutSafe(to, order);
-  await sendUpsell(to, pending);
   return true;
 }
 
@@ -887,7 +1566,7 @@ async function sendUpsell(to, justOrdered) {
       to,
       `🔥 *Customers also love…*\n\n` +
         `*${suggestion.name}*\n` +
-        `KES ${suggestion.priceKes.toLocaleString()} · ⭐ ${suggestion.rating} · 100% prepaid\n\n` +
+        `KES ${formatProductListPrice(suggestion)} · ⭐ ${suggestion.rating} · 100% prepaid\n\n` +
         `Add it too? Reply *1* to order, or *menu* to keep shopping.`
     );
   } catch (err) {
@@ -901,6 +1580,24 @@ export async function handleMenuAction(from, id) {
   if (id === "shop_all") return sendCategoryList(from);
   if (await isCategoryMenuId(id)) return sendCategorySubmenu(from, id);
   if (await isSubcategoryRowId(id)) return sendProductsForSubcategory(from, id);
+  if (id.startsWith("order_") && id.includes("_offer_")) {
+    const match = id.match(/^order_(.+)_offer_(\d+)$/i);
+    if (match) return startPrepaidOrder(from, match[1], { offerId: match[2] });
+  }
+  if (id.startsWith("pay_offer_")) {
+    return startPrepaidOrderFromOffer(from, id.replace(/^pay_offer_/i, ""));
+  }
+  if (id.startsWith("reorder_now_")) {
+    const productId = id.replace("reorder_now_", "");
+    return startPrepaidOrder(from, productId);
+  }
+  if (id.startsWith("reorder_week_")) {
+    const orderId = id.replace("reorder_week_", "");
+    const { snoozeReorderReminder } = await import("./reorder-reminders.js");
+    const meta = getCustomerMeta(from) || {};
+    await snoozeReorderReminder({ orderId, phone: meta.phone || from, days: 7 });
+    return sendText(from, "Sawa — I'll nudge you again in a week. Type *menu* anytime.");
+  }
   if (id.startsWith("order_")) return startPrepaidOrder(from, id.replace("order_", ""));
   if (id.startsWith("pick_")) return showProductActions(from, id.replace("pick_", ""));
   if (id === "deals_today") return sendDealsOfTheDay(from);

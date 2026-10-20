@@ -1,135 +1,85 @@
-# Sokoni AI Brain — System Prompt & Architecture
+# Sokoni AI Brain — 4-Tier Architecture & Training
 
-> **Source of truth:** `whatsapp-bot/src/services/ai.js` (`SYSTEM_PROMPT`, `buildCatalogBlock`, `buildModeInjection`)
-> **Architecture:** Pre-search catalog → inject CATALOG + mode → LLM reply (no function tools)
-> **Business model:** COD store primary; international affiliate secondary
-> **Last synced:** 2026-07-08
+> **Source of truth (prompts):** `whatsapp-bot/src/services/ai-prompts.js`  
+> **Layer 3 context:** `whatsapp-bot/src/services/ai-user-context.js`  
+> **RAG:** `whatsapp-bot/knowledge/*.md` + optional `platform_knowledge` (pgvector)  
+> **Tools (pre-LLM):** `whatsapp-bot/src/services/ai-tools.js`  
+> **Runtime:** `whatsapp-bot/src/services/ai-agent.js`  
+> **Last synced:** 2026-08-29
 
 ---
 
-## How the brain works (3 layers)
+## Updating prompts does **not** wipe training
+
+Editing the system prompt or knowledge docs is like updating a worker’s instruction manual.
+The model’s general language ability stays; only Sokoni’s reference rules and retrieved facts change.
+
+To make the agent wiser over time: add bullets to `SOKONI_MASTER_RULES` / `SOKONI_MVP_LOGISTICS_FACTS`, add markdown under `knowledge/`, and keep Layer 1 command handlers for money/custody.
+
+---
+
+## The 4 tiers
 
 ```
-User message
-    ↓
-webhookHandler.js (routing: menu, order, track, admin, product-router)
-    ↓
-gatherProducts() + catalog search (deterministic)
-    ↓
-SYSTEM_PROMPT + CATALOG block + MODE injection + session history
-    ↓
-LLM reply (or template fallback)
+1. Strict Command Router   → ACCEPT / PICKUP / CONFIRM / WAYBILL / PARTIAL_REFUND / balance
+2. System Prompt           → identity, safety, logistics Stable Facts
+3. Dynamic User Context    → role, recent SKN orders, rider/seller flags (every AI turn)
+4. RAG Knowledge           → knowledge/*.md (+ optional pgvector platform_knowledge)
+         +
+   Pre-LLM Tools           → track_order, search_products, get_seller_payout, …
 ```
 
-The LLM **does not search**. Your code searches. The prompt enforces catalog-only answers.
+### Tier 1 — Command router (no LLM)
+
+`webhookHandler.js` runs deterministic handlers **before** `runAiAgent`.
+Financial / custody actions never rely on the model.
+
+### Tier 2 — System prompt
+
+`buildGroundedSystemPrompt()` wraps channel prompts + master rules.
+Improve accuracy by editing Stable Facts — not by fine-tuning.
+
+### Tier 3 — Dynamic user context
+
+`buildUserContextBlock({ phone, customerKey })` injects live role + recent orders
+into `CONTEXT DATA` every freeform turn. This is **additive**; it does not replace Tier 2.
+
+### Tier 4 — RAG
+
+Keyword (and optional DB) retrieval over `knowledge/*.md`. Prefer short policy docs over stuffing the system prompt.
+
+### Tools (agentic, Sokoni style)
+
+Tools are **selected and executed server-side** (`runToolRouter` / `runAgentGraph`) before the LLM call.
+Results appear as LOOKUP RESULTS. Native OpenAI `tool_calls` stay disabled on purpose (safer for escrow).
+
+| User intent | Tool / path | Outcome |
+| --- | --- | --- |
+| Where is my order? | `track_order` | Live status from order + boda meta |
+| Shipping rates | `get_shipping_rates` | Seller tariff matrix |
+| Seller balance | Layer 1 `balance` or `get_seller_payout` | Ledger snapshot |
 
 ---
 
-## Layer 1 — Master brain
+## Accuracy as you scale
 
-Implemented as `SYSTEM_PROMPT` in `whatsapp-bot/src/services/ai.js`.
-
-Key rules:
-- **Store first:** pay-on-delivery, reply *1* to order, type *menu* to browse
-- **International second:** only when asked; route to *menu* → Shop International
-- **TikTok:** match viral energy; featured items from `tiktok-featured.json`
-- **Never hallucinate:** only CATALOG block facts
-- **Human handoff:** stop selling; team replies in chat
+1. **Separation of concerns** — ACCEPT / PICKUP / CONFIRM / refunds stay on fixed DB code.
+2. **Prompt bullets** — when launch logs show a wrong answer, add one Stable Fact line.
+3. **Conversation memory** — WhatsApp AI turns persist in `chat_memory` (session history). Review weekly; add FAQs to `knowledge/`.
+4. **Never** let the LLM move money without a Layer 1 verifier.
 
 ---
 
-## Layer 2 — Mode injections
+## How to extend knowledge
 
-Appended as extra system messages based on context:
-
-| Mode | Trigger | Behaviour |
-|------|---------|-----------|
-| `TIKTOK_VIRAL` | TikTok / viral keywords | Fast, featured items first |
-| `PRODUCT_FOCUS` | `lastProductContext` + detail question | Answer about THIS item first |
-| `RECOMMEND` | "recommend", "best", "show me" | Top 3 ranked picks |
-| `INTERNATIONAL` | AliExpress / abroad / import intent | 1–4 weeks, customs, menu → intl |
-
----
-
-## Layer 3 — CATALOG block format
-
-Built by `buildCatalogBlock()` in `ai.js`:
-
-```
-CATALOG (authoritative — only use these):
-[STORE | pay on delivery]
-1) id:pt-001 | Tecno Spark 20C | KES 13,599 | ⭐4.5 | STORE|pay on delivery | cat:phones-tablets/smartphones | tags:camera,battery
-
-CUSTOMER CONTEXT:
-intent: recommend
-budget_hint: under KES 15000
-viral_source: no
-language: sw
-REQUIRED CTA: reply *1* to order OR *menu* to browse
-```
-
----
-
-## Message router (code-level, not LLM)
-
-Documented order in `webhookHandler.js`:
-
-1. Admin sender → admin commands
-2. Human handoff active → handoff handler only
-3. `"menu"` / `"start"` / `"habari"` → reset + main menu
-4. Pending COD order → order flow (name/location/phone)
-5. Active product menu (`1`/`2`/`3`) → order / ask AI / main menu
-6. `"track"` + `SK-####` → order status
-7. `"human"` / `"agent"` → handoff
-8. **Product router** (`product-router.js`) → perfume oils + all-category search
-9. Purchase intent (`nipee`/`nataka`) + product context → start COD order
-10. Product search intent → numbered list OR AI
-11. Default → `runAiAgent()`
-
----
-
-## WhatsApp main menu
-
-1. Browse Categories
-2. Today's Picks
-3. **Shop International**
-4. Track My Order
-5. Visit Website
-6. Talk to a Human
-7. How Sokoni Works
-
----
-
-## How Sokoni Works (single truth)
-
-1. Chat Sokoni on WhatsApp (or browse sokonimall.com)
-2. AI finds the right product from our **pay-on-delivery store** catalog
-3. Reply *1* to order (local) OR *menu* → Shop International (partner links)
-4. Track with your **SK-####** order number anytime
-
----
-
-## TikTok caption brain
-
-See `whatsapp-bot/prompts/tiktok-caption.prompt.md`.
-
-- `fulfillment=store` → CTA must say **pay on delivery** + WhatsApp link in bio
-- `scope=international` → CTA must mention **1–4 weeks** + customs may apply
-- Never fake discounts unless `originalPriceKes` exists in JSON
-
----
-
-## Website alignment
-
-- Hero: COD store first, international secondary
-- Site catalog: run `node scripts/build-site-catalog.mjs` after editing `whatsapp-bot/src/data/products.json`
-- Deep links: `sokonimall.com/?text=phone under 15k` pre-fills search
-- Reviews: API at `bot.sokonimall.com/api/reviews`, fallback `website/data/reviews.json`
+1. Add/edit `whatsapp-bot/knowledge/<topic>.md`
+2. Register in `KNOWLEDGE_FILES` / `LANE_DOCS` (`agent-specialists.js`)
+3. Deploy bot (keyword RAG reloads). Optional: seed `platform_knowledge` via `upsertKnowledgeChunk` when pgvector is enabled.
 
 ---
 
 ## Do not use (outdated)
 
-- `docs/CONCEPT.md` affiliate-only flows without COD context
-- Old references to LLM `search_products` tool calls — not implemented in v1
-- Interactive WhatsApp buttons — WAHA uses numbered text menus
+- COD-first / `ai.js` SYSTEM_PROMPT docs from older revisions
+- Teaching the LLM to invent OTPs, till numbers, or execute ACCEPT itself
+- Replacing Layer 1 with LLM-native tool_calls for custody

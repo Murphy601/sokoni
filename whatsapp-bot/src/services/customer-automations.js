@@ -1,7 +1,10 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
-import { getOrdersForCustomer, getOrder, updateOrderStatus } from "./orders.js";
-import { getCustomerMeta, setCustomerMeta } from "./session.js";
+import { getOrdersForCustomer, getOrder, updateOrderStatus, extractOrderIdFromText } from "./orders.js";
+import { getCustomerMeta, setCustomerMeta,
+  getPendingOrder,
+  getPendingCart,
+} from "./session.js";
 import { alertAdminIssueAction } from "./ops-admin.js";
 import {
   welcomeBackMessage,
@@ -23,7 +26,6 @@ import {
   aiSurveyMessage,
   damagedReturnMessage,
   wrongOrderApologyMessage,
-  postDeliveryDamageMessage,
   mpesaTroubleshootMessage,
   delayedDeliveryMessage,
   PROMO_CODE,
@@ -78,8 +80,7 @@ function latestRelevantOrder(customerKey, phone = "") {
 }
 
 function orderIdFromText(text) {
-  const m = String(text || "").match(/\b(SK-\d+)\b/i);
-  return m ? m[1].toUpperCase() : null;
+  return extractOrderIdFromText(text);
 }
 
 async function handleReplaceOrCancel(customerKey, action, { phone = "", displayName = "" } = {}) {
@@ -90,14 +91,24 @@ async function handleReplaceOrCancel(customerKey, action, { phone = "", displayN
   if (!order) {
     await sendText(
       customerKey,
-      "I couldn't find your order. Reply with your order number (e.g. *SK-1042*) or type *track*."
+      "I couldn't find your order. Reply with your order number (e.g. *SKN-1002-1* or older *SK-1042*) or type *track*."
     );
     return true;
   }
 
   if (action === "CANCEL") {
     if (!["cancelled", "delivered"].includes(order.status)) {
-      updateOrderStatus(order.id, "cancelled");
+      const cancelResult = updateOrderStatus(order.id, "cancelled", {
+        source: "customer-automations",
+      });
+      if (cancelResult?.error) {
+        await sendText(
+          customerKey,
+          cancelResult.message ||
+            `Cannot cancel *${order.id}* in its current state. Reply *HELP ${order.id}* for support.`
+        );
+        return true;
+      }
     }
     setCustomerMeta(customerKey, {
       awaitingWrongOrderFix: false,
@@ -107,7 +118,7 @@ async function handleReplaceOrCancel(customerKey, action, { phone = "", displayN
     });
     await sendText(
       customerKey,
-      `✅ Request closed for order *${order.id}*. You owe nothing on pay-on-delivery.\n\nType *menu* to shop again. 🙏`
+      `✅ Order *${order.id}* cancelled. Your payment never reached the seller — our team is processing your M-Pesa refund from escrow.\n\nType *menu* to shop again. 🙏`
     );
     await alertAdminIssueAction({
       customerKey,
@@ -148,11 +159,23 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
   const t = normalize(text);
   if (!t) return false;
 
-  if (/^(replace|correct)$/i.test(t)) {
+  // A checkout in progress owns these words. wrongOrderIssueId is sticky, so
+  // without this a buyer who once reported a wrong order has every later
+  // "cancel" hijacked: it cancels some earlier order, promises an M-Pesa
+  // refund for money that was never taken, and pulls in an admin -- while the
+  // order they were actually trying to abandon is still sitting in checkout.
+  const midCheckout = Boolean(getPendingOrder(customerKey) || getPendingCart(customerKey));
+
+  if (!midCheckout && /^(replace|correct)$/i.test(t)) {
     return handleReplaceOrCancel(customerKey, "REPLACE", { phone, displayName });
   }
 
-  if (/^cancel$/i.test(t) && (getCustomerMeta(customerKey)?.awaitingWrongOrderFix || getCustomerMeta(customerKey)?.wrongOrderIssueId)) {
+  if (
+    !midCheckout &&
+    /^cancel$/i.test(t) &&
+    (getCustomerMeta(customerKey)?.awaitingWrongOrderFix ||
+      getCustomerMeta(customerKey)?.wrongOrderIssueId)
+  ) {
     return handleReplaceOrCancel(customerKey, "CANCEL", { phone, displayName });
   }
 
@@ -162,78 +185,27 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
     ) ||
     /imefika\s+(vibaya|sio\s+sahihi)/i.test(t)
   ) {
-    const order = latestRelevantOrder(customerKey, phone);
-    const oid = orderIdFromText(text) || order?.id;
-    const resolved = oid ? getOrder(oid) : order;
-    const msg = resolved
-      ? wrongOrderApologyMessage({
-          orderId: resolved.id,
-          productName: resolved.productName,
-          customerName: displayName || resolved.customerName,
-        })
-      : damagedReturnMessage({ orderId: "your order", productName: "your item", reason: "wrong item" });
-    setCustomerMeta(customerKey, {
-      awaitingWrongOrderFix: true,
-      wrongOrderIssueId: resolved?.id || null,
-    });
-    await sendText(customerKey, msg);
-    if (resolved && config.admin.primary) {
-      try {
-        await sendText(
-          config.admin.primary,
-          `⚠️ *Wrong order report*\nOrder: *${resolved.id}*\nCustomer: ${displayName || "—"} · ${phone || customerKey}\n\nSend: #apolog ${resolved.id}`
-        );
-      } catch {
-        /* ignore */
-      }
-    }
-    return true;
-  }
-
-  if (
-    /damaged|broken|faulty|imevunjika|haifanyi\s+kazi|not\s+working|cracked|dented/i.test(t)
-  ) {
-    const order = latestRelevantOrder(customerKey, phone);
-    const oid = orderIdFromText(text) || order?.id;
-    const resolved = oid ? getOrder(oid) : order;
-    if (resolved) {
-      setCustomerMeta(customerKey, { awaitingDamagePhoto: true, issueOrderId: resolved.id });
-      await sendText(
-        customerKey,
-        postDeliveryDamageMessage({
-          orderId: resolved.id,
-          productName: resolved.productName,
-          customerName: displayName || resolved.customerName,
-        })
-      );
-    } else {
-      await sendText(customerKey, damagedReturnMessage({ orderId: "your order", productName: "your item" }));
-    }
-    return true;
-  }
-
-  if (getCustomerMeta(customerKey)?.awaitingDamagePhoto) {
-    const hasMediaHint = /photo|video|image|picha|sent/i.test(t) || t.length > 20;
-    if (hasMediaHint) {
-      const issueOrderId = getCustomerMeta(customerKey)?.issueOrderId;
-      setCustomerMeta(customerKey, { awaitingDamagePhoto: false, issueOrderId: null });
-      await sendText(
-        customerKey,
-        `✅ Thanks — we've logged your damage report. A replacement will be arranged.\n\nType *Human* for urgent help. 🙏`
-      );
-      if (config.admin.primary) {
-        try {
-          await sendText(
-            config.admin.primary,
-            `📸 *Damage report + media*\nOrder: *${issueOrderId || "—"}*\nCustomer: ${displayName || "—"} · ${phone || customerKey}\nNote: ${text.slice(0, 200)}`
-          );
-        } catch {
-          /* ignore */
-        }
-      }
+    // Hard dispute protocol owns wrong-item (freeze + evidence photos). Soft REPLACE/CANCEL
+    // only applies after ops already set awaitingWrongOrderFix via #apolog.
+    if (getCustomerMeta(customerKey)?.awaitingWrongOrderFix) {
+      const order = latestRelevantOrder(customerKey, phone);
+      const oid = orderIdFromText(text) || order?.id;
+      const resolved = oid ? getOrder(oid) : order;
+      const msg = resolved
+        ? wrongOrderApologyMessage({
+            orderId: resolved.id,
+            productName: resolved.productName,
+            customerName: displayName || resolved.customerName,
+          })
+        : damagedReturnMessage({ orderId: "your order", productName: "your item", reason: "wrong item" });
+      await sendText(customerKey, msg);
       return true;
     }
+    return false;
   }
+
+  // Damaged / broken / photo evidence → dispute-protocol.js (stateful; must beat catalog search).
+  // Do not soft-handle here — it left awaitingDamagePhoto without routing the next image.
 
   if (
     /mpesa\s+(error|fail)|payment\s+(fail|error)|transaction\s+(fail|error)|haikubali|lipa\s+haikubali|network\s+glitch/i.test(
@@ -317,8 +289,8 @@ export async function tryCustomerAutomation(customerKey, text, { phone = "", dis
       t
     )
   ) {
-    const { startSupplierOnboarding } = await import("./supplier-onboarding.js");
-    return startSupplierOnboarding(customerKey, { phone });
+    const { startSellerOnboarding } = await import("./seller-onboarding.js");
+    return startSellerOnboarding(customerKey, { phone });
   }
 
   if (/^#(?:giftwrap|gift-wrap)\b/i.test(String(text || "").trim()) || /\b(gift\s*wrap|zawadi)\b/i.test(t)) {

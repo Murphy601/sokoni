@@ -114,16 +114,21 @@ While testing locally, expose the bot with **ngrok** (free):
 ngrok http 3001
 ```
 
-Copy the HTTPS URL (e.g. `https://abc123.ngrok-free.app`) and configure WAHA:
+Copy the HTTPS URL (e.g. `https://abc123.ngrok-free.app`) and configure WAHA.
+Prefer `bash scripts/configure-waha-session.sh` (adds HMAC when `WEBHOOK_HMAC_KEY` is in `whatsapp-bot/.env` — see `docs/STATIC_BOT_SECURITY.md`).
+
+Manual example:
 
 ```bash
 curl -X PUT http://localhost:3000/api/sessions/default \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: sokoni-local-dev-key" \
   -d "{
     \"config\": {
       \"webhooks\": [{
         \"url\": \"https://abc123.ngrok-free.app/webhook\",
-        \"events\": [\"message.any\"]
+        \"events\": [\"message.any\"],
+        \"hmac\": { \"key\": \"your-shared-secret\" }
       }]
     }
   }"
@@ -245,8 +250,8 @@ For HTTPS, put **nginx + Let's Encrypt** in front (recommended before real custo
 1. Customer opens **https://wa.me/254117422428** (website links already use this number).
 2. They type **menu** or **hi**.
 3. Bot sends numbered options — they reply **1**, **2**, etc.
-4. On a product, reply **1** to order (pay on delivery), **2** to ask AI.
-5. New COD orders are forwarded to **254117422428** on WhatsApp automatically.
+4. On a product, reply **1** to order (prepaid escrow), **2** to ask AI.
+5. New paid orders are forwarded to **254117422428** on WhatsApp automatically.
 
 ---
 
@@ -261,7 +266,7 @@ Main menu
   5 How Sokoni Works
 
 After each product:
-  1 Order (pay on delivery)
+  1 Order (prepaid escrow)
   2 Ask about it
   3 Main menu
 ```

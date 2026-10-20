@@ -6,7 +6,7 @@ import { resolveProductQuery } from "../src/services/product-router.js";
 
 const cases = [
   'Hi Sokoni, tell me more about "Apple Watch Series 9 GPS 41mm" (≈ KES 42,770).',
-  'Hi Sokoni, I\'d like to order "Tecno Spark 20C 128GB + 4GB RAM" (KES 13,599) — Pay on Delivery.',
+  'Hi Sokoni, I\'d like to order "Tecno Spark 20C 128GB + 4GB RAM" (KES 13,599) — prepaid escrow.',
   "I want BRUT 1 litre perfume oil",
   "apple watch series 9",
 ];

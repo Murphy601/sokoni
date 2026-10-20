@@ -6,14 +6,37 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPeerSeller, findSupplierByPhone } from "./suppliers.js";
+import { normalizePin } from "../lib/location-pin.js";
 import { getOrder } from "./orders.js";
+import { orderBuyerTotal, resolveSellerPayoutKes, computeFeeBreakdown } from "./shipping-tiers.js";
+import { shipmentStatusLabel } from "./shipments.js";
+import { config } from "../config.js";
+import { labelPageUrlForOrder } from "./prepaid-checkout.js";
 import { readFileSync, existsSync as fsExists } from "node:fs";
-import { consumeVerificationToken } from "./seller-verification.js";
+import { validateSellerSession } from "./seller-verification.js";
+import { healReleasedSellerPayouts } from "./settlements.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SETTLEMENTS_FILE = path.join(__dirname, "..", "..", "data", "settlements.json");
 const MASTER_CATALOG = path.join(__dirname, "..", "data", "products.json");
 const REPO_CATALOG = path.join(__dirname, "..", "..", "..", "website", "data", "products.json");
+
+function sellerOrderNet(o) {
+  const payout = resolveSellerPayoutKes(o);
+  if (payout > 0) return payout;
+  return o.sellerNetKes ?? o.sourcePriceKes ?? Math.round(orderBuyerTotal(o) * 0.9);
+}
+
+function sellerOrderGross(o) {
+  return Math.round(Number(orderBuyerTotal(o)) || 0);
+}
+
+function sellerOrderFee(o) {
+  const gross = sellerOrderGross(o);
+  const net = sellerOrderNet(o);
+  const fee = Math.round(Number(o?.platformFeeKes) || Math.max(0, gross - net));
+  return fee;
+}
 
 export function normalizePhone(phone) {
   let d = String(phone || "").replace(/\D/g, "");
@@ -38,21 +61,95 @@ export function requireSeller(phone) {
   return { supplier };
 }
 
-/** New sellers must verify WhatsApp OTP first; returning sellers skip verification. */
-export async function onboardSellerAsync(payload) {
-  const { phone, shopName, shopHandle, mpesaNumber, nationalId, verificationToken } = payload || {};
-  const normalizedPhone = normalizePhone(phone);
-
-  const existing = findSupplierByPhone(normalizedPhone);
-  if (!existing) {
-    const check = await consumeVerificationToken(normalizedPhone, verificationToken);
-    if (check.error) return check;
+/** Require valid WhatsApp OTP session + onboarded seller profile. */
+export async function requireAuthenticatedSeller(phone, sessionToken) {
+  const session = await validateSellerSession(phone, sessionToken);
+  if (session.error) return session;
+  const check = requireSeller(phone);
+  if (check.error) return check;
+  const st = String(check.supplier.shopStatus || "live").toLowerCase();
+  if (st === "deactivated") {
+    try {
+      const { revokeSellerSession, deactivatedLoginBlock } = await import("./seller-verification.js");
+      await revokeSellerSession(phone);
+      return deactivatedLoginBlock();
+    } catch {
+      return {
+        error: "account_deactivated",
+        shopStatus: "deactivated",
+        supportEmail: "support@sokonimall.com",
+        message:
+          "Account deactivated. Contact support for more information.\n\nsupport@sokonimall.com",
+      };
+    }
   }
-
-  return onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId });
+  return check;
 }
 
-export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId }) {
+/** New and returning sellers must verify WhatsApp OTP before every sign-in. */
+export async function onboardSellerAsync(payload) {
+  const {
+    phone,
+    shopName,
+    shopHandle,
+    mpesaNumber,
+    nationalId,
+    kraPin,
+    pickupLat,
+    pickupLng,
+    sessionToken,
+    verificationToken,
+  } = payload || {};
+  const token = sessionToken || verificationToken;
+  const session = await validateSellerSession(phone, token);
+  if (session.error) return session;
+
+  const result = onboardSeller({
+    phone,
+    shopName,
+    shopHandle,
+    mpesaNumber,
+    nationalId,
+    kraPin,
+    pickupLat,
+    pickupLng,
+  });
+  if (result.error) return result;
+
+  // Provision Postgres users + sellers so activity / public shop / PATCH profile work.
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    if (isDbEnabled()) {
+      const { ensureSellerSocialProfile } = await import("../db/repositories/users.js");
+      const ensured = await ensureSellerSocialProfile({
+        phone: result.seller?.phone || session.phone,
+        handle: result.seller?.shopHandle || shopHandle || shopName,
+        shopName: result.seller?.businessName || shopName,
+        location: result.seller?.city || null,
+        mpesaNumber: result.seller?.mpesaNumber || mpesaNumber,
+        isVerified: true,
+      });
+      if (!ensured.error && ensured.user?.handle) {
+        result.seller = {
+          ...result.seller,
+          shopHandle: ensured.user.handle.startsWith("@")
+            ? ensured.user.handle
+            : `@${ensured.user.handle}`,
+          socialUserId: ensured.user.id,
+          dbSellerId: ensured.seller?.id || null,
+        };
+      } else if (ensured.error) {
+        console.warn("[seller-onboard] social profile ensure failed:", ensured.error, ensured.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] social profile ensure skipped:", err.message);
+  }
+
+  return result;
+}
+
+export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nationalId, kraPin, pickupLat, pickupLng }) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone || normalizedPhone.length < 12) {
     return { error: "invalid_phone", message: "Enter a valid WhatsApp number (07xx or 2547xx)." };
@@ -64,13 +161,50 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
     return { error: "invalid_mpesa", message: "Enter a valid M-Pesa number (07xx or 2547xx)." };
   }
 
+  // A shop with no collection point cannot be priced: every delivery from it
+  // would fall back to the flat minimum whatever the distance. Enforced here
+  // rather than only in the browser, so no client can skip it.
+  //
+  // New shops only. Sellers who signed up before pins existed keep working and
+  // are prompted separately -- locking them out of their own hub would be a
+  // far worse outcome than a missing pin.
+  const pin = normalizePin({ lat: pickupLat, lng: pickupLng });
+  const alreadyASeller = Boolean(findSupplierByPhone(normalizedPhone));
+  if (!pin && !alreadyASeller) {
+    return {
+      error: "pickup_pin_required",
+      message:
+        "Set where riders collect from. Tap “Use my current location”, or pick it on the map.",
+    };
+  }
+
   const result = createPeerSeller({
     phone: normalizedPhone,
     shopName: String(shopName).trim(),
     shopHandle: String(shopHandle || shopName).trim(),
     mpesaNumber: normalizePhone(mpesaNumber),
     nationalId,
+    kraPin,
+    pickupLat,
+    pickupLng,
+    whatsappChatId: `${normalizedPhone}@c.us`,
   });
+
+  void import("./whatsapp-crm.js")
+    .then(({ upsertCrmFromRosterPerson }) =>
+      upsertCrmFromRosterPerson({
+        phone: normalizedPhone,
+        name: String(shopName || "").trim(),
+        role: "seller",
+      })
+    )
+    .catch((err) => console.warn("[seller-onboard] CRM seller sync skipped:", err.message));
+
+  if (!result.existing) {
+    void import("./channel-invite.js")
+      .then(({ queueChannelInvite }) => queueChannelInvite(normalizedPhone, "onboarding"))
+      .catch((err) => console.warn("[seller-onboard] channel invite skipped:", err.message));
+  }
 
   return {
     success: true,
@@ -82,6 +216,8 @@ export function onboardSeller({ phone, shopName, shopHandle, mpesaNumber, nation
 
 function sanitizeSeller(s) {
   if (!s) return null;
+  const shopStatus = String(s.shopStatus || "live").toLowerCase();
+  const payoutHold = Boolean(s.payoutHold) || shopStatus === "paused" || shopStatus === "deactivated" || shopStatus === "under_review";
   return {
     id: s.id,
     businessName: s.businessName,
@@ -89,14 +225,54 @@ function sanitizeSeller(s) {
     phone: s.phone,
     mpesaNumber: s.mpesaNumber || null,
     isSellerVerified: Boolean(s.isSellerVerified),
+    kycStatus: s.kycStatus || (s.isSellerVerified ? "approved" : "pending"),
+    nationalId: s.nationalId ? String(s.nationalId).replace(/.(?=.{3})/g, "•") : null,
+    kraPin: s.kraPin ? String(s.kraPin).replace(/.(?=.{3})/g, "•") : null,
+    bankName: s.bankName || null,
+    bankAccountName: s.bankAccountName || null,
+    bankAccountNumber: s.bankAccountNumber
+      ? `••••${String(s.bankAccountNumber).slice(-4)}`
+      : null,
+    mpesaTill: s.mpesaTill || null,
+    mpesaPaybill: s.mpesaPaybill || null,
+    paybillAccount: s.paybillAccount || null,
     role: s.role || "SELLER",
     city: s.city || "",
+    promoBanner: s.promoBanner || "",
+    offerNote: s.offerNote || "",
+    shopStatus,
+    payoutHold,
+    canWithdraw: !payoutHold && shopStatus === "live",
+    shopStatusNote: s.shopStatusNote || null,
+    catalogLocked: shopStatus !== "live",
+    accountBlocked: shopStatus === "deactivated",
   };
 }
 
-export function getSellerProfile(phone) {
+export async function getSellerProfile(phone, sessionToken) {
+  const session = await validateSellerSession(phone, sessionToken);
+  if (session.error) return session;
+
   const check = requireSeller(phone);
-  if (check.error) return check;
+  if (check.error) {
+    return { needsSetup: true, error: check.error, message: check.message };
+  }
+  const st = String(check.supplier.shopStatus || "live").toLowerCase();
+  if (st === "deactivated") {
+    try {
+      const { revokeSellerSession, deactivatedLoginBlock } = await import("./seller-verification.js");
+      await revokeSellerSession(phone);
+      return deactivatedLoginBlock();
+    } catch {
+      return {
+        error: "account_deactivated",
+        shopStatus: "deactivated",
+        supportEmail: "support@sokonimall.com",
+        message:
+          "Account deactivated. Contact support for more information.\n\nsupport@sokonimall.com",
+      };
+    }
+  }
   return { seller: sanitizeSeller(check.supplier) };
 }
 
@@ -120,37 +296,235 @@ function loadAllOrders() {
   return [];
 }
 
+function sellerLabelUrl(orderId) {
+  return labelPageUrlForOrder(orderId);
+}
+
+/**
+ * Seller-facing fulfillment phase for hub UI.
+ * Aligns with buyer YES / auto-release / #status delivered — not just shipmentStatus alone.
+ */
+export function sellerOrderFulfillment(order) {
+  const paid =
+    order?.customerPaymentStatus === "confirmed" ||
+    order?.escrowStatus === "held" ||
+    order?.escrowStatus === "released";
+  const shipmentStatus = order?.shipmentStatus || "pending";
+  const status = String(order?.status || "").toLowerCase();
+  const escrow = String(order?.escrowStatus || "").toLowerCase();
+
+  const received = Boolean(
+    status === "delivered" ||
+      shipmentStatus === "delivered" ||
+      order?.buyerConfirmedAt ||
+      order?.shipmentDeliveredAt ||
+      order?.deliveredAt ||
+      escrow === "released"
+  );
+
+  const dispatched = Boolean(
+    received ||
+      order?.sellerDispatchedAt ||
+      order?.inTransitAt ||
+      ["dropped_off", "in_transit", "at_pickup_point", "delivered"].includes(shipmentStatus) ||
+      ["out_for_delivery", "delivered"].includes(status)
+  );
+
+  /** Paid, not yet handed off — show Print label. */
+  const needsDropOff =
+    paid &&
+    !received &&
+    !dispatched &&
+    ["pending", "label_ready"].includes(shipmentStatus);
+
+  let phase = "unpaid";
+  if (paid && received) phase = "received";
+  else if (paid && dispatched) phase = "shipped";
+  else if (paid) phase = "awaiting_ship";
+
+  const phaseLabel =
+    phase === "received"
+      ? "Received"
+      : phase === "shipped"
+        ? "Shipped"
+        : phase === "awaiting_ship"
+          ? needsDropOff
+            ? "Awaiting ship"
+            : shipmentStatusLabel(shipmentStatus)
+          : "Unpaid";
+
+  return {
+    paid: Boolean(paid && order?.customerPaymentStatus === "confirmed"),
+    shipmentStatus,
+    shipmentStatusLabel:
+      phase === "received"
+        ? "Received"
+        : phase === "shipped"
+          ? "Shipped"
+          : shipmentStatusLabel(shipmentStatus),
+    status: order?.status || null,
+    needsDropOff,
+    received,
+    dispatched,
+    phase,
+    phaseLabel,
+    buyerConfirmedAt: order?.buyerConfirmedAt || null,
+    sellerDispatchedAt: order?.sellerDispatchedAt || null,
+    deliveredAt: order?.deliveredAt || order?.shipmentDeliveredAt || null,
+  };
+}
+
+function orderBuyerPhone(order) {
+  const direct = normalizePhone(order?.phone || order?.mpesaPhone || "");
+  if (direct) return direct;
+  // WhatsApp chat ids are often 2547…@c.us / @s.whatsapp.net
+  const fromKey = normalizePhone(String(order?.customerKey || order?.chatId || "").split("@")[0] || "");
+  if (fromKey && fromKey.length >= 10) return fromKey;
+  return null;
+}
+
+/** Seller dashboard — paid orders, labels, shipment status (Phases 5–6). */
+export function getSellerOrders(supplierId) {
+  return loadAllOrders()
+    .filter(
+      (o) =>
+        o.supplierId === supplierId &&
+        o.status !== "cancelled" &&
+        o.kind !== "cart_parent"
+    )
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map((o) => {
+      const fulfill = sellerOrderFulfillment(o);
+      const paid = fulfill.paid;
+
+      return {
+        orderId: o.id,
+        productId: o.productId || null,
+        productName: o.productName,
+        quantity: Math.max(1, Math.round(Number(o.quantity) || 1)),
+        sellerNetKes: sellerOrderNet(o),
+        paid,
+        status: fulfill.status,
+        shipmentStatus: fulfill.shipmentStatus,
+        shipmentStatusLabel: fulfill.shipmentStatusLabel,
+        needsDropOff: fulfill.needsDropOff,
+        received: fulfill.received,
+        dispatched: fulfill.dispatched,
+        phase: fulfill.phase,
+        phaseLabel: fulfill.phaseLabel,
+        buyerConfirmedAt: fulfill.buyerConfirmedAt,
+        sellerDispatchedAt: fulfill.sellerDispatchedAt,
+        deliveredAt: fulfill.deliveredAt,
+        riderName: o.riderName || null,
+        riderPhone: o.riderPhone || null,
+        trackingRef: o.courierTrackingRef || null,
+        customerName: o.customerName || null,
+        buyerPhone: orderBuyerPhone(o),
+        labelUrl: paid ? sellerLabelUrl(o.id) : null,
+        trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
+        createdAt: o.createdAt,
+      };
+    });
+}
+
+export async function getSellerOrdersByPhone(phone, sessionToken) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+  return { orders: getSellerOrders(check.supplier.id), seller: sanitizeSeller(check.supplier) };
+}
+
 /** Escrow ledger: available / pending / in transit for seller dashboard. */
 export function getSellerEscrowLedger(supplierId) {
+  // Move any already-released orders into Ready for M-Pesa (fixes pre-fix Releases).
+  try {
+    healReleasedSellerPayouts(supplierId);
+  } catch (err) {
+    console.warn("[seller-onboard] payout heal skipped:", err?.message || err);
+  }
+
   const settlements = loadSettlements();
   const orders = loadAllOrders().filter((o) => o.supplierId === supplierId);
 
   const sellerEntries = settlements.entries.filter((e) => e.supplierId === supplierId);
 
-  const available = sellerEntries
-    .filter((e) => e.status === "owed" || e.status === "paid")
-    .map((e) => ({
-      orderId: e.orderId,
-      amountKes: e.payoutAmountKes,
-      status: e.status === "paid" ? "paid" : "available",
-      productName: e.productName,
-    }));
+  function enrichLedgerRow(base, e, order) {
+    const net = Math.round(Number(base.amountKes) || 0);
+    const gross = Math.round(Number(e?.retailKes) || (order ? sellerOrderGross(order) : 0));
+    const fee = Math.round(Number(e?.marginKes) || (order ? sellerOrderFee(order) : Math.max(0, gross - net)));
+    return {
+      ...base,
+      sellerNetKes: net,
+      salesKes: gross || net + fee,
+      commissionKes: fee,
+    };
+  }
 
+  // Ready for M-Pesa = owed (withdrawable) + failed B2C (retry). Never pending escrow.
+  const available = sellerEntries
+    .filter((e) => e.status === "owed" || e.status === "b2c_failed" || e.status === "paid")
+    .map((e) => {
+      const order = orders.find((o) => o.id === e.orderId);
+      return enrichLedgerRow(
+        {
+          orderId: e.orderId,
+          amountKes: e.payoutAmountKes,
+          status: e.status === "paid" ? "paid" : e.status === "b2c_failed" ? "b2c_failed" : "available",
+          productName: e.productName,
+          readyLabel:
+            e.status === "paid"
+              ? "Paid out"
+              : e.status === "b2c_failed"
+                ? "Ready — retry withdraw"
+                : "Ready for M-Pesa",
+        },
+        e,
+        order
+      );
+    });
+
+  // Sending to M-Pesa — show under Ready list as in-flight, but not withdrawable again.
+  const sending = sellerEntries
+    .filter((e) => e.status === "disbursing" || e.status === "withdraw_queued")
+    .map((e) => {
+      const order = orders.find((o) => o.id === e.orderId);
+      return enrichLedgerRow(
+        {
+          orderId: e.orderId,
+          amountKes: e.payoutAmountKes,
+          status: e.status === "withdraw_queued" ? "withdraw_queued" : "disbursing",
+          productName: e.productName,
+          readyLabel: e.status === "withdraw_queued" ? "Queued — sending to M-Pesa" : "Sending to M-Pesa",
+        },
+        e,
+        order
+      );
+    });
+
+  // Pending escrow = buyer paid, still held. Released money must NEVER land here.
   const pendingEscrow = orders
     .filter(
       (o) =>
         o.customerPaymentStatus === "confirmed" &&
-        o.escrowStatus === "held" &&
+        String(o.escrowStatus || "").toLowerCase() === "held" &&
+        !o.escrowReleasedAt &&
         o.status !== "delivered" &&
         o.status !== "cancelled"
     )
-    .map((o) => ({
-      orderId: o.id,
-      amountKes: o.sourcePriceKes || Math.round((o.priceKes || 0) * 0.92),
-      status: "pending",
-      productName: o.productName,
-      trackingCode: o.id,
-    }));
+    .map((o) =>
+      enrichLedgerRow(
+        {
+          orderId: o.id,
+          amountKes: sellerOrderNet(o),
+          status: "pending",
+          productName: o.productName,
+          trackingCode: o.id,
+          shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus || "pending"),
+          trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
+        },
+        null,
+        o
+      )
+    );
 
   const inTransit = orders
     .filter(
@@ -159,38 +533,63 @@ export function getSellerEscrowLedger(supplierId) {
         o.status !== "delivered" &&
         o.status !== "cancelled"
     )
-    .map((o) => ({
-      orderId: o.id,
-      amountKes: o.sourcePriceKes || Math.round((o.priceKes || 0) * 0.92),
-      status: "in_transit",
-      productName: o.productName,
-      trackingCode: o.id,
-      shipmentStatus: o.shipmentStatus,
-    }));
+    .map((o) =>
+      enrichLedgerRow(
+        {
+          orderId: o.id,
+          amountKes: sellerOrderNet(o),
+          status: "in_transit",
+          productName: o.productName,
+          trackingCode: o.id,
+          shipmentStatus: o.shipmentStatus,
+          shipmentStatusLabel: shipmentStatusLabel(o.shipmentStatus),
+          trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(o.id)}`,
+        },
+        null,
+        o
+      )
+    );
 
-  const availableTotal = available
-    .filter((e) => e.status === "available")
-    .reduce((s, e) => s + (e.amountKes || 0), 0);
+  const readyItems = available.filter((e) => e.status === "available" || e.status === "b2c_failed");
+  const availableTotal = readyItems.reduce((s, e) => s + (e.amountKes || 0), 0);
+  const paidOutItems = available.filter((e) => e.status === "paid");
+  const paidOutTotal = paidOutItems.reduce((s, e) => s + (e.amountKes || 0), 0);
   const pendingTotal = pendingEscrow.reduce((s, e) => s + (e.amountKes || 0), 0);
   const transitTotal = inTransit.reduce((s, e) => s + (e.amountKes || 0), 0);
 
   return {
-    available: { totalKes: availableTotal, items: available },
+    available: { totalKes: availableTotal, items: [...readyItems, ...sending] },
+    paidOut: { totalKes: paidOutTotal, items: paidOutItems },
     pendingEscrow: { totalKes: pendingTotal, items: pendingEscrow },
     inTransit: { totalKes: transitTotal, items: inTransit },
   };
 }
 
-export function getSellerEscrowLedgerByPhone(phone) {
-  const check = requireSeller(phone);
+export async function getSellerEscrowLedgerByPhone(phone, sessionToken) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
   return { ledger: getSellerEscrowLedger(check.supplier.id), seller: sanitizeSeller(check.supplier) };
 }
 
+function assertSellerCanMutateCatalog(supplier) {
+  const st = String(supplier?.shopStatus || "live").toLowerCase();
+  if (st === "live") return { ok: true };
+  return {
+    error: "shop_unavailable",
+    shopStatus: st,
+    message:
+      st === "paused"
+        ? "Your store is paused by Administration — listing edits are disabled."
+        : "Your store is unavailable — listing edits are disabled.",
+  };
+}
+
 /** Bump listing to top of feed without re-uploading photos. */
-export async function refreshSellerListing({ phone, productId }) {
-  const check = requireSeller(phone);
+export async function refreshSellerListing({ phone, productId, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
   if (check.error) return check;
+  const lock = assertSellerCanMutateCatalog(check.supplier);
+  if (!lock.ok) return lock;
 
   const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
   let updated = null;
@@ -200,11 +599,12 @@ export async function refreshSellerListing({ phone, productId }) {
       const products = JSON.parse(await readFile(file, "utf-8"));
       const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
       if (idx === -1) continue;
-      products[idx] = {
+      const { preserveSoldState } = await import("./product-availability.js");
+      products[idx] = preserveSoldState(products[idx], {
         ...products[idx],
         publishedAt: Date.now(),
         refreshedAt: Date.now(),
-      };
+      });
       await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
       updated = products[idx];
     } catch (err) {
@@ -214,6 +614,27 @@ export async function refreshSellerListing({ phone, productId }) {
 
   if (!updated) {
     return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  // Push DB catalog rows up feed ranking (homepage / API feed use updated_at + refreshedAt).
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    if (isDbEnabled()) {
+      await query(
+        `UPDATE products
+            SET updated_at = NOW(),
+                legacy_json = CASE
+                  WHEN legacy_json IS NULL THEN jsonb_build_object('refreshedAt', $2::bigint, 'publishedAt', $2::bigint)
+                  ELSE legacy_json
+                       || jsonb_build_object('refreshedAt', $2::bigint)
+                       || jsonb_build_object('publishedAt', $2::bigint)
+                END
+          WHERE id = $1`,
+        [productId, Number(updated.refreshedAt)]
+      );
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB bump skipped:", err.message);
   }
 
   try {
@@ -229,6 +650,789 @@ export async function refreshSellerListing({ phone, productId }) {
     productId,
     refreshedAt: updated.refreshedAt,
     message: "Listing refreshed — pushed back up the feed.",
+  };
+}
+
+/**
+ * Drop (or raise) a live listing's seller-net price.
+ * On a real drop of buyer all-in price, WhatsApp-notifies users who liked the item.
+ */
+export async function updateSellerListingPrice({ phone, productId, sellerNetKes, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+  const lock = assertSellerCanMutateCatalog(check.supplier);
+  if (!lock.ok) return lock;
+
+  const nextNet = Math.round(Number(sellerNetKes));
+  if (!Number.isFinite(nextNet) || nextNet < 50) {
+    return {
+      error: "invalid_price",
+      message: "Enter a valid price you receive (minimum KES 50).",
+    };
+  }
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  let oldBuyerTotal = null;
+  let oldSellerNet = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const sellerHandle = String(check.supplier.shopHandle || "")
+        .replace(/^@+/, "")
+        .trim()
+        .toLowerCase();
+      const sellerDigits = normalizePhone(phone);
+      const idx = products.findIndex((p) => {
+        if (p.id !== productId) return false;
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerHandle) {
+          const ph = String(p.shopHandle || p.sellerHandle || "")
+            .replace(/^@+/, "")
+            .trim()
+            .toLowerCase();
+          if (ph && ph === sellerHandle) return true;
+        }
+        if (sellerDigits && normalizePhone(p.sellerPhone) === sellerDigits) return true;
+        return false;
+      });
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      oldBuyerTotal =
+        oldBuyerTotal ??
+        (current.priceKes != null ? Math.round(Number(current.priceKes)) : null);
+      oldSellerNet =
+        oldSellerNet ??
+        Math.round(Number(current.sellerNetKes ?? current.sourcePriceKes) || 0);
+
+      const fees = computeFeeBreakdown(nextNet, current.shippingKes, {
+        freeShipping: Boolean(current.freeShipping),
+        deliveryMethod: current.deliveryMethod || "hub",
+      });
+
+      const { preserveSoldState, assertCanRestock } = await import("./product-availability.js");
+      const gate = await assertCanRestock(productId, current);
+      if (!gate.ok) {
+        return {
+          error: gate.error,
+          message: gate.message || "Sold listings cannot be repriced onto the live grid.",
+        };
+      }
+      const comparePatch = applyCompareAtOnBuyerPriceChange(
+        current,
+        oldBuyerTotal ?? Math.round(Number(current.priceKes) || 0),
+        fees.buyerTotalKes
+      );
+      const nextRow = {
+        ...current,
+        sellerNetKes: fees.sellerNetKes,
+        sourcePriceKes: fees.sellerNetKes,
+        priceKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        transactionFeeKes: fees.transactionFeeKes,
+        sellerPayoutKes: fees.sellerPayoutKes,
+        shippingKes: fees.shippingKes,
+        freeShipping: Boolean(fees.freeShipping),
+        publishedAt: Date.now(),
+        refreshedAt: Date.now(),
+        priceUpdatedAt: Date.now(),
+        ...comparePatch,
+      };
+      if (Object.prototype.hasOwnProperty.call(comparePatch, "originalPriceKes") && comparePatch.originalPriceKes == null) {
+        delete nextRow.originalPriceKes;
+        delete nextRow.compareAtPrice;
+      }
+      products[idx] = preserveSoldState(current, nextRow);
+      if (products[idx].originalPriceKes == null) {
+        delete products[idx].originalPriceKes;
+      }
+      if (products[idx].compareAtPrice == null) {
+        delete products[idx].compareAtPrice;
+      }
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = products[idx];
+    } catch (err) {
+      console.warn("[seller-onboard] price update failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  const newBuyerTotal = Math.round(Number(updated.priceKes) || 0);
+
+  await syncListingPriceToDb(updated);
+  try {
+    const { invalidateProductCache } = await import("./catalog.js");
+    invalidateProductCache();
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("node scripts/build-site-catalog.mjs", {
+      cwd: path.join(__dirname, "..", "..", ".."),
+      stdio: "pipe",
+    });
+  } catch {}
+
+  let notified = 0;
+  if (oldBuyerTotal != null && newBuyerTotal < oldBuyerTotal) {
+    try {
+      const { notifyLikersPriceDrop } = await import("./social-notifications.js");
+      let excludeUserId = null;
+      try {
+        const { isDbEnabled, query } = await import("../db/pool.js");
+        if (isDbEnabled()) {
+          const { rows } = await query(
+            `SELECT seller_user_id FROM products WHERE id = $1 LIMIT 1`,
+            [productId]
+          );
+          if (rows[0]?.seller_user_id) excludeUserId = Number(rows[0].seller_user_id);
+        }
+      } catch {}
+      const ping = await notifyLikersPriceDrop({
+        productId,
+        title: updated.name || productId,
+        oldPriceKes: oldBuyerTotal,
+        newPriceKes: newBuyerTotal,
+        excludeUserId,
+      });
+      notified = Number(ping?.notified) || 0;
+    } catch (err) {
+      console.warn("[seller-onboard] price-drop notify skipped:", err.message);
+    }
+  }
+
+  const drop = oldBuyerTotal != null && newBuyerTotal < oldBuyerTotal;
+  const raise = oldBuyerTotal != null && newBuyerTotal > oldBuyerTotal;
+  const compareAt =
+    updated.compareAtPrice != null
+      ? Math.round(Number(updated.compareAtPrice))
+      : updated.originalPriceKes != null
+        ? Math.round(Number(updated.originalPriceKes))
+        : null;
+  return {
+    success: true,
+    productId,
+    sellerNetKes: Math.round(Number(updated.sellerNetKes) || nextNet),
+    priceKes: newBuyerTotal,
+    previousPriceKes: oldBuyerTotal,
+    previousSellerNetKes: oldSellerNet,
+    compareAtPrice: Number.isFinite(compareAt) && compareAt > 0 ? compareAt : null,
+    originalPriceKes: Number.isFinite(compareAt) && compareAt > 0 ? compareAt : null,
+    priceDropped: drop,
+    priceRaised: raise,
+    likersNotified: notified,
+    refreshedAt: updated.refreshedAt,
+    message: drop
+      ? `Price dropped to buyer total KES ${newBuyerTotal.toLocaleString()} — you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.${notified ? ` Notified ${notified} liker${notified === 1 ? "" : "s"}.` : ""}`
+      : raise
+        ? `Price raised — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`
+        : `Price updated — buyer pays KES ${newBuyerTotal.toLocaleString()}, you receive KES ${Math.round(Number(updated.sellerNetKes) || nextNet).toLocaleString()}.`,
+  };
+}
+
+/**
+ * Apply compare-at / original price rules for buyer-facing strike-through + % OFF.
+ * - Price drop: set compare_at to the prior buyer total (keep higher existing compare).
+ * - Price raise: clear compare_at so badges never show on a raise.
+ * - Unchanged: leave compare fields alone.
+ */
+function applyCompareAtOnBuyerPriceChange(current, oldBuyerTotal, newBuyerTotal) {
+  const oldPrice = Math.round(Number(oldBuyerTotal) || 0);
+  const newPrice = Math.round(Number(newBuyerTotal) || 0);
+  const prevCompareRaw = current?.compareAtPrice ?? current?.originalPriceKes;
+  const prevCompare =
+    prevCompareRaw != null && Number.isFinite(Number(prevCompareRaw))
+      ? Math.round(Number(prevCompareRaw))
+      : 0;
+
+  if (oldPrice > 0 && newPrice > 0 && newPrice < oldPrice) {
+    const compareAt = Math.max(prevCompare || 0, oldPrice);
+    return {
+      originalPriceKes: compareAt,
+      compareAtPrice: compareAt,
+    };
+  }
+
+  if (oldPrice > 0 && newPrice > oldPrice) {
+    const patch = {
+      originalPriceKes: null,
+      compareAtPrice: null,
+    };
+    if (current?.promo && typeof current.promo === "object" && current.promo.active) {
+      patch.promo = { ...current.promo, active: false, endedAt: Date.now() };
+      patch.promoUpdatedAt = Date.now();
+    }
+    return patch;
+  }
+
+  return {};
+}
+
+function resolvePromoSellerNet(listNet, type, value) {
+  const list = Math.round(Number(listNet) || 0);
+  const v = Number(value);
+  if (!Number.isFinite(list) || list < 50) return { error: "invalid_list_price" };
+  if (!Number.isFinite(v) || v <= 0) return { error: "invalid_promo_value" };
+  let next = list;
+  const t = String(type || "percent").toLowerCase();
+  if (t === "percent" || t === "pct" || t === "%") {
+    if (v > 70) return { error: "promo_too_steep", message: "Max promo is 70% off." };
+    next = Math.round(list * (1 - v / 100));
+  } else if (t === "kes_off" || t === "off" || t === "kes") {
+    if (v >= list) return { error: "promo_too_steep", message: "KES off must be less than your list price." };
+    next = Math.round(list - v);
+  } else if (t === "sale_net" || t === "sale" || t === "net") {
+    next = Math.round(v);
+  } else {
+    return { error: "invalid_promo_type", message: "Use percent, kes_off, or sale_net." };
+  }
+  if (next < 50) return { error: "invalid_promo_value", message: "Promo seller net must stay at least KES 50." };
+  if (next >= list) {
+    return { error: "promo_not_lower", message: "Promo must be lower than your current list price." };
+  }
+  return { nextNet: next, type: t === "pct" || t === "%" ? "percent" : t === "off" || t === "kes" ? "kes_off" : t === "sale" || t === "net" ? "sale_net" : t };
+}
+
+/**
+ * Start an item promo. Lowers seller net → recomputes fees → buyer STK uses new priceKes.
+ * Only this product is discounted — no cart-wide codes.
+ */
+export async function setSellerListingPromo({
+  phone,
+  productId,
+  type = "percent",
+  value,
+  sessionToken,
+}) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  let listSellerNet = null;
+  let listBuyerTotal = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const existingPromo = current.promo && typeof current.promo === "object" ? current.promo : null;
+      listSellerNet =
+        listSellerNet ??
+        Math.round(
+          Number(
+            existingPromo?.active && existingPromo?.listSellerNetKes
+              ? existingPromo.listSellerNetKes
+              : current.sellerNetKes ?? current.sourcePriceKes
+          ) || 0
+        );
+      listBuyerTotal =
+        listBuyerTotal ??
+        Math.round(
+          Number(
+            existingPromo?.active && existingPromo?.listPriceKes
+              ? existingPromo.listPriceKes
+              : current.priceKes
+          ) || 0
+        );
+
+      const resolved = resolvePromoSellerNet(listSellerNet, type, value);
+      if (resolved.error) return resolved;
+
+      const fees = computeFeeBreakdown(resolved.nextNet, current.shippingKes, {
+        freeShipping: Boolean(current.freeShipping),
+        deliveryMethod: current.deliveryMethod || "hub",
+      });
+
+      const { preserveSoldState, assertCanRestock } = await import("./product-availability.js");
+      const gate = await assertCanRestock(productId, current);
+      if (!gate.ok) {
+        return {
+          error: gate.error,
+          message: gate.message || "Sold listings cannot take a promo.",
+        };
+      }
+
+      const promo = {
+        active: true,
+        type: resolved.type,
+        value: Number(value),
+        listSellerNetKes: listSellerNet,
+        listPriceKes: listBuyerTotal || fees.buyerTotalKes,
+        startedAt: Date.now(),
+        endedAt: null,
+      };
+
+      products[idx] = preserveSoldState(current, {
+        ...current,
+        sellerNetKes: fees.sellerNetKes,
+        sourcePriceKes: fees.sellerNetKes,
+        priceKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        transactionFeeKes: fees.transactionFeeKes,
+        sellerPayoutKes: fees.sellerPayoutKes,
+        shippingKes: fees.shippingKes,
+        freeShipping: Boolean(fees.freeShipping),
+        originalPriceKes: promo.listPriceKes,
+        compareAtPrice: promo.listPriceKes,
+        promo,
+        publishedAt: Date.now(),
+        refreshedAt: Date.now(),
+        priceUpdatedAt: Date.now(),
+        promoUpdatedAt: Date.now(),
+      });
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = products[idx];
+    } catch (err) {
+      console.warn("[seller-onboard] promo set failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  await syncListingPriceToDb(updated);
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("node scripts/build-site-catalog.mjs", {
+      cwd: path.join(__dirname, "..", "..", ".."),
+      stdio: "pipe",
+    });
+  } catch {}
+
+  const buyerPays = Math.round(Number(updated.priceKes) || 0);
+  const youGet = Math.round(Number(updated.sellerNetKes) || 0);
+  return {
+    success: true,
+    productId,
+    promo: updated.promo,
+    sellerNetKes: youGet,
+    priceKes: buyerPays,
+    originalPriceKes: updated.originalPriceKes,
+    message: `Promo live — buyers pay KES ${buyerPays.toLocaleString()} (was KES ${Math.round(Number(updated.originalPriceKes) || 0).toLocaleString()}). You receive KES ${youGet.toLocaleString()}. STK uses this price. End anytime from My listings.`,
+  };
+}
+
+/** End item promo and restore list seller net / buyer price. */
+export async function endSellerListingPromo({ phone, productId, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => p.id === productId && p.supplierId === check.supplier.id);
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const existingPromo = current.promo && typeof current.promo === "object" ? current.promo : null;
+      if (!existingPromo?.active) {
+        return { error: "no_active_promo", message: "This listing has no active promo." };
+      }
+
+      const restoreNet = Math.round(
+        Number(existingPromo.listSellerNetKes ?? current.sellerNetKes ?? current.sourcePriceKes) || 0
+      );
+      if (restoreNet < 50) {
+        return { error: "invalid_list_price", message: "Could not restore list price — set price manually." };
+      }
+
+      const fees = computeFeeBreakdown(restoreNet, current.shippingKes, {
+        freeShipping: Boolean(current.freeShipping),
+        deliveryMethod: current.deliveryMethod || "hub",
+      });
+
+      const { preserveSoldState, assertCanRestock } = await import("./product-availability.js");
+      const gate = await assertCanRestock(productId, current);
+      if (!gate.ok) {
+        return {
+          error: gate.error,
+          message: gate.message || "Sold listings cannot end a promo onto the live grid.",
+        };
+      }
+
+      products[idx] = preserveSoldState(current, {
+        ...current,
+        sellerNetKes: fees.sellerNetKes,
+        sourcePriceKes: fees.sellerNetKes,
+        priceKes: fees.buyerTotalKes,
+        platformFeeKes: fees.platformFeeKes,
+        transactionFeeKes: fees.transactionFeeKes,
+        sellerPayoutKes: fees.sellerPayoutKes,
+        shippingKes: fees.shippingKes,
+        freeShipping: Boolean(fees.freeShipping),
+        originalPriceKes: undefined,
+        compareAtPrice: undefined,
+        promo: {
+          ...existingPromo,
+          active: false,
+          endedAt: Date.now(),
+        },
+        publishedAt: Date.now(),
+        refreshedAt: Date.now(),
+        priceUpdatedAt: Date.now(),
+        promoUpdatedAt: Date.now(),
+      });
+      // Drop undefined originalPriceKes from JSON
+      delete products[idx].originalPriceKes;
+      delete products[idx].compareAtPrice;
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = products[idx];
+    } catch (err) {
+      console.warn("[seller-onboard] promo end failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  await syncListingPriceToDb(updated);
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("node scripts/build-site-catalog.mjs", {
+      cwd: path.join(__dirname, "..", "..", ".."),
+      stdio: "pipe",
+    });
+  } catch {}
+
+  const buyerPays = Math.round(Number(updated.priceKes) || 0);
+  const youGet = Math.round(Number(updated.sellerNetKes) || 0);
+  return {
+    success: true,
+    productId,
+    promo: updated.promo,
+    sellerNetKes: youGet,
+    priceKes: buyerPays,
+    originalPriceKes: null,
+    message: `Promo ended — list price restored. Buyers pay KES ${buyerPays.toLocaleString()}, you receive KES ${youGet.toLocaleString()}.`,
+  };
+}
+
+async function syncListingPriceToDb(updated) {
+  if (!updated?.id) return;
+  try {
+    const { isDbEnabled, query } = await import("../db/pool.js");
+    const { upsertCatalogProduct } = await import("../db/repositories/products.js");
+    if (!isDbEnabled()) return;
+    await upsertCatalogProduct(updated);
+    const promo = updated.promo && typeof updated.promo === "object" ? updated.promo : null;
+    const compareAt =
+      updated.compareAtPrice != null
+        ? Math.round(Number(updated.compareAtPrice))
+        : updated.originalPriceKes != null
+          ? Math.round(Number(updated.originalPriceKes))
+          : null;
+    const compareAtOrNull = Number.isFinite(compareAt) && compareAt > 0 ? compareAt : null;
+    await query(
+      `UPDATE products
+          SET price_kes = $2,
+              source_price_kes = $3,
+              shipping_kes = $4,
+              original_price_kes = $5,
+              compare_at_price = $5,
+              updated_at = NOW(),
+              legacy_json = CASE
+                WHEN legacy_json IS NULL THEN $6::jsonb
+                ELSE legacy_json || $6::jsonb
+              END
+        WHERE id = $1`,
+      [
+        updated.id,
+        Math.round(Number(updated.priceKes) || 0),
+        Math.round(Number(updated.sellerNetKes) || 0),
+        Math.round(Number(updated.shippingKes) || 0),
+        compareAtOrNull,
+        JSON.stringify({
+          sellerNetKes: Math.round(Number(updated.sellerNetKes) || 0),
+          priceKes: Math.round(Number(updated.priceKes) || 0),
+          platformFeeKes: Math.round(Number(updated.platformFeeKes) || 0),
+          transactionFeeKes: Math.round(Number(updated.transactionFeeKes) || 0),
+          originalPriceKes: compareAtOrNull,
+          compareAtPrice: compareAtOrNull,
+          promo: promo,
+          refreshedAt: Number(updated.refreshedAt || Date.now()),
+          priceUpdatedAt: Number(updated.priceUpdatedAt || Date.now()),
+          promoUpdatedAt: Number(updated.promoUpdatedAt || Date.now()),
+        }),
+      ]
+    );
+  } catch (err) {
+    // compare_at_price may be missing until migration — retry without it
+    if (String(err.message || "").includes("compare_at_price")) {
+      try {
+        const { isDbEnabled, query } = await import("../db/pool.js");
+        const { upsertCatalogProduct } = await import("../db/repositories/products.js");
+        if (!isDbEnabled()) return;
+        await upsertCatalogProduct(updated);
+        const promo = updated.promo && typeof updated.promo === "object" ? updated.promo : null;
+        const compareAtOrNull =
+          updated.originalPriceKes != null ? Math.round(Number(updated.originalPriceKes)) : null;
+        await query(
+          `UPDATE products
+              SET price_kes = $2,
+                  source_price_kes = $3,
+                  shipping_kes = $4,
+                  original_price_kes = $5,
+                  updated_at = NOW(),
+                  legacy_json = CASE
+                    WHEN legacy_json IS NULL THEN $6::jsonb
+                    ELSE legacy_json || $6::jsonb
+                  END
+            WHERE id = $1`,
+          [
+            updated.id,
+            Math.round(Number(updated.priceKes) || 0),
+            Math.round(Number(updated.sellerNetKes) || 0),
+            Math.round(Number(updated.shippingKes) || 0),
+            compareAtOrNull,
+            JSON.stringify({
+              sellerNetKes: Math.round(Number(updated.sellerNetKes) || 0),
+              priceKes: Math.round(Number(updated.priceKes) || 0),
+              originalPriceKes: compareAtOrNull,
+              compareAtPrice: compareAtOrNull,
+              promo,
+              refreshedAt: Number(updated.refreshedAt || Date.now()),
+              priceUpdatedAt: Number(updated.priceUpdatedAt || Date.now()),
+            }),
+          ]
+        );
+        return;
+      } catch (err2) {
+        console.warn("[seller-onboard] DB listing price sync skipped:", err2.message);
+        return;
+      }
+    }
+    console.warn("[seller-onboard] DB listing price sync skipped:", err.message);
+  }
+}
+
+/**
+ * Update live listing units on hand (multi-unit inventory).
+ * Soft out-of-stock items can be restocked; permanent sold tombstones cannot.
+ */
+export async function updateSellerListingStock({ phone, productId, stockQuantity, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const qty = Math.round(Number(stockQuantity));
+  if (!Number.isFinite(qty) || qty < 0 || qty > 9999) {
+    return {
+      error: "invalid_stock",
+      message: "Enter units on hand between 0 and 9999.",
+    };
+  }
+  if (!productId) {
+    return { error: "missing_product_id", message: "Missing product id." };
+  }
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  const sellerDigits = normalizePhone(phone);
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => {
+        if (p.id !== productId) return false;
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerDigits && normalizePhone(p.sellerPhone) === sellerDigits) return true;
+        return false;
+      });
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const { applyStockQuantityFields, clearSoldSku } = await import("./product-availability.js");
+
+      // Seller-owned inventory update wins: clear permanent tombstone so multi-unit restock works
+      // after older builds wrongly sold-locked every payment.
+      if (qty > 0) {
+        await clearSoldSku(productId);
+      }
+
+      const next = applyStockQuantityFields({ ...current }, qty);
+      next.stockUpdatedAt = Date.now();
+      products[idx] = next;
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = next;
+    } catch (err) {
+      console.warn("[seller-onboard] stock update failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    const { updateProductInventory, upsertCatalogProduct } = await import(
+      "../db/repositories/products.js"
+    );
+    if (isDbEnabled()) {
+      await upsertCatalogProduct(updated);
+      await updateProductInventory(productId, {
+        stockQuantity: updated.stockQuantity,
+        inStock: updated.inStock !== false && !updated.isSold,
+        isSold: Boolean(updated.isSold),
+      });
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB stock update skipped:", err.message);
+  }
+
+  try {
+    const { invalidateProductCache } = await import("./catalog.js");
+    invalidateProductCache();
+  } catch {}
+
+  try {
+    const { syncPublicCatalog } = await import("./catalog-ops.js");
+    await syncPublicCatalog();
+  } catch (err) {
+    console.warn("[seller-onboard] catalog sync after stock:", err.message);
+  }
+
+  try {
+    const { notifySellerLowStock, notifyAdminLowStock } = await import("./inventory-alerts.js");
+    await notifySellerLowStock(updated, { reason: "stock_saved" });
+    await notifyAdminLowStock(updated);
+  } catch {}
+
+  if (qty > 0) {
+    try {
+      const { notifyWaitlistOnRestock } = await import("./product-waitlist.js");
+      await notifyWaitlistOnRestock(updated);
+    } catch {}
+  }
+
+  return {
+    success: true,
+    productId,
+    stockQuantity: Math.max(0, Math.round(Number(updated.stockQuantity) || 0)),
+    inStock: updated.inStock !== false && !updated.isSold,
+    isSold: Boolean(updated.isSold),
+    variants: Array.isArray(updated.variants) ? updated.variants : [],
+    message:
+      qty > 0
+        ? `Units on hand set to ${qty} — listing stays on the main menu while stock remains.`
+        : "Marked out of stock — buyers won't see it until you add units again.",
+  };
+}
+
+/**
+ * Replace size/colour variants on a live listing and sync parent stockQuantity.
+ */
+export async function updateSellerListingVariants({ phone, productId, variants, sessionToken }) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+  if (!productId) {
+    return { error: "missing_product_id", message: "Missing product id." };
+  }
+  if (!Array.isArray(variants)) {
+    return { error: "invalid_variants", message: "Send a variants array (size, colour, units)." };
+  }
+
+  const paths = [MASTER_CATALOG, REPO_CATALOG].filter((p) => existsSync(p));
+  let updated = null;
+  const sellerDigits = normalizePhone(phone);
+
+  for (const file of paths) {
+    try {
+      const products = JSON.parse(await readFile(file, "utf-8"));
+      const idx = products.findIndex((p) => {
+        if (p.id !== productId) return false;
+        if (p.supplierId && p.supplierId === check.supplier.id) return true;
+        if (sellerDigits && normalizePhone(p.sellerPhone) === sellerDigits) return true;
+        return false;
+      });
+      if (idx === -1) continue;
+
+      const current = products[idx];
+      const { applyProductVariants, clearSoldSku, productStockOnHand } = await import(
+        "./product-availability.js"
+      );
+      const next = applyProductVariants({ ...current }, variants);
+      const sum = productStockOnHand(next);
+      if (sum > 0) await clearSoldSku(productId);
+      next.stockUpdatedAt = Date.now();
+      products[idx] = next;
+      await writeFile(file, JSON.stringify(products, null, 2) + "\n", "utf-8");
+      updated = next;
+    } catch (err) {
+      console.warn("[seller-onboard] variants update failed:", file, err.message);
+    }
+  }
+
+  if (!updated) {
+    return { error: "not_found", message: "Listing not found or not yours." };
+  }
+
+  try {
+    const { isDbEnabled } = await import("../db/pool.js");
+    const { updateProductInventory, upsertCatalogProduct } = await import(
+      "../db/repositories/products.js"
+    );
+    if (isDbEnabled()) {
+      await upsertCatalogProduct(updated);
+      await updateProductInventory(productId, {
+        stockQuantity: updated.stockQuantity,
+        inStock: updated.inStock !== false && !updated.isSold,
+        isSold: Boolean(updated.isSold),
+      });
+    }
+  } catch (err) {
+    console.warn("[seller-onboard] DB variants sync skipped:", err.message);
+  }
+
+  try {
+    const { invalidateProductCache } = await import("./catalog.js");
+    invalidateProductCache();
+  } catch {}
+
+  try {
+    const { syncPublicCatalog } = await import("./catalog-ops.js");
+    await syncPublicCatalog();
+  } catch (err) {
+    console.warn("[seller-onboard] catalog sync after variants:", err.message);
+  }
+
+  try {
+    const { notifySellerLowStock, notifyAdminLowStock } = await import("./inventory-alerts.js");
+    await notifySellerLowStock(updated, { reason: "variants_saved" });
+    await notifyAdminLowStock(updated);
+  } catch {}
+
+  try {
+    const { productStockOnHand } = await import("./product-availability.js");
+    if (productStockOnHand(updated) > 0) {
+      const { notifyWaitlistOnRestock } = await import("./product-waitlist.js");
+      await notifyWaitlistOnRestock(updated);
+    }
+  } catch {}
+
+  const { listProductVariants, productStockOnHand } = await import("./product-availability.js");
+  return {
+    success: true,
+    productId,
+    variants: listProductVariants(updated),
+    stockQuantity: productStockOnHand(updated),
+    inStock: updated.inStock !== false && !updated.isSold,
+    message: `Saved ${listProductVariants(updated).length} variant(s) · ${productStockOnHand(updated)} units total.`,
   };
 }
 
@@ -250,7 +1454,7 @@ export async function confirmOrderDelivery(orderId) {
   });
 
   const { onOrderDelivered } = await import("./escrow-automation.js");
-  onOrderDelivered(getOrder(orderId) || order);
+  await onOrderDelivered(getOrder(orderId) || order);
 
   const fresh = getOrder(orderId);
   const payout = await releaseEscrowPayout(orderId);
@@ -263,7 +1467,10 @@ export async function confirmOrderDelivery(orderId) {
   };
 }
 
-/** Release escrow payout via M-Pesa B2C when order is delivered. */
+/**
+ * After delivery — schedule escrow hold only.
+ * Instant withdraw uses Paystack (if keyed) or Daraja B2C / admin `#payb2c`.
+ */
 export async function releaseEscrowPayout(orderId) {
   const order = getOrder(orderId);
   if (!order) return { error: "not_found" };
@@ -273,44 +1480,249 @@ export async function releaseEscrowPayout(orderId) {
   }
 
   const { getSupplier } = await import("./suppliers.js");
-  const seller = getSupplier(order.supplierId);
-  const mpesaPhone = seller?.mpesaNumber || seller?.phone;
-  const netAmount = order.sourcePriceKes || Math.round((order.priceKes || 0) * 0.92);
-
-  if (!mpesaPhone) {
-    return { error: "no_mpesa", message: "Seller M-Pesa number not on file." };
-  }
-
-  const { initiateB2CPayout } = await import("./daraja-mpesa.js");
-  let payoutResult;
-  try {
-    payoutResult = await initiateB2CPayout({
-      phone: mpesaPhone,
-      amount: netAmount,
-      remarks: `Payout for Order #${order.id}`,
-    });
-  } catch (err) {
-    payoutResult = { ok: false, error: err.message };
-  }
-
   const { updateOrderMeta } = await import("./orders.js");
-  const { scheduleSellerPayoutAfterDelivery } = await import("./settlements.js");
+  const { creditSellerWalletAfterDelivery, escrowHoldBusinessDays } = await import(
+    "./settlements.js"
+  );
+  const { isB2CReady, b2cMeta } = await import("./daraja-mpesa.js");
+  const { isPaystackReady, paystackMeta, resolvePayoutRail } = await import("./paystack-transfers.js");
+  const { lockDisputeBeforePayout } = await import("./disputes.js");
 
-  if (payoutResult.ok) {
-    updateOrderMeta(orderId, { isPaidOut: true, payoutStatus: "paid", paidOutAt: Date.now() });
-    return { success: true, payoutResult, netAmount, mpesaPhone };
+  let gate;
+  try {
+    gate = await lockDisputeBeforePayout(orderId);
+  } catch (err) {
+    console.warn("[seller-onboard] dispute lookup failed, payout aborted:", err?.message || err);
+    return {
+      error: "dispute_lookup_failed",
+      message: "Payout aborted. The dispute check did not complete.",
+    };
+  }
+  if (!gate?.clear) {
+    return { error: "dispute_open", message: "Payout aborted. This order is in dispute." };
   }
 
-  scheduleSellerPayoutAfterDelivery({ ...order, sourcePriceKes: netAmount });
-  updateOrderMeta(orderId, { payoutStatus: "scheduled", isPaidOut: false });
+  const fresh = getOrder(orderId);
+  if (!fresh) return { error: "not_found" };
+  if (fresh.disputeHold || fresh.escrowStatus === "refunded") {
+    return { error: "dispute_open", message: "Payout aborted. This order is in dispute." };
+  }
+  if (fresh.isPaidOut) return { skipped: true, message: "Already paid out." };
+  if (fresh.status !== "delivered") {
+    return { error: "not_delivered", message: "Order must be delivered first." };
+  }
+
+  const seller = getSupplier(fresh.supplierId);
+  const mpesaPhone = seller?.mpesaNumber || seller?.phone;
+  const netAmount = sellerOrderNet(fresh);
+
+  const holdDays = escrowHoldBusinessDays();
+  const ready = creditSellerWalletAfterDelivery(
+    {
+      ...fresh,
+      sourcePriceKes: netAmount,
+      sellerNetKes: netAmount,
+    },
+    { payoutAmountKes: netAmount }
+  );
+  const immediate = holdDays === 0 || ready?.status === "owed";
+  updateOrderMeta(orderId, {
+    payoutStatus: immediate ? "owed" : "scheduled",
+    isPaidOut: false,
+    payoutEligibleAt: ready?.payoutEligibleAt || Date.now(),
+    escrowStatus: "released",
+  });
+
+  void import("./channel-invite.js")
+    .then(({ queueChannelInvite }) => queueChannelInvite(fresh.phone, "purchase"))
+    .catch((err) => console.warn("[seller-onboard] channel invite skipped:", err.message));
 
   return {
     success: true,
-    scheduled: true,
-    payoutResult,
+    scheduled: !immediate,
+    ready: immediate,
     netAmount,
-    message: payoutResult.stub
-      ? "Payout scheduled — B2C API pending, manual transfer for now."
-      : "Payout scheduled after escrow hold.",
+    mpesaPhone: mpesaPhone || null,
+    b2c: b2cMeta(),
+    paystack: paystackMeta(),
+    payoutRail: resolvePayoutRail(isB2CReady()),
+    message: immediate
+      ? isPaystackReady()
+        ? "Seller wallet credited (Ready for M-Pesa). Withdraw sends Paystack → M-Pesa instantly."
+        : isB2CReady()
+          ? "Seller wallet credited (Ready for M-Pesa). Withdraw sends B2C instantly."
+          : "Seller wallet credited (Ready for M-Pesa). Set PAYSTACK_SECRET_KEY or B2C for instant withdraw, or #paid after manual send."
+      : isPaystackReady() || isB2CReady()
+        ? `Payout scheduled (${holdDays} business day hold) — then Ready / withdraw.`
+        : `Payout scheduled (${holdDays} business day hold).`,
   };
+}
+
+/**
+ * Seller Hub dispatch — same mutation as WhatsApp DISPATCH, plus rider / waybill fields.
+ * Does not replace the WhatsApp command path.
+ */
+export async function sellerDispatchOrder({
+  phone,
+  sessionToken,
+  orderId,
+  riderName = "",
+  riderPhone = "",
+  trackingRef = "",
+} = {}) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const { normalizeOrderId, updateOrderMeta } = await import("./orders.js");
+  const { advanceShipmentStatus, getEffectiveShipmentStatus } = await import("./shipments.js");
+  const {
+    authorizeSellerForOrder,
+    isPaidHeld,
+    isDispatched,
+    isAdminTakeOver,
+    msgBuyerDispatched,
+    msgSellerDispatchAck,
+    dispatchMessages,
+    notifyAdminEvent,
+  } = await import("./communication-hub.js");
+
+  const id = normalizeOrderId(orderId);
+  if (!id) return { error: "invalid_order_id", message: "Enter a valid SKN order id." };
+
+  let order = getOrder(id);
+  if (!order) return { error: "not_found", message: `Order ${id} not found.` };
+  if (order.supplierId !== check.supplier.id) {
+    return { error: "forbidden", message: "This order is not linked to your shop." };
+  }
+  if (isAdminTakeOver(order) || order.disputeHold) {
+    return { error: "support_hold", message: "This order is with Sokoni support right now." };
+  }
+
+  const auth = await authorizeSellerForOrder(order, phone, "");
+  order = auth.order || order;
+  if (!auth.ok) {
+    return { error: "forbidden", message: "Could not authorize dispatch for this order." };
+  }
+  if (!isPaidHeld(order)) {
+    return { error: "unpaid", message: "Buyer has not paid into escrow yet." };
+  }
+
+  const ship = getEffectiveShipmentStatus(order);
+  if (ship === "delivered" || order.status === "delivered") {
+    return { error: "already_delivered", message: "Order is already delivered." };
+  }
+  if (isDispatched(order) && order.sellerDispatchedAt) {
+    return {
+      ok: true,
+      already: true,
+      orderId: order.id,
+      message: "Already dispatched — buyer should reply YES on WhatsApp.",
+      riderName: order.riderName || null,
+      trackingRef: order.courierTrackingRef || null,
+    };
+  }
+
+  const rider = String(riderName || "").trim().slice(0, 80);
+  const riderTel = String(riderPhone || "").replace(/\D/g, "").slice(0, 15);
+  const waybill = String(trackingRef || "").trim().slice(0, 80);
+
+  // If seller already has a tracking ref on an upcountry order, register waybill path.
+  if (waybill && (order.fulfillmentMode === "SELLER_COURIER" || order.requiresRider === false)) {
+    const { registerSellerWaybill } = await import("./upcountry-shipments.js");
+    const wb = await registerSellerWaybill({
+      orderId: id,
+      sellerPhone: phone,
+      courierName: rider || order.courierName || "Courier",
+      waybillNumber: waybill,
+    });
+    if (wb.ok) {
+      return {
+        ok: true,
+        orderId: id,
+        message: wb.message,
+        trackingRef: waybill,
+        fulfillmentMode: "SELLER_COURIER",
+        trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(id)}`,
+      };
+    }
+  }
+
+  const result = advanceShipmentStatus(id, "in_transit", {
+    actor: "seller_hub_dispatch",
+    note: "Seller DISPATCH via Seller Hub",
+    skipBuyerNotify: true,
+    riderName: rider || undefined,
+    riderPhone: riderTel || undefined,
+    trackingRef: waybill || undefined,
+  });
+  if (result.error) {
+    return { error: result.error, message: `Could not dispatch (${result.error}).` };
+  }
+
+  updateOrderMeta(id, {
+    sellerDispatchedAt: Date.now(),
+    deliveryMode: order.deliveryMode === "pending" ? "seller_dispatch" : order.deliveryMode,
+    ...(rider ? { riderName: rider } : {}),
+    ...(riderTel ? { riderPhone: riderTel } : {}),
+    ...(waybill ? { courierTrackingRef: waybill } : {}),
+  });
+
+  const fresh = getOrder(id) || order;
+  void notifyAdminEvent("SELLER_DISPATCHED", {
+    orderId: fresh.id,
+    details: `IN_TRANSIT via Seller Hub — buyer asked for YES ${fresh.id}`,
+    silent: true,
+  });
+
+  const jobs = [];
+  if (fresh.customerKey) jobs.push({ to: fresh.customerKey, message: msgBuyerDispatched(fresh) });
+  // Optional ack to seller WhatsApp if we know a chat id — fail-soft.
+  try {
+    const { sellerNotifyTargets } = await import("./communication-hub.js");
+    const targets = sellerNotifyTargets(phone) || [];
+    for (const to of targets.slice(0, 1)) {
+      jobs.push({ to, message: msgSellerDispatchAck(fresh) });
+    }
+  } catch {
+    /* ignore */
+  }
+  void dispatchMessages(jobs);
+
+  return {
+    ok: true,
+    orderId: fresh.id,
+    message: "Marked dispatched. Buyer was asked to reply YES when it arrives.",
+    riderName: fresh.riderName || rider || null,
+    trackingRef: fresh.courierTrackingRef || waybill || null,
+    trackUrl: `${config.publicSiteUrl}/track.html?order=${encodeURIComponent(fresh.id)}`,
+  };
+}
+
+/** Soft payout details for admin/manual rails — live withdraw still uses M-Pesa number. */
+export async function updateSellerPayoutDetails({
+  phone,
+  sessionToken,
+  mpesaNumber,
+  bankName,
+  bankAccountName,
+  bankAccountNumber,
+  mpesaTill,
+  mpesaPaybill,
+  paybillAccount,
+} = {}) {
+  const check = await requireAuthenticatedSeller(phone, sessionToken);
+  if (check.error) return check;
+
+  const { updatePeerSellerPayoutDetails } = await import("./suppliers.js");
+  const result = updatePeerSellerPayoutDetails(phone, {
+    mpesaNumber,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    mpesaTill,
+    mpesaPaybill,
+    paybillAccount,
+  });
+  if (result.error) return result;
+  return { ok: true, seller: sanitizeSeller(result.supplier), message: "Payout details saved." };
 }

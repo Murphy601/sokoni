@@ -3,57 +3,105 @@
 # Safe on docker-compose v1 (no --force-recreate — that triggers ContainerConfig KeyError).
 set -euo pipefail
 
-REPO="${SOKONI_REPO:-$HOME/sokoni}"
-COMPOSE_FILE="$REPO/docker-compose.waha.yml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+export SOKONI_REPO="${SOKONI_REPO:-$REPO}"
 
-# GCP VM may have docker-compose (v1) instead of "docker compose" (v2 plugin).
-docker_compose() {
-  if docker compose version >/dev/null 2>&1; then
-    docker compose "$@"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose "$@"
-  else
-    echo "ERROR: Docker Compose not found."
-    echo "Install one of:"
-    echo "  sudo apt install docker-compose-plugin   # docker compose"
-    echo "  sudo apt install docker-compose            # docker-compose"
-    exit 1
-  fi
-}
+# shellcheck source=lib/waha-common.sh
+source "$SCRIPT_DIR/lib/waha-common.sh"
+COMPOSE_FILE="$WAHA_COMPOSE_FILE"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "ERROR: Missing $COMPOSE_FILE — run: cd ~/sokoni && git pull origin main"
   exit 1
 fi
 
-echo "==> Starting WAHA from $COMPOSE_FILE"
-cd "$REPO"
+echo "==> Starting WAHA from $COMPOSE_FILE (repo: $SOKONI_REPO)"
+cd "$SOKONI_REPO"
 
-# Pull latest image so catalog API endpoints are available (sessions/volumes are preserved).
-if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
-  echo "==> Pulling latest devlikeapro/waha:latest (set SKIP_WAHA_PULL=1 to skip)"
-  docker pull devlikeapro/waha:latest || echo "WARN: docker pull failed — continuing with cached image"
+if [ "${WIPE_WAHA_SESSIONS:-}" = "1" ]; then
+  waha_wipe_sessions_volume
 fi
+
+# Resolve WhatsApp Web version on the host (required — empty env breaks compose/NOWEB).
+if [ -z "${WAHA_NOWEB_WA_VERSION:-}" ]; then
+  if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/fetch-wa-version.js" ]; then
+    WAHA_NOWEB_WA_VERSION="$(node "$SCRIPT_DIR/fetch-wa-version.js" 2>/dev/null || true)"
+  fi
+fi
+if [ -z "${WAHA_NOWEB_WA_VERSION:-}" ]; then
+  # Built-in floor from WAHA 2026.7.2 / current Baileys pin — better than empty.
+  WAHA_NOWEB_WA_VERSION="2.3000.1043857760"
+  echo "==> Could not fetch live WA version — using fallback $WAHA_NOWEB_WA_VERSION"
+fi
+export WAHA_NOWEB_WA_VERSION
+echo "==> WAHA_NOWEB_WA_VERSION=$WAHA_NOWEB_WA_VERSION"
+
+# Avoid bouncing a healthy linked session on every bot deploy (regressed WA before).
+# Force recreate with: FORCE_WAHA_RECREATE=1 bash scripts/deploy-waha.sh
+if [ "${FORCE_WAHA_RECREATE:-}" != "1" ] && [ "${WIPE_WAHA_SESSIONS:-}" != "1" ]; then
+  EXISTING_CID="$(waha_container_id)"
+  if [ -n "$EXISTING_CID" ]; then
+    EXISTING_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$EXISTING_CID" 2>/dev/null || true)"
+    EXISTING_VER="$(docker exec "$EXISTING_CID" printenv WAHA_NOWEB_WA_VERSION 2>/dev/null || true)"
+    EXISTING_STATUS="$(
+      curl -sf -H "X-Api-Key: $WAHA_KEY" "$WAHA_URL/api/sessions/$WAHA_SESSION" 2>/dev/null \
+        | python3 -c 'import sys,json
+try:
+  print(json.load(sys.stdin).get("status") or "")
+except Exception:
+  print("")' 2>/dev/null || true
+    )"
+    if [[ "$EXISTING_IMAGE" == *2026.7.2* ]] \
+      && [ "$EXISTING_STATUS" = "WORKING" ] \
+      && [ -n "$EXISTING_VER" ]; then
+      echo "==> WAHA already healthy on $EXISTING_IMAGE (status=WORKING, WAHA_NOWEB_WA_VERSION=$EXISTING_VER)"
+      echo "    Skipping container recreate — set FORCE_WAHA_RECREATE=1 to force."
+      echo "==> Re-applying session webhook/store config only..."
+      if [ -f "$SCRIPT_DIR/configure-waha-session.sh" ]; then
+        bash "$SCRIPT_DIR/configure-waha-session.sh" || true
+      fi
+      exit 0
+    fi
+    echo "==> Recreating WAHA (image=$EXISTING_IMAGE status=${EXISTING_STATUS:-unknown} ver=${EXISTING_VER:-unset})"
+  fi
+fi
+
+# Pull the pinned image explicitly (avoid compose ${image:tag} default interpolation bugs).
+if [ "${SKIP_WAHA_PULL:-}" != "1" ]; then
+  echo "==> Pulling WAHA image ($WAHA_DEFAULT_IMAGE) — set SKIP_WAHA_PULL=1 to skip"
+  docker pull "$WAHA_DEFAULT_IMAGE" || echo "WARN: docker pull failed — continuing with cached image"
+fi
+
+# Show resolved compose config (catches empty/broken image early).
+echo "==> Resolved compose image:"
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml config 2>/dev/null \
+  | python3 -c "import sys,re
+t=sys.stdin.read()
+m=re.search(r'image:\\s*[\\\"\\']?([^\\\"\\'\\s]+)', t)
+print(m.group(1) if m else 'UNKNOWN')" \
+  || echo "(could not render compose config)"
 
 # docker-compose v1.29 + --force-recreate → KeyError: 'ContainerConfig'. Use down + up instead.
 # Do NOT use --remove-orphans — it kills sokoni_postgres (separate compose file, same project name).
-docker_compose -p sokoni-waha -f docker-compose.waha.yml down 2>/dev/null || true
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml down 2>/dev/null || true
 
-# Remove ghost containers left by failed --force-recreate runs.
-docker ps -aq --filter "name=waha" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+# Remove ghost containers left by failed --force-recreate runs (this project only).
+docker ps -aq --filter "name=${WAHA_COMPOSE_PROJECT}" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
 
-docker_compose -p sokoni-waha -f docker-compose.waha.yml up -d
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml up -d
 
-sleep 4
-WAHA_CID="$(docker ps -qf 'ancestor=devlikeapro/waha:latest' | head -1)"
+sleep 5
+WAHA_CID="$(waha_container_id)"
 if [ -z "$WAHA_CID" ]; then
   echo "ERROR: WAHA container is not running."
-  docker_compose -p sokoni-waha -f docker-compose.waha.yml ps || true
-  docker ps -a | grep -i waha || true
+  waha_print_status
+  waha_print_recent_logs 60
   exit 1
 fi
 
 echo "==> WAHA container: $WAHA_CID"
+echo "==> Image: $(docker inspect -f '{{.Config.Image}}' "$WAHA_CID" 2>/dev/null || echo unknown)"
 echo "==> WAHA WhatsApp env:"
 docker exec "$WAHA_CID" env | grep -E '^WHATSAPP_' | sort || true
 
@@ -82,8 +130,43 @@ if [ "$life" != "0" ]; then
 fi
 
 echo "==> WAHA media config OK"
-docker_compose -p sokoni-waha -f docker-compose.waha.yml ps
+echo "==> WAHA_NOWEB_WA_VERSION in container:"
+docker exec "$WAHA_CID" env | grep '^WAHA_NOWEB_WA_VERSION=' || echo "(missing)"
+waha_docker_compose -p "$WAHA_COMPOSE_PROJECT" -f docker-compose.waha.yml ps
 
-if [ -f "$REPO/scripts/configure-waha-session.sh" ]; then
-  bash "$REPO/scripts/configure-waha-session.sh"
+echo "==> Waiting for WAHA HTTP API..."
+api_ok=0
+for i in $(seq 1 60); do
+  if curl -sf -H "X-Api-Key: ${WAHA_KEY}" "${WAHA_URL}/api/sessions" >/dev/null 2>&1; then
+    echo "==> WAHA API ready (${i}s)"
+    api_ok=1
+    break
+  fi
+  # Surface crash-loops early
+  if [ $((i % 10)) -eq 0 ]; then
+    echo "  … still waiting (${i}s)"
+    waha_print_recent_logs 15
+  fi
+  sleep 1
+done
+
+if [ "$api_ok" -ne 1 ]; then
+  echo "ERROR: WAHA container is up but API never became ready at $WAHA_URL"
+  waha_print_status
+  waha_print_recent_logs 80
+  echo "Inspect: docker logs $WAHA_CID --tail 100"
+  exit 1
+fi
+
+if [ -f "$SCRIPT_DIR/configure-waha-session.sh" ]; then
+  if ! bash "$SCRIPT_DIR/configure-waha-session.sh"; then
+    echo ""
+    echo "WARN: WAHA container is up, but WhatsApp session is not WORKING yet."
+    echo "      Link the phone (pairing code / QR):"
+    echo "        bash scripts/waha-link-whatsapp.sh"
+    echo "      Or reset:"
+    echo "        RESET_WAHA_SESSION=1 bash scripts/configure-waha-session.sh"
+    # Container itself succeeded — linking is a separate step.
+    exit 0
+  fi
 fi

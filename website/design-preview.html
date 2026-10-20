@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Sokoni Design Tokens — Preview</title>
@@ -39,7 +41,7 @@
     <section>
       <h2>Typography</h2>
       <div class="type-row font-display" style="font-size: var(--text-display); font-weight: 700;">Display — Shop like you're texting a trusted assistant</div>
-      <div class="type-row font-display" style="font-size: var(--text-headline); font-weight: 700;">Headline — Pay when it arrives</div>
+      <div class="type-row font-display" style="font-size: var(--text-headline); font-weight: 700;">Headline — Escrow until you confirm</div>
       <div class="type-row font-body" style="font-size: var(--text-body-lg); line-height: var(--leading-body);">Body — Tell us what you need in English, Kiswahili or Sheng. We deliver across Kenya.</div>
       <div class="type-row font-body" style="font-size: var(--text-label); font-weight: 600;">Label — Start on WhatsApp</div>
     </section>
@@ -48,7 +50,7 @@
       <h2>Components</h2>
       <div class="demo-row">
         <button type="button" class="btn-whatsapp" style="border:0;padding:12px 24px;cursor:pointer;">Start on WhatsApp</button>
-        <span class="chip">Pay on delivery</span>
+        <span class="chip">Prepaid escrow</span>
         <input class="input-sokoni" type="search" placeholder="e.g. soundbar chini ya 10k" style="padding:12px 16px;border:2px solid rgba(27,16,53,0.1);min-width:220px;" />
       </div>
     </section>
@@ -72,5 +74,8 @@
       grid.innerHTML += `<div class="swatch"><div class="swatch-color" style="background:${hex}"></div><div class="swatch-meta"><strong>${name}</strong><br>${hex}</div></div>`;
     }
   </script>
+
+  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
 </body>
 </html>

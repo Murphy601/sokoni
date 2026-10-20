@@ -1,12 +1,22 @@
 name: Catalog Sync
 
-# Refreshes product prices/availability daily and commits any changes back to the repo.
-# See docs/CATALOG_SYNC.md for what's automatable per source and how to add secrets.
+# DEPRECATED — affiliate era only. Kept for reference, not scheduled.
+#
+# This drives scripts/sync/ (Amazon PA-API, AliExpress, opt-in structured-data
+# readers for Kilimall/Jumia/Temu), which has not been touched since the first
+# day of the repo. Sokoni pivoted to a peer-to-peer prepaid marketplace on
+# 2026-07-27; products.json is now written by sellers through the Seller Hub
+# and the VM's own catalog publish.
+#
+# Leaving it on a nightly cron meant a job with `contents: write` could mutate
+# the live catalog on a schedule, for a business model that no longer exists.
+# The schedule is removed. Manual dispatch stays so the affiliate path can be
+# exercised deliberately if it is ever revived.
+#
+# See docs/CATALOG_SYNC.md for the original design.
 
 on:
-  schedule:
-    - cron: "0 3 * * *" # every day at 03:00 UTC
-  workflow_dispatch: {} # allow manual runs from the Actions tab
+  workflow_dispatch: {} # manual only — no schedule, by design
 
 permissions:
   contents: write

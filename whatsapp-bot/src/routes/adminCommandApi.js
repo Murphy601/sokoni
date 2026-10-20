@@ -1,0 +1,356 @@
+/**
+ * Admin Command Center — Platform Manager APIs.
+ * Mounted at /admin/command (requireAdminToken).
+ */
+import { clientError } from "../lib/public-error.js";
+import { Router } from "express";
+import { requireAdminToken } from "../lib/admin-auth.js";
+import {
+  getPlatformCommandDashboard,
+  getEscrowHoldingTank,
+  getHubPerformanceStats,
+  getPlatformCommissions,
+  pauseEscrowOrder,
+  refundEscrowOrder,
+  releaseEscrowOrder,
+} from "../services/platform-command.js";
+import { initiateSettlementB2C, markPayoutPaid } from "../services/settlements.js";
+import { isB2CReady, b2cMeta } from "../services/daraja-mpesa.js";
+import { markWithdrawalPaid, markWithdrawalPaidByOrderId } from "../services/seller-withdrawals.js";
+import { config } from "../config.js";
+import { updateOrderMeta } from "../services/orders.js";
+import { listAdminDisputes, resolveDispute } from "../services/disputes.js";
+import { smartSearch, smartSuggest } from "../services/smart-search.js";
+import { runOpsAgentTurn, opsAgentMeta } from "../services/ops-agent.js";
+
+const router = Router();
+router.use(requireAdminToken);
+
+/** GET /admin/command/dashboard */
+router.get("/dashboard", async (_req, res) => {
+  try {
+    res.json(await getPlatformCommandDashboard());
+  } catch (err) {
+    res.status(500).json(clientError(err, "dashboard_failed"));
+  }
+});
+
+/** GET /admin/command/escrow */
+router.get("/escrow", (req, res) => {
+  const limit = Number(req.query.limit) || 80;
+  res.json(getEscrowHoldingTank({ limit }));
+});
+
+/** POST /admin/command/escrow/:orderId/pause */
+router.post("/escrow/:orderId/pause", (req, res) => {
+  const result = pauseEscrowOrder(req.params.orderId, {
+    reason: req.body?.reason,
+    adminLabel: req.body?.adminLabel || "admin-command",
+  });
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
+});
+
+/** POST /admin/command/escrow/:orderId/refund */
+router.post("/escrow/:orderId/refund", (req, res) => {
+  const result = refundEscrowOrder(req.params.orderId, {
+    reason: req.body?.reason,
+    adminLabel: req.body?.adminLabel || "admin-command",
+  });
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
+});
+
+/** POST /admin/command/escrow/:orderId/release */
+router.post("/escrow/:orderId/release", async (req, res) => {
+  const result = releaseEscrowOrder(req.params.orderId, {
+    reason: req.body?.reason,
+    adminLabel: req.body?.adminLabel || "admin-command",
+  });
+  try {
+    const { writeAdminLog } = await import("../services/admin-logs.js");
+    await writeAdminLog({
+      action: "FORCE_RELEASE",
+      actorLabel: String(req.body?.adminLabel || "admin-command").slice(0, 80),
+      orderRef: req.params.orderId,
+      targetType: "order",
+      targetId: req.params.orderId,
+      source: "admin-command.dead-man",
+      success: !result?.error,
+      message: result?.message || result?.error || req.body?.reason || null,
+    });
+  } catch {
+    /* fail-soft */
+  }
+  if (result.error) return res.status(404).json(result);
+  res.json(result);
+});
+
+/** POST /admin/command/escrow/:orderId/paid — mark queued / Ready payout sent by hand */
+router.post("/escrow/:orderId/paid", (req, res) => {
+  const id = String(req.params.orderId || "").trim();
+  if (/^WD-\d{4}-\d+/i.test(id)) {
+    const out = markWithdrawalPaid(id);
+    if (out.error === "not_found") return res.status(404).json(out);
+    return res.json({ ok: true, ...out, message: `Marked ${id} paid.` });
+  }
+  const entry = markPayoutPaid(id);
+  if (!entry) return res.status(404).json({ error: "not_found", message: `No owed / queued payout for ${id}.` });
+  try {
+    updateOrderMeta(id, {
+      payoutStatus: "paid",
+      isPaidOut: true,
+      paidOutAt: Date.now(),
+      payoutRail: "admin",
+    });
+  } catch {
+    /* ignore */
+  }
+  const done = markWithdrawalPaidByOrderId(id);
+  res.json({
+    ok: true,
+    entry,
+    withdrawal: done?.request || null,
+    message: done?.ok
+      ? `Marked ${id} paid — withdrawal ${done.request.id} closed.`
+      : `Marked ${id} paid.`,
+  });
+});
+
+/** POST /admin/command/escrow/:orderId/payb2c — Daraja B2C only when PAYSTACK_ONLY=false */
+router.post("/escrow/:orderId/payb2c", async (req, res) => {
+  if (config.paystack?.only !== false) {
+    return res.status(409).json({
+      error: "daraja_off",
+      message:
+        "Daraja B2C is off. Send M-Pesa by hand, then Mark paid (or WhatsApp #paid WD-…).",
+    });
+  }
+  if (!isB2CReady()) {
+    return res.status(503).json({
+      error: "b2c_not_configured",
+      message:
+        "Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (initiator DavidMuiruri) then restart the bot.",
+      b2c: b2cMeta(),
+    });
+  }
+  try {
+    const result = await initiateSettlementB2C(req.params.orderId, {
+      force: Boolean(req.body?.force),
+    });
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (result.error) return res.status(400).json(result);
+    res.json({ ok: true, ...result, b2c: b2cMeta() });
+  } catch (err) {
+    res.status(500).json(clientError(err, "payb2c_failed"));
+  }
+});
+
+/** GET /admin/command/hubs?days=30 */
+router.get("/hubs", (req, res) => {
+  const days = Number(req.query.days) || 30;
+  res.json(getHubPerformanceStats({ days }));
+});
+
+/** GET /admin/command/commissions?days=30&status=all|earned|held|refunded */
+router.get("/commissions", (req, res) => {
+  const days = Number(req.query.days) || 30;
+  const limit = Number(req.query.limit) || 80;
+  const status = String(req.query.status || "all");
+  res.json(getPlatformCommissions({ days, limit, status }));
+});
+
+/** GET /admin/command/disputes?status=open */
+router.get("/disputes", async (req, res) => {
+  const result = await listAdminDisputes({
+    status: req.query.status || "open",
+    limit: Number(req.query.limit) || 40,
+  });
+  if (result.error === "database_not_configured") {
+    return res.status(503).json(result);
+  }
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** POST /admin/command/disputes/:id/resolve */
+router.post("/disputes/:id/resolve", async (req, res) => {
+  const result = await resolveDispute({
+    disputeId: req.params.id,
+    resolution: req.body?.resolution,
+    notes: req.body?.notes,
+    adminLabel: req.body?.adminLabel || "admin-command",
+  });
+  if (result.error === "database_not_configured") return res.status(503).json(result);
+  if (result.error === "not_found") return res.status(404).json(result);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+/** GET /admin/command/search?q= — smart search preview for admins */
+router.get("/search", async (req, res) => {
+  const q = String(req.query.q || req.query.query || "").trim();
+  if (!q) return res.status(400).json({ error: "missing_query", message: "Pass ?q=" });
+  try {
+    const result = await smartSearch({
+      q,
+      limit: Number(req.query.limit) || 12,
+      browseCategory: req.query.browse || null,
+      browseSubCategory: req.query.browseSub || null,
+      maxPriceKes: req.query.maxPriceKes != null ? Number(req.query.maxPriceKes) : null,
+    });
+    res.json({
+      ...result,
+      products: (result.products || []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        priceKes: p.priceKes,
+        browseCategory: p.browseCategory,
+        browseSubCategory: p.browseSubCategory,
+        inStock: p.inStock !== false,
+        imageUrl: p.imageUrl,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json(clientError(err, "search_failed"));
+  }
+});
+
+/** GET /admin/command/suggest?q= */
+router.get("/suggest", async (req, res) => {
+  res.json(await smartSuggest(String(req.query.q || ""), { limit: Number(req.query.limit) || 8 }));
+});
+
+/**
+ * POST /admin/command/master
+ * Body: { command: "!force-release SKN-…" } — code interceptor, no LLM.
+ * Auth: X-Admin-Token or X-Master-Admin-Secret (MASTER_ADMIN_SECRET / ADMIN_SETUP_TOKEN).
+ */
+router.post("/master", async (req, res) => {
+  try {
+    const command = String(req.body?.command || req.body?.text || "").trim();
+    if (!command) {
+      return res.status(400).json({ error: "missing_command", message: "Provide command / text." });
+    }
+    const { executeMasterAdminCommand, isMasterCommand } = await import("../services/admin-override.js");
+    if (!isMasterCommand(command) && !/^(admin|#help|OVERRIDE)/i.test(command)) {
+      return res.status(400).json({
+        error: "not_master_command",
+        message: "Use !force-release, !override-state, OVERRIDE:, etc. See !help",
+      });
+    }
+    const result = await executeMasterAdminCommand(command, {
+      adminLabel: String(req.body?.adminLabel || "master-api").slice(0, 80),
+      actorPhone: String(req.body?.actorPhone || "").slice(0, 20),
+      source: "admin-command.master-api",
+    });
+    res.json({
+      ok: result.ok,
+      action: result.action,
+      reply: result.reply,
+      data: result.data || null,
+    });
+  } catch (err) {
+    res.status(500).json(clientError(err, "master_command_failed"));
+  }
+});
+
+/** GET /admin/command/admin-logs — Boss FORCE RELEASE / SUSPEND SHOP trail */
+router.get("/admin-logs", async (req, res) => {
+  try {
+    const { listAdminLogs } = await import("../services/admin-logs.js");
+    const result = await listAdminLogs({
+      limit: req.query.limit,
+      action: req.query.action,
+    });
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err, "admin_logs_failed"));
+  }
+});
+
+/** GET /admin/command/ratings/:type/:id — event log for Purge Unfair Review */
+router.get("/ratings/:type/:id", async (req, res) => {
+  try {
+    const { listRatingEvents, getSellerRatingProfile, findSellerByHandle } = await import(
+      "../services/rating-engine.js"
+    );
+    let type = String(req.params.type || "").toLowerCase();
+    let id = Number(req.params.id);
+
+    if (type === "by-handle" || type === "handle") {
+      const handleId = await findSellerByHandle(req.params.id);
+      if (!handleId) {
+        return res.status(404).json({ error: "seller_not_found", message: "No user for that handle." });
+      }
+      type = "seller";
+      id = handleId;
+    } else if (type !== "rider") {
+      type = "seller";
+    }
+
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ error: "invalid_id" });
+    }
+    const { events } = await listRatingEvents({
+      subjectType: type,
+      subjectId: id,
+      limit: Number(req.query.limit) || 40,
+    });
+    let profile = null;
+    if (type === "seller") profile = await getSellerRatingProfile(id);
+    res.json({ subjectType: type, subjectId: id, profile, events });
+  } catch (err) {
+    res.status(500).json(clientError(err, "ratings_list_failed"));
+  }
+});
+
+/**
+ * POST /admin/command/ratings/purge
+ * Body: { subjectType, subjectId, poolEntryId } — Purge Unfair Review
+ */
+router.post("/ratings/purge", async (req, res) => {
+  try {
+    const { purgeRatingEntry } = await import("../services/rating-engine.js");
+    const subjectType = String(req.body?.subjectType || "seller").toLowerCase();
+    const subjectId = Number(req.body?.subjectId);
+    const poolEntryId = String(req.body?.poolEntryId || "").trim();
+    const result = await purgeRatingEntry({
+      subjectType,
+      subjectId,
+      poolEntryId,
+      actorLabel: String(req.body?.adminLabel || "admin-dashboard").slice(0, 80),
+    });
+    if (!result?.ok) {
+      return res.status(400).json({ error: result?.reason || "purge_failed" });
+    }
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json(clientError(err, "purge_failed"));
+  }
+});
+
+/** GET /admin/command/ops-agent — provider + tool list (no customer data). */
+router.get("/ops-agent", (_req, res) => {
+  res.json(opsAgentMeta());
+});
+
+/**
+ * POST /admin/command/ops-agent
+ * Staff natural-language: "Did John get his order? Ask him how the jacket fits."
+ * LLM may call Postgres tools then WAHA sendText. Admin token required.
+ */
+router.post("/ops-agent", async (req, res) => {
+  try {
+    const message = String(req.body?.message || req.body?.prompt || "").trim();
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    const dryRun = req.body?.dryRun === true || req.body?.dry_run === true;
+    const result = await runOpsAgentTurn({ message, history, dryRun });
+    res.status(result.ok ? 200 : result.error === "missing_message" ? 400 : 502).json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err, "ops_agent_failed"));
+  }
+});
+
+export default router;

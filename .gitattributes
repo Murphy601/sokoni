@@ -1,0 +1,15 @@
+# Blobs in this repo are LF. core.autocrlf=true on a Windows checkout rewrites
+# the working tree to CRLF, which silently shifts every byte offset -- tests
+# that slice a fixed window out of a source file then fail locally and pass in
+# CI. Pin the working tree to LF so both agree.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary

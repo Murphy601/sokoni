@@ -6,22 +6,143 @@ import { query, isDbEnabled, closePool } from "./pool.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = path.join(__dirname, "..", "..", "db", "schema.sql");
 const SCHEMA_PHASE2_PATH = path.join(__dirname, "..", "..", "db", "schema-phase2-browse.sql");
+const SCHEMA_PHASE5_PATH = path.join(__dirname, "..", "..", "db", "schema-phase5-shipping.sql");
+const SCHEMA_PHASE10_PATH = path.join(__dirname, "..", "..", "db", "schema-phase10-social.sql");
+const SCHEMA_PHASE11_PATH = path.join(__dirname, "..", "..", "db", "schema-phase11-shop-reviews.sql");
+const SCHEMA_PHASE12_PATH = path.join(__dirname, "..", "..", "db", "schema-phase12-depop-expansion.sql");
+const SCHEMA_PHASE13_PATH = path.join(__dirname, "..", "..", "db", "schema-phase13-reviews-disputes.sql");
+const SCHEMA_PHASE14_PATH = path.join(__dirname, "..", "..", "db", "schema-phase14-account-auth.sql");
+const SCHEMA_PHASE15_PATH = path.join(__dirname, "..", "..", "db", "schema-phase15-hybrid-logistics.sql");
+const SCHEMA_PHASE16_PATH = path.join(__dirname, "..", "..", "db", "schema-phase16-pgvector-knowledge.sql");
+const SCHEMA_PHASE17_PATH = path.join(__dirname, "..", "..", "db", "schema-phase17-compare-at-price.sql");
+const SCHEMA_PHASE19_PATH = path.join(__dirname, "..", "..", "db", "schema-phase19-boda-fleet.sql");
+const SCHEMA_PHASE20_PATH = path.join(__dirname, "..", "..", "db", "schema-phase20-boda-otp-safeguards.sql");
+const SCHEMA_PHASE21_PATH = path.join(__dirname, "..", "..", "db", "schema-phase21-boda-payout-hold.sql");
+const SCHEMA_PHASE22_PATH = path.join(__dirname, "..", "..", "db", "schema-phase22-rider-b2c.sql");
+const SCHEMA_PHASE23_PATH = path.join(__dirname, "..", "..", "db", "schema-phase23-rider-payout-split.sql");
+const SCHEMA_PHASE24_PATH = path.join(__dirname, "..", "..", "db", "schema-phase24-boda-ops-safeguards.sql");
+const SCHEMA_PHASE25_PATH = path.join(__dirname, "..", "..", "db", "schema-phase25-upcountry-waybill.sql");
+const SCHEMA_PHASE26_PATH = path.join(__dirname, "..", "..", "db", "schema-phase26-platform-rider-pin.sql");
+const SCHEMA_PHASE27_PATH = path.join(__dirname, "..", "..", "db", "schema-phase27-dispatch-radius.sql");
+const SCHEMA_PHASE28_PATH = path.join(__dirname, "..", "..", "db", "schema-phase28-atomic-accept.sql");
+const SCHEMA_PHASE29_PATH = path.join(__dirname, "..", "..", "db", "schema-phase29-ops-edge-safeguards.sql");
+const SCHEMA_PHASE30_PATH = path.join(__dirname, "..", "..", "db", "schema-phase30-audit-logs.sql");
+const SCHEMA_PHASE31_PATH = path.join(__dirname, "..", "..", "db", "schema-phase31-staff-roles.sql");
+const SCHEMA_PHASE32_PATH = path.join(__dirname, "..", "..", "db", "schema-phase32-admin-logs.sql");
+const SCHEMA_PHASE33_PATH = path.join(__dirname, "..", "..", "db", "schema-phase33-weighted-ratings.sql");
+const SCHEMA_PHASE34_PATH = path.join(__dirname, "..", "..", "db", "schema-phase34-growth-points.sql");
+const SCHEMA_PHASE35_PATH = path.join(__dirname, "..", "..", "db", "schema-phase35-shop-pins.sql");
+const SCHEMA_PHASE36_PATH = path.join(__dirname, "..", "..", "db", "schema-phase36-location-pins.sql");
+const SCHEMA_PHASE37_PATH = path.join(__dirname, "..", "..", "db", "schema-phase37-rich-messages.sql");
+const SCHEMA_PHASE38_PATH = path.join(__dirname, "..", "..", "db", "schema-phase38-bundles.sql");
+const SCHEMA_PHASE39_PATH = path.join(__dirname, "..", "..", "db", "schema-phase39-fit-check.sql");
+const SCHEMA_PHASE40_PATH = path.join(__dirname, "..", "..", "db", "schema-phase40-flagged-messages.sql");
+const SCHEMA_PHASE41_PATH = path.join(__dirname, "..", "..", "db", "schema-phase41-agent-actions.sql");
+const SCHEMA_PHASE42_PATH = path.join(__dirname, "..", "..", "db", "schema-phase42-action-guards.sql");
+const SCHEMA_PHASE43_PATH = path.join(__dirname, "..", "..", "db", "schema-phase43-action-once.sql");
+const SCHEMA_PHASE44_PATH = path.join(__dirname, "..", "..", "db", "schema-phase44-native-jobs.sql");
+const SCHEMA_PHASE45_PATH = path.join(__dirname, "..", "..", "db", "schema-phase45-promotion-queue.sql");
+const SCHEMA_PHASE46_PATH = path.join(__dirname, "..", "..", "db", "schema-phase46-category-tree-indexes.sql");
+
+async function applySchemaFile(label, filePath, { required = false } = {}) {
+  try {
+    const sql = await readFile(filePath, "utf-8");
+    await query(sql);
+    console.log(`[db] ${label} applied:`, filePath);
+    return { ok: true, label };
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      if (required) throw err;
+      console.warn(`[db] ${label} skipped (file missing):`, filePath);
+      return { ok: true, label, skipped: true };
+    }
+    console.error(`[db] ${label} FAILED:`, err.message);
+    return { ok: false, label, error: err.message };
+  }
+}
 
 export async function runMigrations() {
   if (!isDbEnabled()) {
     throw new Error("DATABASE_URL is not set — cannot run migrations");
   }
-  const sql = await readFile(SCHEMA_PATH, "utf-8");
-  await query(sql);
-  console.log("[db] schema applied:", SCHEMA_PATH);
+  const results = [];
+
+  const base = await applySchemaFile("phase1 base schema", SCHEMA_PATH, { required: true });
+  results.push(base);
+  if (!base.ok) throw new Error(base.error || "base schema failed");
+
+  const phases = [
+    ["phase2 browse schema", SCHEMA_PHASE2_PATH],
+    ["phase5 shipping schema", SCHEMA_PHASE5_PATH],
+    ["phase10 social schema", SCHEMA_PHASE10_PATH],
+    ["phase11 shop reviews", SCHEMA_PHASE11_PATH],
+    ["phase12 depop expansion", SCHEMA_PHASE12_PATH],
+    ["phase13 reviews disputes", SCHEMA_PHASE13_PATH],
+    ["phase14 account auth", SCHEMA_PHASE14_PATH],
+    ["phase15 hybrid logistics", SCHEMA_PHASE15_PATH],
+    ["phase17 compare_at_price", SCHEMA_PHASE17_PATH],
+    ["phase19 boda fleet", SCHEMA_PHASE19_PATH],
+    ["phase20 boda otp safeguards", SCHEMA_PHASE20_PATH],
+    ["phase21 boda payout hold", SCHEMA_PHASE21_PATH],
+    ["phase22 rider b2c payouts", SCHEMA_PHASE22_PATH],
+    ["phase23 rider payout fee split", SCHEMA_PHASE23_PATH],
+    ["phase24 boda ops safeguards", SCHEMA_PHASE24_PATH],
+    ["phase25 upcountry waybill", SCHEMA_PHASE25_PATH],
+    ["phase26 platform rider pin", SCHEMA_PHASE26_PATH],
+    ["phase27 dispatch radius engine", SCHEMA_PHASE27_PATH],
+    ["phase28 atomic accept pickup sla", SCHEMA_PHASE28_PATH],
+    ["phase29 ops edge safeguards", SCHEMA_PHASE29_PATH],
+    ["phase30 audit logs + dispatch status", SCHEMA_PHASE30_PATH],
+    ["phase31 staff roles RBAC", SCHEMA_PHASE31_PATH],
+    ["phase32 admin_logs Boss overrides", SCHEMA_PHASE32_PATH],
+    ["phase33 weighted ratings + badges", SCHEMA_PHASE33_PATH],
+    ["phase34 growth points + pamoja + rider quests", SCHEMA_PHASE34_PATH],
+    ["phase35 seller shop pins", SCHEMA_PHASE35_PATH],
+    ["phase36 location pins", SCHEMA_PHASE36_PATH],
+    ["phase37 rich inbox messages", SCHEMA_PHASE37_PATH],
+    ["phase38 bundles", SCHEMA_PHASE38_PATH],
+    ["phase39 fit check photos", SCHEMA_PHASE39_PATH],
+    ["phase40 flagged messages", SCHEMA_PHASE40_PATH],
+    ["phase41 agent actions", SCHEMA_PHASE41_PATH],
+    ["phase42 action guards", SCHEMA_PHASE42_PATH],
+    ["phase43 one release proposal", SCHEMA_PHASE43_PATH],
+    ["phase44 waitlist + reorder + policy view", SCHEMA_PHASE44_PATH],
+    ["phase45 promotion queue last_promoted_at", SCHEMA_PHASE45_PATH],
+    ["phase46 category tree indexes", SCHEMA_PHASE46_PATH],
+  ];
+
+  for (const [label, filePath] of phases) {
+    results.push(await applySchemaFile(label, filePath));
+  }
+
+  // Phase16 (pgvector) is optional — many hosts lack CREATE EXTENSION vector.
+  const phase16 = await applySchemaFile("phase16 pgvector knowledge", SCHEMA_PHASE16_PATH);
+  if (!phase16.ok) {
+    console.warn(
+      "[db] phase16 pgvector skipped — keyword RAG over knowledge/*.md still works:",
+      phase16.error
+    );
+    results.push({ ok: true, label: "phase16 pgvector knowledge", skipped: true, error: phase16.error });
+  } else {
+    results.push(phase16);
+  }
 
   try {
-    const phase2 = await readFile(SCHEMA_PHASE2_PATH, "utf-8");
-    await query(phase2);
-    console.log("[db] phase2 browse schema applied:", SCHEMA_PHASE2_PATH);
+    const { seedCountiesToDb } = await import("../services/kenya-locations.js");
+    const seeded = await seedCountiesToDb();
+    if (seeded.ok) console.log("[db] kenya counties seeded:", seeded.counties);
+    else console.log("[db] kenya counties seed:", seeded.reason || seeded);
   } catch (err) {
-    if (err.code !== "ENOENT") throw err;
+    console.warn("[db] county seed skipped:", err.message);
+    results.push({ ok: false, label: "county seed", error: err.message });
   }
+
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length) {
+    const summary = failed.map((f) => `${f.label}: ${f.error}`).join("; ");
+    throw new Error(`${failed.length} migration step(s) failed — ${summary}`);
+  }
+  return results;
 }
 
 async function main() {
@@ -29,6 +150,7 @@ async function main() {
     await runMigrations();
     const { rows } = await query("SELECT name, applied_at FROM schema_migrations ORDER BY id");
     console.log("[db] migrations:", rows);
+    console.log("[db] all migration steps OK");
   } finally {
     await closePool();
   }

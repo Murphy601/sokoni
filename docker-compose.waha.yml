@@ -1,23 +1,33 @@
 # WAHA — WhatsApp HTTP API (self-hosted)
 # Docs: https://waha.devlike.pro/
 #
-# Start:  docker compose -f docker-compose.waha.yml up -d
-# Dashboard: http://localhost:3000/dashboard  (admin / sokoni)
-# QR (with key): http://localhost:3000/api/default/auth/qr?x-api-key=sokoni-local-dev-key
+# Start:  bash scripts/deploy-waha.sh
+# Link:   bash scripts/waha-link-whatsapp.sh
+# Dashboard (localhost / SSH tunnel only): http://localhost:3000/dashboard
+#
+# Keep port 3000 off the public internet. Never publish QR / pairing codes.
+#
+# Optional overrides (export before deploy, or put in a .env next to this file):
+#   WAHA_API_KEY, WAHA_DASHBOARD_USERNAME, WAHA_DASHBOARD_PASSWORD
+#   WAHA_NOWEB_WA_VERSION (e.g. 2.3000.1044083468) — set by deploy-waha.sh from live sw.js
+# Do NOT put the image tag inside ${VAR:-repo:tag} — docker-compose v1 breaks on the colon.
 
 services:
   waha:
-    image: devlikeapro/waha:latest
+    # 2026.7.2 fixes stale NOWEB WhatsApp Web version (STARTING → Connection Failure).
+    # See https://github.com/devlikeapro/waha/issues/2191
+    image: devlikeapro/waha:latest-2026.7.2
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       WAHA_RUN_XVFB: "False"
-      WAHA_API_KEY: sokoni-local-dev-key
-      WAHA_API_KEY_PLAIN: sokoni-local-dev-key
-      WAHA_DASHBOARD_USERNAME: admin
-      WAHA_DASHBOARD_PASSWORD: sokoni
-      # NOWEB = no Chromium browser (more reliable on Windows Docker)
+      # Defaults have no ":" so old docker-compose interpolation stays safe.
+      WAHA_API_KEY: ${WAHA_API_KEY:-sokoni-local-dev-key}
+      WAHA_API_KEY_PLAIN: ${WAHA_API_KEY:-sokoni-local-dev-key}
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:-sokoni}
+      # NOWEB = no Chromium browser (more reliable on small VMs)
       WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_PRINT_QR: "true"
       # Save incoming images/files so the bot can download them (required for catalog photos)
@@ -25,6 +35,9 @@ services:
       # Keep files until manually cleared — default 180s deletes files during large album uploads
       WHATSAPP_FILES_LIFETIME: "0"
       WHATSAPP_FILES_FOLDER: /app/.media
+      # Injected by scripts/deploy-waha.sh (node scripts/fetch-wa-version.js).
+      # Do not leave empty — an empty override can break NOWEB. Always export before up.
+      WAHA_NOWEB_WA_VERSION: ${WAHA_NOWEB_WA_VERSION}
     extra_hosts:
       # Lets WAHA reach the bot on the host (pm2 :3001) from inside the container.
       - "host.docker.internal:host-gateway"

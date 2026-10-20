@@ -1,0 +1,124 @@
+/**
+ * Static checks for AI latency routing, grounding prompt, RAG chunks, thread_id.
+ */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import {
+  buildChatProviderChain,
+  chatTemperature,
+  llmRouterMeta,
+  isToolUseFailedError,
+  extractFailedGenerationText,
+} from "../src/services/llm-router.js";
+import {
+  buildGroundedSystemPrompt,
+  SOKONI_MASTER_RULES,
+} from "../src/services/ai-prompts.js";
+import { retrieveKnowledge, formatKnowledgeForPrompt } from "../src/services/agent-specialists.js";
+import { threadIdFromPhone } from "../src/services/commerce-ops.js";
+import { resolveThreadId } from "../src/services/session.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(__dirname, "..", "..");
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg);
+}
+
+// Temperature locked low
+assert(chatTemperature() <= 0.35, "chat temperature must stay low");
+assert(chatTemperature(0.55) <= 0.35, "override capped");
+
+// Grounding prompt
+const grounded = buildGroundedSystemPrompt({
+  channel: "whatsapp",
+  contextBlocks: ["KNOWLEDGE: Prepaid escrow only."],
+  threadId: "254700000000",
+});
+assert(grounded.includes("CONTEXT DATA"), "has context block");
+assert(grounded.includes("254700000000"), "has thread id");
+assert(grounded.includes("ONLY use factual data") || SOKONI_MASTER_RULES.includes("ONLY use factual data"), "strict grounding");
+assert(grounded.includes("NO API TOOL CALLS") || SOKONI_MASTER_RULES.includes("NO API TOOL CALLS"), "blocks gpt-oss built-in tools");
+assert(!grounded.includes("## Tools"), "avoid ## Tools heading that triggers tool calling");
+assert(grounded.includes("LOOKUP RESULTS") || SOKONI_MASTER_RULES.includes("LOOKUP RESULTS"), "uses LOOKUP RESULTS wording");
+
+// Thread id = phone digits
+assert(threadIdFromPhone("+254 700 000 000") === "254700000000", "threadIdFromPhone digits");
+assert(resolveThreadId("254712345678") === "254712345678", "resolveThreadId");
+
+// RAG chunks exist for escrow
+const chunks = retrieveKnowledge("escrow prepaid m-pesa", { limit: 2, specialist: "buyer" });
+assert(chunks.length >= 1, "knowledge retrieves escrow policy");
+const block = formatKnowledgeForPrompt(chunks);
+assert(block.includes("EXCLUSIVELY") || block.includes("KNOWLEDGE"), "knowledge format grounded");
+
+// Router meta
+const meta = llmRouterMeta();
+assert(meta.avoid?.includes("ollama_local_cpu_queue"), "documents avoid ollama");
+assert(meta.avoid?.includes("groq_builtin_tools_for_chat"), "documents avoid groq built-in tools");
+assert(meta.avoid?.includes("openrouter_free_auto_first"), "documents avoid openrouter/free as primary");
+assert(Array.isArray(meta.providers), "providers listed");
+assert(typeof meta.temperature === "number", "temperature in meta");
+assert(
+  !meta.note?.toLowerCase().includes("prefer groq_api_key or gemini"),
+  "meta should not push Gemini as default chat path"
+);
+
+// Provider chain builds without throwing (may be empty without keys)
+const chain = buildChatProviderChain();
+assert(Array.isArray(chain), "provider chain is array");
+assert(
+  !chain.some((p) => p.name === "gemini"),
+  "Gemini must stay out of chat chain unless AI_CHAT_USE_GEMINI / provider=gemini"
+);
+
+// Default Groq model ID must not be the retired Llama instant
+const routerSrc = readFileSync(path.join(root, "whatsapp-bot/src/services/llm-router.js"), "utf8");
+assert(routerSrc.includes("openai/gpt-oss-20b"), "router defaults to gpt-oss-20b");
+assert(!routerSrc.includes('llama-3.1-8b-instant"'), "router must not default to retired llama");
+assert(routerSrc.includes('tool_choice = "none"') || routerSrc.includes('tool_choice: "none"'), "groq uses tool_choice none");
+assert(routerSrc.includes("google/gemma-4-31b-it:free"), "openrouter free fallback uses live gemma-4-31b");
+assert(!routerSrc.includes("gemma-4-26b-a4b-it:free"), "drops flaky gemma-4-26b a4b free slug");
+assert(routerSrc.includes("Do NOT use tool_choice=auto"), "documents why tool_choice stays none");
+assert(routerSrc.includes("orderOpenRouterChatModels"), "chat deprioritizes openrouter/free auto");
+assert(routerSrc.includes('finishReason === "length"'), "retries truncated completions");
+
+assert(
+  isToolUseFailedError({ error: { code: "tool_use_failed", message: "Tool choice is none, but model called a tool" } }),
+  "detects tool_use_failed"
+);
+assert(
+  extractFailedGenerationText({ error: { failed_generation: '{"name":"browser_search"}' } }) == null,
+  "rejects tool-call failed_generation"
+);
+assert(
+  extractFailedGenerationText({ error: { failed_generation: "Prepaid escrow until delivery." } }) ===
+    "Prepaid escrow until delivery.",
+  "recovers plain failed_generation"
+);
+
+const configSrc = readFileSync(path.join(root, "whatsapp-bot/src/config.js"), "utf8");
+assert(configSrc.includes('GROQ_MODEL || "openai/gpt-oss-20b"'), "config default gpt-oss-20b");
+assert(configSrc.includes("useGemini"), "config exposes Gemini chat opt-in");
+assert(configSrc.includes("google/gemma-4-31b-it:free"), "default OpenRouter chat is named free model");
+assert(configSrc.includes("AI_CHAT_MAX_TOKENS"), "exposes AI_CHAT_MAX_TOKENS");
+
+// File markers
+const agent = readFileSync(path.join(root, "whatsapp-bot/src/services/ai-agent.js"), "utf8");
+assert(agent.includes("routedChatCompletion"), "ai-agent uses router");
+assert(agent.includes("buildGroundedSystemPrompt"), "ai-agent uses grounded prompt");
+assert(!agent.includes("temperature: conversational ? 0.55"), "no high conversational temp");
+
+const schema = readFileSync(
+  path.join(root, "whatsapp-bot/db/schema-phase16-pgvector-knowledge.sql"),
+  "utf8"
+);
+assert(schema.includes("platform_knowledge"), "platform_knowledge table");
+
+const migrate = readFileSync(path.join(root, "whatsapp-bot/src/db/migrate.js"), "utf8");
+assert(migrate.includes("phase16"), "migrate includes phase16");
+
+console.log("ai latency / grounding / RAG checks OK");
+console.log("providers:", meta.providers.map((p) => p.name).join(",") || "(none — set GROQ/GEMINI/OPENAI keys)");
+console.log("temperature:", meta.temperature);

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boda Fleet Desk · Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+</head>
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Boda</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <a href="admin-support.html">Support</a>
+          <span class="is-active">Boda</span>
+          <a href="admin-riders.html">Riders</a>
+          <a href="admin-finances.html">Finances</a>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Fleet desk</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-5 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Boda fleet desk</h1>
+      <p class="text-sm text-brand-purple/65">Review PENDING applications, open docs, then Verify or Reject. Verified riders get WhatsApp and become AVAILABLE.</p>
+      <label class="block text-sm font-medium max-w-md">
+        Admin token
+        <input id="admin-token" type="password" autocomplete="off"
+               class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+               placeholder="ADMIN_SETUP_TOKEN" />
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="load-pending" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Load PENDING</button>
+        <button type="button" id="load-verified" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Load VERIFIED</button>
+        <button type="button" id="load-all" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Load all</button>
+      </div>
+      <div class="flex flex-wrap gap-2 items-end">
+        <label class="block text-sm font-medium flex-1 min-w-[12rem] max-w-md">
+          Find rider (phone / name / plate)
+          <input id="rider-search" type="search" autocomplete="off"
+                 class="mt-1 w-full min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+                 placeholder="2547… or Peter or KMGB" />
+        </label>
+        <button type="button" id="rider-search-btn" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Search</button>
+      </div>
+      <p id="boda-counts" class="text-xs font-semibold text-brand-purple/55" aria-live="polite"></p>
+      <p id="boda-status" class="text-sm text-brand-purple/60" role="status"></p>
+    </section>
+    <div id="rider-list" class="space-y-4"></div>
+
+    <section class="rounded-3xl border border-red-200/80 bg-white p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="font-display text-2xl font-bold">Rider dispute review</h2>
+          <p class="text-sm text-brand-purple/65 mt-1">Suspended / disputed deliveries — OTP, GPS, fee hold. Reactivate or permanently ban.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="load-disputes" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Load disputes</button>
+          <button type="button" id="run-rider-b2c" class="min-h-[44px] px-4 rounded-full border border-brand-purple/15 text-sm font-bold">Run rider B2C</button>
+        </div>
+      </div>
+      <p id="dispute-status" class="text-sm text-brand-purple/60" role="status"></p>
+      <div id="dispute-list" class="space-y-4"></div>
+    </section>
+
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <h2 class="font-display text-2xl font-bold">OTP audit trail</h2>
+      <p class="text-sm text-brand-purple/65">Evidence log for every CONFIRM attempt — OTP, GPS, geofence distance, escrow status.</p>
+      <div class="flex flex-wrap gap-3 items-end">
+        <label class="block text-sm font-medium">
+          Order id
+          <input id="audit-order" type="text" placeholder="SKN-8812"
+                 class="mt-1 w-44 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" />
+        </label>
+        <button type="button" id="load-audit" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-bold">Load audit</button>
+      </div>
+      <p id="audit-status" class="text-sm text-brand-purple/60" role="status"></p>
+      <div id="audit-list" class="space-y-3"></div>
+    </section>
+  </main>
+
+  <script src="assets/js/admin-boda.js"></script>
+</body>
+</html>

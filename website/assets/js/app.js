@@ -3,8 +3,6 @@
 const WHATSAPP_NUMBER = "254117422428";
 const WHATSAPP_DISPLAY = "+254 117 422 428";
 const SUPPORT_EMAIL = "support@sokonimall.com";
-const MPESA_TILL = "4775847";
-const MPESA_TILL_NAME = "David Thuku Muiruri";
 const OFFER_PERCENT = 3;
 const PROMO_CODE = "SOKONI3";
 const REVIEWS_API =
@@ -123,6 +121,7 @@ let activeSubcategory = null;
 let activeProductId = null;
 let activeItemType = "all";
 let activePriceTier = null;
+let activeAesthetic = null;
 let searchQuery = "";
 let showKes = true;
 const STORE_INITIAL_LIMIT = 48;
@@ -142,7 +141,22 @@ function orderLinkFor(product) {
   );
 }
 
+function askInboxLinkFor(product) {
+  const handle = normalizeShopHandle(
+    product?.shopHandle || product?.sellerHandle || product?.shop?.handle || ""
+  );
+  const sellerUserId = Number(product?.sellerUserId || product?.userId || product?.shop?.userId);
+  if (!handle && !(Number.isInteger(sellerUserId) && sellerUserId > 0)) return "";
+  const params = new URLSearchParams();
+  if (Number.isInteger(sellerUserId) && sellerUserId > 0) params.set("with", String(sellerUserId));
+  if (product?.id) params.set("product", String(product.id));
+  if (handle) params.set("handle", handle);
+  return `inbox.html?${params.toString()}`;
+}
+
 function askLinkFor(product) {
+  const inbox = askInboxLinkFor(product);
+  if (inbox) return inbox;
   return waLink(`Hi Sokoni, tell me more about "${product.name}" (${formatPrice(product)}).`);
 }
 
@@ -176,14 +190,28 @@ function saveCurrencyPref() {
   } catch {}
 }
 
+function buyerPriceKes(product) {
+  if (product.totalKes != null) return Math.round(Number(product.totalKes) || 0);
+  const item = Math.round(Number(product.priceKes) || 0);
+  const ship = Math.round(Number(product.shippingKes) || 0);
+  return ship > 0 ? item + ship : item;
+}
+
 function formatPrice(product) {
-  if (product.priceKes != null) {
-    return `KES ${product.priceKes.toLocaleString()}`;
-  }
+  const kes = buyerPriceKes(product);
+  if (kes > 0) return `KES ${kes.toLocaleString()}`;
   if (product.priceUsd != null) {
     return `$${product.priceUsd}`;
   }
   return "";
+}
+
+function formatShippingLine(_product) {
+  return "Seller handles dispatch";
+}
+
+function formatBuyerTotal(product) {
+  return formatPrice(product);
 }
 
 function syncCurrencyUi() {
@@ -308,6 +336,37 @@ function matchesSearch(product, tokens, maxPriceKes) {
   return scoreProduct(product, meaningful) > 0;
 }
 
+function aestheticMatchTerms(aestheticId) {
+  const menu = window.SokoniBrowse?.getMenu?.();
+  const vibes = menu?.aesthetics || [];
+  const vibe = vibes.find((v) => v.id === aestheticId);
+  if (!vibe) return [String(aestheticId || "").toLowerCase()].filter(Boolean);
+  const terms = [vibe.id, vibe.label, ...(vibe.match || [])]
+    .map((t) => String(t || "").toLowerCase().trim())
+    .filter(Boolean);
+  return [...new Set(terms)];
+}
+
+function productMatchesAesthetic(product, aestheticId) {
+  if (!aestheticId) return true;
+  const terms = aestheticMatchTerms(aestheticId);
+  if (!terms.length) return true;
+  const hay = [
+    product?.era,
+    product?.name,
+    product?.title,
+    product?.description,
+    product?.category,
+    product?.browseCategory,
+    product?.browseSubCategory,
+    ...(Array.isArray(product?.tags) ? product.tags : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return terms.some((term) => hay.includes(term));
+}
+
 function filteredStoreProducts() {
   const tokens = tokenize(searchQuery);
   const maxPriceKes = parseMaxPriceKes(searchQuery);
@@ -323,13 +382,21 @@ function filteredStoreProducts() {
       items = items.filter((p) => p.priceKes == null || p.priceKes <= tierMax);
     }
   }
+  if (activeAesthetic) {
+    items = items.filter((p) => productMatchesAesthetic(p, activeAesthetic));
+  }
   if (activeCategory === "viral") {
     items = items.filter((p) => p.viral || VIRAL_IDS.has(p.id));
   } else if (activeCategory !== "all") {
+    const nav =
+      window.SokoniBrowse?.resolveNavFilter?.(activeCategory, activeSubcategory) || {
+        browse: activeCategory,
+        sub: activeSubcategory,
+      };
     items = items.filter((p) => {
       const path = window.SokoniBrowse?.resolveBrowsePath(p) || {};
-      if (path.browse !== activeCategory) return false;
-      if (activeSubcategory && path.sub !== activeSubcategory) return false;
+      if (path.browse !== nav.browse) return false;
+      if (nav.sub && path.sub !== nav.sub) return false;
       return true;
     });
   }
@@ -355,7 +422,8 @@ function visibleStoreProducts() {
     activeSubcategory ||
     activeProductId ||
     activeItemType !== "all" ||
-    activePriceTier;
+    activePriceTier ||
+    activeAesthetic;
   const limit = filtered ? STORE_SEARCH_LIMIT : storeDisplayLimit;
   return { all, visible: all.slice(0, limit) };
 }
@@ -366,6 +434,7 @@ function setCatalogFilter({
   productId = null,
   itemType = activeItemType,
   priceTier = activePriceTier,
+  aesthetic = activeAesthetic,
   scroll = false,
 } = {}) {
   searchQuery = "";
@@ -374,6 +443,7 @@ function setCatalogFilter({
   activeProductId = productId || null;
   activeItemType = itemType || "all";
   activePriceTier = priceTier || null;
+  activeAesthetic = aesthetic || null;
   storeDisplayLimit = STORE_SEARCH_LIMIT;
 
   const input = document.getElementById("hero-search");
@@ -429,6 +499,11 @@ function updateDealsFilterLabel() {
     const menu = window.SokoniBrowse?.getMenu?.();
     const tier = menu?.priceTiers?.find((t) => t.id === activePriceTier);
     if (tier) parts.push(tier.label);
+  }
+  if (activeAesthetic) {
+    const menu = window.SokoniBrowse?.getMenu?.();
+    const vibe = menu?.aesthetics?.find((v) => v.id === activeAesthetic);
+    if (vibe) parts.push(`#${vibe.label}`);
   }
   if (parts.length) {
     el.textContent = `Showing: ${parts.join(" · ")}`;
@@ -488,10 +563,79 @@ function runSearch(query) {
 
 // ---------- Render helpers ----------
 
+function catalogBotOrigin() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001"
+    : "https://bot.sokonimall.com";
+}
+
 function resolveProductImage(product) {
-  if (product?.imageUrl) return product.imageUrl;
-  if (product?.id) return `assets/images/products/${product.id}.jpg`;
+  const botOrigin = catalogBotOrigin();
+  const raw = product?.imageUrl || (Array.isArray(product?.images) ? product.images[0] : null);
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+  if (product?.id) return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.jpg`;
+  if (raw) {
+    const file = String(raw).replace(/^\/?assets\/images\/products\//i, "").replace(/^\/?catalog-images\//i, "");
+    if (file) return `${botOrigin}/catalog-images/${encodeURIComponent(file.split("/").pop())}`;
+  }
   return null;
+}
+
+/** Seller showcase or AI preview clip — never autoplay every card. */
+function resolveProductVideo(product) {
+  const botOrigin = catalogBotOrigin();
+  const raw = product?.videoUrl;
+  if (raw && /^https?:\/\//i.test(String(raw))) return String(raw);
+  if (raw) {
+    const file = String(raw)
+      .replace(/^\/?assets\/images\/products\//i, "")
+      .replace(/^\/?catalog-images\//i, "");
+    if (file) return `${botOrigin}/catalog-images/${encodeURIComponent(file.split("/").pop())}`;
+  }
+  if (product?.id && (product.videoKind === "seller" || product.videoKind === "preview")) {
+    return `${botOrigin}/catalog-images/${encodeURIComponent(product.id)}.mp4`;
+  }
+  return null;
+}
+
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+}
+
+function canHoverClipPreview() {
+  return Boolean(
+    window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches && !prefersReducedMotion()
+  );
+}
+
+let activeClipCard = null;
+
+function stopCardClip(card) {
+  if (!card) return;
+  const vid = card.querySelector("video.depop-card-clip");
+  if (vid) {
+    try {
+      vid.pause();
+      vid.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }
+  card.classList.remove("is-clip-playing");
+  if (activeClipCard === card) activeClipCard = null;
+}
+
+function playCardClip(card) {
+  if (!card || prefersReducedMotion()) return;
+  const vid = card.querySelector("video.depop-card-clip");
+  if (!vid?.src) return;
+  if (activeClipCard && activeClipCard !== card) stopCardClip(activeClipCard);
+  activeClipCard = card;
+  card.classList.add("is-clip-playing");
+  const playPromise = vid.play();
+  if (playPromise?.catch) {
+    playPromise.catch(() => stopCardClip(card));
+  }
 }
 
 function productImageBlock(product) {
@@ -509,8 +653,24 @@ function productImageBlock(product) {
   return `<div class="product-image-wrap mb-4 mt-4 rounded-xl overflow-hidden bg-brand-cream aspect-square flex items-center justify-center p-4 text-xs text-brand-purple/40">Photo coming soon</div>`;
 }
 
+function normalizeHandleValue(value) {
+  const clean = String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  return clean.replace(/[^a-z0-9._-]+/g, "").slice(0, 40);
+}
+
 function sellerHandle(product) {
-  const name = product.source || product.businessName || "";
+  const direct = normalizeHandleValue(
+    product?.sellerHandle ||
+      product?.shopHandle ||
+      product?.seller?.handle ||
+      product?.handle
+  );
+  if (direct) return `@${direct}`;
+
+  const name = product.businessName || product.source || "";
   if (!name) return "";
   const slug = name
     .toLowerCase()
@@ -519,44 +679,111 @@ function sellerHandle(product) {
   return slug ? `@${slug}` : "";
 }
 
+function viewerQueryValue() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("viewer") || params.get("viewerUserId");
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return "";
+  return String(n);
+}
+
+function sellerShopLink(product) {
+  const handle = normalizeHandleValue(sellerHandle(product));
+  if (!handle) return "";
+  const params = new URLSearchParams({ handle });
+  const viewer = viewerQueryValue();
+  if (viewer) params.set("viewer", viewer);
+  return `shop.html?${params.toString()}`;
+}
+
 function conditionBadgeHtml(product) {
   if (product.isSecondhand) {
-    const cond = product.condition || "Pre-Loved";
+    const cond =
+      product.conditionLabel ||
+      String(product.condition || "Pre-Loved")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
     return `<span class="depop-card-condition depop-card-condition--thrift">♻️ ${escapeHtml(cond)}</span>`;
   }
-  return `<span class="depop-card-condition depop-card-condition--new">✨ Brand New</span>`;
+  const newLabel =
+    product.conditionLabel && /brand new/i.test(String(product.conditionLabel))
+      ? product.conditionLabel
+      : "Brand New";
+  return `<span class="depop-card-condition depop-card-condition--new">✨ ${escapeHtml(newLabel)}</span>`;
 }
 
 function renderDepopCard(product) {
   const name = escapeHtml(product.name || "Product");
   const id = escapeHtml(product.id || "");
   const src = resolveProductImage(product);
+  const videoSrc = resolveProductVideo(product);
   const imageInner = src
-    ? `<img src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" />`
+    ? `<img class="depop-card-still" src="${escapeHtml(src)}" alt="" loading="lazy" decoding="async" data-fallback-text="Photo soon" data-fallback-span-class="depop-card-placeholder" />`
     : `<span class="depop-card-placeholder">Photo soon</span>`;
+  const clipInner = videoSrc
+    ? `<video class="depop-card-clip" src="${escapeHtml(videoSrc)}"${
+        src ? ` poster="${escapeHtml(src)}"` : ""
+      } muted loop playsinline preload="metadata" aria-hidden="true"></video>
+        <button type="button" class="depop-card-clip-btn" data-clip-toggle="1" aria-label="Play short video">▶</button>`
+    : "";
   const handle = sellerHandle(product);
-  const saved = window.SokoniShopShell?.isInBag?.(product.id);
+  const shopLink = sellerShopLink(product);
+  const saved = window.SokoniShopShell?.isHearted?.(product.id) ?? window.SokoniShopShell?.isInBag?.(product.id);
 
   return `
-    <article class="depop-card" data-product-id="${id}" tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
-      <div class="depop-card-image-wrap">
+    <article class="depop-card${videoSrc ? " has-clip" : ""}" data-product-id="${id}"${
+      videoSrc ? ' data-has-clip="1"' : ""
+    } tabindex="0" role="button" aria-label="${name}, ${escapeHtml(formatPrice(product))}">
+      <div class="depop-card-image-wrap"${videoSrc ? ' data-has-clip="1"' : ""}>
         ${imageInner}
+        ${clipInner}
+        ${discountBadge(product)}
         ${conditionBadgeHtml(product)}
         <button type="button" class="depop-card-heart${saved ? " is-saved" : ""}" data-save-id="${id}" aria-label="${saved ? "Remove from saved" : "Save item"}">${saved ? "♥" : "♡"}</button>
         <span class="depop-card-badge">PREPAID</span>
       </div>
       <div class="depop-card-body">
-        <p class="depop-card-price">${escapeHtml(formatPrice(product))}</p>
+        ${promoPriceHtml(product)}
         <p class="depop-card-title">${name}</p>
-        ${handle ? `<p class="depop-card-seller">${escapeHtml(handle)}</p>` : ""}
+        ${
+          handle
+            ? `<div class="depop-card-seller-row">
+                <p class="depop-card-seller">${
+                  shopLink
+                    ? `<a href="${shopLink}" data-shop-link="1" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
+                    : escapeHtml(handle)
+                }</p>
+                ${window.SokoniSellerTrust?.ratingHtml?.(product, { className: "seller-rating-line depop-card-rating" }) || ""}
+              </div>`
+            : window.SokoniSellerTrust?.ratingHtml?.(product, {
+                className: "seller-rating-line depop-card-rating",
+              }) || ""
+        }
+        ${window.SokoniSellerTrust?.badgesHtml?.(product, { max: 2, className: "seller-trust-badges depop-card-trust" }) || ""}
       </div>
     </article>`;
 }
 
 function renderStoreCard(product) {
   const name = escapeHtml(product.name || "Product");
-  const rating = Number(product.rating) || 0;
-  const reviews = Number(product.reviews) || 0;
+  const trust = product.sellerTrust || {};
+  const ratingLine =
+    window.SokoniSellerTrust?.ratingHtml?.(product, {
+      className: "seller-rating-line text-xs text-brand-purple/55 mb-1",
+    }) ||
+    (() => {
+      const reviews = Number(trust.totalReviews ?? product.reviews) || 0;
+      const unrated = trust.unrated || reviews < 5;
+      if (unrated) {
+        return `<p class="text-xs text-brand-purple/50 mb-1">${
+          reviews > 0 ? `UNRATED · ${reviews} reviews` : "New store · UNRATED"
+        }</p>`;
+      }
+      const rating = Number(trust.avgRating ?? product.rating) || 0;
+      return `<p class="text-xs text-brand-purple/50 mb-1">★ ${rating.toFixed(1)} (${reviews.toLocaleString()} reviews)</p>`;
+    })();
+  const handle = sellerHandle(product);
+  const shopLink = sellerShopLink(product);
   return `
     <div class="product-card relative bg-white rounded-2xl border border-black/5 shadow-sm p-5 flex flex-col">
       <span class="absolute top-3 left-3 z-10 bg-brand-green text-brand-purple text-[10px] font-bold px-2 py-1 rounded-full">🔒 Prepaid</span>
@@ -572,24 +799,51 @@ function renderStoreCard(product) {
       ]
         .filter(Boolean)
         .join(" · ")}</p>
-      <div class="flex items-baseline gap-2 mb-1">
-        <span class="font-extrabold text-lg">${formatPrice(product)}</span>
+      <div class="flex items-baseline gap-2 mb-1 flex-wrap price-container">
+        <span class="font-extrabold text-lg current-price">${formatPrice(product)}</span>
         ${
-          product.originalPriceKes && product.priceKes && product.originalPriceKes > product.priceKes
-            ? `<span class="text-xs text-brand-purple/40 line-through">KES ${product.originalPriceKes.toLocaleString()}</span>`
+          productOnPromo(product)
+            ? `${
+                compareAtPriceKes(product)
+                  ? `<span class="compare-price text-xs font-medium text-brand-purple/40 line-through">was KES ${compareAtPriceKes(
+                      product
+                    ).toLocaleString()}</span>`
+                  : ""
+              }
+               <span class="badge-promo text-[10px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded-full">${
+                 promoDiscountPct(product) ? `${promoDiscountPct(product)}% OFF` : "SALE"
+               }</span>`
             : ""
         }
       </div>
-      <p class="text-xs text-brand-purple/50 mb-4">⭐ ${rating} (${reviews.toLocaleString()} reviews)</p>
+      ${
+        handle
+          ? `<p class="text-xs text-brand-purple/55 mb-1">${
+              shopLink
+                ? `<a href="${shopLink}" data-shop-link="1" class="underline hover:text-brand-green">${escapeHtml(handle)}</a>`
+                : escapeHtml(handle)
+            }</p>`
+          : ""
+      }
+      ${ratingLine}
+      ${window.SokoniSellerTrust?.badgesHtml?.(product, { max: 2, className: "seller-trust-badges mb-3" }) || ""}
       <div class="mt-auto flex flex-col gap-2">
         <a href="${orderLinkFor(product)}" target="_blank" rel="noopener"
            class="text-center bg-brand-green text-brand-purple text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition">
           🛒 Buy — prepaid
         </a>
-        <a href="${askLinkFor(product)}" target="_blank" rel="noopener"
+        <a href="${askLinkFor(product)}" ${askInboxLinkFor(product) ? "" : 'target="_blank" rel="noopener"'}
            class="text-center text-xs text-brand-purple/60 underline hover:text-brand-purple">
-          💬 Ask about it on WhatsApp
+          ${askInboxLinkFor(product) ? "💬 Message seller" : "💬 Ask about it on WhatsApp"}
         </a>
+        ${
+          handle && shopLink
+            ? `<a href="${shopLink}" data-shop-link="1"
+               class="text-center text-xs text-brand-purple/60 underline hover:text-brand-green">
+              🏪 View ${escapeHtml(handle)} shop
+            </a>`
+            : ""
+        }
       </div>
     </div>
   `;
@@ -599,24 +853,51 @@ function renderCategoryChips() {
   const grid = document.getElementById("category-grid");
   if (!grid) return;
   const menu = window.SokoniBrowse?.getMenu?.();
-  const browseCats = menu?.categories || [];
-  const chip = (id, label, emoji) => {
+  // Skip nav-only aliases (Phones/TV/Computers/Appliances → Electronics).
+  const browseCats = (menu?.categories || []).filter((c) => !c.navOnly);
+  const FALLBACK_IMG =
+    window.SokoniBrowseThumb?.FALLBACK ||
+    "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=150&h=150&q=80";
+  const TOP_CHIPS = [
+    {
+      id: "all",
+      label: "All Products",
+      image:
+        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=150&h=150&q=80&sig=all",
+    },
+    {
+      id: "viral",
+      label: "Viral Bargains",
+      image:
+        "https://images.unsplash.com/photo-1558171813-4c088753af8f?auto=format&fit=crop&w=150&h=150&q=80&sig=viral",
+    },
+  ];
+
+  const browseThumb = (src) => window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
+
+  const chip = (item) => {
+    const id = item.id;
+    const label = item.label || id;
     const active = activeCategory === id && !activeProductId;
+    const src = browseThumb(item.image || FALLBACK_IMG);
+    // Scaled Cloudinary/Unsplash thumbs — glass shell wraps existing media/label.
     return `
-    <button type="button" data-cat="${id}"
+    <button type="button" data-cat="${escapeHtml(id)}"
       class="depop-cat-card cat-chip ${active ? "is-active" : ""}">
-      <span class="depop-cat-card__icon" aria-hidden="true">${emoji}</span>
-      <span class="depop-cat-card__label">${label}</span>
+      <span class="depop-cat-card__glass">
+        <span class="depop-cat-card__icon depop-cat-card__icon--img" aria-hidden="true">
+          <img src="${escapeHtml(src)}" alt="" width="150" height="150" loading="lazy"
+            decoding="async" referrerpolicy="no-referrer"
+            data-fallback-src="${escapeHtml(browseThumb(FALLBACK_IMG))}" />
+        </span>
+        <span class="depop-cat-card__label">${escapeHtml(label)}</span>
+      </span>
     </button>`;
   };
+
   grid.innerHTML =
-    chip("all", "All Products", "🛍️") +
-    chip("viral", "Viral Bargains", "🔥") +
-    browseCats
-      .slice(0, 8)
-      .map((c) => chip(c.id, c.label, c.emoji || "🛍️"))
-      .join("");
-  if (window.SokoniComponents) SokoniComponents.upgradeIn(grid);
+    TOP_CHIPS.map(chip).join("") + browseCats.map((c) => chip(c)).join("");
+  if (window.SokoniComponents) window.SokoniComponents.upgradeIn(grid);
   grid.querySelectorAll(".cat-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       setCatalogFilter({
@@ -633,6 +914,7 @@ function renderBrowseFilters() {
   const bar = document.getElementById("browse-filter-bar");
   const itemWrap = document.getElementById("item-type-chips");
   const priceWrap = document.getElementById("price-tier-chips");
+  const vibeWrap = document.getElementById("vibe-filter-chips");
   if (!bar || !itemWrap || !priceWrap) return;
 
   const menu = window.SokoniBrowse?.getMenu?.();
@@ -642,6 +924,7 @@ function renderBrowseFilters() {
     { id: "secondhand", label: "Pre-Loved / Thrift" },
   ];
   const priceTiers = menu?.priceTiers || [];
+  const aesthetics = menu?.aesthetics || [];
 
   const filterChip = (id, label, active, dataAttr, dataVal) => `
     <button type="button" class="browse-chip ${active ? "is-active" : ""}" ${dataAttr}="${dataVal}">${label}</button>`;
@@ -657,6 +940,20 @@ function renderBrowseFilters() {
       )
     )
     .join("");
+
+  if (vibeWrap) {
+    vibeWrap.innerHTML = aesthetics
+      .map((v) =>
+        filterChip(
+          v.id,
+          `#${v.label}`,
+          activeAesthetic === v.id,
+          "data-aesthetic",
+          v.id
+        )
+      )
+      .join("");
+  }
 
   priceWrap.innerHTML = priceTiers
     .map((t) =>
@@ -675,6 +972,17 @@ function renderBrowseFilters() {
   itemWrap.querySelectorAll("[data-item-type]").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeItemType = btn.dataset.itemType || "all";
+      storeDisplayLimit = STORE_SEARCH_LIMIT;
+      renderBrowseFilters();
+      renderStoreGrid();
+      syncCatalogNavUi();
+    });
+  });
+
+  vibeWrap?.querySelectorAll("[data-aesthetic]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const vibe = btn.dataset.aesthetic;
+      activeAesthetic = activeAesthetic === vibe ? null : vibe;
       storeDisplayLimit = STORE_SEARCH_LIMIT;
       renderBrowseFilters();
       renderStoreGrid();
@@ -746,22 +1054,47 @@ function bindStoreGridClicks() {
       e.preventDefault();
       e.stopPropagation();
       const pid = heart.dataset.saveId;
-      window.SokoniShopShell?.toggleBag?.(pid);
-      const saved = window.SokoniShopShell?.isInBag?.(pid);
-      heart.classList.toggle("is-saved", saved);
+      const saved = window.SokoniShopShell?.toggleBag?.(pid);
+      heart.classList.toggle("is-saved", Boolean(saved));
       heart.textContent = saved ? "♥" : "♡";
       heart.setAttribute("aria-label", saved ? "Remove from saved" : "Save item");
       return;
     }
+    const clipBtn = e.target.closest("[data-clip-toggle]");
+    if (clipBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const card = clipBtn.closest(".depop-card[data-has-clip]");
+      if (!card) return;
+      if (card.classList.contains("is-clip-playing")) stopCardClip(card);
+      else playCardClip(card);
+      return;
+    }
+    if (e.target.closest("[data-shop-link]")) return;
     const card = e.target.closest(".depop-card[data-product-id]");
     if (!card) return;
+    stopCardClip(card);
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
     if (p) window.SokoniProductSheet?.open(p);
+  });
+  grid.addEventListener("pointerover", (e) => {
+    if (!canHoverClipPreview()) return;
+    const card = e.target.closest(".depop-card[data-has-clip]");
+    if (!card || !e.target.closest(".depop-card-image-wrap")) return;
+    playCardClip(card);
+  });
+  grid.addEventListener("pointerout", (e) => {
+    if (!canHoverClipPreview()) return;
+    const card = e.target.closest(".depop-card[data-has-clip]");
+    if (!card) return;
+    const next = e.relatedTarget;
+    if (next && card.contains(next)) return;
+    stopCardClip(card);
   });
   grid.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     const card = e.target.closest(".depop-card[data-product-id]");
-    if (!card || e.target.closest(".depop-card-heart")) return;
+    if (!card || e.target.closest(".depop-card-heart") || e.target.closest("[data-shop-link]") || e.target.closest("[data-clip-toggle]")) return;
     e.preventDefault();
     const p = storeProducts.find((x) => x.id === card.dataset.productId);
     if (p) window.SokoniProductSheet?.open(p);
@@ -810,10 +1143,64 @@ function renderStoreGrid() {
   revealCatalogSections();
 }
 
+function compareAtPriceKes(product) {
+  const n = Math.round(
+    Number(product?.compareAtPrice ?? product?.originalPriceKes) || 0
+  );
+  return n > 0 ? n : 0;
+}
+
+function productOnPromo(product) {
+  if (!product) return false;
+  const original = compareAtPriceKes(product);
+  const current = buyerPriceKes(product);
+  // Strict: only when current price is below compare-at (never on raises).
+  return Boolean(original && current && current < original);
+}
+
+function promoDiscountPct(product) {
+  if (!productOnPromo(product)) return 0;
+  if (product?.discountPct != null && Number(product.discountPct) > 0) {
+    return Math.round(Number(product.discountPct));
+  }
+  const original = compareAtPriceKes(product);
+  const current = buyerPriceKes(product);
+  if (!original || !current || current >= original) return 0;
+  return Math.max(1, Math.round(((original - current) / original) * 100));
+}
+
 function discountBadge(product) {
-  if (!product.originalPriceKes) return "";
-  const pct = Math.round((1 - product.priceKes / product.originalPriceKes) * 100);
-  return `<span class="absolute top-3 left-3 bg-brand-green text-brand-purple text-xs font-bold px-2 py-1 rounded-full">-${pct}%</span>`;
+  if (!productOnPromo(product)) return "";
+  const pct = promoDiscountPct(product);
+  const label = pct >= 1 ? `${pct}% OFF` : "SALE";
+  return `<span class="depop-card-promo badge-promo" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+}
+
+/**
+ * Buyer price row: current KES only, or was/now + % OFF when compare-at > current.
+ * Matches: ~~KES 1,700~~ KES 1,500 + [12% OFF]
+ */
+function promoPriceHtml(product) {
+  const currentKes = buyerPriceKes(product);
+  const currentLabel = currentKes > 0 ? `KES ${currentKes.toLocaleString()}` : formatPrice(product);
+  if (!productOnPromo(product)) {
+    return `<p class="depop-card-price price-container"><span class="current-price depop-card-price-now">${escapeHtml(
+      currentLabel
+    )}</span></p>`;
+  }
+  const original = compareAtPriceKes(product);
+  const pct = promoDiscountPct(product);
+  return `<p class="depop-card-price depop-card-price--promo price-container">
+      ${pct >= 1 ? `<span class="badge-promo depop-card-price-save">${pct}% OFF</span>` : `<span class="badge-promo depop-card-price-save">SALE</span>`}
+      <span class="price-wrapper">
+        <span class="current-price depop-card-price-now">${escapeHtml(currentLabel)}</span>
+        ${
+          original > 0
+            ? `<span class="compare-price depop-card-price-was">was KES ${original.toLocaleString()}</span>`
+            : ""
+        }
+      </span>
+    </p>`;
 }
 
 function setupBrowseNudge() {
@@ -874,15 +1261,87 @@ function setupBrowseNudge() {
 
 // ---------- Init ----------
 
+function smartSearchApiBase() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001/api/search"
+    : "https://bot.sokonimall.com/api/search";
+}
+
+function ensureSearchSuggestBox(input) {
+  if (!input) return null;
+  let box = document.getElementById("hero-search-suggest");
+  if (box) return box;
+  const host = input.closest("form") || input.parentElement;
+  if (!host) return null;
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  box = document.createElement("div");
+  box.id = "hero-search-suggest";
+  box.className =
+    "hidden absolute left-0 right-0 top-full mt-2 z-30 rounded-2xl border border-black/10 bg-white shadow-lg overflow-hidden";
+  box.setAttribute("role", "listbox");
+  host.appendChild(box);
+  return box;
+}
+
+let smartSuggestTimer = null;
+async function refreshSmartSuggestions(query) {
+  const input = document.getElementById("hero-search");
+  const box = ensureSearchSuggestBox(input);
+  if (!box) return;
+  const q = String(query || "").trim();
+  if (q.length < 2) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  try {
+    const res = await fetch(`${smartSearchApiBase()}/suggest?q=${encodeURIComponent(q)}&limit=6`);
+    const data = await res.json().catch(() => ({}));
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    if (!suggestions.length) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = suggestions
+      .map(
+        (s) =>
+          `<button type="button" class="w-full text-left px-4 py-3 text-sm hover:bg-[#FFF8F0] border-b border-black/5 last:border-0" data-smart-suggest="${String(s)
+            .replace(/"/g, "&quot;")}">${String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")}</button>`
+      )
+      .join("");
+    box.classList.remove("hidden");
+    box.querySelectorAll("[data-smart-suggest]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.getAttribute("data-smart-suggest") || "";
+        if (input) input.value = value;
+        box.classList.add("hidden");
+        runSearch(value);
+      });
+    });
+  } catch {
+    box.classList.add("hidden");
+  }
+}
+
 function bindSearch() {
   const form = document.getElementById("hero-search-form");
   const input = document.getElementById("hero-search");
   form?.addEventListener("submit", (e) => {
     e.preventDefault();
+    document.getElementById("hero-search-suggest")?.classList.add("hidden");
     runSearch(input?.value || "");
   });
   input?.addEventListener("input", () => {
-    if (!(input.value || "").trim()) runSearch("");
+    const q = input.value || "";
+    if (!q.trim()) runSearch("");
+    clearTimeout(smartSuggestTimer);
+    smartSuggestTimer = setTimeout(() => refreshSmartSuggestions(q), 220);
+  });
+  input?.addEventListener("blur", () => {
+    setTimeout(() => document.getElementById("hero-search-suggest")?.classList.add("hidden"), 180);
   });
   document.getElementById("search-hint-link")?.addEventListener("click", (e) => {
     e.preventDefault();
@@ -919,21 +1378,140 @@ async function loadProductsFromApi() {
   return all.map((p) => (window.SokoniBrowse?.enrichProduct(p) || p));
 }
 
+function normalizeShopHandle(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+}
+
+/** Merge API + static JSON for metadata only — never resurrect API-hidden listings. */
+function mergeCatalogProducts(apiProducts, staticProducts) {
+  const byId = new Map();
+  for (const p of apiProducts || []) {
+    if (p?.id) byId.set(String(p.id), p);
+  }
+  for (const p of staticProducts || []) {
+    if (!p?.id) continue;
+    const id = String(p.id);
+    const existing = byId.get(id);
+    // If the live API omitted this id (hidden / out of stock / shop paused), do not
+    // pull it back from Cloudflare static products.json.
+    if (!existing) continue;
+
+    const apiHandle = normalizeShopHandle(existing.shopHandle || existing.sellerHandle);
+    const staticHandle = normalizeShopHandle(p.shopHandle || p.sellerHandle);
+    const apiIsDefault = !apiHandle || apiHandle === "sokoni-store";
+    const staticIsPeer = staticHandle && staticHandle !== "sokoni-store";
+    let merged = existing;
+    if (staticIsPeer && apiIsDefault) {
+      merged = {
+        ...existing,
+        ...p,
+        // Preserve live stock / visibility from API — static must not un-hide.
+        inStock: existing.inStock,
+        isSold: existing.isSold,
+        shopHandle: staticHandle,
+        sellerHandle: staticHandle,
+        businessName: p.shopName || p.businessName || existing.businessName,
+        sellerTrust: existing.sellerTrust || p.sellerTrust,
+        rating: existing.sellerTrust ? existing.rating : p.rating ?? existing.rating,
+        reviews: existing.sellerTrust ? existing.reviews : p.reviews ?? existing.reviews,
+        isSellerVerified: existing.isSellerVerified || p.isSellerVerified,
+      };
+    }
+    // Keep seller/preview clips when API/legacy_json omitted them.
+    if (!merged.videoUrl && p.videoUrl) {
+      merged = {
+        ...merged,
+        videoUrl: p.videoUrl,
+        videoKind: merged.videoKind || p.videoKind || null,
+      };
+    } else if (!merged.videoKind && p.videoKind) {
+      merged = { ...merged, videoKind: p.videoKind };
+    }
+    // Prefer higher known stock from static only when API still lists the item as in stock.
+    const apiQty = Number(merged.stockQuantity);
+    const staticQty = Number(p.stockQuantity);
+    if (
+      merged.inStock !== false &&
+      merged.isSold !== true &&
+      Number.isFinite(staticQty) &&
+      staticQty > 0 &&
+      (!Number.isFinite(apiQty) || apiQty < staticQty)
+    ) {
+      merged = { ...merged, stockQuantity: staticQty };
+    }
+    // Prefer compare-at / promo display fields from whichever side has a real drop.
+    const existingCompare = Number(merged.compareAtPrice ?? merged.originalPriceKes) || 0;
+    const staticCompare = Number(p.compareAtPrice ?? p.originalPriceKes) || 0;
+    const existingPrice = Number(merged.priceKes ?? merged.totalKes) || 0;
+    const staticOnSale = staticCompare > 0 && existingPrice > 0 && existingPrice < staticCompare;
+    const existingOnSale = existingCompare > 0 && existingPrice > 0 && existingPrice < existingCompare;
+    if (staticOnSale && !existingOnSale) {
+      merged = {
+        ...merged,
+        compareAtPrice: staticCompare,
+        originalPriceKes: staticCompare,
+        onPromo: true,
+        discountPct:
+          p.discountPct != null
+            ? Number(p.discountPct)
+            : Math.max(1, Math.round(((staticCompare - existingPrice) / staticCompare) * 100)),
+        promo: p.promo || merged.promo || { active: true, type: "sale" },
+      };
+    }
+    byId.set(id, merged);
+  }
+  return [...byId.values()];
+}
+
+async function loadStaticProducts() {
+  const response = await fetch(dataUrl("data/products.json"));
+  const json = await response.json();
+  const list = Array.isArray(json) ? json : json.products || [];
+  return list.map((p) => window.SokoniBrowse?.enrichProduct(p) || p);
+}
+
 async function loadProducts() {
   if (await isCatalogPaused()) {
     return [];
   }
   await window.SokoniBrowse?.loadMenu?.();
+  let fromApi = [];
+  let apiOk = false;
   try {
-    const fromApi = await loadProductsFromApi();
-    if (fromApi.length) return fromApi;
+    fromApi = await loadProductsFromApi();
+    apiOk = true;
   } catch (err) {
     console.warn("Products API unavailable, falling back to JSON:", err.message);
   }
-  const response = await fetch(dataUrl("data/products.json"));
-  const json = await response.json();
-  const list = Array.isArray(json) ? json : json.products || [];
-  return list.map((p) => window.SokoniBrowse?.enrichProduct(p) || p);
+  let fromStatic = [];
+  try {
+    fromStatic = await loadStaticProducts();
+  } catch (err) {
+    console.warn("Static products.json unavailable:", err.message);
+  }
+  if (apiOk && fromApi.length) {
+    return mergeCatalogProducts(fromApi, fromStatic);
+  }
+  // API succeeded but returned nothing (all orphans filtered / empty catalog) —
+  // never resurrect deleted peer shops from Cloudflare static products.json.
+  if (apiOk) {
+    return [];
+  }
+  // API down: only allow platform-owned static rows (no peer shopHandles).
+  return (fromStatic || []).filter((p) => {
+    const h = String(p.shopHandle || p.sellerHandle || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase();
+    if (h && h !== "sokoni-store") return false;
+    if (p.isSold === true || p.inStock === false) return false;
+    const sid = String(p.supplierId || "");
+    if (/^(sup[_-]|seller[_-])/i.test(sid)) return false;
+    return true;
+  });
 }
 
 async function loadStoreMeta() {
@@ -1071,7 +1649,9 @@ async function renderProducts() {
   try {
     await loadTiktokFeaturedIds();
     await loadStoreMeta();
-    const products = (await loadProducts()).filter((p) => p.inStock !== false);
+    const products = (await loadProducts()).filter(
+      (p) => p.inStock !== false && p.isSold !== true
+    );
     storeProducts = products.filter((p) => p.fulfillment === "store" || (p.scope === "local" && p.fulfillment !== "supplier"));
 
     loadCurrencyPref();
@@ -1087,21 +1667,32 @@ async function renderProducts() {
     openPendingProductSheet();
     revealCatalogSections();
 
+    if (window.SokoniShopShell?.hydrateLikesFromServer) {
+      await window.SokoniShopShell.hydrateLikesFromServer(storeProducts.map((p) => p.id));
+    }
+
+    const navigateBrowse = (sel) =>
+      setCatalogFilter({
+        category: sel.category,
+        subcategory: sel.subcategory,
+        productId: sel.productId,
+        priceTier: sel.priceTier ?? activePriceTier,
+        scroll: sel.scroll,
+      });
+
+    if (window.SokoniMegaMenu) {
+      await window.SokoniMegaMenu.init({ navigate: navigateBrowse });
+    }
+
     if (window.SokoniCatalogNav) {
       await window.SokoniCatalogNav.init({
         products: storeProducts,
-        navigate: (sel) =>
-          setCatalogFilter({
-            category: sel.category,
-            subcategory: sel.subcategory,
-            productId: sel.productId,
-            priceTier: sel.priceTier ?? activePriceTier,
-            scroll: sel.scroll,
-          }),
+        navigate: navigateBrowse,
       });
     }
 
     if (window.SokoniFeed?.refresh) window.SokoniFeed.refresh();
+    window.SokoniShopShell?.syncHeartButtons?.();
   } catch (err) {
     console.error("Failed to load product catalog:", err);
     const grid = document.getElementById("local-deals-grid");
@@ -1114,7 +1705,7 @@ async function renderProducts() {
   }
 }
 
-/** ?text= / ?q= pre-fill search; ?product= opens detail sheet (e.g. ?product=sk-0042). */
+/** ?text= / ?q= pre-fill search; ?product= opens detail sheet (e.g. ?product=sk-0042). ?pamoja= joins group-buy. */
 function applyDeepLinkFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const text = params.get("text") || params.get("q");
@@ -1123,17 +1714,33 @@ function applyDeepLinkFromUrl() {
     return;
   }
   const productId = params.get("product")?.trim();
-  if (!productId) return;
-  searchQuery = "";
-  activeCategory = "all";
-  activeSubcategory = null;
-  activeProductId = productId;
-  pendingProductSheetId = productId;
+  if (productId) {
+    searchQuery = "";
+    activeCategory = "all";
+    activeSubcategory = null;
+    activeProductId = productId;
+    pendingProductSheetId = productId;
+    return;
+  }
+  if (params.get("pamoja")?.trim()) {
+    // Product sheet joins the pool once buyer auth is ready
+    void window.SokoniProductSheet?.joinPamojaFromQuery?.();
+  }
 }
 
 window.SokoniApp = {
   getStoreProducts: () => storeProducts,
   formatPrice,
+  buyerPriceKes,
+  compareAtPriceKes,
+  formatShippingLine,
+  formatBuyerTotal,
+  resolveProductImage,
+  resolveProductVideo,
+  productOnPromo,
+  promoDiscountPct,
+  discountBadge,
+  promoPriceHtml,
   runSearch,
   setCatalogFilter,
   renderDepopCard,

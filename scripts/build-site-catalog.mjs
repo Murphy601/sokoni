@@ -14,6 +14,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { CATEGORY_TAXONOMY } from "./catalog-taxonomy.mjs";
+import { computeProductTotals } from "../whatsapp-bot/src/services/shipping-tiers.js";
+import { publicPromoFields } from "../whatsapp-bot/src/lib/public-promo.js";
+import {
+  applySoldLocks,
+  enforceSoldLocksOnMaster,
+  isProductAvailable,
+} from "../whatsapp-bot/src/services/product-availability.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -53,17 +60,20 @@ const CATEGORY_EMOJI = {
 function toPublic(product) {
   const emoji = product.emoji || CATEGORY_EMOJI[product.category] || "🛍️";
 
-  // Store items: pay-on-delivery. Never expose cost price or supplier.
+  // Store items: prepaid escrow. Never expose cost price or supplier.
   if (product.fulfillment === "store") {
-    const priceKes =
-      product.priceKes != null
-        ? product.priceKes
-        : computeRetail(product.sourcePriceKes || 0);
+    const totals = computeProductTotals(product);
+    const promoFields = publicPromoFields(product, { totalKes: totals.totalKes });
     return {
       id: product.id,
       name: product.name,
       category: product.category,
-      priceKes,
+      priceKes: totals.totalKes,
+      ...(promoFields.originalPriceKes ? { originalPriceKes: promoFields.originalPriceKes } : {}),
+      ...(promoFields.compareAtPrice ? { compareAtPrice: promoFields.compareAtPrice } : {}),
+      ...(promoFields.onPromo ? { onPromo: true } : {}),
+      ...(promoFields.discountPct ? { discountPct: promoFields.discountPct } : {}),
+      ...(promoFields.promo ? { promo: promoFields.promo } : {}),
       rating: product.rating,
       reviews: product.reviews,
       source: "Sokoni",
@@ -72,8 +82,15 @@ function toPublic(product) {
       fulfillment: "store",
       payment: "prepaid",
       inStock: product.inStock !== false,
+      ...(product.stockQuantity != null && Number.isFinite(Number(product.stockQuantity))
+        ? { stockQuantity: Math.max(0, Math.round(Number(product.stockQuantity))) }
+        : {}),
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
       ...(product.images?.length ? { images: product.images } : {}),
+      ...(product.videoUrl ? { videoUrl: product.videoUrl } : {}),
+      ...(product.videoKind === "seller" || product.videoKind === "preview"
+        ? { videoKind: product.videoKind }
+        : {}),
       ...(product.subcategory ? { subcategory: product.subcategory } : {}),
       ...(product.browseCategory ? { browseCategory: product.browseCategory } : {}),
       ...(product.browseSubCategory ? { browseSubCategory: product.browseSubCategory } : {}),
@@ -83,6 +100,15 @@ function toPublic(product) {
       ...(product.color ? { color: product.color } : {}),
       ...(product.tags?.length ? { tags: product.tags } : {}),
       ...(product.description ? { description: product.description } : {}),
+      ...(product.shopHandle || product.sellerHandle
+        ? {
+            shopHandle: product.shopHandle || product.sellerHandle,
+            sellerHandle: product.sellerHandle || product.shopHandle,
+            ...(product.source && product.source !== "Sokoni"
+              ? { shopName: product.source }
+              : {}),
+          }
+        : {}),
     };
   }
 
@@ -121,8 +147,22 @@ async function main() {
     /* no pause file — publish as normal */
   }
 
-  const master = paused ? [] : JSON.parse(await readFile(MASTER, "utf-8"));
-  const publicItems = master.map(toPublic).filter(Boolean).filter((p) => p.inStock !== false);
+  // Re-apply sold tombstones so RMW races cannot resurrect sold SKUs on publish.
+  if (!paused) {
+    try {
+      await enforceSoldLocksOnMaster();
+    } catch (err) {
+      console.warn("[build-site-catalog] sold-lock enforce:", err.message);
+    }
+  }
+
+  const masterRaw = paused ? [] : JSON.parse(await readFile(MASTER, "utf-8"));
+  const master = paused ? [] : await applySoldLocks(masterRaw);
+  const publicItems = master
+    .filter((p) => isProductAvailable(p))
+    .map(toPublic)
+    .filter(Boolean)
+    .filter((p) => p.inStock !== false);
   await writeFile(OUTPUT, JSON.stringify(publicItems, null, 2) + "\n", "utf-8");
 
   const storeItems = publicItems.filter((p) => p.fulfillment === "store");
@@ -157,7 +197,7 @@ async function main() {
   const store = storeItems.length;
   const intl = publicItems.filter((p) => p.scope === "international").length;
   console.log(
-    `Built ${OUTPUT}\n  store (pay-on-delivery): ${store}\n  international: ${intl}\n  total: ${publicItems.length}`
+    `Built ${OUTPUT}\n  store (prepaid escrow): ${store}\n  international: ${intl}\n  total: ${publicItems.length}`
   );
 }
 

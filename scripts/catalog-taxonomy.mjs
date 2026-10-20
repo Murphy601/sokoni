@@ -48,6 +48,7 @@ export const CATEGORY_TAXONOMY = [
       { id: "personal-care", label: "Personal Care" },
       { id: "fragrances", label: "Fragrances" },
       { id: "perfume-oils", label: "Perfume Oils" },
+      { id: "mens-grooming", label: "Men's Grooming" },
     ],
   },
   {
@@ -103,6 +104,10 @@ export const CATEGORY_TAXONOMY = [
       { id: "food-cupboard", label: "Food Cupboard" },
       { id: "drinks", label: "Drinks" },
       { id: "household-supplies", label: "Household Supplies" },
+      { id: "food-staples", label: "Food Staples" },
+      { id: "beverages", label: "Beverages" },
+      { id: "household", label: "Household" },
+      { id: "personal-grocery", label: "Personal Care Grocery" },
     ],
   },
   {
@@ -114,6 +119,18 @@ export const CATEGORY_TAXONOMY = [
       { id: "feeding", label: "Feeding" },
       { id: "toys", label: "Toys" },
       { id: "baby-gear", label: "Baby Gear" },
+    ],
+  },
+  {
+    id: "automotive",
+    label: "Automotive",
+    emoji: "🚗",
+    subcategories: [
+      { id: "car-accessories", label: "Car Accessories" },
+      { id: "oils-fluids", label: "Oils & Fluids" },
+      { id: "tyres-wheels", label: "Tyres & Wheels" },
+      { id: "motorbike", label: "Motorbike" },
+      { id: "tools-care", label: "Tools & Care" },
     ],
   },
 ];

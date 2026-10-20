@@ -8,6 +8,9 @@ const PHRASE_REPLACEMENTS = [
   [/\bnipee?\b/gi, "want"],
   [/\bsandals?\b/gi, "sandals shoes fashion"],
   [/\bshoes?\b/gi, "shoes fashion"],
+  [/\byogurt\b/gi, "yoghurt yogurt"],
+  [/\byoghurt\b/gi, "yoghurt yogurt"],
+  [/\bmugs?\b/gi, "mug mugs cup"],
   [/\bnipatie\b/gi, "want"],
   [/\bniletee\b/gi, "want"],
   [/\bnaomba\b/gi, "want"],
@@ -60,4 +63,24 @@ export function isShopperFillerOnly(text) {
     .split(/\s+/)
     .filter(Boolean);
   return tokens.length > 0 && tokens.every((t) => STOP_FILLERS.has(t));
+}
+
+const SWAHILI_HINT_RE =
+  /\b(habari|sasa|mambo|nataka|nipee|nipatie|niletee|asante|pole|sawa|ndiyo|ndio|sio|bei|nguo|viatu|simu|haraka|tafadhali|karibu|sana|kwani|bado|sasa|nini|gani|poa|fiti|chap)\b/i;
+
+/**
+ * Hint Whisper language: sw | en | undefined (auto).
+ * Prefer Kiswahili when recent text has clear SW/Sheng markers.
+ */
+export function detectSpeechLanguageHint(text = "") {
+  const t = String(text || "").trim();
+  if (!t) return undefined;
+  if (SWAHILI_HINT_RE.test(t)) return "sw";
+  if (/[a-z]{3,}/i.test(t) && !SWAHILI_HINT_RE.test(t)) return "en";
+  return undefined;
+}
+
+/** Prefer Kiswahili-friendly reply framing when shopper used SW/Sheng. */
+export function prefersKiswahiliReply(text = "") {
+  return detectSpeechLanguageHint(text) === "sw";
 }

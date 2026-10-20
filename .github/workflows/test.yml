@@ -1,0 +1,103 @@
+name: Tests
+
+# The bot VM pushes catalog commits straight to main (sokoni-bot, "catalog: update
+# products via WhatsApp admin"). On 2026-08-30 one of those re-added a sold-out row
+# 8 minutes after a scrub landed, and main sat red for a week because nothing ran
+# the suite. This job is what makes that visible.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    # eslint was already in devDependencies and `npm run lint` was already a
+    # script, but there was no config, so it errored out and nothing ran it.
+    # A missing import for normalizePin then reached production and broke
+    # rider registration -- a ReferenceError only fires when its line runs,
+    # and that line was the last step of a 14-step flow.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install eslint
+        run: npm install --no-save eslint@^9.17.0
+
+      - name: Lint
+        run: npx eslint whatsapp-bot/src website/assets/js
+
+  bot:
+    name: whatsapp-bot unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: whatsapp-bot/package-lock.json
+
+      - name: Install
+        working-directory: whatsapp-bot
+        # Dev deps included: the SQL parameter-type test needs pglite to build
+        # the real schema and parse every statement. The VM deploy still
+        # installs with --omit=dev, so none of this ships.
+        run: npm ci
+
+      - name: Unit tests
+        working-directory: whatsapp-bot
+        # Pass explicit paths: `node --test <glob>` only expands on Node >= 22.
+        run: |
+          set -euo pipefail
+          files="$(find src -name '*.test.js' | sort)"
+          if [ -z "$files" ]; then
+            echo "no test files found under src/" >&2
+            exit 1
+          fi
+          echo "$files" | sed 's/^/  /'
+          # shellcheck disable=SC2086
+          node --test $files
+
+      - name: Module import smoke
+        run: node scripts/verify-bot-import.mjs
+
+  copy-audit:
+    name: no cash-on-delivery offers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/audit-cod-copy.sh
+
+  static-data:
+    name: catalog JSON validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Catalogs parse and carry no sold rows
+        run: |
+          set -euo pipefail
+          for f in website/data/products.json whatsapp-bot/src/data/products.json; do
+            node -e "
+              const rows = require('./$f');
+              const list = Array.isArray(rows) ? rows : rows.products || [];
+              const bad = list.filter(p => p.isSold === true || p.inStock === false || Number(p.stockQuantity) === 0);
+              if (bad.length) {
+                console.error('$f publishes sold/out-of-stock rows:', bad.map(p => p.id).join(', '));
+                process.exit(1);
+              }
+              console.log('$f ok (' + list.length + ' rows)');
+            "
+          done

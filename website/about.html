@@ -1,32 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>About Us — Sokoni Mall</title>
 <meta name="description" content="About Sokoni Mall — Kenya's prepaid marketplace for brand new and pre-loved fashion. Shop and sell on WhatsApp with 100% escrow protection." />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Sokoni Mall",
+  "legalName": "SKN MALL KENYA",
+  "url": "https://sokonimall.com",
+  "logo": "https://sokonimall.com/assets/images/logo-og.png",
+  "foundingDate": "2026-09-04",
+  "identifier": { "@type": "PropertyValue", "propertyID": "KE-BRS", "value": "BN-36SM2YW9" },
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Murang'a Union Building, Thika - Kandara Road",
+    "postOfficeBoxNumber": "220",
+    "postalCode": "01034",
+    "addressLocality": "Kandara",
+    "addressCountry": "KE"
+  },
+  "areaServed": { "@type": "Country", "name": "Kenya" },
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "contactType": "customer support",
+    "telephone": "+254117422428",
+    "email": "support@sokonimall.com",
+    "areaServed": "KE",
+    "availableLanguage": ["English", "Swahili"]
+  }
+}
+</script>
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: { green: '#FF2300', purple: '#000000', purpleLight: '#121212', cream: '#121212' } }, fontFamily: { sans: ['Inter', '"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } };
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", purpleLight: "#2E1B57", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
 </script>
 <script>
-  (function () { try { var t = localStorage.getItem('sokoni-theme'); if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {} })();
+  (function () { document.documentElement.classList.add("dark"); })();
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
 <link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
 </head>
-<body class="bg-black text-zinc-300 font-sans antialiased">
-  <header class="border-b border-zinc-800 bg-black/90 backdrop-blur sticky top-0 z-40">
-    <div class="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
-      <a href="index.html" class="text-sm font-medium text-zinc-400 hover:text-white transition">← Back to Sokoni</a>
-      <a href="faq.html" class="text-sm text-zinc-500 hover:text-white transition">FAQ</a>
-    </div>
-  </header>
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="about">
+  <div id="sokoni-shell-header"></div>
 
-  <main class="max-w-3xl mx-auto px-5 py-12 legal-prose">
-    <h1 class="text-3xl font-bold text-white tracking-tight mb-2">About Sokoni Mall</h1>
-    <p class="text-sm text-zinc-500 mb-10">Kenya's #1 prepaid marketplace · Founded by David Thuku Muiruri · sokonimall.com</p>
+  <main class="depop-main-content max-w-3xl mx-auto w-full px-5 py-10 flex-1 legal-prose">
+    <p class="depop-label mb-2">Company</p>
+
+    <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">About Sokoni Mall</h1>
+    <p class="text-sm text-zinc-500 mb-10">Kenya's #1 prepaid marketplace · sokonimall.com</p>
 
     <p><strong>Sokoni Mall Enterprise</strong> is a Kenyan peer-to-peer marketplace for <strong>brand new merchandise</strong> and <strong>pre-loved fashion</strong>. We combine a Depop-style storefront at sokonimall.com with a smart WhatsApp assistant — so you can browse, pay upfront, and track every order without downloading another app.</p>
 
@@ -36,30 +81,97 @@
     <h2>How Sokoni works</h2>
     <ul>
       <li><strong>Shop</strong> — browse on the website or chat with Sokoni Plug on WhatsApp.</li>
-      <li><strong>Pay upfront</strong> — 100% prepaid via M-Pesa STK push (Daraja) or verified till payment. No cash on delivery.</li>
+      <li><strong>Pay upfront</strong> — 100% prepaid via M-Pesa STK push. No cash on delivery.</li>
       <li><strong>Escrow protection</strong> — your money is held safely until the item arrives as described.</li>
-      <li><strong>Track</strong> — every order gets an <strong>SK-####</strong> code. Follow shipment from label to delivered on <a href="track.html">track.html</a> or in WhatsApp.</li>
+      <li><strong>Track</strong> — every order gets an <strong>SKN-####</strong> code. Follow shipment from label to delivered on <a href="track.html">track.html</a> or in WhatsApp.</li>
     </ul>
 
     <h2>Sell on Sokoni</h2>
     <p>Anyone can list items at <a href="suppliers/list.html">sokonimall.com/suppliers/list</a> — upload photos, add details, and post live. Sellers drop off at a hub using a prepaid label; payouts release after confirmed delivery. Zero listing fees during launch.</p>
 
-    <h2>Founder &amp; transparency</h2>
-    <p>Sokoni is founder-led by <strong>David Thuku Muiruri</strong>. During our launch phase, M-Pesa Buy Goods Till <strong>4775847</strong> is registered to the founder — a named, accountable checkout while our business till transition completes. Daraja STK push auto-confirms most payments; manual till payers should verify their <strong>SK-####</strong> on <a href="https://wa.me/254117422428">+254 117 422 428</a> before sending.</p>
+    <h2>Transparency</h2>
+    <p>Sokoni is a Kenyan prepaid marketplace. Checkout uses <strong>M-Pesa STK</strong> so payment auto-confirms. Always verify your <strong>SKN-####</strong> on <a href="https://wa.me/254117422428">+254 117 422 428</a> before paying — never send money to riders or personal numbers. How escrow, the 2-hour inspection, and a missed delivery are handled: <a href="trust-and-safety.html">Trust &amp; safety</a>.</p>
 
     <h2>Contact</h2>
     <ul>
       <li>WhatsApp / calls: <a href="https://wa.me/254117422428">+254 117 422 428</a></li>
       <li>Email: <a href="mailto:support@sokonimall.com">support@sokonimall.com</a></li>
-      <li>Location: Nairobi, Kenya</li>
+      <li>Kenya — we sell and deliver countrywide</li>
+      <li>Registered office: see <a href="#registration">official registration</a></li>
     </ul>
+
+    <section id="registration" class="sokoni-brs-record" aria-labelledby="brs-heading">
+      <h2 id="brs-heading" class="!mt-0">Official registration</h2>
+      <p>Sokoni Mall trades as the registered business name <strong>SKN MALL KENYA</strong>. The address below is the official BRS record — not a claim that we only serve one town. Shoppers and sellers across Kenya use the same prepaid WhatsApp marketplace.</p>
+
+      <table class="sokoni-brs-table">
+        <caption class="sr-only">Official Business Registration Service record for SKN MALL KENYA</caption>
+        <tbody>
+          <tr>
+            <th scope="row">Registered Business Name</th>
+            <td>SKN MALL KENYA</td>
+          </tr>
+          <tr>
+            <th scope="row">Registration Number</th>
+            <td>BN-36SM2YW9</td>
+          </tr>
+          <tr>
+            <th scope="row">Governing Act</th>
+            <td>Registration of Business Names Act (Cap. 499, Sec. 14)</td>
+          </tr>
+          <tr>
+            <th scope="row">Issuing Authority</th>
+            <td>Business Registration Service (BRS), Republic of Kenya</td>
+          </tr>
+          <tr>
+            <th scope="row">Registered Address</th>
+            <td>Murang'a Union Building, Thika - Kandara Road, P.O. Box 220, 01034 - Kandara</td>
+          </tr>
+          <tr>
+            <th scope="row">Registration Date</th>
+            <td>September 4, 2026</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="sokoni-brs-verify">
+        <h3>Verify our registration</h3>
+        <p>To verify our official business registration status with the Business Registration Service (BRS), SMS the word <strong>BRS</strong> to <strong>21546</strong> and follow the prompts using our registration number <strong>BN-36SM2YW9</strong>.</p>
+      </div>
+    </section>
+  
   </main>
 
-  <footer class="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500">
-    <p><a href="index.html" class="hover:text-white transition-colors">Home</a> · <a href="faq.html" class="hover:text-white transition-colors">FAQ</a> · <a href="terms.html" class="hover:text-white transition-colors">Terms</a> · <a href="privacy.html" class="hover:text-white transition-colors">Privacy</a></p>
-    <p class="mt-2">&copy; <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace.</p>
+  <footer class="footer-legal border-t border-zinc-900 py-8 text-center text-xs text-zinc-500">
+    <p>
+      <a href="index.html" class="hover:text-white transition-colors">Home</a>
+      · <a href="about.html" class="hover:text-white transition-colors">About</a>
+      · <a href="index.html#how-it-works" class="hover:text-white transition-colors">How it works</a>
+      · <a href="trust-and-safety.html" class="hover:text-white transition-colors">Trust &amp; safety</a>
+      · <a href="faq.html" class="hover:text-white transition-colors">FAQ</a>
+      · <a href="terms.html#returns" class="hover:text-white transition-colors">Refunds</a>
+      · <a href="terms.html" class="hover:text-white transition-colors">Terms</a>
+      · <a href="privacy.html" class="hover:text-white transition-colors">Privacy</a>
+    </p>
+    <div class="sokoni-brs-badge">
+      <p>
+        <strong>Registered Business:</strong> SKN MALL KENYA
+        <span aria-hidden="true"> | </span>
+        <strong>BN Registration No:</strong> BN-36SM2YW9
+      </p>
+      <p class="sokoni-brs-badge__note">
+        Duly registered under the Registration of Business Names Act (Cap 499) by the Republic of Kenya Business Registration Service (BRS).
+      </p>
+    </div>
+    <p class="mt-4">&copy; <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace.</p>
   </footer>
-  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <div id="sokoni-shell-nav"></div>
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/depop-nav.js"></script>
+  <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+
+  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
   <script src="https://savannah-agents-aqex.onrender.com/widget.js" data-tenant-id="a452ff00-9d75-468c-a624-82e173dc395e" async></script>
 </body>
 </html>

@@ -1,0 +1,683 @@
+(function () {
+  const API_BASE =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      ? "http://localhost:3001"
+      : "https://bot.sokonimall.com";
+  const CHECKOUT_API = `${API_BASE}/api/checkout`;
+  const SOCIAL_API = `${API_BASE}/api/social`;
+  const POLL_MS = 3000;
+  const POLL_MAX = 20;
+
+  const form = document.getElementById("checkout-lookup");
+  const input = document.getElementById("order-id");
+  const panel = document.getElementById("checkout-panel");
+  const errorEl = document.getElementById("checkout-error");
+  const loadingEl = document.getElementById("checkout-loading");
+  const payBtn = document.getElementById("checkout-pay-btn");
+  const payBlock = document.getElementById("checkout-pay-block");
+  const tillBlock = document.getElementById("checkout-till-block");
+  const statusEl = document.getElementById("checkout-status");
+  const readinessEl = document.getElementById("checkout-readiness");
+
+  let currentOrderId = null;
+  let currentOrder = null;
+  let checkoutMetaCache = null;
+  let pollTimer = null;
+  let pollCount = 0;
+  let activeOfferId = null;
+  let payBusy = false;
+  /** @type {{ towns: string[], hubs: Record<string, string[]>, options: Array<{town:string,spotName:string,id:string}> } | null} */
+  let landmarkCatalog = null;
+
+  function formatKes(n) {
+    return `KES ${Math.round(Number(n) || 0).toLocaleString()}`;
+  }
+
+  function setOfferStatus(msg, isError = false) {
+    const node = document.getElementById("offer-checkout-status");
+    if (!node) return;
+    node.textContent = msg || "";
+    node.classList.toggle("text-red-600", isError);
+  }
+
+  function selectedDeliveryType() {
+    const checked = document.querySelector('input[name="offer-delivery-type"]:checked');
+    return checked?.value || "other";
+  }
+
+  function syncLandmarkUi() {
+    const type = selectedDeliveryType();
+    const hubFields = document.getElementById("offer-hub-fields");
+    const locationWrap = document.getElementById("offer-location-wrap");
+    const locationInput = document.getElementById("offer-location");
+    const townSel = document.getElementById("offer-landmark-town");
+    const spotSel = document.getElementById("offer-landmark-spot");
+    const useHub = type === "parcel_hub";
+    hubFields?.classList.toggle("hidden", !useHub);
+    locationWrap?.classList.toggle("hidden", useHub);
+    if (locationInput) locationInput.required = !useHub;
+    if (townSel) townSel.required = useHub;
+    if (spotSel) spotSel.required = useHub;
+  }
+
+  function fillSpotOptions(town) {
+    const spotSel = document.getElementById("offer-landmark-spot");
+    if (!spotSel) return;
+    const spots = (landmarkCatalog?.hubs && town && landmarkCatalog.hubs[town]) || [];
+    spotSel.innerHTML = `<option value="">Choose spot…</option>${spots
+      .map((s) => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)
+      .join("")}`;
+    spotSel.disabled = spots.length === 0;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  async function loadLandmarkCatalog() {
+    const townSel = document.getElementById("offer-landmark-town");
+    if (!townSel) return;
+    try {
+      const res = await fetch(`${CHECKOUT_API}/landmarks`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) return;
+      landmarkCatalog = data;
+      townSel.innerHTML = `<option value="">Choose town…</option>${(data.towns || [])
+        .map((t) => `<option value="${escapeAttr(t)}">${escapeHtml(t)}</option>`)
+        .join("")}`;
+    } catch {
+      /* free-text fallback still works */
+    }
+    syncLandmarkUi();
+  }
+
+  function collectLandmarkPayload() {
+    const type = selectedDeliveryType();
+    const town = document.getElementById("offer-landmark-town")?.value.trim() || "";
+    const spot = document.getElementById("offer-landmark-spot")?.value.trim() || "";
+    const note = document.getElementById("offer-landmark-note")?.value.trim() || "";
+    const location = document.getElementById("offer-location")?.value.trim() || "";
+    if (type === "parcel_hub") {
+      const match = landmarkCatalog?.options?.find((o) => o.town === town && o.spotName === spot);
+      return {
+        deliveryType: "parcel_hub",
+        landmarkTown: town,
+        landmarkSpot: spot,
+        landmarkId: match?.id || undefined,
+        landmarkInstructions: note || undefined,
+        location: [spot, town, note].filter(Boolean).join(" · "),
+      };
+    }
+    return {
+      deliveryType: "other",
+      location,
+      landmarkInstructions: note || undefined,
+    };
+  }
+
+  function bindLandmarkUi() {
+    document.querySelectorAll('input[name="offer-delivery-type"]').forEach((el) => {
+      el.addEventListener("change", syncLandmarkUi);
+    });
+    document.getElementById("offer-landmark-town")?.addEventListener("change", (e) => {
+      fillSpotOptions(e.target.value);
+    });
+    syncLandmarkUi();
+  }
+
+  async function loadOfferPreview(offerId) {
+    const panel = document.getElementById("offer-checkout-panel");
+    if (!panel) return;
+    panel.classList.remove("hidden");
+    activeOfferId = offerId;
+    setOfferStatus("Loading agreed price…");
+
+    const session = window.SokoniBuyerAuth?.readSession?.();
+    const params = new URLSearchParams({ offerId: String(offerId) });
+    if (session?.userId) params.set("buyerUserId", String(session.userId));
+    if (window.SokoniBuyerAuth?.appendAuthQuery) {
+      window.SokoniBuyerAuth.appendAuthQuery(params);
+    }
+
+    try {
+      const res = await fetch(`${SOCIAL_API}/offers/${encodeURIComponent(offerId)}/checkout?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOfferStatus(data.message || data.error || "This offer cannot be checked out.", true);
+        return;
+      }
+      document.getElementById("offer-checkout-product").textContent =
+        data.offer?.product?.title || data.productId || "Accepted offer";
+      document.getElementById("offer-checkout-amount").textContent = formatKes(
+        data.breakdown?.totalKes ?? data.offer?.amountKsh
+      );
+      const listNode = document.getElementById("offer-checkout-list");
+      if (listNode) {
+        if (data.listedBuyerTotalKes != null) {
+          listNode.textContent = `Listed ${formatKes(data.listedBuyerTotalKes)}`;
+          listNode.classList.remove("hidden");
+        } else {
+          listNode.textContent = "";
+        }
+      }
+      const breakdownNode = document.getElementById("offer-checkout-breakdown");
+      if (breakdownNode) {
+        const b = data.breakdown || {};
+        const rows = [];
+        if (b.itemKes != null || b.sellerNetKes != null) {
+          rows.push(`<li>Item (seller receives) · ${formatKes(b.itemKes ?? b.sellerNetKes)}</li>`);
+        }
+        if (b.shippingKes != null && Number(b.shippingKes) > 0 && !b.freeShipping) {
+          rows.push(`<li>Shipping · ${formatKes(b.shippingKes)}</li>`);
+        } else {
+          rows.push(`<li>Delivery · arranged by seller after payment</li>`);
+        }
+        if (b.platformFeeKes != null) {
+          rows.push(`<li>Sokoni fee (10%) · ${formatKes(b.platformFeeKes)}</li>`);
+        }
+        if (b.totalKes != null) {
+          rows.push(`<li><strong>You pay into escrow · ${formatKes(b.totalKes)}</strong></li>`);
+        }
+        breakdownNode.innerHTML = rows.join("");
+      }
+      setOfferStatus(
+        "Pick a parcel hub or enter a landmark, then pay on M-Pesa. Delivery is arranged by the seller after payment."
+      );
+      const phoneInput = document.getElementById("offer-phone");
+      if (phoneInput && session?.phone && !phoneInput.value) {
+        phoneInput.value = session.phone;
+      }
+      void loadLandmarkCatalog();
+    } catch {
+      setOfferStatus("Could not load offer checkout right now.", true);
+    }
+  }
+
+  async function placeOfferOrder(ev) {
+    ev.preventDefault();
+    if (!activeOfferId) return;
+    const session = window.SokoniBuyerAuth?.readSession?.();
+    if (!session?.userId) {
+      setOfferStatus("Verify your WhatsApp above before paying.", true);
+      return;
+    }
+
+    const name = document.getElementById("offer-name")?.value.trim();
+    const phone = document.getElementById("offer-phone")?.value.trim();
+    const landmark = collectLandmarkPayload();
+    if (selectedDeliveryType() === "parcel_hub" && (!landmark.landmarkTown || !landmark.landmarkSpot)) {
+      setOfferStatus("Choose a town and drop-off spot, or switch to Other landmark.", true);
+      return;
+    }
+    if (selectedDeliveryType() !== "parcel_hub" && String(landmark.location || "").trim().length < 4) {
+      setOfferStatus("Enter a clearer delivery location (estate/town + landmark).", true);
+      return;
+    }
+    const btn = document.getElementById("offer-place-btn");
+    if (btn) btn.disabled = true;
+    setOfferStatus("Creating prepaid order…");
+
+    try {
+      let payload = {
+        buyerUserId: session.userId,
+        name,
+        deliveryPhone: phone,
+        ...landmark,
+      };
+      if (window.SokoniBuyerAuth?.authFields) {
+        payload = window.SokoniBuyerAuth.authFields(payload);
+      }
+      const res = await fetch(`${SOCIAL_API}/offers/${encodeURIComponent(activeOfferId)}/place-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOfferStatus(data.message || data.error || "Could not place order from this offer.", true);
+        return;
+      }
+
+      document.getElementById("offer-checkout-panel")?.classList.add("hidden");
+      if (input) input.value = data.orderId;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("offerId");
+      url.searchParams.set("order", data.orderId);
+      window.history.replaceState({}, "", url);
+      setOfferStatus("");
+      hideError();
+      await loadOrder(data.orderId);
+      const checkoutPhone = document.getElementById("checkout-phone");
+      if (checkoutPhone && phone) checkoutPhone.value = phone;
+    } catch {
+      setOfferStatus("Network error while placing offer order.", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function normalizeOrderId(raw) {
+    return globalThis.SokoniOrderId?.normalizeOrderId(raw) || "";
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg || "Something went wrong.";
+    errorEl.classList.remove("hidden");
+    panel.classList.add("hidden");
+  }
+
+  function hideError() {
+    errorEl.classList.add("hidden");
+  }
+
+  function stopPolling() {
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = null;
+    pollCount = 0;
+  }
+
+  function stkLive(meta) {
+    return Boolean(meta?.stkAvailable ?? meta?.darajaConfigured ?? meta?.paystackConfigured);
+  }
+
+  function renderReadiness(meta) {
+    if (!readinessEl || !meta) return;
+    if (stkLive(meta)) {
+      readinessEl.textContent =
+        "M-Pesa STK is live — tap Pay, enter PIN on your phone. Payment confirms automatically.";
+    } else {
+      readinessEl.textContent =
+        "STK is briefly unavailable — open WhatsApp and reply paid with your M-Pesa code, or try Pay again in a moment.";
+    }
+  }
+
+  function renderTillBlock(meta, orderId) {
+    // Never show till numbers or till account names on the public checkout page.
+    if (!tillBlock) return;
+    tillBlock.classList.add("hidden");
+  }
+
+  function renderSellerShippingBreakdown(data) {
+    const host = document.getElementById("checkout-seller-shipping");
+    if (!host) return;
+    const rows = Array.isArray(data?.vendorBreakdown)
+      ? data.vendorBreakdown
+      : Array.isArray(data?.children) && data.children.length > 1
+        ? data.children.map((c) => ({
+            vendorId: c.vendorId || c.shopHandle,
+            shippingFee: c.shippingKes,
+          }))
+        : [];
+    if (rows.length < 2) {
+      host.classList.add("hidden");
+      host.innerHTML = "";
+      return;
+    }
+    host.classList.remove("hidden");
+    host.innerHTML =
+      `<p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Shipping by seller</p><ul class="space-y-1 text-sm text-zinc-300">` +
+      rows
+        .map((v) => {
+          const name = String(v.vendorId || v.shopHandle || "Seller").replace(/^@/, "");
+          const fee = Math.round(Number(v.shippingFee ?? v.shippingKes) || 0);
+          return `<li>${escapeHtml(name)} · ${formatKes(fee)}</li>`;
+        })
+        .join("") +
+      `</ul><p class="text-xs text-zinc-500">Multi-seller carts ship separately — each seller’s rate is included in one M-Pesa total.</p>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderOrderSummary(data) {
+    const total = Math.round(Number(data.totalKes ?? data.amountKes) || 0);
+    const ship = Math.round(Number(data.shippingKes) || 0);
+    const item = Math.round(
+      Number(data.itemKes) || Math.max(0, total - ship)
+    );
+    const itemEl = document.getElementById("checkout-item");
+    const shipEl = document.getElementById("checkout-shipping");
+    const totalEl = document.getElementById("checkout-total");
+    const noteEl = document.getElementById("checkout-shipping-note");
+    if (itemEl) itemEl.textContent = formatKes(item);
+    if (shipEl) {
+      const place = [data.deliveryCounty, data.deliveryTown].filter(Boolean).join(" · ");
+      const multi = Array.isArray(data.vendorBreakdown) && data.vendorBreakdown.length > 1;
+      shipEl.textContent =
+        ship > 0
+          ? `${formatKes(ship)}${place ? ` (${place})` : ""}${multi ? " · split by seller" : ""}`
+          : "KES 0";
+    }
+    if (totalEl) totalEl.textContent = formatKes(total);
+    if (noteEl) {
+      noteEl.textContent =
+        ship > 0
+          ? "Delivery fee is included in the M-Pesa STK amount below."
+          : "Choose county (or map pin) above and apply — delivery is added before M-Pesa.";
+    }
+    renderSellerShippingBreakdown(data);
+    const hub = document.getElementById("checkout-hub");
+    if (hub) {
+      const offer = data.hubInspection;
+      if (offer && offer.offered) {
+        hub.hidden = false;
+        hub.classList.remove("hidden");
+        hub.textContent = `${offer.label}. ${offer.detail || ""}`.trim();
+      } else {
+        hub.hidden = true;
+        hub.classList.add("hidden");
+        hub.textContent = "";
+      }
+    }
+    if (payBtn && !payBusy) {
+      const paid = data.paymentStatus === "confirmed";
+      if (!paid) {
+        payBtn.textContent =
+          total > 0 ? `Pay with M-Pesa (${formatKes(total)})` : "Pay with M-Pesa";
+      }
+    }
+  }
+
+  function renderCheckout(data) {
+    currentOrderId = data.orderId;
+    currentOrder = data;
+    const meta = data.meta || checkoutMetaCache || {};
+    checkoutMetaCache = meta;
+    document.getElementById("checkout-order-id").textContent = data.orderId;
+    document.getElementById("checkout-product").textContent = data.productName || "Sokoni order";
+    renderOrderSummary(data);
+
+    const trackLink = document.getElementById("checkout-track-link");
+    if (trackLink) trackLink.href = `track.html?order=${encodeURIComponent(data.orderId)}`;
+
+    renderReadiness(meta);
+    renderTillBlock(meta, data.orderId);
+
+    const paid = data.paymentStatus === "confirmed";
+    const processing = data.paymentStatusDetail === "processing";
+
+    if (paid) {
+      stopPolling();
+      statusEl.textContent = "✅ Already paid — escrow held. Your order is being processed.";
+      payBlock.classList.add("hidden");
+      tillBlock?.classList.add("hidden");
+    } else if (processing && stkLive(meta)) {
+      statusEl.textContent = "📱 STK sent — enter your M-Pesa PIN. Waiting for confirmation…";
+      payBlock.classList.remove("hidden");
+      if (payBtn && !payBusy) payBtn.textContent = "Resend STK";
+    } else if (stkLive(meta)) {
+      statusEl.textContent =
+        "💳 Set delivery above, then tap Pay — M-Pesa STK uses item + delivery fee.";
+      payBlock.classList.remove("hidden");
+    } else {
+      statusEl.textContent =
+        "💳 Payment required before dispatch. Use the till details below, then reply paid on WhatsApp.";
+      payBlock.classList.add("hidden");
+    }
+
+    panel.classList.remove("hidden");
+  }
+
+  async function loadMeta() {
+    try {
+      const res = await fetch(`${CHECKOUT_API}/meta`);
+      if (!res.ok) return;
+      checkoutMetaCache = await res.json();
+      renderReadiness(checkoutMetaCache);
+    } catch {
+      /* page still works without meta */
+    }
+  }
+
+  async function loadOrder(orderId, { quiet } = {}) {
+    hideError();
+    if (!quiet) {
+      panel.classList.add("hidden");
+      loadingEl.classList.remove("hidden");
+    }
+
+    try {
+      const res = await fetch(`${CHECKOUT_API}/${encodeURIComponent(orderId)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data.error === "order_not_found"
+            ? "Order not found. Check your SKN-#### from WhatsApp."
+            : "Could not load order."
+        );
+      }
+      renderCheckout(data);
+      void tryClaimOrderForAccount(orderId);
+      return data;
+    } catch (err) {
+      if (!quiet) showError(err.message);
+      return null;
+    } finally {
+      if (!quiet) loadingEl.classList.add("hidden");
+    }
+  }
+
+  async function tryClaimOrderForAccount(orderId) {
+    const account = window.SokoniAccountAuth?.readSession?.();
+    if (!account?.sessionToken || !account.user?.phone) return;
+    try {
+      await window.SokoniAccountAuth.claimOrder(orderId);
+    } catch {
+      /* non-blocking */
+    }
+  }
+
+  function schedulePoll(orderId) {
+    stopPolling();
+    pollCount = 0;
+    const tick = async () => {
+      pollCount += 1;
+      const data = await loadOrder(orderId, { quiet: true });
+      if (data?.paymentStatus === "confirmed") {
+        statusEl.textContent = "✅ Payment confirmed — escrow held. Track your order anytime.";
+        return;
+      }
+      if (pollCount >= POLL_MAX) {
+        statusEl.textContent =
+          "Still waiting for M-Pesa… If you paid, refresh or open Track. Or reply paid on WhatsApp.";
+        if (payBtn) {
+          payBtn.disabled = false;
+          payBtn.textContent = "Resend STK";
+        }
+        return;
+      }
+      pollTimer = setTimeout(tick, POLL_MS);
+    };
+    pollTimer = setTimeout(tick, POLL_MS);
+  }
+
+  async function payOrder() {
+    if (!currentOrderId || payBusy) return;
+    const phone = document.getElementById("checkout-phone")?.value.trim();
+    if (!phone) {
+      showError("Enter the M-Pesa phone number for STK push.");
+      return;
+    }
+    hideError();
+    payBusy = true;
+    payBtn.disabled = true;
+    payBtn.textContent = "Preparing total…";
+
+    try {
+      // Apply county/pin shipping onto the order before Daraja STK so amount includes delivery.
+      try {
+        await window.SokoniCheckoutDeliverySelector?.applyToOrder?.();
+      } catch {
+        /* STK path still runs hybrid ensure on the bot */
+      }
+      const refreshed = await loadOrder(currentOrderId, { quiet: true });
+      const total = Math.round(Number(refreshed?.totalKes ?? refreshed?.amountKes) || 0);
+      payBtn.textContent =
+        total > 0 ? `Sending STK (${formatKes(total)})…` : "Sending STK…";
+
+      const res = await fetch(`${CHECKOUT_API}/${encodeURIComponent(currentOrderId)}/stk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "STK push failed. Try WhatsApp or pay till manually.");
+      }
+
+      if (data.meta) checkoutMetaCache = data.meta;
+      if (data.amountKes != null || data.totalKes != null || data.shippingKes != null) {
+        renderOrderSummary({
+          ...(refreshed || {}),
+          totalKes: data.totalKes ?? data.amountKes,
+          amountKes: data.amountKes ?? data.totalKes,
+          shippingKes: data.shippingKes,
+        });
+      }
+
+      if (data.alreadyPaid || data.method === "already_paid") {
+        statusEl.textContent = "✅ Already paid.";
+        payBlock.classList.add("hidden");
+        tillBlock?.classList.add("hidden");
+        return;
+      }
+
+      if (data.method === "manual_till" || data.stkAvailable === false) {
+        renderTillBlock(data.meta || checkoutMetaCache, currentOrderId);
+        statusEl.textContent =
+          data.message ||
+          "STK is not live yet — pay the till below with your SK number, then reply paid on WhatsApp.";
+        payBlock.classList.add("hidden");
+        return;
+      }
+
+      const stkTotal = Math.round(Number(data.amountKes ?? data.totalKes) || total);
+      statusEl.textContent =
+        data.customerMessage ||
+        `📱 STK sent for ${formatKes(stkTotal)} — check your phone and enter M-Pesa PIN. Waiting…`;
+      schedulePoll(currentOrderId);
+    } catch (err) {
+      showError(err.message);
+      payBtn.disabled = false;
+      const t = Math.round(Number(currentOrder?.totalKes ?? currentOrder?.amountKes) || 0);
+      payBtn.textContent = t > 0 ? `Pay with M-Pesa (${formatKes(t)})` : "Pay with M-Pesa";
+    } finally {
+      payBusy = false;
+    }
+  }
+
+  form?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    stopPolling();
+    const id = normalizeOrderId(input.value);
+    if (!id) return;
+    input.value = id;
+    const url = new URL(window.location.href);
+    url.searchParams.set("order", id);
+    window.history.replaceState({}, "", url);
+    loadOrder(id);
+  });
+
+  payBtn?.addEventListener("click", payOrder);
+  document.getElementById("offer-checkout-form")?.addEventListener("submit", placeOfferOrder);
+  bindLandmarkUi();
+
+  /** Bridge for Path B hybrid delivery selector → Daraja STK totals. */
+  window.SokoniCheckoutDelivery = {
+    getOrderId: () => currentOrderId || normalizeOrderId(input?.value || ""),
+    getVendorId: () =>
+      currentOrder?.vendorId ||
+      String(currentOrder?.shopHandle || currentOrder?.supplierId || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, "") ||
+      null,
+    getCartItems: () => {
+      if (Array.isArray(currentOrder?.cartItems) && currentOrder.cartItems.length) {
+        return currentOrder.cartItems;
+      }
+      const vendorId =
+        currentOrder?.vendorId ||
+        String(currentOrder?.shopHandle || currentOrder?.supplierId || "")
+          .trim()
+          .toLowerCase()
+          .replace(/^@/, "") ||
+        "unknown";
+      return [{ productId: currentOrder?.orderId || "checkout", vendorId, qty: 1 }];
+    },
+    onApplied: (data) => {
+      if (data?.order) {
+        renderOrderSummary({
+          itemKes: currentOrder?.itemKes,
+          shippingKes: data.order.shippingKes ?? data.shippingKes,
+          totalKes: data.order.amountKes ?? data.totalKes,
+          amountKes: data.order.amountKes ?? data.totalKes,
+          deliveryCounty: data.order.deliveryCounty,
+          deliveryTown: data.order.deliveryTown,
+          paymentStatus: currentOrder?.paymentStatus,
+          vendorBreakdown: data?.calc?.vendorBreakdown || currentOrder?.vendorBreakdown,
+          children: currentOrder?.children,
+        });
+      }
+      if (data?.orderId) void loadOrder(data.orderId, { quiet: true });
+    },
+  };
+  try {
+    window.SokoniCheckoutDeliverySelector?.init?.();
+  } catch {
+    /* fail-soft */
+  }
+
+  loadMeta().then(() => {
+    const params = new URLSearchParams(window.location.search);
+    const offerId = params.get("offerId");
+    const preset = params.get("order");
+    const paystackRef = params.get("reference") || params.get("trxref");
+    if (offerId) {
+      window.SokoniBuyerAuth?.bindPanel?.({
+        onVerified: () => {
+          loadOfferPreview(offerId);
+        },
+      });
+      void loadLandmarkCatalog();
+      loadOfferPreview(offerId);
+      return;
+    }
+    if (preset) {
+      input.value = normalizeOrderId(preset);
+      loadOrder(input.value);
+      return;
+    }
+    if (paystackRef) {
+      fetch(`${CHECKOUT_API}/by-reference/${encodeURIComponent(paystackRef)}`)
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.orderId) {
+            showError("Payment found, but we could not match the order. Enter your SKN-####.");
+            return;
+          }
+          input.value = data.orderId;
+          const url = new URL(window.location.href);
+          url.searchParams.set("order", data.orderId);
+          window.history.replaceState({}, "", url);
+          loadOrder(data.orderId);
+        })
+        .catch(() => {
+          showError("Could not load this payment. Enter your SKN-#### from WhatsApp.");
+        });
+    }
+  });
+})();

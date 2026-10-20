@@ -1,0 +1,180 @@
+# Phase 2 — Social Engine & Seller Storefronts
+
+Slices so far:
+
+1. Shop storefront follow/like hydration + bag dual-write
+2. Homepage/feed heart hydration from server liked set
+3. Follower / following lists on shop profiles
+4. Seller storefront profile edit (name, handle, bio, location, avatar URL)
+5. Seller shop activity feed (followers + likes)
+6. Buyer activity center (offer replies, follows, likes) — accepted offers link to **on-site** `checkout.html?offerId=`
+7. Soft-fail WhatsApp pings for follow / like / offer / DM (notify-only; deep-link back to site)
+8. Mute preference for WhatsApp social pings (`social_wa_notify`)
+9. Per-event mute (follows / likes / offers)
+10. WAHA linking ops (scripts + health/admin status)
+11. Structured offer → prepaid escrow: accepted `amount_kes` is buyer all-in; fee engine recalculates seller net + 10% without parsing chat text
+12. On-site inbox bargaining: offer cards + place-order checkout; WhatsApp is not the negotiation channel
+
+## What shipped
+
+### Shop profile viewer hydration
+
+`GET /api/social/shop/:handle`
+
+Optional viewer resolution (does not fail the public GET):
+
+1. Buyer WhatsApp session (`phone` + `sessionToken` query / headers), preferred
+2. Legacy `?viewer=` / `?viewerUserId=`
+
+When resolved, response includes:
+
+```json
+{
+  "viewer": {
+    "userId": 12,
+    "isFollowing": true,
+    "likedProductIds": ["prod_abc"]
+  },
+  "products": [
+    { "id": "prod_abc", "liked": true, "likesCount": 4 }
+  ]
+}
+```
+
+Shop page (`website/assets/js/shop-profile.js`) uses this to show **Following** / **♥ Liked** on load, and reloads after OTP verify.
+
+### Absolute like set (bag sync)
+
+`POST /api/products/like`
+
+```json
+{
+  "userId": 12,
+  "productId": "prod_abc",
+  "liked": true,
+  "phone": "2547XXXXXXXX",
+  "sessionToken": "…"
+}
+```
+
+- Omit `liked` → toggle (existing shop like buttons)
+- `liked: true|false` → idempotent set (used by bag / homepage hearts)
+
+### Homepage / product-sheet hearts
+
+Local bag (`sokoni-bag`) stays the guest save-for-later UX.
+
+When `SokoniBuyerAuth` has a session:
+
+1. Bag toggles dual-write to `/api/products/like` with absolute `liked`
+2. On homepage load, `GET /api/products/likes?productIds=…` hydrates heart visuals from the server liked set
+3. Heart state is **bag ∪ server likes** (`SokoniShopShell.isHearted`)
+
+### Batch liked lookup
+
+`GET /api/products/likes?productIds=id1,id2`
+
+Optional auth: buyer session or `viewer` / `userId` query (soft mode).
+
+```json
+{ "userId": 12, "likedProductIds": ["prod_abc"] }
+```
+
+### Follower / following lists
+
+`GET /api/social/users/:userId/followers`
+
+`GET /api/social/users/:userId/following`
+
+Returns `{ userId, direction, users[], pagination }`.
+
+Shop page Followers / Following counters open an inline list with links to each handle.
+
+### Seller storefront profile edit
+
+`PATCH /api/social/shop/profile` (seller session)
+
+Body fields (all optional): `handle` / `shopHandle`, `shopName` / `businessName`, `bio`, `avatarUrl`, `location` / `city`.
+
+Updates `users` storefront fields, soft-syncs linked `sellers` row + JSON supplier handle/name so session auth still resolves.
+
+Seller dashboard (`suppliers/list.html`) has a Shop profile form under the profile bar.
+
+### Seller shop activity
+
+`GET /api/social/activity` (seller session)
+
+Returns recent `{ type: "follow"|"like", actor, product?, createdAt }` events for the signed-in seller.
+
+Dashboard shows a Shop activity panel with refresh.
+
+### Buyer activity center
+
+`GET /api/social/buyer/activity` (buyer WhatsApp session required)
+
+Returns recent offer replies (`offer_accepted` / `offer_declined` / `offer_expired`), shops followed, and items liked.
+
+UI: `website/activity.html` — linked from shop, inbox, and mobile bottom nav.
+
+### WhatsApp social pings (soft-fail)
+
+When WAHA is linked, Sokoni texts:
+
+- Seller on new follower
+- Seller on new product like (not re-likes / unlikes)
+- Buyer when an offer is accepted or declined
+
+Failures are logged and never block the social API response. Dry-run WAHA still no-ops safely.
+
+### Notification preferences
+
+`GET|PATCH /api/social/notify-prefs` (buyer or seller WhatsApp session)
+
+```json
+{
+  "socialWaNotify": true,
+  "socialWaNotifyFollows": true,
+  "socialWaNotifyLikes": true,
+  "socialWaNotifyOffers": true
+}
+```
+
+- Columns (all default true): `social_wa_notify` (master), `social_wa_notify_follows`, `social_wa_notify_likes`, `social_wa_notify_offers`
+- Master off mutes all social WhatsApp pings; per-event flags mute only that type
+- Seller shop profile: master + follows + likes; buyer Activity: master + offers
+- Seller `PATCH /api/social/shop/profile` can also set the same fields
+- Orders / OTP unchanged
+
+### WAHA linking ops
+
+Live social pings need the GCP WAHA session in `WORKING` state.
+
+- Canonical VM flow: `deploy-waha.sh` → `waha-link-whatsapp.sh` → `deploy-bot.sh` → `health-check.sh`
+- Scripts resolve the pinned WAHA image via compose project `sokoni-waha` (not `:latest` ancestor filter)
+- Public `/health`: `wahaLinked` + `wahaSessionStatus`
+- Admin: `GET /admin/ops/waha?token=…` (redacted linked id; no QR)
+
+## Out of scope (later)
+
+- Public QR / pairing UI (never — keep linking on the VM / SSH tunnel)
+
+## Quick checks
+
+```bash
+cd whatsapp-bot
+node --check src/db/repositories/social.js
+node --check src/routes/socialApi.js
+node --check src/routes/productsApi.js
+npm run test:social
+```
+
+Manual:
+
+1. Open `shop.html?handle=<seller>` signed out → Follow hidden / likes prompt verify
+2. Verify WhatsApp → shop reloads with `viewer` → Follow / Liked state matches DB
+3. Toggle follow + like → refresh → state persists
+4. With session, homepage ♡ still saves to bag and dual-writes social like
+5. Tap Followers / Following on a shop → list loads with handle links
+6. Seller dashboard → Shop activity shows new follows/likes
+7. Buyer `activity.html` → verify WhatsApp → see offer replies / follows / likes
+8. With WAHA linked: follow/like/offer reply send soft-fail WhatsApp pings

@@ -69,9 +69,9 @@ function buildPerfumeProducts(scents) {
         imageUrl: tier.imageUrl,
         scope: "local",
         fulfillment: "store",
-        payment: "cod",
+        payment: "prepaid",
         inStock: true,
-        description: `Premium inspired perfume oil. ${tier.label} bottle. Pay on delivery.`,
+        description: `Premium inspired perfume oil. ${tier.label} bottle. Prepaid M-Pesa escrow.`,
       });
     }
   });

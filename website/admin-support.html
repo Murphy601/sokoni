@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Support Ops Desk · Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#00D26A", purple: "#1A1A1A", purpleLight: "#2A2A2A", cream: "#F4F4F4", red: "#FF2300" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+<style>
+  .cmd-out { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body class="admin-depop admin-body antialiased min-h-screen">
+  <header class="admin-chrome">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title" style="font-size:1.15rem;">Sokoni <span class="dot">.</span> Support</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <span class="is-active">Support</span>
+          <a href="admin-boda.html">Boda</a>
+          <a href="admin-riders.html">Riders</a>
+          <a href="admin-finances.html">Finances</a>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Ops desk</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-5 py-8 space-y-5">
+    <section class="rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <h1 class="font-display text-2xl sm:text-3xl font-black uppercase tracking-tight">Support ops desk</h1>
+      <p class="text-sm text-brand-purple/65 max-w-3xl">
+        Inbox for HELP / “Talk to a Human”, plus every admin <code>#command</code>
+        (status, fulfill, payconfirm, scan, issue macros, broadcast, ops…).
+        Escrow pause/refund/B2C and KYC stay on <a class="underline" href="admin-command.html">Command</a>
+        and <a class="underline" href="admin-seller-listings.html">Listings</a>
+        / <a class="underline" href="admin-sellers-shops.html">Sellers &amp; Shops</a>.
+      </p>
+      <label class="block text-sm font-medium max-w-md">
+        Admin token
+        <input
+          id="admin-token"
+          type="password"
+          autocomplete="off"
+          class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm"
+          placeholder="ADMIN_SETUP_TOKEN"
+        />
+      </label>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button type="button" id="refresh-btn" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple font-bold text-sm">
+          Refresh
+        </button>
+        <p id="admin-status" class="text-sm" role="status"></p>
+      </div>
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Support desk sections">
+        <button type="button" class="desk-tab is-active min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="inbox">Inbox</button>
+        <button type="button" class="desk-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="orders">Orders</button>
+        <button type="button" class="desk-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="payments">Payments</button>
+        <button type="button" class="desk-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="payouts">Payouts</button>
+        <button type="button" class="desk-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="crm">CRM</button>
+        <button type="button" class="desk-tab min-h-[40px] px-3 rounded-full border border-brand-purple/10 text-xs font-bold" data-tab="command"># Commands</button>
+      </div>
+    </section>
+
+    <!-- INBOX -->
+    <div data-panel="inbox" class="grid md:grid-cols-[280px_1fr] gap-4">
+      <section class="rounded-3xl border border-black/5 bg-white p-4">
+        <h2 class="text-sm font-bold mb-3">Open threads</h2>
+        <div id="support-list" class="space-y-2 text-sm"></div>
+      </section>
+
+      <section class="rounded-3xl border border-black/5 bg-white p-4 flex flex-col min-h-[420px] space-y-3">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 id="active-order" class="font-display text-xl font-bold">Select a thread</h2>
+            <p id="active-meta" class="text-xs text-brand-purple/55 mt-1"></p>
+          </div>
+          <button type="button" id="resolve-btn" class="hidden min-h-[44px] px-4 rounded-full border border-black/15 text-sm font-semibold">
+            Resolve / resume bot
+          </button>
+        </div>
+
+        <div id="order-actions" class="space-y-2 rounded-2xl border border-black/5 bg-brand-cream/60 p-3">
+          <p class="text-xs font-bold uppercase tracking-wide text-brand-purple/50">Order actions (WhatsApp #commands)</p>
+          <label class="block text-xs font-medium">
+            Order id
+            <input
+              id="action-order-id"
+              type="text"
+              autocomplete="off"
+              class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm bg-white"
+              placeholder="SKN-1002-1 — select a thread or type it"
+            />
+          </label>
+          <div class="flex flex-wrap gap-2 items-end">
+            <label class="text-xs font-medium">
+              Status
+              <select id="status-select" class="mt-1 block min-h-[44px] rounded-2xl border border-black/10 px-2 text-sm bg-white">
+                <option value="confirmed">confirmed</option>
+                <option value="packed">packed</option>
+                <option value="out_for_delivery">out_for_delivery</option>
+                <option value="delivered">delivered</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </label>
+            <button type="button" data-cmd="status" class="order-act min-h-[44px] px-3 rounded-full bg-brand-green text-brand-purple text-xs font-bold">Set status</button>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-cmd="payconfirm" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Payconfirm</button>
+            <button type="button" data-cmd="fulfill" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Fulfill</button>
+            <button type="button" data-cmd="fulfill-share" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Fulfill + share</button>
+            <button type="button" data-cmd="notify-store" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Notify store</button>
+            <button type="button" data-cmd="nearby" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Nearby pickup</button>
+            <button type="button" data-cmd="scan" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Hub scan</button>
+            <button type="button" data-cmd="paid" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Mark seller paid</button>
+            <button type="button" data-cmd="payb2c" class="order-act min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">Pay B2C</button>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-cmd="apolog" class="order-act min-h-[40px] px-3 rounded-full border border-amber-200 text-xs font-semibold">Apology / wrong item</button>
+            <button type="button" data-cmd="damage" class="order-act min-h-[40px] px-3 rounded-full border border-amber-200 text-xs font-semibold">Damage at door</button>
+            <button type="button" data-cmd="recover" class="order-act min-h-[40px] px-3 rounded-full border border-amber-200 text-xs font-semibold">Post-delivery damage</button>
+            <button type="button" data-cmd="delay" class="order-act min-h-[40px] px-3 rounded-full border border-amber-200 text-xs font-semibold">Delay apology</button>
+            <button type="button" data-cmd="oos" class="order-act min-h-[40px] px-3 rounded-full border border-amber-200 text-xs font-semibold">Out of stock</button>
+          </div>
+          <div class="flex flex-wrap gap-2 items-end">
+            <label class="text-xs font-medium flex-1 min-w-[140px]">
+              Transit note
+              <input id="transit-extra" type="text" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="rider:John phone:07… eta:2 hours" />
+            </label>
+            <button type="button" data-cmd="transit" class="order-act min-h-[44px] px-3 rounded-full border border-black/10 text-xs font-semibold">Send transit</button>
+          </div>
+          <div class="flex flex-wrap gap-2 items-end">
+            <label class="text-xs font-medium flex-1 min-w-[140px]">
+              Pickup point id
+              <input id="pickup-id" type="text" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="pp-xxxx" />
+            </label>
+            <button type="button" data-cmd="pickup" class="order-act min-h-[44px] px-3 rounded-full border border-black/10 text-xs font-semibold">Assign pickup</button>
+          </div>
+          <div class="flex flex-wrap gap-2 items-end">
+            <label class="text-xs font-medium flex-1 min-w-[140px]">
+              Scan advance
+              <input id="scan-extra" type="text" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="in_transit hub:Umoja · or delivered" />
+            </label>
+            <button type="button" data-cmd="scan-extra" class="order-act min-h-[44px] px-3 rounded-full border border-black/10 text-xs font-semibold">Scan + args</button>
+          </div>
+          <pre id="action-result" class="hidden cmd-out text-xs rounded-2xl bg-brand-purple text-white p-3 max-h-48 overflow-y-auto" aria-live="polite"></pre>
+        </div>
+
+        <div id="chat-messages" class="flex-1 overflow-y-auto rounded-2xl bg-brand-purple text-white p-4 space-y-2 text-sm min-h-[240px]"></div>
+        <form id="reply-form" class="flex flex-col sm:flex-row gap-2">
+          <label class="sr-only" for="admin-input">Reply</label>
+          <input
+            id="admin-input"
+            type="text"
+            class="flex-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm"
+            placeholder="Type reply to WhatsApp…"
+            disabled
+          />
+          <button type="submit" id="send-btn" disabled class="min-h-[44px] px-5 rounded-full bg-brand-green text-brand-purple font-bold text-sm disabled:opacity-40">
+            Send
+          </button>
+        </form>
+      </section>
+    </div>
+
+    <!-- ORDERS PANEL -->
+    <section data-panel="orders" class="hidden rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-display text-xl font-bold">Recent orders</h2>
+        <button type="button" id="orders-refresh" class="min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-bold">Reload</button>
+      </div>
+      <div id="orders-table" class="overflow-x-auto text-sm"></div>
+    </section>
+
+    <!-- PAYMENTS PANEL -->
+    <section data-panel="payments" class="hidden rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-display text-xl font-bold">Payments queue</h2>
+        <button type="button" id="payments-refresh" class="min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-bold">Reload</button>
+      </div>
+      <p id="payments-note" class="text-sm text-brand-purple/60"></p>
+      <div id="payments-table" class="overflow-x-auto text-sm"></div>
+    </section>
+
+    <!-- PAYOUTS PANEL -->
+    <section data-panel="payouts" class="hidden rounded-3xl border border-black/5 bg-white p-5 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-display text-xl font-bold">Seller payouts</h2>
+        <button type="button" id="payouts-refresh" class="min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-bold">Reload</button>
+      </div>
+      <p class="text-sm text-brand-purple/60">Same data as <code>#payouts</code>. Mark paid / B2C also on Command Center escrow.</p>
+      <div id="payouts-summary" class="grid gap-3 sm:grid-cols-3 text-sm"></div>
+      <div id="payouts-table" class="overflow-x-auto text-sm"></div>
+    </section>
+
+    <!-- CRM PANEL -->
+    <section data-panel="crm" class="hidden rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="font-display text-xl font-bold">WhatsApp CRM</h2>
+          <p class="text-sm text-brand-purple/65 max-w-3xl">
+            Auto-tags inbound chats (New lead, Interested, Closed…). Free-form WhatsApp inside Meta’s 24-hour window; approved templates after. Assign a human to pause the bot.
+          </p>
+        </div>
+        <button type="button" id="crm-refresh" class="min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-bold">Reload</button>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-4">
+        <label class="block text-xs font-medium">
+          Tag
+          <select id="crm-filter-tag" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+            <option value="">All tags</option>
+            <option value="new_lead">New lead</option>
+            <option value="interested">Interested</option>
+            <option value="qualified">Qualified</option>
+            <option value="ordering">Ordering</option>
+            <option value="support">Support</option>
+            <option value="complaint">Complaint</option>
+            <option value="closed">Closed</option>
+          </select>
+        </label>
+        <label class="block text-xs font-medium">
+          24h window
+          <select id="crm-filter-window" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+            <option value="any">Any</option>
+            <option value="inside">Inside 24h (free-form)</option>
+            <option value="outside">Outside 24h (template)</option>
+          </select>
+        </label>
+        <label class="block text-xs font-medium sm:col-span-2">
+          Search
+          <input id="crm-filter-q" type="search" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="Name, phone, chat id" />
+        </label>
+      </div>
+      <div id="crm-table" class="overflow-x-auto text-sm"></div>
+
+      <div class="rounded-2xl border border-black/5 bg-brand-cream/60 p-4 space-y-3">
+        <p class="text-xs font-bold uppercase tracking-wide text-brand-purple/50">Tagged broadcast</p>
+        <p class="text-xs text-brand-purple/60">Sends your note only while the 24h window is open. After that, the selected approved template is used instead.</p>
+        <form id="crm-broadcast-form" class="grid gap-3 sm:grid-cols-2">
+          <label class="block text-xs font-medium">
+            Segment
+            <select id="crm-broadcast-tag" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+              <option value="interested">Interested</option>
+              <option value="new_lead">New lead</option>
+              <option value="qualified">Qualified</option>
+              <option value="ordering">Ordering</option>
+              <option value="support">Support</option>
+              <option value="complaint">Complaint</option>
+            </select>
+          </label>
+          <label class="block text-xs font-medium">
+            After-window template
+            <select id="crm-broadcast-template" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+              <option value="follow_up">Follow-up</option>
+              <option value="interested_nudge">Interested nudge</option>
+              <option value="window_reopen">Window reopen</option>
+              <option value="support_checkin">Support check-in</option>
+            </select>
+          </label>
+          <label class="block text-xs font-medium sm:col-span-2">
+            Message (inside 24h only)
+            <input id="crm-broadcast-message" type="text" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="Discount / follow-up for people who wrote this week" />
+          </label>
+          <label class="block text-xs font-medium">
+            Last inbound within
+            <select id="crm-broadcast-since" class="mt-1 w-full min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm">
+              <option value="7">7 days</option>
+              <option value="1">24 hours</option>
+              <option value="14">14 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </label>
+          <div class="flex flex-wrap gap-2 items-end">
+            <button type="submit" id="crm-broadcast-dry" class="min-h-[44px] px-4 rounded-full border border-black/15 text-sm font-semibold">Dry run</button>
+            <button type="button" id="crm-broadcast-send" class="min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple font-bold text-sm">Send to segment</button>
+          </div>
+        </form>
+        <pre id="crm-broadcast-out" class="hidden cmd-out text-xs rounded-2xl bg-brand-purple text-white p-3 max-h-48 overflow-y-auto" aria-live="polite"></pre>
+      </div>
+    </section>
+
+    <!-- RAW COMMAND PANEL -->
+    <section data-panel="command" class="hidden rounded-3xl border border-black/5 bg-white p-5 space-y-4">
+      <h2 class="font-display text-xl font-bold">WhatsApp #command runner</h2>
+      <p class="text-sm text-brand-purple/65">
+        Runs the identical handlers as the admin phone. Customer/seller WhatsApp side-effects still send;
+        the command reply shows here instead of pinging your admin number.
+      </p>
+      <form id="command-form" class="flex flex-col sm:flex-row gap-2">
+        <label class="sr-only" for="command-input">Command</label>
+        <input
+          id="command-input"
+          type="text"
+          class="flex-1 min-h-[48px] rounded-2xl border border-black/10 px-4 text-sm"
+          placeholder="#orders · #status SKN-… delivered · #broadcast … · #ops · #catalog pause"
+          autocomplete="off"
+        />
+        <button type="submit" class="min-h-[48px] px-5 rounded-full bg-brand-green text-brand-purple font-bold text-sm">
+          Run
+        </button>
+      </form>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" data-quick="#orders" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#orders</button>
+        <button type="button" data-quick="#payments" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#payments</button>
+        <button type="button" data-quick="#payouts" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#payouts</button>
+        <button type="button" data-quick="#ops" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#ops</button>
+        <button type="button" data-quick="#sync" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#sync</button>
+        <button type="button" data-quick="#catalog live" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#catalog live</button>
+        <button type="button" data-quick="#catalog pause" class="cmd-quick min-h-[40px] px-3 rounded-full border border-amber-200 text-xs font-semibold">#catalog pause</button>
+        <button type="button" data-quick="#help" class="cmd-quick min-h-[40px] px-3 rounded-full border border-black/10 text-xs font-semibold">#help</button>
+      </div>
+      <div class="space-y-2">
+        <p class="text-xs font-bold uppercase tracking-wide text-brand-purple/50">Broadcast (all customers)</p>
+        <form id="broadcast-form" class="flex flex-col sm:flex-row gap-2">
+          <label class="sr-only" for="broadcast-input">Broadcast message</label>
+          <input id="broadcast-input" type="text" class="flex-1 min-h-[44px] rounded-2xl border border-black/10 px-3 text-sm" placeholder="Message body (offer footer + STOP opt-out added)" />
+          <button type="submit" class="min-h-[44px] px-4 rounded-full border border-amber-300 text-sm font-bold">Broadcast…</button>
+        </form>
+      </div>
+      <pre id="command-output" class="cmd-out text-sm rounded-2xl bg-brand-purple text-white p-4 min-h-[160px] max-h-[420px] overflow-y-auto" aria-live="polite">Run a command to see output here.</pre>
+    </section>
+  </main>
+
+  <script src="assets/js/admin-support.js?v=20261010crm"></script>
+
+  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
+</body>
+</html>

@@ -14,6 +14,14 @@ const DEFAULTS = {
   prepaidOnly: config.store.prepaidOnly !== false,
   catalogSyncOnPublish: true,
   maintenanceMode: false,
+  /** When true, autoDispatchBodaForOrder / pins skip until OVERRIDE: SYSTEM RESUME. */
+  dispatchPaused: false,
+  /**
+   * Multi-seller cart (SKN parent + per-line children).
+   * Default ON so website bag handoff works after deploy.
+   * Disable with MULTI_SELLER_CART=0 or flags.multiSellerCart=false.
+   */
+  multiSellerCart: true,
   notes: "",
   updatedAt: null,
 };
@@ -51,6 +59,8 @@ export function updatePlatformFlags(patch = {}) {
   if (patch.prepaidOnly != null) allowed.prepaidOnly = Boolean(patch.prepaidOnly);
   if (patch.catalogSyncOnPublish != null) allowed.catalogSyncOnPublish = Boolean(patch.catalogSyncOnPublish);
   if (patch.maintenanceMode != null) allowed.maintenanceMode = Boolean(patch.maintenanceMode);
+  if (patch.dispatchPaused != null) allowed.dispatchPaused = Boolean(patch.dispatchPaused);
+  if (patch.multiSellerCart != null) allowed.multiSellerCart = Boolean(patch.multiSellerCart);
   if (patch.notes != null) allowed.notes = String(patch.notes).slice(0, 500);
   return persist({ ...current, ...allowed });
 }
@@ -62,4 +72,18 @@ export function isPrepaidOnlyEffective() {
 
 export function isMaintenanceMode() {
   return load().maintenanceMode === true;
+}
+
+/** Boss OVERRIDE: SYSTEM PAUSE — skip auto rider pins until RESUME. */
+export function isDispatchPaused() {
+  return load().dispatchPaused === true;
+}
+
+/** Phase 9 — multi-seller cart feature flag (env OR platform-flags.json). */
+export function isMultiSellerCartEnabled() {
+  const env = String(process.env.MULTI_SELLER_CART || "").trim().toLowerCase();
+  if (env === "0" || env === "false" || env === "off") return false;
+  if (env === "1" || env === "true" || env === "on") return true;
+  // Default ON (DEFAULTS.multiSellerCart); explicit false in flags file disables.
+  return load().multiSellerCart !== false;
 }

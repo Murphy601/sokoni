@@ -13,7 +13,24 @@
     "db:backfill-browse": "node scripts/backfill-browse-categories.mjs",
     "catalog:clear": "node scripts/clear-all-catalog.mjs",
     "test:listing": "node scripts/test-listing-generator.mjs",
-    "test:gemini": "node scripts/test-gemini-vision.mjs"
+    "test:listing-moderation": "node scripts/test-listing-moderation.mjs",
+    "test:listing-studio": "node scripts/test-listing-studio.mjs",
+    "test:clip-fallbacks": "node scripts/test-clip-fallbacks.mjs",
+    "test:daraja-checkout": "node scripts/test-daraja-checkout.mjs",
+    "test:paystack-payouts": "node scripts/test-paystack-payouts.mjs",
+    "test:hybrid-shipping": "node scripts/test-hybrid-shipping.mjs",
+    "test:gemini": "node scripts/test-gemini-vision.mjs",
+    "test:nvidia": "node scripts/test-nvidia-vision.mjs",
+    "verify:cloudinary": "node scripts/verify-cloudinary.mjs",
+    "test:account-auth": "node scripts/test-account-auth.mjs",
+    "test:buyer-auth": "node scripts/test-buyer-social-auth.mjs",
+    "test:social-routing": "node scripts/test-social-auth-routing.mjs",
+    "test:seller-social-profile": "node scripts/test-seller-social-profile.mjs",
+    "test:agent-router": "node scripts/test-agent-tool-router.mjs",
+    "test:ops-agent": "node --test src/services/ops-agent.test.js",
+    "tts:precache": "node scripts/pre-cache-elevenlabs.mjs",
+    "test:bulk-csv": "node scripts/test-bulk-listing-csv.mjs",
+    "test:social": "npm run test:buyer-auth && npm run test:social-routing && npm run test:seller-social-profile"
   },
   "keywords": [
     "whatsapp",
@@ -24,16 +41,25 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@turf/boolean-point-in-polygon": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.1",
+    "multer": "^1.4.5-lts.1",
     "openai": "^4.77.0",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "eslint": "^9.17.0"
   },
   "engines": {
     "node": ">=18"
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
   }
 }

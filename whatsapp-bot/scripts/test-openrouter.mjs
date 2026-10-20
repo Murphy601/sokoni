@@ -9,7 +9,7 @@ const client = new OpenAI({
 
 const models = [
   process.env.OPENAI_MODEL || "openrouter/free",
-  ...(process.env.OPENAI_MODEL_FALLBACKS || "google/gemma-4-26b-a4b-it:free")
+  ...(process.env.OPENAI_MODEL_FALLBACKS || "google/gemma-4-31b-it:free")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),

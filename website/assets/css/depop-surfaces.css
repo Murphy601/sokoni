@@ -1,0 +1,2141 @@
+/**
+ * Depop Selling Hub / Inbox / Disputes surfaces
+ * Canvas #000 · surfaces #09090B · borders #18181B · accent #FF2300 · success #10B981
+ */
+
+:root {
+  --depop-bg: #000000;
+  --depop-surface: #09090b;
+  --depop-border: #18181b;
+  --depop-border-hover: #27272a;
+  --depop-accent: #ff2300;
+  --depop-accent-hover: #d91e00;
+  --depop-success: #10b981;
+  --depop-text: #ffffff;
+  --depop-muted: #a1a1aa;
+  --depop-faint: #71717a;
+}
+
+/* Page shells that should always feel like Depop dark */
+body.depop-surface-page,
+.depop-surface {
+  background: var(--depop-bg) !important;
+  color: var(--depop-text);
+}
+
+.depop-surface a:not(.depop-btn-accent):not(.depop-btn-white) {
+  color: var(--depop-muted);
+}
+
+.depop-surface a:not(.depop-btn-accent):not(.depop-btn-white):hover {
+  color: var(--depop-text);
+}
+
+.depop-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--depop-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.depop-card {
+  background: var(--depop-surface);
+  border: 1px solid var(--depop-border);
+  border-radius: 1rem;
+}
+
+.depop-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  border-radius: 9999px;
+  background: var(--depop-accent);
+  color: #fff !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: none;
+  transition: background 0.15s ease;
+}
+
+.depop-btn-accent:hover,
+.depop-btn-accent:focus-visible {
+  background: var(--depop-accent-hover);
+  outline: none;
+}
+
+.depop-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  background: var(--depop-surface);
+  color: #e4e4e7 !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid #27272a;
+}
+
+.depop-btn-ghost:hover {
+  background: #18181b;
+  color: #fff !important;
+}
+
+.depop-btn-white {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: 9999px;
+  background: #fff;
+  color: #000 !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.depop-btn-white:hover {
+  background: #e4e4e7;
+}
+
+.depop-pill-success {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.depop-pill-accent {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  background: rgba(255, 35, 0, 0.12);
+  color: var(--depop-accent);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.depop-pill-amber {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* —— Seller Hub —— */
+.seller-hub.depop-hub {
+  color: var(--depop-text);
+}
+
+.seller-hub-carousel {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+}
+
+.seller-hub-carousel > * {
+  scroll-snap-align: start;
+}
+
+.seller-hub-card {
+  min-width: 11.5rem;
+  max-width: 14rem;
+  flex-shrink: 0;
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: var(--depop-surface);
+  padding: 1rem;
+  color: var(--depop-text);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.seller-hub-card:hover,
+.seller-hub-card:focus-visible {
+  border-color: #3f3f46;
+  outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .seller-hub-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.seller-hub-card--draft {
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.seller-hub-card--guide {
+  min-width: 15rem;
+}
+
+.seller-hub-stat {
+  min-height: 6.5rem;
+  background: var(--depop-surface) !important;
+  border: 1px solid var(--depop-border) !important;
+  color: var(--depop-text);
+}
+
+.seller-hub-stat p {
+  color: inherit;
+}
+
+.seller-hub-stat .depop-stat-label {
+  color: var(--depop-faint);
+}
+
+.seller-hub-stat .depop-stat-meta {
+  color: var(--depop-muted);
+}
+
+.seller-hub-stat--accent .depop-stat-value {
+  color: var(--depop-accent);
+}
+
+.seller-hub-stat--success {
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.seller-hub-stat--success .depop-stat-value {
+  color: var(--depop-success);
+}
+
+.seller-hub-thumb {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  object-fit: cover;
+  background: #18181b;
+  flex-shrink: 0;
+  border: 1px solid #27272a;
+}
+
+.seller-hub-growth {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.seller-hub-level-done {
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.depop-hub-progress {
+  background: #18181b;
+}
+
+.depop-hub-progress > div {
+  background: var(--depop-accent);
+}
+
+/* —— Inbox messenger —— */
+.inbox-hub-label {
+  color: var(--depop-accent);
+}
+
+.inbox-messenger {
+  background: var(--depop-surface);
+  border-color: var(--depop-border);
+  /* The bundle and seller-tools sheets are position:absolute with inset
+     bottom. Without a positioned ancestor they resolve against the page and
+     open hundreds of pixels below the panel, which reads as the button doing
+     nothing at all. */
+  position: relative;
+}
+
+.inbox-messenger-head {
+  background: #000;
+  border-bottom-color: var(--depop-border);
+}
+
+.inbox-thread {
+  background: #000;
+}
+
+.inbox-bubble-mine {
+  background: var(--depop-accent);
+  color: #fff;
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-bubble-theirs {
+  background: #18181b;
+  color: #e4e4e7;
+  border: 1px solid #27272a;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+}
+
+.inbox-bargain-card {
+  background: #000;
+  border: 1px solid var(--depop-border);
+  color: var(--depop-text);
+}
+
+.inbox-bargain-cta {
+  background: var(--depop-accent);
+  color: #fff;
+}
+
+.inbox-bargain-cta:hover {
+  background: var(--depop-accent-hover);
+}
+
+.inbox-bargain-ghost {
+  background: #18181b;
+  border-color: #27272a;
+  color: var(--depop-muted);
+}
+
+.inbox-bargain-ghost:hover {
+  color: #fff;
+}
+
+/* —— Disputes —— */
+.dispute-hub-label {
+  color: var(--depop-accent);
+}
+
+.dispute-card {
+  background: var(--depop-surface);
+  border-color: var(--depop-border);
+  color: var(--depop-text);
+}
+
+.dispute-badge--review {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.dispute-badge--resolved {
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.dispute-badge--action {
+  background: rgba(255, 35, 0, 0.1);
+  color: var(--depop-accent);
+  border: 1px solid rgba(255, 35, 0, 0.2);
+}
+
+.dispute-guide-card {
+  background: var(--depop-surface);
+  border-color: var(--depop-border);
+  color: var(--depop-text);
+}
+
+.dispute-guide-carousel {
+  scrollbar-color: #27272a transparent;
+}
+
+
+/* —— Full seller sell page (dashboard + withdraw + listing) —— */
+body.sell-depop-page {
+  background: var(--depop-bg) !important;
+  color: var(--depop-text) !important;
+}
+
+/* Only the top Sell page chrome — never flatten #seller-hub-nav */
+body.sell-depop-page > header.sell-page-header,
+body.sell-depop-page header.sell-page-header {
+  background: rgba(0, 0, 0, 0.95) !important;
+  border-bottom: 1px solid var(--depop-border) !important;
+  color: var(--depop-text);
+}
+
+body.sell-depop-page .sell-depop-section,
+body.sell-depop-page #onboard-panel,
+body.sell-depop-page #seller-shop-edit,
+body.sell-depop-page #seller-profile-bar,
+body.sell-depop-page #success-box,
+body.sell-depop-page .sell-panel,
+body.sell-depop-page #bulk-draft-studio {
+  background: var(--depop-surface) !important;
+  border: 1px solid var(--depop-border) !important;
+  color: var(--depop-text);
+  border-radius: 1.5rem;
+}
+
+body.sell-depop-page #seller-hub-overview {
+  /* already depop-surface; keep flush with page */
+  background: var(--depop-surface) !important;
+}
+
+body.sell-depop-page .text-brand-green,
+body.sell-depop-page .hover\:text-brand-green:hover {
+  color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .text-brand-purple,
+body.sell-depop-page .dark\:text-white {
+  color: var(--depop-text) !important;
+}
+
+body.sell-depop-page .text-brand-purple\/60,
+body.sell-depop-page .text-brand-purple\/65,
+body.sell-depop-page .text-brand-purple\/70,
+body.sell-depop-page .text-brand-purple\/55,
+body.sell-depop-page .text-brand-purple\/50,
+body.sell-depop-page .text-brand-purple\/45,
+body.sell-depop-page .dark\:text-white\/60,
+body.sell-depop-page .dark\:text-white\/65,
+body.sell-depop-page .dark\:text-white\/70,
+body.sell-depop-page .dark\:text-white\/55,
+body.sell-depop-page .dark\:text-white\/50 {
+  color: var(--depop-muted) !important;
+}
+
+body.sell-depop-page .bg-brand-green\/5,
+body.sell-depop-page .bg-brand-green\/10,
+body.sell-depop-page .border-brand-green\/20,
+body.sell-depop-page .border-brand-green\/25,
+body.sell-depop-page .border-brand-green\/30,
+body.sell-depop-page .border-brand-green\/40 {
+  background: rgba(255, 35, 0, 0.06) !important;
+  border-color: rgba(255, 35, 0, 0.25) !important;
+}
+
+body.sell-depop-page .bg-brand-green,
+body.sell-depop-page .bg-brand-green\/20,
+body.sell-depop-page button.bg-brand-green,
+body.sell-depop-page .btn-whatsapp {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+body.sell-depop-page .btn-whatsapp:hover {
+  background: var(--depop-accent-hover) !important;
+}
+
+body.sell-depop-page .bg-white,
+body.sell-depop-page .bg-white\/70,
+body.sell-depop-page .dark\:bg-brand-purple,
+body.sell-depop-page .dark\:bg-brand-purpleLight\/40,
+body.sell-depop-page .bg-brand-cream,
+body.sell-depop-page .dark\:bg-brand-purple\/30 {
+  background: #000 !important;
+  color: var(--depop-text) !important;
+}
+
+body.sell-depop-page .border-black\/5,
+body.sell-depop-page .border-brand-purple\/10,
+body.sell-depop-page .border-brand-purple\/15,
+body.sell-depop-page .border-brand-purple\/20,
+body.sell-depop-page .dark\:border-white\/10,
+body.sell-depop-page .dark\:border-white\/15,
+body.sell-depop-page .dark\:border-white\/20 {
+  border-color: var(--depop-border) !important;
+}
+
+body.sell-depop-page .sell-form-input,
+body.sell-depop-page .sell-form-input select,
+body.sell-depop-page .sell-form-input textarea,
+body.sell-depop-page textarea,
+body.sell-depop-page input[type="text"],
+body.sell-depop-page input[type="tel"],
+body.sell-depop-page input[type="url"],
+body.sell-depop-page input[type="number"],
+body.sell-depop-page select {
+  background: #000 !important;
+  color: #fff !important;
+  border-color: #27272a !important;
+  caret-color: #fff !important;
+}
+
+body.sell-depop-page .sell-form-input:focus,
+body.sell-depop-page textarea:focus,
+body.sell-depop-page input:focus,
+body.sell-depop-page select:focus {
+  border-color: var(--depop-accent) !important;
+  box-shadow: 0 0 0 2px rgba(255, 35, 0, 0.35) !important;
+}
+
+body.sell-depop-page .sell-form-input::placeholder,
+body.sell-depop-page textarea::placeholder {
+  color: #71717a !important;
+}
+
+/* Dashboard section groups — clear visual hierarchy */
+body.sell-depop-page .sell-dash-group__head {
+  padding: 0 0.15rem;
+}
+
+body.sell-depop-page .sell-dash-group__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+}
+
+body.sell-depop-page .sell-dash-group__hint {
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+  color: #71717a;
+}
+
+body.sell-depop-page .sell-dash-collapse > summary {
+  list-style: none;
+}
+
+body.sell-depop-page .sell-dash-collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+body.sell-depop-page .sell-dash-collapse[open] .sell-dash-collapse__chevron {
+  color: #ff2300;
+}
+
+body.sell-depop-page .sell-view-tabs {
+  background: #18181b !important;
+}
+
+body.sell-depop-page .sell-view-tab {
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .sell-view-tab.is-active {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-tab-badge {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-order-card,
+body.sell-depop-page .sell-offer-card {
+  background: #000 !important;
+  border-color: var(--depop-border) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-card {
+  border-color: rgba(255, 35, 0, 0.28) !important;
+}
+
+body.sell-depop-page .sell-order-badge--action {
+  background: rgba(255, 35, 0, 0.12) !important;
+  color: #ff7a66 !important;
+}
+
+body.sell-depop-page .sell-order-badge--transit {
+  background: rgba(251, 191, 36, 0.12) !important;
+  color: #fbbf24 !important;
+}
+
+body.sell-depop-page .sell-order-badge--done {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #34d399 !important;
+}
+
+body.sell-depop-page .sell-order-badge--reminded {
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #34d399 !important;
+}
+
+body.sell-depop-page .sell-order-action {
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-order-action--primary {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-quick-btn {
+  background: var(--depop-accent) !important;
+  border-color: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-reset-btn,
+body.sell-depop-page .sell-offer-undo-btn,
+body.sell-depop-page .sell-offer-undo-open-btn,
+body.sell-depop-page .sell-btn-ghost {
+  background: var(--depop-surface) !important;
+  border-color: #27272a !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-ledger-tab {
+  background: #000 !important;
+  border-color: var(--depop-border) !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-ledger-tab.is-active {
+  border-color: var(--depop-accent) !important;
+  background: rgba(255, 35, 0, 0.1) !important;
+}
+
+body.sell-depop-page .sell-ledger-dot.available {
+  background: var(--depop-success) !important;
+}
+
+body.sell-depop-page .sell-ledger-dot.transit {
+  background: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-wizard-step.is-active,
+body.sell-depop-page .sell-wizard-step.is-done {
+  background: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-wizard-step {
+  background: #27272a !important;
+}
+
+body.sell-depop-page .sell-media-slot {
+  background: #000 !important;
+  border-color: #27272a !important;
+}
+
+body.sell-depop-page .sell-media-slot-cover {
+  border-color: rgba(255, 35, 0, 0.55) !important;
+}
+
+body.sell-depop-page .sell-media-slot .sell-slot-label {
+  color: #71717a !important;
+}
+
+body.sell-depop-page .sell-studio-badge {
+  background: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-studio-controls {
+  border-color: rgba(255, 35, 0, 0.28) !important;
+  background: rgba(255, 35, 0, 0.08) !important;
+}
+
+body.sell-depop-page .sell-studio-toggle input {
+  accent-color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-fee-table .sell-fee-net th,
+body.sell-depop-page .sell-fee-table .sell-fee-net td,
+body.sell-depop-page .depop-card-total,
+body.sell-depop-page .product-sheet-total {
+  color: var(--depop-success) !important;
+}
+
+body.sell-depop-page .sell-fee-table th,
+body.sell-depop-page .sell-fee-table td {
+  border-bottom-color: var(--depop-border) !important;
+}
+
+body.sell-depop-page .sell-price-range {
+  background: rgba(255, 35, 0, 0.08) !important;
+  color: var(--depop-muted) !important;
+}
+
+body.sell-depop-page .sell-tag-hint {
+  color: var(--depop-faint) !important;
+}
+
+body.sell-depop-page .bulk-studio-banner {
+  background: rgba(255, 35, 0, 0.06) !important;
+  border-color: rgba(255, 35, 0, 0.25) !important;
+}
+
+body.sell-depop-page .bulk-studio-chip {
+  background: #18181b !important;
+  border-color: #27272a !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .bulk-studio-dropzone {
+  border-color: #27272a !important;
+  background: #000 !important;
+}
+
+body.sell-depop-page .bulk-studio-dropzone.is-dragover {
+  border-color: var(--depop-accent) !important;
+  background: rgba(255, 35, 0, 0.06) !important;
+}
+
+body.sell-depop-page .bulk-studio-help,
+body.sell-depop-page .bulk-studio-grid {
+  border-color: var(--depop-border) !important;
+  background: #000 !important;
+}
+
+body.sell-depop-page .bulk-studio-table thead {
+  background: #18181b !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .bulk-studio-table th,
+body.sell-depop-page .bulk-studio-table td {
+  border-color: var(--depop-border) !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .bulk-studio-input,
+body.sell-depop-page .bulk-studio-condition,
+body.sell-depop-page .bulk-studio-vibe {
+  background: #09090b !important;
+  border-color: #27272a !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .bulk-studio-input:focus,
+body.sell-depop-page .bulk-studio-input:hover {
+  border-color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page .sell-offer-filter {
+  background: #000 !important;
+  border-color: #27272a !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .sell-offer-filter.is-active {
+  border-color: var(--depop-accent) !important;
+  color: #fff !important;
+  background: rgba(255, 35, 0, 0.1) !important;
+}
+
+body.sell-depop-page .sell-offer-filter-count {
+  background: #27272a !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-offer-filter.is-active .sell-offer-filter-count {
+  background: rgba(255, 35, 0, 0.35) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-filters {
+  gap: 0.5rem;
+}
+
+body.sell-depop-page input[type="checkbox"] {
+  accent-color: var(--depop-accent) !important;
+}
+
+body.sell-depop-page a:not(.depop-btn-accent):not(.depop-btn-white):not(.sell-order-action--primary):not(.btn-whatsapp) {
+  color: var(--depop-muted);
+}
+
+body.sell-depop-page a:not(.depop-btn-accent):not(.depop-btn-white):not(.sell-order-action--primary):not(.btn-whatsapp):hover {
+  color: #fff;
+}
+
+body.sell-depop-page .font-display {
+  color: #fff;
+}
+
+body.sell-depop-page .sell-offer-action {
+  background: #18181b !important;
+  border-color: #27272a !important;
+  color: #e4e4e7 !important;
+}
+
+body.sell-depop-page .sell-offer-action--accept,
+body.sell-depop-page .sell-offer-action--primary,
+body.sell-depop-page .sell-offer-action--chat,
+body.sell-depop-page .sell-offer-action--remind,
+body.sell-depop-page .sell-offer-action--counter {
+  background: var(--depop-accent) !important;
+  border-color: var(--depop-accent) !important;
+  color: #fff !important;
+}
+
+body.sell-depop-page .sell-offer-action--decline {
+  background: transparent !important;
+  border-color: #3f3f46 !important;
+  color: #a1a1aa !important;
+}
+
+body.sell-depop-page .bulk-studio-banner {
+  background: rgba(255, 35, 0, 0.06) !important;
+  border-color: rgba(255, 35, 0, 0.25) !important;
+}
+
+/* Shop activity feed */
+body.sell-depop-page .sell-activity-row {
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.85rem 1rem;
+  color: #e4e4e7;
+}
+
+body.sell-depop-page .sell-activity-row:hover {
+  border-color: #27272a;
+}
+
+body.sell-depop-page .sell-activity-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #18181b;
+  color: #a1a1aa;
+  border: 1px solid #27272a;
+}
+
+body.sell-depop-page .sell-activity-pill--follow {
+  background: rgba(255, 35, 0, 0.12);
+  color: #ff2300;
+  border-color: rgba(255, 35, 0, 0.25);
+}
+
+body.sell-depop-page .sell-activity-pill--like {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+
+/* Activity feed rows (seller hub + buyer activity page) */
+.depop-surface-page .sell-activity-row,
+body.sell-depop-page .sell-activity-row {
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.85rem 1rem;
+  color: #e4e4e7;
+}
+
+.depop-surface-page .sell-activity-row:hover,
+body.sell-depop-page .sell-activity-row:hover {
+  border-color: #27272a;
+}
+
+.depop-surface-page .sell-activity-pill,
+body.sell-depop-page .sell-activity-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #18181b;
+  color: #a1a1aa;
+  border: 1px solid #27272a;
+}
+
+.depop-surface-page .sell-activity-pill--follow,
+body.sell-depop-page .sell-activity-pill--follow {
+  background: rgba(255, 35, 0, 0.12);
+  color: #ff2300;
+  border-color: rgba(255, 35, 0, 0.25);
+}
+
+.depop-surface-page .sell-activity-pill--like,
+body.sell-depop-page .sell-activity-pill--like {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+/* Profile quick links */
+.depop-surface-page .profile-quick-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e4e4e7 !important;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.depop-surface-page .profile-quick-link:hover {
+  border-color: #3f3f46;
+  color: #fff !important;
+}
+
+/* Ask Sokoni AI chat */
+.depop-surface-page .ask-chat-log {
+  border-radius: 1rem;
+  border: 1px solid var(--depop-border);
+  background: var(--depop-surface);
+}
+
+.depop-surface-page .ask-chat-form {
+  background: var(--depop-bg);
+}
+
+.depop-surface-page .ask-suggest {
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #0a0a0a;
+  color: #e4e4e7;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.depop-surface-page .ask-suggest:hover,
+.depop-surface-page .ask-suggest:focus-visible {
+  border-color: #ff2300;
+  color: #fff;
+  outline: none;
+}
+
+.depop-surface-page .ask-bubble {
+  max-width: 85%;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.depop-surface-page .ask-bubble--user {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+  background: var(--depop-accent);
+  color: #fff;
+}
+
+.depop-surface-page .ask-bubble--bot {
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  background: #18181b;
+  color: #e4e4e7;
+  border: 1px solid #27272a;
+  white-space: pre-wrap;
+}
+
+.depop-surface-page .ask-product-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--depop-border);
+  background: #000;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #fff;
+}
+
+.depop-surface-page .ask-product-order {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 0.75rem;
+  border-radius: 9999px;
+  background: var(--depop-accent);
+  color: #fff !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* Dispute guide cards are buttons */
+.depop-surface-page .dispute-guide-card {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  text-align: left;
+  width: auto;
+}
+
+.depop-surface-page .dispute-guide-card[aria-expanded="true"] {
+  border-color: #3f3f46;
+}
+
+.depop-surface-page .sell-fee-table th,
+.depop-surface-page .sell-fee-table td {
+  color: #e4e4e7;
+  border-bottom-color: #18181b;
+}
+
+.depop-surface-page .sell-fee-table .sell-fee-total th,
+.depop-surface-page .sell-fee-table .sell-fee-total td {
+  color: #fff;
+}
+
+/* ---- Escrow referee cards + pinned deal ledger -------------------------- */
+
+/* Full width and centred, so a referee card never reads as a chat bubble.
+   The buyer has to be able to tell at a glance that Sokoni said this, not
+   the person they are haggling with. */
+.inbox-escrow-card {
+  margin: 10px auto;
+  padding: 10px 14px;
+  max-width: 92%;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.inbox-escrow-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+
+.inbox-escrow-line {
+  margin: 4px 0 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.inbox-escrow-meta {
+  margin: 0;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.6;
+}
+
+/* The chat surface is dark whatever the OS theme is -- .inbox-bubble-theirs
+   is a flat #18181b with no media query -- so these are keyed to that surface
+   and not to prefers-color-scheme. Gating them on the OS theme put dark green
+   text on a dark card for anyone browsing in light mode. */
+.inbox-escrow-locked {
+  background: rgba(37, 211, 102, 0.14);
+  border-color: rgba(37, 211, 102, 0.4);
+  color: #7ef0ab;
+}
+
+.inbox-escrow-pending {
+  background: rgba(240, 180, 41, 0.16);
+  border-color: rgba(240, 180, 41, 0.42);
+  color: #ffd479;
+}
+
+.inbox-escrow-transit {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.38);
+  color: #93c5fd;
+}
+
+.inbox-escrow-alert {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+/* Sticky so the agreed terms stay on screen however far the thread scrolls --
+   that is the whole reason it exists. */
+.inbox-ledger {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(11, 31, 24, 0.96);
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  color: #f5f7f6;
+  backdrop-filter: blur(6px);
+}
+
+.inbox-ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.inbox-ledger-pin {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.inbox-ledger-ref {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.7;
+}
+
+.inbox-ledger-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.inbox-ledger-rows > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.inbox-ledger-rows dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+}
+
+.inbox-ledger-rows dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+
+/* Voice notes. preload="none" on the element means nothing is fetched until
+   play is pressed -- opening a thread full of them costs one request, not one
+   per note. */
+.inbox-voice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+.inbox-voice-mine {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+/* The audio element is the engine, not the interface. Its own controls report
+   a WebM recording as zero seconds long, which is what put 0:00 / 0:00 on
+   every note. */
+.inbox-voice audio {
+  display: none;
+}
+
+.inbox-voice-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: #FF2300;
+  color: #fff;
+  cursor: pointer;
+}
+
+.inbox-voice-play:active {
+  transform: scale(0.94);
+}
+
+/* Which glyph shows is component state, so it lives here. Keying it off
+   Tailwind's .hidden would put the play and pause icons on top of each other
+   any time the CDN script did not load. */
+.inbox-voice-glyph-pause {
+  display: none;
+}
+
+.inbox-voice.is-playing .inbox-voice-glyph-play {
+  display: none;
+}
+
+.inbox-voice.is-playing .inbox-voice-glyph-pause {
+  display: block;
+}
+
+.inbox-voice-track {
+  flex: 1 1 auto;
+  min-width: 90px;
+  max-width: 180px;
+  height: 4px;
+  border-radius: 999px;
+  background: #3f3f46;
+  overflow: hidden;
+}
+
+.inbox-voice-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: #FF2300;
+  transition: width 0.12s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-voice-fill {
+    transition: none;
+  }
+}
+
+.inbox-voice-len {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #a1a1aa;
+}
+
+/* Icebreakers. A single scrolling row above the composer, only while a thread
+   is empty. Scrollbar hidden because on a phone this is a swipe, not a
+   scrollbar people should see. */
+#chat-icebreakers {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#chat-icebreakers::-webkit-scrollbar {
+  display: none;
+}
+
+.inbox-chip {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.inbox-chip:hover,
+.inbox-chip:focus-visible {
+  border-color: #25d366;
+  color: #fff;
+}
+
+/* Record button. Pulses only while recording, so the state is obvious without
+   reading anything -- a mic that is silently live is the worst outcome here. */
+.inbox-mic {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inbox-mic:hover,
+.inbox-mic:focus-visible {
+  border-color: #25d366;
+  color: #e4e4e7;
+}
+
+.inbox-mic.is-recording {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fff;
+  animation: inbox-mic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes inbox-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-mic.is-recording { animation: none; }
+}
+
+/* ---- Bundle builder ----------------------------------------------------- */
+
+.inbox-bundle-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.inbox-bundle-btn:hover,
+.inbox-bundle-btn:focus-visible {
+  border-color: #25d366;
+  color: #e4e4e7;
+}
+
+/* Sheet rather than a modal: on a phone the thread should stay visible
+   behind it, so the buyer keeps the conversation in view while picking. */
+/* .hidden is a class (0-1-0) and these are ids (1-0-0), so without an equally
+   specific hidden rule the id wins and the element is stuck on screen. That is
+   what left the bundle sheet covering the inbox. */
+#bundle-drawer.hidden,
+#chat-icebreakers.hidden {
+  display: none;
+}
+
+#bundle-drawer {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: flex-end;
+  max-height: 100%;
+}
+
+.bundle-sheet {
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #0b0b0b;
+  border-top: 1px solid #27272a;
+  border-radius: 14px 14px 0 0;
+  padding: 12px;
+}
+
+.bundle-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.bundle-close {
+  background: none;
+  border: 0;
+  color: #a1a1aa;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.bundle-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #e4e4e7;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bundle-tile.is-picked {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.12);
+}
+
+.bundle-tile img,
+.bundle-noimg {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 7px;
+  background: #27272a;
+  display: block;
+}
+
+.bundle-tile-name {
+  font-size: 11px;
+  line-height: 1.25;
+  /* Two lines then ellipsis: a long title must not make one tile taller than
+     its neighbours and break the grid rhythm. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bundle-tile-price {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7ef0ab;
+}
+
+.bundle-foot {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #27272a;
+}
+
+.bundle-sum {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.bundle-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.bundle-price-row input {
+  width: 130px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #e4e4e7;
+  text-align: right;
+}
+
+.bundle-send {
+  width: 100%;
+  padding: 11px;
+  border-radius: 999px;
+  border: 0;
+  background: #25d366;
+  color: #06231a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bundle-send:disabled {
+  background: #27272a;
+  color: #71717a;
+  cursor: not-allowed;
+}
+
+/* ---- Bundle card in the thread ----------------------------------------- */
+
+.inbox-bundle {
+  max-width: 85%;
+  padding: 10px;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+.inbox-bundle-mine {
+  margin-left: auto;
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-bundle-head {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.inbox-bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  position: relative;
+}
+
+.inbox-bundle-grid figure {
+  margin: 0;
+}
+
+.inbox-bundle-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.inbox-bundle-grid figcaption {
+  font-size: 10px;
+  color: #a1a1aa;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inbox-bundle-more {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 11px;
+  color: #e4e4e7;
+}
+
+.inbox-bundle-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.inbox-bundle-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #71717a;
+}
+
+/* ---- Scratch cards ------------------------------------------------------ */
+
+.inbox-scratch {
+  max-width: 85%;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1f2937, #111827);
+  border: 1px solid #374151;
+  text-align: center;
+}
+
+.inbox-scratch.is-sent {
+  margin-left: auto;
+  opacity: 0.85;
+}
+
+.inbox-scratch.is-revealed {
+  background: linear-gradient(135deg, rgba(37, 211, 102, 0.18), rgba(37, 211, 102, 0.06));
+  border-color: rgba(37, 211, 102, 0.45);
+}
+
+.inbox-scratch-head {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.inbox-scratch-perk {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #7ef0ab;
+}
+
+.inbox-scratch-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* The foil sits above the perk. position:relative so the canvas can cover it
+   exactly, and touch-action:none so rubbing does not scroll the thread. */
+.inbox-scratch-foil {
+  position: relative;
+  height: 56px;
+  margin: 4px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 211, 102, 0.14);
+}
+
+.inbox-scratch-hint {
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+.inbox-scratch-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+  transition: opacity 0.25s ease;
+}
+
+.inbox-scratch-canvas.is-cleared {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- Reactions ---------------------------------------------------------- */
+
+.inbox-sound {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.inbox-sound[aria-pressed="false"] {
+  opacity: 0.55;
+}
+
+.inbox-reacts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: -2px;
+}
+
+.inbox-react {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: #131316;
+  color: #d4d4d8;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.inbox-react.is-mine {
+  border-color: #25d366;
+  background: rgba(37, 211, 102, 0.14);
+}
+
+/* Anchored to the bubble it belongs to, so it cannot drift on a long thread. */
+.inbox-react-picker {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 8;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #0b0b0b;
+  border: 1px solid #3f3f46;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+[data-msg-id] {
+  position: relative;
+}
+
+.inbox-react-opt {
+  border: 0;
+  background: none;
+  font-size: 17px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.inbox-react-opt:hover,
+.inbox-react-opt:focus-visible {
+  background: #27272a;
+}
+
+/* ---- Nudge -------------------------------------------------------------- */
+
+.inbox-nudge-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.inbox-nudge-btn:hover,
+.inbox-nudge-btn:focus-visible {
+  border-color: #25d366;
+}
+
+.inbox-nudge-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inbox-nudge {
+  align-self: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.14);
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  color: #fde68a;
+  font-size: 12px;
+}
+
+.inbox-nudge-mine {
+  opacity: 0.7;
+}
+
+/* Short and small. A big shake on a phone reads as a crash, and the point is
+   a buzz, not a scare. */
+@keyframes inbox-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+}
+
+.is-nudged {
+  animation: inbox-shake 0.6s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still acknowledge the nudge, without moving anything. */
+  .is-nudged {
+    animation: none;
+    outline: 2px solid rgba(250, 204, 21, 0.6);
+    outline-offset: -2px;
+  }
+}
+
+/* ---- Locked drops ------------------------------------------------------- */
+
+.inbox-drop {
+  max-width: 85%;
+  padding: 10px;
+  border-radius: 14px;
+  background: linear-gradient(140deg, #1e1b4b, #111827);
+  border: 1px solid #4c1d95;
+}
+
+.inbox-drop-mine {
+  margin-left: auto;
+  opacity: 0.9;
+}
+
+.inbox-drop-head {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.inbox-drop-art {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #27272a;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+}
+
+.inbox-drop-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Decoration, not protection: the URL is in the payload either way. What the
+     window actually gates is the item being public, which the server owns. */
+  filter: blur(14px) saturate(0.7);
+  transform: scale(1.08);
+  transition: filter 0.5s ease, transform 0.5s ease;
+}
+
+.inbox-drop.is-open .inbox-drop-art img {
+  filter: none;
+  transform: none;
+}
+
+.inbox-drop-lock {
+  position: absolute;
+  font-size: 26px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
+.inbox-drop.is-open .inbox-drop-lock {
+  display: none;
+}
+
+.inbox-drop-name {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ede9fe;
+}
+
+.inbox-drop-meta {
+  margin: 0;
+  font-size: 11px;
+  color: #a5b4fc;
+}
+
+.inbox-drop-meta [data-drop-timer] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+}
+
+/* ---- Fit check ---------------------------------------------------------- */
+
+.inbox-fit {
+  max-width: 85%;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(140deg, rgba(37, 211, 102, 0.16), rgba(37, 211, 102, 0.04));
+  border: 1px solid rgba(37, 211, 102, 0.4);
+}
+
+.inbox-fit.is-waiting {
+  background: #18181b;
+  border-color: #27272a;
+  opacity: 0.8;
+}
+
+.inbox-fit-head {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7ef0ab;
+}
+
+.inbox-fit-copy {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #e4e4e7;
+}
+
+.inbox-fit-pick {
+  display: inline-block;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #06231a;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inbox-fit-photo {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+}
+
+.inbox-fit-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.inbox-fit-share {
+  margin-top: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: transparent;
+  color: #e4e4e7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inbox-fit-share:hover,
+.inbox-fit-share:focus-visible {
+  border-color: #25d366;
+}
+
+
+/* ---- Composer layout ---------------------------------------------------- */
+
+/* The action buttons are flex-none, so without this the input is the only
+   thing that can shrink -- and it shrank to about two characters wide once
+   there were five of them. min-width:0 lets it actually use the space it is
+   given rather than being held open by its own content. */
+#chat-form {
+  flex-wrap: wrap;
+}
+
+#chat-input {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.inbox-composer-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.inbox-composer-actions > :last-child {
+  margin-left: auto;
+}
+
+/* Tighter round buttons: five at 40px plus gaps is most of a phone's width. */
+.inbox-mic,
+.inbox-sound,
+.inbox-nudge-btn,
+.inbox-bundle-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+
+
+/* ---- Composer icons ----------------------------------------------------- */
+
+.inbox-mic svg,
+.inbox-bundle-btn svg {
+  display: block;
+  pointer-events: none;
+}
+
+/* Mic turns into a stop square while recording, so the button says what
+   pressing it again will do. */
+.inbox-mic-stop {
+  display: none;
+}
+
+.inbox-mic.is-recording .inbox-mic-glyph {
+  display: none;
+}
+
+.inbox-mic.is-recording .inbox-mic-stop {
+  display: block;
+}
+
+.inbox-mic.is-recording {
+  background: #FF2300;
+  color: #fff;
+}
+
+/* ---- Seller tools ------------------------------------------------------- */
+
+/* Same sheet treatment as the bundle drawer, and the same specificity trap:
+   an id beats .hidden unless there is a rule at equal weight. */
+#seller-tools-drawer.hidden {
+  display: none;
+}
+
+#seller-tools-drawer {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  height: 100%;
+  z-index: 30;
+}
+
+.seller-tool-group {
+  padding: 10px 0;
+  border-bottom: 1px solid #27272a;
+}
+
+.seller-tool-group:last-of-type {
+  border-bottom: none;
+}
+
+.seller-tool-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.seller-tool-hint {
+  font-size: 11px;
+  color: #71717a;
+  margin-bottom: 8px;
+}
+
+.seller-tool-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  margin-bottom: 6px;
+  border-radius: 0.7rem;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #fafafa;
+  cursor: pointer;
+}
+
+.seller-tool-row[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.seller-tool-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.seller-tool-note {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.seller-tool-recipients {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.seller-tool-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #d4d4d8;
+}
+
+.seller-tool-send {
+  width: 100%;
+  padding: 9px;
+  border: none;
+  border-radius: 999px;
+  background: #FF2300;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seller-tool-send[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.seller-tool-status {
+  min-height: 16px;
+  font-size: 12px;
+  color: #a1a1aa;
+  padding-top: 6px;
+}
+
+.seller-tool-status.is-bad {
+  color: #f87171;
+}
+
+/* :not(.hidden) rather than a bare class: both are 0-1-0, so whichever
+   stylesheet lands last would otherwise decide whether a hidden button is
+   hidden -- and Tailwind arrives from a CDN at a time we do not control. */
+.inbox-seller-tools-btn:not(.hidden) {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #fafafa;
+  cursor: pointer;
+}
+
+
+/* ---- Chat photos -------------------------------------------------------- */
+
+.inbox-photo-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: #18181b;
+  color: #fafafa;
+  cursor: pointer;
+}
+
+.inbox-photo-btn svg {
+  display: block;
+  pointer-events: none;
+}
+
+.inbox-photo-btn[disabled] {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.inbox-photo {
+  position: relative;
+  max-width: 78%;
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  overflow: hidden;
+  background: #18181b;
+  border: 1px solid #27272a;
+}
+
+.inbox-photo-mine {
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+}
+
+.inbox-photo img {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+}
+
+/* Photos expire after two weeks. Say so rather than leaving a broken frame. */
+.inbox-photo-gone {
+  display: none;
+  padding: 18px 14px;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.inbox-photo.is-gone img {
+  display: none;
+}
+
+.inbox-photo.is-gone .inbox-photo-gone {
+  display: block;
+}
+
+.inbox-photo-caption {
+  max-width: 78%;
+  font-size: 13px;
+  color: #d4d4d8;
+}

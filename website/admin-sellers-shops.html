@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sellers &amp; Shops — Sokoni Admin OS</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+</head>
+<body class="admin-depop admin-body">
+  <div class="admin-wrap">
+    <header class="admin-top">
+      <div>
+        <div class="flex items-center gap-3" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title">Sokoni <span class="dot">.</span> Shops</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <span class="is-active">Shops</span>
+          <a href="admin-seller-listings.html">Listings</a>
+          <a href="admin-support.html">Support</a>
+          <a href="admin-boda.html">Boda</a>
+          <a href="admin-riders.html">Riders</a>
+          <a href="admin-finances.html">Finances</a>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Boss Mode Active</span>
+        <button id="shops-refresh" type="button" class="btn-outline">Refresh</button>
+      </div>
+    </header>
+
+    <div class="admin-token-row">
+      <label for="admin-token">Admin token
+        <input
+          id="admin-token"
+          type="password"
+          autocomplete="off"
+          class="admin-input"
+          placeholder="ADMIN_SETUP_TOKEN"
+        />
+      </label>
+      <p id="shops-status-msg" class="admin-status" role="status"></p>
+    </div>
+
+    <!-- Control metrics -->
+    <div class="admin-metrics" aria-label="Shop metrics">
+      <div class="admin-metric">
+        <p class="admin-metric-label">Total active shops</p>
+        <p id="metric-active" class="admin-metric-value">—</p>
+      </div>
+      <div class="admin-metric">
+        <p class="admin-metric-label">Verified handles</p>
+        <p id="metric-verified" class="admin-metric-value is-green">—</p>
+      </div>
+      <div class="admin-metric">
+        <p class="admin-metric-label">Held / paused shops</p>
+        <p id="metric-flagged" class="admin-metric-value is-red">—</p>
+      </div>
+      <div class="admin-metric">
+        <p class="admin-metric-label">Payout holds (escrow)</p>
+        <p id="metric-holds" class="admin-metric-value">—</p>
+      </div>
+    </div>
+
+    <!-- Directory -->
+    <section class="admin-panel">
+      <div class="admin-panel-toolbar">
+        <h2>Seller Directory &amp; Inventory</h2>
+        <div class="admin-controls">
+          <input
+            id="shops-q"
+            type="search"
+            class="admin-input admin-input-wide"
+            placeholder="Search @handle, merchant name, phone…"
+          />
+          <select id="shops-status" class="admin-select" aria-label="Filter by status">
+            <option value="all">All shops</option>
+            <option value="live">Live</option>
+            <option value="held">Held / paused</option>
+            <option value="paused">Paused</option>
+            <option value="under_review">Under review</option>
+            <option value="deactivated">Deactivated</option>
+          </select>
+          <button id="shops-search" type="button" class="btn-ink">Search</button>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Shop handle</th>
+              <th>Seller details</th>
+              <th>Listed inventory</th>
+              <th>Escrow volume</th>
+              <th>Status</th>
+              <th style="text-align:right;">Admin actions</th>
+            </tr>
+          </thead>
+          <tbody id="shops-tbody"></tbody>
+        </table>
+      </div>
+      <p id="shops-empty" class="admin-empty hidden">No shops match this filter.</p>
+    </section>
+  </div>
+
+  <!-- Item gallery drawer -->
+  <div id="shops-backdrop" class="shops-backdrop" style="position:fixed;inset:0;z-index:40;" aria-hidden="true"></div>
+  <aside
+    id="shops-drawer"
+    class="shops-drawer"
+    style="position:fixed;top:0;right:0;z-index:50;height:100%;width:100%;max-width:28rem;background:#fff;display:flex;flex-direction:column;"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="drawer-title"
+    aria-hidden="true"
+  >
+    <div class="drawer-head">
+      <div style="min-width:0;">
+        <h2 id="drawer-title">Shop items</h2>
+        <p id="drawer-sub" class="muted" style="margin:0.25rem 0 0;"></p>
+      </div>
+      <button id="drawer-close" type="button" class="btn-outline" aria-label="Close" style="min-width:2.75rem;">✕</button>
+    </div>
+    <div id="drawer-body" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:0.75rem;"></div>
+  </aside>
+
+  <!-- Image inspector -->
+  <div id="img-modal" class="hidden" style="position:fixed;inset:0;z-index:60;background:rgba(26,26,26,0.85);display:none;align-items:center;justify-content:center;padding:1rem;" role="dialog" aria-modal="true" aria-label="Image inspector">
+    <button id="img-modal-close" type="button" class="btn-ink" style="position:absolute;top:1rem;right:1rem;" aria-label="Close image">✕</button>
+    <img id="img-modal-src" src="" alt="Product photo" style="max-height:90vh;max-width:100%;border:2px solid #fff;border-radius:1rem;object-fit:contain;" />
+  </div>
+
+  <!-- Edit shop -->
+  <div id="edit-modal" class="hidden" style="position:fixed;inset:0;z-index:55;background:rgba(26,26,26,0.5);display:none;align-items:flex-end;justify-content:center;padding:1rem;">
+    <form id="edit-form" class="admin-modal-panel" style="width:100%;max-width:28rem;">
+      <h3>Edit shop</h3>
+      <input type="hidden" id="edit-id" />
+      <label>Shop name
+        <input id="edit-name" />
+      </label>
+      <label>Phone
+        <input id="edit-phone" />
+      </label>
+      <label>Handle (without @)
+        <input id="edit-handle" />
+      </label>
+      <label>Bio
+        <textarea id="edit-bio" rows="3"></textarea>
+      </label>
+      <div style="display:flex;gap:0.5rem;padding-top:0.35rem;">
+        <button type="submit" class="btn-green" style="flex:1;">Save</button>
+        <button type="button" id="edit-cancel" class="btn-outline">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="assets/js/admin-sellers-shops.js"></script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+name: Bot Deploy
+
+# Pull latest main on the GCP VM and restart the Sokoni bot after merges.
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   VM_HOST          — e.g. 104.197.128.235
+#   VM_USER          — e.g. daviemuiruri3888
+#   VM_SSH_KEY       — private key with access to the VM
+#   GEMINI_API_KEY   — Google Gemini key for seller photo → listing drafts
+#   HEYGEN_API_KEY   — HeyGen / HyperFrames clip fallback (optional but recommended)
+#
+# Website (sokonimall.com) deploys separately via Cloudflare Workers Builds on main.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "whatsapp-bot/**"
+      - "remotion-worker/**"
+      - "scripts/deploy-bot.sh"
+      - "scripts/deploy-waha.sh"
+      - "scripts/configure-waha-session.sh"
+      - "scripts/configure-clip-fallbacks.sh"
+      - "scripts/start-postgres.sh"
+      - "scripts/verify-bot-import.mjs"
+      - "docker-compose.waha.yml"
+      - ".github/workflows/bot-deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: bot-deploy
+  cancel-in-progress: false
+
+jobs:
+  # Gate: the VM auto-commits catalog changes straight to main, and on
+  # 2026-08-30 one of those shipped a regression that sat on main for a week.
+  # Deploy does not start until the suite is green on this exact commit.
+  test:
+    name: tests must pass before deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: whatsapp-bot/package-lock.json
+
+      - name: Install
+        working-directory: whatsapp-bot
+        run: npm ci --omit=dev
+
+      - name: Unit tests
+        working-directory: whatsapp-bot
+        # Explicit paths: `node --test <glob>` only expands on Node >= 22.
+        run: |
+          set -euo pipefail
+          files="$(find src -name '*.test.js' | sort)"
+          if [ -z "$files" ]; then
+            echo "no test files found under src/" >&2
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          node --test $files
+
+      - name: Module import smoke
+        run: node scripts/verify-bot-import.mjs
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      !contains(github.event.head_commit.message, '[skip deploy]')
+    steps:
+      - name: Check deploy secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${VM_HOST}" ]; then
+            echo "::error title=Missing VM_HOST::Set Actions secret VM_HOST to the GCP VM public IP (bot.sokonimall.com)."
+            missing=1
+          fi
+          if [ -z "${VM_USER}" ]; then
+            echo "::error title=Missing VM_USER::Set Actions secret VM_USER (SSH username on the GCP VM)."
+            missing=1
+          fi
+          if [ -z "${VM_SSH_KEY}" ]; then
+            echo "::error title=Missing VM_SSH_KEY::Set Actions secret VM_SSH_KEY to the private key that can SSH into the VM."
+            missing=1
+          fi
+          if [ -z "${GEMINI_API_KEY}" ]; then
+            echo "::warning title=Missing GEMINI_API_KEY::Set Actions secret GEMINI_API_KEY for best seller photo drafts (or set GEMINI_API_KEY on the VM .env)."
+          fi
+          if [ -z "${HEYGEN_API_KEY}" ]; then
+            echo "::warning title=Missing HEYGEN_API_KEY::Set Actions secret HEYGEN_API_KEY for HyperFrames clip fallbacks (or run scripts/configure-clip-fallbacks.sh on the VM)."
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Bot Deploy cannot SSH until secrets are set."
+            echo "Docs: docs/DEPLOY_BOT_GCP.md (GitHub Actions secrets section)."
+            echo "Manual fallback on the VM:"
+            echo "  cd ~/sokoni && git pull origin main && bash scripts/deploy-bot.sh"
+            exit 1
+          fi
+          echo "Deploy secrets present (host=${VM_HOST}, user=${VM_USER})."
+
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd ~/sokoni
+            git fetch origin main
+            git checkout main
+            git pull --rebase origin main
+            export SOKONI_GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}'
+            export SOKONI_HEYGEN_API_KEY='${{ secrets.HEYGEN_API_KEY }}'
+            bash scripts/deploy-bot.sh
+
+      - name: Smoke-check bot health
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/sokoni-health.json -w "%{http_code}" https://bot.sokonimall.com/health || true)
+            echo "try $i → HTTP $code"
+            if [ "$code" = "200" ]; then
+              head -c 400 /tmp/sokoni-health.json || true
+              echo
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::Bot health check did not return 200 yet — check pm2/nginx on the VM."
+          exit 0

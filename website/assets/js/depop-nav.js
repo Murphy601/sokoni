@@ -2,6 +2,18 @@
  * Depop-style header — category strip from browse-menu, search sync, bottom nav.
  */
 (function () {
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function browseThumb(src) {
+    return window.SokoniBrowseThumb?.thumbUrl?.(src) || String(src || "");
+  }
+
   function scrollToDeals() {
     document.getElementById("deals")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -49,11 +61,13 @@
     ];
 
     let html = cats
-      .slice(0, 10)
-      .map(
-        (c) =>
-          `<button type="button" data-depop-filter='${JSON.stringify({ category: c.id, scroll: true })}'>${c.emoji || ""} ${c.label}</button>`
-      )
+      .slice(0, 12)
+      .map((c) => {
+        const icon = c.image
+          ? `<img class="depop-cat-strip__img" src="${escapeHtml(browseThumb(c.image))}" alt="" width="32" height="32" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+          : `<span class="depop-cat-strip__emoji">${escapeHtml(c.emoji || "")}</span>`;
+        return `<button type="button" data-depop-filter='${escapeHtml(JSON.stringify({ category: c.id, scroll: true }))}'>${icon} ${escapeHtml(c.label)}</button>`;
+      })
       .join("");
 
     html += staticChips
@@ -128,12 +142,24 @@
       setBottomNavActive(null);
       return;
     }
+    if (path.includes("profile")) {
+      setBottomNavActive("profile");
+      return;
+    }
+    if (path.includes("inbox")) {
+      setBottomNavActive("inbox");
+      return;
+    }
+    if (path.includes("activity")) {
+      setBottomNavActive("activity");
+      return;
+    }
     if (path.includes("track")) {
       setBottomNavActive("track");
       return;
     }
     if (hash === "#deals") {
-      setBottomNavActive("search");
+      setBottomNavActive("explore");
       return;
     }
     setBottomNavActive("home");
@@ -146,6 +172,19 @@
     document.querySelectorAll(".depop-bottom-nav__item[data-depop-nav]").forEach((link) => {
       link.addEventListener("click", (e) => {
         const action = link.getAttribute("data-depop-nav");
+        if (action === "explore") {
+          e.preventDefault();
+          setBottomNavActive("explore");
+          if (window.SokoniCatalogNav?.open) {
+            window.SokoniCatalogNav.open();
+          } else if (!document.getElementById("deals")) {
+            window.location.href = "index.html#deals";
+          } else {
+            focusMobileSearch();
+            scrollToDeals();
+          }
+          return;
+        }
         if (action === "search") {
           e.preventDefault();
           setBottomNavActive("search");
@@ -157,13 +196,9 @@
           setBottomNavActive("home");
           return;
         }
-        if (action === "profile" || action === "track") {
-          setBottomNavActive("track");
+        if (action === "profile" || action === "activity" || action === "inbox" || action === "track") {
+          setBottomNavActive(action);
           return;
-        }
-        if (action === "explore") {
-          e.preventDefault();
-          window.SokoniCatalogNav?.open?.();
         }
         if (action === "bag") {
           e.preventDefault();

@@ -2,7 +2,16 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { config } from "../config.js";
-import { sendText, customerKeyFromChatId, phoneDigitsFromChatId } from "./whatsapp.js";
+import { handleAdminDispatch, matchAdminDispatch } from "../agents/admin-dispatch.js";
+import {
+  sendText,
+  toChatId,
+  withAdminReplyCapture,
+  customerKeyFromChatId,
+  phoneDigitsFromChatId,
+  isBotEcho,
+  wasRecentBotSend,
+} from "./whatsapp.js";
 import { sendReviewPrompt } from "./reviews.js";
 import { setHumanHandoff } from "./session.js";
 import {
@@ -15,6 +24,10 @@ import {
   statusLabel,
   ORDER_STATUSES,
   normalizeStatus,
+  extractOrderIdFromText,
+  ORDER_ID_CAPTURE,
+  ORDER_ID_RE,
+  normalizeOrderId,
 } from "./orders.js";
 import { getSupplier } from "./suppliers.js";
 import { planFulfillment, applyFulfillmentPlan } from "./fulfillment.js";
@@ -56,31 +69,34 @@ import {
   handleFlagsCommand,
   handleDbOpsCommand,
 } from "./platform-admin.js";
-import { getSettlementSummary, markPayoutPaid } from "./settlements.js";
+import { getSettlementSummary, markPayoutPaid, initiateSettlementB2C } from "./settlements.js";
+import { markWithdrawalPaid, markWithdrawalPaidByOrderId } from "./seller-withdrawals.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
+import { isB2CReady, b2cMeta } from "./daraja-mpesa.js";
+
+import { phonesMatchKenya, digitsOnly as phoneDigits, normalizeKenyaPhone, isBossPhone, checkIfBoss, extractBossPhoneFromPayload } from "../lib/phone-normalize.js";
 
 function digitsOnly(value) {
-  return String(value || "").replace(/\D/g, "");
+  return phoneDigits(value);
 }
 
 function phonesMatch(a, b) {
-  const da = digitsOnly(a);
-  const db = digitsOnly(b);
-  if (!da || !db) return false;
-  if (da === db) return true;
-  // Kenya: 2547XXXXXXXX vs 07XXXXXXXX — same national number only
-  const norm = (d) => {
-    if (d.startsWith("254")) return d;
-    if (d.startsWith("0") && d.length >= 10) return `254${d.slice(1)}`;
-    if (d.length === 9) return `254${d}`;
-    return d;
-  };
-  return norm(da) === norm(db);
+  return phonesMatchKenya(a, b);
 }
 
 function isAdminPhone(phone) {
   if (!phone) return false;
-  return config.admin.phones.some((p) => phonesMatch(phone, p));
+  // Founder Boss hardwire always wins.
+  if (checkIfBoss(phone)) return true;
+  const list = [
+    ...(config.admin.phones || []),
+    ...(config.admin.matchAliases || []),
+  ];
+  return list.some((p) => phonesMatch(phone, p));
 }
+
+/** Public re-export for webhook / PING path. */
+export { checkIfBoss };
 
 /** Persisted @lid chat IDs verified for a configured admin phone. */
 const adminChatIds = new Map();
@@ -89,7 +105,14 @@ const ADMIN_IDS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "
 
 function seedAdminCusIds() {
   for (const p of config.admin.phones) {
-    adminChatIds.set(`${p}@c.us`, p);
+    const n = normalizeKenyaPhone(p) || digitsOnly(p);
+    if (!n) continue;
+    adminChatIds.set(`${n}@c.us`, n);
+    // Also seed national-zero form if someone stored that historically
+    if (n.startsWith("254") && n.length >= 12) {
+      const national = `0${n.slice(3)}`;
+      adminChatIds.set(`${national}@c.us`, n);
+    }
   }
 }
 
@@ -136,12 +159,17 @@ function persistAdminChatIds() {
 export function isAdminSender(chatId, phone = "") {
   loadAdminChatIds();
 
+  const chatDigits = phoneDigitsFromChatId(chatId);
+  const incoming = digitsOnly(phone) || chatDigits || "";
+  if (process.env.ADMIN_PHONE_DEBUG === "1" || process.env.ADMIN_PHONE_DEBUG === "true") {
+    console.log("[admin] Incoming Phone:", phone || "(empty)", "chatId:", chatId, "digits:", incoming);
+  }
+
   if (chatId && adminChatIds.has(chatId)) {
     return isAdminPhone(adminChatIds.get(chatId));
   }
 
-  const chatDigits = phoneDigitsFromChatId(chatId);
-  if (chatDigits && config.admin.phones.some((p) => phonesMatch(chatDigits, p))) {
+  if (chatDigits && isAdminPhone(chatDigits)) {
     if (chatId && chatId.includes("@lid")) {
       registerAdminChatId(chatId, chatDigits);
     }
@@ -158,8 +186,11 @@ export function isAdminSender(chatId, phone = "") {
   }
 
   // Metadata phone must match the sender chat id, not a random field in the payload.
-  if (isAdminPhone(phone) && chatDigits && phonesMatch(phone, chatDigits)) {
-    return true;
+  // Relaxed: if chatDigits missing (some WAHA payloads), still trust isAdminPhone(phone).
+  if (isAdminPhone(phone)) {
+    if (!chatDigits || phonesMatch(phone, chatDigits)) {
+      return true;
+    }
   }
 
   return false;
@@ -171,16 +202,15 @@ export function tryRegisterAdminFromMessage(chatId, phone = "", text = "") {
     registerAdminChatId(chatId, phone);
     return isAdminSender(chatId, phone);
   }
-  // Bootstrap @lid when the configured admin sends a command (single-admin setup).
-  if (
-    chatId?.includes("@lid") &&
-    config.admin.phones.length === 1 &&
-    (containsAdminCommand(text) ||
-      /^admin\b/i.test((text || "").trim()) ||
-      /^orders?\b/i.test((text || "").trim()))
-  ) {
-    registerAdminChatId(chatId, config.admin.phones[0]);
-    console.log("[admin] bootstrapped @lid for", config.admin.phones[0]);
+  // Bootstrap @lid ONLY for hardwired founder Boss — never map random @lid → ADMIN_PHONES[0]
+  const looksBossProbe =
+    /^\s*ping\s*$/i.test(String(text || "")) ||
+    containsAdminCommand(text) ||
+    /^\s*OVERRIDE\s*:/i.test((text || "").trim()) ||
+    /^admin\b/i.test((text || "").trim());
+  if (chatId?.includes("@lid") && looksBossProbe && phone && checkIfBoss(phone)) {
+    registerAdminChatId(chatId, phone);
+    console.log("[admin] bootstrapped @lid for founder Boss phone", phone);
     return true;
   }
   return isAdminSender(chatId, phone);
@@ -212,11 +242,37 @@ export function registerAdminChatId(chatId, phone = "") {
   console.log("[admin] registered chat id", chatId, "for", p);
 }
 
+/** Shop reply for someone who is not an admin and typed an admin command. */
+export const PUBLIC_HELP_REPLY =
+  "Welcome to Sokoni Mall. Need help with an order or listing an item? Reply *menu* to browse.";
+
+/**
+ * True when the text is trying to open the admin desk.
+ * Ordinary words such as "approve" inside a sentence are left alone.
+ */
+export function isUnauthorizedAdminProbe(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (/^\/admin\b/i.test(t) || /^admin\b/i.test(t)) return true;
+  if (/^\/(dashboard|sysinfo|ops)\b/i.test(t)) return true;
+  if (/^(dashboard|sysinfo|ops)$/i.test(t)) return true;
+  if (/^\s*FORCE\s+RELEASE\b/i.test(t) || /^\s*PAUSE\s+PAYOUTS?\b/i.test(t)) return true;
+  if (/^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(t)) return true;
+  if (/^(stats|volume|heap|pulse|pending|actions|queue)$/i.test(t)) return true;
+  if (/^(a|approve|r|reject)\s+\d+\s*[.!]?\s*$/i.test(t)) return true;
+  if (/^user\s+\+?[\d][\d\s-]{7,18}$/i.test(t)) return true;
+  if (/^escrow\s+[A-Za-z0-9-]{3,40}$/i.test(t)) return true;
+  return containsAdminCommand(t);
+}
+
 /** Detect explicit admin #commands only (no generic "# message" relay). */
 export function containsAdminCommand(text) {
   const t = (text || "").trim();
-  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit)\b/i.test(t)) return true;
-  if (/^#SK-\d+\s+/i.test(t)) return true;
+  if (/^\s*OVERRIDE\s*:/i.test(t)) return true;
+  if (/^\s*![a-z][\w-]*/i.test(t)) return true;
+  if (/^\s*FORCE_PAYOUT\b/i.test(t)) return true;
+  if (/^#(?:help|orders|status|broadcast|fulfill|payouts|payb2c|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|apolog|wrong|damage|recover|delay|oos|transit|resolve|done)\b/i.test(t)) return true;
+  if (new RegExp(`^#${ORDER_ID_CAPTURE}\\s+`, "i").test(t)) return true;
   return false;
 }
 
@@ -234,12 +290,12 @@ export function resolveAdminIdentity(_body, parsed) {
   return { verified, phone };
 }
 
-/** Hard gate — admin features only for configured ADMIN_PHONES. */
+/** Hard gate — admin features for ADMIN_PHONES or hardwired Boss last-9. */
 export function requireAdminSender(chatId, phone = "") {
-  if (!isAdminSender(chatId, phone)) {
+  if (!isAdminSender(chatId, phone) && !checkIfBoss(phone || chatId)) {
     return false;
   }
-  if (config.admin.phones.length === 0) {
+  if (config.admin.phones.length === 0 && !checkIfBoss(phone || chatId)) {
     console.warn("[admin] ADMIN_PHONES not configured — admin console disabled");
     return false;
   }
@@ -250,16 +306,57 @@ export function requireAdminSender(chatId, phone = "") {
  * Route to admin handler only for explicit admin commands — not every admin message.
  * Admin can still type "menu" / shop like a normal customer otherwise.
  */
-export function shouldRouteIncomingAsAdmin(body, parsed) {
+export async function shouldRouteIncomingAsAdmin(body, parsed) {
   tryRegisterAdminFromMessage(parsed.customerKey, parsed.phone, parsed.text);
 
-  if (!canRunAdminCommands(parsed.customerKey, parsed.phone)) return false;
-
   const text = (parsed.text || "").trim();
-  if (/^admin\b/i.test(text)) return true;
-  if (/^orders?\b/i.test(text)) return true;
-  if (containsAdminCommand(parsed.text)) return true;
-  return false;
+  const looksLikeStaffCmd =
+    /^\s*OVERRIDE\s*:/i.test(text) ||
+    /^\s*![a-z][\w-]*/i.test(text) ||
+    /^\s*FORCE_PAYOUT\b/i.test(text) ||
+    /^\s*FORCE\s+RELEASE\b/i.test(text) ||
+    /^\s*RELEASE\s+PAYOUT\b/i.test(text) ||
+    /^\s*REFUND\s+BUYER\b/i.test(text) ||
+    /^\s*REFUND\s+DISPUTE\b/i.test(text) ||
+    /^\s*SPLIT\s+ESCROW\b/i.test(text) ||
+    /^\s*PAUSE\s+PAYOUTS?\b/i.test(text) ||
+    /^\s*PAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
+    /^\s*UNPAUSE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
+    /^\s*DEACTIVATE\s+(SELLER|SHOP)\b/i.test(text) ||
+    /^\s*ACTIVATE\s+(SELLER|SHOP)\b/i.test(text) ||
+    /^\s*DELETE\s+(SELLER|SHOP|RIDER)\b/i.test(text) ||
+    /^\s*BROADCAST\s+(SELLERS?|RIDERS?|BUYERS?|CUSTOMERS?)\b/i.test(text) ||
+    /^\s*VERIFY\s+SHOP\b/i.test(text) ||
+    /^\s*SUSPEND\s+(SHOP|SELLER|RIDER)\b/i.test(text) ||
+    /^\s*SET\s+COMMISSION\b/i.test(text) ||
+    /^\s*HIDE\s+ITEM\b/i.test(text) ||
+    /^\s*REASSIGN\s+RIDER\b/i.test(text) ||
+    /^\s*FORCE\s+RETURN\b/i.test(text) ||
+    /^\s*UNBAN\s+(RIDER|SELLER|SHOP)\b/i.test(text) ||
+    /^\s*CLEAR\s+SESSION\b/i.test(text) ||
+    /^\s*SET\s+MODE\b/i.test(text) ||
+    /^\s*(STATUS|BRIEFING|BRIEF)\s*$/i.test(text) ||
+    /^\s*SYSTEM\s+(PAUSE|RESUME)\b/i.test(text) ||
+    /^\s*OVERRIDE\s+TEST\s*$/i.test(text) ||
+    /^admin\b/i.test(text) ||
+    /^\/admin\b/i.test(text) ||
+    /^orders?\b/i.test(text) ||
+    /^[1-4]$/.test(text) ||
+    containsAdminCommand(parsed.text) ||
+    Boolean(matchAdminDispatch(text));
+
+  if (!looksLikeStaffCmd) return false;
+
+  if (canRunAdminCommands(parsed.customerKey, parsed.phone)) return true;
+  if (checkIfBoss(parsed.phone || parsed.customerKey)) return true;
+
+  try {
+    const { resolveStaffRole } = await import("./staff-roles.js");
+    const staff = await resolveStaffRole(parsed.phone || phoneDigitsFromChatId(parsed.customerKey));
+    return Boolean(staff);
+  } catch {
+    return false;
+  }
 }
 
 function isBusinessChat(chatId) {
@@ -277,7 +374,7 @@ function isAdminRelayAttempt(text) {
 
 const CUSTOMER_STATUS_MESSAGES = {
   confirmed: (o) =>
-    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Payment secured in Sokoni escrow — nothing more to pay on delivery. Asante! 🙏`,
+    `✅ *Order ${o.id} confirmed!*\n\nWe're preparing your *${o.productName}*. Payment secured in Sokoni escrow — nothing to pay at the door. Asante! 🙏`,
   packed: (o) =>
     o.deliveryMode === "pickup_point" && o.pickupPointName
       ? `📦 *Order ${o.id} packed!*\n\nYour *${o.productName}* is ready at pickup partner *${o.pickupPointName}*. We'll send the shop address in the next message 📍`
@@ -349,7 +446,7 @@ async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quote
   if (!canRunAdminCommands(fromChatId, fromPhone, { allowBusinessOwner })) return false;
 
   const statusInput = String(text || "").trim();
-  let orderId = quotedText?.match(/\bSK-\d+\b/i)?.[0];
+  let orderId = extractOrderIdFromText(quotedText || "");
   if (!orderId) {
     const customerKey = customerKeyFromChatId(toChatId);
     const orders = getOrdersForCustomer(customerKey);
@@ -367,45 +464,59 @@ async function tryQuickStatusOnCustomerReply({ fromChatId, toChatId, text, quote
   return true;
 }
 
-function adminHelpText() {
+export function adminHelpText() {
   return (
     `🛠️ *Sokoni admin commands*\n\n` +
     `Type *admin* or *#help* anytime for this menu.\n` +
-    `Customers: *menu* · Suppliers: *vendor menu*\n\n` +
+    `Customers: *menu* · Suppliers: *vendor menu*\n` +
+    `_IDs: *SKN-####* / *SKN-####-n* (cart) · older *SK-####* still works_\n\n` +
     `📋 *#orders* — recent orders\n` +
     `💰 *#payments* — unpaid prepaid orders (or manual *paid* claims)\n` +
-    `✅ *#payconfirm SK-1042* — manual payment verify (Daraja auto-confirms when live)\n` +
-    `📦 *#notify-store SK-1042* — tell store/pickup point to release parcel\n` +
-    `📍 *#pickup SK-1042 pp-xxxx* — assign / override pickup point\n` +
-    `🔎 *#nearby SK-1042* — suggest pickup partners near customer\n` +
-    `📦 *#scan SK-1042* — hub drop-off scan (advances shipment status)\n` +
-    `   _Or #scan SK-1042 in_transit hub:Umoja · #scan SK-1042 delivered_\n` +
-    `🔄 *#status SK-1042 delivered* — update status + notify customer\n` +
-    `   _(or *#SK-1042 confirmed* — same as #status)_\n\n` +
+    `✅ *#payconfirm SKN-1002-1* — manual payment verify (Daraja auto-confirms when live)\n` +
+    `📦 *#notify-store SKN-1002-1* — tell store/pickup point to release parcel\n` +
+    `📍 *#pickup SKN-1002-1 pp-xxxx* — assign / override pickup point\n` +
+    `🔎 *#nearby SKN-1002-1* — suggest pickup partners near customer\n` +
+    `📦 *#scan SKN-1002-1* — hub drop-off scan (advances shipment status)\n` +
+    `   _Or #scan SKN-1002-1 in_transit hub:Umoja · #scan SK-1042 delivered_\n` +
+    `🔄 *#status SKN-1002-1 delivered* — update status + notify customer\n` +
+    `   _(or *#SKN-1002-1 confirmed* — same as #status)_\n\n` +
     `🙏 *Customer issue commands*\n` +
-    `• *#apolog SK-1042* — wrong-item apology (customer replies REPLACE/CANCEL)\n` +
-    `• *#wrong SK-1042 ordered:sandals received:perfume* — same as #apolog with details\n` +
-    `• *#damage SK-1042* — damaged/wrong variant return at door\n` +
-    `• *#recover SK-1042* — post-delivery damage (ask for photo)\n` +
-    `• *#delay SK-1042 later today* — delivery delay apology\n` +
-    `• *#oos SK-1042* — out of stock → cancel + notify customer\n` +
-    `• *#transit SK-1042 rider:John phone:0712… eta:2 hours* — rider on the way alert\n\n` +
-    `📦 *#fulfill SK-1042* — notify supplier (no customer contact)\n` +
-    `📦 *#fulfill SK-1042 share* — supplier delivers (with address)\n` +
-    `💰 *#payouts* — supplier amounts owed\n` +
-    `✅ *#paid SK-1042* — mark supplier paid\n\n` +
+    `• *#apolog SKN-1002-1* — wrong-item apology (customer replies REPLACE/CANCEL)\n` +
+    `• *#wrong SKN-1002-1 ordered:sandals received:perfume* — same as #apolog with details\n` +
+    `• *#damage SKN-1002-1* — damaged/wrong variant return at door\n` +
+    `• *#recover SKN-1002-1* — post-delivery damage (ask for photo)\n` +
+    `• *#delay SKN-1002-1 later today* — delivery delay apology\n` +
+    `• *#oos SKN-1002-1* — out of stock → cancel + notify customer\n` +
+    `• *#transit SKN-1002-1 rider:John phone:0712… eta:2 hours* — rider on the way alert\n\n` +
+    `📦 *#fulfill SKN-1002-1* — notify supplier (no customer contact)\n` +
+    `📦 *#fulfill SKN-1002-1 share* — supplier delivers (with address)\n` +
+    `💰 *#payouts* — supplier amounts owed / B2C status\n` +
+    `💸 *#payb2c SKN-1002-1* — send seller payout via M-Pesa B2C\n` +
+    `✅ *#paid SKN-1002-1* — mark supplier paid (manual transfer)\n` +
+    `✅ *#paid WD-2026-0004* — mark a queued withdrawal paid (all its orders)\n` +
+    `🖥️ *Command Center* — use the Admin OS on the Sokoni site (token required).\n\n` +
     `📣 *Customer comms & offers*\n` +
     `• *#broadcast <message>* — message all customers (adds ${OFFER_PERCENT}% offer footer + STOP opt-out)\n` +
     `• Promo code *${PROMO_CODE}* (${OFFER_PERCENT}% off) — customers say *discount* or *punguza bei*\n` +
     `• Auto-replies: *referral*, *scam*, *survey*, *vendor*, *gift wrap*, *weekend delivery*, etc.\n` +
     `• Customers opt out of broadcasts: *STOP* · opt back in: *START*\n\n` +
-    `🆔 *#SK-1042 <message>* — message one customer\n` +
-    `🏪 Seller listings — GET /admin/suppliers/seller-listings/pending?token=...\n\n` +
+    `🆔 *#SKN-1002-1 <message>* — message buyer/seller (starts ADMIN_TAKE_OVER / silent bot)\n` +
+    `✅ *#done SKN-1002-1* — end dispute/help takeover, resume bot\n` +
+    `   _(alias: *#resolve SKN-1002-1* · or *#done* alone if only one open thread)_\n` +
+    `   _(buyer/seller can also reply *DONE* on WhatsApp)_\n` +
+    `🖥️ Support ops desk — Admin OS Support (site login + token).\n` +
+    `🏪 Seller listings / Shops desk — Admin OS (token required).\n` +
+    `   · shops-desk, items, freeze/verify/commission via Admin API\n` +
+    `   · flagged listings takedown/restore via Admin API\n\n` +
     `🛠️ *Platform ops (Phase 9)*\n` +
     `• *#ops* — catalog pause/live, DB, flags\n` +
     `• *#catalog live* · *#catalog pause* · *#sync* · *#sync push*\n` +
     `• *#stock prod_abc in|out* · *#flags prepaid on|off*\n` +
     `• *#db migrate* · *#db seed* · REST \`/admin/ops/status?token=...\`\n\n` +
+    `⚡ *Master palette* (ADMIN_PHONES / MASTER_ADMIN_SECRET)\n` +
+    `• *!force-release SKN-####* · *!override-state SKN-#### STATUS*\n` +
+    `• *!ban-user / !unban-user +254…* · *!agent-mode MUTE|ACTIVE +254…*\n` +
+    `• *!system-pause* / *!system-resume* · *OVERRIDE: …* · *!help*\n\n` +
     `❓ *#help* — this list`
   );
 }
@@ -442,7 +553,7 @@ async function handleStatusCommand(adminChatId, args) {
   if (!orderId || !statusInput) {
     return sendText(
       adminChatId,
-      `Usage: #status SK-1042 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
+      `Usage: #status SKN-1002-1 out\n\nStatuses: ${ORDER_STATUSES.join(", ")}`
     );
   }
   const order = getOrder(orderId);
@@ -478,9 +589,12 @@ async function handleStatusCommand(adminChatId, args) {
     advanceShipmentStatus(result.order.id, "delivered", { actor: "admin_status", note: "#status delivered" });
     onOrderDelivered(getOrder(result.order.id) || result.order);
   }
+  const holdDays = Number(config.mpesa?.escrowHoldBusinessDays);
   const payoutNote =
     result.status === "delivered" && result.order.sourcePriceKes
-      ? `\nSeller payout scheduled (2–3 business days). Check #payouts.`
+      ? holdDays > 0
+        ? `\nSeller payout scheduled (${holdDays} business day hold). Check #payouts.`
+        : `\nSeller wallet credited → Ready for M-Pesa. Check #payouts.`
       : "";
   return sendText(
     adminChatId,
@@ -493,7 +607,7 @@ async function handleFulfillCommand(adminChatId, args) {
   const orderId = parts[0];
   const share = parts[1]?.toLowerCase() === "share";
   if (!orderId) {
-    return sendText(adminChatId, "Usage: #fulfill SK-1042\nOr: #fulfill SK-1042 share (includes customer address)");
+    return sendText(adminChatId, "Usage: #fulfill SKN-1002-1\nOr: #fulfill SK-1042 share (includes customer address)");
   }
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
@@ -563,18 +677,81 @@ async function handleFulfillCommand(adminChatId, args) {
 
 async function handlePayoutsCommand(adminChatId) {
   const summary = getSettlementSummary();
-  if (summary.count === 0) {
-    return sendText(adminChatId, "💰 No supplier payouts owed right now.");
+  const b2c = b2cMeta();
+  const b2cLine = b2c.ready
+    ? `B2C: ready · ${b2c.auto ? "auto after hold" : "manual #payb2c"} · shortcode ${b2c.shortcode}`
+    : "B2C: not configured (set MPESA_INITIATOR_NAME + SECURITY_CREDENTIAL)";
+
+  const parts = [`💰 *Supplier payouts*\n${b2cLine}`];
+
+  if (summary.scheduledCount > 0) {
+    parts.push(`⏳ Scheduled (escrow hold): ${summary.scheduledCount} · KES ${summary.totalScheduledKes.toLocaleString()}`);
   }
-  const lines = summary.entries.slice(0, 10).map(
-    (e) =>
-      `*${e.orderId}* · ${e.supplierName}\n` +
-      `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
-      `#paid ${e.orderId} when sent`
-  );
+  if (summary.disbursingCount > 0) {
+    const lines = (summary.disbursing || []).slice(0, 5).map(
+      (e) => `*${e.orderId}* · KES ${e.payoutAmountKes.toLocaleString()} · waiting M-Pesa result`
+    );
+    parts.push(`📤 Disbursing (${summary.disbursingCount})\n${lines.join("\n")}`);
+  }
+  if (summary.failedCount > 0) {
+    const lines = (summary.failed || []).slice(0, 5).map(
+      (e) =>
+        `*${e.orderId}* · KES ${e.payoutAmountKes.toLocaleString()}\n` +
+        `${e.b2c?.resultDesc || e.b2c?.lastMessage || "failed"} · #payb2c ${e.orderId}`
+    );
+    parts.push(`⚠️ B2C failed (${summary.failedCount})\n${lines.join("\n\n")}`);
+  }
+
+  if (summary.queuedCount > 0) {
+    const lines = (summary.queued || []).slice(0, 8).map(
+      (e) =>
+        `*${e.orderId}* · ${e.supplierName}\n` +
+        `KES ${e.payoutAmountKes.toLocaleString()} · ${e.withdrawId || "queued"}\n` +
+        `#paid ${e.withdrawId || e.orderId}`
+    );
+    parts.push(
+      `🕐 Admin queue (send M-Pesa by hand): ${summary.queuedCount} · KES ${(summary.totalQueuedKes || 0).toLocaleString()}\n\n${lines.join("\n\n")}`
+    );
+  }
+  if (summary.count === 0 && summary.disbursingCount === 0 && summary.failedCount === 0 && !summary.queuedCount) {
+    parts.push("No supplier payouts owed right now.");
+    return sendText(adminChatId, parts.join("\n\n"));
+  }
+
+  if (summary.count > 0) {
+    const lines = summary.entries.slice(0, 10).map(
+      (e) =>
+        `*${e.orderId}* · ${e.supplierName}\n` +
+        `Pay: KES ${e.payoutAmountKes.toLocaleString()} · ${e.productName}\n` +
+        (b2c.ready ? `#payb2c ${e.orderId}` : `#paid ${e.orderId} when sent`)
+    );
+    parts.push(
+      `🟢 Owed: KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+    );
+  }
+
+  return sendText(adminChatId, parts.join("\n\n"));
+}
+
+async function handlePayB2CCommand(adminChatId, orderId) {
+  if (!orderId) return sendText(adminChatId, "Usage: #payb2c SKN-1002-1");
+  if (!isB2CReady()) {
+    return sendText(
+      adminChatId,
+      "⚠️ B2C not configured. Set MPESA_INITIATOR_NAME + MPESA_SECURITY_CREDENTIAL (or INITIATOR_PASSWORD + CERT_PATH) + MPESA_B2C_SHORTCODE, then restart the bot."
+    );
+  }
+  const out = await initiateSettlementB2C(orderId);
+  if (out.skipped) {
+    return sendText(adminChatId, `ℹ️ *${orderId}* — ${out.message}`);
+  }
+  if (out.error) {
+    return sendText(adminChatId, `⚠️ *${orderId}* — ${out.message || out.error}`);
+  }
+  const amt = out.entry?.payoutAmountKes;
   return sendText(
     adminChatId,
-    `💰 *Owed to suppliers:* KES ${summary.totalOwedKes.toLocaleString()} (${summary.count})\n\n${lines.join("\n\n")}`
+    `✅ B2C submitted for *${orderId}*${amt != null ? ` · KES ${Number(amt).toLocaleString()}` : ""}.\nWaiting for Safaricom ResultURL — check #payouts.`
   );
 }
 
@@ -618,7 +795,7 @@ async function handlePaymentsCommand(adminChatId) {
 }
 
 async function handlePayconfirmCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #payconfirm SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #payconfirm SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -629,7 +806,7 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
   const result = await applyPostPaymentAutomation(order, {
     mpesaReceiptNumber: "manual-admin",
     phoneNumber: order.phone,
-    amount: order.priceKes,
+    amount: orderBuyerTotal(order),
   });
 
   if (result?.skipped) {
@@ -642,23 +819,23 @@ async function handlePayconfirmCommand(adminChatId, orderId) {
 
   return sendText(
     adminChatId,
-    `✅ Payment confirmed for *${order.id}* · KES ${order.priceKes.toLocaleString()} · escrow held\nCustomer + seller notified.\n\n${note}\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
+    `✅ Payment confirmed for *${order.id}* · KES ${orderBuyerTotal(order).toLocaleString()} · escrow held\nCustomer + seller notified.\n\n${note}\n\nNext: #notify-store ${order.id} or #fulfill ${order.id}`
   );
 }
 
 async function handleScanCommand(adminChatId, args) {
-  const orderId = args.trim().match(/\b(SK-\d+)\b/i)?.[1]?.toUpperCase();
+  const orderId = extractOrderIdFromText(args);
   if (!orderId) {
     return sendText(
       adminChatId,
-      "Usage: #scan SK-1042\nOr: #scan SK-1042 in_transit hub:Umoja\nOr: #scan SK-1042 delivered"
+      "Usage: #scan SKN-1002-1\nOr: #scan SKN-1002-1 in_transit hub:Umoja\nOr: #scan SK-1042 delivered"
     );
   }
 
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
-  const tail = args.replace(/\bSK-\d+\b/i, "").trim();
+  const tail = args.replace(ORDER_ID_RE, "").trim();
   const forceMatch = tail.match(/\b(label_ready|dropped_off|in_transit|at_pickup_point|delivered)\b/i);
   const hubMatch = tail.match(/\bhub:(\S+)/i);
   const courierMatch = tail.match(/\bcourier:(\S+)/i);
@@ -683,22 +860,6 @@ async function handleScanCommand(adminChatId, args) {
   }
 
   const tracking = buildPublicTrackingPayload(result.order);
-  try {
-    if (result.order.customerKey) {
-      await sendText(
-        result.order.customerKey,
-        `📦 *${result.order.id}* update: *${tracking.shipmentStatusLabel}*\n\n` +
-          `${renderShipmentTimelineFromPayload(tracking)}\n\n` +
-          `_Track anytime: type *${result.order.id}* or visit sokonimall.com/track.html_`
-      );
-    }
-  } catch (err) {
-    console.warn("[admin] scan customer notify failed:", err.message);
-  }
-
-  if (result.status === "delivered") {
-    onOrderDelivered(result.order);
-  }
 
   return sendText(
     adminChatId,
@@ -714,7 +875,7 @@ function renderShipmentTimelineFromPayload(tracking) {
 }
 
 async function handleNotifyStoreCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #notify-store SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #notify-store SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -740,7 +901,7 @@ async function handleNotifyStoreCommand(adminChatId, orderId) {
 }
 
 async function handleNearbyCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #nearby SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #nearby SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -767,7 +928,7 @@ async function handleAssignPickupCommand(adminChatId, args) {
   const orderId = parts[0];
   const pointId = parts[1];
   if (!orderId || !pointId) {
-    return sendText(adminChatId, "Usage: #pickup SK-1042 pp-xxxx");
+    return sendText(adminChatId, "Usage: #pickup SKN-1002-1 pp-xxxx");
   }
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
@@ -791,14 +952,45 @@ async function handleAssignPickupCommand(adminChatId, args) {
 }
 
 async function handlePaidCommand(adminChatId, orderId) {
-  if (!orderId) return sendText(adminChatId, "Usage: #paid SK-1042");
-  const entry = markPayoutPaid(orderId);
-  if (!entry) return sendText(adminChatId, `⚠️ No owed payout for *${orderId}*.`);
-  updateOrderMeta(orderId, { payoutStatus: "paid" });
+  if (!orderId) return sendText(adminChatId, "Usage: #paid SKN-1002-1  or  #paid WD-2026-0004");
+  const id = String(orderId || "").trim();
+  if (/^WD-\d{4}-\d+/i.test(id)) {
+    const out = markWithdrawalPaid(id);
+    if (out.error === "not_found") return sendText(adminChatId, `⚠️ ${out.message}`);
+    if (out.skipped) return sendText(adminChatId, `ℹ️ *${out.request.id}* — ${out.message}`);
+    const req = out.request;
+    await notifySellerWithdrawalPaid(req);
+    return sendText(
+      adminChatId,
+      `✅ Marked *${req.id}* paid — KES ${req.amountKes.toLocaleString()} to ${req.mpesaNumber}.\n` +
+        `Orders: ${(req.orderIds || []).join(", ")}`
+    );
+  }
+  const entry = markPayoutPaid(id);
+  if (!entry) return sendText(adminChatId, `⚠️ No owed / queued payout for *${id}*.`);
+  updateOrderMeta(id, { payoutStatus: "paid", isPaidOut: true, paidOutAt: Date.now(), payoutRail: "admin" });
+  const done = markWithdrawalPaidByOrderId(id);
+  if (done?.ok && done.request) await notifySellerWithdrawalPaid(done.request);
   return sendText(
     adminChatId,
-    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.`
+    `✅ Marked *${entry.orderId}* paid — KES ${entry.payoutAmountKes.toLocaleString()} to ${entry.supplierName}.` +
+      (done?.ok ? `\nWithdrawal *${done.request.id}* closed.` : "")
   );
+}
+
+async function notifySellerWithdrawalPaid(request) {
+  try {
+    const supplier = getSupplier(request.supplierId);
+    const phone = supplier?.phone || request.phone;
+    if (!phone) return;
+    const { toChatId } = await import("./whatsapp.js");
+    await sendText(
+      toChatId(phone),
+      `✅ Withdrawal *${request.id}* paid — KES ${Number(request.amountKes || 0).toLocaleString()} sent to your M-Pesa.`
+    );
+  } catch (err) {
+    console.warn("[admin] seller withdraw notify failed:", err?.message || err);
+  }
 }
 
 async function handleBroadcastCommand(adminChatId, message) {
@@ -857,10 +1049,10 @@ function getBroadcastRecipients() {
 function normalizeAdminCommand(text) {
   const t = (text || "").trim();
   const embedded = t.match(
-    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db)\b[\s\S]*/i
+    /(?:^|\n)\s*#(?:help|orders|status|broadcast|fulfill|payouts|paid|payments|payconfirm|notify-store|pickup|nearby|scan|ops|sync|catalog|stock|flags|db|resolve|done)\b[\s\S]*/i
   );
   if (embedded) return embedded[0].trim();
-  const sk = t.match(/#SK-\d+\s+[\s\S]+/i);
+  const sk = t.match(new RegExp(`#${ORDER_ID_CAPTURE}\\s+[\\s\\S]+`, "i"));
   if (sk) return sk[0].trim();
   if (/^orders?\b/i.test(t)) return "#orders";
   return t;
@@ -872,24 +1064,183 @@ async function handleTargetedOrderMessage(adminChatId, orderId, message) {
     return sendText(adminChatId, `⚠️ Order *${orderId}* not found. Try #orders.`);
   }
   try {
-    await sendText(order.customerKey, message.trim());
-    setHumanHandoff(order.customerKey, { adminDirect: true, startedAt: Date.now(), ackSent: true });
-    if (order.status === "delivered" && !order.reviewPromptSent) {
+    const body = `🛡️ *[Sokoni Support]:* ${message.trim()}`;
+    const {
+      recordAdminOutbound,
+      notifyOrderParties,
+      getOrderPartyChats,
+    } = await import("./communication-hub.js");
+    const parties = await getOrderPartyChats(order);
+    await notifyOrderParties(order, {
+      buyerMessage: parties.buyer.length ? body : null,
+      sellerMessage: parties.seller.length ? body : null,
+    });
+    if (order.customerKey) {
+      setHumanHandoff(order.customerKey, {
+        adminDirect: true,
+        adminTakeOver: true,
+        orderId: order.id,
+        startedAt: Date.now(),
+        ackSent: true,
+      });
+    }
+    recordAdminOutbound(order.id, message.trim(), { setTakeOver: true });
+    if (order.status === "delivered" && !order.reviewPromptSent && order.customerKey) {
       await sendReviewPrompt(order.customerKey, order);
     }
-    return sendText(adminChatId, `✅ Sent to *${order.customerName}* (${order.id}).`);
+    const who = [
+      parties.buyer.length ? "buyer" : null,
+      parties.seller.length ? "seller" : null,
+    ]
+      .filter(Boolean)
+      .join(" + ");
+    return sendText(
+      adminChatId,
+      `✅ Sent to *${who || "no chats"}* (${order.id}). Bot is silent on those chats.\nEnd: *#done ${order.id}*`
+    );
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed to send: ${err.message}`);
   }
 }
 
+function listOpenTakeOverOrders(limit = 20) {
+  return listRecentOrders(200)
+    .filter((o) => o?.adminTakeOver || o?.supportStatus === "ADMIN_TAKE_OVER")
+    .slice(0, limit);
+}
+
+/**
+ * Admin ends HELP/dispute takeover and resumes the bot.
+ * Accepts: #done SK-1042 · #resolve SK-1042 · #done (if exactly one open thread)
+ */
+async function handleResolveSupportCommand(adminChatId, rest, { via = "done" } = {}) {
+  const raw = String(rest || "").trim();
+
+  // "#done all" — clear every open takeover at once. Needed when a bad
+  // escalation silenced several chats and resolving them one id at a time
+  // means the bot stays down in the meantime.
+  if (/^all$/i.test(raw)) {
+    const open = listOpenTakeOverOrders(100);
+    if (!open.length) return sendText(adminChatId, "No open support/dispute takeovers.");
+    const { resolveAdminTakeOver } = await import("./communication-hub.js");
+    const done = [];
+    const failed = [];
+    for (const o of open) {
+      try {
+        const r = await resolveAdminTakeOver(o.id, { note: `resolved via #${via} all` });
+        (r?.error ? failed : done).push(o.id);
+      } catch (err) {
+        failed.push(o.id);
+        console.warn(`[admin] #done all could not resolve ${o.id}:`, err.message);
+      }
+    }
+    return sendText(
+      adminChatId,
+      `✅ Resumed ${done.length} chat${done.length === 1 ? "" : "s"}.` +
+        (done.length ? `\n${done.map((id) => `• ${id}`).join("\n")}` : "") +
+        (failed.length ? `\n\n⚠️ Still stuck: ${failed.join(", ")}` : "")
+    );
+  }
+
+  let orderId = extractOrderIdFromText(raw);
+  if (!orderId && !raw) {
+    const open = listOpenTakeOverOrders();
+    if (open.length === 1) {
+      orderId = open[0].id;
+    } else if (open.length === 0) {
+      return sendText(adminChatId, "No open support/dispute takeovers. Usage: *#done SKN-1002-1* (or older *#done SK-1042*)");
+    } else {
+      const lines = open.slice(0, 10).map((o) => `• *#done ${o.id}* — ${o.productName || "order"}`);
+      lines.push("", "Or *#done all* to resume every one of them.");
+      return sendText(
+        adminChatId,
+        `Several takeovers are open — pick one:\n${lines.join("\n")}` +
+          (open.length > 10 ? `\n…+${open.length - 10} more` : "")
+      );
+    }
+  } else if (!orderId) {
+    return sendText(adminChatId, "Usage: *#done SKN-1002-1* (or *#resolve SK-1042*)");
+  }
+
+  const { resolveAdminTakeOver } = await import("./communication-hub.js");
+  const result = await resolveAdminTakeOver(orderId, { note: `resolved via #${via}` });
+  if (result.error) {
+    return sendText(adminChatId, `⚠️ ${result.message || result.error}`);
+  }
+  const hold = result.order?.disputeHold
+    ? "\n⚠️ Escrow still on dispute hold until the in-app dispute is resolved."
+    : "";
+  return sendText(adminChatId, `✅ Support closed for *${orderId}*. Bot resumed.${hold}`);
+}
+
+/**
+ * Admin chat id used when the support dashboard runs #commands
+ * (must match ADMIN_PHONES so canRunAdminCommands passes).
+ */
+export function dashboardAdminChatId() {
+  const phone = config.admin.phones[0] || config.admin.primary;
+  if (!phone) return "";
+  return toChatId(phone);
+}
+
+/**
+ * Run the same WhatsApp admin #command path from the web desk.
+ * Captures admin reply texts (does not ping admin WA); customer/seller sends still go out.
+ */
+export async function executeAdminCommandFromDashboard(text, quotedText = "") {
+  const adminChatId = dashboardAdminChatId() || "dashboard-admin@c.us";
+  const cmd = String(text || "").trim();
+  if (!cmd) {
+    return { ok: false, error: "missing_command", message: "Enter a #command.", replies: [] };
+  }
+  // REST route is already gated by X-Admin-Token — do not re-require ADMIN_PHONES match.
+  let handled = false;
+  const replies = await withAdminReplyCapture(adminChatId, async () => {
+    handled = await runAdminCommand(adminChatId, cmd, quotedText, {
+      allowBusinessOwner: false,
+      skipSenderAuth: true,
+    });
+  });
+  if (!handled) {
+    return {
+      ok: false,
+      error: "unhandled",
+      message: "Command was not handled.",
+      replies,
+    };
+  }
+  return { ok: true, command: cmd, replies };
+}
+
 /** Parse and run an admin command. Returns true if handled. */
-async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwner = false } = {}) {
+export async function runAdminCommand(
+  adminChatId,
+  text,
+  quotedText,
+  { allowBusinessOwner = false, skipSenderAuth = false } = {}
+) {
   const phone = phoneDigitsFromChatId(adminChatId) || "";
-  if (!canRunAdminCommands(adminChatId, phone, { allowBusinessOwner })) {
+  if (!skipSenderAuth && !canRunAdminCommands(adminChatId, phone, { allowBusinessOwner })) {
     return false;
   }
   const t = normalizeAdminCommand(text.trim());
+
+  if (
+    /^\s*OVERRIDE\s*:/i.test(t) ||
+    /^\s*OVERRIDE\s*:/i.test(text) ||
+    /^\s*![a-z][\w-]*/i.test(t) ||
+    /^\s*![a-z][\w-]*/i.test(text) ||
+    /^\s*FORCE_PAYOUT\b/i.test(t) ||
+    /^\s*FORCE_PAYOUT\b/i.test(text)
+  ) {
+    const { executeMasterAdminCommand } = await import("./admin-override.js");
+    const result = await executeMasterAdminCommand(text, {
+      adminLabel: phone || phoneDigitsFromChatId(adminChatId) || "boss",
+      actorPhone: phone || phoneDigitsFromChatId(adminChatId) || "",
+    });
+    await sendText(adminChatId, result.reply || "Override processed.");
+    return true;
+  }
 
   if (/^admin\b/i.test(t) || /^#help\b/i.test(t)) {
     await sendText(adminChatId, adminHelpText());
@@ -913,6 +1264,11 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
   }
   if (/^#payouts\b/i.test(t)) {
     await handlePayoutsCommand(adminChatId);
+    return true;
+  }
+  if (/^#payb2c\b/i.test(t)) {
+    const oid = t.replace(/^#payb2c\b/i, "").trim().split(/\s+/)[0];
+    await handlePayB2CCommand(adminChatId, oid);
     return true;
   }
   if (/^#payments\b/i.test(t)) {
@@ -996,9 +1352,15 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
     return true;
   }
 
-  const targeted = t.match(/^#(SK-\d+)\s+([\s\S]+)/i);
+  if (/^#(?:done|resolve)\b/i.test(t)) {
+    const via = /^#done\b/i.test(t) ? "done" : "resolve";
+    await handleResolveSupportCommand(adminChatId, t.replace(/^#(?:done|resolve)\b/i, ""), { via });
+    return true;
+  }
+
+  const targeted = t.match(new RegExp(`^#${ORDER_ID_CAPTURE}\\s+([\\s\\S]+)`, "i"));
   if (targeted) {
-    const orderId = targeted[1].toUpperCase();
+    const orderId = normalizeOrderId(targeted[1]);
     const msg = targeted[2].trim();
     if (isAdminQuickStatusText(msg)) {
       await handleStatusCommand(adminChatId, `${orderId} ${msg}`);
@@ -1020,8 +1382,62 @@ async function runAdminCommand(adminChatId, text, quotedText, { allowBusinessOwn
 export async function handleAdminIncoming({ customerKey, text, quotedText, phone = "" }) {
   tryRegisterAdminFromMessage(customerKey, phone, text);
   if (!canRunAdminCommands(customerKey, phone)) {
-    console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
-    return false;
+    // Staff table may have roles not in ADMIN_PHONES — allow if resolveStaffRole hits
+    try {
+      const { resolveStaffRole } = await import("./staff-roles.js");
+      const staff = await resolveStaffRole(phone || phoneDigitsFromChatId(customerKey));
+      if (!staff) {
+        console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
+        return false;
+      }
+    } catch {
+      console.warn("[admin] blocked incoming admin attempt", customerKey, phone);
+      return false;
+    }
+  }
+
+  // Numbered dispute action card (1–4)
+  try {
+    const { tryHandleDisputeAdminChoice } = await import("./dispute-admin-actions.js");
+    const choice = await tryHandleDisputeAdminChoice(customerKey, text, { phone });
+    if (choice.handled) {
+      if (choice.reply) await sendText(customerKey, choice.reply);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[admin] dispute card choice skipped:", err.message);
+  }
+
+  // Master executive verbs — code interceptor (never LLM / RAG)
+  try {
+    const {
+      isMasterCommand,
+      softMapSpokenToMasterCommand,
+      executeMasterAdminCommand,
+    } = await import("./admin-override.js");
+    const mapped =
+      softMapSpokenToMasterCommand(text) || (isMasterCommand(text) ? text : null);
+    if (mapped) {
+      const result = await executeMasterAdminCommand(mapped, {
+        adminLabel: phone || customerKey || "boss",
+        actorPhone: phone || "",
+        requireStaff: true,
+        founderBoss: checkIfBoss(phone || customerKey),
+        source: "admin.incoming.whatsapp",
+      });
+      if (result?.reply) await sendText(customerKey, result.reply);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[admin] master command skipped:", err.message);
+  }
+
+  if (matchAdminDispatch(text)) {
+    const reply = await handleAdminDispatch(text, {
+      actorPhone: phone || phoneDigitsFromChatId(customerKey),
+    });
+    if (reply) await sendText(customerKey, reply);
+    return true;
   }
 
   const cmd = normalizeAdminCommand(text);
@@ -1039,12 +1455,17 @@ export async function handleAdminIncoming({ customerKey, text, quotedText, phone
 }
 
 /** Handle messages sent by the store owner (fromMe). Admin #commands only from ADMIN_PHONES. */
-export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedText }) {
+export async function handleAdminOutgoing({ fromChatId, toChatId, text, quotedText, messageId = null }) {
   console.log("[admin:outgoing]", {
     to: toChatId,
     text: text?.slice(0, 60),
     quoted: quotedText?.slice(0, 80),
   });
+
+  // Bot API sends also arrive as fromMe — never treat those as human handoff.
+  if (isBotEcho(messageId, toChatId) || wasRecentBotSend(toChatId)) {
+    return false;
+  }
 
   const fromPhone = phoneDigitsFromChatId(fromChatId);
   const allowBusinessOwner = isBusinessOwnerSender(fromChatId);
@@ -1097,15 +1518,32 @@ export function extractCustomerMeta(payload) {
     payload._data?.participant,
     payload._data?.sender?.id?.user,
     payload._data?.id?.participant,
+    // WAHA / Baileys LID → PN hints
+    payload._data?.senderPn,
+    payload._data?.sender_pn,
+    payload._data?.remoteJidAlt,
+    payload._data?.remote_jid_alt,
+    payload.senderPn,
+    payload.remoteJidAlt,
+    payload._data?.peerRecipientPn,
+    payload._data?.recipientPn,
+    typeof payload._data?.senderPn === "object" ? payload._data?.senderPn?.user : null,
   ];
   if (!phone) {
     for (const c of candidates) {
-      const d = digitsOnly(c);
+      const raw = typeof c === "string" ? c : c?.user || c?.id || "";
+      const d = digitsOnly(String(raw).replace(/@.*/g, ""));
       if (d.length >= 9) {
         phone = d;
         break;
       }
     }
   }
+  // Last resort when WAHA hid the PN behind @lid: scan payload for Boss last-9
+  if (!phone) {
+    const scanned = extractBossPhoneFromPayload(payload);
+    if (scanned) phone = scanned;
+  }
+  if (phone) phone = normalizeKenyaPhone(phone) || phone;
   return { chatId, displayName: displayName.trim(), phone };
 }

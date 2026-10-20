@@ -6,10 +6,16 @@ import {
   cancelOrder,
   changeOrder,
   handleCart,
+  startCartFromHandoff,
   startCodOrder,
+  startPrepaidOrderFromOffer,
   sendHumanHandoff,
+  tryNumberedMenuReply,
 } from "../services/menu.js";
-import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId } from "../services/whatsapp.js";
+import { sendText, customerKeyFromChatId, isBotEcho, phoneDigitsFromChatId, wasRecentBotSend, resolveWahaLidToPhone, extractWahaProductMessage } from "../services/whatsapp.js";
+import { extractWahaOrderCart } from "../services/whatsapp-native-cart.js";
+import { withVoiceReply, flushVoiceReply } from "../services/voice-reply.js";
+import { looksLikeVoiceNoteMime, isExplicitAudioRequest } from "../lib/voice-text-first.js";
 import { runAiAgent } from "../services/ai.js";
 import {
   getMenuState,
@@ -17,27 +23,59 @@ import {
   isHumanHandoff,
   clearHumanHandoff,
   setCustomerMeta,
+  getCustomerMeta,
+  hydrateSessionFromDb,
 } from "../services/session.js";
-import { searchProducts, findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
+import { findProductFromMessage, findProductFromWebsiteMessage } from "../services/catalog.js";
 import { handleCustomerWhileHandoff } from "../services/handoff.js";
-import { handleAdminOutgoing, handleAdminIncoming, isAdminSender, containsAdminCommand, shouldRouteIncomingAsAdmin, requireAdminSender, canRunAdminCommands, extractCustomerMeta, isAdminQuickStatusText, isBusinessOwnerSender } from "../services/admin.js";
-import { extractWahaProductMessage } from "../services/whatsapp.js";
+import { isWhereIsMyOrder } from "../services/order-status-question.js";
+import {
+  handleAdminOutgoing,
+  handleAdminIncoming,
+  isAdminSender,
+  containsAdminCommand,
+  shouldRouteIncomingAsAdmin,
+  isUnauthorizedAdminProbe,
+  PUBLIC_HELP_REPLY,
+  requireAdminSender,
+  canRunAdminCommands,
+  extractCustomerMeta,
+  isAdminQuickStatusText,
+  isBusinessOwnerSender,
+  checkIfBoss,
+  tryRegisterAdminFromMessage,
+  registerAdminChatId,
+} from "../services/admin.js";
 import { config } from "../config.js";
+import { isOrphanSubmitWord } from "../lib/confirm-words.js";
+import { normalizeKenyaPhone } from "../lib/phone-normalize.js";
 import { registerContact } from "../services/orders.js";
 import { sendOrderStatus } from "../services/menu.js";
-import { handleReviewReply, siteUrlLine } from "../services/reviews.js";
-import { handleProductRouter, resolveProductQuery, handleCatalogPagination } from "../services/product-router.js";
+import { siteUrlLine } from "../services/reviews.js";
+import { handleProductRouter, handleCatalogPagination } from "../services/product-router.js";
 import { looksLikeDeliveryDetails } from "../services/delivery-details.js";
-import { getPendingOrder } from "../services/session.js";
+import { getPendingOrder, getPendingCart, clearPendingOrder, clearPendingCart } from "../services/session.js";
 import { tryCustomerAutomation, maybeSendOutOfOffice } from "../services/customer-automations.js";
-import { normalizeShopperQuery } from "../services/shopper-language.js";
 import { tryRoleMenu, handleVendorMenuAction, handlePickupMenuAction } from "../services/role-menus.js";
+import { handleSellerWalletMessage } from "../services/seller-wallet.js";
 import { handleSupplierOnboarding, isInSupplierOnboarding, trySupplierContinueFromRef } from "../services/supplier-onboarding.js";
 import {
   handlePickupOnboarding,
   isInPickupOnboarding,
   tryPickupContinueFromRef,
 } from "../services/pickup-point-onboarding.js";
+import {
+  handleRiderOnboarding,
+  isInRiderOnboarding,
+  isRiderApplyCommand,
+  startRiderOnboarding,
+} from "../services/rider-onboarding.js";
+import {
+  handleSellerOnboarding,
+  isInSellerOnboarding,
+  isSellerApplyCommand,
+  startSellerOnboarding,
+} from "../services/seller-onboarding.js";
 
 const RESET_KEYWORDS = new Set(["menu", "start", "habari"]);
 const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
@@ -45,6 +83,19 @@ const CATALOG_ALIASES = new Set(["catalogue", "catalog", "shop", "browse"]);
 function parseNumericChoice(text) {
   const match = text.trim().match(/^(\d{1,2})$/);
   return match ? Number(match[1]) : null;
+}
+
+/** Buyer product photo for stock match (not ID docs / non-images). */
+function looksLikeBuyerProductPhoto(mediaMimetype, text = "") {
+  const mime = String(mediaMimetype || "").toLowerCase();
+  if (mime && !mime.startsWith("image/")) return false;
+  const caption = String(text || "").toLowerCase();
+  if (/\b(id|passport|kra|license|national id)\b/.test(caption)) return false;
+  return true;
+}
+
+function looksLikeVoiceNote(mediaMimetype) {
+  return looksLikeVoiceNoteMime(mediaMimetype);
 }
 
 function extractQuotedText(payload) {
@@ -107,13 +158,62 @@ function extractAlbumId(payload) {
 function extractMedia(payload) {
   const media = payload?.media || payload?._data?.media || null;
   const mediaError = media?.error || payload?._data?.media?.error || null;
+  const type = String(
+    payload?.type || payload?._data?.type || payload?._data?.message?.type || ""
+  ).toLowerCase();
+  const rawMime = String(media?.mimetype || media?.mimeType || "");
+  const typeLooksVoice = /\b(ptt|audio|voice|ogg)\b/.test(type) || type.includes("ptt");
+  const mediaMimetype = rawMime || (typeLooksVoice ? "audio/ogg" : "image/jpeg");
+  const isVoiceNote = typeLooksVoice || looksLikeVoiceNoteMime(mediaMimetype);
+  // WAHA reports voice length in whole seconds, and not on every engine. Left
+  // null when absent rather than defaulted -- a player showing 0:00 for every
+  // note is worse than one that reads the length off the stream itself.
+  const seconds = Number(
+    payload?._data?.message?.audioMessage?.seconds ??
+      payload?._data?.audioMessage?.seconds ??
+      payload?._data?.seconds ??
+      payload?.seconds
+  );
   return {
-    hasMedia: Boolean(payload?.hasMedia && (media?.url || payload?.id)),
+    hasMedia: Boolean((payload?.hasMedia || isVoiceNote) && (media?.url || payload?.id)),
     mediaUrl: media?.url || null,
-    mediaMimetype: media?.mimetype || media?.mimeType || "image/jpeg",
+    mediaMimetype,
     mediaFilename: media?.filename || null,
     mediaError,
+    isVoiceNote,
+    mediaDurationMs: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null,
   };
+}
+
+/** WAHA / WhatsApp live location pin (degrees). */
+export function extractWahaLocation(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const d = payload._data || {};
+  const loc = payload.location || d.location || d.msg?.location || {};
+  const lat = Number(
+    payload.latitude ??
+      payload.lat ??
+      loc.latitude ??
+      loc.lat ??
+      d.lat ??
+      d.latitude ??
+      loc.degreesLatitude ??
+      d.degreesLatitude
+  );
+  const lng = Number(
+    payload.longitude ??
+      payload.lng ??
+      loc.longitude ??
+      loc.lng ??
+      d.lng ??
+      d.longitude ??
+      loc.degreesLongitude ??
+      d.degreesLongitude
+  );
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  if (lat === 0 && lng === 0) return null;
+  return { lat, lng };
 }
 
 /** Album container messages have no real file — skip them; individual photos follow separately. */
@@ -134,8 +234,10 @@ export function parseWahaMessage(body) {
 
   const text = String(payload.body || "").trim();
   const mediaInfo = extractMedia(payload);
+  const location = extractWahaLocation(payload);
   const hasProductCard = Boolean(extractWahaProductMessage(payload));
-  if (!text && !mediaInfo.hasMedia && !hasProductCard) return null;
+  const hasNativeCart = Boolean(extractWahaOrderCart(payload));
+  if (!text && !mediaInfo.hasMedia && !hasProductCard && !hasNativeCart && !location) return null;
   if (isIgnorableChat(payload.from) || isIgnorableChat(payload.to)) return null;
 
   const quotedText = extractQuotedText(payload);
@@ -155,6 +257,7 @@ export function parseWahaMessage(body) {
       quotedText,
       session: body.session || config.waha.session,
       rawPayload: payload,
+      location,
       ...mediaInfo,
     };
   }
@@ -175,46 +278,48 @@ export function parseWahaMessage(body) {
     combinedText,
     session: body.session || config.waha.session,
     rawPayload: payload,
+    location,
     ...mediaInfo,
     ...meta,
   };
 }
 
-async function tryProductSearch(customerKey, text) {
-  if (isCasualGreeting(text)) return false;
-
-  const routed = await resolveProductQuery(text);
-  if (routed.action !== "none") return false;
-
-  const searchText = normalizeShopperQuery(text);
-  const products = await searchProducts({
-    keywords: searchText,
-    fulfillment: "store",
-    scope: "local",
-    limit: 4,
+/**
+ * After Sokoni Plug replies, attach a numbered picker so *1* / *2* still orders.
+ * Hydrates full catalog rows from product ids returned by tools.
+ */
+async function sendPlugProductPicker(customerKey, products) {
+  if (!products?.length) return;
+  const { getProductById } = await import("../services/catalog.js");
+  const full = [];
+  for (const p of products.slice(0, 4)) {
+    const row = p?.id ? await getProductById(p.id) : null;
+    if (row) full.push(row);
+  }
+  if (!full.length) return;
+  await sendNumberedProductList(customerKey, full, {
+    title: "Pick a number to view & order:",
   });
-  if (products.length === 0) return false;
-
-  const isProductIntent =
-    /want|looking for|need|show me|send|get|buy|order|recommend|product card|card again/i.test(searchText) ||
-    /tv|phone|tablet|laptop|fridge|washing|headphone|smart|hisense|samsung|redmi|infinix|simu|perfume|mafuta|sauti|spika/i.test(
-      searchText
-    ) ||
-    /nataka|nipee|nipe|chini ya|bei/i.test(String(text || "").toLowerCase());
-
-  if (!isProductIntent && products.length > 1) return false;
-
-  await sendNumberedProductList(customerKey, products, { title: "Here's what I found:" });
-  return true;
 }
 
 function isProductMenuChoice(text) {
   return /^[123]$/.test(String(text || "").trim());
 }
 
-async function handleActiveProductMenu(customerKey, text) {
+async function handleActiveProductMenu(customerKey, text, { location = null } = {}) {
   const menuState = getMenuState(customerKey);
   if (menuState?.type !== "product" || !menuState.productId) return false;
+
+  // Checkout already in progress — never restart "Order" from this menu.
+  const pending = getPendingOrder(customerKey);
+  if (
+    pending &&
+    ["location", "confirm_fees", "contact", "awaiting_delivery_location", "awaiting_customer_details"].includes(
+      String(pending.step || "")
+    )
+  ) {
+    return tryHandlePendingOrder(customerKey, text, { location });
+  }
 
   const choice = parseNumericChoice(text);
   if (!choice || !menuState.options?.[choice - 1]) return false;
@@ -240,16 +345,191 @@ export async function handleIncomingMessage(
     mediaMimetype = null,
     messageId = null,
     wahaSession = null,
+    location = null,
+    rawPayload = null,
   } = {}
 ) {
+  // If still @lid with no phone, try WAHA lids API once more
+  if ((!phone || !String(phone).replace(/\D/g, "")) && String(customerKey || "").includes("@lid")) {
+    try {
+      const resolved = await resolveWahaLidToPhone(customerKey, wahaSession);
+      if (resolved) phone = normalizeKenyaPhone(resolved) || resolved;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const bossHit = checkIfBoss(phone || customerKey, config.admin.phones || []);
+  if (bossHit && phone) {
+    tryRegisterAdminFromMessage(customerKey, phone, text);
+    registerAdminChatId(customerKey, phone);
+  }
+
   setCustomerMeta(customerKey, { chatId, displayName, phone });
   registerContact(customerKey, { chatId, displayName, phone });
+
+  // Boss / staff code interceptor BEFORE any AI/RAG path (hardwired last-9 + ADMIN_PHONES)
+  try {
+    const { tryBossIntercept } = await import("../services/boss-intercept.js");
+    const hit = await tryBossIntercept({ phone, customerKey, text, chatId });
+    if (hit?.handled && hit.reply) {
+      return sendText(customerKey, hit.reply);
+    }
+  } catch (err) {
+    console.warn("[webhook] boss interceptor:", err.message);
+  }
+
+  // Boss !ban-user — block non-admin senders before AI / commerce
+  if (!isAdminSender(customerKey, phone) && !bossHit) {
+    try {
+      const digits = String(phone || "").replace(/\D/g, "");
+      const meta = getCustomerMeta(customerKey);
+      const alt = digits.length >= 9 ? getCustomerMeta(`${digits}@c.us`) : null;
+      if (meta?.banned || alt?.banned) {
+        await sendText(
+          customerKey,
+          "Your Sokoni access is restricted. Email *support@sokonimall.com* if you think this is a mistake."
+        );
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] ban check skipped:", err.message);
+    }
+  }
+
+  // Per-user rate limit (max ~10 msgs/min) — spam bypasses LLM with static reply
+  try {
+    const { checkWhatsAppUserRateLimit } = await import("../middleware/wa-user-rate-limit.js");
+    const rate = checkWhatsAppUserRateLimit(customerKey, phone);
+    if (!rate.allowed) {
+      await sendText(customerKey, rate.message || "⏳ Please slow down and try again shortly.");
+      return;
+    }
+  } catch (err) {
+    console.warn("[webhook] user rate limit skipped:", err.message);
+  }
+
+  // MAS Phase 1: shadow security agents (never blocks unless MAS_ENABLE_MODERATION_LIVE)
+  try {
+    const { shadowInboundText, tryMasModerationGate } = await import("../services/mas/index.js");
+    shadowInboundText(String(combinedText || text || "").slice(0, 4000), {
+      customerKey,
+      channel: "whatsapp",
+    });
+    const gate = await tryMasModerationGate(String(text || "").slice(0, 2000));
+    if (gate.blocked) {
+      await sendText(
+        customerKey,
+        "That message couldn't be processed for safety reasons. Ask about Sokoni orders, stock, or delivery — or type *menu*."
+      );
+      return;
+    }
+  } catch (err) {
+    console.warn("[webhook] MAS shadow/moderation skipped:", err.message);
+  }
+
+  try {
+    await hydrateSessionFromDb(customerKey, phone);
+  } catch {
+    /* fail-soft */
+  }
+
+  // Mini-CRM: intent tag + last inbound (Meta 24h window). Assign humans for complaints / explicit handoff.
+  try {
+    const adminish = bossHit || isAdminSender(customerKey, phone);
+    if (!adminish) {
+      const { recordInbound, assignAgent } = await import("../services/whatsapp-crm.js");
+      const spokenOrText = String(combinedText || text || "").trim();
+      const crm = recordInbound({
+        customerKey,
+        text: spokenOrText,
+        displayName,
+        phone,
+        chatId,
+      });
+      if (crm.intent?.assignHuman) {
+        await assignAgent({
+          customerKey,
+          chatId,
+          displayName,
+          phone,
+          lastMessage: spokenOrText,
+          reason: crm.intent.intent,
+          priority: crm.intent.intent === "complaint" ? "high" : "normal",
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[webhook] crm inbound skipped:", err.message);
+  }
+
+  // Persist seller phone ↔ chatId early (critical for WhatsApp @lid replies).
+  if (phone) {
+    try {
+      const { attachSellerWhatsAppChat, findSupplierByPhone } = await import(
+        "../services/suppliers.js"
+      );
+      const seller = findSupplierByPhone(phone);
+      if (seller?.phone) attachSellerWhatsAppChat(seller.phone, customerKey);
+    } catch (err) {
+      console.warn("[webhook] seller chat link skipped:", err.message);
+    }
+  }
 
   const normalized = text.toLowerCase().trim();
 
   if (isInPickupOnboarding(customerKey)) {
     const handled = await handlePickupOnboarding(customerKey, text, { phone });
     if (handled) return;
+  }
+
+  // Rider application in progress — consumes text AND document photos, so it
+  // must run before the buyer photo/catalog paths steal the media.
+  if (isInRiderOnboarding(customerKey)) {
+    const handled = await handleRiderOnboarding(customerKey, text, {
+      phone,
+      hasMedia,
+      mediaUrl,
+      mediaMimetype,
+      messageId,
+      chatId,
+      session: wahaSession,
+      location,
+    });
+    if (handled) return;
+  }
+
+  if (isRiderApplyCommand(text)) {
+    await startRiderOnboarding(customerKey, { phone });
+    return;
+  }
+
+  // Seller signup in chat (replaces the supplier-programme flow).
+  if (isInSellerOnboarding(customerKey)) {
+    const handled = await handleSellerOnboarding(customerKey, text, { phone, location });
+    if (handled) return;
+  }
+
+  if (isSellerApplyCommand(text)) {
+    await startSellerOnboarding(customerKey, { phone });
+    return;
+  }
+
+  // A bare "submit" or "confirm" with no flow open.
+  //
+  // This reached the shopping agent, which searched the catalogue for a
+  // product called "Submit" and told the applicant it could not find one.
+  // Whatever lost their draft, answering a confirmation word with a product
+  // search is the wrong reply -- say what happened and how to get going
+  // again.
+  if (isOrphanSubmitWord(text) && !hasMedia) {
+    await sendText(
+      customerKey,
+      `There's nothing waiting to be submitted — your application isn't open any more.\n\n` +
+        `Reply *RIDER APPLY* to start a boda application, or *SELL* to open a shop.\n\n` +
+        `You can also apply online:\n${config.publicSiteUrl || "https://sokonimall.com"}/boda/apply.html`
+    );
+    return;
   }
 
   if (isInSupplierOnboarding(customerKey)) {
@@ -268,9 +548,111 @@ export async function handleIncomingMessage(
   if (await tryPickupContinueFromRef(customerKey, combinedText, { phone })) return;
   if (await trySupplierContinueFromRef(customerKey, combinedText, { phone })) return;
 
+  // Voice note → Whisper STT (EN/SW hint) → continue as text (phone = thread_id).
+  if (
+    hasMedia &&
+    looksLikeVoiceNote(mediaMimetype) &&
+    !String(text || "").trim()
+  ) {
+    try {
+      const { downloadWahaMedia } = await import("../services/whatsapp.js");
+      const { transcribeWhatsAppAudio } = await import("../services/commerce-ops.js");
+      const { detectSpeechLanguageHint, prefersKiswahiliReply } = await import(
+        "../services/shopper-language.js"
+      );
+      const buffer = await downloadWahaMedia(mediaUrl, {
+        messageId,
+        chatId,
+        session: wahaSession,
+        mimetype: mediaMimetype,
+      });
+      const hist = getSession(customerKey)?.history || [];
+      const recentText = hist
+        .slice(-4)
+        .map((m) => m.content)
+        .filter(Boolean)
+        .join(" ");
+      const languageHint = detectSpeechLanguageHint(recentText) || detectSpeechLanguageHint(quotedText);
+      const stt = await transcribeWhatsAppAudio({
+        buffer,
+        mimetype: mediaMimetype,
+        languageHint,
+      });
+      if (stt.ok && stt.text) {
+        const spoken = String(stt.text).trim();
+        // Keep original transcript for the LLM; catalog search still normalizes internally.
+        if (prefersKiswahiliReply(spoken) || languageHint === "sw") {
+          setCustomerMeta(customerKey, { preferKiswahiliReply: true, lastVoiceLang: stt.language || "sw" });
+        } else {
+          setCustomerMeta(customerKey, { lastVoiceLang: stt.language || "en" });
+        }
+
+        // Staff / Boss voice → code interceptor (before shopper AI)
+        try {
+          const adminish =
+            isAdminSender(customerKey, phone) ||
+            Boolean(await (await import("../services/staff-roles.js")).resolveStaffRole(phone));
+          if (adminish) {
+            const { tryBossIntercept } = await import("../services/boss-intercept.js");
+            const hit = await tryBossIntercept({
+              phone,
+              customerKey,
+              text: spoken,
+              chatId,
+            });
+            if (hit?.handled && hit.reply) {
+              await sendText(customerKey, hit.reply);
+              return;
+            }
+            if (containsAdminCommand(spoken) || /^(admin|orders?)\b/i.test(spoken)) {
+              const { runAdminCommand } = await import("../services/admin.js");
+              await runAdminCommand(customerKey, spoken, quotedText);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("[webhook] admin voice route skipped:", err.message);
+        }
+
+        return handleIncomingMessage(customerKey, spoken, {
+          quotedText,
+          combinedText: spoken,
+          displayName,
+          phone,
+          chatId,
+          hasMedia: false,
+          messageId,
+          wahaSession,
+        });
+      }
+      await sendText(
+        customerKey,
+        "I couldn't hear that voice note clearly — type your request (e.g. *viatu size 42 under 3000*)."
+      );
+      return;
+    } catch (err) {
+      console.warn("[webhook] voice stt skipped:", err.message);
+    }
+  }
+
+  // Sokoni boda fleet: ACCEPT / PICKUP / CONFIRM — must beat role menus
+  // ("Pick up SKN-…" used to match pickup-point apply via /^pickup\b/).
+  {
+    try {
+      const { tryHandleBodaFleetMessage } = await import("../services/boda-fleet.js");
+      if (await tryHandleBodaFleetMessage(customerKey, text, { phone, location })) return;
+    } catch (err) {
+      console.warn("[webhook] boda fleet skipped:", err.message);
+    }
+  }
+
   if (await tryRoleMenu(customerKey, text, { phone })) return;
 
-  if (await handleReviewReply(customerKey, text)) return;
+  {
+    const { handleRateCommand, handleReviewReply } = await import("../services/reviews.js");
+    if (await handleRateCommand(customerKey, text, { phone })) return;
+    if (await handleReviewReply(customerKey, text)) return;
+  }
 
   if (/^(pay|retry|stk|lipa)\b/i.test(normalized)) {
     const { findAwaitingPaymentOrderForCustomer, getOrder } = await import("../services/orders.js");
@@ -291,6 +673,10 @@ export async function handleIncomingMessage(
       return sendText(customerKey, formatPrepaidCheckoutPrompt(order));
     }
     const result = await initiateMpesaCheckout(order, { phone: order.phone || phone });
+    if (result.method === "shipping_blocked" || result.cancelled) {
+      // Buyer already notified by shipping-gate cancel messages.
+      return;
+    }
     const prompt = formatPrepaidCheckoutPrompt(getOrder(order.id) || order);
     if (result.ok) return sendText(customerKey, prompt);
     return sendText(
@@ -304,6 +690,71 @@ export async function handleIncomingMessage(
     return handleCustomerPaidClaim(customerKey, text, phone);
   }
 
+  // ADMIN_TAKE_OVER: silent relay to ops (must beat DISPATCH/YES/bot menus).
+  {
+    const { tryRelayAdminTakeOver } = await import("../services/communication-hub.js");
+    if (await tryRelayAdminTakeOver(customerKey, text, { phone })) return;
+  }
+
+  // Order-state bus: DISPATCH / YES / HELP (before generic track-by-id).
+  {
+    const { tryHandleWaDeliveryConfirm } = await import("../services/wa-delivery-confirm.js");
+    if (await tryHandleWaDeliveryConfirm(customerKey, text, { phone })) return;
+  }
+
+  // Seller upcountry waybill: WAYBILL SKN-#### Courier Tracking (+ optional media)
+  {
+    try {
+      const { tryHandleSellerWaybillMessage } = await import("../services/upcountry-shipments.js");
+      if (
+        await tryHandleSellerWaybillMessage(customerKey, text, {
+          phone,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] waybill handler skipped:", err.message);
+    }
+  }
+
+  // Waybill pre-shipment photo follow-ups (media-only while session open)
+  if (hasMedia) {
+    try {
+      const { tryHandleWaybillEvidencePhoto } = await import("../services/upcountry-shipments.js");
+      if (
+        await tryHandleWaybillEvidencePhoto(customerKey, {
+          hasMedia,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+          phone,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] waybill photo skipped:", err.message);
+    }
+  }
+
+  // Seller partial escrow refund: PARTIAL_REFUND SKN-#### amount
+  {
+    try {
+      const { tryHandlePartialRefundMessage } = await import("../services/partial-escrow-refund.js");
+      if (await tryHandlePartialRefundMessage(customerKey, text, { phone })) return;
+    } catch (err) {
+      console.warn("[webhook] partial refund skipped:", err.message);
+    }
+  }
+
   // Customers must never see admin console
   if (!requireAdminSender(customerKey, phone)) {
     if (/^admin\b/i.test(normalized) || /^#help\b/i.test(text.trim())) {
@@ -315,31 +766,90 @@ export async function handleIncomingMessage(
   }
 
   // Track always works — even during human handoff (admin may have replied manually)
-  const orderIdMatch =
-    !containsAdminCommand(text) &&
-    !isAdminSender(customerKey, phone) &&
-    text.trim().match(/\bSK-?(\d{3,})\b/i);
-  if (orderIdMatch) {
-    return sendOrderStatus(customerKey, `SK-${orderIdMatch[1]}`, phone);
+  if (!containsAdminCommand(text) && !isAdminSender(customerKey, phone)) {
+    const { extractOrderIdFromText } = await import("../services/orders.js");
+    const trackId = extractOrderIdFromText(text.trim());
+    if (trackId) {
+      return sendOrderStatus(customerKey, trackId, phone);
+    }
   }
   if (
+    isWhereIsMyOrder(normalized) ||
     /^track\b/i.test(normalized) ||
     normalized === "track order" ||
     normalized === "my order" ||
-    normalized === "my orders"
+    normalized === "my orders" ||
+    // Payment receipt tells buyers to reply "Status" — keep that promise.
+    normalized === "status" ||
+    normalized === "order status"
   ) {
     console.log("[track] request from", customerKey, phone || "(no phone)");
     const { sendTrackOrderMenu } = await import("../services/menu.js");
     return sendTrackOrderMenu(customerKey, phone);
   }
 
-  // Human handoff — bot stays silent except menu / track (handled above)
+  // Numbered menu replies (1, 2, 3…) — before handoff silence swallows them.
+  if (await tryNumberedMenuReply(customerKey, text, { phone })) return;
+
+  // Fulfillment disputes MUST run even during human handoff — otherwise seller/admin
+  // alerts never fire once ADMIN_TAKE_OVER is set, and text complaints are swallowed.
+  if (!isAdminSender(customerKey, phone) && String(combinedText || text || "").trim()) {
+    try {
+      const { tryHandleFulfillmentDispute } = await import("../services/dispute-protocol.js");
+      if (await tryHandleFulfillmentDispute(customerKey, combinedText || text, { phone })) {
+        if (hasMedia) {
+          try {
+            const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+            await tryHandleDisputeEvidencePhoto(customerKey, {
+              hasMedia,
+              mediaUrl,
+              mediaMimetype,
+              messageId,
+              chatId,
+              session: wahaSession,
+              text: combinedText || text,
+              phone,
+            });
+          } catch (err) {
+            console.warn("[webhook] dispute evidence after open skipped:", err.message);
+          }
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute protocol skipped:", err.message);
+    }
+  }
+
+  // Human handoff — bot stays silent except menu / track / disputes (handled above).
+  // Exception: dispute evidence photos must still attach (not silent-drop / not catalog search).
   if (isHumanHandoff(customerKey)) {
     if (normalized === "menu") {
       clearHumanHandoff(customerKey);
       return sendWelcome(customerKey);
     }
-    return handleCustomerWhileHandoff(customerKey);
+    if (hasMedia) {
+      try {
+        const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+        if (
+          await tryHandleDisputeEvidencePhoto(customerKey, {
+            hasMedia,
+            mediaUrl,
+            mediaMimetype,
+            messageId,
+            chatId,
+            session: wahaSession,
+            text: combinedText || text,
+            phone,
+          })
+        ) {
+          return;
+        }
+      } catch (err) {
+        console.warn("[webhook] handoff dispute evidence skipped:", err.message);
+      }
+    }
+    return handleCustomerWhileHandoff(customerKey, combinedText || text);
   }
 
   if (
@@ -365,7 +875,34 @@ export async function handleIncomingMessage(
     return sendWelcome(customerKey);
   }
 
+  // Dispute evidence photos BEFORE automations + catalog search (stateful routing).
+  if (hasMedia && !isAdminSender(customerKey, phone)) {
+    try {
+      const { tryHandleDisputeEvidencePhoto } = await import("../services/dispute-protocol.js");
+      if (
+        await tryHandleDisputeEvidencePhoto(customerKey, {
+          hasMedia,
+          mediaUrl,
+          mediaMimetype,
+          messageId,
+          chatId,
+          session: wahaSession,
+          text: combinedText || text,
+          phone,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      console.warn("[webhook] dispute evidence skipped:", err.message);
+    }
+  }
+
+  // Fulfillment disputes already handled earlier (before handoff). Soft automations next.
+
   if (await tryCustomerAutomation(customerKey, text, { phone, displayName })) return;
+
+  if (await handleSellerWalletMessage(customerKey, text, { phone })) return;
 
   if (/^(shop international|international shopping|🌍)$/i.test(normalized) || normalized === "international") {
     const { sendMainMenu } = await import("../services/menu.js");
@@ -374,6 +911,22 @@ export async function handleIncomingMessage(
       "Sokoni Mall is *100% local & prepaid* — brand new and pre-loved items from Kenya sellers only."
     );
     return sendMainMenu(customerKey);
+  }
+
+  try {
+    const { startNativeWhatsAppCart, extractWahaOrderCart } = await import("../services/whatsapp-native-cart.js");
+    if (extractWahaOrderCart(rawPayload) && (await startNativeWhatsAppCart(customerKey, rawPayload))) {
+      return;
+    }
+  } catch (err) {
+    console.warn("[webhook] native cart skipped:", err.message);
+  }
+
+  try {
+    const { tryHandleWaitlistAsk } = await import("../services/product-waitlist.js");
+    if (await tryHandleWaitlistAsk(customerKey, combinedText || text, { phone })) return;
+  } catch (err) {
+    console.warn("[webhook] waitlist skipped:", err.message);
   }
 
   if (normalized === "cart" || normalized === "my cart" || normalized === "my cart?") {
@@ -388,6 +941,64 @@ export async function handleIncomingMessage(
     return changeOrder(customerKey);
   }
 
+  // Website bag handoff — BEFORE AI / product pickers (must set pendingCart)
+  if (
+    /SOKONI_CART/i.test(combinedText) ||
+    /NEW SOKONI CART/i.test(combinedText) ||
+    /\[SKU:[^\]]+\]/i.test(combinedText)
+  ) {
+    if (await startCartFromHandoff(customerKey, combinedText)) return;
+  }
+
+  // Product photo → stock match must beat stuck checkout.
+  // Dispute evidence already handled earlier; image-search also hard-gates disputes.
+  if (hasMedia && !isInSupplierOnboarding(customerKey) && looksLikeBuyerProductPhoto(mediaMimetype, combinedText || text)) {
+    const hadCheckout = Boolean(getPendingCart(customerKey) || getPendingOrder(customerKey));
+    if (hadCheckout) {
+      clearPendingCart(customerKey);
+      clearPendingOrder(customerKey);
+      await sendText(
+        customerKey,
+        "Paused checkout — matching your photo instead. (*menu* to order again anytime.)"
+      );
+    }
+    try {
+      const { tryHandleBuyerImageSearch } = await import("../services/image-search.js");
+      const imageHit = await tryHandleBuyerImageSearch(customerKey, {
+        hasMedia,
+        mediaUrl,
+        mediaMimetype,
+        messageId,
+        chatId,
+        session: wahaSession,
+        text: combinedText || text,
+        phone,
+      });
+      if (imageHit) {
+        if (imageHit === true) return;
+        if (imageHit.handled) {
+          if (imageHit.reply) await sendText(customerKey, imageHit.reply);
+          if (imageHit.products?.length) await sendPlugProductPicker(customerKey, imageHit.products);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("[webhook] image search skipped:", err.message);
+    }
+  }
+
+  // Cart or single-item checkout awaiting delivery details — before AI
+  if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
+    const pendingHandledEarly = await tryHandlePendingOrder(customerKey, combinedText, { location });
+    if (pendingHandledEarly) return;
+  }
+
+  // Accepted structured offer → prepaid checkout at agreed buyer total
+  const payOfferMatch = text.match(/^pay[_\s-]?offer[_\s-]?(\d+)$/i);
+  if (payOfferMatch) {
+    return startPrepaidOrderFromOffer(customerKey, payOfferMatch[1]);
+  }
+
   if (await handleCatalogPagination(customerKey, text)) return;
 
   if (isCasualGreeting(text)) {
@@ -398,7 +1009,15 @@ export async function handleIncomingMessage(
     );
   }
 
-  if (await handleActiveProductMenu(customerKey, text)) return;
+  {
+    const pendingCheckout = getPendingOrder(customerKey);
+    const checkoutBusy =
+      pendingCheckout &&
+      ["location", "confirm_fees", "contact", "awaiting_delivery_location", "awaiting_customer_details"].includes(
+        String(pendingCheckout.step || "")
+      );
+    if (!checkoutBusy && (await handleActiveProductMenu(customerKey, text, { location }))) return;
+  }
 
   if (/product card|send (the )?card|card again|show (me )?(the )?(item|product)/i.test(normalized)) {
     const product = await findProductFromMessage(combinedText);
@@ -426,30 +1045,32 @@ export async function handleIncomingMessage(
     }
   }
 
-  const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText);
+  const pendingHandled = await tryHandlePendingOrder(customerKey, combinedText, { location });
   if (pendingHandled) return;
 
-  if (looksLikeDeliveryDetails(combinedText) && !getPendingOrder(customerKey)) {
+  if (
+    looksLikeDeliveryDetails(combinedText) &&
+    !getPendingOrder(customerKey) &&
+    !getPendingCart(customerKey)
+  ) {
     return sendText(
       customerKey,
       "I have your name and location 👍 To place the order, first pick an item (*menu* → category → reply with the number → *1* to order), then send those details again."
     );
   }
 
-  const websiteProduct = await findProductFromWebsiteMessage(combinedText);
-  if (websiteProduct) {
-    const { showProductActions } = await import("../services/menu.js");
-    return showProductActions(customerKey, websiteProduct.id);
+  // Never treat a cart handoff as a single-product website referral
+  if (!/SOKONI_CART/i.test(combinedText) && !/\[SKU:/i.test(combinedText)) {
+    const websiteProduct = await findProductFromWebsiteMessage(combinedText);
+    if (websiteProduct) {
+      const { showProductActions } = await import("../services/menu.js");
+      return showProductActions(customerKey, websiteProduct.id);
+    }
   }
 
   if (await handleCatalogPagination(customerKey, text)) return;
 
   if (await handleProductRouter(customerKey, text)) return;
-
-  const catalogRoute = await resolveProductQuery(text);
-  if (catalogRoute.action === "exact" || catalogRoute.action === "confirm") {
-    return;
-  }
 
   if (isPurchaseIntent(text)) {
     const session = getSession(customerKey);
@@ -462,7 +1083,7 @@ export async function handleIncomingMessage(
   const menuState = getMenuState(customerKey);
 
   if (menuState?.type === "product" && isProductMenuChoice(text)) {
-    return handleActiveProductMenu(customerKey, text);
+    return handleActiveProductMenu(customerKey, text, { location });
   }
 
   const choice = parseNumericChoice(text);
@@ -519,15 +1140,46 @@ export async function handleIncomingMessage(
     return sendHumanHandoff(customerKey, { chatId, displayName, phone, lastMessage: combinedText });
   }
 
-  if (await tryProductSearch(customerKey, combinedText)) return;
+  // Never let AI invent till / product-picker replies during cart checkout
+  if (getPendingCart(customerKey) || getPendingOrder(customerKey)) {
+    const pendingAgain = await tryHandlePendingOrder(customerKey, combinedText, { location });
+    if (pendingAgain) return;
+  }
 
-  const session = getSession(customerKey);
-  if (session.lastProductContext && catalogRoute.action !== "none") return;
-
+  // Web inbox reply. Deliberately the last handler before the agent: every
+  // other flow has already declined this message, so routing it to a chat
+  // thread cannot steal an order, a rider command, or a menu tap. It only
+  // fires when we pinged this chat about a thread in the last few minutes,
+  // or when the sender used the explicit R prefix.
   try {
-    const reply = await runAiAgent(customerKey, combinedText, phone);
-    if (!reply) return;
-    return sendText(customerKey, reply);
+    const { tryHandleInboxReply } = await import("../services/inbox-bridge.js");
+    if (await tryHandleInboxReply(customerKey, combinedText, { phone })) return;
+  } catch (err) {
+    console.warn("[webhook] inbox reply skipped:", err.message);
+  }
+
+  // Free-text shopping / site questions → Sokoni Plug (shared tools with web Ask).
+  try {
+    const agent = await runAiAgent(customerKey, combinedText, phone);
+    if (agent.handoff) {
+      return sendHumanHandoff(customerKey, {
+        chatId,
+        displayName,
+        phone,
+        lastMessage: combinedText,
+      });
+    }
+    if (!agent.reply) {
+      return sendText(
+        customerKey,
+        "Samahani, sikupata ulichomaanisha. Type *menu* to browse, or tell me what you're looking for."
+      );
+    }
+    await sendText(customerKey, agent.reply);
+    if (agent.products?.length) {
+      await sendPlugProductPicker(customerKey, agent.products);
+    }
+    return;
   } catch (err) {
     console.error("Unexpected reply error:", err.message);
     return sendText(customerKey, "Something went wrong. Type *menu* to browse products.");
@@ -535,15 +1187,74 @@ export async function handleIncomingMessage(
 }
 
 export async function handleWahaWebhook(body) {
+  // Compact sender log — exact WAHA fields (Meta Cloud shape differs; we use WAHA).
+  try {
+    const p = body?.payload || {};
+    console.log(
+      "[webhook] RAW SENDER:",
+      JSON.stringify({
+        event: body?.event,
+        from: p.from,
+        to: p.to,
+        fromMe: p.fromMe,
+        pushName: p.pushName,
+        senderPn: p._data?.senderPn || p.senderPn || null,
+        remoteJidAlt: p._data?.remoteJidAlt || p.remoteJidAlt || null,
+        bodyPreview: String(p.body || "").slice(0, 80),
+      })
+    );
+  } catch {
+    /* ignore */
+  }
+
   const parsed = parseWahaMessage(body);
   if (!parsed) return;
 
-  if (parsed.direction === "outgoing") {
-    if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
-    return handleAdminOutgoing(parsed);
+  // Resolve @lid → real phone via WAHA lids API when missing
+  if (parsed.direction === "incoming" && parsed.customerKey?.includes("@lid") && !parsed.phone) {
+    try {
+      const resolved = await resolveWahaLidToPhone(parsed.customerKey, parsed.session);
+      if (resolved) {
+        parsed.phone = normalizeKenyaPhone(resolved) || resolved;
+        console.log("[webhook] PARSED SENDER NUMBER (lid→pn):", parsed.phone);
+      }
+    } catch (err) {
+      console.warn("[webhook] lid resolve:", err.message);
+    }
   }
 
-  if (shouldRouteIncomingAsAdmin(body, parsed)) {
+  if (parsed.direction === "incoming") {
+    console.log(
+      "[webhook] PARSED SENDER NUMBER:",
+      parsed.phone || "(empty)",
+      "chatId:",
+      parsed.customerKey,
+      "IS_BOSS?:",
+      checkIfBoss(parsed.phone || parsed.customerKey, config.admin.phones || [])
+    );
+  }
+
+  if (parsed.direction === "outgoing") {
+    if (isBotEcho(parsed.messageId, parsed.toChatId)) return;
+    return handleAdminOutgoing({
+      fromChatId: parsed.fromChatId,
+      toChatId: parsed.toChatId,
+      text: parsed.text,
+      quotedText: parsed.quotedText,
+      messageId: parsed.messageId,
+    });
+  }
+
+  // Idempotency: WAHA (or proxies) can redeliver the same inbound event.
+  {
+    const { claimInboundMessageId } = await import("../services/message-dedupe.js");
+    if (claimInboundMessageId(parsed.messageId)) {
+      console.log(`[webhook] duplicate blocked messageId=${parsed.messageId}`);
+      return;
+    }
+  }
+
+  if (await shouldRouteIncomingAsAdmin(body, parsed)) {
     const handled = await handleAdminIncoming({
       ...parsed,
       phone: parsed.phone || undefined,
@@ -551,18 +1262,67 @@ export async function handleWahaWebhook(body) {
     if (handled !== false) return handled;
   }
 
-  if (!parsed.text && !parsed.hasMedia) return;
+  if (isUnauthorizedAdminProbe(parsed.text || "")) {
+    try {
+      await sendText(parsed.customerKey, PUBLIC_HELP_REPLY);
+    } catch (err) {
+      console.warn("[webhook] help reply skipped:", err.message);
+    }
+    return;
+  }
 
-  return handleIncomingMessage(parsed.customerKey, parsed.text || "", {
-    quotedText: parsed.quotedText,
-    combinedText: parsed.combinedText || parsed.text || "",
-    displayName: parsed.displayName,
-    phone: parsed.phone,
-    chatId: parsed.chatId,
-    hasMedia: parsed.hasMedia,
-    mediaUrl: parsed.mediaUrl,
-    mediaMimetype: parsed.mediaMimetype,
-    messageId: parsed.messageId,
-    session: parsed.session,
+  if (!parsed.text && !parsed.hasMedia && !parsed.location && !extractWahaOrderCart(parsed.rawPayload)) return;
+
+  const runTurn = () =>
+    handleIncomingMessage(parsed.customerKey, parsed.text || "", {
+      quotedText: parsed.quotedText,
+      combinedText: parsed.combinedText || parsed.text || "",
+      displayName: parsed.displayName,
+      phone: parsed.phone,
+      chatId: parsed.chatId,
+      hasMedia: parsed.hasMedia,
+      mediaUrl: parsed.mediaUrl,
+      mediaMimetype: parsed.mediaMimetype,
+      messageId: parsed.messageId,
+      wahaSession: parsed.session,
+      location: parsed.location || null,
+      rawPayload: parsed.rawPayload || null,
+    });
+
+  const incomingVoiceNote =
+    parsed.isVoiceNote ||
+    (parsed.hasMedia && looksLikeVoiceNoteMime(parsed.mediaMimetype));
+
+  // A voice note sent while a web chat is open belongs in that chat, not in
+  // the transcription path. Gated on the same short window as a text reply,
+  // so a note sent out of the blue still reaches the agent as before.
+  if (incomingVoiceNote && parsed.mediaUrl) {
+    try {
+      const { tryHandleInboxVoiceNote } = await import("../services/inbox-bridge.js");
+      const routed = await tryHandleInboxVoiceNote(parsed.customerKey, {
+        mediaUrl: parsed.mediaUrl,
+        mimetype: parsed.mediaMimetype,
+        durationMs: parsed.mediaDurationMs,
+      });
+      if (routed) return;
+    } catch (err) {
+      console.warn("[webhook] inbox voice note skipped:", err.message);
+    }
+  }
+  const wantsVoice =
+    incomingVoiceNote ||
+    isExplicitAudioRequest(parsed.text) ||
+    isExplicitAudioRequest(parsed.combinedText);
+  if (!wantsVoice) {
+    return runTurn();
+  }
+
+  return withVoiceReply(true, async () => {
+    try {
+      return await runTurn();
+    } finally {
+      const result = await flushVoiceReply(parsed.customerKey);
+      console.log("[voice-reply]", result?.ok ? "sent" : `skip:${result?.reason || "unknown"}`);
+    }
   });
 }

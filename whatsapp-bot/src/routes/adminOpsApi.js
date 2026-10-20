@@ -1,5 +1,5 @@
+import { clientError } from "../lib/public-error.js";
 import { Router } from "express";
-import { config } from "../config.js";
 import {
   getOpsStatus,
   pauseCatalog,
@@ -11,29 +11,27 @@ import {
   runDbSeed,
   updatePlatformFlags,
 } from "../services/catalog-ops.js";
+import { getWahaSessionStatus } from "../services/waha-session.js";
+import { requireAdminToken } from "../lib/admin-auth.js";
+import { listFlaggedMessages, resolveFlaggedMessage } from "../agents/flagged-store.js";
+import { listAgentActions, resolveAgentAction } from "../agents/agent-actions.js";
 
 const router = Router();
 
-function isAdminTokenValid(token) {
-  const expected =
-    process.env.ADMIN_SETUP_TOKEN ||
-    process.env.SUPPLIER_ADMIN_TOKEN ||
-    config.tiktok.setupToken ||
-    "";
-  return expected && token === expected;
-}
-
-function requireToken(req, res, next) {
-  if (!isAdminTokenValid(req.query.token)) {
-    return res.status(403).json({ error: "forbidden" });
-  }
-  next();
-}
-
-router.use(requireToken);
+router.use(requireAdminToken);
 
 router.get("/status", async (_req, res) => {
   res.json({ status: await getOpsStatus() });
+});
+
+/** GET /admin/ops/waha — WhatsApp session link status (no QR / pairing codes). */
+router.get("/waha", async (_req, res) => {
+  try {
+    const waha = await getWahaSessionStatus();
+    res.json({ ok: true, waha });
+  } catch (err) {
+    res.status(500).json(clientError(err));
+  }
 });
 
 router.post("/catalog/pause", async (req, res) => {
@@ -51,7 +49,7 @@ router.post("/catalog/sync", async (_req, res) => {
     const status = await syncPublicCatalog();
     res.json({ ok: true, status });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -60,7 +58,7 @@ router.post("/catalog/publish", async (_req, res) => {
     const status = await publishCatalogToGit();
     res.json({ ok: true, status });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -81,7 +79,64 @@ router.post("/db/migrate", async (_req, res) => {
     const result = await runDbMigrate();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
+  }
+});
+
+router.get("/flagged-messages", async (req, res) => {
+  try {
+    const result = await listFlaggedMessages(req.query.status);
+    if (result.error === "invalid_status") return res.status(400).json(result);
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err));
+  }
+});
+
+router.post("/flagged-messages/:id/resolve", async (req, res) => {
+  try {
+    const result = await resolveFlaggedMessage(req.params.id, req.body?.action, req.body?.notes);
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (result.error === "unsupported_action" || result.error === "invalid_flag" || result.error === "already_resolved") {
+      return res.status(400).json(result);
+    }
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err));
+  }
+});
+
+router.get("/agent-actions", async (req, res) => {
+  try {
+    const result = await listAgentActions(req.query.status);
+    if (result.error === "invalid_status") return res.status(400).json(result);
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err));
+  }
+});
+
+router.post("/agent-actions/:id/resolve", async (req, res) => {
+  try {
+    const result = await resolveAgentAction(req.params.id, req.body?.action || req.body?.decision);
+    if (result.error === "not_found") return res.status(404).json(result);
+    if (
+      result.error === "unsupported_action" ||
+      result.error === "invalid_action" ||
+      result.error === "already_resolved"
+    ) {
+      return res.status(400).json(result);
+    }
+    if (result.error === "expired") return res.status(409).json(result);
+    if (result.error === "database_not_configured") return res.status(503).json(result);
+    const closed = result.action?.status === "FAILED" || result.action?.status === "FAILED_DUE_TO_DISPUTE";
+    const status = closed ? 409 : 200;
+    res.status(status).json(result);
+  } catch (err) {
+    res.status(500).json(clientError(err));
   }
 });
 
@@ -90,7 +145,7 @@ router.post("/db/seed", async (req, res) => {
     const result = await runDbSeed(Boolean(req.body?.dryRun));
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json(clientError(err));
   }
 });
 

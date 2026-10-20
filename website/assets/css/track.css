@@ -1,0 +1,218 @@
+/* Phase 6 — SKN-#### / SK-#### tracking stepper — Depop matte black / scarlet */
+
+.track-panel {
+  --track-line: #27272a;
+  --track-dot-pending: #3f3f46;
+  --track-dot-active: #ff2300;
+  --track-dot-done: #10b981;
+  color: #fff;
+}
+
+.track-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff2300;
+  margin: 0 0 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.track-order-id {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.track-product {
+  font-weight: 600;
+  margin: 0.5rem 0 0;
+  color: #e4e4e7;
+}
+
+.track-price {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #ff2300;
+  margin: 0.35rem 0 0;
+}
+
+.track-meta,
+.track-rider,
+.track-updated {
+  font-size: 0.875rem;
+  color: #a1a1aa;
+  margin: 0.35rem 0 0;
+}
+
+.track-courier {
+  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  background: rgba(255, 35, 0, 0.08);
+  border: 1px solid rgba(255, 35, 0, 0.22);
+  color: #e4e4e7;
+}
+
+.track-courier p {
+  margin: 0.15rem 0;
+}
+
+.track-stepper {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.track-step {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  gap: 0.75rem;
+  position: relative;
+  padding-bottom: 1.25rem;
+}
+
+.track-step:last-child {
+  padding-bottom: 0;
+}
+
+.track-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 0.5625rem;
+  top: 1.125rem;
+  bottom: 0;
+  width: 2px;
+  background: var(--track-line);
+}
+
+.track-step--done:not(:last-child)::before {
+  background: var(--track-dot-done);
+}
+
+.track-step-dot {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  margin-top: 0.15rem;
+  border: 2px solid var(--track-dot-pending);
+  background: #000;
+  position: relative;
+  z-index: 1;
+}
+
+.track-step--active .track-step-dot {
+  border-color: var(--track-dot-active);
+  background: var(--track-dot-active);
+  box-shadow: 0 0 0 4px rgba(255, 35, 0, 0.2);
+}
+
+.track-step--done .track-step-dot {
+  border-color: var(--track-dot-done);
+  background: var(--track-dot-done);
+}
+
+.track-step--done .track-step-dot::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+
+.track-step-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.35;
+  color: #e4e4e7;
+}
+
+.track-step--active .track-step-label {
+  color: #fff;
+}
+
+.track-step--pending .track-step-label {
+  color: #71717a;
+}
+
+.track-step-hint {
+  font-size: 0.75rem;
+  color: #ff2300;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+}
+
+.track-history {
+  font-size: 0.8125rem;
+  border-top: 1px solid var(--track-line);
+  padding-top: 0.75rem;
+}
+
+.track-history summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #a1a1aa;
+}
+
+.track-history ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.track-history li {
+  padding: 0.35rem 0;
+  color: #a1a1aa;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+.track-history time {
+  margin-left: auto;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.track-pay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  border-radius: 9999px;
+  background: #ff2300;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.track-pay-btn:hover {
+  background: #d91e00;
+}
+
+.track-pay-btn--ghost {
+  background: #18181b;
+  border: 1px solid #27272a;
+  color: #e4e4e7;
+}
+
+.track-pay-btn--ghost:hover {
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track-pay-btn:hover {
+    transform: none;
+  }
+}

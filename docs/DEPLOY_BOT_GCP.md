@@ -10,6 +10,45 @@ The e2-micro has only **1 GB RAM**, so we:
 
 ---
 
+## GitHub Actions auto-deploy (required secrets)
+
+Workflow: `.github/workflows/bot-deploy.yml` runs on every `main` push that touches `whatsapp-bot/**`.
+
+In **GitHub → Settings → Secrets and variables → Actions**, set:
+
+| Secret | Example | Notes |
+|--------|---------|--------|
+| `VM_HOST` | `104.197.128.235` | Public IP of `sokoni-bot` (same as `bot.sokonimall.com` A record) |
+| `VM_USER` | `daviemuiruri3888` | Linux user that owns `~/sokoni` |
+| `VM_SSH_KEY` | `-----BEGIN … PRIVATE KEY-----` | Full private key; matching public key in `~/.ssh/authorized_keys` on the VM |
+| `GEMINI_API_KEY` | Google AI Studio key | Seller cover photo → listing draft (deploy writes it into VM `.env`) |
+
+Without `VM_*`, Bot Deploy fails immediately with `missing server host` / empty key.
+
+**Manual deploy (if Actions secrets are not set yet):**
+
+```bash
+# On the GCP VM (browser SSH is fine)
+cd ~/sokoni
+# Always deploy from origin/main (do not stay on a leftover feature branch)
+git fetch origin main
+git stash push -u -m "vm-pre-deploy-$(date +%s)" || true
+git checkout -B main origin/main
+SKIP_WAHA_DEPLOY=1 SKIP_CATALOG_PUBLISH=1 bash scripts/deploy-bot.sh
+curl -s https://bot.sokonimall.com/health
+```
+
+Useful env flags:
+- Bot deploy **skips WAHA by default** (avoids breaking a linked session). Use `FORCE_WAHA_DEPLOY=1` to recreate WAHA from `deploy-bot.sh`.
+- `SKIP_WAHA_DEPLOY=0` — also runs WAHA deploy (same as force for most cases).
+- `SKIP_CATALOG_PUBLISH=1` — do not try to commit/push local `products.json` (use when the VM branch has diverged).
+- `SOKONI_DEPLOY_REF=main` — ref to force-checkout (default `main`).
+- Prefer `bash scripts/deploy-waha.sh` when WhatsApp itself needs fixing (pins `2026.7.2` + live WA version).
+
+Website (`sokonimall.com`) deploys via **Cloudflare Workers Builds** on `main` — no VM secrets needed.
+
+---
+
 ## Phase A — Create the GCP VM
 
 1. Go to https://console.cloud.google.com → create or select a **project**.
@@ -88,8 +127,14 @@ WAHA_SESSION=default
 
 OPENAI_API_KEY=sk-or-v1-...your key...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=google/gemini-2.5-flash
-OPENAI_MODEL_FALLBACKS=openai/gpt-4o-mini,google/gemini-2.5-flash-lite,nvidia/nemotron-nano-9b-v2:free
+OPENAI_MODEL=openrouter/free
+OPENAI_MODEL_FALLBACKS=google/gemma-4-31b-it:free
+
+# Seller photos → listing draft (primary Gemini; keep krea as OpenRouter fallback)
+CATALOG_VISION_MODEL=google/gemini-2.5-flash
+CATALOG_VISION_FALLBACKS=google/gemini-2.0-flash-001,krea/krea-2-medium-turbo
+GEMINI_API_KEY=...your Google AI Studio key...
+GEMINI_VISION_MODEL=gemini-2.5-flash
 
 PORT=3001
 PUBLIC_SITE_URL=https://sokonimall.com
@@ -144,12 +189,20 @@ server {
     listen 80;
     server_name bot.sokonimall.com;
 
+    # Seller video + boda rider multipart docs (/api/riders/register).
+    # Below ~1m (nginx default) the browser shows "Failed to fetch" on 413.
+    # Also run: bash scripts/ensure-nginx-upload-limit.sh
+    client_max_body_size 25m;
+
     location / {
         proxy_pass http://localhost:3001;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+        proxy_connect_timeout 30s;
     }
 }
 ```
@@ -167,50 +220,50 @@ Test from your PC: `https://bot.sokonimall.com/health` → `{"status":"ok"}`
 
 ## Phase G — Connect WhatsApp (WAHA)
 
-```bash
-curl -X POST http://localhost:3000/api/sessions \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: sokoni-local-dev-key" \
-  -d '{
-    "name": "default",
-    "config": {
-      "noweb": { "store": { "enabled": true, "fullSync": false } },
-      "webhooks": [{ "url": "http://host.docker.internal:3001/webhook", "events": ["message.any"] }]
-    }
-  }'
-```
+Keep WAHA on **localhost:3000 only** (SSH tunnel / VM shell). Do **not** open port 3000 on the public internet, and never publish QR images or pairing codes on `bot.sokonimall.com`.
 
-Or run the helper after WAHA is up:
+Canonical flow on the GCP VM:
 
 ```bash
-bash scripts/configure-waha-session.sh
+cd ~/sokoni && git pull --rebase origin main
+
+# 1) Start pinned WAHA image + apply NOWEB store + webhook
+bash scripts/deploy-waha.sh
+
+# 2) If status is SCAN_QR_CODE (or after RESET), pair the phone
+bash scripts/waha-link-whatsapp.sh
+# Prefer pairing code (WhatsApp → Linked devices → Link with phone number)
+# Optional PNG is written to ~/sokoni/waha-qr.png — scp locally; do not commit
+
+# 3) Restart bot + verify
+bash scripts/deploy-bot.sh
+bash scripts/health-check.sh
 ```
 
-Get the QR. NOWEB prints it in logs — easiest:
+Expect `status: WORKING` from health-check. Public check (no secrets):
 
 ```bash
-docker logs $(docker ps -qf "ancestor=devlikeapro/waha:latest") 2>&1 | tail -40
+curl -s https://bot.sokonimall.com/health | python3 -m json.tool
+# wahaConfigured / wahaReachable / wahaLinked / wahaSessionStatus
 ```
 
-Scan the QR with the phone that owns **+254117422428** (Settings → Linked devices).
-
-Set the webhook (WAHA → bot, same machine) — usually done by `configure-waha-session.sh`:
+Token-protected detail (redacted phone):
 
 ```bash
-curl -X PUT http://localhost:3000/api/sessions/default \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: sokoni-local-dev-key" \
-  -d '{"config":{"webhooks":[{"url":"http://host.docker.internal:3001/webhook","events":["message.any"]}]}}'
+curl -s "https://bot.sokonimall.com/admin/ops/waha?token=$ADMIN_SETUP_TOKEN" | python3 -m json.tool
 ```
 
-**VM deploy (use `docker-compose`, not `docker compose` on this host):**
+Full reset (forces re-link):
 
 ```bash
-cd ~/sokoni && git pull origin main
-bash scripts/deploy-waha.sh    # starts WAHA + configures session/webhook
-bash scripts/deploy-bot.sh     # restarts pm2 even if WAHA step warns
-bash scripts/health-check.sh   # session must show WORKING
+RESET_WAHA_SESSION=1 bash scripts/waha-link-whatsapp.sh
 ```
+
+Image is pinned via `WAHA_IMAGE` / `docker-compose.waha.yml` (`latest-2026.7.2`).  
+`2026.6.2` ships a stale WhatsApp Web client (`2.3000.1035920091`) that loops `STARTING → Connection Failure` (WAHA #2191).  
+Scripts resolve the container by compose project `sokoni-waha`, not `ancestor=…:latest`.
+
+Use the same `WAHA_API_KEY` in `whatsapp-bot/.env` and when starting compose (`export WAHA_API_KEY=…` before `deploy-waha.sh`).
 
 Test: from another phone, send `menu` to +254117422428.
 

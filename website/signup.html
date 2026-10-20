@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sign up — Sokoni Mall</title>
+<meta name="description" content="Create a free Sokoni Mall account." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script>
+  (function () {
+    var q = window.location.search || "";
+    var params = new URLSearchParams(q);
+    params.set("modal", "signup");
+    window.location.replace("login.html?" + params.toString());
+  })();
+</script>
+</head>
+<body style="background:#0c0c0c;color:#fff;font-family:system-ui,sans-serif;padding:2rem;">
+  <p>Opening sign up… <a href="login.html?modal=signup" style="color:#25D366">Continue</a></p>
+</body>
+</html>

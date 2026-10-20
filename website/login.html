@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Sokoni Mall — Buy, sell &amp; discover across Kenya</title>
+<meta name="description" content="Kenya's WhatsApp marketplace. Browse rare finds, ask Sokoni AI, then log in or create a free account." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { green: "#25D366", purple: "#1B1035", cream: "#FFF8F0" },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () { document.documentElement.classList.add("dark"); })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
+<link rel="stylesheet" href="assets/css/auth-landing.css" />
+</head>
+<body class="font-sans antialiased auth-landing has-depop-shell text-white" data-shell-page="profile">
+  <header class="auth-landing-header" aria-label="Sokoni Mall">
+    <div class="auth-header-row">
+      <a href="index.html" class="depop-logo">SOKONI<span class="depop-logo-dot">.</span></a>
+      <form class="auth-search" id="auth-landing-search" action="index.html" method="get" role="search">
+        <label class="sr-only" for="auth-search-input">Search Sokoni</label>
+        <input id="auth-search-input" name="q" type="search" placeholder='Search for "vintage Nike dunks"' autocomplete="off" />
+        <button type="submit">Search</button>
+      </form>
+      <nav class="auth-landing-nav" aria-label="Account">
+        <button type="button" class="auth-nav-link" data-auth-open="ask">✦ ASK AI</button>
+        <button type="button" class="auth-nav-link auth-nav-outline" data-auth-open="login">Log in</button>
+        <button type="button" class="auth-nav-link auth-nav-cta" data-auth-open="signup">Create Account</button>
+        <a href="suppliers/list.html" class="auth-nav-link auth-nav-outline">Sell now</a>
+      </nav>
+    </div>
+    <nav class="auth-subnav" aria-label="Browse categories">
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Women</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Men</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Sneakers</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Thrift &amp; Y2K</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Local Brands</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Tech</button>
+      <button type="button" class="auth-subnav-link" data-auth-open="signup">Sale</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="auth-hero-split" aria-label="Welcome">
+      <div>
+        <div class="auth-mode-toggle" id="auth-mode-toggle" role="tablist" aria-label="Buy, sell, or ride">
+          <button type="button" class="is-active" data-mode="buy" role="tab" aria-selected="true">Buy</button>
+          <button type="button" data-mode="sell" role="tab" aria-selected="false">Sell</button>
+          <button type="button" data-mode="ride" role="tab" aria-selected="false">Ride</button>
+        </div>
+        <div id="auth-hero-buy">
+          <h1>Buy preloved. Wear it your way.</h1>
+          <p class="auth-hero-lead">Together, we’re keeping Kenyan fashion circular — prepaid on WhatsApp with M-Pesa escrow.</p>
+          <div class="auth-hero-cta-row">
+            <button type="button" class="depop-btn-accent min-h-[48px] px-6" data-auth-open="signup">Shop now</button>
+            <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="ask">Ask AI ✦</button>
+          </div>
+        </div>
+        <div id="auth-hero-sell" hidden>
+          <h1>Sell from your phone. Get paid on M-Pesa.</h1>
+          <p class="auth-hero-lead">Snap, list, and take orders on WhatsApp — prepaid escrow until delivery is confirmed.</p>
+          <div class="auth-hero-cta-row">
+            <a href="suppliers/list.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Start selling</a>
+            <button type="button" class="depop-btn-ghost min-h-[48px] px-5" data-auth-open="signup">Create account</button>
+          </div>
+        </div>
+        <div id="auth-hero-ride" hidden>
+          <h1>Drive with Sokoni — turn every ride into M-Pesa income.</h1>
+          <p class="auth-hero-lead">Guaranteed prepaid jobs, ACCEPT / PICKUP / CONFIRM in chat, M-Pesa after delivery confirmation.</p>
+          <div class="auth-hero-cta-row">
+            <a href="boda/apply.html" class="depop-btn-accent min-h-[48px] px-6 inline-flex items-center">Apply to ride</a>
+            <a href="boda/index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center">How it works</a>
+          </div>
+        </div>
+        <div class="auth-stat-row" id="auth-stat-buy" aria-label="Why Sokoni">
+          <div class="auth-stat-card">
+            <strong>Live shop</strong>
+            <span>Fresh listings from independent sellers</span>
+          </div>
+          <div class="auth-stat-card">
+            <strong>New drops</strong>
+            <span>Thrift, streetwear, tech &amp; more</span>
+          </div>
+          <div class="auth-stat-card">
+            <strong>Buy safely</strong>
+            <span>Protected with M-Pesa escrow</span>
+          </div>
+        </div>
+        <div class="auth-stat-row" id="auth-stat-ride" hidden aria-label="Why ride with Sokoni">
+          <div class="auth-stat-card">
+            <strong>Guaranteed payouts</strong>
+            <span>Funds locked in escrow before you start moving</span>
+          </div>
+          <div class="auth-stat-card">
+            <strong>WhatsApp dispatch</strong>
+            <span>Accept jobs and enter OTPs directly in chat</span>
+          </div>
+          <div class="auth-stat-card">
+            <strong>~15-min cash out</strong>
+            <span>Fee rails to M-Pesa after delivery CONFIRM</span>
+          </div>
+        </div>
+      </div>
+      <div class="auth-hero-stack" aria-hidden="true">
+        <div class="auth-float-card auth-float-card--1">
+          <img src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="" width="600" height="800" />
+        </div>
+        <div class="auth-float-card auth-float-card--2">
+          <img src="https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="" width="600" height="800" />
+        </div>
+        <div class="auth-float-card auth-float-card--3">
+          <img src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="" width="600" height="800" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Buyer protection: the homepage hero carousel is behind the account gate,
+         so logged-out visitors get the escrow pitch here instead. -->
+    <section
+      class="auth-edit-banner auth-edit-banner--trust"
+      aria-roledescription="carousel"
+      aria-label="Buyer protection"
+    >
+      <ul class="auth-edit-slides" id="auth-trust-slides">
+        <li class="is-active">
+          <a class="auth-edit-slide-hit" href="faq.html#escrow">
+            <div class="auth-edit-copy">
+              <span class="auth-trust-badge">Zero-risk escrow</span>
+              <h2>Shop safely on Sokoni &mdash; 100% buyer protection.</h2>
+              <p>Your payment is held securely in Sokoni escrow until you inspect and accept your delivery.</p>
+              <span class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Learn how escrow works</span>
+            </div>
+            <div class="auth-edit-media">
+              <img src="assets/images/marketing/escrow-mpesa-security.jpg" alt="" width="1000" height="700" loading="lazy" />
+            </div>
+          </a>
+        </li>
+        <li>
+          <button type="button" class="auth-edit-slide-hit" data-auth-open="signup" aria-label="Safer than cash on delivery &mdash; create account">
+            <div class="auth-edit-copy">
+              <span class="auth-trust-badge">M-Pesa STK push</span>
+              <h2>Safer than cash on delivery.</h2>
+              <p>Pay by automated M-Pesa STK push. Sellers are only paid after your package is delivered and verified.</p>
+              <span class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop verified sellers</span>
+            </div>
+            <div class="auth-edit-media">
+              <img src="assets/images/marketing/trust-exchange-nairobi.jpg" alt="" width="1000" height="700" loading="lazy" />
+            </div>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="auth-edit-slide-hit" data-auth-open="signup" aria-label="Guaranteed refund &mdash; create account">
+            <div class="auth-edit-copy">
+              <span class="auth-trust-badge">Guaranteed refund</span>
+              <h2>Not what you ordered? Guaranteed refund.</h2>
+              <p>Inspect your parcel when it arrives. Wrong or damaged? Report it on WhatsApp within 24 hours for a full M-Pesa refund.</p>
+              <span class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Start shopping</span>
+            </div>
+            <div class="auth-edit-media">
+              <img src="assets/images/marketing/inspect-before-pay.jpg" alt="" width="1000" height="700" loading="lazy" />
+            </div>
+          </button>
+        </li>
+      </ul>
+      <div class="auth-edit-dots" id="auth-trust-dots" aria-label="Buyer protection slides"></div>
+    </section>
+
+    <section class="auth-edit-banner" aria-roledescription="carousel" aria-label="Featured edits">
+      <ul class="auth-edit-slides" id="auth-edit-slides">
+        <li class="is-active">
+          <button type="button" class="auth-edit-slide-hit" data-auth-open="signup" aria-label="Local creators and makers — create account">
+            <div class="auth-edit-copy">
+              <h2>Local creators &amp; makers</h2>
+              <p>Support home-grown labels and independent closets — prepaid, escrowed, WhatsApp checkout.</p>
+              <span class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Explore creators</span>
+            </div>
+            <div class="auth-edit-media">
+              <img src="https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&amp;fit=crop&amp;w=1000&amp;q=80" alt="" width="1000" height="700" loading="lazy" />
+            </div>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="auth-edit-slide-hit" data-auth-open="signup" aria-label="Weekend fits — create account">
+            <div class="auth-edit-copy">
+              <h2>Weekend fits, circular style</h2>
+              <p>Discover our edit of stylish weekend looks — thrift classics and streetwear across Kenya.</p>
+              <span class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop now</span>
+            </div>
+            <div class="auth-edit-media">
+              <img src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&amp;fit=crop&amp;w=1000&amp;q=80" alt="" width="1000" height="700" loading="lazy" />
+            </div>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="auth-edit-slide-hit" data-auth-open="signup" aria-label="Fresh drops daily — create account">
+            <div class="auth-edit-copy">
+              <h2>Fresh drops daily</h2>
+              <p>Curated sneakers and streetwear stacks from verified sellers — ask AI if you know the model.</p>
+              <span class="depop-btn-accent inline-flex min-h-[44px] px-5 items-center w-fit">Shop drops</span>
+            </div>
+            <div class="auth-edit-media">
+              <img src="https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&amp;fit=crop&amp;w=1000&amp;q=80" alt="" width="1000" height="700" loading="lazy" />
+            </div>
+          </button>
+        </li>
+      </ul>
+      <div class="auth-edit-dots" id="auth-edit-dots" aria-label="Banner slides"></div>
+    </section>
+
+    <section class="auth-quiz" aria-labelledby="auth-quiz-title">
+      <div class="auth-section-head">
+        <p class="auth-section-kicker">Start here</p>
+        <h2 id="auth-quiz-title">What category do you shop for?</h2>
+        <p class="auth-section-lead">Pick a lane — create a free account to start shopping.</p>
+      </div>
+      <div class="auth-quiz-grid">
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="womenswear">
+          <img src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
+          <span>Womenswear</span>
+        </button>
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="menswear">
+          <img src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
+          <span>Menswear</span>
+        </button>
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="sneakers">
+          <img src="https://images.unsplash.com/photo-1552346154-21d32810aba3?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
+          <span>Sneakers &amp; kicks</span>
+        </button>
+        <button type="button" class="auth-quiz-card" data-auth-open="signup" data-signup-intent="everything">
+          <img src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=600&amp;auto=format&amp;fit=crop&amp;q=80" alt="" width="600" height="800" loading="lazy" />
+          <span>Everything</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="auth-styles" aria-labelledby="auth-styles-title">
+      <div class="auth-section-head">
+        <p class="auth-section-kicker">Aesthetic inspo</p>
+        <h2 id="auth-styles-title">Shop by style</h2>
+        <p class="auth-section-lead">Curated vibes — tap any look to create your account.</p>
+      </div>
+      <div class="auth-style-grid">
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="y2k-cargo">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Y2K cargo" width="600" height="600" loading="lazy" data-auth-img /></span>
+          <strong>Y2K cargo</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="seaside-staples">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Seaside staples" width="600" height="600" loading="lazy" data-auth-img /></span>
+          <strong>Seaside staples</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="night-out-fits">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Night out fits" width="600" height="600" loading="lazy" data-auth-img /></span>
+          <strong>Night out fits</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="drip-and-bags">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Drip and bags" width="600" height="600" loading="lazy" data-auth-img /></span>
+          <strong>Drip &amp; bags</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="chunky-kicks">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Chunky kicks" width="600" height="600" loading="lazy" data-auth-img /></span>
+          <strong>Chunky kicks</strong>
+        </button>
+        <button type="button" class="auth-style-tile" data-auth-open="signup" data-signup-intent="retro-tees">
+          <span class="auth-style-media"><img src="https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Retro tees" width="600" height="600" loading="lazy" data-auth-img /></span>
+          <strong>Retro tees</strong>
+        </button>
+      </div>
+    </section>
+
+    <section class="auth-discover" aria-labelledby="auth-brands-title">
+      <div class="auth-section-head">
+        <p class="auth-section-kicker">Discover</p>
+        <h2 id="auth-brands-title">Popular brands</h2>
+      </div>
+      <div class="auth-brand-rail">
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Nike</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Adidas</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Carhartt</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">The North Face</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Stüssy</button>
+        <button type="button" class="auth-brand-chip" data-auth-open="signup">Local labels</button>
+      </div>
+      <div class="auth-section-head" style="padding-top:1rem">
+        <h2>Popular this week</h2>
+        <p class="auth-section-lead">Trending hunts — create an account to start shopping.</p>
+      </div>
+      <div class="auth-trend-rail">
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Gorpcore jackets <em>hot</em></button>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Vintage Levi’s 501 <em>hot</em></button>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Street hoodies <em>rising</em></button>
+        <button type="button" class="auth-trend-chip" data-auth-open="signup">Chunky loafers <em>rising</em></button>
+      </div>
+    </section>
+
+    <aside class="auth-mobile-banner">
+      <div>
+        <h2>Shop on the go — WhatsApp + web</h2>
+        <p>List faster from your phone, track M-Pesa prepaid orders, and never miss a drop. Sokoni runs in your browser and on WhatsApp — no app store required.</p>
+        <div class="auth-hero-cta-row">
+          <a href="https://wa.me/254117422428" class="depop-btn-accent min-h-[48px] px-5 inline-flex items-center">Open WhatsApp</a>
+          <a href="index.html" class="depop-btn-ghost min-h-[48px] px-5 inline-flex items-center" data-auth-open="signup">Open shop</a>
+        </div>
+      </div>
+      <div class="auth-mobile-mock" aria-hidden="true">
+        Sokoni · live<br />
+        “Find vintage cargo under KES 2,000” →<br />
+        SKN order · M-Pesa escrow ✓
+      </div>
+    </aside>
+  </main>
+
+  <footer class="auth-footer-rich">
+    <div class="auth-footer-grid">
+      <div>
+        <h3>Sokoni</h3>
+        <a href="about.html">About us</a>
+        <a href="about.html#registration">Business registration</a>
+        <a href="faq.html">How it works</a>
+        <a href="index.html">Shop</a>
+      </div>
+      <div>
+        <h3>Sell</h3>
+        <a href="suppliers/list.html">Sell on Sokoni</a>
+        <a href="faq.html">M-Pesa escrow</a>
+        <a href="suppliers/list.html">Seller onboarding</a>
+      </div>
+      <div>
+        <h3>Help</h3>
+        <a href="faq.html">Help center</a>
+        <a href="faq.html">Safety</a>
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+    </div>
+    <div class="sokoni-brs-badge">
+      <p>
+        <strong>Registered Business:</strong> SKN MALL KENYA
+        <span aria-hidden="true"> | </span>
+        <strong>BN Registration No:</strong> BN-36SM2YW9
+      </p>
+      <p class="sokoni-brs-badge__note">
+        Duly registered under the Registration of Business Names Act (Cap 499) by the Republic of Kenya Business Registration Service (BRS).
+        <a href="about.html#registration">Full details &amp; how to verify</a>
+      </p>
+    </div>
+    <p class="auth-footer-bottom">© Sokoni Mall · Kenya WhatsApp marketplace · Prepaid with M-Pesa escrow</p>
+  </footer>
+
+  <!-- Centered modals -->
+  <div id="auth-modal-root" class="auth-modal-root" aria-hidden="true">
+    <button type="button" class="auth-modal-backdrop" data-auth-close aria-label="Close"></button>
+
+    <!-- LOG IN -->
+    <div id="auth-panel-login" class="auth-modal-panel" role="dialog" aria-modal="true" aria-labelledby="auth-login-title" hidden>
+      <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">×</button>
+      <p class="auth-modal-label">Welcome back</p>
+      <h2 id="auth-login-title" class="auth-modal-title">Log in to Sokoni</h2>
+      <p class="text-sm text-zinc-400 mb-4">
+        Use the email you signed up with.
+      </p>
+
+      <form id="account-login-form" class="space-y-3" novalidate>
+        <label class="block text-xs font-medium text-zinc-300">
+          Email
+          <input name="email" type="email" required autocomplete="email" placeholder="you@email.com"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <label class="block text-xs font-medium text-zinc-300">
+          Password
+          <span class="auth-pw-wrap block">
+            <input id="login-password" name="password" type="password" required autocomplete="current-password" minlength="8" placeholder="Your password"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+            <button type="button" class="auth-pw-toggle" data-pw-toggle="login-password" aria-pressed="false">Show</button>
+          </span>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-zinc-300 min-h-[44px]">
+          <input name="rememberMe" type="checkbox" value="1" class="rounded border-zinc-600" />
+          Keep me signed in (90 days)
+        </label>
+        <p id="account-login-form-status" class="text-sm text-zinc-400" role="status" aria-live="polite"></p>
+        <button type="submit" class="w-full min-h-[48px] rounded-full bg-[#25D366] text-[#1B1035] font-bold text-sm hover:opacity-90 transition">
+          Log in
+        </button>
+      </form>
+
+      <p class="text-sm text-zinc-500 text-center mt-3">
+        <a href="forgot-password.html" class="hover:text-white underline-offset-2 hover:underline">Forgot password?</a>
+      </p>
+
+      <div class="border-t border-zinc-800 pt-4 mt-4 space-y-3">
+        <p class="text-sm font-semibold text-white">Or continue with WhatsApp</p>
+        <p class="text-xs text-zinc-400">Same OTP as buyer verify — signs you into the account linked to that number.</p>
+        <label class="block text-xs font-medium text-zinc-300">
+          WhatsApp number
+          <input id="account-wa-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <label class="block text-xs font-medium text-zinc-300">
+          Code
+          <input id="account-wa-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits"
+                 class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="account-wa-send-btn" class="depop-btn-ghost">Send code</button>
+          <button type="button" id="account-wa-verify-btn" class="depop-btn-accent">Verify &amp; continue</button>
+        </div>
+        <p id="account-wa-status" class="text-xs text-zinc-400" role="status"></p>
+      </div>
+
+      <p class="text-sm text-zinc-400 text-center mt-4">
+        New to Sokoni?
+        <button type="button" class="text-[#25D366] font-semibold hover:underline" data-auth-open="signup">Create an account</button>
+      </p>
+    </div>
+
+    <!-- CREATE ACCOUNT -->
+    <div id="auth-panel-signup" class="auth-modal-panel" role="dialog" aria-modal="true" aria-labelledby="auth-signup-title" hidden>
+      <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">×</button>
+      <p class="auth-modal-label">Free account</p>
+      <h2 id="auth-signup-title" class="auth-modal-title">Join Sokoni</h2>
+
+      <div id="auth-role-toggle" class="auth-role-toggle" role="tablist" aria-label="Account type">
+        <button type="button" class="is-active" data-role="buyer" role="tab" aria-selected="true">Buyer</button>
+        <button type="button" data-role="seller" role="tab" aria-selected="false">Seller / Store</button>
+      </div>
+
+      <div id="auth-signup-seller-note" class="text-sm text-zinc-300 mb-3 space-y-2" hidden>
+        <p>Sellers shop the marketplace too — same account browses the feed, bag, and inbox. After you join, open <strong>Sell</strong> anytime to list with prepaid escrow.</p>
+      </div>
+
+      <div id="auth-signup-fields">
+        <form id="account-signup-form" class="space-y-3" novalidate>
+          <input type="hidden" name="role" id="auth-signup-role" value="buyer" />
+          <label class="block text-xs font-medium text-zinc-300">
+            Name
+            <input name="displayName" type="text" autocomplete="name" maxlength="120" placeholder="Your name"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <label class="block text-xs font-medium text-zinc-300">
+            Email
+            <input name="email" type="email" required autocomplete="email" placeholder="you@email.com"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <label class="block text-xs font-medium text-zinc-300">
+            Password
+            <span class="auth-pw-wrap block">
+              <input id="signup-password" name="password" type="password" required autocomplete="new-password" minlength="8" placeholder="At least 8 characters"
+                     class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+              <button type="button" class="auth-pw-toggle" data-pw-toggle="signup-password" aria-pressed="false">Show</button>
+            </span>
+          </label>
+          <label class="block text-xs font-medium text-zinc-300">
+            WhatsApp (optional)
+            <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XXXXXXXX"
+                   class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-[#161616] px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+          </label>
+          <p class="text-xs text-zinc-500">Phone helps match prepaid orders and M-Pesa later.</p>
+          <p id="account-signup-form-status" class="text-sm text-zinc-400" role="status" aria-live="polite"></p>
+          <button type="submit" class="w-full min-h-[48px] rounded-full bg-[#25D366] text-[#1B1035] font-bold text-sm hover:opacity-90 transition">
+            Create free account
+          </button>
+        </form>
+        <p class="text-xs text-zinc-500 mt-3">By joining, you agree to Sokoni’s <a href="terms.html" class="underline hover:text-white">Terms</a> and <a href="privacy.html" class="underline hover:text-white">Privacy Policy</a> (Kenya Data Protection Act, 2019 — how we handle phone numbers and delivery addresses).</p>
+      </div>
+
+      <p class="text-sm text-zinc-400 text-center mt-4">
+        Already have an account?
+        <button type="button" class="text-[#25D366] font-semibold hover:underline" data-auth-open="login">Log in</button>
+      </p>
+    </div>
+
+    <!-- ASK AI -->
+    <div id="auth-panel-ask" class="auth-modal-panel auth-modal-wide" role="dialog" aria-modal="true" aria-labelledby="auth-ask-title" hidden>
+      <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">×</button>
+      <p class="auth-modal-label">Sokoni Plug</p>
+      <h2 id="auth-ask-title" class="auth-modal-title">
+        Sokoni AI ✦
+        <span class="auth-ask-status">Online</span>
+      </h2>
+      <p class="text-sm text-zinc-400 mb-1">Products, sellers, prepaid escrow, or order tracking — ask in plain language.</p>
+
+      <div class="auth-ask-chips" aria-label="Suggested prompts">
+        <button type="button" data-ask-chip="Find sneakers under KES 4,000">Find sneakers under KES 4,000</button>
+        <button type="button" data-ask-chip="Show top streetwear sellers on Sokoni">Top streetwear sellers</button>
+        <button type="button" data-ask-chip="How do I list my items and collect M-Pesa?">List &amp; collect M-Pesa</button>
+      </div>
+
+      <div id="auth-ask-log" class="auth-ask-log" aria-live="polite"></div>
+
+      <form id="auth-ask-form" class="flex gap-2">
+        <label for="auth-ask-input" class="sr-only">Ask anything</label>
+        <input id="auth-ask-input" type="text" autocomplete="off"
+               placeholder="Ask about products, sellers, or orders…"
+               class="flex-1 min-h-[48px] rounded-2xl border border-zinc-800 bg-[#161616] px-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+        <button type="submit" class="depop-btn-accent shrink-0 min-h-[48px] px-5">Ask</button>
+      </form>
+      <p class="text-xs text-zinc-500 mt-3 text-center">
+        Prefer full screen? <a href="ask.html" class="text-[#25D366] font-semibold hover:underline">Open Ask Plug</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="sokoni-shell-nav"></div>
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/buyer-auth.js"></script>
+  <script src="assets/js/account-auth.js"></script>
+  <script src="assets/js/account-gate.js"></script>
+  <script src="assets/js/privacy-consent.js"></script>
+  <script src="assets/js/auth-landing.js"></script>
+  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Inbox — Sokoni Mall</title>
+<meta name="description" content="Send safe in-app messages between buyers and sellers on Sokoni. Keep deals and payment inside the platform." />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            green: "#25D366",
+            purple: "#1B1035",
+            purpleLight: "#2E1B57",
+            cream: "#FFF8F0",
+          },
+        },
+        fontFamily: {
+          sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+          display: ["Fraunces", "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("sokoni-theme");
+      if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.classList.add("dark");
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/design-tokens.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/inbox-disputes.css" />
+<link rel="stylesheet" href="assets/css/depop-surfaces.css" />
+</head>
+<body class="font-sans antialiased has-depop-shell min-h-screen flex flex-col depop-surface-page text-white" data-shell-page="inbox">
+  <div id="sokoni-shell-header"></div>
+
+  <main class="depop-main-content max-w-3xl mx-auto w-full px-5 py-7 flex-1 flex flex-col gap-5">
+    <header class="space-y-1 border-b border-zinc-900 pb-4">
+      <p class="inbox-hub-label depop-label">Inbox</p>
+      <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
+        Chat with <span id="chat-peer-label">seller</span>
+      </h1>
+      <p class="text-sm text-zinc-400">
+        Keep messages, offers, and payment inside Sokoni. Phone numbers and “pay outside” links are blocked.
+      </p>
+      <p id="inbox-status" class="text-sm mt-1 text-zinc-400"></p>
+    </header>
+
+
+    <section id="inbox-shops-section" class="space-y-3" aria-label="Available shops">
+      <div class="flex items-end justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-black text-white">Available shops</h2>
+          <p class="text-xs text-zinc-400">Pick a shop below to start chatting</p>
+        </div>
+        <a href="index.html#deals" class="text-xs font-bold text-[#FF2300] hover:underline shrink-0">See all</a>
+      </div>
+      <div id="inbox-shops-list" class="inbox-shops-list" role="list"></div>
+      <p id="inbox-shops-empty" class="text-sm text-zinc-500 hidden">No live shops right now — browse the catalog, then Message from a listing.</p>
+    </section>
+
+    <section id="buyer-auth-panel" class="depop-card p-4 space-y-3">
+      <p class="text-sm font-semibold text-white">Buyer WhatsApp sign-in</p>
+      <p class="text-xs text-zinc-400">
+        Verify to keep this chat tied to your WhatsApp number.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <label class="flex-1 text-xs font-medium text-zinc-300">
+          WhatsApp number
+          <input
+            id="buyer-auth-phone"
+            type="tel"
+            inputmode="tel"
+            autocomplete="tel"
+            placeholder="07XXXXXXXX"
+            class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
+          />
+        </label>
+        <label class="sm:w-36 text-xs font-medium text-zinc-300">
+          Code
+          <input
+            id="buyer-auth-code"
+            type="text"
+            inputmode="numeric"
+            maxlength="6"
+            placeholder="6 digits"
+            class="mt-1 w-full min-h-[44px] rounded-2xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
+          />
+        </label>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="buyer-auth-send-btn" type="button" class="depop-btn-ghost">
+          Send code
+        </button>
+        <button id="buyer-auth-verify-btn" type="button" class="depop-btn-accent">
+          Verify
+        </button>
+      </div>
+      <p id="buyer-auth-status" class="text-xs text-zinc-400"></p>
+    </section>
+
+    <section class="inbox-messenger flex-1" aria-label="Conversation">
+      <div class="inbox-messenger-head">
+        <div class="min-w-0">
+          <p class="text-xs font-bold truncate text-white" id="chat-peer-head">Thread</p>
+          <p id="chat-peer-sub" class="text-[11px] text-zinc-500">Instant messenger · offers stay on Sokoni</p>
+        </div>
+        <a href="disputes.html" class="text-[11px] font-bold text-[#FF2300] hover:underline shrink-0">Disputes</a>
+      </div>
+
+      <div class="px-4 pt-4">
+        <div id="inbox-offers" class="space-y-3 mb-3"></div>
+        <div id="inbox-offer-composer" class="hidden mb-3 depop-card p-3 space-y-2">
+          <p class="text-xs font-semibold text-zinc-300">Your total to pay (KES) — includes shipping + Sokoni fee</p>
+          <div class="flex flex-wrap gap-2">
+            <label class="sr-only" for="inbox-offer-amount">Buyer total offer amount</label>
+            <input
+              id="inbox-offer-amount"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              placeholder="e.g. 1500"
+              class="flex-1 min-w-[8rem] min-h-[44px] rounded-2xl border border-zinc-800 bg-black px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300]"
+            />
+            <button
+              type="button"
+              id="inbox-offer-send-btn"
+              class="depop-btn-accent">
+              Send offer
+            </button>
+          </div>
+          <p id="inbox-offer-composer-status" class="text-xs text-zinc-500"></p>
+        </div>
+      </div>
+
+      <div id="chat-ledger" class="hidden"></div>
+      <input id="file-picker" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        <div id="chat-thread" class="inbox-thread"></div>
+      <p id="chat-empty" class="text-sm text-zinc-500 px-4 pb-2">
+        No messages yet — ask about condition, size, or pickup. Keep bargaining on-site.
+      </p>
+
+      <div class="px-4 pb-2 flex flex-wrap gap-2 items-center">
+        <button
+          type="button"
+          id="inbox-make-offer-btn"
+          class="depop-btn-ghost hidden">
+          Make offer
+        </button>
+      </div>
+
+      <!-- Icebreakers. Only rendered into when a thread has no messages yet. -->
+      <div id="bundle-drawer" class="hidden" role="dialog" aria-label="Build a bundle">
+        <div class="bundle-sheet">
+          <div class="bundle-head">
+            <strong>Build a bundle</strong>
+            <button type="button" class="bundle-close" data-bundle-close aria-label="Close">×</button>
+          </div>
+          <div id="bundle-body"></div>
+        </div>
+      </div>
+      <div id="seller-tools-drawer" class="hidden" role="dialog" aria-label="Seller tools">
+        <div class="bundle-sheet">
+          <div class="bundle-head">
+            <strong>Seller tools</strong>
+            <button type="button" class="bundle-close" data-seller-tools-close aria-label="Close">×</button>
+          </div>
+          <div id="seller-tools-body"></div>
+        </div>
+      </div>
+      <div id="chat-icebreakers" class="hidden" role="group" aria-label="Suggested openers"></div>
+      <form id="chat-form" class="mt-auto border-t border-zinc-900 p-3 flex gap-2 items-end bg-black">
+        <label class="sr-only" for="chat-input">Type message</label>
+        <textarea
+          id="chat-input"
+          rows="2"
+          maxlength="2000"
+          placeholder="Ask about size, condition, or fit — stay on Sokoni"
+          class="flex-1 min-h-[44px] rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF2300] resize-y"></textarea>
+        <div class="inbox-composer-actions">
+          <button type="button" id="chat-nudge-btn" class="inbox-nudge-btn" title="Nudge (once an hour)" aria-label="Nudge">👋</button>
+          <button type="button" id="chat-sound-btn" class="inbox-sound" aria-pressed="true" title="Sound on" aria-label="Toggle reaction sounds">🔈</button>
+          <button type="button" id="chat-photo-btn" class="inbox-photo-btn" title="Send a photo" aria-label="Send a photo">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"></path>
+            </svg>
+          </button>
+          <input type="file" id="chat-photo-input" accept="image/jpeg,image/png,image/webp" class="sr-only" tabindex="-1" aria-hidden="true" />
+          <button type="button" id="chat-bundle-btn" class="inbox-bundle-btn" title="Build a bundle" aria-label="Build a bundle">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M12 2 3 6.5v11L12 22l9-4.5v-11zm0 2.3 6.4 3.2L12 10.7 5.6 7.5zM5 9.3l6 3v7.2l-6-3zm8 10.2v-7.2l6-3v7.2z"></path>
+            </svg>
+          </button>
+          <button type="button" id="chat-seller-tools-btn" class="inbox-seller-tools-btn hidden" title="Send a deal or a drop" aria-label="Seller tools">🎁</button>
+          <button type="button" id="chat-mic-btn" class="inbox-mic" aria-pressed="false" title="Record a voice note" aria-label="Record a voice note">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <path class="inbox-mic-glyph" fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"></path>
+              <rect class="inbox-mic-stop" x="6" y="6" width="12" height="12" rx="2" fill="currentColor"></rect>
+            </svg>
+          </button>
+          <button
+            id="chat-send-btn"
+            type="submit"
+            class="depop-btn-accent shrink-0">
+            Send
+          </button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer class="border-t border-zinc-900 py-6 text-center text-xs text-zinc-500">
+    Need help? <a href="https://wa.me/254117422428" target="_blank" rel="noopener" class="text-[#FF2300] font-semibold">WhatsApp Sokoni</a>
+    · <a href="disputes.html" class="text-[#FF2300] font-semibold">Order protection</a>
+  </footer>
+
+  <div id="sokoni-shell-nav"></div>
+
+  <script src="assets/js/shell-chrome.js"></script>
+  <script src="assets/js/depop-nav.js"></script>
+  <script src="assets/js/account-auth.js"></script>
+  <script src="assets/js/account-gate.js"></script>
+  <script src="assets/js/buyer-auth.js"></script>
+  <script src="assets/js/inbox.js?v=shops-list-1"></script>
+
+  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
+</body>
+</html>

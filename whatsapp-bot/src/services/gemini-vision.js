@@ -1,6 +1,6 @@
 /**
  * Google Gemini vision — direct API (backend only, key from GEMINI_API_KEY).
- * Used for seller listing photo → JSON draft; OpenRouter remains fallback.
+ * Listing-photo fallback after OpenRouter / NVIDIA NIM (see listing-generator.js).
  */
 import { config } from "../config.js";
 
@@ -20,11 +20,37 @@ function geminiModelChain() {
 export function normalizeGeminiListingJson(parsed) {
   const out = { ...parsed };
   if (!out.name && out.title) out.name = out.title;
+  if (out.sellerNetKes == null && out.seller_net_kes != null) out.sellerNetKes = out.seller_net_kes;
+  if (!out.sourcePriceKes && out.sellerNetKes != null) out.sourcePriceKes = out.sellerNetKes;
   if (!out.sourcePriceKes && out.suggestedPriceKsh != null) {
     out.sourcePriceKes = out.suggestedPriceKsh;
   }
   if (!out.sourcePriceKes && out.priceKes != null) out.sourcePriceKes = out.priceKes;
+  if (!out.sellerNetKes && out.sourcePriceKes != null) out.sellerNetKes = out.sourcePriceKes;
   if (!out.description && out.desc) out.description = out.desc;
+  if (!out.estimatedWeightClass && out.weightClass) out.estimatedWeightClass = out.weightClass;
+  if (!out.estimatedWeightClass && out.estimated_weight_class) {
+    out.estimatedWeightClass = out.estimated_weight_class;
+  }
+  if (out.suggestedShippingFeeKsh == null && out.suggestedShippingKes != null) {
+    out.suggestedShippingFeeKsh = out.suggestedShippingKes;
+  }
+  if (out.suggestedShippingFeeKsh == null && out.shippingKes != null) {
+    out.suggestedShippingFeeKsh = out.shippingKes;
+  }
+  if (out.suggestedShippingFeeKsh == null && out.shipping_fee_ksh != null) {
+    out.suggestedShippingFeeKsh = out.shipping_fee_ksh;
+  }
+  if (!out.browseCategory && out.browse_category) out.browseCategory = out.browse_category;
+  if (!out.browseSubCategory && out.browse_sub_category) out.browseSubCategory = out.browse_sub_category;
+  if (!out.browseSubCategory && out.browseSubcategory) out.browseSubCategory = out.browseSubcategory;
+  if (out.size == null && out.Size != null) out.size = out.Size;
+  if (!Array.isArray(out.tags) && typeof out.tags === "string") {
+    out.tags = out.tags.split(/[,#\s]+/).map((t) => t.replace(/^#/, "").trim()).filter(Boolean);
+  }
+  if (out.pitToPitIn == null && out.pit_to_pit_in != null) out.pitToPitIn = out.pit_to_pit_in;
+  if (out.lengthIn == null && out.length_in != null) out.lengthIn = out.length_in;
+  if (out.waistIn == null && out.waist_in != null) out.waistIn = out.waist_in;
   return out;
 }
 
@@ -56,12 +82,13 @@ export async function geminiGenerateListingJson(opts) {
     ],
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.1,
-      maxOutputTokens: 800,
+      temperature: 0.05,
+      maxOutputTokens: 1200,
     },
   };
 
-  const res = await fetch(url, {
+  // Prefer header auth; fall back to ?key= for some AI Studio keys.
+  let res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -70,10 +97,21 @@ export async function geminiGenerateListingJson(opts) {
     body: JSON.stringify(body),
   });
 
+  if (res.status === 401 || res.status === 403) {
+    res = await fetch(`${url}?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    const short = errText.slice(0, 280).replace(/\s+/g, " ");
-    if (res.status === 429) throw new Error(`Gemini rate limit — try again in a moment (${short})`);
+    const short = errText.slice(0, 180).replace(/\s+/g, " ");
+    if (res.status === 429) throw new Error("Gemini rate limit — try again in a moment");
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Gemini authentication failed — check GEMINI_API_KEY on the bot");
+    }
     throw new Error(`Gemini ${res.status}: ${short || res.statusText}`);
   }
 

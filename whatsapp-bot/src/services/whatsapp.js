@@ -1,17 +1,43 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import axios from "axios";
 import { config } from "../config.js";
+import { recordVoiceReplyText } from "./voice-reply.js";
 import {
   catalogImageUrlCandidates,
   readCatalogImageBase64,
 } from "../lib/catalog-images.js";
 
-/** Normalize phone digits or chatId to WAHA chatId format. */
+/**
+ * Divert sendText replies for a specific admin chat into an in-memory buffer
+ * (used by the support dashboard command runner — side-effects to customers still go out).
+ * @type {AsyncLocalStorage<{ chatId: string, replies: string[] }>}
+ */
+const adminReplyCapture = new AsyncLocalStorage();
+
+/** Run `fn` while capturing sendText destined for `chatId` (no WAHA for those). */
+export async function withAdminReplyCapture(chatId, fn) {
+  const target = toChatId(chatId);
+  const store = { chatId: target, replies: [] };
+  return adminReplyCapture.run(store, async () => {
+    await fn();
+    return store.replies.slice();
+  });
+}
+
+/** Normalize phone digits or chatId to WAHA chatId format (`254…@c.us`). */
 export function toChatId(phoneOrChatId) {
-  if (phoneOrChatId.includes("@")) {
-    return phoneOrChatId.replace(/@s\.whatsapp\.net$/, "@c.us");
+  if (!phoneOrChatId) return "";
+  const raw = String(phoneOrChatId).trim();
+  if (raw.includes("@")) {
+    return raw.replace(/@s\.whatsapp\.net$/i, "@c.us");
   }
-  const digits = String(phoneOrChatId).replace(/\D/g, "");
-  return `${digits}@c.us`;
+  let digits = raw.replace(/\D/g, "");
+  // Kenya local 07xx / 01xx → E.164 254…
+  if (digits.startsWith("0") && digits.length >= 10) digits = `254${digits.slice(1)}`;
+  if (digits.length === 9 && /^[17]/.test(digits)) digits = `254${digits}`;
+  return digits ? `${digits}@c.us` : "";
 }
 
 /** Session key + display id from WAHA `from` field (supports @c.us and @lid). */
@@ -25,6 +51,50 @@ export function phoneDigitsFromChatId(chatId) {
   if (!chatId || chatId.includes("@lid")) return null;
   const digits = chatId.replace(/@c\.us$/, "").replace(/@s\.whatsapp\.net$/, "").replace(/\D/g, "");
   return digits.length >= 9 ? digits : null;
+}
+
+/**
+ * Resolve WAHA @lid → phone (@c.us) via Contacts Lids API.
+ * Caches in-memory for the process lifetime.
+ */
+const lidPhoneCache = new Map();
+
+export async function resolveWahaLidToPhone(lidChatId, session = "") {
+  const lid = String(lidChatId || "").trim();
+  if (!lid.includes("@lid")) return "";
+  if (lidPhoneCache.has(lid)) return lidPhoneCache.get(lid) || "";
+
+  if (!config.waha.apiUrl) {
+    lidPhoneCache.set(lid, "");
+    return "";
+  }
+
+  const sess = session || config.waha.session || "default";
+  const lidPath = lid.replace(/@/g, "%40");
+  const urls = [
+    `${config.waha.apiUrl}/api/${encodeURIComponent(sess)}/lids/${lidPath}`,
+    `${config.waha.apiUrl}/api/${encodeURIComponent(sess)}/lids/${lid.replace(/@lid$/, "")}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const { data } = await axios.get(url, {
+        headers: wahaHeaders(),
+        timeout: 8000,
+      });
+      const pn = data?.pn || data?.phone || data?.phoneNumber || "";
+      const digits = phoneDigitsFromChatId(pn) || String(pn || "").replace(/\D/g, "");
+      if (digits && digits.length >= 9) {
+        lidPhoneCache.set(lid, digits);
+        console.log("[waha] resolved @lid → phone", lid, "→", digits);
+        return digits;
+      }
+    } catch (err) {
+      console.warn("[waha] lid resolve failed:", url.split("/").pop(), err.message);
+    }
+  }
+  lidPhoneCache.set(lid, "");
+  return "";
 }
 
 /** Extract phone digits from WAHA chatId. */
@@ -48,15 +118,42 @@ function wahaHeaders(extra = {}) {
   return headers;
 }
 
-async function callWaha(endpoint, body) {
+async function callWahaGet(endpoint, { timeoutMs = 20000 } = {}) {
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run] GET", endpoint);
+    return { dryRun: true };
+  }
+  try {
+    const { data } = await axios.get(`${config.waha.apiUrl}${endpoint}`, {
+      headers: wahaHeaders({ Accept: "application/json" }),
+      timeout: timeoutMs,
+    });
+    return data;
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.message || err.response?.data?.error || err.message;
+    console.error(`[waha] GET ${endpoint} failed${status ? ` (${status})` : ""}:`, detail);
+    throw err;
+  }
+}
+
+async function callWaha(endpoint, body, { timeoutMs = 30000 } = {}) {
   if (!config.waha.apiUrl) {
     console.log("[waha:dry-run]", endpoint, JSON.stringify(body, null, 2));
     return { dryRun: true };
   }
-  const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, {
-    headers: wahaHeaders({ "Content-Type": "application/json" }),
-  });
-  return data;
+  try {
+    const { data } = await axios.post(`${config.waha.apiUrl}${endpoint}`, body, {
+      headers: wahaHeaders({ "Content-Type": "application/json" }),
+      timeout: timeoutMs,
+    });
+    return data;
+  } catch (err) {
+    const status = err.response?.status;
+    const detail = err.response?.data?.message || err.response?.data?.error || err.message;
+    console.error(`[waha] ${endpoint} failed${status ? ` (${status})` : ""}:`, detail);
+    throw err;
+  }
 }
 
 /** WAHA expects @ encoded in chatId path only — not the full message id. */
@@ -111,6 +208,54 @@ function uniqueChatIds(...ids) {
 }
 
 /** Download media from WAHA (image/PDF from WhatsApp message). Retries when WAHA is still saving. */
+/**
+ * Stream one media file straight from WAHA to a caller, without buffering it.
+ *
+ * downloadWahaMedia pulls the whole file into an arraybuffer, which is right
+ * when the bot needs the bytes -- saving a rider's ID photo, say. It is wrong
+ * for serving a chat thread: a buyer opening a conversation with a hundred
+ * voice notes would put every one of them through the Node heap, and this VM
+ * runs pm2 with a 450MB cap.
+ *
+ * The response is piped, so memory stays flat no matter the file size or how
+ * many people are listening at once.
+ *
+ * @param {string} mediaUrl WAHA media URL, as stored on the message
+ * @param {{signal?: AbortSignal}} opts
+ * @returns {Promise<{stream: import("stream").Readable, contentType: string, contentLength: number|null}>}
+ */
+export async function streamWahaMedia(mediaUrl, { signal } = {}) {
+  if (!config.waha.apiUrl) throw new Error("WAHA_API_URL not set");
+  const apiBase = config.waha.apiUrl.replace(/\/$/, "");
+  const url = fixMediaUrl(mediaUrl, apiBase);
+  if (!url) throw new Error("no_media_url");
+
+  const resp = await axios.get(url, {
+    headers: wahaHeaders(),
+    responseType: "stream",
+    timeout: 30_000,
+    signal,
+    validateStatus: (code) => code === 200,
+  });
+
+  const contentType = String(resp.headers["content-type"] || "application/octet-stream");
+  if (contentType.includes("application/json")) {
+    // WAHA answered with a pointer rather than the file. Follow it once.
+    const chunks = [];
+    for await (const chunk of resp.data) chunks.push(chunk);
+    const json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (!json?.media?.url) throw new Error("WAHA returned JSON without media");
+    return streamWahaMedia(json.media.url, { signal });
+  }
+
+  const len = Number(resp.headers["content-length"]);
+  return {
+    stream: resp.data,
+    contentType,
+    contentLength: Number.isFinite(len) && len > 0 ? len : null,
+  };
+}
+
 export async function downloadWahaMedia(
   mediaUrl,
   { messageId, chatId, fromChatId, toChatId, session, mimetype } = {}
@@ -421,7 +566,17 @@ export async function fetchWahaBusinessCatalog(businessPhoneOrUrl, session) {
 const botSentIds = new Set();
 const BOT_IDS_MAX = 1000;
 const recentSends = new Map(); // normalized chatId -> timestamp
-const RECENT_SEND_WINDOW_MS = 6000;
+const RECENT_SEND_WINDOW_MS = 45000;
+
+/** True if the bot sent to this chat recently (outgoing webhook echo guard). */
+export function wasRecentBotSend(destinationChatId) {
+  try {
+    const ts = recentSends.get(toChatId(destinationChatId));
+    return Boolean(ts && Date.now() - ts < RECENT_SEND_WINDOW_MS);
+  } catch {
+    return false;
+  }
+}
 
 function idStrings(idLike) {
   const out = [];
@@ -470,35 +625,335 @@ export function isBotEcho(messageId, destinationChatId) {
   return false;
 }
 
-/** Light spacing pass — extra breathing room between sections without bloating short replies. */
+/** Light spacing pass — extra breathing room between sections without bloating short replies.
+ * Also splits inline numbered keycaps (1️⃣…) that models mash into one WhatsApp paragraph.
+ * Converts literal `\n` / `\\n` from JSON/LLM dumps into real line breaks.
+ */
+export function formatWhatsAppText(aiResponseText) {
+  if (!aiResponseText) return "";
+  let s = String(aiResponseText);
+  // Literal escaped newlines (JSON / model dumps) → real breaks
+  s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
+  s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  // Cap runaway vertical gaps
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}
+
 export function normalizeBotMessageSpacing(text) {
-  let s = String(text || "")
-    .replace(/\r\n/g, "\n")
-    .trim();
+  let s = formatWhatsAppText(text);
   if (!s) return s;
 
-  // Blank line before emoji-led section headers (common in admin/help menus).
+  // Force a blank line before keycap digits 1️⃣–9️⃣ (even when inline mid-paragraph).
+  s = s.replace(/\s*([1-9]\uFE0F?\u20E3)\s*/gu, "\n\n$1 ");
+  // Blank line after Boss salute when the model mashed the rest onto the same line
+  s = s.replace(
+    /^(Yes,\s*Boss\.|Right away,\s*Boss\.|On it,\s*Boss\.|Yes,\s*Chief\.)\s+(?=\S)/i,
+    "$1\n\n"
+  );
+  // Per-paragraph wall-of-text fail-safe (runs even after salute already inserted \n\n)
+  s = s
+    .split(/\n\n+/)
+    .map((para) => {
+      const p = para.trim();
+      if (!p || p.includes("\n")) return p;
+      if ((p.match(/[.!?]["']?\s+/g) || []).length >= 1) {
+        return p.replace(/([.!?]["']?)\s+(?=[A-Z*"“•])/g, "$1\n\n");
+      }
+      return p;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  // Blank line before emoji-led section headers already on their own line.
   s = s.replace(/\n(?=[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}])/gu, "\n\n");
   // Blank line before bold section labels like *Catalog commands*
   s = s.replace(/\n(\*[^\n*]{3,}\*)/g, "\n\n$1");
-  return s.replace(/\n{3,}/g, "\n\n");
+  // Blank line before bullet lines mashed mid-paragraph
+  s = s.replace(/([.!?:])\s+(•\s)/g, "$1\n\n$2");
+  // Collapse accidental triple+ newlines; strip leading blanks from keycap split
+  s = s.replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n");
+  // Tidy spaces (keep newlines)
+  s = s
+    .split("\n")
+    .map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd())
+    .join("\n")
+    .trim();
+  return s;
 }
 
-export async function sendText(to, text) {
+export async function sendText(to, text, { timeoutMs = 30000 } = {}) {
   const body = normalizeBotMessageSpacing(text);
-  const resp = await callWaha("/api/sendText", {
+  const dest = toChatId(to);
+  if (!dest) {
+    console.error("[whatsapp] sendText aborted — empty chatId from", to);
+    throw new Error("empty_chat_id");
+  }
+  const capture = adminReplyCapture.getStore();
+  if (capture && capture.chatId === dest) {
+    capture.replies.push(body);
+    return { captured: true, chatId: dest };
+  }
+  recordVoiceReplyText(body);
+  // Hot path: single attempt only. Never route normal chat through multi-JID
+  // retries — those can stack 30s WAHA timeouts and freeze the whole bot.
+  try {
+    const resp = await callWaha(
+      "/api/sendText",
+      {
+        session: config.waha.session,
+        chatId: dest,
+        text: body,
+      },
+      { timeoutMs }
+    );
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.error("[whatsapp] sendText failed:", dest, err.message);
+    throw err;
+  }
+}
+
+function voiceFilePayload(filepath, data) {
+  const filename = path.basename(filepath);
+  const ext = path.extname(filename).toLowerCase();
+  const mimetype =
+    ext === ".ogg" || ext === ".oga" || ext === ".opus"
+      ? "audio/ogg; codecs=opus"
+      : ext === ".wav"
+        ? "audio/wav"
+        : ext === ".m4a"
+          ? "audio/mp4"
+          : "audio/mpeg";
+  return {
+    data: Buffer.from(data).toString("base64"),
+    mimetype,
+    filename,
+  };
+}
+
+/**
+ * Send a cached MP3 (or ogg) as a WhatsApp voice note.
+ * WAHA `convert: true` turns MP3 into PTT — no ffmpeg required on the bot VM.
+ */
+/**
+ * Send a voice note straight from a buffer.
+ *
+ * sendVoiceNote reads a cached file off disk. A browser recording is already
+ * in memory, and writing it out only to read it back would put the same bytes
+ * through the filesystem twice for no reason.
+ */
+export async function sendVoiceBuffer(to, buffer, { mimetype = "audio/ogg", filename = "voice.ogg" } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  if (!buffer?.length) throw new Error("empty_buffer");
+
+  const body = {
     session: config.waha.session,
-    chatId: toChatId(to),
-    text: body,
-  });
-  rememberSend(resp, to);
-  return resp;
+    chatId: dest,
+    file: {
+      mimetype: String(mimetype || "audio/ogg").split(";")[0],
+      filename,
+      data: Buffer.from(buffer).toString("base64"),
+    },
+    convert: true,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVoice", { chatId: dest, bytes: buffer.length });
+    return { dryRun: true, chatId: dest };
+  }
+  try {
+    const resp = await callWaha("/api/sendVoice", body, { timeoutMs: 45000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVoiceBuffer failed, trying sendFile:", err.message);
+    const resp = await callWaha("/api/sendFile", { ...body, caption: "" }, { timeoutMs: 45000 });
+    rememberSend(resp, dest);
+    return resp;
+  }
+}
+
+export async function sendVoiceNote(to, filepath) {
+  const dest = toChatId(to);
+  if (!dest) {
+    console.error("[whatsapp] sendVoiceNote aborted — empty chatId from", to);
+    throw new Error("empty_chat_id");
+  }
+  const data = await readFile(filepath);
+  const file = voiceFilePayload(filepath, data);
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file,
+    convert: true,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVoice", {
+      chatId: dest,
+      filename: file.filename,
+      bytes: data.length,
+    });
+    return { dryRun: true, chatId: dest, filepath };
+  }
+  try {
+    const resp = await callWaha("/api/sendVoice", body, { timeoutMs: 45000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVoice failed, trying sendFile:", err.message);
+    const resp = await callWaha(
+      "/api/sendFile",
+      { ...body, caption: "" },
+      { timeoutMs: 45000 }
+    );
+    rememberSend(resp, dest);
+    return resp;
+  }
+}
+
+function isWahaTimeoutError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  const code = String(err?.code || "").toUpperCase();
+  return (
+    code === "ECONNABORTED" ||
+    code === "ETIMEDOUT" ||
+    msg.includes("timeout") ||
+    msg.includes("timed out")
+  );
+}
+
+function isRetryableWahaChatError(err) {
+  if (isWahaTimeoutError(err)) return false;
+  const status = err?.response?.status;
+  const detail = String(
+    err?.response?.data?.message || err?.response?.data?.error || err?.message || ""
+  ).toLowerCase();
+  // Only flip JID form on "bad chat" style failures — not on transport timeouts.
+  if (status === 404 || status === 400 || status === 422) return true;
+  return (
+    detail.includes("chat not found") ||
+    detail.includes("invalid chat") ||
+    detail.includes("no chat") ||
+    detail.includes("not a valid") ||
+    detail.includes("jid")
+  );
+}
+
+/**
+ * Dispute-alert path only: try phone JID forms once each.
+ * Does NOT retry after WAHA timeout (avoids 60–90s freezes).
+ * Do not use for normal customer replies — use sendText.
+ */
+export async function sendTextReliable(to, text, { label = "whatsapp", timeoutMs = 20000 } = {}) {
+  const body = normalizeBotMessageSpacing(text);
+  const raw = String(to || "").trim();
+  const primary = toChatId(to) || raw;
+  const isLid = primary.includes("@lid") || raw.includes("@lid");
+  const digits =
+    phoneDigitsFromChatId(primary) ||
+    (!raw.includes("@")
+      ? (() => {
+          let d = raw.replace(/\D/g, "");
+          if (d.startsWith("0") && d.length >= 10) d = `254${d.slice(1)}`;
+          if (d.length === 9 && /^[17]/.test(d)) d = `254${d}`;
+          return d.length >= 10 && d.length <= 15 ? d : null;
+        })()
+      : null);
+
+  // @lid has no phone digits — single attempt only (never invent @c.us from LID).
+  // Real phones: prefer @c.us then @s.whatsapp.net.
+  const candidates = isLid
+    ? uniqueChatIds(primary).filter(Boolean)
+    : uniqueChatIds(
+        digits ? `${digits}@c.us` : primary,
+        digits ? `${digits}@s.whatsapp.net` : null,
+        primary
+      ).filter(Boolean);
+
+  if (!config.waha.apiUrl) {
+    console.error(
+      `[${label}] WAHA_API_URL unset — message NOT delivered (dry-run). targets=`,
+      candidates.join(",") || "(none)"
+    );
+    console.log("[waha:dry-run]", "/api/sendText", {
+      chatId: candidates[0] || primary,
+      text: String(body).slice(0, 160),
+    });
+    return { dryRun: true, ok: false, chatId: candidates[0] || primary };
+  }
+
+  if (!candidates.length) {
+    console.error(`[${label}] no valid WAHA chatId for`, to);
+    throw new Error("empty_chat_id");
+  }
+
+  let lastErr = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const chatId = candidates[i];
+    try {
+      const resp = await callWaha(
+        "/api/sendText",
+        {
+          session: config.waha.session,
+          chatId,
+          text: body,
+        },
+        { timeoutMs }
+      );
+      rememberSend(resp, chatId);
+      const mid = resp?.id || resp?.key?.id || resp?.messageId || "ok";
+      console.log(`[${label}] WAHA sendText OK → ${chatId} id=${mid}`);
+      return { ok: true, dryRun: false, chatId, resp };
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[${label}] WAHA sendText failed → ${chatId}:`, err.message);
+      // Timeout / transport failure: stop immediately — retrying another JID
+      // only stacks more waits and can wedge the bot under load.
+      if (isWahaTimeoutError(err)) break;
+      if (!isRetryableWahaChatError(err)) break;
+      if (i === candidates.length - 1) break;
+    }
+  }
+  console.error(`[${label}] WAHA sendText exhausted targets:`, candidates.join(","));
+  throw lastErr || new Error("sendText_failed");
 }
 
 /** Public HTTPS URL for a catalog image (prefers bot server for WhatsApp). */
 export function resolvePublicImageUrl(product) {
   const candidates = catalogImageUrlCandidates(product);
   return candidates[0] || null;
+}
+
+/**
+ * Send an image we already hold in memory.
+ *
+ * sendImage takes a link or a base64 string and hardcodes image/jpeg. A chat
+ * photo can be png or webp and we have the bytes, so this keeps the real
+ * mimetype rather than mislabelling it.
+ */
+export async function sendImageBuffer(to, buffer, { mimetype = "image/jpeg", filename = "photo.jpg", caption = "" } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  if (!buffer?.length) throw new Error("empty_buffer");
+
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file: {
+      mimetype: String(mimetype || "image/jpeg").split(";")[0],
+      filename,
+      data: Buffer.from(buffer).toString("base64"),
+    },
+    caption: caption || "",
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendImage", { chatId: dest, bytes: buffer.length });
+    return { dryRun: true, chatId: dest };
+  }
+  const resp = await callWaha("/api/sendImage", body, { timeoutMs: 45000 });
+  rememberSend(resp, dest);
+  return resp;
 }
 
 export async function sendImage(to, { link, data, caption, filename = "product.jpg" }) {
@@ -551,7 +1006,7 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
   if (product.fulfillment === "store") {
     const caption =
       `*${product.name}*\n` +
-      `KES ${product.priceKes.toLocaleString()}  ·  💵 Pay on delivery\n` +
+      `KES ${product.priceKes.toLocaleString()}  ·  🛡️ Prepaid — escrow until you confirm\n` +
       `⭐ ${product.rating} (${product.reviews.toLocaleString()} reviews)`;
 
     const sent = await sendProductImage(to, product, caption);
@@ -562,14 +1017,14 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
     if (!setActions) return;
 
     const options = [
-      { id: `order_${product.id}`, label: "🛒 Order (pay on delivery)" },
+      { id: `order_${product.id}`, label: "🛒 Order (prepaid escrow)" },
       { id: `ask_ai_${product.id}`, label: "🤖 Ask about it" },
       { id: "menu_main", label: "⬅ Main menu" },
     ];
     setMenuState(to, { type: "product", productId: product.id, options });
     return sendText(
       to,
-      `What next?\n\n1. 🛒 Order (pay on delivery)\n2. 🤖 Ask about it\n3. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
+      `What next?\n\n1. 🛒 Order (prepaid escrow)\n2. 🤖 Ask about it\n3. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
     );
   }
 
@@ -613,4 +1068,176 @@ export async function sendProductCard(to, product, affiliateUrl, sourceLabel, { 
     to,
     `What next?\n\n1. 🤖 Ask AI about it\n2. ⬅ Main menu\n\n_Reply with the number (e.g. 1)_`
   );
+}
+
+export function toChannelId(channelId) {
+  const raw = String(channelId || "").trim();
+  if (!raw) return "";
+  if (/@newsletter$/i.test(raw)) return raw;
+  return `${raw.replace(/@.*$/, "")}@newsletter`;
+}
+
+/** Circular video note (WAHA sendVideo asNote). Falls back to sendFile. */
+export async function sendVideoNote(to, { url, data, mimetype = "video/mp4", filename = "note.mp4" } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  const file = data
+    ? { data: Buffer.from(data).toString("base64"), mimetype, filename }
+    : { url, mimetype, filename };
+  if (!file.url && !file.data) throw new Error("missing_video");
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file,
+    convert: true,
+    asNote: true,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVideo", { chatId: dest, asNote: true });
+    return { dryRun: true, chatId: dest, endpoint: "/api/sendVideo" };
+  }
+  try {
+    const resp = await callWaha("/api/sendVideo", body, { timeoutMs: 60000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVideo note failed, trying sendFile:", err.message);
+    const resp = await callWaha("/api/sendFile", { ...body, caption: "" }, { timeoutMs: 60000 });
+    rememberSend(resp, dest);
+    return resp;
+  }
+}
+
+export async function publishWhatsAppStatus({ text = "", mediaUrl = "" } = {}) {
+  const session = config.waha.session;
+  const caption = String(text || "").trim();
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "status@broadcast", { caption, mediaUrl: Boolean(mediaUrl) });
+    return { dryRun: true, destination: "status@broadcast", text: caption };
+  }
+  if (mediaUrl) {
+    try {
+      return await callWaha(`/api/${encodeURIComponent(session)}/status/image`, {
+        file: { url: mediaUrl },
+        caption,
+      });
+    } catch (err) {
+      console.warn("[whatsapp] status/image failed, trying sendImage:", err.message);
+      return callWaha("/api/sendImage", {
+        session,
+        chatId: "status@broadcast",
+        file: { url: mediaUrl },
+        caption,
+      });
+    }
+  }
+  try {
+    return await callWaha(`/api/${encodeURIComponent(session)}/status/text`, { text: caption });
+  } catch (err) {
+    console.warn("[whatsapp] status/text failed, trying sendText:", err.message);
+    return callWaha("/api/sendText", {
+      session,
+      chatId: "status@broadcast",
+      text: caption,
+    });
+  }
+}
+
+function normalizeChannelRow(row = {}) {
+  const id = toChannelId(row.id || row.jid || row.chatId || row.newsletterId || "");
+  return {
+    id,
+    name: row.name || row.title || row.subject || null,
+    role: row.role || row.membership || row.permission || null,
+    description: row.description || row.desc || null,
+  };
+}
+
+/** GET /api/{session}/channels?role=OWNER — ids look like 111111111111111111@newsletter. */
+export async function listWhatsAppChannels({ role = "OWNER" } = {}) {
+  const session = config.waha.session || "default";
+  const q = role ? `?role=${encodeURIComponent(role)}` : "";
+  if (!config.waha.apiUrl) {
+    return { ok: true, dryRun: true, session, role: role || null, count: 0, channels: [] };
+  }
+  try {
+    const data = await callWahaGet(`/api/${encodeURIComponent(session)}/channels${q}`);
+    const rows = Array.isArray(data) ? data : data?.channels || data?.data || [];
+    const channels = rows.map(normalizeChannelRow).filter((c) => c.id);
+    return { ok: true, session, role: role || null, count: channels.length, channels };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "channels_failed",
+      message: String(err?.message || err).slice(0, 200),
+      session,
+      channels: [],
+    };
+  }
+}
+
+export async function resolveWhatsAppChannelId(explicit = "") {
+  const fromArg = toChannelId(explicit || config.waha.channelId);
+  if (fromArg) {
+    return { ok: true, channelId: fromArg, source: explicit ? "argument" : "env" };
+  }
+  const listed = await listWhatsAppChannels({ role: "OWNER" });
+  if (listed.dryRun) {
+    return { ok: true, dryRun: true, channelId: null, source: "dry_run" };
+  }
+  const first = listed.channels?.[0];
+  if (first?.id) {
+    return { ok: true, channelId: first.id, source: "waha_owner", name: first.name };
+  }
+  return {
+    ok: false,
+    error: "missing_channel_id",
+    message:
+      "No OWNER channel from GET /api/{session}/channels. Scan the WAHA QR, then pass channel_id or set WAHA_CHANNEL_ID (111…@newsletter).",
+  };
+}
+
+export async function publishWhatsAppChannel({ channelId = "", text = "", mediaUrl = "" } = {}) {
+  const resolved = await resolveWhatsAppChannelId(channelId);
+  if (!resolved.ok && !resolved.dryRun) return resolved;
+  const dest = resolved.channelId;
+  if (!dest) {
+    return {
+      ok: Boolean(resolved.dryRun),
+      dryRun: Boolean(resolved.dryRun),
+      error: resolved.dryRun ? undefined : "missing_channel_id",
+      message: resolved.message || "Need a channel id (111…@newsletter).",
+    };
+  }
+  if (mediaUrl) {
+    return sendImage(dest, { link: mediaUrl, caption: text });
+  }
+  return sendText(dest, text);
+}
+
+export async function createWhatsAppGroup({ name, participants = [] } = {}) {
+  const session = config.waha.session;
+  const members = [...new Set(participants.map((p) => toChatId(p)).filter(Boolean))];
+  const body = { session, name: String(name || "").trim().slice(0, 80), participants: members };
+  if (!body.name || members.length < 1) {
+    return { ok: false, error: "missing_args", message: "Need a group name and at least one participant." };
+  }
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/createGroup", body);
+    return { ok: true, dryRun: true, name: body.name, participants: members, groupId: "dryrun@g.us" };
+  }
+  try {
+    const data = await callWaha("/api/createGroup", body, { timeoutMs: 45000 });
+    const groupId = data?.id || data?.gid?._serialized || data?.groupId || "";
+    return { ok: true, ...data, groupId, name: body.name, participants: members };
+  } catch (err) {
+    console.warn("[whatsapp] createGroup failed, trying session groups:", err.message);
+    const data = await callWaha(
+      `/api/${encodeURIComponent(session)}/groups`,
+      { name: body.name, participants: members },
+      { timeoutMs: 45000 }
+    );
+    const groupId = data?.id || data?.gid?._serialized || data?.groupId || "";
+    return { ok: true, ...data, groupId, name: body.name, participants: members };
+  }
 }

@@ -1,10 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Sokoni Mall — Brand New & Pre-Loved Marketplace</title>
 <meta name="description" content="Shop brand new and pre-loved fashion across Kenya. 100% prepaid escrow — instant SK order tracking. No COD." />
+<meta name="sokoni-account-gate" content="hard" />
+<script>
+  /* Early hard-gate: avoid shop flash before account-auth.js loads. Bypass with ?gate=soft|off */
+  (function () {
+    try {
+      var q = new URLSearchParams(location.search).get("gate");
+      if (q) localStorage.setItem("sokoni-account-gate", String(q).toLowerCase());
+      var mode = (localStorage.getItem("sokoni-account-gate") || "hard").toLowerCase();
+      if (mode !== "hard") return;
+      var raw = localStorage.getItem("sokoni-account-session");
+      if (!raw) {
+        location.replace("login.html?next=" + encodeURIComponent("index.html" + location.search));
+        return;
+      }
+      var p = JSON.parse(raw);
+      if (!p.token || !p.expiresAt || Number(p.expiresAt) <= Date.now()) {
+        localStorage.removeItem("sokoni-account-session");
+        location.replace("login.html?next=" + encodeURIComponent("index.html"));
+      }
+    } catch (e) {}
+  })();
+</script>
 <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="assets/images/favicon-32.png" sizes="32x32" type="image/png" />
 <link rel="apple-touch-icon" href="assets/images/logo-apple-touch.png" />
@@ -12,6 +36,35 @@
 <meta property="og:description" content="Brand new & pre-loved marketplace — 100% prepaid, instant SK tracking across Kenya." />
 <meta property="og:image" content="assets/images/logo-og.png" />
 <meta property="og:type" content="website" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Sokoni Mall",
+  "legalName": "SKN MALL KENYA",
+  "url": "https://sokonimall.com",
+  "logo": "https://sokonimall.com/assets/images/logo-og.png",
+  "foundingDate": "2026-09-04",
+  "identifier": { "@type": "PropertyValue", "propertyID": "KE-BRS", "value": "BN-36SM2YW9" },
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Murang'a Union Building, Thika - Kandara Road",
+    "postOfficeBoxNumber": "220",
+    "postalCode": "01034",
+    "addressLocality": "Kandara",
+    "addressCountry": "KE"
+  },
+  "areaServed": { "@type": "Country", "name": "Kenya" },
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "contactType": "customer support",
+    "telephone": "+254117422428",
+    "email": "support@sokonimall.com",
+    "areaServed": "KE",
+    "availableLanguage": ["English", "Swahili"]
+  }
+}
+</script>
 <meta name="theme-color" content="#000000" />
 <meta name="sokoni-catalog-version" content="20260712" />
 <script src="https://cdn.tailwindcss.com"></script>
@@ -55,21 +108,25 @@
     } catch (e) {}
   })();
 </script>
+<link rel="preconnect" href="https://res.cloudinary.com" crossorigin>
+<link rel="dns-prefetch" href="https://res.cloudinary.com">
+<link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+<link rel="dns-prefetch" href="https://images.unsplash.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/design-tokens.css" />
-<link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/styles.css?v=20260906a" />
 <link rel="stylesheet" href="assets/css/motion.css" />
-<link rel="stylesheet" href="assets/css/depop-ui.css" />
-<link rel="stylesheet" href="assets/css/depop-shell.css" />
+<link rel="stylesheet" href="assets/css/depop-ui.css?v=compare-at-2" />
+<link rel="stylesheet" href="assets/css/depop-shell.css?v=20260806c" />
 </head>
-<body class="bg-black text-white font-sans antialiased has-depop-shell">
+<body class="font-sans antialiased has-depop-shell">
   <!-- Depop-style shell header -->
   <header class="depop-shell-header" aria-label="Sokoni Mall">
     <div class="depop-main-bar">
       <button type="button" id="shop-browse-btn" class="depop-icon-btn" aria-label="Browse categories">☰</button>
-      <a href="index.html" class="depop-logo">SOKONI<span> MALL</span></a>
+      <a href="index.html" class="depop-logo">SOKONI<span class="depop-logo-dot">.</span><span class="depop-logo-mall"> MALL</span></a>
       <div class="depop-search-wrap hidden sm:block">
         <form id="depop-search-form" role="search">
           <span class="depop-search-icon" aria-hidden="true">🔍</span>
@@ -79,9 +136,16 @@
       </div>
       <div class="depop-header-actions">
         <button type="button" id="depop-search-toggle" class="depop-icon-btn sm:hidden" aria-label="Search">🔍</button>
+        <a href="ask.html" class="inline-flex text-xs font-semibold min-h-[44px] items-center gap-1 px-2 hover:opacity-80" aria-label="ASK AI" title="ASK AI">
+          <span aria-hidden="true">💬</span>
+          <span>ASK AI</span>
+        </a>
+        <a href="track.html" class="hidden sm:inline-flex text-xs font-semibold min-h-[44px] items-center px-2 hover:opacity-80" title="Track order">Track</a>
+        <span data-account-nav data-account-nav-class="hidden sm:inline-flex text-xs font-semibold min-h-[44px] items-center px-2 hover:opacity-80"></span>
         <a href="suppliers/list.html" class="depop-btn-sell hidden sm:inline-flex">Sell</a>
-        <button type="button" id="shop-bag-btn" class="depop-icon-btn" aria-label="Saved items">
-          🛍️
+        <button type="button" id="shop-bag-btn" class="depop-icon-btn depop-cart-btn" aria-label="Cart" title="Cart">
+          <img class="depop-cart-icon" src="assets/images/ui/cart-icon.svg" width="22" height="22" alt="" />
+          <span class="depop-cart-label">Cart</span>
           <span id="shop-bag-count" class="depop-bag-count hidden" aria-hidden="true">0</span>
         </button>
         <button id="theme-toggle" type="button" aria-label="Toggle dark mode" class="depop-icon-btn hidden md:inline-flex">
@@ -115,22 +179,111 @@
     <a href="#" id="search-hint-link" class="hidden"></a>
   </div>
 
-  <!-- Dynamic hero carousel -->
-  <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Featured"></section>
-
-  <!-- Curated collections -->
-  <section class="depop-collections catalog-main max-w-7xl mx-auto px-4 md:px-5">
-    <h2 class="depop-collections-heading">Curated collections</h2>
-    <div id="depop-collections-row" class="depop-collections-row">
-      <button type="button" class="depop-collection-card" data-depop-filter='{"category":"trending","scroll":true}'>🔥 Trending Fits</button>
-      <button type="button" class="depop-collection-card" data-depop-filter='{"priceTier":"under-2500","scroll":true}'>🏷️ Under 2,500 KSh</button>
-      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"secondhand","scroll":true}'>♻️ Pre-Loved Gems</button>
-      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"new","scroll":true}'>✨ Brand New Drops</button>
+  <!-- Kilimall-style: embedded category rail + hero banner (desktop); hero only on mobile -->
+  <section class="sokoni-hero-zone" aria-label="Categories and featured">
+    <div class="sokoni-hero-zone-inner">
+      <aside id="sokoni-category-rail" class="sokoni-category-rail" aria-label="Shop by category">
+        <div class="sokoni-category-rail__head">Categories</div>
+        <div id="sokoni-category-rail-list" class="sokoni-category-rail__list"></div>
+        <div id="sokoni-category-flyout" class="sokoni-category-flyout" hidden aria-hidden="true"></div>
+      </aside>
+      <div class="sokoni-hero-banner-slot">
+        <section id="depop-hero-carousel" class="depop-hero-carousel" aria-label="Sokoni"></section>
+      </div>
     </div>
   </section>
 
-  <!-- Phase 8 — Personalized feed rails -->
-  <div id="feed-rails" class="catalog-main max-w-7xl mx-auto px-4 md:px-5 space-y-10 py-6 hidden"></div>
+  <section id="trust-ticker" class="px-4 md:px-5 py-2 text-sm text-zinc-400" aria-live="polite" hidden></section>
+  <script src="assets/js/trust-ticker.js" defer></script>
+
+  <!-- Brands + promo rotator (hero-style in-place swap; no slide-away blanking) -->
+  <section class="depop-brands-bar depop-promo-section reveal-on-scroll" aria-label="Popular brands and featured finds">
+    <p class="depop-brands-kicker">Popular brands &amp; styles on Sokoni</p>
+    <div id="depop-brands-row" class="depop-brands-row"></div>
+
+    <div class="depop-product-showcase depop-promo-panel" id="depop-promo-carousel">
+      <div class="depop-promo-poster-wrap">
+        <figure class="depop-promo-visual" aria-hidden="false">
+          <img
+            data-promo-img="a"
+            class="depop-promo-img is-active"
+            src="assets/images/marketing/product-sneakers.jpg"
+            alt="Vintage streetwear sneakers on a dark studio podium"
+            width="1536"
+            height="1024"
+            decoding="async"
+            fetchpriority="high"
+          />
+          <img
+            data-promo-img="b"
+            class="depop-promo-img"
+            src="assets/images/marketing/product-sneakers.jpg"
+            alt=""
+            width="1536"
+            height="1024"
+            decoding="async"
+            aria-hidden="true"
+          />
+        </figure>
+      </div>
+      <div class="depop-promo-footer">
+        <div class="depop-promo-copy">
+          <span class="depop-edu-kicker" data-promo-kicker>Pre-loved finds</span>
+          <h2 class="depop-edu-title" data-promo-title>Studio-clean shots. Real thrift heat.</h2>
+          <p class="text-sm text-zinc-400" data-promo-sub>
+            Sellers list sneakers, denim, and streetwear with clear photos — you pay on M-Pesa, escrow holds until delivery.
+          </p>
+        </div>
+        <div class="depop-product-showcase-actions depop-promo-actions">
+          <a data-promo-primary href="#deals" class="depop-hero-cta depop-hero-cta--primary">Shop pre-loved</a>
+          <a data-promo-secondary href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--ghost">List your kicks</a>
+        </div>
+      </div>
+      <div class="depop-promo-dots" id="depop-promo-dots" role="tablist" aria-label="Featured promo slides"></div>
+    </div>
+  </section>
+
+  <!-- Sellers discovered from live catalog -->
+  <section class="depop-top-shops" aria-label="Sellers to follow">
+    <div class="depop-top-shops-inner">
+      <div class="depop-top-shops-head">
+        <div>
+          <h2>Sellers to follow</h2>
+          <p>Shops with live listings right now — open a profile and follow when you’re signed in.</p>
+        </div>
+        <a href="suppliers/list.html" class="depop-top-shops-link">Start selling →</a>
+      </div>
+      <div id="depop-top-shops-grid" class="depop-top-shops-grid" hidden></div>
+      <div id="depop-top-shops-empty" class="depop-top-shops-empty">
+        Fresh shops appear here as sellers go live.
+        <a href="suppliers/list.html"> List your first item</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Phase 8/12 — Explore + Following feed rails -->
+  <section class="catalog-main max-w-7xl mx-auto px-4 md:px-5 pt-6" aria-label="Home feed">
+    <div class="flex flex-wrap items-center gap-2 mb-4" role="tablist" aria-label="Feed mode">
+      <button
+        type="button"
+        id="feed-tab-explore"
+        class="feed-mode-tab is-active min-h-[44px] px-4 rounded-full bg-brand-green text-brand-purple text-sm font-semibold"
+        role="tab"
+        aria-selected="true">
+        Explore
+      </button>
+      <button
+        type="button"
+        id="feed-tab-following"
+        class="feed-mode-tab min-h-[44px] px-4 rounded-full border border-brand-purple/20 dark:border-white/20 text-sm font-semibold"
+        role="tab"
+        aria-selected="false">
+        Following
+      </button>
+    </div>
+    <p id="feed-mode-hint" class="text-sm text-brand-purple/60 dark:text-white/65 mb-2 hidden"></p>
+    <div id="feed-rails" class="space-y-10 hidden"></div>
+  </section>
 
   <div class="depop-main-content">
 
@@ -146,12 +299,26 @@
       <p id="catalog-filter-label" class="hidden text-sm font-semibold text-brand-green mb-4"></p>
       <div id="browse-filter-bar" class="hidden flex-col gap-2 mb-4">
         <div id="item-type-chips" class="flex flex-wrap gap-2"></div>
+        <div id="vibe-filter-chips" class="flex flex-wrap gap-2" aria-label="Aesthetic filters"></div>
         <div id="price-tier-chips" class="flex flex-wrap gap-2"></div>
       </div>
       <p id="search-status" class="hidden text-sm text-brand-purple/70 dark:text-white/70 mb-4"></p>
-      <div id="local-deals-empty" class="hidden text-center py-12 text-brand-purple/50">
-        <p class="mb-4">No listings match your search.</p>
-        <a id="search-empty-wa" href="#" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-6 py-3 rounded-full">Try another search</a>
+      <div id="local-deals-empty" class="hidden text-center py-12 text-brand-purple/50 dark:text-zinc-400">
+        <img
+          class="depop-empty-search-art mx-auto mb-5"
+          src="assets/images/marketing/empty-search.jpg"
+          alt=""
+          width="320"
+          height="320"
+          loading="lazy"
+          decoding="async"
+        />
+        <p class="text-lg font-semibold text-brand-purple dark:text-white mb-2">Nothing listed for that yet.</p>
+        <p class="mb-5 max-w-md mx-auto text-sm">Try another keyword — or list the piece yourself and sell it on Sokoni.</p>
+        <div class="flex flex-wrap justify-center gap-3">
+          <a id="search-empty-wa" href="#" class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-6 py-3 rounded-full">Ask on WhatsApp</a>
+          <a href="suppliers/list.html" class="inline-flex items-center gap-2 border border-brand-purple/20 dark:border-white/20 font-semibold px-6 py-3 rounded-full">List an item</a>
+        </div>
       </div>
       <div id="catalog-refresh-empty" class="hidden text-center py-16 text-brand-purple/60 col-span-full">
         <p class="text-xl font-display font-bold text-brand-purple dark:text-white mb-2">Fresh listings loading</p>
@@ -166,12 +333,23 @@
     </div>
   </section>
 
+  <!-- Curated collections (below first viewport) -->
+  <section class="depop-collections catalog-main max-w-7xl mx-auto px-4 md:px-5">
+    <h2 class="depop-collections-heading">Curated collections</h2>
+    <div id="depop-collections-row" class="depop-collections-row">
+      <button type="button" class="depop-collection-card" data-depop-filter='{"category":"trending","scroll":true}'>Trending fits</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"priceTier":"under-2500","scroll":true}'>Under 2,500 KSh</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"secondhand","scroll":true}'>Pre-loved gems</button>
+      <button type="button" class="depop-collection-card" data-depop-filter='{"itemType":"new","scroll":true}'>Brand new drops</button>
+    </div>
+  </section>
+
   <!-- CATEGORIES -->
   <section id="categories" class="catalog-main reveal-on-scroll max-w-7xl mx-auto px-4 md:px-5 py-10 md:py-12">
     <div class="flex items-end justify-between mb-6">
       <div>
         <h2 class="depop-section-heading">Browse categories</h2>
-        <p class="text-zinc-400 mt-1 text-sm">Women, men, brand new, pre-loved &amp; more.</p>
+        <p class="text-zinc-400 mt-1 text-sm">Women, men, beauty, electronics, supermarket, auto &amp; more.</p>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" id="category-grid"></div>
@@ -199,25 +377,25 @@
         <div class="group bg-white/5 border border-white/10 rounded-3xl p-7 hover:bg-white/10 hover:-translate-y-1 transition">
           <div class="w-14 h-14 rounded-2xl bg-brand-green/15 text-3xl flex items-center justify-center mb-5 group-hover:scale-110 transition">🤖</div>
           <h3 class="font-bold text-xl mb-2">AI Shopping Assistant</h3>
-          <p class="text-white/60 text-sm">Ask in English, Kiswahili or Sheng. Sokoni AI searches our prepaid catalog and tracks SK-#### orders — same brain on web & WhatsApp.</p>
+          <p class="text-white/60 text-sm">Ask in English, Kiswahili or Sheng. Sokoni AI searches our prepaid catalog and tracks SKN-#### orders — same brain on web & WhatsApp.</p>
         </div>
         <!-- Live tracking -->
         <div class="group bg-white/5 border border-white/10 rounded-3xl p-7 hover:bg-white/10 hover:-translate-y-1 transition">
           <div class="w-14 h-14 rounded-2xl bg-brand-green/15 text-3xl flex items-center justify-center mb-5 group-hover:scale-110 transition">📦</div>
           <h3 class="font-bold text-xl mb-2">Live Order Tracking</h3>
-          <p class="text-white/60 text-sm">Every order gets a number like <b class="text-brand-green">SK-1042</b>. Type it anytime to see exactly where your delivery is.</p>
+          <p class="text-white/60 text-sm">Every order gets a number like <b class="text-brand-green">SKN-1002-1</b>. Type it anytime to see exactly where your delivery is.</p>
         </div>
         <!-- Delivery updates -->
         <div class="group bg-white/5 border border-white/10 rounded-3xl p-7 hover:bg-white/10 hover:-translate-y-1 transition">
           <div class="w-14 h-14 rounded-2xl bg-brand-green/15 text-3xl flex items-center justify-center mb-5 group-hover:scale-110 transition">🛵</div>
           <h3 class="font-bold text-xl mb-2">Delivery Updates</h3>
-          <p class="text-white/60 text-sm">Get a WhatsApp ping when your order is confirmed, packed and out for delivery — plus your M-Pesa Till payment details.</p>
+          <p class="text-white/60 text-sm">Get a WhatsApp ping when your order is paid, packed, and out for delivery — plus your SKN-#### tracking link.</p>
         </div>
-        <!-- Pay on delivery -->
+        <!-- Prepaid escrow -->
         <div class="group bg-white/5 border border-white/10 rounded-3xl p-7 hover:bg-white/10 hover:-translate-y-1 transition">
-          <div class="w-14 h-14 rounded-2xl bg-brand-green/15 text-3xl flex items-center justify-center mb-5 group-hover:scale-110 transition">💵</div>
-          <h3 class="font-bold text-xl mb-2">M-Pesa Till on Delivery</h3>
-          <p class="text-white/60 text-sm">Inspect first, then pay Till <b class="text-brand-green">4775847</b> — registered to founder <b>David Thuku Muiruri</b> during our launch phase, so you pay a named, accountable person. Verify via <b>+254 117 422 428</b> before paying. Reply <em>paid</em> after payment.</p>
+          <div class="w-14 h-14 rounded-2xl bg-brand-green/15 text-3xl flex items-center justify-center mb-5 group-hover:scale-110 transition">🔒</div>
+          <h3 class="font-bold text-xl mb-2">Prepaid M-Pesa escrow</h3>
+          <p class="text-white/60 text-sm">Pay upfront via <b class="text-brand-green">M-Pesa STK</b>. Funds stay in Sokoni escrow until delivery is confirmed — no COD.</p>
         </div>
         <!-- Human support -->
         <div class="group bg-white/5 border border-white/10 rounded-3xl p-7 hover:bg-white/10 hover:-translate-y-1 transition">
@@ -237,7 +415,7 @@
       <div class="mt-14 grid md:grid-cols-2 gap-8 items-center bg-white/5 border border-white/10 rounded-3xl p-8 md:p-10">
         <div>
           <h3 class="text-2xl font-extrabold mb-3">Know exactly where your order is 📍</h3>
-          <p class="text-white/60 mb-6">Type your SK-#### on this site or in WhatsApp — live shipment timeline from label to delivered.</p>
+          <p class="text-white/60 mb-6">Type your SKN-#### on this site or in WhatsApp — live shipment timeline from label to delivered.</p>
           <a href="track.html"
              class="inline-flex items-center gap-2 bg-brand-green text-brand-purple font-bold px-6 py-3.5 rounded-full shadow-lg shadow-green-500/30 hover:scale-105 transition mr-3">
             📦 Track an Order
@@ -250,7 +428,7 @@
         </div>
         <div class="bg-[#ECE5DD] text-brand-purple rounded-2xl p-5 shadow-2xl max-w-sm md:ml-auto w-full">
           <div class="bg-white rounded-2xl rounded-tl-none px-4 py-3 text-sm shadow space-y-2">
-            <p class="font-bold">📦 SK-1042</p>
+            <p class="font-bold">📦 SKN-1002-1</p>
             <p>🛍️ Hisense 43" Smart TV</p>
             <p class="text-brand-purple/60">💰 KES 28,099 — prepaid · escrow held</p>
             <div class="pt-2 space-y-1 text-[13px] border-t border-black/5">
@@ -281,31 +459,50 @@
         </div>
         <div class="depop-edu-card">
           <h3>📦 Prepaid labels</h3>
-          <p>Print or scan a drop-off label instantly when your item sells — track every package with SK-#### codes.</p>
+          <p>Print or scan a drop-off label instantly when your item sells — track every package with SKN-#### codes.</p>
         </div>
       </div>
     </div>
   </section>
 
   <!-- HOW IT WORKS (marketplace) -->
-  <section id="how-it-works" class="depop-edu-section depop-edu-section--light reveal-on-scroll">
+  <section id="how-it-works" class="depop-how-strip reveal-on-scroll">
     <div class="depop-edu-inner px-4 md:px-5">
-      <h2 class="depop-edu-title">How Sokoni Mall works</h2>
-      <div class="depop-edu-grid">
-        <div class="depop-edu-card">
-          <span class="depop-edu-step-num">1</span>
-          <h3>Snap &amp; AI auto-list</h3>
-          <p>Upload 1–4 photos. Gemini AI fills titles, tags, backgrounds, and price suggestions automatically.</p>
-        </div>
-        <div class="depop-edu-card">
-          <span class="depop-edu-step-num">2</span>
-          <h3>Buyer pays upfront</h3>
-          <p>Payment held safely in escrow via M-Pesa or card — 100% buyer protection until delivery is confirmed.</p>
-        </div>
-        <div class="depop-edu-card">
-          <span class="depop-edu-step-num">3</span>
-          <h3>Drop off &amp; track</h3>
-          <p>Drop your package at the nearest hub using your instant SK-#### QR code. Seller paid on confirmed delivery.</p>
+      <span class="depop-edu-kicker">How it works</span>
+      <h2 class="depop-edu-title">How Sokoni works</h2>
+      <p class="text-sm text-zinc-400 max-w-2xl">Prepaid escrow marketplace — list, buy, drop off, get paid. No COD.</p>
+      <div class="depop-how-layout">
+        <figure class="depop-how-visual">
+          <img
+            src="assets/images/marketing/how-it-works-dispatch.jpg"
+            alt="Buyer with a tote of pre-loved fashion on a Nairobi street"
+            width="1536"
+            height="1024"
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+        <div class="depop-edu-grid">
+          <div class="depop-edu-card">
+            <span class="depop-edu-step-num">1</span>
+            <h3>Snap &amp; list</h3>
+            <p>Upload photos from your phone. Add title, price, and condition — post live in minutes.</p>
+          </div>
+          <div class="depop-edu-card">
+            <span class="depop-edu-step-num">2</span>
+            <h3>Buy &amp; escrow</h3>
+            <p>Pay with M-Pesa. Funds stay in Sokoni escrow until delivery is confirmed.</p>
+          </div>
+          <div class="depop-edu-card">
+            <span class="depop-edu-step-num">3</span>
+            <h3>Drop off</h3>
+            <p>Seller prints the SK label and drops the parcel at a Sokoni hub or pickup partner.</p>
+          </div>
+          <div class="depop-edu-card">
+            <span class="depop-edu-step-num">4</span>
+            <h3>Get paid</h3>
+            <p>Buyer receives the order — then seller payout is released to their wallet / M-Pesa.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -331,13 +528,159 @@
         </div>
         <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
           <div class="w-12 h-12 rounded-xl bg-brand-green text-brand-purple flex items-center justify-center text-xl font-bold mb-4">3</div>
-          <h3 class="font-bold text-lg mb-2">💵 Safe pay on delivery</h3>
-          <p class="text-white/60 text-sm">We deliver to your door or pickup point. <strong>Inspect first</strong>, then pay via M-Pesa Till <strong>4775847</strong> — registered to founder <strong>David Thuku Muiruri</strong> (named, accountable checkout during our launch phase). Verify on <strong>+254 117 422 428</strong> before paying. Never pay riders.</p>
+          <h3 class="font-bold text-lg mb-2">🔒 Pay upfront — escrow held</h3>
+          <p class="text-white/60 text-sm">Pay via <strong>M-Pesa STK</strong> before dispatch. Sokoni holds funds until delivery is confirmed. Track with your <strong>SKN-####</strong>. Never pay riders or personal numbers.</p>
         </div>
       </div>
       <p class="text-center text-white/40 text-xs mt-10 max-w-2xl mx-auto">
-        <strong>100% prepaid</strong> — M-Pesa escrow until delivery is confirmed. Track every order with SK-####.
+        <strong>100% prepaid</strong> — M-Pesa escrow until delivery is confirmed. Track every order with SKN-####.
       </p>
+    </div>
+  </section>
+
+  <!-- Trust / quality / hubs — between How it works and Reviews -->
+  <section id="trusted-exchange" class="depop-trust-banner reveal-on-scroll" aria-label="Trust, quality checks, and drop-off hubs">
+    <div class="depop-trust-banner-inner px-4 md:px-5">
+      <span class="depop-edu-kicker">From escrow to delivery</span>
+      <h2 class="depop-edu-title">Trust built into every handoff.</h2>
+      <p class="text-sm text-zinc-400 max-w-2xl">
+        Inspect the drop, use Sokoni hubs, and track every parcel — M-Pesa stays in escrow until delivery is confirmed.
+      </p>
+
+      <div class="depop-trust-stack">
+        <article class="depop-trust-card">
+          <figure class="depop-trust-banner-visual">
+            <img
+              src="assets/images/marketing/trust-exchange-nairobi.jpg"
+              alt="Seller and buyer shaking hands over a Sokoni Marketplace bag with Track ID SKN-572198-XY on a Nairobi street"
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div class="depop-trust-card-copy">
+            <h3>Trusted exchange</h3>
+            <p>Meet, hand over, and follow the SK track ID — escrow holds payment until delivery.</p>
+            <div class="depop-trust-banner-actions">
+              <a href="track.html" class="depop-hero-cta depop-hero-cta--primary">Track an order</a>
+              <a href="faq.html" class="depop-hero-cta depop-hero-cta--ghost">How escrow works</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="depop-trust-card">
+          <figure class="depop-trust-banner-visual">
+            <img
+              src="assets/images/marketing/inspect-before-pay.jpg"
+              alt="Buyer scanning a QR code while unboxing pre-loved sneakers at a Nairobi coffee shop"
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div class="depop-trust-card-copy">
+            <h3>Inspect before you pay</h3>
+            <p>Scan the package QR and check condition — authenticity and thrift quality, verified before you commit.</p>
+            <div class="depop-trust-banner-actions">
+              <a href="#deals" class="depop-hero-cta depop-hero-cta--primary">Shop finds</a>
+              <a href="faq.html" class="depop-hero-cta depop-hero-cta--ghost">Buyer protection</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="depop-trust-card">
+          <figure class="depop-trust-banner-visual">
+            <img
+              src="assets/images/marketing/dropoff-hub.jpg"
+              alt="Staff at a Sokoni drop-off hub handing a branded bag to a courier"
+              width="1536"
+              height="1024"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div class="depop-trust-card-copy">
+            <h3>Drop-off hubs</h3>
+            <p>Hand parcels to partner counters in Nairobi CBD and major towns — couriers pick up, buyers track with SKN-####.</p>
+            <div class="depop-trust-banner-actions">
+              <a href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--primary">Start selling</a>
+              <a href="#how-it-works" class="depop-hero-cta depop-hero-cta--ghost">How it works</a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trade across Kenya — between How it works / trust and Reviews -->
+  <section id="trade-across-kenya" class="depop-trade-across" aria-label="Trade across all 47 counties">
+    <div class="depop-trade-across-inner px-4 md:px-5">
+      <span class="depop-edu-kicker">Impact &amp; community</span>
+      <h2 class="depop-edu-title">Trade across all 47 counties</h2>
+      <p class="text-sm text-zinc-400 max-w-2xl">
+        Farmers, makers, and couriers — Sokoni connects buyers and sellers countrywide with M-Pesa escrow and SK tracking.
+      </p>
+
+      <article class="depop-trade-board" aria-labelledby="trade-mashinani-title">
+        <figure class="depop-trade-banner">
+          <img
+            src="assets/images/marketing/sokoni-mashinani-farm.jpg"
+            alt="Kenyan farmer handing a crate of fresh tomatoes and avocados to a courier beside a pickup truck"
+            width="1536"
+            height="1024"
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+        <h3 id="trade-mashinani-title" class="depop-trade-board-title">Direct from the Farm (Sokoni Mashinani)</h3>
+        <p class="depop-trade-board-sub">
+          Skip the middleman. Buy fresh produce, livestock, and raw agricultural goods directly from verified local farmers across Nakuru, Eldoret, Meru, and Kisumu.
+        </p>
+        <h4 class="depop-trade-cat-heading">Categories</h4>
+        <div id="trade-mashinani-grid" class="depop-trade-cat-grid" aria-label="Sokoni Mashinani categories"></div>
+      </article>
+
+      <article class="depop-trade-board" aria-labelledby="trade-artisans-title">
+        <figure class="depop-trade-banner">
+          <img
+            src="assets/images/marketing/sokoni-local-artisan.jpg"
+            alt="Kenyan craftsman in a woodwork shop holding a finished wooden coffee table"
+            width="1536"
+            height="1024"
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+        <h3 id="trade-artisans-title" class="depop-trade-board-title">Empowering Local Artisans &amp; Crafts</h3>
+        <p class="depop-trade-board-sub">
+          From custom wood furniture to hand-woven kitenge wear, Sokoni gives local makers a digital storefront to reach buyers anywhere in Kenya safely using M-Pesa Escrow.
+        </p>
+        <h4 class="depop-trade-cat-heading">Categories</h4>
+        <div id="trade-artisans-grid" class="depop-trade-cat-grid" aria-label="Artisans and crafts categories"></div>
+      </article>
+
+      <article class="depop-trade-board depop-trade-board--courier" aria-labelledby="trade-courier-title">
+        <figure class="depop-trade-banner">
+          <img
+            src="assets/images/marketing/sokoni-county-courier.jpg"
+            alt="Courier loading Sokoni Marketplace boxes onto a transport vehicle at a Kenyan parcel depot"
+            width="1536"
+            height="1024"
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+        <h3 id="trade-courier-title" class="depop-trade-board-title">Nationwide Delivery to Any County</h3>
+        <p class="depop-trade-board-sub">
+          Whether you're ordering from Nairobi CBD or shipping from a village in Nyeri, our door-to-hub parcel network ensures tracked delivery right to your nearest town centre.
+        </p>
+        <div class="depop-trade-across-actions">
+          <a href="track.html" class="depop-hero-cta depop-hero-cta--primary">Track an order</a>
+          <a href="suppliers/list.html" class="depop-hero-cta depop-hero-cta--ghost">Start selling</a>
+        </div>
+      </article>
     </div>
   </section>
 
@@ -421,21 +764,21 @@
         <span class="depop-bottom-nav__icon" aria-hidden="true">🏠</span>
         <span class="depop-bottom-nav__label">Home</span>
       </a>
-      <a href="#deals" class="depop-bottom-nav__item" data-depop-nav="search">
-        <span class="depop-bottom-nav__icon" aria-hidden="true">🔍</span>
-        <span class="depop-bottom-nav__label">Search</span>
+      <a href="#deals" class="depop-bottom-nav__item" data-depop-nav="explore">
+        <span class="depop-bottom-nav__icon" aria-hidden="true">🧭</span>
+        <span class="depop-bottom-nav__label">Explore</span>
       </a>
       <a href="suppliers/list.html" class="depop-bottom-nav__item depop-bottom-nav__item--sell" data-depop-nav="sell">
         <span class="depop-bottom-nav__icon" aria-hidden="true">➕</span>
         <span class="depop-bottom-nav__label">Sell</span>
       </a>
-      <a href="https://wa.me/254117422428" class="depop-bottom-nav__item" data-depop-nav="inbox" target="_blank" rel="noopener">
+      <a href="inbox.html" class="depop-bottom-nav__item" data-depop-nav="inbox">
         <span class="depop-bottom-nav__icon" aria-hidden="true">💬</span>
         <span class="depop-bottom-nav__label">Inbox</span>
       </a>
-      <a href="track.html" class="depop-bottom-nav__item" data-depop-nav="track">
-        <span class="depop-bottom-nav__icon" aria-hidden="true">📦</span>
-        <span class="depop-bottom-nav__label">Track</span>
+      <a href="profile.html" class="depop-bottom-nav__item" data-depop-nav="profile" data-account-nav-label>
+        <span class="depop-bottom-nav__icon" aria-hidden="true">👤</span>
+        <span class="depop-bottom-nav__label">Account</span>
       </a>
     </div>
   </nav>
@@ -448,7 +791,7 @@
         <p class="text-zinc-400 text-sm font-normal leading-relaxed">
           Kenya's #1 prepaid marketplace for brand new merchandise and pre-loved fashion. Fast drop-off logistics &amp; 100% Escrow Protection.
         </p>
-        <p class="text-zinc-500 text-xs font-normal">support@sokonimall.com • Nairobi, Kenya</p>
+        <p class="text-zinc-500 text-xs font-normal">support@sokonimall.com • Kenya</p>
       </div>
       <div>
         <h4 class="text-sm font-semibold text-white tracking-wide uppercase mb-3">Shop</h4>
@@ -464,8 +807,12 @@
         <h4 class="text-sm font-semibold text-white tracking-wide uppercase mb-3">Company</h4>
         <ul class="space-y-2">
           <li><a href="about.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">About Us</a></li>
+          <li><a href="about.html#registration" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Business registration</a></li>
           <li><a href="#how-it-works" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">How It Works</a></li>
+          <li><a href="boda/index.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Drive with Sokoni</a></li>
+          <li><a href="trust-and-safety.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Trust &amp; safety</a></li>
           <li><a href="faq.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">FAQ</a></li>
+          <li><a href="terms.html#returns" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Refunds</a></li>
           <li><a href="terms.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Terms of Service</a></li>
           <li><a href="privacy.html" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Privacy Policy</a></li>
         </ul>
@@ -473,14 +820,27 @@
       <div>
         <h4 class="text-sm font-semibold text-white tracking-wide uppercase mb-3">Get in Touch</h4>
         <ul class="space-y-2">
-          <li><a href="https://instagram.com" target="_blank" rel="noopener" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">Instagram</a></li>
-          <li><a href="https://tiktok.com" target="_blank" rel="noopener" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">TikTok</a></li>
+          <li><a href="https://wa.me/254117422428" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">WhatsApp +254 117 422 428</a></li>
           <li><a href="mailto:support@sokonimall.com" class="text-xs font-normal text-zinc-400 hover:text-white transition-colors">support@sokonimall.com</a></li>
+          <li><span class="text-xs font-normal text-zinc-500">Registered office: Murang'a Union Building, Thika–Kandara Road, P.O. Box 220, 01034 Kandara. Delivery is countrywide.</span></li>
         </ul>
       </div>
     </div>
-    <div class="max-w-7xl mx-auto mt-12 pt-6 border-t border-zinc-900 text-center text-xs text-zinc-500">
-      © <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace. All rights reserved.
+    <div class="max-w-7xl mx-auto mt-12 pt-6 border-t border-zinc-900">
+      <div class="sokoni-brs-badge">
+        <p>
+          <strong>Registered Business:</strong> SKN MALL KENYA
+          <span aria-hidden="true"> | </span>
+          <strong>BN Registration No:</strong> BN-36SM2YW9
+        </p>
+        <p class="sokoni-brs-badge__note">
+          Duly registered under the Registration of Business Names Act (Cap 499) by the Republic of Kenya Business Registration Service (BRS).
+          <a href="about.html#registration">Full details &amp; how to verify</a>
+        </p>
+      </div>
+      <p class="mt-6 text-center text-xs text-zinc-500">
+        © <span id="year"></span> Sokoni Mall Enterprise. 100% Prepaid Escrow Marketplace. All rights reserved.
+      </p>
     </div>
   </footer>
 
@@ -509,16 +869,17 @@
     </div>
   </div>
 
-  <!-- Phase 3 — Saved items (bag) sheet -->
+  <!-- Cart sheet -->
   <div id="bag-sheet" class="bottom-sheet" hidden aria-hidden="true">
     <div class="sheet-backdrop" aria-hidden="true"></div>
-    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Saved items">
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Cart">
       <button type="button" id="bag-sheet-close" class="sheet-close" aria-label="Close">&times;</button>
       <div class="sheet-scroll">
-        <h2 class="bag-sheet-title">Saved items</h2>
-        <p id="bag-sheet-empty" class="bag-sheet-empty hidden">Nothing saved yet — tap ♡ on any item while browsing.</p>
+        <h2 class="bag-sheet-title">Cart</h2>
+        <p id="bag-sheet-empty" class="bag-sheet-empty hidden">Your cart is empty — tap Add to cart on any item.</p>
         <ul id="bag-sheet-list" class="bag-sheet-list"></ul>
-        <a id="bag-sheet-order" href="#" target="_blank" rel="noopener" class="bag-sheet-order hidden">💬 Order all on WhatsApp</a>
+        <div id="bag-sheet-summary" class="bag-sheet-summary hidden"></div>
+        <a id="bag-sheet-order" href="#" target="_blank" rel="noopener" class="bag-sheet-order hidden">💬 Order cart on WhatsApp</a>
       </div>
     </div>
   </div>
@@ -526,20 +887,31 @@
   <!-- Catalog navigator (browse drawer) -->
   <div id="catalog-nav-backdrop" class="catalog-nav-backdrop" hidden></div>
   <aside id="catalog-nav-panel" class="catalog-nav-panel" hidden aria-label="Store catalog"></aside>
-  <button type="button" id="catalog-nav-toggle" class="catalog-nav-toggle" aria-expanded="false" aria-controls="catalog-nav-panel" aria-label="Open browse menu">
+  <!-- Mobile-only floating browse control — desktop uses embedded category rail -->
+  <button type="button" id="catalog-nav-toggle" class="catalog-nav-toggle catalog-nav-toggle--mobile-only" aria-expanded="false" aria-controls="catalog-nav-panel" aria-label="Open browse menu">
     <span class="catalog-nav-toggle-icon" aria-hidden="true">☰</span>
     <span class="catalog-nav-toggle-label">Browse</span>
   </button>
 
   <script src="assets/js/component-handler.js"></script>
+  <script src="assets/js/account-auth.js"></script>
+  <script src="assets/js/privacy-consent.js"></script>
+  <script src="assets/js/account-gate.js"></script>
+  <script src="assets/js/buyer-auth.js"></script>
   <script src="assets/js/browse.js"></script>
+  <script src="assets/js/browse-thumb.js"></script>
   <script src="assets/js/depop-hero-carousel.js"></script>
-  <script src="assets/js/depop-nav.js"></script>
+  <script src="assets/js/depop-promo-carousel.js"></script>
+  <script src="assets/js/depop-trade-across.js?v=thumbs-150"></script>
+  <script src="assets/js/depop-ecosystem.js?v=shops-adiv-1"></script>
+  <script src="assets/js/depop-nav.js?v=thumbs-150"></script>
   <script src="assets/js/shop-shell.js"></script>
-  <script src="assets/js/product-sheet.js"></script>
-  <script src="assets/js/catalog-nav.js"></script>
+  <script src="assets/js/seller-trust.js"></script>
+  <script src="assets/js/product-sheet.js?v=compare-at-2"></script>
+  <script src="assets/js/mega-menu.js?v=thumbs-150"></script>
+  <script src="assets/js/catalog-nav.js?v=thumbs-150"></script>
   <script src="assets/js/feed.js" defer></script>
-  <script src="assets/js/app.js"></script>
+  <script src="assets/js/app.js?v=thumbs-150"></script>
   <script src="assets/js/hero-engine.js" defer></script>
   <script src="assets/js/main.js" defer></script>
   <script>
@@ -563,6 +935,8 @@
       }
     })();
   </script>
+  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="assets/js/sokoni-motion/sokoni-motion.js?v=20260806c" defer></script>
   <script src="https://savannah-agents-aqex.onrender.com/widget.js" data-tenant-id="a452ff00-9d75-468c-a624-82e173dc395e" async></script>
 </body>
 </html>

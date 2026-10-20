@@ -1,7 +1,31 @@
 #!/usr/bin/env bash
 # Run on the GCP VM (sokoni-bot) after SSH login.
+#
+# IMPORTANT: git checkout replaces this path on disk. Bash reading the repo file
+# then hits EOF and exits right after "Reset branch" with no error. Always run
+# the body from a /tmp snapshot (see wrapper below).
 set -euo pipefail
 
+# __DEPLOY_WRAPPER__
+if [ "${SOKONI_DEPLOY_REEXEC:-}" != "1" ]; then
+  _self="${BASH_SOURCE[0]:-$0}"
+  _tmp="$(mktemp /tmp/sokoni-deploy.XXXXXX)"
+  # Strip the wrapper; only the body runs from /tmp (safe across git checkout).
+  if ! awk '/^# __DEPLOY_BODY__$/ {p=1; next} p' "$_self" > "$_tmp" || [ ! -s "$_tmp" ]; then
+    echo "ERROR: could not extract deploy body from $_self" >&2
+    rm -f "$_tmp"
+    exit 1
+  fi
+  chmod 700 "$_tmp"
+  echo "==> Deploy snapshot: $_tmp" >&2
+  exec env SOKONI_DEPLOY_REEXEC=1 SOKONI_DEPLOY_TMP="$_tmp" bash "$_tmp" "$@"
+fi
+if [ -n "${SOKONI_DEPLOY_TMP:-}" ]; then
+  # shellcheck disable=SC2064
+  trap 'rm -f "$SOKONI_DEPLOY_TMP" 2>/dev/null || true' EXIT
+fi
+
+# __DEPLOY_BODY__
 REPO="${SOKONI_REPO:-$HOME/sokoni}"
 BOT_DIR="$REPO/whatsapp-bot"
 NAME="${PM2_NAME:-sokoni-bot}"
@@ -10,46 +34,115 @@ echo "==> Deploying Sokoni bot from $REPO"
 
 cd "$REPO"
 
-# Push local WhatsApp catalog changes BEFORE pulling code (never wipe unpushed products).
-if git status --porcelain whatsapp-bot/src/data/products.json website/data/products.json website/assets/images/products/ 2>/dev/null | grep -q .; then
+DEPLOY_REF="${SOKONI_DEPLOY_REF:-main}"
+STASHED=0
+
+# Optional: publish local WhatsApp catalog before switching branches.
+# Set SKIP_CATALOG_PUBLISH=1 when the VM is on a diverged feature branch / push would fail.
+if [ "${SKIP_CATALOG_PUBLISH:-}" = "1" ]; then
+  echo "==> SKIP_CATALOG_PUBLISH=1 — leaving local catalog files alone for now"
+elif git status --porcelain whatsapp-bot/src/data/products.json website/data/products.json website/assets/images/products/ 2>/dev/null | grep -q .; then
   echo "==> Local catalog changes found — publishing to GitHub first..."
   node scripts/build-site-catalog.mjs
   if ! node scripts/commit-catalog.mjs; then
-    echo "ERROR: Catalog publish failed. Fix git auth, then run: node scripts/publish-catalog-now.mjs"
-    exit 1
+    echo "WARN: Catalog publish failed — continuing deploy (live catalog is Postgres when dbConnected)."
+    echo "      Later: node scripts/publish-catalog-now.mjs"
   fi
 fi
 
-echo "==> Syncing with origin/main..."
-git fetch origin main
-STASHED=0
+echo "==> Syncing to origin/${DEPLOY_REF} (always deploy from this ref, not a leftover feature branch)..."
+git fetch origin "$DEPLOY_REF"
+
+# When SKIP_CATALOG_PUBLISH=1, keep the VM's live catalog across the hard reset.
+CATALOG_BAK=""
+CATALOG_KEEP=(
+  "whatsapp-bot/src/data/products.json"
+  "website/data/products.json"
+  "website/data/catalog-version.json"
+  "website/data/catalog-menu.json"
+  "website/data/catalog-paused.json"
+)
+if [ "${SKIP_CATALOG_PUBLISH:-}" = "1" ]; then
+  CATALOG_BAK="$(mktemp -d /tmp/sokoni-catalog-bak.XXXXXX)"
+  for f in "${CATALOG_KEEP[@]}"; do
+    if [ -f "$f" ]; then
+      mkdir -p "$CATALOG_BAK/$(dirname "$f")"
+      cp -a "$f" "$CATALOG_BAK/$f"
+    fi
+  done
+  echo "==> Backed up VM catalog under $CATALOG_BAK"
+fi
+
+# Unfinished merge/rebase blocks stash + checkout ("needs merge" / "resolve your current index").
+if [ -f .git/MERGE_HEAD ] || [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ] || [ -f .git/CHERRY_PICK_HEAD ]; then
+  echo "==> Aborting unfinished merge/rebase/cherry-pick so deploy can sync..."
+  git merge --abort 2>/dev/null || true
+  git rebase --abort 2>/dev/null || true
+  git cherry-pick --abort 2>/dev/null || true
+fi
+if git diff --name-only --diff-filter=U 2>/dev/null | grep -q .; then
+  echo "==> Clearing unmerged index paths..."
+  git reset --merge 2>/dev/null || git reset --mixed HEAD || true
+fi
+
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  echo "==> Stashing dirty files so git pull can proceed..."
-  git stash push -u -m "deploy-bot-$(date +%s)" || true
-  STASHED=1
-fi
-if ! git pull --rebase origin main; then
-  echo "WARN: git pull --rebase failed — continuing deploy at $(git rev-parse --short HEAD)"
-fi
-if [ "$STASHED" = "1" ]; then
-  if ! git stash pop; then
-    echo "WARN: stash pop had conflicts — auto-resolving known VM-only files..."
-    if git diff --name-only --diff-filter=U 2>/dev/null | grep -q '^website/data/tiktok-featured\.json$'; then
-      git checkout --ours website/data/tiktok-featured.json
-      git add website/data/tiktok-featured.json
-      echo "==> Resolved tiktok-featured.json (kept origin/main version)"
-    fi
-    # Drop stash if working tree is clean enough to continue
-    if [ -z "$(git diff --name-only --diff-filter=U 2>/dev/null)" ]; then
-      git stash drop || true
-    else
-      echo "WARN: unresolved conflicts remain — fix manually; bot restart continues"
-    fi
+  echo "==> Stashing dirty tracked files so checkout can proceed..."
+  # Do NOT use `git stash -u` — that removes untracked listing photos under
+  # website/assets/images/products/ and breaks /catalog-images until re-upload.
+  if git stash push -m "deploy-bot-$(date +%s)"; then
+    STASHED=1
+  else
+    echo "WARN: stash failed (often a stuck merge) — continuing with hard reset to origin/${DEPLOY_REF}"
   fi
 fi
-echo "==> Git at: $(git log -1 --oneline)"
+# Keep noisy untracked bak files from blocking nothing; leave product images alone.
+mkdir -p /tmp/sokoni-vm-scratch
+shopt -s nullglob
+for bak in whatsapp-bot/src/data/products.json.bak-*; do
+  mv "$bak" /tmp/sokoni-vm-scratch/ 2>/dev/null || true
+done
+shopt -u nullglob
+# Force local main (or override) onto the remote tip — avoids "pull --rebase" staying on a feature branch.
+if ! git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"; then
+  echo "==> checkout -B failed — hard-resetting to origin/${DEPLOY_REF}"
+  git reset --hard "origin/${DEPLOY_REF}"
+  git checkout -B "$DEPLOY_REF" "origin/${DEPLOY_REF}"
+fi
+if ! git rev-parse --verify "origin/${DEPLOY_REF}" >/dev/null 2>&1; then
+  echo "ERROR: origin/${DEPLOY_REF} missing after fetch"
+  exit 1
+fi
+# Ensure working tree matches remote tip even if checkout left conflicted paths.
+git reset --hard "origin/${DEPLOY_REF}"
+echo "==> Git at: $(git log -1 --oneline) (branch $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown))"
 
-if [ -f "$REPO/docker-compose.waha.yml" ]; then
+if [ -n "$CATALOG_BAK" ]; then
+  echo "==> Restoring VM catalog files (SKIP_CATALOG_PUBLISH=1)"
+  for f in "${CATALOG_KEEP[@]}"; do
+    if [ -f "$CATALOG_BAK/$f" ]; then
+      mkdir -p "$(dirname "$f")"
+      cp -a "$CATALOG_BAK/$f" "$f"
+    fi
+  done
+fi
+
+if [ "$STASHED" = "1" ]; then
+  echo "==> Keeping deploy stash (not auto-popped onto main) — restore later with: git stash list"
+  echo "    VM-only files (tiktok-featured, product bak) stay out of the running tree."
+fi
+
+# Default: do NOT recreate WAHA on bot deploys (bouncing 2026.6.2 broke WhatsApp).
+# Refresh WAHA explicitly with: FORCE_WAHA_DEPLOY=1 bash scripts/deploy-bot.sh
+# Or: bash scripts/deploy-waha.sh
+if [ "${FORCE_WAHA_DEPLOY:-}" = "1" ]; then
+  echo "==> FORCE_WAHA_DEPLOY=1 — running WAHA deploy"
+  if ! bash "$REPO/scripts/deploy-waha.sh"; then
+    echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
+    echo "      Run: bash scripts/deploy-waha.sh"
+  fi
+elif [ "${SKIP_WAHA_DEPLOY:-1}" != "0" ]; then
+  echo "==> Leaving WAHA as-is (default). Set FORCE_WAHA_DEPLOY=1 to recreate."
+elif [ -f "$REPO/docker-compose.waha.yml" ]; then
   if ! bash "$REPO/scripts/deploy-waha.sh"; then
     echo "WARN: WAHA deploy failed — WhatsApp will not reply until WAHA is fixed."
     echo "      Run: bash scripts/deploy-waha.sh"
@@ -62,6 +155,10 @@ if [ -f "$REPO/scripts/start-postgres.sh" ] && [ -f "$BOT_DIR/.env" ] && grep -q
 fi
 
 cd "$BOT_DIR"
+
+# Seller avatars live under gitignored data/avatars (survive git reset --hard).
+mkdir -p "$BOT_DIR/data/avatars"
+echo "==> Seller avatars dir: $BOT_DIR/data/avatars"
 
 # Ensure .env exists and upgrade legacy/paid chat models → free OpenRouter stack.
 ENV_FILE="$BOT_DIR/.env"
@@ -82,51 +179,135 @@ set_env_kv() {
   fi
 }
 
+# Read env values without tripping set -e/pipefail when a key is missing.
+env_get() {
+  local file="$1" key="$2"
+  grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" 2>/dev/null \
+    | tail -1 \
+    | sed -E 's/^[^=]+=//' \
+    | tr -d "\"'" \
+    | tr -d '[:space:]' \
+    || true
+}
+
 if [ -f "$ENV_FILE" ]; then
-  CURRENT_MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]')"
+  CURRENT_MODEL="$(env_get "$ENV_FILE" OPENAI_MODEL)"
   FREE_MODEL="openrouter/free"
-  FREE_FALLBACKS="google/gemma-4-26b-a4b-it:free"
-  # Seller photos only — WhatsApp chat stays on FREE_MODEL above
-  PHOTO_VISION_MODEL="krea/krea-2-medium-turbo"
-  PHOTO_VISION_FALLBACKS="google/gemma-4-26b-a4b-it:free"
+  # Prefer free router + a live free Gemma 4 slug (26b a4b often 429s under load).
+  # Do NOT pin meta-llama/llama-3.3-70b-instruct:free — removed from OpenRouter free tier.
+  FREE_FALLBACKS="google/gemma-4-31b-it:free"
+  # Seller photos — free OpenRouter VLMs (NVIDIA NIM is a code fallback after these).
+  # Do NOT force paid google/gemini-* on OpenRouter; those burn credits / expire.
+  PHOTO_VISION_MODEL="openrouter/free"
+  PHOTO_VISION_FALLBACKS="nvidia/nemotron-nano-12b-v2-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   DEPRECATED_MODELS='nemotron-nano-9b|gemma-2-9b-it|gpt-oss-20b|gemini-2\.0-flash-exp|deepseek-r1|gemini-2\.5-pro|gemini-2\.5-flash|gemini-2\.5-flash-lite|gemma-4-31b-it:free|qwen/qwen3-next-80b|llama-3\.3-70b-instruct:free|llama-3\.2-3b-instruct:free|qwen/qwen3-coder:free'
   if [ -z "$CURRENT_MODEL" ] || echo "$CURRENT_MODEL" | grep -qE "$DEPRECATED_MODELS"; then
     echo "==> Setting OPENAI_MODEL → ${FREE_MODEL} (was: ${CURRENT_MODEL:-unset})"
     set_env_kv "$ENV_FILE" "OPENAI_MODEL" "$FREE_MODEL"
   fi
-  CURRENT_FALLBACKS="$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b|llama-3\.2-3b|qwen/qwen3-coder'; then
+  CURRENT_FALLBACKS="$(env_get "$ENV_FILE" OPENAI_MODEL_FALLBACKS)"
+  if [ -z "$CURRENT_FALLBACKS" ] || echo "$CURRENT_FALLBACKS" | grep -qE 'gpt-4o-mini|gemini-2\.0-flash-exp|deepseek-r1|nemotron-nano|qwen/qwen3-next-80b|llama-3\.3-70b|llama-3\.2-3b|qwen/qwen3-coder|gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "OPENAI_MODEL_FALLBACKS" "$FREE_FALLBACKS"
     echo "==> Set OPENAI_MODEL_FALLBACKS → ${FREE_FALLBACKS}"
   fi
-  CURRENT_VISION="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE 'openrouter/free|gemini-2\.0-flash-exp|gemini-2\.5-flash|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
+  CURRENT_VISION="$(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"
+  # Prefer free OpenRouter vision; migrate away from image-gen / paid OpenRouter Gemini primaries.
+  if [ -z "$CURRENT_VISION" ] || echo "$CURRENT_VISION" | grep -qE '^(krea/)|google/gemini-|openai/gpt-|anthropic/|gemini-2\.0-flash-exp|gemma-4-31b-it:free|google/gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_MODEL" "$PHOTO_VISION_MODEL"
-    echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (seller photos only; chat stays ${FREE_MODEL})"
+    echo "==> Set CATALOG_VISION_MODEL → ${PHOTO_VISION_MODEL} (was: ${CURRENT_VISION:-unset}; free seller photos; chat stays ${FREE_MODEL})"
   fi
-  CURRENT_VISION_FB="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CATALOG_VISION_FALLBACKS=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//' | tr -d "\"'" | tr -d '[:space:]' || true)"
-  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|nvidia/nemotron'; then
+  CURRENT_VISION_FB="$(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
+  if [ -z "$CURRENT_VISION_FB" ] || echo "$CURRENT_VISION_FB" | grep -qE 'google/gemini-|krea/krea|gemini-2\.0-flash-exp|gemini-2\.5-flash-lite|gemma-4-31b-it:free|gemma-4-26b-a4b-it:free'; then
     set_env_kv "$ENV_FILE" "CATALOG_VISION_FALLBACKS" "$PHOTO_VISION_FALLBACKS"
     echo "==> Set CATALOG_VISION_FALLBACKS → ${PHOTO_VISION_FALLBACKS}"
   fi
-  echo "==> AI model: $(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENAI_MODEL=' "$ENV_FILE" | tail -1 | sed -E 's/^[^=]+=//')"
+  # Chat must not use vision GEMINI_API_KEY unless explicitly opted in.
+  CURRENT_USE_GEMINI="$(env_get "$ENV_FILE" AI_CHAT_USE_GEMINI)"
+  if [ -z "$CURRENT_USE_GEMINI" ]; then
+    set_env_kv "$ENV_FILE" "AI_CHAT_USE_GEMINI" "false"
+  fi
+  echo "==> AI model: $(env_get "$ENV_FILE" OPENAI_MODEL)"
+  echo "==> Vision: $(env_get "$ENV_FILE" CATALOG_VISION_MODEL)"
+  echo "==> Vision fallbacks: $(env_get "$ENV_FILE" CATALOG_VISION_FALLBACKS)"
+  # Optional Gemini only — never seed an expired hardcoded key on deploy.
+  CURRENT_GEMINI="$(env_get "$ENV_FILE" GEMINI_API_KEY)"
   if [ -n "${SOKONI_GEMINI_API_KEY:-}" ]; then
     set_env_kv "$ENV_FILE" "GEMINI_API_KEY" "$SOKONI_GEMINI_API_KEY"
     echo "==> Set GEMINI_API_KEY from SOKONI_GEMINI_API_KEY"
-  elif grep -qE '^[[:space:]]*(export[[:space:]]+)?GEMINI_API_KEY=.' "$ENV_FILE" 2>/dev/null; then
-    echo "==> Gemini vision: GEMINI_API_KEY present"
+  elif [ -n "$CURRENT_GEMINI" ]; then
+    echo "==> Gemini vision: GEMINI_API_KEY present (${#CURRENT_GEMINI} chars) — optional last fallback"
   else
-    echo "WARN: GEMINI_API_KEY not set — seller photo AI uses OpenRouter fallback only"
+    echo "==> Gemini vision: GEMINI_API_KEY unset (OK — OpenRouter free + NVIDIA NIM cover seller photos)"
+  fi
+  # Groq chat (fast WhatsApp) — OpenRouter stays as free fallback. Never commit keys.
+  if [ -n "${SOKONI_GROQ_API_KEY:-}${GROQ_API_KEY:-}" ]; then
+    ENV_FILE="$ENV_FILE" SKIP_RESTART=1 \
+      GROQ_API_KEY="${GROQ_API_KEY:-}" SOKONI_GROQ_API_KEY="${SOKONI_GROQ_API_KEY:-}" \
+      bash "$REPO/scripts/set-groq-env.sh" || echo "WARN: set-groq-env.sh failed"
+  elif [ -n "$(env_get "$ENV_FILE" GROQ_API_KEY)" ]; then
+    CURRENT_AI_PROV="$(env_get "$ENV_FILE" AI_CHAT_PROVIDER)"
+    CURRENT_AI_TEMP="$(env_get "$ENV_FILE" AI_CHAT_TEMPERATURE)"
+    CURRENT_GROQ_MODEL="$(env_get "$ENV_FILE" GROQ_MODEL)"
+    set_env_kv "$ENV_FILE" "AI_CHAT_PROVIDER" "${CURRENT_AI_PROV:-auto}"
+    set_env_kv "$ENV_FILE" "AI_CHAT_TEMPERATURE" "${CURRENT_AI_TEMP:-0.15}"
+    if [ -z "$CURRENT_GROQ_MODEL" ] || [ "$CURRENT_GROQ_MODEL" = "llama-3.1-8b-instant" ] || [ "$CURRENT_GROQ_MODEL" = "llama-3.3-70b-versatile" ]; then
+      set_env_kv "$ENV_FILE" "GROQ_MODEL" "openai/gpt-oss-20b"
+      echo "==> Migrated GROQ_MODEL → openai/gpt-oss-20b (retired Llama IDs)"
+    fi
+    echo "==> Groq chat: GROQ_API_KEY present — auto routes Groq→OpenRouter"
+  else
+    echo "==> Groq chat: GROQ_API_KEY unset — using OpenRouter only. On VM: export GROQ_API_KEY=… && bash scripts/set-groq-env.sh"
+  fi
+  # Clip fallbacks: HyperFrames (HeyGen) + local Remotion worker.
+  if [ -n "${SOKONI_HEYGEN_API_KEY:-}" ]; then
+    set_env_kv "$ENV_FILE" "HEYGEN_API_KEY" "$SOKONI_HEYGEN_API_KEY"
+    echo "==> Set HEYGEN_API_KEY from SOKONI_HEYGEN_API_KEY"
+  fi
+  CURRENT_HEYGEN="$(env_get "$ENV_FILE" HEYGEN_API_KEY)"
+  if [ -n "$CURRENT_HEYGEN" ]; then
+    set_env_kv "$ENV_FILE" "STUDIO_CLIP_FALLBACKS" "hyperframes,remotion"
+    set_env_kv "$ENV_FILE" "REMOTION_RENDER_URL" "http://127.0.0.1:${REMOTION_WORKER_PORT:-3105}/render"
+    set_env_kv "$ENV_FILE" "REMOTION_COMPOSITION" "SokoniProduct"
+    echo "==> Clip fallbacks: HyperFrames + Remotion (HEYGEN_API_KEY present, ${#CURRENT_HEYGEN} chars)"
+  else
+    echo "==> Clip fallbacks: HEYGEN_API_KEY unset — run scripts/configure-clip-fallbacks.sh on the VM"
   fi
 else
   echo "WARN: No .env found — bot uses code defaults (openrouter/free)"
+fi
+
+# Production Daraja (org 3439153) — STK + B2C shortcode/callbacks.
+# B2C initiator username lives in .env (DavidMuiruri); deploy keeps it.
+# Skip with: SKIP_DARAJA_ENV=1 bash scripts/deploy-bot.sh
+if [ "${SKIP_DARAJA_ENV:-}" != "1" ] && [ -f "$ENV_FILE" ] && [ -x "$REPO/scripts/set-daraja-env.sh" ]; then
+  echo "==> Applying production Daraja env (shortcode 3439153 / initiator from .env)"
+  ENV_FILE="$ENV_FILE" SKIP_RESTART=1 bash "$REPO/scripts/set-daraja-env.sh" || \
+    echo "WARN: set-daraja-env.sh failed — check MPESA_* in $ENV_FILE"
 fi
 
 npm install --omit=dev 2>/dev/null || npm install
 
   if [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=.' "$ENV_FILE" 2>/dev/null; then
   echo "==> Applying DB migrations..."
-  npm run db:migrate || echo "WARN: db:migrate failed"
+  # A failed migration used to print one WARN line in the middle of several
+  # hundred and the deploy still reported success. The code then runs against
+  # a schema it is ahead of, and the first person to hit the missing column
+  # gets a generic "couldn't reach ops" -- which is exactly how rider
+  # registration stayed broken while every deploy looked fine.
+  #
+  # Still non-fatal on purpose: stopping here would leave the bot on old code
+  # with no way to ship an urgent fix. It is recorded and reported at the end
+  # instead, and the exit status says so.
+  if ! npm run db:migrate; then
+    MIGRATE_FAILED=1
+    echo ""
+    echo "########################################################"
+    echo "## DB MIGRATIONS FAILED -- schema is behind the code  ##"
+    echo "## Fix before trusting anything that writes to the DB ##"
+    echo "##   cd $BOT_DIR && npm run db:migrate                ##"
+    echo "########################################################"
+    echo ""
+  fi
   if npm run 2>/dev/null | grep -q 'db:backfill-browse'; then
     PAUSE_FILE="$REPO/website/data/catalog-paused.json"
     if [ -f "$PAUSE_FILE" ] && grep -q '"paused"[[:space:]]*:[[:space:]]*true' "$PAUSE_FILE" 2>/dev/null; then
@@ -134,6 +315,11 @@ npm install --omit=dev 2>/dev/null || npm install
     else
       npm run db:backfill-browse || echo "WARN: db:backfill-browse failed"
     fi
+  fi
+  # Storefront /shop reads Postgres — keep it aligned with master products.json after deploys.
+  if [ -f "$REPO/whatsapp-bot/scripts/resync-catalog-db.mjs" ]; then
+    echo "==> Syncing master catalog → Postgres (fixes missing seller posts on /shop)..."
+    (cd "$REPO/whatsapp-bot" && node scripts/resync-catalog-db.mjs) || echo "WARN: resync-catalog-db failed — run: cd ~/sokoni/whatsapp-bot && node scripts/resync-catalog-db.mjs"
   fi
 fi
 
@@ -147,11 +333,59 @@ if ! node "$REPO/scripts/verify-bot-import.mjs"; then
   exit 1
 fi
 
+# Production refuses to boot without this. An empty key used to let any POST
+# to /webhook impersonate a WhatsApp message.
+WEBHOOK_KEY_LINE="$(grep -E '^(WEBHOOK_HMAC_KEY|WAHA_WEBHOOK_HMAC_KEY)=' "$BOT_DIR/.env" 2>/dev/null | tail -1 || true)"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_LINE#*=}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE%\"}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE#\"}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE%\'}"
+WEBHOOK_KEY_VALUE="${WEBHOOK_KEY_VALUE#\'}"
+if [[ -z "${WEBHOOK_HMAC_KEY:-}${WAHA_WEBHOOK_HMAC_KEY:-}" && -z "${WEBHOOK_KEY_VALUE// /}" ]]; then
+  echo "ERROR: WEBHOOK_HMAC_KEY is required before the bot can start."
+  echo "Add it to $BOT_DIR/.env (openssl rand -hex 32), then re-run scripts/configure-waha-session.sh."
+  exit 1
+fi
+
 if pm2 describe "$NAME" >/dev/null 2>&1; then
   pm2 delete "$NAME" || true
 fi
-pm2 start src/server.js --name "$NAME" --cwd "$BOT_DIR" --update-env
+# Cap heap + auto-restart before a studio OOM takes the whole 1GB VM down.
+# NODE_ENV=production makes server.js refuse to listen if the HMAC key is empty.
+export NODE_ENV=production
+pm2 start src/server.js \
+  --name "$NAME" \
+  --cwd "$BOT_DIR" \
+  --update-env \
+  --max-memory-restart 450M \
+  --node-args="--max-old-space-size=384 --expose-gc"
 pm2 save
+
+# Local Remotion HTTP worker (clip fallback) — fail-soft if install/start fails.
+WORKER_DIR="$REPO/remotion-worker"
+WORKER_NAME="${REMOTION_PM2_NAME:-sokoni-remotion}"
+WORKER_PORT="${REMOTION_WORKER_PORT:-3105}"
+if [ "${SKIP_REMOTION_WORKER:-}" != "1" ] && [ -f "$WORKER_DIR/server.mjs" ]; then
+  echo "==> Installing / starting Remotion worker on :$WORKER_PORT..."
+  if (cd "$WORKER_DIR" && (npm install --omit=dev 2>/dev/null || npm install)); then
+    if pm2 describe "$WORKER_NAME" >/dev/null 2>&1; then
+      pm2 delete "$WORKER_NAME" || true
+    fi
+    pm2 start "$WORKER_DIR/server.mjs" \
+      --name "$WORKER_NAME" \
+      --cwd "$WORKER_DIR" \
+      --update-env \
+      --max-memory-restart 320M \
+      --node-args="--max-old-space-size=280" || echo "WARN: remotion worker pm2 start failed"
+    pm2 save >/dev/null 2>&1 || true
+    sleep 1
+    curl -sf --max-time 4 "http://127.0.0.1:${WORKER_PORT}/health" >/dev/null 2>&1 \
+      && echo "==> Remotion worker health OK" \
+      || echo "WARN: Remotion worker not ready yet (bundle may still be warming; HyperFrames still works)"
+  else
+    echo "WARN: remotion-worker npm install failed — HyperFrames fallback still works if HEYGEN_API_KEY is set"
+  fi
+fi
 
 echo "==> Waiting for bot health (up to 30s)..."
 HEALTH_OK=0
@@ -185,5 +419,12 @@ else
   echo "WARN: https://bot.sokonimall.com still unreachable (502 = nginx or Cloudflare)"
   echo "      If local health OK: sudo nginx -t && sudo systemctl reload nginx"
 fi
+
+# Seller own-video uploads need >1m bodies (default nginx was rejecting at ~1MB).
+if [ -x "$REPO/scripts/ensure-nginx-upload-limit.sh" ]; then
+  echo "==> Ensuring nginx client_max_body_size (seller videos + boda rider apply)..."
+  bash "$REPO/scripts/ensure-nginx-upload-limit.sh" || echo "WARN: nginx upload-limit script failed (chunked uploads / client compress still help)"
+fi
+
 echo ""
 echo "Done."

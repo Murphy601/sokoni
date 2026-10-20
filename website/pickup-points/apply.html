@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="../assets/vendor/purify.min.js"></script>
+<script src="../assets/js/html-guard.js"></script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Pickup Point Application — Sokoni</title>
-<meta name="description" content="Apply to become a Sokoni pickup station. Receive parcels, earn commission, help customers collect pay-on-delivery orders." />
+<meta name="description" content="Apply to become a Sokoni pickup station. Receive parcels, earn commission, help customers collect their prepaid Sokoni orders." />
 <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -137,6 +139,8 @@
   </main>
 
   <script src="../assets/js/pickup-points.js"></script>
+  <!-- Path B: React + Framer Motion progressive enhancement (fail-soft) -->
+  <script src="../assets/js/sokoni-motion/sokoni-motion.js?v=20260806b" defer></script>
   <script src="https://savannah-agents-aqex.onrender.com/widget.js" data-tenant-id="a452ff00-9d75-468c-a624-82e173dc395e" async></script>
 </body>
 </html>

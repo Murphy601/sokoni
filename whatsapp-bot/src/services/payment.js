@@ -1,9 +1,16 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
-import { getOrder, getOrdersForCustomer, updateOrderMeta, listRecentOrders } from "./orders.js";
+import {
+  getOrder,
+  getOrdersForCustomer,
+  updateOrderMeta,
+  listRecentOrders,
+  extractOrderIdFromText,
+} from "./orders.js";
 import { getPickupPoint } from "./pickupPoints.js";
 import { getSupplier } from "./suppliers.js";
 import { paymentVerificationPrompt, paymentConfirmedMessage } from "./trust-copy.js";
+import { orderBuyerTotal } from "./shipping-tiers.js";
 
 export const CUSTOMER_PAYMENT_STATUSES = ["unpaid", "claimed", "confirmed"];
 
@@ -15,19 +22,19 @@ export function formatMpesaTillBlock(amountKes = null) {
 export function formatShortPaymentReminder(order) {
   if (!order || order.customerPaymentStatus === "confirmed") return null;
   if (order.status === "cancelled") return null;
-  const price = Number(order.priceKes);
+  const price = orderBuyerTotal(order);
   const priceLine = Number.isFinite(price) ? price.toLocaleString() : "—";
   if (order.status === "awaiting_payment" || order.customerPaymentStatus === "unpaid") {
     return (
       `💳 *Payment due — ${order.id}*\n\n` +
-      `Pay *KES ${priceLine}* upfront to activate your order (escrow protected).\n` +
-      `Use Till *${config.store.mpesaTill}* with reference *${order.id}*.\n\n` +
+      `Pay *KES ${priceLine}* upfront via M-Pesa STK to activate your order (escrow protected).\n` +
+      `Reply *pay* to get the STK prompt again.\n\n` +
       `Reply *paid* after M-Pesa. We dispatch only after verification.`
     );
   }
   return (
     `💳 *Payment reminder — ${order.id}*\n\n` +
-    `Complete payment of *KES ${priceLine}* to Till *${config.store.mpesaTill}*.\n\n` +
+    `Complete payment of *KES ${priceLine}* via M-Pesa STK (reply *pay* to resend).\n\n` +
     `Reply *paid* after you send payment.`
   );
 }
@@ -90,9 +97,9 @@ function orderMatchesCustomer(order, customerKey, phone = "") {
 }
 
 function pickOrderForPaidClaim(customerKey, text = "", phone = "") {
-  const idMatch = text.match(/\bSK-?(\d{3,})\b/i);
-  if (idMatch) {
-    const order = getOrder(`SK-${idMatch[1]}`);
+  const trackId = extractOrderIdFromText(text);
+  if (trackId) {
+    const order = getOrder(trackId);
     if (orderMatchesCustomer(order, customerKey, phone)) return order;
   }
 
@@ -132,7 +139,7 @@ export function buildAdminPaidClaimMessage(order) {
     `*Customer:* ${order.customerName}\n` +
     `*Customer phone:* ${order.phone}\n` +
     `*Chat:* \`${order.customerKey}\`\n` +
-    `*Amount:* KES ${order.priceKes.toLocaleString()}\n` +
+    `*Amount:* KES ${orderBuyerTotal(order).toLocaleString()}\n` +
     `*Order status:* ${order.status}\n\n` +
     storeBlock +
     `\n*Confirm:* #payconfirm ${order.id}\n` +
@@ -140,20 +147,36 @@ export function buildAdminPaidClaimMessage(order) {
   );
 }
 
-/** Customer replied "paid" — flag for admin review. */
+/** Customer replied "paid" — verify code against webhooks when present; else flag for admin. */
 export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
   const order = pickOrderForPaidClaim(customerKey, text, phone);
   if (!order) {
     await sendText(
       customerKey,
-      `I couldn't find an active order to mark as paid.\n\nType *track* or your order number (e.g. *SK-1042*), then reply *paid* again.`
+      `I couldn't find an active order to mark as paid.\n\nType *track* or your order number (e.g. *SKN-1002* or *SK-1042*), then reply *paid* again.`
     );
     return true;
   }
 
   if (order.customerPaymentStatus === "confirmed") {
-    await sendText(customerKey, paymentConfirmedMessage({ orderId: order.id, amountKes: order.priceKes }));
+    await sendText(customerKey, paymentConfirmedMessage({ orderId: order.id, amountKes: orderBuyerTotal(order) }));
     return true;
+  }
+
+  // Anti fake PoP — if they pasted a code, verify against Paystack/M-Pesa webhook fields.
+  const codeMatch = String(text || "").match(/\b([A-Z0-9]{8,15})\b/i);
+  if (codeMatch) {
+    const { verifyPaymentProof } = await import("./commerce-ops.js");
+    const proof = verifyPaymentProof({
+      orderId: order.id,
+      code: codeMatch[1],
+      customerKey,
+      phone,
+    });
+    if (!proof.verified && proof.error === "code_not_found") {
+      await sendText(customerKey, proof.message);
+      return true;
+    }
   }
 
   if (order.customerPaymentStatus === "claimed") {
@@ -171,7 +194,7 @@ export async function handleCustomerPaidClaim(customerKey, text, phone = "") {
 
   await sendText(
     customerKey,
-    `Asante! 🙏 We received your payment notice for *${order.id}* (KES ${order.priceKes.toLocaleString()}).\n\nOur team will verify your M-Pesa payment to Till *${config.store.mpesaTill}* and confirm shortly.`
+    `Asante! 🙏 We received your payment notice for *${order.id}* (KES ${orderBuyerTotal(order).toLocaleString()}).\n\nOur team will verify your M-Pesa STK payment and confirm shortly.`
   );
 
   if (config.admin.primary) {
@@ -196,13 +219,13 @@ export function filterPendingPaymentClaims(orders) {
 export async function notifyStorePaymentConfirmed(order) {
   const store = resolveOrderStore(order);
   if (!store?.phone) {
-    return { error: "no_store", message: "No store/pickup point assigned. Use #pickup SK-xxxx <pp-id> first." };
+    return { error: "no_store", message: "No store/pickup point assigned. Use #pickup SKN-xxxx <pp-id> first." };
   }
 
   const storeChat = `${String(store.phone).replace(/\D/g, "")}@c.us`;
   const msg =
     `✅ *Payment confirmed — ${order.id}*\n\n` +
-    `Customer *${order.customerName}* (+${String(order.phone).replace(/\D/g, "")}) has paid *KES ${order.priceKes.toLocaleString()}* to Sokoni Till *${config.store.mpesaTill}*.\n\n` +
+    `Customer *${order.customerName}* (+${String(order.phone).replace(/\D/g, "")}) has paid *KES ${orderBuyerTotal(order).toLocaleString()}* via Sokoni prepaid escrow.\n\n` +
     `*Product:* ${order.productName}\n` +
     `Release the parcel to the customer after verifying their order ID.\n\n` +
     `_Sokoni admin_`;

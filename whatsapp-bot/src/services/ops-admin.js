@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { sendText } from "./whatsapp.js";
-import { getOrder, updateOrderMeta, updateOrderStatus } from "./orders.js";
+import { getOrder, updateOrderMeta, updateOrderStatus, extractOrderIdFromText, ORDER_ID_RE } from "./orders.js";
 import { advanceShipmentStatus } from "./shipments.js";
 import {
   wrongOrderApologyMessage,
@@ -23,8 +23,7 @@ export function parseOpsFlags(text) {
 }
 
 export function parseOrderIdFromArgs(args) {
-  const match = String(args || "").trim().match(/\b(SK-\d+)\b/i);
-  return match ? match[1].toUpperCase() : null;
+  return extractOrderIdFromText(args);
 }
 
 async function notifyCustomer(order, message, metaPatch = {}) {
@@ -35,7 +34,7 @@ async function notifyCustomer(order, message, metaPatch = {}) {
   });
 }
 
-/** #apolog / #wrong SK-1042 [ordered:X received:Y] */
+/** #apolog / #wrong SKN-1002-1 [ordered:X received:Y] */
 export async function handleApologCommand(adminChatId, args) {
   const orderId = parseOrderIdFromArgs(args);
   if (!orderId) {
@@ -72,10 +71,10 @@ export async function handleApologCommand(adminChatId, args) {
   }
 }
 
-/** #damage SK-1042 — doorstep return / damaged wrong variant */
+/** #damage SKN-1002-1 — doorstep return / damaged wrong variant */
 export async function handleDamageCommand(adminChatId, args) {
   const orderId = parseOrderIdFromArgs(args);
-  if (!orderId) return sendText(adminChatId, "Usage: #damage SK-1042 [reason:damaged]");
+  if (!orderId) return sendText(adminChatId, "Usage: #damage SKN-1002-1 [reason:damaged]");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -99,14 +98,14 @@ export async function handleDamageCommand(adminChatId, args) {
   }
 }
 
-/** #delay SK-1042 later today */
+/** #delay SKN-1002-1 later today */
 export async function handleDelayCommand(adminChatId, args) {
   const orderId = parseOrderIdFromArgs(args);
-  if (!orderId) return sendText(adminChatId, "Usage: #delay SK-1042 later today");
+  if (!orderId) return sendText(adminChatId, "Usage: #delay SKN-1002-1 later today");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
-  const rest = args.replace(/\bSK-\d+\b/i, "").trim();
+  const rest = args.replace(ORDER_ID_RE, "").trim();
   const newWindow = rest || "later today";
   const msg = delayedDeliveryMessage({
     orderId: order.id,
@@ -122,16 +121,20 @@ export async function handleDelayCommand(adminChatId, args) {
   }
 }
 
-/** #oos SK-1042 — supplier out of stock cancellation */
+/** #oos SKN-1002-1 — supplier out of stock cancellation */
 export async function handleOosCommand(adminChatId, args) {
   const orderId = parseOrderIdFromArgs(args);
-  if (!orderId) return sendText(adminChatId, "Usage: #oos SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #oos SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
-  const result = updateOrderStatus(orderId, "cancelled");
+  const result = updateOrderStatus(orderId, "cancelled", {
+    force: true,
+    source: "ops-admin.oos",
+    sellerCancel: true,
+  });
   if (!result || result.error) {
-    return sendText(adminChatId, `⚠️ Could not cancel *${orderId}*.`);
+    return sendText(adminChatId, `⚠️ Could not cancel *${orderId}*.${result?.message ? ` ${result.message}` : ""}`);
   }
 
   const msg = orderCancellationMessage({
@@ -147,13 +150,13 @@ export async function handleOosCommand(adminChatId, args) {
   }
 }
 
-/** #transit SK-1042 rider:John phone:0712345678 eta:2 hours */
+/** #transit SKN-1002-1 rider:John phone:0712345678 eta:2 hours */
 export async function handleTransitCommand(adminChatId, args) {
   const orderId = parseOrderIdFromArgs(args);
   if (!orderId) {
     return sendText(
       adminChatId,
-      "Usage: #transit SK-1042 rider:John phone:0712345678 eta:2 hours"
+      "Usage: #transit SKN-1002-1 rider:John phone:0712345678 eta:2 hours"
     );
   }
   const order = getOrder(orderId);
@@ -190,10 +193,10 @@ export async function handleTransitCommand(adminChatId, args) {
   }
 }
 
-/** #recover SK-1042 — post-delivery damage / broken item */
+/** #recover SKN-1002-1 — post-delivery damage / broken item */
 export async function handleRecoverCommand(adminChatId, args) {
   const orderId = parseOrderIdFromArgs(args);
-  if (!orderId) return sendText(adminChatId, "Usage: #recover SK-1042");
+  if (!orderId) return sendText(adminChatId, "Usage: #recover SKN-1002-1");
   const order = getOrder(orderId);
   if (!order) return sendText(adminChatId, `⚠️ Order *${orderId}* not found.`);
 
@@ -208,6 +211,14 @@ export async function handleRecoverCommand(adminChatId, args) {
       issueType: "post_delivery_damage",
       awaitingDamagePhoto: true,
     });
+    try {
+      const { markAwaitingDisputeEvidence } = await import("./dispute-protocol.js");
+      if (order.customerKey) {
+        markAwaitingDisputeEvidence(order.customerKey, { orderId: order.id, phone: order.phone || "" });
+      }
+    } catch {
+      /* ignore */
+    }
     return sendText(adminChatId, `✅ Recovery message sent for *${order.id}* (awaiting photo).`);
   } catch (err) {
     return sendText(adminChatId, `⚠️ Failed: ${err.message}`);
@@ -227,7 +238,7 @@ export async function alertAdminIssueAction({ customerKey, orderId, action, disp
         `Customer: ${displayName || "—"} · ${phone || customerKey}\n\n` +
         (action === "REPLACE"
           ? "Dispatch correct item and update order."
-          : "Close request — customer owes nothing on COD.")
+          : "Order cancelled by buyer — refund their escrow to M-Pesa.")
     );
   } catch {
     /* ignore */

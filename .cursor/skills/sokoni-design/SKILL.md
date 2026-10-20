@@ -11,7 +11,7 @@ You maintain the Sokoni storefront (`website/`) so it feels like **texting a tru
 
 ## Brand voice
 
-- Conversational, not corporate. Short sentences. Real examples (SK-xxxx, M-Pesa Till, pickup partners).
+- Conversational, not corporate. Short sentences. Real examples (SKN-xxxx / SKN-xxxx-n, older SK-xxxx, M-Pesa Till, pickup partners).
 - English, Kiswahili, and Sheng are welcome where natural.
 - **Never** anchor marketing to a single city or region — Sokoni serves Kenya broadly (home delivery + pickup points).
 - **Never** use hollow adjectives: seamless, leverage, ecosystem, world-class, cutting-edge.
@@ -30,9 +30,9 @@ Spacing: 8px base grid. Section gaps 64px. Product cards use `card-product` patt
 
 ## Component families
 
-1. **button-whatsapp** — pill, green, dark text. Verbs: "Start on WhatsApp", "Order — pay on delivery".
+1. **button-whatsapp** — pill, green, dark text. Verbs: "Start on WhatsApp", "Order — prepaid escrow".
 2. **button-secondary** — outline/ghost; never outshine primary CTA on same row.
-3. **card-product** — COD badge, image, title, KES price, order + ask links.
+3. **card-product** — escrow badge, image, title, KES price, order + ask links.
 4. **input-search** — large, plain-language placeholder, green focus ring.
 5. **chat-preview** — WhatsApp colours from DESIGN.md tokens only.
 
@@ -49,8 +49,8 @@ After injecting HTML via JS, call `SokoniComponents.upgradeIn(container)` so pro
 ## Writing tone
 
 - concise, confident, helpful
-- Prefer "pay when it arrives" over "cashless seamless checkout"
-- Mention pay on delivery, M-Pesa Till 4775847, and pickup where payment is discussed
+- Prefer "your money is safe until you confirm" over "cashless seamless checkout"
+- Mention prepaid M-Pesa STK escrow and pickup where payment is discussed — never publish till numbers or till account names
 
 ## Rules: Do
 

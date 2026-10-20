@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="assets/vendor/purify.min.js"></script>
+<script src="assets/js/html-guard.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boda Fleet &amp; Riders · Sokoni Admin</title>
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/admin-depop.css" />
+<style>
+  .fleet-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid currentColor;
+  }
+  .fleet-badge.is-delivery { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .fleet-badge.is-available { background: rgba(0,210,106,0.12); color: #00d26a; border-color: #00d26a; }
+  .fleet-badge.is-offline { background: #e5e5ea; color: #1a1a1a; border-color: #8e8e93; }
+  .fleet-badge.is-suspended { background: rgba(255,35,0,0.1); color: #ff2300; border-color: #ff2300; }
+  .fleet-badge.is-pending { background: #fff; color: #1a1a1a; border-color: #1a1a1a; }
+  .map-modal {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(26,26,26,0.7);
+    display: none; align-items: center; justify-content: center;
+    padding: 1rem;
+  }
+  .map-modal.is-open { display: flex; }
+  .map-modal-panel {
+    width: 100%; max-width: 28rem;
+    background: #fff;
+    border: 2px solid #1a1a1a;
+    border-radius: 1rem;
+    box-shadow: 6px 6px 0 0 #1a1a1a;
+    padding: 1.25rem;
+  }
+  .map-frame {
+    width: 100%; height: 220px;
+    border: 2px solid #1a1a1a;
+    border-radius: 0.75rem;
+    background: #f4f4f4;
+  }
+</style>
+</head>
+<body class="admin-depop admin-body">
+  <div class="admin-wrap">
+    <header class="admin-top">
+      <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span class="admin-os-pill">Admin OS</span>
+          <h1 class="admin-title">Sokoni <span class="dot">.</span> Riders</h1>
+        </div>
+        <nav class="admin-nav" aria-label="Admin desks">
+          <a href="admin-command.html">Orders</a>
+          <a href="admin-disputes.html">Disputes</a>
+          <a href="admin-sellers-shops.html">Shops</a>
+          <a href="admin-seller-listings.html">Listings</a>
+          <a href="admin-support.html">Support</a>
+          <a href="admin-boda.html">Boda</a>
+          <span class="is-active">Riders</span>
+          <a href="admin-finances.html">Finances</a>
+        </nav>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+        <span class="admin-boss">Fleet control</span>
+        <button id="fleet-refresh" type="button" class="btn-outline">Refresh</button>
+        <button id="fleet-add-open" type="button" class="btn-red">+ Add new rider</button>
+      </div>
+    </header>
+
+    <div class="admin-token-row">
+      <label for="admin-token">Admin token
+        <input id="admin-token" type="password" autocomplete="off" class="admin-input" placeholder="ADMIN_SETUP_TOKEN" />
+      </label>
+      <p id="fleet-status" class="admin-status" role="status"></p>
+    </div>
+
+    <div class="admin-metrics" aria-label="Fleet metrics">
+      <div class="admin-metric">
+        <p class="admin-metric-label">Riders shown</p>
+        <p id="metric-total" class="admin-metric-value">—</p>
+      </div>
+      <div class="admin-metric">
+        <p class="admin-metric-label">On delivery</p>
+        <p id="metric-delivery" class="admin-metric-value">—</p>
+      </div>
+      <div class="admin-metric">
+        <p class="admin-metric-label">Available</p>
+        <p id="metric-available" class="admin-metric-value is-green">—</p>
+      </div>
+      <div class="admin-metric">
+        <p class="admin-metric-label">Suspended</p>
+        <p id="metric-suspended" class="admin-metric-value is-red">—</p>
+      </div>
+    </div>
+
+    <section class="admin-panel">
+      <div class="admin-panel-toolbar">
+        <div>
+          <h2>Boda fleet &amp; riders</h2>
+          <p class="muted" style="margin:0.35rem 0 0;font-size:0.75rem;font-weight:700;">Manage dispatch, payouts, and rider suspensions</p>
+        </div>
+        <div class="admin-controls">
+          <input id="fleet-q" type="search" class="admin-input admin-input-wide" placeholder="Search name, phone, plate, SKN…" />
+          <select id="fleet-filter" class="admin-select" aria-label="Filter status">
+            <option value="all">All statuses</option>
+            <option value="ON_DELIVERY">On delivery</option>
+            <option value="AVAILABLE">Available</option>
+            <option value="OFFLINE">Offline</option>
+            <option value="SUSPENDED">Suspended</option>
+            <option value="PENDING">Pending verify</option>
+          </select>
+          <button id="fleet-search" type="button" class="btn-ink">Search</button>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Rider &amp; bike</th>
+              <th>Live status</th>
+              <th>Completed jobs</th>
+              <th>Unpaid ledger</th>
+              <th style="text-align:right;">Admin controls</th>
+            </tr>
+          </thead>
+          <tbody id="fleet-tbody"></tbody>
+        </table>
+      </div>
+      <p id="fleet-empty" class="admin-empty hidden">No riders match this filter.</p>
+    </section>
+  </div>
+
+  <!-- Add rider -->
+  <div id="add-modal" class="map-modal" role="dialog" aria-modal="true" aria-label="Add rider">
+    <form id="add-form" class="map-modal-panel" style="display:flex;flex-direction:column;gap:0.75rem;">
+      <h3 style="margin:0;font-weight:900;text-transform:uppercase;">Add new rider</h3>
+      <label>Full name <input id="add-name" class="admin-input" style="width:100%;" required /></label>
+      <label>Phone <input id="add-phone" class="admin-input" style="width:100%;" placeholder="07… / 254…" required /></label>
+      <label>Plate <input id="add-plate" class="admin-input" style="width:100%;" required /></label>
+      <label>Town
+        <select id="add-town" class="admin-select" style="width:100%;">
+          <option value="NAIROBI">Nairobi</option>
+          <option value="THIKA">Thika</option>
+        </select>
+      </label>
+      <label>Stage / bike note <input id="add-stage" class="admin-input" style="width:100%;" placeholder="Honda Ace · CBD stage" /></label>
+      <div style="display:flex;gap:0.5rem;">
+        <button type="submit" class="btn-red" style="flex:1;">Save rider</button>
+        <button type="button" id="add-cancel" class="btn-outline">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- GPS map -->
+  <div id="map-modal" class="map-modal" role="dialog" aria-modal="true" aria-label="Live GPS">
+    <div class="map-modal-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+        <h3 id="map-title" style="margin:0;font-weight:900;text-transform:uppercase;font-size:0.95rem;">Live GPS</h3>
+        <button type="button" id="map-close" class="btn-outline" aria-label="Close">✕</button>
+      </div>
+      <p id="map-meta" class="muted" style="font-size:0.75rem;margin:0 0 0.75rem;"></p>
+      <iframe id="map-frame" class="map-frame" title="Rider map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <p style="margin:0.75rem 0 0;"><a id="map-external" href="#" target="_blank" rel="noopener" class="btn-ink" style="display:inline-flex;">Open in maps</a></p>
+    </div>
+  </div>
+
+  <script src="assets/js/admin-riders.js"></script>
+</body>
+</html>
