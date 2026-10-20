@@ -154,11 +154,22 @@
     document.body?.classList.add("has-depop-shell");
   }
 
+  function loadSavannahCallWidget() {
+    if (window.__savannahCallWidget) return;
+    if (document.querySelector("script[src*='savannah-agents-aqex']")) return;
+    const s = document.createElement("script");
+    s.src = "https://savannah-agents-aqex.onrender.com/widget.js";
+    s.async = true;
+    s.setAttribute("data-tenant-id", "a452ff00-9d75-468c-a624-82e173dc395e");
+    (document.body || document.documentElement).appendChild(s);
+  }
+
   function mount() {
     const page = detectPage();
     ensureShellBody();
     renderHeader(page);
     renderBottomNav(page);
+    loadSavannahCallWidget();
   }
 
   if (document.readyState === "loading") {
