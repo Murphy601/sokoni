@@ -1077,6 +1077,35 @@ export function toChannelId(channelId) {
   return `${raw.replace(/@.*$/, "")}@newsletter`;
 }
 
+/**
+ * Outgoing WhatsApp voice/video ring via the WAHA voice-calls app.
+ * Needs that app installed on the session — the built-in `calls` app only rejects inbound.
+ */
+export async function startWhatsAppCall(to, { video = false } = {}) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  const session = config.waha.session;
+  const body = { session, chatId: dest, asVideo: video === true };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", `/api/apps/voice-calls/${session}`, body);
+    return { dryRun: true, chatId: dest, endpoint: `/api/apps/voice-calls/${session}`, asVideo: video === true };
+  }
+  try {
+    return await callWaha(`/api/apps/voice-calls/${encodeURIComponent(session)}`, { chatId: dest, asVideo: video === true }, {
+      timeoutMs: 20_000,
+    });
+  } catch (first) {
+    try {
+      return await callWaha("/api/apps/voice-calls", body, { timeoutMs: 20_000 });
+    } catch (err) {
+      const fail = new Error("calls_unavailable");
+      fail.status = err.response?.status || first.response?.status;
+      fail.cause = err;
+      throw fail;
+    }
+  }
+}
+
 /** Circular video note (WAHA sendVideo asNote). Falls back to sendFile. */
 export async function sendVideoNote(to, { url, data, mimetype = "video/mp4", filename = "note.mp4" } = {}) {
   const dest = toChatId(to);

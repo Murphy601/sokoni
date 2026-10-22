@@ -5,7 +5,7 @@
  */
 import { normalizeKenyaPhone } from "../lib/phone-normalize.js";
 import { normalizeOrderId } from "../lib/order-id.js";
-import { getOrder, updateOrderMeta, getOrdersForCustomer } from "./orders.js";
+import { getOrder, updateOrderMeta } from "./orders.js";
 import { sendText, toChatId } from "./whatsapp.js";
 import { setMenuState } from "./session.js";
 import { config } from "../config.js";
@@ -513,28 +513,123 @@ export async function listWhatsAppChannelsTool({ role = "OWNER" } = {}, extras =
   return { ...listed, tool: "list_whatsapp_channels" };
 }
 
-export async function sendVideoNoteTool({ phone_number, video_url, order_id } = {}, extras = {}) {
-  const phone = normalizeKenyaPhone(phone_number);
-  const url = String(video_url || "").trim();
+export async function generateListingClipTool(args = {}, extras = {}) {
+  const productId = String(args.product_id || args.productId || args.sku || "").trim();
+  const urls = [];
+  const one = String(args.image_url || args.imageUrl || args.photo_url || "").trim();
+  if (one) urls.push(one);
+  if (Array.isArray(args.image_urls)) {
+    for (const raw of args.image_urls) urls.push(String(raw || "").trim());
+  }
+
+  let product = null;
+  if (productId) {
+    const { getProductById, searchProducts } = await import("./catalog.js");
+    product = await getProductById(productId);
+    if (!product) {
+      const hits = await searchProducts({ keywords: productId, limit: 1 });
+      product = hits?.[0] || null;
+    }
+    if (product?.videoUrl && allowedMediaUrl(product.videoUrl)) {
+      return {
+        ok: true,
+        tool: "generate_listing_clip",
+        reused: true,
+        videoUrl: product.videoUrl,
+        productId: product.id,
+      };
+    }
+    if (product?.imageUrl) urls.push(product.imageUrl);
+    if (Array.isArray(product?.images)) urls.push(...product.images);
+  }
+
+  const stills = [...new Set(urls.map((u) => String(u || "").trim()).filter((u) => allowedMediaUrl(u)))];
+  if (!stills.length) {
+    return {
+      ok: false,
+      error: "missing_image",
+      tool: "generate_listing_clip",
+      message: "Need a catalog product_id or a Cloudinary / sokonimall.com image URL.",
+    };
+  }
+
+  if (extras.dryRun === true) {
+    const { cloudinaryPublicIdFromUrl } = await import("./listing-studio.js");
+    const still = stills[0];
+    const cloud = still.match(/res\.cloudinary\.com\/([^/]+)\//i)?.[1];
+    const pid = cloudinaryPublicIdFromUrl(still);
+    const videoUrl =
+      cloud && pid
+        ? `https://res.cloudinary.com/${cloud}/image/upload/f_mp4/${pid}.mp4`
+        : still.replace(/\.(jpe?g|png|webp)(\?|$)/i, ".mp4$2");
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "generate_listing_clip",
+      videoUrl,
+      imageUrl: still,
+      productId: product?.id || null,
+    };
+  }
+
+  const { isStudioClipEnabled, attachVideoFromCleanImageUrls } = await import("./listing-studio.js");
+  if (!isStudioClipEnabled()) {
+    return {
+      ok: false,
+      error: "studio_clip_disabled",
+      tool: "generate_listing_clip",
+      message: "Cloudinary clip generation is off. Pass a ready video URL to send_video_note.",
+    };
+  }
+  const clip = await attachVideoFromCleanImageUrls(stills);
+  if (!clip?.videoUrl) {
+    return {
+      ok: false,
+      error: "clip_failed",
+      tool: "generate_listing_clip",
+      message: "Could not build an MP4 from those stills.",
+    };
+  }
+  return { ok: true, tool: "generate_listing_clip", videoUrl: clip.videoUrl, productId: product?.id || null };
+}
+
+export async function sendVideoNoteTool(args = {}, extras = {}) {
+  const { resolveOpsRecipient, knownRecipient } = await import("./ops-tools.js");
+  const resolved = await resolveOpsRecipient(args, extras);
+  const phone = resolved.phone;
+  let url = String(args.video_url || args.videoUrl || "").trim();
+  if (!url && (args.product_id || args.image_url || args.image_urls || args.photo_url)) {
+    const clip = await generateListingClipTool(args, extras);
+    if (!clip.ok) return { ...clip, tool: "send_video_note" };
+    url = clip.videoUrl;
+  }
   if (!phone || !url) {
-    return { ok: false, error: "missing_args", tool: "send_video_note", message: "Need phone_number and video_url." };
+    return {
+      ok: false,
+      error: "missing_args",
+      tool: "send_video_note",
+      message:
+        "Need a known recipient (phone, rider_name, seller_name, or role=admin) and a video_url — or product_id / image_url to generate a clip.",
+    };
   }
   if (!allowedMediaUrl(url)) {
-    return { ok: false, error: "url_not_allowed", tool: "send_video_note", message: "Video must be a WAHA, sokonimall.com, or catalog Cloudinary URL." };
+    return {
+      ok: false,
+      error: "url_not_allowed",
+      tool: "send_video_note",
+      message: "Video must be a WAHA, sokonimall.com, or catalog Cloudinary URL.",
+    };
   }
-  const known =
-    extras.allowUnknown === true ||
-    getOrdersForCustomer("", phone).length > 0 ||
-    (Array.isArray(config.admin?.phones) && config.admin.phones.includes(phone));
+  const known = extras.allowUnknown === true || (await knownRecipient(phone, extras));
   if (!known) {
     return {
       ok: false,
       error: "unknown_recipient",
       tool: "send_video_note",
-      message: "Can only send a video note to a known buyer, seller, or admin.",
+      message: "Can only send a video note to a known buyer, seller, rider, or admin.",
     };
   }
-  const orderId = normalizeOrderId(order_id);
+  const orderId = normalizeOrderId(args.order_id || args.orderId);
   if (orderId && getOrder(orderId)) {
     const order = getOrder(orderId);
     const prev = Array.isArray(order.inspectionVideos) ? order.inspectionVideos : [];
@@ -546,6 +641,59 @@ export async function sendVideoNoteTool({ phone_number, video_url, order_id } = 
   const { sendVideoNote } = await import("./whatsapp.js");
   await sendVideoNote(phone, { url });
   return { ok: true, tool: "send_video_note", phone, videoUrl: url, orderId: orderId || null };
+}
+
+export async function placeWhatsAppCallTool(args = {}, extras = {}) {
+  const { resolveOpsRecipient, knownRecipient } = await import("./ops-tools.js");
+  const { phone } = await resolveOpsRecipient(args, extras);
+  if (!phone) {
+    return {
+      ok: false,
+      error: "missing_phone",
+      tool: "place_whatsapp_call",
+      message: "Need a Kenya WhatsApp number, rider_name, seller_name, or role=admin.",
+    };
+  }
+  if (!extras.allowUnknown && !(await knownRecipient(phone, extras))) {
+    return {
+      ok: false,
+      error: "unknown_recipient",
+      tool: "place_whatsapp_call",
+      message: "Can only call a known buyer, seller, rider, or admin.",
+    };
+  }
+  const asVideo = /^(1|true|yes|on|video)$/i.test(String(args.as_video || args.video || args.asVideo || ""));
+  if (extras.dryRun === true || !config.waha?.apiUrl) {
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "place_whatsapp_call",
+      phone,
+      asVideo,
+      message: "WAHA dry-run — call logged, not placed.",
+    };
+  }
+  try {
+    const { startWhatsAppCall } = await import("./whatsapp.js");
+    const resp = await startWhatsAppCall(phone, { video: asVideo });
+    return {
+      ok: true,
+      tool: "place_whatsapp_call",
+      phone,
+      asVideo,
+      dryRun: Boolean(resp?.dryRun),
+      message: resp?.dryRun ? "WAHA dry-run." : "WhatsApp call ringing.",
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "calls_unavailable",
+      tool: "place_whatsapp_call",
+      phone,
+      message:
+        "This WAHA Core image cannot place an outgoing call (apps are only chatwoot, inbound-reject calls, mcp). Send a voice note (send_whatsapp_voice) or video note instead.",
+    };
+  }
 }
 
 export async function createMediationGroup(

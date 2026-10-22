@@ -36,6 +36,18 @@ Admin detail (redacted phone):
 curl -s "https://bot.sokonimall.com/admin/ops/waha?token=$ADMIN_SETUP_TOKEN"
 ```
 
+## Voice-calls app (outgoing WhatsApp rings)
+
+Install on the **running WAHA container**, session `default` — not on the Node bot.
+
+```bash
+cd ~/sokoni
+git fetch origin cursor/ops-call-clip-tools-2301 && git checkout cursor/ops-call-clip-tools-2301
+bash scripts/install-waha-voice-calls.sh
+```
+
+That script does **not** recreate WAHA. On Core (`devlikeapro/waha`) the Apps API only accepts `chatwoot`, `calls` (reject inbound), and `mcp` — there is no outgoing-ring app. Leave the container running. The ops agent sends a voice note instead of a live call. Real rings need **WAHA Plus**.
+
 ## Reset / re-link
 
 ```bash
