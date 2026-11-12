@@ -1,0 +1,28 @@
+{
+  "scrapedAt": "2026-10-10T21:33:00Z",
+  "live": {
+    "origin": "https://sokonimall.com",
+    "bot": "https://bot.sokonimall.com",
+    "anonymousHomepage": "login-style auth landing (client redirect from index hard-gate)",
+    "ungatedCatalogChars": 34413,
+    "publicPages": 15,
+    "allHttpOk": true
+  },
+  "catalog": {
+    "products": 1,
+    "example": {
+      "id": "pt-tondx-001",
+      "name": "Black Itel Feature Phone",
+      "priceKes": 12,
+      "shop": "adiv-s-mini-mart"
+    }
+  },
+  "botHealth": {
+    "build": "60d5624",
+    "wahaSessionStatus": "WORKING",
+    "dbConnected": true,
+    "prepaidOnly": true,
+    "paymentRail": "paystack",
+    "b2cAuto": false
+  }
+}
