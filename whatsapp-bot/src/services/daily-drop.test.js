@@ -5,9 +5,12 @@ import {
   pickNextDripItem,
   dailyDropCaption,
   dripDropCaption,
+  dripDropSocialLinks,
   isDripSlot,
+  isDripEligible,
   runDailyDrop,
 } from "./daily-drop.js";
+import { config } from "../config.js";
 import { ensureCatalogImageBotUrl } from "../lib/catalog-images.js";
 
 describe("daily drop curation", () => {
@@ -29,6 +32,18 @@ describe("daily drop curation", () => {
     assert.match(caption, /Countrywide Kenya/);
     assert.equal(/\bpaybill\b/i.test(caption), false);
     assert.match(caption, /Popular boots/);
+    assert.match(caption, /Website:/);
+    assert.match(caption, /Facebook:/);
+    assert.match(caption, /WhatsApp Channel:/);
+  });
+
+  it("includes website, Facebook Page, and Channel links in the footer", () => {
+    const links = dripDropSocialLinks();
+    assert.match(links, /Website: https?:\/\//i);
+    assert.match(links, /Facebook:/);
+    if (config.waha?.channelInviteUrl) {
+      assert.match(links, /WhatsApp Channel:/);
+    }
   });
 
   it("posts the drop to Status and Channel together", async () => {
@@ -119,6 +134,16 @@ describe("daily drop curation", () => {
     assert.equal(posted.imageUrl, image);
     assert.equal(posted.videoUrl, video);
     assert.equal(posted.dryRun, true);
+  });
+
+  it("rejects out-of-stock manual drip items", async () => {
+    assert.equal(isDripEligible({ id: "x", inStock: false, name: "Gone" }), false);
+    const posted = await runDailyDrop({
+      dryRun: true,
+      items: [{ id: "gone", name: "Gone", inStock: false, priceKes: 100 }],
+    });
+    assert.equal(posted.ok, false);
+    assert.equal(posted.error, "empty_catalog");
   });
 
   it("skips unknown hosts and still posts the caption", async () => {

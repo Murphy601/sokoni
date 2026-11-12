@@ -24,7 +24,7 @@ function popularity(product) {
 
 export function pickDailyDropItems(products = [], limit = 5) {
   return (Array.isArray(products) ? products : [])
-    .filter((p) => p && p.inStock !== false && !p.isSold && isProductLive(p))
+    .filter((p) => isDripEligible(p))
     .sort((a, b) => popularity(b) - popularity(a) || (Number(b.rating) || 0) - (Number(a.rating) || 0))
     .slice(0, Math.min(8, Math.max(1, Number(limit) || 5)));
 }
@@ -32,6 +32,16 @@ export function pickDailyDropItems(products = [], limit = 5) {
 function isProductLive(p) {
   const qty = Number(p.quantity ?? p.stock ?? p.stockQuantity ?? 1);
   return !Number.isFinite(qty) || qty > 0;
+}
+
+/** Same bar as shopper catalog — drip must not promote sold, OOS, or hidden listings. */
+export function isDripEligible(product) {
+  if (!product?.id) return false;
+  if (product.inStock === false || product.isSold === true) return false;
+  if (!isProductLive(product)) return false;
+  const mod = String(product.moderation?.status || product.status || "live").trim().toLowerCase();
+  if (mod === "hidden") return false;
+  return true;
 }
 
 export function sellerKey(product) {
@@ -56,9 +66,7 @@ function promotedAt(product, timestamps = {}) {
 
 /** Least-recently-promoted seller, then that seller's oldest-unpromoted live item. */
 export function pickNextDripItem(products = [], timestamps = {}) {
-  const live = (Array.isArray(products) ? products : []).filter(
-    (p) => p && p.id && p.inStock !== false && !p.isSold && isProductLive(p)
-  );
+  const live = (Array.isArray(products) ? products : []).filter((p) => isDripEligible(p));
   if (!live.length) return null;
 
   const sellerLast = new Map();
@@ -89,6 +97,19 @@ export function pickNextDripItem(products = [], timestamps = {}) {
   })[0];
 }
 
+/** Website, Facebook Page, and WhatsApp Channel invite — same on Status, Channel, and FB drips. */
+export function dripDropSocialLinks() {
+  const rawSite = String(config.publicSiteUrl || "https://sokonimall.com").trim().replace(/\/$/, "");
+  const website = /^https?:\/\//i.test(rawSite) ? rawSite : `https://${rawSite.replace(/^\/+/, "")}`;
+  const facebook = String(config.facebook?.pageUrl || "https://www.facebook.com/Sokoni.bep")
+    .trim()
+    .replace(/\/$/, "");
+  const channel = String(config.waha?.channelInviteUrl || "").trim();
+  const lines = [`Website: ${website}`, `Facebook: ${facebook}`];
+  if (channel) lines.push(`WhatsApp Channel: ${channel}`);
+  return lines.join("\n");
+}
+
 export function dailyDropCaption(items = []) {
   const rows = items.slice(0, 5).map((p, i) => {
     const kes = Number(p.priceKes ?? p.price) || 0;
@@ -97,7 +118,8 @@ export function dailyDropCaption(items = []) {
   return (
     `Today's drop — ${rows.length} still available. Prepaid M-Pesa escrow.\n\n` +
     `${rows.join("\n")}\n\n` +
-    `Shop on WhatsApp or sokonimall.com. Countrywide Kenya — never pay a rider directly.`
+    `${dripDropSocialLinks()}\n\n` +
+    `Countrywide Kenya — never pay a rider directly.`
   );
 }
 
@@ -109,7 +131,8 @@ export function dripDropCaption(item = {}) {
   return (
     `Today's drop — still available. Prepaid M-Pesa escrow.\n\n` +
     `${name}${kes ? ` — KES ${kes}` : ""}${shopLine}\n\n` +
-    `Shop on WhatsApp or sokonimall.com. Countrywide Kenya — never pay a rider directly.`
+    `${dripDropSocialLinks()}\n\n` +
+    `Countrywide Kenya — never pay a rider directly.`
   );
 }
 
@@ -160,18 +183,31 @@ export async function loadDailyDropItems(limit = 5) {
 }
 
 export async function loadNextDripItem() {
+  const { searchProducts } = await import("./catalog.js");
+  const { isProductAvailable } = await import("./product-availability.js");
+  const products = (await searchProducts({ keywords: "", limit: 200 })).filter(
+    (p) => isDripEligible(p) && isProductAvailable(p)
+  );
+  if (!products.length) return null;
+
+  // DB ordering is a hint only — never drip a row that is not in the live catalog slice.
   try {
     const { isDbEnabled } = await import("../db/pool.js");
     if (isDbEnabled()) {
       const { pickLeastPromotedProduct } = await import("../db/repositories/products.js");
       const row = await pickLeastPromotedProduct();
-      if (row?.id) return row;
+      if (
+        row?.id &&
+        products.some((p) => p.id === row.id) &&
+        isDripEligible(row) &&
+        isProductAvailable(row)
+      ) {
+        return row;
+      }
     }
   } catch (err) {
     console.warn("[daily-drop] db pick skipped:", err.message);
   }
-  const { searchProducts } = await import("./catalog.js");
-  const products = await searchProducts({ keywords: "", limit: 80 });
   return pickNextDripItem(products, loadPromotionTimestamps());
 }
 
@@ -247,10 +283,31 @@ async function stampPromoted(item, extras = {}) {
   }
 }
 
+async function resolveDripItems(extras = {}) {
+  if (Array.isArray(extras.items) && extras.items.length) {
+    const { getProductById } = await import("./catalog.js");
+    const { isProductAvailable } = await import("./product-availability.js");
+    const out = [];
+    for (const raw of extras.items) {
+      const fresh = raw?.id ? await getProductById(raw.id) : null;
+      const p = fresh || raw;
+      if (isDripEligible(p) && isProductAvailable(p)) out.push(p);
+    }
+    return out;
+  }
+  const next = await loadNextDripItem();
+  return next ? [next] : [];
+}
+
 export async function runDailyDrop(extras = {}) {
-  const items = extras.items || [await loadNextDripItem()].filter(Boolean);
+  const items = await resolveDripItems(extras);
   if (!items.length) {
-    return { ok: false, error: "empty_catalog", tool: "daily_drop", message: "No unsold listings to post." };
+    return {
+      ok: false,
+      error: "empty_catalog",
+      tool: "daily_drop",
+      message: "No unsold listings to post.",
+    };
   }
   const text = extras.text || (items.length === 1 ? dripDropCaption(items[0]) : dailyDropCaption(items));
   const { media, mediaSkipped } = await resolveDailyDropMedia(items, extras);
