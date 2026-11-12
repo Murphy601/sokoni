@@ -970,6 +970,48 @@ export async function sendImage(to, { link, data, caption, filename = "product.j
   return resp;
 }
 
+/** Channel / group video (not a round video note). */
+export async function sendVideo(
+  to,
+  { link, data, caption = "", mimetype = "video/mp4", filename = "clip.mp4", convert = true } = {}
+) {
+  const dest = toChatId(to);
+  if (!dest) throw new Error("empty_chat_id");
+  const file = data
+    ? {
+        data: Buffer.from(data).toString("base64"),
+        mimetype: String(mimetype || "video/mp4").split(";")[0],
+        filename,
+      }
+    : { url: link, mimetype: String(mimetype || "video/mp4").split(";")[0], filename };
+  if (!file.url && !file.data) throw new Error("missing_video");
+  const body = {
+    session: config.waha.session,
+    chatId: dest,
+    file,
+    caption: caption || "",
+    convert: convert !== false,
+  };
+  if (!config.waha.apiUrl) {
+    console.log("[waha:dry-run]", "/api/sendVideo", { chatId: dest, convert: body.convert });
+    return { dryRun: true, chatId: dest, endpoint: "/api/sendVideo" };
+  }
+  try {
+    const resp = await callWaha("/api/sendVideo", body, { timeoutMs: 120_000 });
+    rememberSend(resp, dest);
+    return resp;
+  } catch (err) {
+    console.warn("[whatsapp] sendVideo failed, trying sendFile:", err.message);
+    const resp = await callWaha(
+      "/api/sendFile",
+      { ...body, caption: caption || "" },
+      { timeoutMs: 120_000 }
+    );
+    rememberSend(resp, dest);
+    return resp;
+  }
+}
+
 /** Try local base64 first (always on VM disk), then HTTPS URL(s). */
 export async function sendProductImage(to, product, caption) {
   try {
@@ -1108,17 +1150,37 @@ export async function sendVideoNote(to, { url, data, mimetype = "video/mp4", fil
   }
 }
 
-export async function publishWhatsAppStatus({ text = "", mediaUrl = "" } = {}) {
+export async function publishWhatsAppStatus({ text = "", mediaUrl = "", mediaKind = "" } = {}) {
   const session = config.waha.session;
   const caption = String(text || "").trim();
+  const url = String(mediaUrl || "").trim();
+  const kind =
+    String(mediaKind || "").trim().toLowerCase() ||
+    (url && (/\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(url) || /\/video\/upload\//i.test(url) ? "video" : "image"));
   if (!config.waha.apiUrl) {
-    console.log("[waha:dry-run]", "status@broadcast", { caption, mediaUrl: Boolean(mediaUrl) });
-    return { dryRun: true, destination: "status@broadcast", text: caption };
+    console.log("[waha:dry-run]", "status@broadcast", { caption, mediaUrl: Boolean(url), kind });
+    return { dryRun: true, destination: "status@broadcast", text: caption, kind };
   }
-  if (mediaUrl) {
+  if (url && kind === "video") {
+    try {
+      return await callWaha(
+        `/api/${encodeURIComponent(session)}/status/video`,
+        {
+          file: { url, mimetype: "video/mp4" },
+          caption,
+          convert: true,
+        },
+        { timeoutMs: 120_000 }
+      );
+    } catch (err) {
+      console.warn("[whatsapp] status/video failed, trying sendVideo:", err.message);
+      return sendVideo("status@broadcast", { link: url, caption, convert: true });
+    }
+  }
+  if (url) {
     try {
       return await callWaha(`/api/${encodeURIComponent(session)}/status/image`, {
-        file: { url: mediaUrl },
+        file: { url },
         caption,
       });
     } catch (err) {
@@ -1126,7 +1188,7 @@ export async function publishWhatsAppStatus({ text = "", mediaUrl = "" } = {}) {
       return callWaha("/api/sendImage", {
         session,
         chatId: "status@broadcast",
-        file: { url: mediaUrl },
+        file: { url },
         caption,
       });
     }
@@ -1197,7 +1259,7 @@ export async function resolveWhatsAppChannelId(explicit = "") {
   };
 }
 
-export async function publishWhatsAppChannel({ channelId = "", text = "", mediaUrl = "" } = {}) {
+export async function publishWhatsAppChannel({ channelId = "", text = "", mediaUrl = "", mediaKind = "" } = {}) {
   const resolved = await resolveWhatsAppChannelId(channelId);
   if (!resolved.ok && !resolved.dryRun) return resolved;
   const dest = resolved.channelId;
@@ -1209,8 +1271,15 @@ export async function publishWhatsAppChannel({ channelId = "", text = "", mediaU
       message: resolved.message || "Need a channel id (111…@newsletter).",
     };
   }
-  if (mediaUrl) {
-    return sendImage(dest, { link: mediaUrl, caption: text });
+  const url = String(mediaUrl || "").trim();
+  const kind =
+    String(mediaKind || "").trim().toLowerCase() ||
+    (url && (/\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(url) || /\/video\/upload\//i.test(url) ? "video" : "image"));
+  if (url && kind === "video") {
+    return sendVideo(dest, { link: url, caption: text, convert: true });
+  }
+  if (url) {
+    return sendImage(dest, { link: url, caption: text });
   }
   return sendText(dest, text);
 }

@@ -1,5 +1,5 @@
 /**
- * Catalog drip — one live item every 30 minutes (08:00–20:00 EAT) to Status AND Channel.
+ * Catalog drip — one live item every 30 minutes (08:00–21:00 EAT) to Status AND Channel.
  * Rotates sellers by last_promoted_at. Off unless DAILY_DROP_ENABLED=true.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "..", "..", "data");
 const QUEUE_STORE = path.join(DATA_DIR, "promotion-queue.json");
 
 export const DAILY_DROP_HOUR_EAT = Number(config.dailyDrop?.hourEat ?? 8) || 8;
-export const DAILY_DROP_END_HOUR_EAT = Number(config.dailyDrop?.endHourEat ?? 20) || 20;
+export const DAILY_DROP_END_HOUR_EAT = Number(config.dailyDrop?.endHourEat ?? 21) || 21;
 export const DAILY_DROP_INTERVAL_MINUTES = Number(config.dailyDrop?.intervalMinutes ?? 30) || 30;
 
 function popularity(product) {
@@ -113,10 +113,10 @@ export function dripDropCaption(item = {}) {
   );
 }
 
-/** Every 30 minutes, 08:00-20:30 Africa/Nairobi (cron: star-slash-30 8-20 star star star). */
+/** Every 30 minutes, 08:00–21:00 Africa/Nairobi. */
 export function isDripSlot(clock = {}, opts = {}) {
   const start = Number(opts.hourEat ?? opts.startHour ?? config.dailyDrop?.hourEat ?? 8) || 8;
-  const end = Number(opts.endHourEat ?? opts.endHour ?? config.dailyDrop?.endHourEat ?? 20) || 20;
+  const end = Number(opts.endHourEat ?? opts.endHour ?? config.dailyDrop?.endHourEat ?? 21) || 21;
   const interval = Number(opts.intervalMinutes ?? config.dailyDrop?.intervalMinutes ?? 30) || 30;
   const hour = Number(clock.hour);
   const minute = Number(clock.minute);
@@ -210,6 +210,28 @@ async function resolveDailyDropMedia(items, extras = {}) {
   return { media, mediaSkipped };
 }
 
+/** Showcase MP4 (Cloudinary clip, bot /catalog-images/{id}.mp4, or videoUrl). */
+async function resolveDailyDropVideo(items, extras = {}) {
+  const { isAllowedOpsMediaUrl } = await import("./ops-desk-actions.js");
+  const lead = items[0] || {};
+  let video = String(extras.video_url || extras.videoUrl || "").trim();
+  if (!video) {
+    try {
+      const { resolveStorefrontVideoUrl } = await import("../lib/catalog-images.js");
+      video =
+        String(lead.videoUrl || lead.showcaseReelUrl || lead.reelUrl || "").trim() ||
+        resolveStorefrontVideoUrl(lead) ||
+        "";
+    } catch {
+      video = String(lead.videoUrl || lead.reelUrl || "").trim();
+    }
+  }
+  video = String(video || "").trim();
+  const videoSkipped = Boolean(video) && !isAllowedOpsMediaUrl(video);
+  if (videoSkipped) video = "";
+  return { video, videoSkipped };
+}
+
 async function stampPromoted(item, extras = {}) {
   if (!item?.id || extras.dryRun === true) return;
   const at = extras.now || Date.now();
@@ -232,6 +254,7 @@ export async function runDailyDrop(extras = {}) {
   }
   const text = extras.text || (items.length === 1 ? dripDropCaption(items[0]) : dailyDropCaption(items));
   const { media, mediaSkipped } = await resolveDailyDropMedia(items, extras);
+  const { video, videoSkipped } = await resolveDailyDropVideo(items, extras);
   const dest = String(extras.destination_type || extras.destination || config.dailyDrop?.destination || "BOTH")
     .trim()
     .toUpperCase();
@@ -241,22 +264,21 @@ export async function runDailyDrop(extras = {}) {
       destination_type: dest === "STATUS" || dest === "CHANNEL" ? dest : "BOTH",
       channel_id: extras.channel_id || config.waha?.channelId,
       text,
-      media_url: media || undefined,
+      image_url: media || undefined,
+      video_url: video || undefined,
     },
     extras
   );
   let facebook = null;
-  const lead = items[0] || {};
   if (config.facebook?.dropEnabled && (posted.ok || extras.dryRun === true)) {
-    const reelUrl =
-      String(lead.videoUrl || lead.showcaseReelUrl || lead.reelUrl || "").trim() ||
-      (/\/video\/upload\//i.test(media) ? media : "");
     const { publishFacebookPage } = await import("./ops-desk-actions.js");
     facebook = await publishFacebookPage(
       {
         destination_type: "ALL",
         text,
-        media_url: reelUrl || media || undefined,
+        image_url: media || undefined,
+        video_url: video || undefined,
+        link: "https://sokonimall.com/",
       },
       extras
     );
@@ -269,6 +291,10 @@ export async function runDailyDrop(extras = {}) {
     drip: items.length === 1,
     itemCount: items.length,
     mediaSkipped: mediaSkipped || undefined,
+    videoSkipped: videoSkipped || undefined,
+    imageUrl: media || undefined,
+    videoUrl: video || undefined,
+    dualMedia: Boolean(media && video) || undefined,
     facebook: facebook || undefined,
     items: items.map((p) => ({ id: p.id, name: p.name, priceKes: p.priceKes, seller: sellerKey(p) })),
   };

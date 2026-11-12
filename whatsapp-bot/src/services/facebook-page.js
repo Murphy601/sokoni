@@ -44,7 +44,9 @@ async function graphPost(path, body = {}) {
 
 export function mediaKindFromUrl(url = "") {
   const u = String(url || "").toLowerCase();
-  if (/\.(mp4|mov|m4v|webm)(\?|#|$)/.test(u) || /\/video\/upload\//.test(u)) return "video";
+  if (/\.(mp4|mov|m4v|webm)(\?|#|$)/.test(u) || /\/video\/upload\//.test(u) || /\/f_mp4\//i.test(u)) {
+    return "video";
+  }
   return "image";
 }
 

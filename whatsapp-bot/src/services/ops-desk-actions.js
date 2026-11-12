@@ -409,8 +409,41 @@ function hasTillLeak(text) {
   return /\b(till|paybill|business\s*number)\b/i.test(String(text || ""));
 }
 
+function dripMediaKind(url = "") {
+  const u = String(url || "").toLowerCase();
+  if (/\.(mp4|mov|m4v|webm)(\?|#|$)/.test(u) || /\/video\/upload\//.test(u) || /\/f_mp4\//i.test(u)) {
+    return "video";
+  }
+  return "image";
+}
+
+async function publishWhatsAppOneMedia({ wantStatus, wantChannel, channel_id, body, url, kind }) {
+  const { publishWhatsAppStatus, publishWhatsAppChannel } = await import("./whatsapp.js");
+  const slice = {};
+  if (wantStatus) {
+    try {
+      slice.status = {
+        ok: true,
+        ...(await publishWhatsAppStatus({ text: body, mediaUrl: url, mediaKind: kind })),
+      };
+    } catch (err) {
+      slice.status = { ok: false, error: String(err?.message || err).slice(0, 160) };
+    }
+  }
+  if (wantChannel) {
+    slice.channel = await publishWhatsAppChannel({
+      channelId: channel_id || config.waha?.channelId,
+      text: body,
+      mediaUrl: url,
+      mediaKind: kind,
+    });
+    if (slice.channel && slice.channel.ok === undefined) slice.channel.ok = !slice.channel.error;
+  }
+  return slice;
+}
+
 export async function publishWhatsAppStatusOrChannel(
-  { destination_type, channel_id, text, media_url } = {},
+  { destination_type, channel_id, text, media_url, image_url, video_url } = {},
   extras = {}
 ) {
   const dest = String(destination_type || "BOTH").trim().toUpperCase();
@@ -433,14 +466,28 @@ export async function publishWhatsAppStatusOrChannel(
       message: "Do not publish till or paybill numbers. Prepaid checkout links only.",
     };
   }
-  const media = String(media_url || "").trim();
-  if (media && !allowedMediaUrl(media)) {
-    return {
-      ok: false,
-      error: "url_not_allowed",
-      tool: "publish_whatsapp_status_or_channel",
-      message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
-    };
+
+  const legacy = String(media_url || "").trim();
+  let image = String(image_url || "").trim();
+  let video = String(video_url || "").trim();
+  if (!image && !video && legacy) {
+    if (dripMediaKind(legacy) === "video") video = legacy;
+    else image = legacy;
+  }
+
+  const jobs = [];
+  if (image) jobs.push({ kind: "image", url: image });
+  if (video) jobs.push({ kind: "video", url: video });
+
+  for (const job of jobs) {
+    if (!allowedMediaUrl(job.url)) {
+      return {
+        ok: false,
+        error: "url_not_allowed",
+        tool: "publish_whatsapp_status_or_channel",
+        message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
+      };
+    }
   }
 
   const destinations = [];
@@ -462,43 +509,79 @@ export async function publishWhatsAppStatusOrChannel(
       destinations,
       channelId: wantChannel ? channelId : null,
       text: body,
-      mediaUrl: media || null,
+      mediaUrl: image || video || null,
+      imageUrl: image || null,
+      videoUrl: video || null,
+      dualMedia: jobs.length > 1,
     };
   }
 
-  const posted = {};
-  if (wantStatus) {
-    const { publishWhatsAppStatus } = await import("./whatsapp.js");
-    try {
-      posted.status = { ok: true, ...(await publishWhatsAppStatus({ text: body, mediaUrl: media })) };
-    } catch (err) {
-      posted.status = { ok: false, error: String(err?.message || err).slice(0, 160) };
+  const posted = { byKind: {} };
+  const gapMs = Number(extras.mediaGapMs ?? 2_000) || 0;
+  for (let i = 0; i < jobs.length; i += 1) {
+    const job = jobs[i];
+    posted.byKind[job.kind] = await publishWhatsAppOneMedia(
+      { wantStatus, wantChannel, channel_id, body, url: job.url, kind: job.kind },
+      job.kind
+    );
+    if (i < jobs.length - 1 && gapMs > 0) {
+      await new Promise((r) => setTimeout(r, gapMs));
     }
   }
-  if (wantChannel) {
-    const { publishWhatsAppChannel } = await import("./whatsapp.js");
-    posted.channel = await publishWhatsAppChannel({
-      channelId: channel_id || config.waha?.channelId,
-      text: body,
-      mediaUrl: media,
-    });
-    if (posted.channel && posted.channel.ok === undefined) posted.channel.ok = !posted.channel.error;
+
+  // Back-compat: single-media callers still read posted.status / posted.channel
+  if (jobs.length === 1) {
+    posted.status = posted.byKind[jobs[0].kind]?.status;
+    posted.channel = posted.byKind[jobs[0].kind]?.channel;
   }
 
-  const statusOk = !wantStatus || posted.status?.ok !== false;
-  const channelOk = !wantChannel || posted.channel?.ok !== false;
+  const kindOk = (slice) => {
+    const statusOk = !wantStatus || slice?.status?.ok !== false;
+    const channelOk = !wantChannel || slice?.channel?.ok !== false;
+    return statusOk || channelOk;
+  };
+
+  if (!jobs.length) {
+    const { publishWhatsAppStatus, publishWhatsAppChannel } = await import("./whatsapp.js");
+    if (wantStatus) {
+      try {
+        posted.status = { ok: true, ...(await publishWhatsAppStatus({ text: body })) };
+      } catch (err) {
+        posted.status = { ok: false, error: String(err?.message || err).slice(0, 160) };
+      }
+    }
+    if (wantChannel) {
+      posted.channel = await publishWhatsAppChannel({
+        channelId: channel_id || config.waha?.channelId,
+        text: body,
+      });
+      if (posted.channel?.ok === undefined) posted.channel.ok = !posted.channel.error;
+    }
+  }
+
+  const ok = jobs.length
+    ? jobs.some((j) => kindOk(posted.byKind[j.kind]))
+    : kindOk(posted);
+  const allKindsOk = jobs.length ? jobs.every((j) => kindOk(posted.byKind[j.kind])) : ok;
+
   return {
-    ok: statusOk || channelOk,
+    ok,
     tool: "publish_whatsapp_status_or_channel",
     destination: dest === "STATUS" || dest === "CHANNEL" ? dest : "BOTH",
     destinations,
     posted,
-    partial: Boolean(wantStatus && wantChannel && !(statusOk && channelOk)),
+    imageUrl: image || undefined,
+    videoUrl: video || undefined,
+    dualMedia: jobs.length > 1,
+    partial: Boolean(jobs.length > 0 && !allKindsOk && ok),
   };
 }
 
 /** Facebook Page: REEL + POST + STORY (default ALL), same caption/media as WhatsApp drops. */
-export async function publishFacebookPage({ destination_type, text, media_url, link } = {}, extras = {}) {
+export async function publishFacebookPage(
+  { destination_type, text, media_url, image_url, video_url, link } = {},
+  extras = {}
+) {
   const dest = String(destination_type || "ALL").trim().toUpperCase();
   const wantReel = dest === "REEL" || dest === "ALL";
   const wantPost = dest === "POST" || dest === "ALL";
@@ -520,14 +603,23 @@ export async function publishFacebookPage({ destination_type, text, media_url, l
       message: "Do not publish till or paybill numbers. Prepaid checkout links only.",
     };
   }
-  const media = String(media_url || "").trim();
-  if (media && !allowedMediaUrl(media)) {
-    return {
-      ok: false,
-      error: "url_not_allowed",
-      tool: "publish_facebook_page",
-      message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
-    };
+  const legacy = String(media_url || "").trim();
+  let image = String(image_url || "").trim();
+  let video = String(video_url || "").trim();
+  if (!image && !video && legacy) {
+    const { mediaKindFromUrl } = await import("./facebook-page.js");
+    if (mediaKindFromUrl(legacy) === "video") video = legacy;
+    else image = legacy;
+  }
+  for (const url of [image, video].filter(Boolean)) {
+    if (!allowedMediaUrl(url)) {
+      return {
+        ok: false,
+        error: "url_not_allowed",
+        tool: "publish_facebook_page",
+        message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
+      };
+    }
   }
 
   const destinations = [];
@@ -544,28 +636,28 @@ export async function publishFacebookPage({ destination_type, text, media_url, l
       destination: dest === "REEL" || dest === "POST" || dest === "STORY" ? dest : "ALL",
       destinations,
       text: body,
-      mediaUrl: media || null,
+      mediaUrl: image || video || null,
+      imageUrl: image || null,
+      videoUrl: video || null,
       link: link || config.facebook?.pageUrl || null,
+      dualMedia: Boolean(image && video),
     };
   }
 
-  const {
-    publishFacebookFeed,
-    publishFacebookStory,
-    publishFacebookReel,
-    mediaKindFromUrl,
-  } = await import("./facebook-page.js");
+  const { publishFacebookFeed, publishFacebookStory, publishFacebookReel } = await import("./facebook-page.js");
   const posted = {};
+  const postMedia = image || video || "";
+  const storyMedia = image || video || "";
 
   if (wantPost) {
     try {
-      posted.post = await publishFacebookFeed({ text: body, mediaUrl: media, link });
+      posted.post = await publishFacebookFeed({ text: body, mediaUrl: postMedia, link });
     } catch (err) {
       posted.post = { ok: false, error: String(err?.message || err).slice(0, 200) };
     }
   }
   if (wantStory) {
-    if (!media) {
+    if (!storyMedia) {
       posted.story = {
         ok: false,
         error: "missing_media",
@@ -573,14 +665,14 @@ export async function publishFacebookPage({ destination_type, text, media_url, l
       };
     } else {
       try {
-        posted.story = await publishFacebookStory({ mediaUrl: media, text: body });
+        posted.story = await publishFacebookStory({ mediaUrl: storyMedia, text: body });
       } catch (err) {
         posted.story = { ok: false, error: String(err?.message || err).slice(0, 200) };
       }
     }
   }
   if (wantReel) {
-    if (!media || mediaKindFromUrl(media) !== "video") {
+    if (!video) {
       posted.reel = {
         ok: false,
         skipped: true,
@@ -589,7 +681,7 @@ export async function publishFacebookPage({ destination_type, text, media_url, l
       };
     } else {
       try {
-        posted.reel = await publishFacebookReel({ mediaUrl: media, text: body });
+        posted.reel = await publishFacebookReel({ mediaUrl: video, text: body });
       } catch (err) {
         posted.reel = { ok: false, error: String(err?.message || err).slice(0, 200) };
       }

@@ -87,13 +87,38 @@ describe("daily drop curation", () => {
     assert.equal(/\bpaybill\b/i.test(caption), false);
   });
 
-  it("fires on the 30-minute window from 08:00 to 20:30 EAT", () => {
+  it("fires on the 30-minute window from 08:00 to 21:00 EAT", () => {
     assert.equal(isDripSlot({ hour: 8, minute: 0 }), true);
     assert.equal(isDripSlot({ hour: 8, minute: 30 }), true);
-    assert.equal(isDripSlot({ hour: 20, minute: 30 }), true);
+    assert.equal(isDripSlot({ hour: 21, minute: 0 }), true);
+    assert.equal(isDripSlot({ hour: 21, minute: 30 }), true);
     assert.equal(isDripSlot({ hour: 7, minute: 30 }), false);
-    assert.equal(isDripSlot({ hour: 21, minute: 0 }), false);
+    assert.equal(isDripSlot({ hour: 22, minute: 0 }), false);
     assert.equal(isDripSlot({ hour: 12, minute: 15 }), false);
+  });
+
+  it("drips catalog still + showcase reel together when both exist", async () => {
+    const image = "https://bot.sokonimall.com/catalog-images/ap-001.jpg";
+    const video =
+      "https://res.cloudinary.com/rztynxme/image/upload/f_mp4/v1/sokoni-studio/clip.mp4";
+    const posted = await runDailyDrop({
+      dryRun: true,
+      items: [
+        {
+          id: "ap-001",
+          name: "Demo listing",
+          priceKes: 1200,
+          imageUrl: image,
+          videoUrl: video,
+          inStock: true,
+        },
+      ],
+    });
+    assert.equal(posted.ok, true);
+    assert.equal(posted.dualMedia, true);
+    assert.equal(posted.imageUrl, image);
+    assert.equal(posted.videoUrl, video);
+    assert.equal(posted.dryRun, true);
   });
 
   it("skips unknown hosts and still posts the caption", async () => {
