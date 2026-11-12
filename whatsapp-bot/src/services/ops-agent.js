@@ -40,6 +40,7 @@ Tools:
 - send_whatsapp_message / send_whatsapp_voice — reach a registered seller, rider, or known buyer.
 - send_whatsapp_buttons / send_whatsapp_list — numbered menus (WAHA tap buttons are unreliable).
 - publish_whatsapp_status_or_channel — post a catalog drop to Status AND the official Channel (default BOTH; no till numbers).
+- publish_facebook_page — same caption/media to Facebook Page REEL + POST + STORY (default ALL). Reel only when media_url is an MP4; photo drops still hit feed + story.
 - list_whatsapp_channels — GET /api/{session}/channels?role=OWNER to read 111…@newsletter ids.
 - send_video_note — circular video note to a known buyer/seller (WAHA or sokonimall.com URL).
 - create_mediation_group — buyer + seller + admin WhatsApp group for a disputed SKN. Auto on raise_order_dispute when the order is KES 10,000+.
@@ -602,6 +603,28 @@ export const OPS_TOOLS = [
           },
           text: { type: "string", description: "Caption or announcement." },
           media_url: { type: "string", description: "Optional image/video URL on WAHA or sokonimall.com." },
+        },
+        required: ["text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "publish_facebook_page",
+      description:
+        "Publishes the same catalog caption to the Sokoni Facebook Page: REEL (MP4 only), POST (photo or link), and STORY. Default destination_type is ALL. Never include till or paybill numbers.",
+      parameters: {
+        type: "object",
+        properties: {
+          destination_type: { type: "string", description: "ALL (default) | REEL | POST | STORY" },
+          text: { type: "string", description: "Caption or announcement." },
+          media_url: {
+            type: "string",
+            description: "HTTPS image or video on Cloudinary or sokonimall.com (same as WhatsApp drops).",
+          },
+          link: { type: "string", description: "Optional link for text-only feed posts." },
         },
         required: ["text"],
         additionalProperties: false,

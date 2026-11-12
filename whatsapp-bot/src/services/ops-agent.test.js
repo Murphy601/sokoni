@@ -335,6 +335,18 @@ describe("ops tool argument guards", () => {
     assert.equal(listed.ok, true);
     assert.equal(listed.tool, "list_whatsapp_channels");
     assert.ok(Array.isArray(listed.channels));
+
+    const fb = await executeOpsTool(
+      "publish_facebook_page",
+      {
+        text: "Today's drop — prepaid escrow, countrywide Kenya.",
+        media_url: "https://res.cloudinary.com/rztynxme/image/upload/v1/sokoni-studio/cutout.jpg",
+      },
+      { dryRun: true }
+    );
+    assert.equal(fb.ok, true);
+    assert.deepEqual(fb.destinations, ["REEL", "POST", "STORY"]);
+    assert.equal(fb.dryRun, true);
   });
 
   it("sends video notes only to known chats with allowed URLs", async () => {

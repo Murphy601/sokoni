@@ -245,6 +245,22 @@ export async function runDailyDrop(extras = {}) {
     },
     extras
   );
+  let facebook = null;
+  const lead = items[0] || {};
+  if (config.facebook?.dropEnabled && (posted.ok || extras.dryRun === true)) {
+    const reelUrl =
+      String(lead.videoUrl || lead.showcaseReelUrl || lead.reelUrl || "").trim() ||
+      (/\/video\/upload\//i.test(media) ? media : "");
+    const { publishFacebookPage } = await import("./ops-desk-actions.js");
+    facebook = await publishFacebookPage(
+      {
+        destination_type: "ALL",
+        text,
+        media_url: reelUrl || media || undefined,
+      },
+      extras
+    );
+  }
   if (posted.ok) await stampPromoted(items[0], extras);
   return {
     ...posted,
@@ -253,6 +269,7 @@ export async function runDailyDrop(extras = {}) {
     drip: items.length === 1,
     itemCount: items.length,
     mediaSkipped: mediaSkipped || undefined,
+    facebook: facebook || undefined,
     items: items.map((p) => ({ id: p.id, name: p.name, priceKes: p.priceKes, seller: sellerKey(p) })),
   };
 }
