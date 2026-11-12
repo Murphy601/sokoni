@@ -413,7 +413,9 @@ export const config = {
       process.env.META_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || ""
     ).trim(),
     apiVersion: String(process.env.META_API_VERSION || process.env.FACEBOOK_API_VERSION || "v21.0").trim(),
-    pageUrl: String(process.env.FACEBOOK_PAGE_URL || "https://www.facebook.com/Sokoni.bep").trim(),
+      pageUrl: String(
+        process.env.FACEBOOK_PAGE_URL || "https://www.facebook.com/profile.php?id=61596024845462"
+      ).trim(),
     /** When true, daily-drop also posts to the Page (reel only if video URL). */
     dropEnabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_FACEBOOK || "")),
   },
