@@ -878,17 +878,17 @@ function startReorderReminderScheduler() {
   console.log(`✓ Re-order reminder cron enabled (${tz})`);
 }
 
-/** One live listing every 30 min, 08:00–20:00 EAT. Off unless DAILY_DROP_ENABLED=true. */
+/** One live listing every 30 min, 08:00–21:00 EAT. Off unless DAILY_DROP_ENABLED=true. */
 function startDailyDropScheduler() {
   if (!config.dailyDrop?.enabled) {
     console.log(
-      "⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to drip Status + Channel every 30 min, 08:00–20:00 EAT)"
+      "⚠️ Daily drop cron disabled (set DAILY_DROP_ENABLED=true to drip Status + Channel every 30 min, 08:00–21:00 EAT)"
     );
     return;
   }
   const tz = process.env.BOSS_BRIEFING_TZ || "Africa/Nairobi";
   const start = String(config.dailyDrop.hourEat).padStart(2, "0");
-  const end = String(config.dailyDrop.endHourEat ?? 20).padStart(2, "0");
+  const end = String(config.dailyDrop.endHourEat ?? 21).padStart(2, "0");
   const interval = config.dailyDrop.intervalMinutes || 30;
   let lastKey = "";
   setInterval(() => {

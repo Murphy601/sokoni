@@ -38,12 +38,12 @@ export const config = {
   },
   /**
    * Catalog drip to Status AND Channel. Off unless DAILY_DROP_ENABLED=true.
-   * One live item every 30 minutes, 08:00–20:00 EAT, rotating sellers.
+   * One live item every 30 minutes, 08:00–21:00 EAT, rotating sellers (still + reel when available).
    */
   dailyDrop: {
     enabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_ENABLED || "")),
     hourEat: Number(process.env.DAILY_DROP_HOUR_EAT ?? 8) || 8,
-    endHourEat: Number(process.env.DAILY_DROP_END_HOUR_EAT ?? 20) || 20,
+    endHourEat: Number(process.env.DAILY_DROP_END_HOUR_EAT ?? 21) || 21,
     intervalMinutes: Number(process.env.DAILY_DROP_INTERVAL_MINUTES ?? 30) || 30,
     destination: String(process.env.DAILY_DROP_DESTINATION || "BOTH").trim().toUpperCase(),
   },
