@@ -406,6 +406,17 @@ export const config = {
   buyerAuth: {
     mode: (process.env.BUYER_AUTH_MODE || "soft").trim().toLowerCase(),
   },
+  /** Facebook Page — catalog drops via Graph API (same media URLs as WA Status/Channel). */
+  facebook: {
+    pageId: String(process.env.META_PAGE_ID || process.env.FACEBOOK_PAGE_ID || "").trim(),
+    pageAccessToken: String(
+      process.env.META_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || ""
+    ).trim(),
+    apiVersion: String(process.env.META_API_VERSION || process.env.FACEBOOK_API_VERSION || "v21.0").trim(),
+    pageUrl: String(process.env.FACEBOOK_PAGE_URL || "https://www.facebook.com/Sokoni.bep").trim(),
+    /** When true, daily-drop also posts to the Page (reel only if video URL). */
+    dropEnabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_FACEBOOK || "")),
+  },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

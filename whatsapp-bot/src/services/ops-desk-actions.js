@@ -497,6 +497,118 @@ export async function publishWhatsAppStatusOrChannel(
   };
 }
 
+/** Facebook Page: REEL + POST + STORY (default ALL), same caption/media as WhatsApp drops. */
+export async function publishFacebookPage({ destination_type, text, media_url, link } = {}, extras = {}) {
+  const dest = String(destination_type || "ALL").trim().toUpperCase();
+  const wantReel = dest === "REEL" || dest === "ALL";
+  const wantPost = dest === "POST" || dest === "ALL";
+  const wantStory = dest === "STORY" || dest === "ALL";
+  const body = cleanText(text, 2000);
+  if ((!wantReel && !wantPost && !wantStory) || !body) {
+    return {
+      ok: false,
+      error: "missing_args",
+      tool: "publish_facebook_page",
+      message: "Need destination_type (ALL|REEL|POST|STORY) and text.",
+    };
+  }
+  if (hasTillLeak(body)) {
+    return {
+      ok: false,
+      error: "no_till",
+      tool: "publish_facebook_page",
+      message: "Do not publish till or paybill numbers. Prepaid checkout links only.",
+    };
+  }
+  const media = String(media_url || "").trim();
+  if (media && !allowedMediaUrl(media)) {
+    return {
+      ok: false,
+      error: "url_not_allowed",
+      tool: "publish_facebook_page",
+      message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
+    };
+  }
+
+  const destinations = [];
+  if (wantReel) destinations.push("REEL");
+  if (wantPost) destinations.push("POST");
+  if (wantStory) destinations.push("STORY");
+
+  const { facebookPageConfigured } = await import("./facebook-page.js");
+  if (extras.dryRun === true || !facebookPageConfigured()) {
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "publish_facebook_page",
+      destination: dest === "REEL" || dest === "POST" || dest === "STORY" ? dest : "ALL",
+      destinations,
+      text: body,
+      mediaUrl: media || null,
+      link: link || config.facebook?.pageUrl || null,
+    };
+  }
+
+  const {
+    publishFacebookFeed,
+    publishFacebookStory,
+    publishFacebookReel,
+    mediaKindFromUrl,
+  } = await import("./facebook-page.js");
+  const posted = {};
+
+  if (wantPost) {
+    try {
+      posted.post = await publishFacebookFeed({ text: body, mediaUrl: media, link });
+    } catch (err) {
+      posted.post = { ok: false, error: String(err?.message || err).slice(0, 200) };
+    }
+  }
+  if (wantStory) {
+    if (!media) {
+      posted.story = {
+        ok: false,
+        error: "missing_media",
+        message: "Story needs media_url (same Cloudinary still as WhatsApp).",
+      };
+    } else {
+      try {
+        posted.story = await publishFacebookStory({ mediaUrl: media, text: body });
+      } catch (err) {
+        posted.story = { ok: false, error: String(err?.message || err).slice(0, 200) };
+      }
+    }
+  }
+  if (wantReel) {
+    if (!media || mediaKindFromUrl(media) !== "video") {
+      posted.reel = {
+        ok: false,
+        skipped: true,
+        error: "reel_requires_video",
+        message: "Reel skipped — listing has no public MP4. Post + Story still use the photo.",
+      };
+    } else {
+      try {
+        posted.reel = await publishFacebookReel({ mediaUrl: media, text: body });
+      } catch (err) {
+        posted.reel = { ok: false, error: String(err?.message || err).slice(0, 200) };
+      }
+    }
+  }
+
+  const reelOk = !wantReel || posted.reel?.ok !== false || posted.reel?.skipped;
+  const postOk = !wantPost || posted.post?.ok !== false;
+  const storyOk = !wantStory || posted.story?.ok !== false;
+  return {
+    ok: reelOk || postOk || storyOk,
+    tool: "publish_facebook_page",
+    destination: dest === "REEL" || dest === "POST" || dest === "STORY" ? dest : "ALL",
+    destinations,
+    posted,
+    partial: Boolean(wantReel && wantPost && wantStory && !(reelOk && postOk && storyOk)),
+  };
+}
+
 export async function listWhatsAppChannelsTool({ role = "OWNER" } = {}, extras = {}) {
   const { listWhatsAppChannels } = await import("./whatsapp.js");
   if (extras.dryRun === true || !config.waha?.apiUrl) {
