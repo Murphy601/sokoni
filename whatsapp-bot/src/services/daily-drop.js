@@ -97,6 +97,19 @@ export function pickNextDripItem(products = [], timestamps = {}) {
   })[0];
 }
 
+/** Website, Facebook Page, and WhatsApp Channel invite — same on Status, Channel, and FB drips. */
+export function dripDropSocialLinks() {
+  const rawSite = String(config.publicSiteUrl || "https://sokonimall.com").trim().replace(/\/$/, "");
+  const website = /^https?:\/\//i.test(rawSite) ? rawSite : `https://${rawSite.replace(/^\/+/, "")}`;
+  const facebook = String(config.facebook?.pageUrl || "https://www.facebook.com/Sokoni.bep")
+    .trim()
+    .replace(/\/$/, "");
+  const channel = String(config.waha?.channelInviteUrl || "").trim();
+  const lines = [`Website: ${website}`, `Facebook: ${facebook}`];
+  if (channel) lines.push(`WhatsApp Channel: ${channel}`);
+  return lines.join("\n");
+}
+
 export function dailyDropCaption(items = []) {
   const rows = items.slice(0, 5).map((p, i) => {
     const kes = Number(p.priceKes ?? p.price) || 0;
@@ -105,7 +118,8 @@ export function dailyDropCaption(items = []) {
   return (
     `Today's drop — ${rows.length} still available. Prepaid M-Pesa escrow.\n\n` +
     `${rows.join("\n")}\n\n` +
-    `Shop on WhatsApp or sokonimall.com. Countrywide Kenya — never pay a rider directly.`
+    `${dripDropSocialLinks()}\n\n` +
+    `Countrywide Kenya — never pay a rider directly.`
   );
 }
 
@@ -117,7 +131,8 @@ export function dripDropCaption(item = {}) {
   return (
     `Today's drop — still available. Prepaid M-Pesa escrow.\n\n` +
     `${name}${kes ? ` — KES ${kes}` : ""}${shopLine}\n\n` +
-    `Shop on WhatsApp or sokonimall.com. Countrywide Kenya — never pay a rider directly.`
+    `${dripDropSocialLinks()}\n\n` +
+    `Countrywide Kenya — never pay a rider directly.`
   );
 }
 

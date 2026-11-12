@@ -5,10 +5,12 @@ import {
   pickNextDripItem,
   dailyDropCaption,
   dripDropCaption,
+  dripDropSocialLinks,
   isDripSlot,
   isDripEligible,
   runDailyDrop,
 } from "./daily-drop.js";
+import { config } from "../config.js";
 import { ensureCatalogImageBotUrl } from "../lib/catalog-images.js";
 
 describe("daily drop curation", () => {
@@ -30,6 +32,18 @@ describe("daily drop curation", () => {
     assert.match(caption, /Countrywide Kenya/);
     assert.equal(/\bpaybill\b/i.test(caption), false);
     assert.match(caption, /Popular boots/);
+    assert.match(caption, /Website:/);
+    assert.match(caption, /Facebook:/);
+    assert.match(caption, /WhatsApp Channel:/);
+  });
+
+  it("includes website, Facebook Page, and Channel links in the footer", () => {
+    const links = dripDropSocialLinks();
+    assert.match(links, /Website: https?:\/\//i);
+    assert.match(links, /Facebook:/);
+    if (config.waha?.channelInviteUrl) {
+      assert.match(links, /WhatsApp Channel:/);
+    }
   });
 
   it("posts the drop to Status and Channel together", async () => {
