@@ -6,6 +6,7 @@ import {
   dailyDropCaption,
   dripDropCaption,
   isDripSlot,
+  isDripEligible,
   runDailyDrop,
 } from "./daily-drop.js";
 import { ensureCatalogImageBotUrl } from "../lib/catalog-images.js";
@@ -119,6 +120,16 @@ describe("daily drop curation", () => {
     assert.equal(posted.imageUrl, image);
     assert.equal(posted.videoUrl, video);
     assert.equal(posted.dryRun, true);
+  });
+
+  it("rejects out-of-stock manual drip items", async () => {
+    assert.equal(isDripEligible({ id: "x", inStock: false, name: "Gone" }), false);
+    const posted = await runDailyDrop({
+      dryRun: true,
+      items: [{ id: "gone", name: "Gone", inStock: false, priceKes: 100 }],
+    });
+    assert.equal(posted.ok, false);
+    assert.equal(posted.error, "empty_catalog");
   });
 
   it("skips unknown hosts and still posts the caption", async () => {
