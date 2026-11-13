@@ -419,6 +419,16 @@ export const config = {
     /** When true, daily-drop also posts to the Page (reel only if video URL). */
     dropEnabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_FACEBOOK || "")),
   },
+  /** Instagram Business — Content Publishing API (Page must be linked in Meta Business Suite). */
+  instagram: {
+    userId: String(
+      process.env.META_IG_USER_ID || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || ""
+    ).trim(),
+    profileUrl: String(process.env.INSTAGRAM_PROFILE_URL || "").trim(),
+    apiVersion: String(process.env.META_API_VERSION || "v21.0").trim(),
+    /** When true, daily-drop also posts feed + reel (+ story) like Facebook. */
+    dropEnabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_INSTAGRAM || "")),
+  },
   /** TikTok Content Posting API (backend cron only — not exposed on website). */
   tiktok: {
     clientKey: process.env.TIKTOK_CLIENT_KEY || "",

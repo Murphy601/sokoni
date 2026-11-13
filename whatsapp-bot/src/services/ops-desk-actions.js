@@ -701,6 +701,134 @@ export async function publishFacebookPage(
   };
 }
 
+/** Instagram: FEED + REEL + STORY (default ALL), same media/caption as WhatsApp + Facebook drips. */
+export async function publishInstagramAccount(
+  { destination_type, text, media_url, image_url, video_url } = {},
+  extras = {}
+) {
+  const dest = String(destination_type || "ALL").trim().toUpperCase();
+  const wantReel = dest === "REEL" || dest === "ALL";
+  const wantPost = dest === "POST" || dest === "FEED" || dest === "ALL";
+  const wantStory = dest === "STORY" || dest === "ALL";
+  const body = cleanText(text, 2200);
+  if ((!wantReel && !wantPost && !wantStory) || !body) {
+    return {
+      ok: false,
+      error: "missing_args",
+      tool: "publish_instagram",
+      message: "Need destination_type (ALL|REEL|POST|STORY) and text.",
+    };
+  }
+  if (hasTillLeak(body)) {
+    return {
+      ok: false,
+      error: "no_till",
+      tool: "publish_instagram",
+      message: "Do not publish till or paybill numbers. Prepaid checkout links only.",
+    };
+  }
+  const legacy = String(media_url || "").trim();
+  let image = String(image_url || "").trim();
+  let video = String(video_url || "").trim();
+  if (!image && !video && legacy) {
+    const { mediaKindFromUrl } = await import("./facebook-page.js");
+    if (mediaKindFromUrl(legacy) === "video") video = legacy;
+    else image = legacy;
+  }
+  for (const url of [image, video].filter(Boolean)) {
+    if (!allowedMediaUrl(url)) {
+      return {
+        ok: false,
+        error: "url_not_allowed",
+        tool: "publish_instagram",
+        message: "Media must be on WAHA, sokonimall.com, or the catalog Cloudinary CDN.",
+      };
+    }
+  }
+
+  const destinations = [];
+  if (wantReel) destinations.push("REEL");
+  if (wantPost) destinations.push("FEED");
+  if (wantStory) destinations.push("STORY");
+
+  const { instagramPublishingConfigured } = await import("./instagram-page.js");
+  if (extras.dryRun === true || !instagramPublishingConfigured()) {
+    return {
+      ok: true,
+      dryRun: true,
+      tool: "publish_instagram",
+      destination: dest === "REEL" || dest === "POST" || dest === "STORY" ? dest : "ALL",
+      destinations,
+      text: body,
+      imageUrl: image || null,
+      videoUrl: video || null,
+      dualMedia: Boolean(image && video),
+    };
+  }
+
+  const { publishInstagramFeed, publishInstagramStory, publishInstagramReel } = await import(
+    "./instagram-page.js"
+  );
+  const posted = {};
+  const storyMedia = image || video || "";
+
+  if (wantPost) {
+    if (!image) {
+      posted.feed = {
+        ok: false,
+        skipped: true,
+        error: "feed_requires_image",
+        message: "Feed skipped — use catalog still. Reel uses the MP4.",
+      };
+    } else {
+      try {
+        posted.feed = await publishInstagramFeed({ text: body, mediaUrl: image });
+      } catch (err) {
+        posted.feed = { ok: false, error: String(err?.message || err).slice(0, 200) };
+      }
+    }
+  }
+  if (wantStory) {
+    if (!storyMedia) {
+      posted.story = { ok: false, error: "missing_media", message: "Story needs image or video URL." };
+    } else {
+      try {
+        posted.story = await publishInstagramStory({ text: body, mediaUrl: storyMedia });
+      } catch (err) {
+        posted.story = { ok: false, error: String(err?.message || err).slice(0, 200) };
+      }
+    }
+  }
+  if (wantReel) {
+    if (!video) {
+      posted.reel = {
+        ok: false,
+        skipped: true,
+        error: "reel_requires_video",
+        message: "Reel skipped — listing has no public MP4.",
+      };
+    } else {
+      try {
+        posted.reel = await publishInstagramReel({ text: body, mediaUrl: video });
+      } catch (err) {
+        posted.reel = { ok: false, error: String(err?.message || err).slice(0, 200) };
+      }
+    }
+  }
+
+  const reelOk = !wantReel || posted.reel?.ok !== false || posted.reel?.skipped;
+  const feedOk = !wantPost || posted.feed?.ok !== false || posted.feed?.skipped;
+  const storyOk = !wantStory || posted.story?.ok !== false;
+  return {
+    ok: reelOk || feedOk || storyOk,
+    tool: "publish_instagram",
+    destination: dest === "REEL" || dest === "POST" || dest === "STORY" ? dest : "ALL",
+    destinations,
+    posted,
+    partial: Boolean(wantReel && wantPost && wantStory && !(reelOk && feedOk && storyOk)),
+  };
+}
+
 export async function listWhatsAppChannelsTool({ role = "OWNER" } = {}, extras = {}) {
   const { listWhatsAppChannels } = await import("./whatsapp.js");
   if (extras.dryRun === true || !config.waha?.apiUrl) {

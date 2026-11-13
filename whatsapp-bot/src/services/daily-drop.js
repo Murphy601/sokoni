@@ -105,8 +105,10 @@ export function dripDropSocialLinks() {
     .trim()
     .replace(/\/$/, "");
   const channel = String(config.waha?.channelInviteUrl || "").trim();
+  const instagram = String(config.instagram?.profileUrl || "").trim();
   const lines = [`Website: ${website}`, `Facebook: ${facebook}`];
   if (channel) lines.push(`WhatsApp Channel: ${channel}`);
+  if (instagram) lines.push(`Instagram: ${instagram}`);
   return lines.join("\n");
 }
 
@@ -340,6 +342,19 @@ export async function runDailyDrop(extras = {}) {
       extras
     );
   }
+  let instagram = null;
+  if (config.instagram?.dropEnabled && (posted.ok || extras.dryRun === true)) {
+    const { publishInstagramAccount } = await import("./ops-desk-actions.js");
+    instagram = await publishInstagramAccount(
+      {
+        destination_type: "ALL",
+        text,
+        image_url: media || undefined,
+        video_url: video || undefined,
+      },
+      extras
+    );
+  }
   if (posted.ok) await stampPromoted(items[0], extras);
   return {
     ...posted,
@@ -353,6 +368,7 @@ export async function runDailyDrop(extras = {}) {
     videoUrl: video || undefined,
     dualMedia: Boolean(media && video) || undefined,
     facebook: facebook || undefined,
+    instagram: instagram || undefined,
     items: items.map((p) => ({ id: p.id, name: p.name, priceKes: p.priceKes, seller: sellerKey(p) })),
   };
 }
