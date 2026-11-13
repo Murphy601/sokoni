@@ -97,7 +97,7 @@ export function pickNextDripItem(products = [], timestamps = {}) {
   })[0];
 }
 
-/** Website, Facebook Page, and WhatsApp Channel invite — same on Status, Channel, and FB drips. */
+/** Website, Facebook, WhatsApp Channel, and Instagram — same on all drip captions. */
 export function dripDropSocialLinks() {
   const rawSite = String(config.publicSiteUrl || "https://sokonimall.com").trim().replace(/\/$/, "");
   const website = /^https?:\/\//i.test(rawSite) ? rawSite : `https://${rawSite.replace(/^\/+/, "")}`;

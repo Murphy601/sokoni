@@ -34,13 +34,15 @@ describe("daily drop curation", () => {
     assert.match(caption, /Popular boots/);
     assert.match(caption, /Website:/);
     assert.match(caption, /Facebook:/);
+    assert.match(caption, /Instagram:/);
     assert.match(caption, /WhatsApp Channel:/);
   });
 
-  it("includes website, Facebook Page, and Channel links in the footer", () => {
+  it("includes website, Facebook Page, Channel, and Instagram links in the footer", () => {
     const links = dripDropSocialLinks();
     assert.match(links, /Website: https?:\/\//i);
     assert.match(links, /Facebook:/);
+    assert.match(links, /Instagram: https:\/\/www\.instagram\.com\/sokoni\.mall\/?/i);
     if (config.waha?.channelInviteUrl) {
       assert.match(links, /WhatsApp Channel:/);
     }

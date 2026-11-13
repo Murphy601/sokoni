@@ -424,7 +424,9 @@ export const config = {
     userId: String(
       process.env.META_IG_USER_ID || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || ""
     ).trim(),
-    profileUrl: String(process.env.INSTAGRAM_PROFILE_URL || "").trim(),
+    profileUrl: String(
+      process.env.INSTAGRAM_PROFILE_URL || "https://www.instagram.com/sokoni.mall/"
+    ).trim(),
     apiVersion: String(process.env.META_API_VERSION || "v21.0").trim(),
     /** When true, daily-drop also posts feed + reel (+ story) like Facebook. */
     dropEnabled: /^(1|true|yes|on)$/i.test(String(process.env.DAILY_DROP_INSTAGRAM || "")),
